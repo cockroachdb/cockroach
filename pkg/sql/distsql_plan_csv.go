@@ -70,6 +70,30 @@ func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	return err
 }
 
+// callbackResultWriter is a rowResultWriter that runs a callback function
+// on AddRow.
+type callbackResultWriter func(ctx context.Context, row tree.Datums) error
+
+// newCallbackResultWriter creates a new callbackResultWriter.
+func newCallbackResultWriter(
+	fn func(ctx context.Context, row tree.Datums) error,
+) callbackResultWriter {
+	return callbackResultWriter(fn)
+}
+
+// StatementType implements the rowResultWriter interface.
+func (callbackResultWriter) StatementType() tree.StatementType {
+	return tree.Ack
+}
+
+// IncrementRowsAffected implements the rowResultWriter interface.
+func (callbackResultWriter) IncrementRowsAffected(n int) {}
+
+// AddRow implements the rowResultWriter interface.
+func (c callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	return c(ctx, row)
+}
+
 // LoadCSV performs a distributed transformation of the CSV files at from
 // and stores them in enterprise backup format at to.
 func (l *DistLoader) LoadCSV(
@@ -160,9 +184,41 @@ func (l *DistLoader) LoadCSV(
 		[]sqlbase.ColumnType{colTypeBytes},
 	)
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{colTypeBytes})
-	rowContainer := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
-	rowResultWriter := NewRowResultWriter(tree.Rows, rowContainer)
+	var spans []distsqlrun.OutputRouterSpec_RangeRouterSpec_Span
+	var sstSpecs []distsqlrun.SSTWriterSpec
+	encFn := func(b []byte) []byte {
+		return encoding.EncodeBytesAscending(nil, b)
+	}
+	addSpan := func(start, end []byte) {
+		stream := int32(len(spans) % len(nodes))
+		spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
+			Start:  encFn(start),
+			End:    encFn(end),
+			Stream: stream,
+		})
+		sstSpecs[stream].Spans = append(sstSpecs[stream].Spans, distsqlrun.SSTWriterSpec_SpanName{
+			Name: fmt.Sprintf("%d.sst", len(spans)),
+			End:  end,
+		})
+	}
+
+	tableSpan := tableDesc.TableSpan()
+	prevKey := tableSpan.Key
+	sampleCount := 0
+	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		sampleCount++
+		sampleCount = sampleCount % oversample
+		if sampleCount == 0 {
+			b := row[0].(*tree.DBytes)
+			k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
+			if err != nil {
+				return err
+			}
+			addSpan(prevKey, k)
+			prevKey = k
+		}
+		return nil
+	})
 
 	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, &evalCtx, nil)
 	// Because we're not going through the normal pathways, we have to set up
@@ -189,7 +245,16 @@ func (l *DistLoader) LoadCSV(
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		rowContainer.Clear(ctx)
+		// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
+		spans = nil
+		sstSpecs = make([]distsqlrun.SSTWriterSpec, len(nodes))
+		for i := range nodes {
+			sstSpecs[i] = distsqlrun.SSTWriterSpec{
+				Destination:   to,
+				WalltimeNanos: walltime,
+			}
+		}
+
 		return l.distSQLPlanner.Run(&planCtx, txn, &p, &recv, evalCtx)
 	}); err != nil {
 		return err
@@ -198,44 +263,7 @@ func (l *DistLoader) LoadCSV(
 		return recv.err
 	}
 
-	n := rowContainer.Len()
-	tableSpan := tableDesc.TableSpan()
-	prevKey := tableSpan.Key
-	var spans []distsqlrun.OutputRouterSpec_RangeRouterSpec_Span
-	encFn := func(b []byte) []byte {
-		return encoding.EncodeBytesAscending(nil, b)
-	}
-	sstSpecs := make([]distsqlrun.SSTWriterSpec, len(nodes))
-	for i := range nodes {
-		sstSpecs[i] = distsqlrun.SSTWriterSpec{
-			Destination:   to,
-			WalltimeNanos: walltime,
-		}
-	}
-	addSpan := func(start, end []byte) {
-		stream := int32(len(spans) % len(nodes))
-		spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
-			Start:  encFn(start),
-			End:    encFn(end),
-			Stream: stream,
-		})
-		sstSpecs[stream].Spans = append(sstSpecs[stream].Spans, distsqlrun.SSTWriterSpec_SpanName{
-			Name: fmt.Sprintf("%d.sst", len(spans)),
-			End:  end,
-		})
-	}
-	// Assign each span to a node.
-	for i := oversample - 1; i < n; i += oversample {
-		row := rowContainer.At(i)
-		b := row[0].(*tree.DBytes)
-		k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
-		if err != nil {
-			return err
-		}
-		addSpan(prevKey, k)
-		prevKey = k
-	}
-	rowContainer.Close(ctx)
+	// Add the closing span.
 	addSpan(prevKey, tableSpan.EndKey)
 
 	routerSpec := distsqlrun.OutputRouterSpec_RangeRouterSpec{
