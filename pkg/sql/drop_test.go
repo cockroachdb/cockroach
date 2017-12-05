@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -324,6 +325,9 @@ func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 				tscc.ClearSchemaChangers()
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableMigrations: true,
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -757,6 +761,9 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 				tscc.ClearSchemaChangers()
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableMigrations: true,
 		},
 	}
 	s, db, _ := serverutils.StartServer(t, params)
