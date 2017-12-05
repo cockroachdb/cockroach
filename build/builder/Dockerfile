@@ -25,7 +25,6 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # g++ - crosstool-ng/build
 # gawk - crosstool-ng/configure
 # git - crosstool-ng/configure
-# golang - go: bootstrap
 # gperf - crosstool-ng/configure
 # help2man - crosstool-ng/configure
 # iptables - acceptance tests' partition nemesis
@@ -49,7 +48,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     gawk \
     git \
-    golang \
     gperf \
     help2man \
     iptables \
@@ -139,24 +137,15 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
  && mv osxcross/target /x-tools/x86_64-apple-darwin13 \
  && rm -rf osxcross
 
-# BEGIN https://github.com/docker-library/golang/blob/94e49ca/1.9/alpine3.6/Dockerfile
-
-RUN curl -fsSL https://storage.googleapis.com/golang/go1.9.src.tar.gz -o golang.tar.gz \
- && echo 'a4ab229028ed167ba1986825751463605264e44868362ca8e7accc8be057e993  golang.tar.gz' | sha256sum -c - \
+RUN curl -fsSL https://storage.googleapis.com/golang/go1.9.2.linux-amd64.tar.gz -o golang.tar.gz \
+ && echo 'de874549d9a8d8d8062be05808509c09a88a248e77ec14eb77453530829ac02b  golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
- && rm golang.tar.gz \
- && cd /usr/local/go/src \
- && GOROOT_BOOTSTRAP=$(go env GOROOT) CC=clang CXX=clang++ ./make.bash \
- && apt-get autoremove -y golang
+ && ln -s /usr/local/go/bin/* /usr/local/bin \
+ && rm golang.tar.gz
 
 ENV GOPATH /go
-ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
-
-RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
 WORKDIR $GOPATH
-
-# END https://github.com/docker-library/golang/blob/94e49ca/1.9/alpine3.6/Dockerfile
-
+RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
 RUN chmod -R a+w $(go env GOTOOLDIR)
 
 # Allow Go support files in gdb.
