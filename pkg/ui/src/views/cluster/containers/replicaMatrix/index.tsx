@@ -6,14 +6,22 @@ import {AdminUIState} from "oss/src/redux/state";
 import { refreshReplicaMatrix, refreshNodes } from "src/redux/apiReducers";
 import {cockroach} from "oss/src/js/protos";
 import { NodeStatus$Properties } from "src/util/proto";
+import Matrix from "./Matrix";
+import { TreeNode } from "./tree";
 import "./index.styl";
 import ReplicaMatrixResponse = cockroach.server.serverpb.ReplicaMatrixResponse;
+import NodeDescriptor = cockroach.roachpb.NodeDescriptor$Properties;
 
 interface ReplicaMatrixProps {
   replicaMatrix: ReplicaMatrixResponse;
   nodes: NodeStatus$Properties[];
   refreshReplicaMatrix: typeof refreshReplicaMatrix;
   refreshNodes: typeof refreshNodes;
+}
+
+interface TableDesc {
+  dbName: string;
+  tableName?: string;
 }
 
 class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
@@ -27,40 +35,51 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
       _.set(byDbByTableByNode, [cell.database_name, cell.table_name, cell.node_id], cell.count);
     });
 
-    function localityToString(locality: cockroach.roachpb.Locality$Properties) {
-      return locality.tiers.map((tier) => (`${tier.key}=${tier.value}`)).join(", ");
+    const nodeTree: TreeNode<NodeDescriptor> = {
+      name: "Cluster",
+      data: {},
+      children: this.props.nodes.map((node) => ({
+        name: node.desc.node_id.toString(),
+        data: node.desc,
+      })),
+    };
+
+    const dbTree: TreeNode<TableDesc> = {
+      name: "Cluster",
+      data: null,
+      children: _.map(byDbByTableByNode, (byTable, dbName) => ({
+        name: dbName,
+        data: { dbName: dbName },
+        children: _.map(byTable, (_, tableName) => ({
+          name: tableName,
+          data: { dbName, tableName },
+        })),
+      })),
+    };
+
+    interface IReplicaMatrix { new(): Matrix<TableDesc, NodeDescriptor>; }
+    // tslint:disable-next-line:variable-name
+    const ReplicaMatrix = Matrix as IReplicaMatrix;
+
+    function renderCell(tableDesc: TableDesc, nodeDesc: NodeDescriptor): JSX.Element | null {
+      if (!_.has(tableDesc, "tableName")) {
+        return null;
+      }
+
+      const val = byDbByTableByNode[tableDesc.dbName][tableDesc.tableName][nodeDesc.node_id.toString()];
+      return (<span>{val.toString()}</span>);
     }
 
     return (
-      <table className="replica-matrix">
-        <thead>
-          <tr>
-            <th colSpan={2} />
-            <th colSpan={this.props.nodes.length}>Node ID</th>
-          </tr>
-          <tr>
-            <th colSpan={2} />
-            {this.props.nodes.map((node) => (
-              <th title={localityToString(node.desc.locality)}>
-                {node.desc.node_id.toString()}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {_.map(byDbByTableByNode, (byTableByNode, dbName) => (
-            _.map(byTableByNode, (byNode, tableName) => (
-              <tr key={`${dbName}-${tableName}`}>
-                <th>{dbName}</th>
-                <th className="table-name">{tableName}</th>
-                {this.props.nodes.map((node) => (
-                  <td className="value">{byNode[node.desc.node_id].toString()}</td>
-                ))}
-              </tr>
-            ))
-          ))}
-        </tbody>
-      </table>
+      <ReplicaMatrix
+        label={<em># Replicas</em>}
+        cols={nodeTree}
+        rows={dbTree}
+        colNodeLabel={() => "Cluster"}
+        colLeafLabel={(node) => `n${node.node_id.toString()}`}
+        rowNodeLabel={(row: TableDesc) => (`DB: ${row.dbName}`)}
+        rowLeafLabel={(row: TableDesc) => (row.tableName)}
+        renderCell={renderCell} />
     );
   }
 }
