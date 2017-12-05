@@ -124,46 +124,14 @@ func (p *planner) orderBy(
 		//    e.g. SELECT a FROM t ORDER by b
 		//    e.g. SELECT a, b FROM t ORDER by a+b
 
-		index := -1
-
 		// First, deal with render aliases.
-		if vBase, ok := expr.(tree.VarName); ok {
-			v, err := vBase.NormalizeVarName()
-			if err != nil {
-				return nil, err
-			}
-
-			if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Table() == "" {
-				// Look for an output column that matches the name. This
-				// handles cases like:
-				//
-				//   SELECT a AS b FROM t ORDER BY b
-				target := string(c.ColumnName)
-				for j, col := range columns {
-					if col.Name == target {
-						if index != -1 {
-							// There is more than one render alias that matches the ORDER BY
-							// clause. Here, SQL92 is specific as to what should be done:
-							// if the underlying expression is known (we're on a renderNode)
-							// and it is equivalent, then just accept that and ignore the ambiguity.
-							// This plays nice with `SELECT b, * FROM t ORDER BY b`. Otherwise,
-							// reject with an ambiguity error.
-							if s == nil || !s.equivalentRenders(j, index) {
-								return nil, errors.Errorf("ORDER BY \"%s\" is ambiguous", target)
-							}
-							// Note that in this case we want to use the index of the first
-							// matching column. This is because
-							// renderNode.computePhysicalProps also prefers the first column,
-							// and we want the orderings to match as much as possible.
-							continue
-						}
-						index = j
-					}
-				}
-			}
+		index, err := s.colIdxByRenderAlias(expr, columns, "ORDER BY")
+		if err != nil {
+			return nil, err
 		}
 
-		// So Then, deal with column ordinals.
+		// If the expression does not refer to an alias, deal with
+		// column ordinals.
 		if index == -1 {
 			col, err := p.colIndex(numOriginalCols, expr, "ORDER BY")
 			if err != nil {
@@ -222,7 +190,10 @@ func (p *planner) orderBy(
 		}
 
 		if index == -1 {
-			return nil, errors.Errorf("column %s does not exist", expr)
+			return nil, pgerror.NewErrorf(
+				pgerror.CodeUndefinedColumnError,
+				"column %s does not exist", expr,
+			)
 		}
 		ordering = append(ordering,
 			sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})

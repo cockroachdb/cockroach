@@ -1547,7 +1547,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		return err
 	}
 	if len(query.colTypes) != len(cols) {
-		return fmt.Errorf("%s: expected %d columns based on type-string, but found %d",
+		return fmt.Errorf("%s: expected %d columns, but found %d",
 			query.pos, len(query.colTypes), len(cols))
 	}
 	vals := make([]interface{}, len(cols))

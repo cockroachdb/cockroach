@@ -198,7 +198,7 @@ EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT DISTINCT k FROM t
 ----
-0  distinct  ·         ·          (k int)                  ·
+0  distinct  ·         ·          (k int)                  weak-key(k)
 1  render    ·         ·          (k int)                  ·
 1  ·         render 0  (k)[int]   ·                        ·
 2  scan      ·         ·          (k int, v[omitted] int)  ·
