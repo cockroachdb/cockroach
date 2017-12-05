@@ -268,6 +268,7 @@ func BenchmarkTableReader(b *testing.B) {
 		nodeID: s.NodeID(),
 	}
 	spec := TableReaderSpec{
+		Table: *tableDesc,
 		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 	}
 	post := PostProcessSpec{}
