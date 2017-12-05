@@ -149,7 +149,7 @@ type operator int16
 
 type expr struct {
   op              operator
-  children        []*expr{}
+  children        []*expr
   relationalProps *relationalProps // See [relational properties](#tracked_properties)
   scalarProps     *scalarProps     // See [scalar properties](#tracked_properties)
   physicalProps   *physicalProps   // See [physical properties](#tracked_properties)
@@ -1027,7 +1027,7 @@ becomes.
   ordering can be imposed by the query itself. For example, a
   top-level `ORDER BY` clause definitely imposes ordering. But so does
   an `ORDER BY` clause that is the immediate sub-expression of
-  `DISTINCT ON`, `WITH ORDINALITY` and
+  `LIMIT`, `DISTINCT ON`, `WITH ORDINALITY` and
   `{INSERT,UPSERT,DELETE,UPDATE}`. Are there other places? Are there
   other physical properties to capture at intermediate nodes?
 
@@ -1080,8 +1080,10 @@ Some points to notice above. The relational operators (`project`,
 track their required input columns. Relational operators have a slice
 of children where the interpretation of the children is operator
 specific. The `project` operator has 2 children: a relational input
-and a list of projections. The `select` operator also has 2 children:
-a relational input and a list of filters.
+and a list of projections. Note that the order of projections is
+important and are stored using an `ordered-list` operator in the
+memo. The `select` operator also has 2 children: a relational input
+and a list of filters.
 
 Inserting the expression tree into the memo results in:
 
