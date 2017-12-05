@@ -15,15 +15,19 @@
 package sqlbase
 
 import (
+	"fmt"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // cascader is used to handle all referential integrity cascading actions.
@@ -33,10 +37,8 @@ type cascader struct {
 	indexRowFetchers   map[ID]map[IndexID]MultiRowFetcher // RowFetchers by Table ID and Index ID
 	rowDeleters        map[ID]RowDeleter                  // RowDeleters by Table ID
 	deleterRowFetchers map[ID]MultiRowFetcher             // RowFetchers for rowDeleters by Table ID
-	// TODO(Bram): replace rowsToCheck's datums with row_containers for memory
-	// monitoring.
-	rowsToCheck map[ID][]tree.Datums // Rows that have been deleted by Table ID
-	alloc       *DatumAlloc
+	rowsChanged        map[ID]*RowContainer               // Rows that have been altered by Table ID
+	alloc              *DatumAlloc
 }
 
 func makeCascader(txn *client.Txn, tablesByID TableLookupsByID, alloc *DatumAlloc) *cascader {
@@ -46,8 +48,14 @@ func makeCascader(txn *client.Txn, tablesByID TableLookupsByID, alloc *DatumAllo
 		indexRowFetchers:   make(map[ID]map[IndexID]MultiRowFetcher),
 		rowDeleters:        make(map[ID]RowDeleter),
 		deleterRowFetchers: make(map[ID]MultiRowFetcher),
-		rowsToCheck:        make(map[ID][]tree.Datums),
+		rowsChanged:        make(map[ID]*RowContainer),
 		alloc:              alloc,
+	}
+}
+
+func (c *cascader) close(ctx context.Context) {
+	for _, container := range c.rowsChanged {
+		container.Close(ctx)
 	}
 }
 
@@ -75,11 +83,11 @@ func spanForIndexValues(
 // batchRequestForIndexValues creates a batch request against an index to
 // extract the primary keys needed for cascading.
 func batchRequestForIndexValues(
+	ctx context.Context,
 	referencedIndex *IndexDescriptor,
 	referencingTable *TableDescriptor,
 	referencingIndex *IndexDescriptor,
-	values []tree.Datums,
-	colIDtoRowIndex map[ColumnID]int,
+	values cascadeQueueElement,
 ) (roachpb.BatchRequest, error) {
 
 	//TODO(bram): consider caching some of these values
@@ -90,7 +98,7 @@ func batchRequestForIndexValues(
 	}
 	indexColIDs := make(map[ColumnID]int, len(referencedIndex.ColumnIDs))
 	for i, referencedColID := range referencedIndex.ColumnIDs[:prefixLen] {
-		if found, ok := colIDtoRowIndex[referencedColID]; ok {
+		if found, ok := values.colIDtoRowIndex[referencedColID]; ok {
 			indexColIDs[referencingIndex.ColumnIDs[i]] = found
 		} else {
 			return roachpb.BatchRequest{}, errors.Errorf(
@@ -100,9 +108,9 @@ func batchRequestForIndexValues(
 	}
 
 	var req roachpb.BatchRequest
-	for _, value := range values {
+	for i := values.startIndex; i < values.endIndex; i++ {
 		span, err := spanForIndexValues(
-			referencingTable, referencingIndex, prefixLen, indexColIDs, value, keyPrefix,
+			referencingTable, referencingIndex, prefixLen, indexColIDs, values.values.At(i), keyPrefix,
 		)
 		if err != nil {
 			return roachpb.BatchRequest{}, err
@@ -130,11 +138,11 @@ func spanForPKValues(
 // batchRequestForPKValues creates a batch request against the primary index of
 // a table and is used to fetch rows for cascading.
 func batchRequestForPKValues(
-	table *TableDescriptor, fetchColIDtoRowIndex map[ColumnID]int, values []tree.Datums,
+	table *TableDescriptor, fetchColIDtoRowIndex map[ColumnID]int, values *RowContainer,
 ) (roachpb.BatchRequest, error) {
 	var req roachpb.BatchRequest
-	for _, value := range values {
-		span, err := spanForPKValues(table, fetchColIDtoRowIndex, value)
+	for i := 0; i < values.Len(); i++ {
+		span, err := spanForPKValues(table, fetchColIDtoRowIndex, values.At(i))
 		if err != nil {
 			return roachpb.BatchRequest{}, err
 		}
@@ -244,146 +252,180 @@ func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, MultiRowFe
 	return rowDeleter, rowFetcher, nil
 }
 
-// deleteRow performs row deletions on a single table for all rows that match
+// deleteRows performs row deletions on a single table for all rows that match
 // the values. Returns the values of the rows that were deleted. This deletion
 // happens in a single batch.
-func (c *cascader) deleteRow(
+func (c *cascader) deleteRows(
 	ctx context.Context,
 	referencedIndex *IndexDescriptor,
 	referencingTable *TableDescriptor,
 	referencingIndex *IndexDescriptor,
-	values []tree.Datums,
-	colIDtoRowIndex map[ColumnID]int,
+	values cascadeQueueElement,
+	mon *mon.BytesMonitor,
 	traceKV bool,
-) ([]tree.Datums, map[ColumnID]int, error) {
+) (*RowContainer, map[ColumnID]int, int, error) {
 	// Create the span to search for index values.
 	// TODO(bram): This initial index lookup can be skipped if the index is the
 	// primary index.
 	if traceKV {
 		log.VEventf(ctx, 2,
 			"cascading delete from refIndex:%s, into table:%s, using index:%s for values:%+v",
-			referencedIndex.Name, referencingTable.Name, referencingIndex.Name, values,
+			referencedIndex.Name, referencingTable.Name, referencingIndex.Name, values.values.chunks,
 		)
 	}
 	req, err := batchRequestForIndexValues(
-		referencedIndex, referencingTable, referencingIndex, values, colIDtoRowIndex,
+		ctx, referencedIndex, referencingTable, referencingIndex, values,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	br, roachErr := c.txn.Send(ctx, req)
 	if roachErr != nil {
-		return nil, nil, roachErr.GoError()
+		return nil, nil, 0, roachErr.GoError()
 	}
 
 	// Create or retrieve the index row fetcher.
 	indexRowFetcher, err := c.addIndexRowFetcher(referencingTable, referencingIndex)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	// Fetch all the primary keys that need to be deleted.
-	// TODO(Bram): use a row container here and consider chunking this into n,
-	// primary keys, perhaps 100, at time.
-	var primaryKeysToDel []tree.Datums
+	// TODO(Bram): consider chunking this into n, primary keys, perhaps 100.
+	pkColTypeInfo, err := makeColTypeInfo(referencingTable, indexRowFetcher.tables[0].colIdxMap)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	primaryKeysToDelete := NewRowContainer(mon.MakeBoundAccount(), pkColTypeInfo, values.values.Len())
+	defer primaryKeysToDelete.Close(ctx)
+
 	for _, resp := range br.Responses {
 		fetcher := spanKVFetcher{
 			kvs: resp.GetInner().(*roachpb.ScanResponse).Rows,
 		}
 		if err := indexRowFetcher.StartScanFrom(ctx, &fetcher); err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 		for !indexRowFetcher.kvEnd {
 			primaryKey, _, _, err := indexRowFetcher.NextRowDecoded(ctx)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, 0, err
 			}
-			// Make a copy of the primary key because the datum struct is reused in
-			// the row fetcher.
-			primaryKey = append(tree.Datums(nil), primaryKey...)
-			primaryKeysToDel = append(primaryKeysToDel, primaryKey)
+			if _, err := primaryKeysToDelete.AddRow(ctx, primaryKey); err != nil {
+				return nil, nil, 0, err
+			}
 		}
 	}
 
 	// Early exit if no rows need to be deleted.
-	if len(primaryKeysToDel) == 0 {
-		return nil, nil, nil
+	if primaryKeysToDelete.Len() == 0 {
+		return nil, nil, 0, nil
 	}
 
 	// Create or retrieve the row deleter and primary index row fetcher.
 	rowDeleter, pkRowFetcher, err := c.addRowDeleter(referencingTable)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	// Create a batch request to get all the spans of the primary keys that need
 	// to be deleted.
 	pkLookupReq, err := batchRequestForPKValues(
-		referencingTable, rowDeleter.FetchColIDtoRowIndex, primaryKeysToDel,
+		referencingTable, rowDeleter.FetchColIDtoRowIndex, primaryKeysToDelete,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
+	primaryKeysToDelete.Clear(ctx)
 	pkResp, roachErr := c.txn.Send(ctx, pkLookupReq)
 	if roachErr != nil {
-		return nil, nil, roachErr.GoError()
+		return nil, nil, 0, roachErr.GoError()
 	}
 
-	// Fetch the rows for deletion.
-	// TODO(Bram): use a row container here too for rowsToDelete.
-	var rowsToDelete []tree.Datums
+	// Add the values to be checked for constraint violations after all cascading
+	// changes have completed. Here either fetch or create the rowContainer for
+	// the table. This rowContainer for the table is also used by the queue to
+	// avoid having to double the memory used.
+	if _, exists := c.rowsChanged[referencingTable.ID]; !exists {
+		// Fetch the rows for deletion and store them in a container.
+		colTypeInfo, err := makeColTypeInfo(referencingTable, rowDeleter.FetchColIDtoRowIndex)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		c.rowsChanged[referencingTable.ID] = NewRowContainer(
+			mon.MakeBoundAccount(), colTypeInfo, primaryKeysToDelete.Len(),
+		)
+	}
+	rowsChanged := c.rowsChanged[referencingTable.ID]
+	deletedRowsStartIndex := rowsChanged.Len()
+
+	// Delete all the rows in a new batch.
+	deleteBatch := c.txn.NewBatch()
+
 	for _, resp := range pkResp.Responses {
 		fetcher := spanKVFetcher{
 			kvs: resp.GetInner().(*roachpb.ScanResponse).Rows,
 		}
 		if err := pkRowFetcher.StartScanFrom(ctx, &fetcher); err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 		for !pkRowFetcher.kvEnd {
 			rowToDelete, _, _, err := pkRowFetcher.NextRowDecoded(ctx)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, 0, err
 			}
-			// Make a copy of the rowToDelete because the datum struct is reused in
-			// the row fetcher.
-			rowToDelete = append(tree.Datums(nil), rowToDelete...)
-			rowsToDelete = append(rowsToDelete, rowToDelete)
+
+			// Add the row to be checked for consistency changes.
+			if _, err := rowsChanged.AddRow(ctx, rowToDelete); err != nil {
+				return nil, nil, 0, err
+			}
+
+			// Delete the row.
+			if err := rowDeleter.deleteRowNoCascade(ctx, deleteBatch, rowToDelete, traceKV); err != nil {
+				return nil, nil, 0, err
+			}
 		}
 	}
 
-	// Delete the rows in a new batch.
-	// TODO(bram): Can we move this batch out of this function?  Might not work
-	// when dealing with updates.
-	deleteBatch := c.txn.NewBatch()
-	for _, row := range rowsToDelete {
-		if err := rowDeleter.deleteRowNoCascade(ctx, deleteBatch, row, traceKV); err != nil {
-			return nil, nil, err
-		}
-	}
+	// Run the batch.
 	if err := c.txn.Run(ctx, deleteBatch); err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
-	// Add the values to be checked for consistency after all cascading changes
-	// have finished.
-	c.rowsToCheck[referencingTable.ID] = append(c.rowsToCheck[referencingTable.ID], rowsToDelete...)
-	return rowsToDelete, rowDeleter.FetchColIDtoRowIndex, nil
+	return rowsChanged, rowDeleter.FetchColIDtoRowIndex, deletedRowsStartIndex, nil
 }
 
 type cascadeQueueElement struct {
-	table *TableDescriptor
-	// TODO(Bram): replace values' datums with row_containers for memory
-	// monitoring.
-	values          []tree.Datums
+	table  *TableDescriptor
+	values *RowContainer // This row container is actually defined elsewhere and
+	// its memory is not managed by the queue.
 	colIDtoRowIndex map[ColumnID]int
+	startIndex      int // Start of the range of rows in the row container.
+	endIndex        int // End of the range of rows (exclusive) in the row container.
 }
 
 // cascadeQueue is used for a breadth first walk of the referential integrity
 // graph.
 type cascadeQueue []cascadeQueueElement
 
-func (q *cascadeQueue) enqueue(elem cascadeQueueElement) {
-	*q = append((*q), elem)
+// Enqueue adds a range of values in a row container to the queue. Note that
+// it always assumes that all the values start at the startIndex and extend to
+// all the rows following that index.
+func (q *cascadeQueue) enqueue(
+	ctx context.Context,
+	table *TableDescriptor,
+	rowContainer *RowContainer,
+	colIDtoRowIndex map[ColumnID]int,
+	startIndex int,
+) error {
+	*q = append(*q, cascadeQueueElement{
+		table:           table,
+		values:          rowContainer,
+		colIDtoRowIndex: colIDtoRowIndex,
+		startIndex:      startIndex,
+		endIndex:        rowContainer.Len(),
+	})
+	return nil
 }
 
 func (q *cascadeQueue) dequeue() (cascadeQueueElement, bool) {
@@ -402,11 +444,26 @@ func (c *cascader) cascadeAll(
 	table *TableDescriptor,
 	originalValues tree.Datums,
 	colIDtoRowIndex map[ColumnID]int,
+	mon *mon.BytesMonitor,
 	traceKV bool,
 ) error {
+	defer c.close(ctx)
 	// Perform all the required cascading operations.
 	var cascadeQ cascadeQueue
-	cascadeQ.enqueue(cascadeQueueElement{table, []tree.Datums{originalValues}, colIDtoRowIndex})
+
+	// Enqueue the first values.
+	colTypeInfo, err := makeColTypeInfo(table, colIDtoRowIndex)
+	if err != nil {
+		return err
+	}
+	originalRowContainer := NewRowContainer(mon.MakeBoundAccount(), colTypeInfo, len(originalValues))
+	defer originalRowContainer.Close(ctx)
+	if _, err := originalRowContainer.AddRow(ctx, originalValues); err != nil {
+		return err
+	}
+	if err := cascadeQ.enqueue(ctx, table, originalRowContainer, colIDtoRowIndex, 0); err != nil {
+		return err
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -418,7 +475,7 @@ func (c *cascader) cascadeAll(
 			break
 		}
 		if traceKV {
-			log.VEventf(ctx, 2, "cascading into %s for values:%s", elem.table.Name, elem.values)
+			log.VEventf(ctx, 2, "cascading into %s for values:%s", elem.table.Name, elem.values.chunks)
 		}
 		for _, referencedIndex := range elem.table.AllNonDropIndexes() {
 			for _, ref := range referencedIndex.ReferencedBy {
@@ -436,19 +493,25 @@ func (c *cascader) cascadeAll(
 					return err
 				}
 				if referencingIndex.ForeignKey.OnDelete == ForeignKeyReference_CASCADE {
-					returnedValues, colIDtoRowIndex, err := c.deleteRow(
-						ctx, &referencedIndex, referencingTable.Table, referencingIndex, elem.values, elem.colIDtoRowIndex, traceKV,
+					returnedValuesContainer, colIDtoRowIndex, startIndex, err := c.deleteRows(
+						ctx,
+						&referencedIndex,
+						referencingTable.Table,
+						referencingIndex,
+						elem,
+						mon,
+						traceKV,
 					)
 					if err != nil {
 						return err
 					}
-					if len(returnedValues) > 0 {
+					if returnedValuesContainer != nil && returnedValuesContainer.Len() > startIndex {
 						// If a row was deleted, add the table to the queue.
-						cascadeQ.enqueue(cascadeQueueElement{
-							table:           referencingTable.Table,
-							values:          returnedValues,
-							colIDtoRowIndex: colIDtoRowIndex,
-						})
+						if err := cascadeQ.enqueue(
+							ctx, referencingTable.Table, returnedValuesContainer, colIDtoRowIndex, startIndex,
+						); err != nil {
+							return err
+						}
 					}
 				}
 			}
@@ -456,18 +519,22 @@ func (c *cascader) cascadeAll(
 	}
 
 	// Check all values to ensure there are no orphans.
-	for tableID, removedValues := range c.rowsToCheck {
-		if len(removedValues) == 0 {
+	for tableID, removedRowContainer := range c.rowsChanged {
+		if removedRowContainer.Len() == 0 {
 			continue
 		}
 		rowDeleter, exists := c.rowDeleters[tableID]
 		if !exists {
-			return errors.Errorf("programming error: could not find row deleter for table %d", tableID)
+			return pgerror.NewError(pgerror.CodeInternalError,
+				fmt.Sprintf("could not find row deleter for table %d", tableID),
+			)
 		}
-		for _, removedValue := range removedValues {
-			if err := rowDeleter.Fks.checkAll(ctx, removedValue); err != nil {
+		for removedRowContainer.Len() > 0 {
+			// TODO(bram): Can these be batched?
+			if err := rowDeleter.Fks.checkAll(ctx, removedRowContainer.At(0)); err != nil {
 				return err
 			}
+			removedRowContainer.PopFirst()
 		}
 	}
 

@@ -352,7 +352,7 @@ func truncateTableInChunks(
 				return err
 			}
 			td := tableDeleter{rd: rd, alloc: alloc}
-			if err := td.init(txn); err != nil {
+			if err := td.init(txn, nil /* *mon.BytesMonitor */); err != nil {
 				return err
 			}
 			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, traceKV)

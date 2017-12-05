@@ -269,7 +269,7 @@ import (
 // -flex-types    tolerate when a result column is produced with a
 //                different numeric type than the one expected by the
 //                test. This enables reusing tests designed for
-//                database with sligtly different typing semantics.
+//                database with slightly different typing semantics.
 //
 // Test output:
 //
