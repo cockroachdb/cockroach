@@ -17,6 +17,8 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -25,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // columnBackfiller is a processor for backfilling columns.
@@ -237,7 +238,9 @@ func (cb *columnBackfiller) runChunk(
 					oldValues[j] = tree.DNull
 				}
 			}
-			if _, err := ru.UpdateRow(ctx, b, oldValues, updateValues, false /* traceKV */); err != nil {
+			if _, err := ru.UpdateRow(
+				ctx, b, oldValues, updateValues, nil /* mon.BytesMonitor */, false, /* traceKV */
+			); err != nil {
 				return err
 			}
 		}

@@ -121,7 +121,10 @@ func (p *planner) Update(
 	if err != nil {
 		return nil, err
 	}
-	tw := tableUpdater{ru: ru, autoCommit: p.autoCommit}
+	tw := tableUpdater{
+		ru:         ru,
+		autoCommit: p.autoCommit,
+	}
 
 	tracing.AnnotateTrace()
 
@@ -261,7 +264,7 @@ func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(params.p.txn)
+	return u.run.tw.init(params.p.txn, &params.p.session.TxnState.mon)
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {
