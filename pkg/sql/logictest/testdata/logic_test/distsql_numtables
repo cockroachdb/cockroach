@@ -292,3 +292,9 @@ query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj7FqAzEQRPt8RZhaha9V5dZNHEy6cIVyGszBnfayu4IEo38PPhUhRcDlzEjvsTcUyXxJKw3xHQPGgE1lopnoveoPTvkL8RAwl636vR4DJlEi3uCzL0TEW_pYeGHKVARkepqXHbrpvCb9Ppa6uthnTUoEnKvH5-OAsQVI9V-ueboScWjhcfeFtkkx_hH_Rz60MYD5yn6fSdWJryrTrunxvP_bi0zzvg49nEqf2tiefgIAAP__QLRrHw==
+
+# Regression test for #20481.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x = 1 ORDER BY xsquared LIMIT 10)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkEFLxDAQhe_-iuWdFHJo95iT4mlBtlJXPEiR2Awl0HbqZALK0v8ubQ7qwooe502--R45YmRPezdQhH1GicZgEm4pRpYlyg92_h22MAjjlHSJG4OWhWCP0KA9weLgXnuqyXkSGHhSF_r16CRhcPJxPaZBOb4lJwSDKqndwOAuDEE3ZYFmNuCkX4KoriPYcjZ_L3HTdUKdUz7pcFs97g8vdfX0cHl11rT9j6mmOPEY6Yfn3OVibgzId5S_NHKSlu6F21WTx2rl1sBT1Lwt87Ab82op-B0uf4W3J3AzX3wGAAD__4lkpKY=
