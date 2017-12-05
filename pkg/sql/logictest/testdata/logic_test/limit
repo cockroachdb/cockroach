@@ -78,17 +78,17 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
 ----
 Level  Type      Field     Description  Columns                      Ordering
-0      limit     ·         ·            (w)                          +w
-0      ·         count     25           ·                            ·
-1      distinct  ·         ·            (w)                          +w
-1      ·         key       w            ·                            ·
-2      limit     ·         ·            (w)                          +w
-2      ·         count     100          ·                            ·
-3      sort      ·         ·            (w)                          +w
-3      ·         order     +w           ·                            ·
-3      ·         strategy  top 100      ·                            ·
-4      render    ·         ·            (w)                          ·
-4      ·         render 0  test.t.w     ·                            ·
-5      scan      ·         ·            (k[omitted], v[omitted], w)  k!=NULL; key(k)
-5      ·         table     t@primary    ·                            ·
-5      ·         spans     ALL          ·                            ·
+0      limit     ·          ·            (w)                          weak-key(w); +w
+0      ·         count      25           ·                            ·
+1      distinct  ·          ·            (w)                          weak-key(w); +w
+1      ·         order key  w            ·                            ·
+2      limit     ·          ·            (w)                          +w
+2      ·         count      100          ·                            ·
+3      sort      ·          ·            (w)                          +w
+3      ·         order      +w           ·                            ·
+3      ·         strategy   top 100      ·                            ·
+4      render    ·          ·            (w)                          ·
+4      ·         render 0   test.t.w     ·                            ·
+5      scan      ·          ·            (k[omitted], v[omitted], w)  k!=NULL; key(k)
+5      ·         table      t@primary    ·                            ·
+5      ·         spans      ALL          ·                            ·

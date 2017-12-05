@@ -85,6 +85,7 @@ func (s *FastIntSet) Add(i int) {
 // AddRange adds values 'from' up to 'to' (inclusively) to the set.
 // E.g. AddRange(1,5) adds the values 1, 2, 3, 4, 5 to the set.
 // 'to' must be >= 'from'.
+// AddRange is always more efficient than individual Adds.
 func (s *FastIntSet) AddRange(from, to int) {
 	if to < from {
 		panic("invalid range when adding range to FastIntSet")
@@ -214,7 +215,7 @@ func (s *FastIntSet) UnionWith(rhs FastIntSet) {
 	s.large.UnionWith(rhs.toLarge())
 }
 
-// Union returns the intersection of s and rhs as a new set.
+// Union returns the union of s and rhs as a new set.
 func (s FastIntSet) Union(rhs FastIntSet) FastIntSet {
 	r := s.Copy()
 	r.UnionWith(rhs)

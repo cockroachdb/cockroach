@@ -67,8 +67,16 @@ func (t *ExprTransformContext) IsAggregate(n *tree.SelectClause, searchPath tree
 
 	t.isAggregateVisitor.searchPath = searchPath
 	defer t.isAggregateVisitor.Reset()
+	// Check SELECT expressions.
 	for _, target := range n.Exprs {
 		tree.WalkExprConst(&t.isAggregateVisitor, target.Expr)
+		if t.isAggregateVisitor.Aggregated {
+			return true
+		}
+	}
+	// Check DISTINCT ON expressions too.
+	for _, expr := range n.DistinctOn {
+		tree.WalkExprConst(&t.isAggregateVisitor, expr)
 		if t.isAggregateVisitor.Aggregated {
 			return true
 		}

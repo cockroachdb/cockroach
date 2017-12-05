@@ -92,24 +92,27 @@ SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 1 9
 2 8
 
-query ITTT
-EXPLAIN SELECT DISTINCT a FROM t ORDER BY b LIMIT 2
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
 ----
-0  limit     ·         ·
-1  distinct  ·         ·
-2  sort      ·         ·
-2  ·         order     +b
-2  ·         strategy  iterative
-3  render    ·         ·
-4  scan      ·         ·
-4  ·         table     t@primary
-4  ·         spans     ALL
+0  limit     ·         ·          (c)                 weak-key(c)
+0  ·         count     2          ·                   ·
+1  distinct  ·         ·          (c)                 weak-key(c)
+2  sort      ·         ·          (c)                 ·
+2  ·         order     +b         ·                   ·
+2  ·         strategy  iterative  ·                   ·
+3  render    ·         ·          (c, b)              ·
+3  ·         render 0  test.t.c   ·                   ·
+3  ·         render 1  test.t.b   ·                   ·
+4  scan      ·         ·          (a[omitted], b, c)  a!=NULL; key(a)
+4  ·         table     t@primary  ·                   ·
+4  ·         spans     ALL        ·                   ·
 
-query I
-SELECT DISTINCT a FROM t ORDER BY b DESC LIMIT 2
+query B
+SELECT DISTINCT c FROM t ORDER BY b DESC LIMIT 2
 ----
-1
-2
+true
+false
 
 query II
 SELECT a AS foo, b FROM t ORDER BY foo DESC
