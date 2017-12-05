@@ -1765,8 +1765,8 @@ DBStatus DBCompact(DBEngine* db) {
   // Compacting the entire database in a single-shot can use a
   // significant amount of additional (temporary) disk space. Instead,
   // we loop over the sstables in the lowest level and initiate
-  // compactions on each key range. The resulting compacted database
-  // is the same size, but the temporary disk space needed for the
+  // compactions on smaller range. The resulting compacted database is
+  // the same size, but the temporary disk space needed for the
   // compaction is dramatically reduced
   std::vector<rocksdb::LiveFileMetaData> metadata;
   db->rep->GetLiveFilesMetaData(&metadata);
@@ -1779,21 +1779,67 @@ DBStatus DBCompact(DBEngine* db) {
   }
 
   if (max_level == db->rep->NumberLevels() - 1) {
-    // TODO(peter): Rather than issuing compactions for every sstable
-    // at the bottom-most level, we could issue compactions for every
-    // Nth. This would require sorting the metadata by
-    // smallestkey. Not difficult. Probably worth exploring before
-    // merging.
+    // A naive approach to selecting ranges to compact would be to
+    // compact the ranges specified by the smallest and largest key in
+    // each sstable of the bottom-most level. Unfortunately, the
+    // sstables in the bottom-most level have vastly different
+    // sizes. For example, starting with the following set of bottom-most sstables:
+    //
+    //   100M[16] 89M 70M 66M 56M 54M 38M[2] 36M 23M 20M 17M 8M 6M 5M 2M 2K[4]
+    //
+    // If we compact the entire database in one call we can end up with:
+    //
+    //   100M[22] 77M 76M 50M
+    //
+    // If we use the naive approach (compact the range specified by
+    // the smallest and largest keys):
+    //
+    //   100M[18] 92M 68M 62M 61M 50M 45M 39M 31M 29M[2] 24M 23M 18M 9M 8M[2] 7M 2K[4]
+    //
+    // With the approach below:
+    //
+    //   100M[19] 80M 68M[2] 62M 61M 53M 45M 36M 31M
+    //
+    // The approach below is to loop over the bottom-most sstables in
+    // sorted order and initiate a compact range every 128MB of data.
+
+    // Gather up the bottom-most sstable metadata.
+    std::vector<rocksdb::SstFileMetaData> sst;
     for (int i = 0; i < metadata.size(); i++) {
       if (metadata[i].level != max_level) {
         continue;
       }
-      rocksdb::Slice start(metadata[i].smallestkey);
-      rocksdb::Slice end(metadata[i].largestkey);
-      rocksdb::Status status = db->rep->CompactRange(options, &start, &end);
+      sst.push_back(metadata[i]);
+    }
+    // Sort the metadata by smallest key.
+    std::sort(sst.begin(), sst.end(),
+              [](const rocksdb::SstFileMetaData& a, const rocksdb::SstFileMetaData& b) -> bool {
+                return a.smallestkey < b.smallestkey;
+              });
+
+    // Walk over the bottom-most sstables in order and perform
+    // compactions every 128MB.
+    rocksdb::Slice last;
+    rocksdb::Slice *last_ptr = nullptr;
+    uint64_t size = 0;
+    const uint64_t target_size = 128 << 20;
+    for (int i = 0; i < sst.size(); ++i) {
+      size += sst[i].size;
+      if (size < target_size) {
+        continue;
+      }
+      rocksdb::Slice cur(sst[i].largestkey);
+      rocksdb::Status status = db->rep->CompactRange(options, last_ptr, &cur);
       if (!status.ok()) {
         return ToDBStatus(status);
       }
+      last = cur;
+      last_ptr = &last;
+      size = 0;
+    }
+
+    if (size > 0) {
+      return ToDBStatus(db->rep->CompactRange(options, last_ptr, nullptr));
     }
     return kSuccess;
   }
