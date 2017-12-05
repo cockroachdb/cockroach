@@ -577,7 +577,7 @@ EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 1  ·       render 0     a
 2  scan    ·            ·
 2  ·       table        abc@primary
-2  ·       spans        /!NULL-
+2  ·       spans        ALL
 2  ·       limit        1
 
 query TRBR
@@ -657,7 +657,7 @@ EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz
 1  ·       render 0     x
 2  scan    ·            ·
 2  ·       table        xyz@xy
-2  ·       spans        /!NULL-
+2  ·       spans        ALL
 2  ·       limit        1
 
 query I
@@ -691,7 +691,7 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz
 1  ·        render 0     x
 2  revscan  ·            ·
 2  ·        table        xyz@xy
-2  ·        spans        /!NULL-
+2  ·        spans        ALL
 2  ·        limit        1
 
 query I
@@ -776,7 +776,7 @@ EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 1  ·       render 0     x
 2  scan    ·            ·
 2  ·       table        xyz@zyx
-2  ·       spans        /3/2/!NULL-/3/3
+2  ·       spans        /3/2-/3/3
 2  ·       limit        1
 
 query T
@@ -800,7 +800,7 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 1  ·        render 0     x
 2  revscan  ·            ·
 2  ·        table        xyz@zyx
-2  ·        spans        /3/2/!NULL-/3/3
+2  ·        spans        /3/2-/3/3
 2  ·        limit        1
 
 # VARIANCE/STDDEV
@@ -988,7 +988,7 @@ EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 1  ·       render 0     a
 2  scan    ·            ·
 2  ·       table        abc@primary
-2  ·       spans        /!NULL-
+2  ·       spans        ALL
 2  ·       limit        1
 
 # Verify we only buffer one row.
@@ -1009,7 +1009,7 @@ EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 1  ·        render 0     a
 2  revscan  ·            ·
 2  ·        table        abc@primary
-2  ·        spans        /!NULL-
+2  ·        spans        ALL
 2  ·        limit        1
 
 # Verify we only buffer one row.
