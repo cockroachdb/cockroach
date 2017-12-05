@@ -28,7 +28,6 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # golang - go: bootstrap
 # gperf - crosstool-ng/configure
 # help2man - crosstool-ng/configure
-# iptables - acceptance tests' partition nemesis
 # libncurses-dev - crosstool-ng/configure
 # make - crosstool-ng boostrap / CRDB build system
 # nodejs - ui: all
@@ -51,7 +50,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     golang \
     gperf \
     help2man \
-    iptables \
     libncurses-dev \
     make \
     nodejs \
