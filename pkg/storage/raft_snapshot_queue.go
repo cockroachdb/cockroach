@@ -116,7 +116,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	err := repl.sendSnapshot(ctx, repDesc, snapTypeRaft, SnapshotRequest_RECOVERY)
 	// Report the snapshot status to Raft, which expects us to do this once
 	// we finish sending the snapshot.
-	repl.reportSnapshotStatus(uint64(id), err)
+	repl.reportSnapshotStatus(ctx, id, err)
 	return err
 }
 
