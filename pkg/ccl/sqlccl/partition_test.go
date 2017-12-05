@@ -669,6 +669,155 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 	return nil
 }
 
+func TestRepartitioningFastPathAvailable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rng, _ := randutil.NewPseudoRand()
+
+	partitioningTestsByName := make(map[string]partitioningTest)
+	for _, t := range allPartitioningTests(rng) {
+		partitioningTestsByName[t.name] = t
+	}
+
+	testCases := []struct {
+		old, new   string
+		isFastPath bool
+	}{
+		{
+			old:        `unpartitioned`,
+			new:        `unpartitioned`,
+			isFastPath: true,
+		},
+		{
+			old:        `unpartitioned`,
+			new:        `single col list partitioning`,
+			isFastPath: true,
+		},
+		{
+			old:        `unpartitioned`,
+			new:        `single col list partitioning - DEFAULT`,
+			isFastPath: true,
+		},
+		{
+			old:        `unpartitioned`,
+			new:        `single col range partitioning`,
+			isFastPath: true,
+		},
+		{
+			old:        `unpartitioned`,
+			new:        `single col range partitioning - MAXVALUE`,
+			isFastPath: true,
+		},
+
+		{
+			old:        `single col list partitioning`,
+			new:        `single col list partitioning - DEFAULT`,
+			isFastPath: true,
+		},
+		{
+			old:        `single col list partitioning - DEFAULT`,
+			new:        `single col list partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `multi col list partitioning`,
+			new:        `multi col list partitioning - DEFAULT`,
+			isFastPath: true,
+		},
+		{
+			old:        `multi col list partitioning - DEFAULT`,
+			new:        `multi col list partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `multi col list partitioning - DEFAULT`,
+			new:        `multi col list partitioning - DEFAULT DEFAULT`,
+			isFastPath: true,
+		},
+		{
+			old:        `multi col list partitioning - DEFAULT DEFAULT`,
+			new:        `multi col list partitioning - DEFAULT`,
+			isFastPath: false,
+		},
+
+		{
+			old:        `single col range partitioning`,
+			new:        `single col range partitioning - MAXVALUE`,
+			isFastPath: true,
+		},
+		{
+			old:        `single col range partitioning - MAXVALUE`,
+			new:        `single col range partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `multi col range partitioning`,
+			new:        `multi col range partitioning - MAXVALUE`,
+			isFastPath: true,
+		},
+		{
+			old:        `multi col range partitioning - MAXVALUE`,
+			new:        `multi col range partitioning`,
+			isFastPath: true, // NB: The MAXVALUE one is constructed to cover the same range
+		},
+		{
+			old:        `multi col range partitioning - MAXVALUE`,
+			new:        `multi col range partitioning - MAXVALUE MAXVALUE`,
+			isFastPath: true,
+		},
+		{
+			old:        `multi col range partitioning - MAXVALUE MAXVALUE`,
+			new:        `multi col range partitioning - MAXVALUE`,
+			isFastPath: false,
+		},
+		{
+			old:        `multi col range partitioning - MAXVALUE MAXVALUE`,
+			new:        `multi col range partitioning - MAXVALUE`,
+			isFastPath: false,
+		},
+
+		{
+			old:        `single col list partitioning`,
+			new:        `single col range partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `single col range partitioning`,
+			new:        `single col list partitioning`,
+			isFastPath: false,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("%s/%s", test.old, test.new), func(t *testing.T) {
+			var old, new *sqlbase.TableDescriptor
+			if pt, ok := partitioningTestsByName[test.old]; !ok {
+				t.Fatalf("unknown partitioning test: %s", test.old)
+			} else {
+				if err := pt.parse(); err != nil {
+					t.Fatalf("%+v", err)
+				}
+				old = pt.parsed.tableDesc
+			}
+			if pt, ok := partitioningTestsByName[test.new]; !ok {
+				t.Fatalf("unknown partitioning test: %s", test.new)
+			} else {
+				if err := pt.parse(); err != nil {
+					t.Fatalf("%+v", err)
+				}
+				new = pt.parsed.tableDesc
+			}
+
+			isFastPath, err := RepartitioningFastPathAvailable(old, new)
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if isFastPath != test.isFastPath {
+				t.Errorf("got %v expected %v", isFastPath, test.isFastPath)
+			}
+		})
+	}
+}
+
 func TestInitialPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
