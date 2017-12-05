@@ -4316,7 +4316,7 @@ func (r *Replica) sendRaftMessageRequest(ctx context.Context, req *RaftMessageRe
 	return ok
 }
 
-func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
+func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID, snapErr error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 
@@ -4326,10 +4326,9 @@ func (r *Replica) reportSnapshotStatus(to uint64, snapErr error) {
 	}
 
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-		raftGroup.ReportSnapshot(to, snapStatus)
+		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
 	}); err != nil {
-		ctx := r.AnnotateCtx(context.TODO())
 		log.Fatal(ctx, err)
 	}
 }
