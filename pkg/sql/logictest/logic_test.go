@@ -37,6 +37,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -802,6 +804,11 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 				},
 				Store: &storage.StoreTestingKnobs{
 					BootstrapVersion: cfg.bootstrapVersion,
+				},
+				SQLEvalContext: &tree.EvalContextTestingKnobs{
+					AssertBinaryExprReturnTypes: true,
+					AssertUnaryExprReturnTypes:  true,
+					AssertFuncExprReturnTypes:   true,
 				},
 			},
 		},
