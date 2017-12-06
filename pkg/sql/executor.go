@@ -2485,50 +2485,48 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 	}, nil
 }
 
-// isAsOf analyzes a select statement to bypass the logic in newPlan(),
-// since that requires the transaction to be started already. If the returned
-// timestamp is not nil, it is the timestamp to which a transaction should
-// be set.
+// isAsOf analyzes a statement to bypass the logic in newPlan(), since
+// that requires the transaction to be started already. If the returned
+// timestamp is not nil, it is the timestamp to which a transaction
+// should be set. The statements that will be checked are Select,
+// ShowTrace (of a Select statement), and Scrub.
 //
-// max is a lower bound on what the transaction's timestamp will be. Used to
-// check that the user didn't specify a timestamp in the future.
+// max is a lower bound on what the transaction's timestamp will be.
+// Used to check that the user didn't specify a timestamp in the future.
 func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
-	if ts, err := isShowTraceForAsOf(session, stmt, max); ts != nil || err != nil {
-		return ts, err
-	}
+	var asOf tree.AsOfClause
+	switch s := stmt.(type) {
+	case *tree.Select:
+		selStmt := s.Select
+		var parenSel *tree.ParenSelect
+		var ok bool
+		for parenSel, ok = selStmt.(*tree.ParenSelect); ok; parenSel, ok = selStmt.(*tree.ParenSelect) {
+			selStmt = parenSel.Select.Select
+		}
 
-	s, ok := stmt.(*tree.Select)
-	if !ok {
-		return nil, nil
-	}
+		sc, ok := selStmt.(*tree.SelectClause)
+		if !ok {
+			return nil, nil
+		}
+		if sc.From == nil || sc.From.AsOf.Expr == nil {
+			return nil, nil
+		}
 
-	selStmt := s.Select
-	var parenSel *tree.ParenSelect
-	for parenSel, ok = selStmt.(*tree.ParenSelect); ok; parenSel, ok = selStmt.(*tree.ParenSelect) {
-		selStmt = parenSel.Select.Select
-	}
-
-	sc, ok := selStmt.(*tree.SelectClause)
-	if !ok {
-		return nil, nil
-	}
-	if sc.From == nil || sc.From.AsOf.Expr == nil {
+		asOf = sc.From.AsOf
+	case *tree.ShowTrace:
+		return isAsOf(session, s.Statement, max)
+	case *tree.Scrub:
+		if s.AsOf.Expr == nil {
+			return nil, nil
+		}
+		asOf = s.AsOf
+	default:
 		return nil, nil
 	}
 
 	evalCtx := session.evalCtx()
-	ts, err := EvalAsOfTimestamp(&evalCtx, sc.From.AsOf, max)
+	ts, err := EvalAsOfTimestamp(&evalCtx, asOf, max)
 	return &ts, err
-}
-
-func isShowTraceForAsOf(
-	session *Session, stmt tree.Statement, max hlc.Timestamp,
-) (*hlc.Timestamp, error) {
-	stf, ok := stmt.(*tree.ShowTrace)
-	if !ok {
-		return nil, nil
-	}
-	return isAsOf(session, stf.Statement, max)
 }
 
 // isSavepoint returns true if stmt is a SAVEPOINT statement.
