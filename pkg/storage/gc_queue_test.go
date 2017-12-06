@@ -478,6 +478,53 @@ func TestGCQueueProcess(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
+	// The total size of the GC'able versions of the keys and values in GCInfo.
+	// Key size: len("a") + mvccVersionTimestampSize (13 bytes) = 14 bytes.
+	// Value size: len("value") + headerSize (5 bytes) = 10 bytes.
+	// key1 at ts1  (14 bytes) => "value" (10 bytes)
+	// key2 at ts1  (14 bytes) => "value" (10 bytes)
+	// key3 at ts1  (14 bytes) => "value" (10 bytes)
+	// key4 at ts1  (14 bytes) => "value" (10 bytes)
+	// key5 at ts1  (14 bytes) => "value" (10 bytes)
+	// key5 at ts2  (14 bytes) => delete (0 bytes)
+	// key10 at ts1 (14 bytes) => delete (0 bytes)
+	var expectedVersionsKeyBytes int64 = 7 * 14
+	var expectedVersionsValBytes int64 = 5 * 10
+
+	// Call RunGC with dummy functions to get current GCInfo.
+	gcInfo, err := func() (GCInfo, error) {
+		snap := tc.repl.store.Engine().NewSnapshot()
+		desc := tc.repl.Desc()
+		defer snap.Close()
+
+		zone, err := cfg.GetZoneConfigForKey(desc.StartKey)
+		if err != nil {
+			t.Fatalf("could not find zone config for range %s: %s", tc.repl, err)
+		}
+
+		ctx := context.Background()
+		now := tc.Clock().Now()
+		return RunGC(ctx, desc, snap, now, zone.GC,
+			func(ctx context.Context, gcKeys [][]roachpb.GCRequest_GCKey, info *GCInfo) error {
+				return nil
+			},
+			func(ctx context.Context, intents []roachpb.Intent) error {
+				return nil
+			},
+			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent) error {
+				return nil
+			})
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gcInfo.AffectedVersionsKeyBytes != expectedVersionsKeyBytes {
+		t.Errorf("expected total keys size: %d bytes; got %d bytes", expectedVersionsKeyBytes, gcInfo.AffectedVersionsKeyBytes)
+	}
+	if gcInfo.AffectedVersionsValBytes != expectedVersionsValBytes {
+		t.Errorf("expected total values size: %d bytes; got %d bytes", expectedVersionsValBytes, gcInfo.AffectedVersionsValBytes)
+	}
+
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
 	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
@@ -999,7 +1046,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	// first case, and two whole batches in the second, adding up to
 	// five batches. There is also a first batch which sets the GC
 	// thresholds, making six total batches.
-	if a, e := atomic.LoadInt32(&gcRequests), int32(6); a != e {
+	if a, e := atomic.LoadInt32(&gcRequests), int32(7); a != e {
 		t.Errorf("expected %d gc requests; got %d", e, a)
 	}
 }
