@@ -118,7 +118,7 @@ func (s *FastIntSet) Remove(i int) {
 }
 
 // Contains returns true if the set contains the value.
-func (s *FastIntSet) Contains(i int) bool {
+func (s FastIntSet) Contains(i int) bool {
 	if s.large != nil {
 		return s.large.Has(i)
 	}
@@ -126,12 +126,12 @@ func (s *FastIntSet) Contains(i int) bool {
 }
 
 // Empty returns true if the set is empty.
-func (s *FastIntSet) Empty() bool {
+func (s FastIntSet) Empty() bool {
 	return s.small == 0 && (s.large == nil || s.large.IsEmpty())
 }
 
 // Len returns the number of the elements in the set.
-func (s *FastIntSet) Len() int {
+func (s FastIntSet) Len() int {
 	if s.large == nil {
 		return bits.OnesCount64(s.small)
 	}
@@ -140,7 +140,7 @@ func (s *FastIntSet) Len() int {
 
 // Next returns the first value in the set which is >= startVal. If there is no
 // value, the second return value is false.
-func (s *FastIntSet) Next(startVal int) (int, bool) {
+func (s FastIntSet) Next(startVal int) (int, bool) {
 	if s.large != nil {
 		res := s.large.LowerBound(startVal)
 		return res, res != intsets.MaxInt
@@ -158,7 +158,7 @@ func (s *FastIntSet) Next(startVal int) (int, bool) {
 }
 
 // ForEach calls a function for each value in the set (in increasing order).
-func (s *FastIntSet) ForEach(f func(i int)) {
+func (s FastIntSet) ForEach(f func(i int)) {
 	if s.large != nil {
 		for x := s.large.Min(); x != intsets.MaxInt; x = s.large.LowerBound(x + 1) {
 			f(x)
@@ -173,7 +173,7 @@ func (s *FastIntSet) ForEach(f func(i int)) {
 }
 
 // Ordered returns a slice with all the integers in the set, in increasing order.
-func (s *FastIntSet) Ordered() []int {
+func (s FastIntSet) Ordered() []int {
 	if s.Empty() {
 		return nil
 	}
