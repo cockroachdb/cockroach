@@ -1118,8 +1118,9 @@ $(SQLPARSER_ROOT)/help_messages.go: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/he
 
 CLANG_FORMAT := $(shell which clang-format)
 # Format libroach .cc and .h files (excluding protos) using clang-format if installed.
+# We also include the auto-generate keys.h
 .PHONY: c-deps-fmt
-c-deps-fmt: $(shell find $(LIBROACH_SRC_DIR) \( -name '*.cc' -o -name '*.h' \) -not \( -name '*.pb.cc' -o -name '*.pb.h' \))
+c-deps-fmt: $(shell find $(LIBROACH_SRC_DIR) \( -name '*.cc' -o -name '*.h' \) -not \( -name '*.pb.cc' -o -name '*.pb.h' -o -name 'keys.h' \))
 ifeq ($(CLANG_FORMAT),)
 	$(error clang-format is required)
 endif
