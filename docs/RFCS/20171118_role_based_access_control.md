@@ -133,6 +133,7 @@ For example:
 * without any extra privileges, `marc` can now perform any operations on table `mydb.employee_data`
 
 Roles and users follow a small set of rules:
+* roles cannot login (they do not have a password and cannot use certs)
 * roles and users use the same namespace (ie: if a user `marc` exists, we cannot create a role `marc`)
 * users and roles can be members of roles
 * membership loops are not allowed (direct: `A ∈ B ∈ A` or indirect: `A ∈ B ∈ C ... ∈ A`)
