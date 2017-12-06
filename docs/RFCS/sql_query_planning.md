@@ -800,11 +800,14 @@ Cost is roughly calculated by estimating how much time each node in
 the expression tree will use to process all results and modelling how
 data flows through the expression tree. [Table statistics](#stats) are
 used to power cardinality estimates of base relations which in term
-power cardinality estimates of intermediate
-relations. Operator-specific computations model the network, disk and
-CPU costs. The cost model should include data layout and the specific
-operating environment. For example, network RTT in one cluster might
-be vastly different than another.
+power cardinality estimates of intermediate relations. This is
+accomplished by propagating histograms of column values from base
+relations up through intermediate nodes (e.g. combining histograms
+from the two join inputs into a single histogram). Operator-specific
+computations model the network, disk and CPU costs. The cost model
+should include data layout and the specific operating environment. For
+example, network RTT in one cluster might be vastly different than
+another.
 
 The operator-specific computations model the work performed by the
 operator. A hash-join needs to model if temporary disk will be needed
@@ -918,7 +921,7 @@ transformations. Checking whether each transformation is applicable at
 each node would be prohibitively expensive, so the transformations are
 indexed by the root operator of their pattern. Transformations are
 further categorized as exploration and implementation and divided
-amongst the search stages best on generality and expected benefit.
+amongst the search stages based on generality and expected benefit.
 
 Search is naturally parallelizable, yet exploiting that parallelism
 involves synchronization overhead. Parallelization also can allow one
