@@ -61,7 +61,7 @@ type Cache interface {
 	Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool)
 	// SetLowWater sets the low water mark of the cache for the specified span
 	// to the provided timestamp.
-	SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp)
+	SetLowWater(start, end roachpb.Key, ts hlc.Timestamp)
 
 	// GetMaxRead returns the maximum read timestamp which overlaps the interval
 	// spanning from start to end. If that maximum timestamp belongs to a single
