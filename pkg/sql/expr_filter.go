@@ -384,7 +384,7 @@ func extractNotNullConstraintsFromNotNullExpr(expr tree.TypedExpr) util.FastIntS
 		return left
 
 	case *tree.ComparisonExpr:
-		if (t.Operator == tree.Is || t.Operator == tree.IsNot) && t.Right == tree.DNull {
+		if (t.Operator == tree.IsNotDistinctFrom || t.Operator == tree.IsDistinctFrom) && t.Right == tree.DNull {
 			return util.FastIntSet{}
 		}
 		if t.Operator == tree.In || t.Operator == tree.NotIn {
@@ -437,11 +437,11 @@ func extractNotNullConstraints(filter tree.TypedExpr) util.FastIntSet {
 		return extractNotNullConstraintsFromNotNullExpr(t.TypedInnerExpr())
 
 	case *tree.ComparisonExpr:
-		if t.Operator == tree.Is && t.Right == tree.DNull {
+		if t.Operator == tree.IsNotDistinctFrom && t.Right == tree.DNull {
 			return util.FastIntSet{}
 		}
 
-		if (t.Operator == tree.IsNot && t.Right == tree.DNull) ||
+		if (t.Operator == tree.IsDistinctFrom && t.Right == tree.DNull) ||
 			t.Operator == tree.In || t.Operator == tree.NotIn {
 			return extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
 		}
