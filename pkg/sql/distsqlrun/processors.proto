@@ -157,7 +157,12 @@ message TableReaderSpan {
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) are all the
 // columns of the table. Internally, only the values for the columns needed by
-// the post-processing stage are be populated.
+// the post-processing stage are be populated. If is_check is set, the
+// TableReader will run additional data checking procedures and the
+// "internal columns" are:
+//  - Error type (string).
+//  - Primary key as a string, if it was obtainable.
+//  - JSON of all decoded column values.
 message TableReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
@@ -173,6 +178,10 @@ message TableReaderSpec {
   // Not used if there is a limit set in the PostProcessSpec of this processor
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
+
+  // Indicates whether the TableReader is being run as an exhaustive
+  // check. This is only true during SCRUB commands.
+  optional bool is_check = 6 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
