@@ -99,6 +99,14 @@ const (
 	defaultMinSklPages = 2
 )
 
+// initialSklAllocSize is the amount of space in its arena that an empty
+// arenaskl.Skiplist consumes.
+var initialSklAllocSize = func() int {
+	a := arenaskl.NewArena(1000)
+	_ = arenaskl.NewSkiplist(a)
+	return int(a.Size())
+}()
+
 // intervalSkl efficiently tracks the latest logical time at which any key or
 // range of keys has been accessed. Keys are binary values of any length, and
 // times are represented as hybrid logical timestamps (see hlc package). The
@@ -216,6 +224,11 @@ func (s *intervalSkl) Add(key []byte, val cacheValue) {
 func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue) {
 	if from == nil && to == nil {
 		panic("from and to keys cannot be nil")
+	}
+	if encodedRangeSize(from, to, opt) > int(s.pageSize)-initialSklAllocSize {
+		// Without this check, we could fall into an infinite page rotation loop
+		// if a range would take up more space than available in an empty page.
+		panic("key range too large to fit in any page")
 	}
 
 	if to != nil {
@@ -1110,4 +1123,17 @@ func encodeValue(b []byte, val cacheValue) []byte {
 		panic(err)
 	}
 	return b
+}
+
+func encodedRangeSize(from, to []byte, opt rangeOptions) int {
+	vals := 1
+	if (opt & excludeTo) == 0 {
+		vals++
+	}
+	if (opt & excludeFrom) == 0 {
+		vals++
+	}
+	// This will be an overestimate because nodes will almost
+	// always be smaller than arenaskl.MaxNodeSize.
+	return len(from) + len(to) + (vals * encodedValSize) + (2 * arenaskl.MaxNodeSize)
 }
