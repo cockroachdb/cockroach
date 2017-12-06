@@ -634,7 +634,18 @@ Physical properties:
 
 * Column ordering. Specified by a top-level projection.
 * Row ordering. Specified by an `ORDER BY` clause or required by a
-  physical operator (e.g. merge-join).
+  physical operator (e.g. merge-join). Row ordering is enforced by the
+  **sort** operator.
+* Rewindability. Required by multi-use CTEs. Every reference to the
+  CTE in the query needs to return the same results. A read-only query
+  has this property by default, though care must be taken with regards
+  to the [Halloween
+  Problem](https://en.wikipedia.org/wiki/Halloween_Problem) if the
+  read-only query exists in the context of a DML query. A CTE
+  containing a DML (such as `INSERT` or `UPDATE`) needs to have its
+  results materialized in temporary storage and thus provide
+  *rewindability*. This property is enforced using a **spool**
+  operator.
 
 Note that this list of properties is not exhaustive. In particular,
 there are a large number of scalar properties for which it isn't clear
@@ -1040,14 +1051,6 @@ becomes.
   BY`. Are there other places we need to pay attention to physical
   properties?  Are there other physical properties to capture at
   intermediate nodes?
-  
-  Another physical property to pay attention to is
-  "rewindability". This arises in the context of CTEs where we need to
-  materialize the view because it is being accessed multiple
-  times. "Rewindability" indicates that an expression can be run
-  multiple times. A scan operator supports rewindability, while most
-  intermediate operators do not. If an operator does not support
-  rewindability, a "spool" operator needs to be added as an enforcer.
   
 * Which parts of query planning can be performed during PREPARE vs
   EXECUTE? Most (all?) of the transformations that are part of Rewrite
