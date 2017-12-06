@@ -78,7 +78,7 @@ cd "$repo"
 for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n1) master
 do
   git checkout "$branch"
-  build/builder.sh make gotestdashi
+  COCKROACH_BUILDER_CCACHE=1 build/builder.sh make gotestdashi
   # TODO(benesch): store the postgres-test version somewhere more accessible.
   docker pull $(git grep cockroachdb/postgres-test -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
 done
