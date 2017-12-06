@@ -276,3 +276,14 @@ SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str
 # Verify we use the "top K" strategy and thus don't hit OOM as above.
 statement ok
 SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str LIMIT 10
+
+# Regression test for #20481.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkUFLxDAQhe_-iuWdFHPYdG85rXhakK3srniQIrEZSqBtajIBZel_lzaIWmhxj_Mm3_sCc0brDO11QwHqBRKFQOddSSE4P0Tpwc58QK0FbNtFHuJCoHSeoM5gyzVB4aTfajqQNuQhYIi1rcfSzttG-89tGxt24T1qTxDII6vVNkPRC7jIP72BdUVQshf_dx-d56l2K2-_NRB4sI3llVzP-rJLfHdV5anS7CbO-_xpf3o95M_H65tZ0-YS04FC59pAfzxzzeu-ECBTUbpccNGX9OhdOWrSmI_cGBgKnLYyDbs2rYYP_oblIpwtw9kivJnARX_1FQAA___U0tm5
+
+query I
+SELECT COUNT(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
+----
+10
