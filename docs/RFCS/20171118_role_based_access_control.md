@@ -43,12 +43,7 @@ Table of Contents
          * [Internal representation of memberships](#internal-representation-of-memberships)
       * [Unresolved questions](#unresolved-questions)
          * [Leases on system tables](#leases-on-system-tables)
-         * [Inheritance of role admin](#inheritance-of-role-admin)
-         * [Adding and removing admin setting](#adding-and-removing-admin-setting)
-         * [Listing expanded role memberships](#listing-expanded-role-memberships)
-         * [Virtual table details](#virtual-table-details)
          * [Existence of an admin user before migrations](#existence-of-an-admin-user-before-migrations)
-         * [Enterprise enforcement workarounds](#enterprise-enforcement-workarounds)
          * [Code location](#code-location)
       * [Future improvements](#future-improvements)
 
@@ -377,7 +372,9 @@ membership loop.
 * **Permissions**: must be an administrator or role admin.
 * **Enterprise requirement**: valid license required.
 
-See [Adding and removing admin setting](#adding-and-removing-admin-setting) for behavior details.
+
+**TODO(mberhault)**: check postgres behavior w.r.t inheritance of `WITH ADMIN` option.
+**TODO(mberhault)**: check postgres behavior: can we add/remote `WITH ADMIN` without changing membership?
 
 #### REVOKE role
 
@@ -390,7 +387,7 @@ Fails if either `rolename` or `name` does not exist, or if the membership does n
 * **Permissions**: must be an administrator or role admin.
 * **Enterprise requirement**: valid license required.
 
-See [Adding and removing admin setting](#adding-and-removing-admin-setting) for behavior details.
+**TODO(mberhault)**: check postgres behavior: can we add/remote `WITH ADMIN` without changing membership?
 
 #### SHOW ROLES
 
@@ -414,7 +411,7 @@ Where `rolename` can be one or more role, or `*` and `name` can be one of more u
 * **Permissions**: none required.
 * **Enterprise requirement**: none required.
 
-See [Listing expanded role memberships](#listing-expanded-role-memberships) for possible variations.
+**TODO(mberhault)**: should we have an option to pick whether to show direct/indirect/all memberships?
 
 ### Modifying role memberships
 
@@ -498,6 +495,9 @@ All prohibited actions are in the "administrative" category of operations (role 
 in the path of data-access SQL queries.
 
 This makes the enterprise license check relatively painless.
+
+It is currently possible to manipulate the system tables directly, bypassing role manipulation statements.
+Closing this loop-hole is out of scope for this document. See [tracking issue #19277](https://github.com/cockroachdb/cockroach/issues/19277).
 
 ### Virtual tables
 
@@ -620,52 +620,6 @@ We need to check whether leases can be acquired on system tables (specifically, 
 If not, an alternative would be to make the `role_members` table a non-system table, or to use an separate
 empty table to acquire leases on.
 
-### Inheritance of role admin
-
-Given the following:
-* `otherrole ∈ mainrole WITH ADMIN OPTION`
-* `marc ∈ otherrole`
-
-Do we allow inheritance of role admin?
-* if yes: `marc` is allowed to modify the membership of `mainrole`
-* if no: `marc` is not allowed to modify the membership of `mainrole`
-
-We should follow the PostgreSQL logic.
-
-### Adding and removing admin setting
-
-When calling `GRANT ... WITH ADMIN OPTION` or `REVOKE ADMIN OPTION FOR ...`, does this add/remove the member
-or only the admin attribute?
-
-Effectively, this boils down to how these calls should work:
-```
-# Add the user without admin
-GRANT myrole TO marc
-# Does this fail on existing member, or does this make marc an admin?
-GRANT myrole TO marc WITH ADMIN OPTION
-```
-
-And for revoke:
-```
-# Given marc as an admin member of myrole, does this remove marc as a member, or only remove the admin attribute?
-REVOKE myrole FROM marc WITH ADMIN OPTION
-```
-
-We should follow the PostgreSQL logic.
-
-### Listing expanded role memberships
-
-The `SHOW GRANTS ON ROLE` statement allows lookup of role memberships.
-
-We should have a way to show or filter direct vs indirect memberships.
-Some options:
-* include a `DIRECT` field which returns `YES` is we are a direct member
-* add an option to `SHOW GRANTS` to show all/direct/indirect memberships
-
-### Virtual table details
-
-The [Virtual tables](#virtual-tables) section has a few TODOs to clarify PostgreSQL behavior.
-
 ### Existence of an `admin` user before migrations
 
 One of the migrations needed for role-based access control is the addition of the `admin` role to the
@@ -675,17 +629,6 @@ We should decide what to do if a user with that name exists. Some possibilities:
 * just overwrite it (clear the password hash and set the `isRole` field) and document the upgrade breakage.
 * rename it: this would involve renaming all privileges as well. Surfacing this to the user would be tricky.
 * fail the migration with a message clearly saying the user must be removed/renamed.
-
-### Enterprise enforcement workarounds
-
-Even though we disable manipulation (create, drop, add/remove members, grant/revoke privileges) or roles
-for non-enterprise users, admin users can still manipulate the system tables storing roles and role
-memberships.
-
-This would let non-enterprise users create new roles and modify their memberships.
-Granting privileges to roles would be trickier as they are embedded in database/table descriptors.
-
-We should see if we want additional safeguards to prevent non-enterprise use of roles.
 
 ### Code location
 
