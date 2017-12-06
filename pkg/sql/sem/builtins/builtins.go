@@ -136,7 +136,7 @@ var Builtins = map[string][]tree.Builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		tree.Builtin{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -159,7 +159,7 @@ var Builtins = map[string][]tree.Builtin{
 
 	"concat_ws": {
 		tree.Builtin{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2553,7 +2553,7 @@ func feedHash(h hash.Hash, args tree.Datums) {
 func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2564,7 +2564,7 @@ func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{Typ: types.Bytes},
+			Types:        tree.VariadicType{VarType: types.Bytes},
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2580,7 +2580,7 @@ func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2591,7 +2591,7 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{Typ: types.Bytes},
+			Types:        tree.VariadicType{VarType: types.Bytes},
 			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2606,7 +2606,7 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 func hash64Builtin(newHash func() hash.Hash64, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2617,7 +2617,7 @@ func hash64Builtin(newHash func() hash.Hash64, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{Typ: types.Bytes},
+			Types:        tree.VariadicType{VarType: types.Bytes},
 			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {

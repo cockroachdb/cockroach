@@ -24,6 +24,72 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
+type variadicTestCase struct {
+	args    []types.T
+	matches bool
+}
+
+type variadicTestData struct {
+	name  string
+	cases []variadicTestCase
+}
+
+func TestVariadicFunctions(t *testing.T) {
+	testData := map[*VariadicType]variadicTestData{
+		{VarType: types.String}: {
+			"string...", []variadicTestCase{
+				{[]types.T{types.String}, true},
+				{[]types.T{types.String, types.String}, true},
+				{[]types.T{types.String, types.Null}, true},
+				{[]types.T{types.String, types.Null, types.String}, true},
+				{[]types.T{types.Int}, false},
+			}},
+		{FixedTypes: []types.T{types.Int}, VarType: types.String}: {
+			"int, string...", []variadicTestCase{
+				{[]types.T{types.Int}, true},
+				{[]types.T{types.Int, types.String}, true},
+				{[]types.T{types.Int, types.String, types.String}, true},
+				{[]types.T{types.Int, types.Null, types.String}, true},
+				{[]types.T{types.String}, false},
+			}},
+		{FixedTypes: []types.T{types.Int, types.Bool}, VarType: types.String}: {
+			"int, bool, string...", []variadicTestCase{
+				{[]types.T{types.Int}, false},
+				{[]types.T{types.Int, types.Bool}, true},
+				{[]types.T{types.Int, types.Bool, types.String}, true},
+				{[]types.T{types.Int, types.Null, types.String}, true},
+				{[]types.T{types.Int, types.Bool, types.String, types.Bool}, false},
+				{[]types.T{types.Int, types.String}, false},
+				{[]types.T{types.Int, types.String, types.String}, false},
+				{[]types.T{types.String}, false},
+			}},
+	}
+
+	for fn, data := range testData {
+		t.Run(fmt.Sprintf("%v", fn), func(t *testing.T) {
+			if data.name != fn.String() {
+				t.Fatalf("expected name %v, got %v", data.name, fn.String())
+			}
+		})
+
+		for _, v := range data.cases {
+			t.Run(fmt.Sprintf("%v/%v", fn, v), func(t *testing.T) {
+				if v.matches {
+					if !fn.matchLen(len(v.args)) {
+						t.Fatalf("expected fn %v to matchLen %v", fn, v.args)
+					}
+
+					if !fn.match(v.args) {
+						t.Fatalf("expected fn %v to match %v", fn, v.args)
+					}
+				} else if fn.matchLen(len(v.args)) && fn.match(v.args) {
+					t.Fatalf("expected fn %v to not match %v", fn, v.args)
+				}
+			})
+		}
+	}
+}
+
 type testOverload struct {
 	paramTypes ArgTypes
 	retType    types.T
