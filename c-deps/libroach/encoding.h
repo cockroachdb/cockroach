@@ -15,6 +15,7 @@
 #ifndef ROACHLIB_ENCODING_H
 #define ROACHLIB_ENCODING_H
 
+#include "rocksdb/slice.h"
 #include <stdint.h>
 
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
