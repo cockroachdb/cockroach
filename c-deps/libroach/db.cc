@@ -1375,7 +1375,8 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
 
   rocksdb::Status Finish(rocksdb::UserCollectedProperties* properties) override {
     *properties = rocksdb::UserCollectedProperties{
-        {"crdb.ts.min", ts_min_}, {"crdb.ts.max", ts_max_},
+        {"crdb.ts.min", ts_min_},
+        {"crdb.ts.max", ts_max_},
     };
     return rocksdb::Status::OK();
   }

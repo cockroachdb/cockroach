@@ -1,8 +1,14 @@
 Sources for libroach.
 
-Code is formatted using [clang-format](https://packagecontrol.io/packages/Clang%20Format).
+Code is formatted using [clang-format](https://clang.llvm.org/docs/ClangFormat.html).
 
-If `clang-format` is in your path, simple run `make c-deps-fmt` in your path to run it over
-the `.cc` and `.h` files in libroach (excluding auto-generated proto files).
+To install:
+* download [LLVM  5.0 for your OS/arch](http://releases.llvm.org/download.html#5.0.0)
+* extract archive
+* place the archive's `bin/clang-format` in your path
 
-You may also want to add clang-format as a save hook in your editor.
+If you use a package manager, make sure it uses clang-format from LLVM 5.0 (`clang-format --version`).
+
+To use, do one of:
+* run `make c-deps-fmt` from the `cockroachdb/cockroach` repo
+* add `clang-format -i <filename>` as a save hook in your editor.

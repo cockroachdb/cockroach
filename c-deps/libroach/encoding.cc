@@ -19,7 +19,10 @@
 
 void EncodeUint32(std::string* buf, uint32_t v) {
   const uint8_t tmp[sizeof(v)] = {
-      uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v),
+      uint8_t(v >> 24),
+      uint8_t(v >> 16),
+      uint8_t(v >> 8),
+      uint8_t(v),
   };
   buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
 }

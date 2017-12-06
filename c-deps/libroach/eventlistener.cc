@@ -24,8 +24,9 @@ void DBEventListener::OnFlushCompleted(rocksdb::DB* db, const rocksdb::FlushJobI
 
   if (kDebug) {
     const rocksdb::TableProperties& p = flush_job_info.table_properties;
-    fprintf(stderr, "OnFlushCompleted:\n  %40s:  entries=%d  data=%.1fMB  "
-                    "index=%.1fMB  filter=%.1fMB\n",
+    fprintf(stderr,
+            "OnFlushCompleted:\n  %40s:  entries=%d  data=%.1fMB  "
+            "index=%.1fMB  filter=%.1fMB\n",
             flush_job_info.file_path.c_str(), (int)p.num_entries, float(p.data_size) / (1024.0 * 1024.0),
             float(p.index_size) / (1024.0 * 1024.0), float(p.filter_size) / (1024.0 * 1024.0));
   }
