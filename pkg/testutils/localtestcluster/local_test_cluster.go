@@ -98,8 +98,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.tester = t
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper)
+	c := &rpcContext.ClusterID
 	server := rpc.NewServer(rpcContext) // never started
-	ltc.Gossip = gossip.New(ambient, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry())
+	ltc.Gossip = gossip.New(ambient, c, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry())
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
 

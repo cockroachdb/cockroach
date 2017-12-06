@@ -65,7 +65,7 @@ func (s *statusServer) ProblemRanges(
 		if err := s.stopper.RunAsyncTask(
 			nodeCtx, "server.statusServer: requesting remote ranges",
 			func(ctx context.Context) {
-				status, err := s.dialNode(nodeID)
+				status, err := s.dialNode(ctx, nodeID)
 				var rangesResponse *serverpb.RangesResponse
 				if err == nil {
 					req := &serverpb.RangesRequest{}
