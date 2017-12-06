@@ -1030,7 +1030,7 @@ FROM pg_catalog.pg_proc
 WHERE proname='least'
 ----
 proname  provariadic  pronargs  prorettype  proargtypes  proargmodes
-least    2283         1         2283        2283         v
+least    2283         1         2283        2283         {"v"}
 
 ## pg_catalog.pg_range
 query IIIIII colnames
