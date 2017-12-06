@@ -644,6 +644,14 @@ type GCInfo struct {
 	ResolveTotal int
 	// Threshold is the computed expiration timestamp. Equal to `Now - Policy`.
 	Threshold hlc.Timestamp
+	// AffectedVersionsKeyBytes is the number of (fully encoded) bytes deleted from keys in the storage engine.
+	// Note that this does not account for compression that the storage engine uses to store data on disk. Real
+	// space savings tends to be smaller due to this compression, and space may be released only at a later point
+	// in time.
+	AffectedVersionsKeyBytes int64
+	// AffectedVersionsValBytes is the number of (fully encoded) bytes deleted from values in the storage engine.
+	// See AffectedVersionsKeyBytes for caveats.
+	AffectedVersionsValBytes int64
 }
 
 func (info *GCInfo) updateMetrics(metrics *StoreMetrics) {
@@ -707,6 +715,8 @@ func RunGC(
 	var expBaseKey roachpb.Key
 	var keys []engine.MVCCKey
 	var vals [][]byte
+	var keyBytes int64
+	var valBytes int64
 
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
@@ -761,7 +771,14 @@ func RunGC(
 					// a single key, with successively newer timestamps to prevent
 					// any single request from exploding during GC evaluation.
 					for i := len(keys) - 1; i >= startIdx+idx; i-- {
-						batchGCKeysBytes += int64(len(keys[i].Key))
+						keyBytes = int64(keys[i].EncodedSize())
+						valBytes = int64(len(vals[i]))
+
+						// Add the total size of the GC'able versions of the keys and values to GCInfo.
+						infoMu.GCInfo.AffectedVersionsKeyBytes += keyBytes
+						infoMu.GCInfo.AffectedVersionsValBytes += valBytes
+
+						batchGCKeysBytes += keyBytes
 						// If the current key brings the batch over the target
 						// size, add the current timestamp to finish the current
 						// chunk and start a new one.
