@@ -15,8 +15,11 @@
 package tscache
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -73,8 +76,9 @@ func (tc *sklImpl) getSkl(readCache bool) *intervalSkl {
 
 // Add implements the Cache interface.
 func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
-	skl := tc.getSkl(readCache)
+	start, end = boundKeyLens(start, end)
 
+	skl := tc.getSkl(readCache)
 	val := cacheValue{ts: ts, txnID: txnID}
 	if len(end) == 0 {
 		skl.Add(nonNil(start), val)
@@ -125,4 +129,24 @@ func nonNil(b []byte) []byte {
 		return emptyStartKey
 	}
 	return b
+}
+
+// boundKeyLens makes sure that the key lengths provided are below the maximum
+// key length allowed by intervalSkl. This is very large (4 GB), so we don't
+// expect to ever see keys of this size in practice. Still, we'd rather not
+// panic.
+func boundKeyLens(start, end roachpb.Key) (roachpb.Key, roachpb.Key) {
+	// If either key is too long, truncate its length, making sure to
+	// always grow the [start,end) range instead of shrinking it.
+	if l := len(start); l > maxSklKeyLen {
+		start = start[:maxSklKeyLen]
+		log.Errorf(context.TODO(), "start key with length %d exceeds maximum key length of %d..."+
+			"losing precision in timestamp cache", l, maxSklKeyLen)
+	}
+	if l := len(end); l > maxSklKeyLen {
+		end = end[:maxSklKeyLen].Next() // next to grow range
+		log.Errorf(context.TODO(), "end key with length %d exceeds maximum key length of %d..."+
+			"losing precision in timestamp cache", l, maxSklKeyLen)
+	}
+	return start, end
 }
