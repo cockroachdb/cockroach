@@ -108,6 +108,9 @@ DBStatus DBSyncWAL(DBEngine* db);
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
 
+// Forces an immediate compaction over keys in the specified range.
+DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end);
+
 // Sets the database entry for "key" to "value".
 DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
 

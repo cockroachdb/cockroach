@@ -16,6 +16,7 @@ syntax = "proto2";
 package cockroach.config;
 option go_package = "config";
 
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // GCPolicy defines garbage collection policies which apply to MVCC
@@ -31,6 +32,17 @@ message GCPolicy {
   // garbage collected. Only older versions of values are garbage
   // collected. Specifying <=0 mean older versions are never GC'd.
   optional int32 ttl_seconds = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLSeconds"];
+
+  message Internal {
+    option (gogoproto.equal) = true;
+
+    // On DROP and TRUNCATE, the drop deadline is set to a timestamp
+    // after which the GC queue will invoke ClearRange on the data.
+    // The GC queue is activated if this value is non-zero.
+    optional util.hlc.Timestamp drop_deadline = 1 [(gogoproto.nullable) = false];
+  }
+  // For internal use only. Internal options not settable via yaml.
+  optional Internal internal = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"-\""];
 }
 
 // Constraint constrains the stores a replica can be stored on.

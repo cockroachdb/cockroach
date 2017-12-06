@@ -1764,6 +1764,16 @@ DBStatus DBCompact(DBEngine* db) {
   return ToDBStatus(db->rep->CompactRange(options, NULL, NULL));
 }
 
+DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end) {
+  rocksdb::CompactRangeOptions options;
+  options.bottommost_level_compaction = rocksdb::BottommostLevelCompaction::kForce;
+  std::string start_key = EncodeKey(start);
+  std::string end_key = EncodeKey(end);
+  rocksdb::Slice start_key_slice(start_key);
+  rocksdb::Slice end_key_slice(end_key);
+  return ToDBStatus(db->rep->CompactRange(options, &start_key_slice, &end_key_slice));
+}
+
 DBStatus DBImpl::Put(DBKey key, DBSlice value) {
   rocksdb::WriteOptions options;
   return ToDBStatus(rep->Put(options, EncodeKey(key), ToSlice(value)));
