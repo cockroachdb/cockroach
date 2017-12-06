@@ -25,14 +25,14 @@ extern "C" {
 
 // A DBSlice contains read-only data that does not need to be freed.
 typedef struct {
-  char *data;
+  char* data;
   int len;
 } DBSlice;
 
 // A DBString is structurally identical to a DBSlice, but the data it
 // contains must be freed via a call to free().
 typedef struct {
-  char *data;
+  char* data;
   int len;
 } DBString;
 
@@ -65,7 +65,7 @@ typedef struct DBIterator DBIterator;
 
 // DBOptions contains local database options.
 typedef struct {
-  DBCache *cache;
+  DBCache* cache;
   uint64_t block_size;
   uint64_t wal_ttl_seconds;
   bool logging_enabled;
@@ -76,82 +76,82 @@ typedef struct {
 } DBOptions;
 
 // Create a new cache with the specified size.
-DBCache *DBNewCache(uint64_t size);
+DBCache* DBNewCache(uint64_t size);
 
 // Add a reference to an existing cache. Note that the underlying
 // RocksDB cache is shared between the original and new reference.
-DBCache *DBRefCache(DBCache *cache);
+DBCache* DBRefCache(DBCache* cache);
 
 // Release a cache, decrementing the reference count on the underlying
 // RocksDB cache. Note that the RocksDB cache will not be freed until
 // all of the references have been released.
-void DBReleaseCache(DBCache *cache);
+void DBReleaseCache(DBCache* cache);
 
 // Opens the database located in "dir", creating it if it doesn't
 // exist.
-DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions options);
+DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions options);
 
 // Destroys the database located in "dir". As the name implies, this
 // operation is destructive. Use with caution.
 DBStatus DBDestroy(DBSlice dir);
 
 // Closes the database, freeing memory and other resources.
-void DBClose(DBEngine *db);
+void DBClose(DBEngine* db);
 
 // Flushes all mem-table data to disk, blocking until the operation is
 // complete.
-DBStatus DBFlush(DBEngine *db);
+DBStatus DBFlush(DBEngine* db);
 
 // Syncs the RocksDB WAL ensuring all data is persisted to
 // disk. Blocks until the operation is complete.
-DBStatus DBSyncWAL(DBEngine *db);
+DBStatus DBSyncWAL(DBEngine* db);
 
 // Forces an immediate compaction over all keys.
-DBStatus DBCompact(DBEngine *db);
+DBStatus DBCompact(DBEngine* db);
 
 // Sets the database entry for "key" to "value".
-DBStatus DBPut(DBEngine *db, DBKey key, DBSlice value);
+DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
 
 // Merge the database entry (if any) for "key" with "value".
-DBStatus DBMerge(DBEngine *db, DBKey key, DBSlice value);
+DBStatus DBMerge(DBEngine* db, DBKey key, DBSlice value);
 
 // Retrieves the database entry for "key".
-DBStatus DBGet(DBEngine *db, DBKey key, DBString *value);
+DBStatus DBGet(DBEngine* db, DBKey key, DBString* value);
 
 // Deletes the database entry for "key".
-DBStatus DBDelete(DBEngine *db, DBKey key);
+DBStatus DBDelete(DBEngine* db, DBKey key);
 
 // Deletes a range of keys from start (inclusive) to end (exclusive).
-DBStatus DBDeleteRange(DBEngine *db, DBKey start, DBKey end);
+DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end);
 
 // Deletes a range of keys from start (inclusive) to end
 // (exclusive). Unlike DBDeleteRange, this function finds the keys to
 // delete by iterating over the supplied iterator and creating
 // tombstones for the individual keys.
-DBStatus DBDeleteIterRange(DBEngine *db, DBIterator *iter, DBKey start, DBKey end);
+DBStatus DBDeleteIterRange(DBEngine* db, DBIterator* iter, DBKey start, DBKey end);
 
 // Applies a batch of operations (puts, merges and deletes) to the
 // database atomically and closes the batch. It is only valid to call
 // this function on an engine created by DBNewBatch. If an error is
 // returned, the batch is not closed and it is the caller's
 // responsibility to call DBClose.
-DBStatus DBCommitAndCloseBatch(DBEngine *db, bool sync);
+DBStatus DBCommitAndCloseBatch(DBEngine* db, bool sync);
 
 // ApplyBatchRepr applies a batch of mutations encoded using that
 // batch representation returned by DBBatchRepr(). It is only valid to
 // call this function on an engine created by DBOpen() or DBNewBatch()
 // (i.e. not a snapshot).
-DBStatus DBApplyBatchRepr(DBEngine *db, DBSlice repr, bool sync);
+DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr, bool sync);
 
 // Returns the internal batch representation. The returned value is
 // only valid until the next call to a method using the DBEngine and
 // should thus be copied immediately. It is only valid to call this
 // function on an engine created by DBNewBatch.
-DBSlice DBBatchRepr(DBEngine *db);
+DBSlice DBBatchRepr(DBEngine* db);
 
 // Creates a new snapshot of the database for use in DBGet() and
 // DBNewIter(). It is the caller's responsibility to call DBClose().
-DBEngine *DBNewSnapshot(DBEngine *db);
+DBEngine* DBNewSnapshot(DBEngine* db);
 
 // Creates a new batch for performing a series of operations
 // atomically. Use DBCommitBatch() on the returned engine to apply the
@@ -160,7 +160,7 @@ DBEngine *DBNewSnapshot(DBEngine *db);
 // does not need to index keys for reading and can be faster if the
 // number of keys is large (and reads are not necessary). It is the
 // caller's responsibility to call DBClose().
-DBEngine *DBNewBatch(DBEngine *db, bool writeOnly);
+DBEngine* DBNewBatch(DBEngine* db, bool writeOnly);
 
 // Creates a new database iterator. When prefix is true, Seek will use
 // the user-key prefix of the key supplied to DBIterSeek() to restrict
@@ -168,38 +168,38 @@ DBEngine *DBNewBatch(DBEngine *db, bool writeOnly);
 // without the same user-key prefix will not work correctly (keys may
 // be skipped). It is the callers responsibility to call
 // DBIterDestroy().
-DBIterator *DBNewIter(DBEngine *db, bool prefix);
+DBIterator* DBNewIter(DBEngine* db, bool prefix);
 
-DBIterator *DBNewTimeBoundIter(DBEngine *db, DBTimestamp min_ts, DBTimestamp max_ts);
+DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts);
 
 // Destroys an iterator, freeing up any associated memory.
-void DBIterDestroy(DBIterator *iter);
+void DBIterDestroy(DBIterator* iter);
 
 // Positions the iterator at the first key that is >= "key".
-DBIterState DBIterSeek(DBIterator *iter, DBKey key);
+DBIterState DBIterSeek(DBIterator* iter, DBKey key);
 
 // Positions the iterator at the first key in the database.
-DBIterState DBIterSeekToFirst(DBIterator *iter);
+DBIterState DBIterSeekToFirst(DBIterator* iter);
 
 // Positions the iterator at the last key in the database.
-DBIterState DBIterSeekToLast(DBIterator *iter);
+DBIterState DBIterSeekToLast(DBIterator* iter);
 
 // Advances the iterator to the next key. If skip_current_key_versions
 // is true, any remaining versions for the current key are
 // skipped. After this call, DBIterValid() returns 1 iff the iterator
 // was not positioned at the last key.
-DBIterState DBIterNext(DBIterator *iter, bool skip_current_key_versions);
+DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions);
 
 // Moves the iterator back to the previous key. If
 // skip_current_key_versions is true, any remaining versions for the
 // current key are skipped. After this call, DBIterValid() returns 1
 // iff the iterator was not positioned at the first key.
-DBIterState DBIterPrev(DBIterator *iter, bool skip_current_key_versions);
+DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
 
 // Implements the merge operator on a single pair of values. update is
 // merged with existing. This method is provided for invocation from
 // Go code.
-DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString *new_value);
+DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
 // NB: The function (cStatsToGoStats) that converts these to the go
 // representation is unfortunately duplicated in engine and engineccl. If this
@@ -221,11 +221,11 @@ typedef struct {
   int64_t last_update_nanos;
 } MVCCStatsResult;
 
-MVCCStatsResult MVCCComputeStats(DBIterator *iter, DBKey start, DBKey end, int64_t now_nanos);
+MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);
 
 bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
-DBStatus MVCCFindSplitKey(DBIterator *iter, DBKey start, DBKey end, DBKey min_split, int64_t target_size,
-                          bool allow_meta2_splits, DBString *split_key);
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split, int64_t target_size,
+                          bool allow_meta2_splits, DBString* split_key);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
@@ -242,8 +242,8 @@ typedef struct {
   int64_t pending_compaction_bytes_estimate;
 } DBStatsResult;
 
-DBStatus DBGetStats(DBEngine *db, DBStatsResult *stats);
-DBString DBGetCompactionStats(DBEngine *db);
+DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
+DBString DBGetCompactionStats(DBEngine* db);
 
 typedef struct {
   int level;
@@ -255,44 +255,44 @@ typedef struct {
 // Retrieve stats about all of the live sstables. Note that the tables
 // array must be freed along with the start_key and end_key of each
 // table.
-DBSSTable *DBGetSSTables(DBEngine *db, int *n);
+DBSSTable* DBGetSSTables(DBEngine* db, int* n);
 
 // DBGetUserProperties fetches the user properties stored in each sstable's
 // metadata. These are returned as a serialized SSTUserPropertiesCollection
 // proto.
-DBString DBGetUserProperties(DBEngine *db);
+DBString DBGetUserProperties(DBEngine* db);
 
 // Bulk adds the file at the given path to a database. See the RocksDB
 // documentation on `IngestExternalFile` for the various restrictions on what
 // can be added. If move_file is true, the file will be moved instead of copied.
-DBStatus DBIngestExternalFile(DBEngine *db, DBSlice path, bool move_file);
+DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file);
 
 typedef struct DBSstFileWriter DBSstFileWriter;
 
 // Creates a new SstFileWriter with the default configuration.
-DBSstFileWriter *DBSstFileWriterNew();
+DBSstFileWriter* DBSstFileWriterNew();
 
 // Opens an in-memory file for output of an sstable.
-DBStatus DBSstFileWriterOpen(DBSstFileWriter *fw);
+DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw);
 
 // Adds a kv entry to the sstable being built. An error is returned if it is
 // not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Open` must have been called. `Close`
 // cannot have been called.
-DBStatus DBSstFileWriterAdd(DBSstFileWriter *fw, DBKey key, DBSlice val);
+DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
 
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.
-DBStatus DBSstFileWriterFinish(DBSstFileWriter *fw, DBString *data);
+DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data);
 
 // Closes the writer and frees memory and other resources. May only be called
 // once.
-void DBSstFileWriterClose(DBSstFileWriter *fw);
+void DBSstFileWriterClose(DBSstFileWriter* fw);
 
-void DBRunLDB(int argc, char **argv);
+void DBRunLDB(int argc, char** argv);
 
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
-DBStatus DBEnvWriteFile(DBEngine *db, DBSlice path, DBSlice contents);
+DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 
 #ifdef __cplusplus
 }  // extern "C"

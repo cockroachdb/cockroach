@@ -16,8 +16,8 @@
 
 const DBStatus kSuccess = {NULL, 0};
 
-DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult *stats) {
-  const rocksdb::Comparator *kComparator = CockroachComparator();
+DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
+  const rocksdb::Comparator* kComparator = CockroachComparator();
 
   // TODO(dan): Inserting into a batch just to iterate over it is unfortunate.
   // Consider replacing this with WriteBatch's Iterate/Handler mechanism and
