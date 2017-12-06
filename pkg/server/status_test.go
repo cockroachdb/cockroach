@@ -562,7 +562,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	}
 
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url)
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -591,7 +591,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 	var request serverpb.NodesRequest
 
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url)
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -302,7 +302,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			} else {
 				// We're going to perform a RunSyncFlow call and then have the client
 				// cancel the call's context.
-				conn, err := flowCtx.rpcCtx.GRPCDial(addr.String())
+				conn, err := flowCtx.rpcCtx.GRPCDial(addr.String()).Connect(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
