@@ -9,16 +9,20 @@ fi
 old=$(sed -n '1!p' "$1")
 
 cat > "$1" << EOF
-<pkg>: <short description>
+
 
 Release note: None
 
+# Write a commit message of the form
+#
+# <pkg>: <short description>
+#
 # Please add a release note with a category if your commit has user-facing
-# changes. Leave the message above if not. For example:
+# changes. Leave the default above if not. For example,
 #
 # Release note (sql change): Add support for JSON columns.
 #
-# Category list:
+# Categories.
 # - cli change
 # - sql change
 # - admin ui change
