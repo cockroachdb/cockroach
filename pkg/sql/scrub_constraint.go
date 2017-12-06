@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"go/constant"
 	"time"
 
 	"golang.org/x/net/context"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 const (
@@ -36,6 +38,7 @@ type sqlCheckConstraintCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc *sqlbase.TableDescriptor
 	checkDesc *sqlbase.TableDescriptor_CheckConstraint
+	asOf      hlc.Timestamp
 
 	// columns is a list of the columns returned in the query result
 	// tree.Datums.
@@ -59,11 +62,13 @@ func newSQLCheckConstraintCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.TableDescriptor,
 	checkDesc *sqlbase.TableDescriptor_CheckConstraint,
+	asOf hlc.Timestamp,
 ) *sqlCheckConstraintCheckOperation {
 	return &sqlCheckConstraintCheckOperation{
 		tableName: tableName,
 		tableDesc: tableDesc,
 		checkDesc: checkDesc,
+		asOf:      asOf,
 	}
 }
 
@@ -79,9 +84,15 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	normalizableTableName := &tree.NormalizableTableName{TableNameReference: o.tableName}
 	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns),
-		From:  &tree.From{Tables: tree.TableExprs{normalizableTableName}},
+		From: &tree.From{
+			Tables: tree.TableExprs{normalizableTableName},
+		},
 		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
 	}
+	if o.asOf != hlc.MaxTimestamp {
+		sel.From.AsOf = tree.AsOfClause{Expr: &tree.NumVal{Value: constant.MakeInt64(o.asOf.WallTime)}}
+	}
+
 	// This could potentially use a variant of planner.SelectClause that could
 	// use the tableDesc we have, but this is a rare operation and the benefit
 	// would be marginal compared to the work of the actual query, so the added

@@ -583,6 +583,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> scrub_stmt
 %type <tree.Statement> scrub_database_stmt
 %type <tree.Statement> scrub_table_stmt
+%type <tree.ScrubOptions> opt_scrub_options_clause
 %type <tree.ScrubOptions> scrub_option_list
 %type <tree.ScrubOption> scrub_option
 
@@ -2161,22 +2162,26 @@ scrub_stmt:
 // %Category: Experimental
 // %Text:
 // EXPERIMENTAL SCRUB DATABASE <database>
+//                             [AS OF SYSTEM TIME <expr>]
+//
 // All scrub checks will be run on the database. This includes:
 //   - Physical table data (encoding)
 //   - Secondary index integrity
 //   - Constraint integrity (NOT NULL, CHECK, FOREIGN KEY, UNIQUE)
 // %SeeAlso: SCRUB TABLE, SCRUB
 scrub_database_stmt:
-  EXPERIMENTAL SCRUB DATABASE name
+  EXPERIMENTAL SCRUB DATABASE name opt_as_of_clause
   {
-    $$.val = &tree.Scrub{Typ: tree.ScrubDatabase, Database: tree.Name($4)}
+    $$.val = &tree.Scrub{Typ: tree.ScrubDatabase, Database: tree.Name($4), AsOf: $5.asOfClause()}
   }
 | EXPERIMENTAL SCRUB DATABASE error // SHOW HELP: SCRUB DATABASE
 
 // %Help: SCRUB TABLE - run scrub checks on a table
 // %Category: Experimental
 // %Text:
-// SCRUB TABLE <tablename> [WITH OPTIONS <option> [, ...]]
+// SCRUB TABLE <tablename>
+//             [AS OF SYSTEM TIME <expr>]
+//             [WITH OPTIONS <option> [, ...]]
 //
 // Options:
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS INDEX ALL
@@ -2186,15 +2191,21 @@ scrub_database_stmt:
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS PHYSICAL
 // %SeeAlso: SCRUB DATABASE, SRUB
 scrub_table_stmt:
-  EXPERIMENTAL SCRUB TABLE qualified_name
+  EXPERIMENTAL SCRUB TABLE qualified_name opt_as_of_clause opt_scrub_options_clause
   {
-    $$.val = &tree.Scrub{Typ: tree.ScrubTable, Table: $4.normalizableTableName()}
-  }
-| EXPERIMENTAL SCRUB TABLE qualified_name WITH OPTIONS scrub_option_list
-  {
-    $$.val = &tree.Scrub{Typ: tree.ScrubTable, Table: $4.normalizableTableName(), Options: $7.scrubOptions()}
+    $$.val = &tree.Scrub{Typ: tree.ScrubTable, Table: $4.normalizableTableName(), AsOf: $5.asOfClause(), Options: $6.scrubOptions()}
   }
 | EXPERIMENTAL SCRUB TABLE error // SHOW HELP: SCRUB TABLE
+
+opt_scrub_options_clause:
+  WITH OPTIONS scrub_option_list
+  {
+    $$.val = $3.scrubOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.ScrubOptions{}
+  }
 
 scrub_option_list:
   scrub_option

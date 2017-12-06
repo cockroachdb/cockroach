@@ -104,3 +104,14 @@ INSERT INTO test.fk_parent VALUES (1,1), (2,1), (3,NULL)
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
 -----
+
+# Test AS OF SYSTEM TIME
+
+statement error database "test" does not exist
+EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS PHYSICAL
+
+statement error database "test" does not exist
+EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS INDEX ALL
+
+statement error database "test" does not exist
+EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS CONSTRAINT ALL
