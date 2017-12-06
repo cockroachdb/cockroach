@@ -17,4 +17,4 @@
 #include <rocksdb/env.h>
 
 // Returns a new SwitchingEnv using the passed-in env as the base.
-rocksdb::Env *NewSwitchingEnv(rocksdb::Env *base_env, std::shared_ptr<rocksdb::Logger> logger);
+rocksdb::Env* NewSwitchingEnv(rocksdb::Env* base_env, std::shared_ptr<rocksdb::Logger> logger);

@@ -50,8 +50,10 @@ IncludeCategories:
     Priority:        2
   - Regex:           '^(<|"(gtest|isl|json)/)'
     Priority:        3
+  - Regex:           '^".*"$'
+    Priority:        4
   - Regex:           '.*'
-    Priority:        1
+    Priority:        5
 IndentCaseLabels: false
 IndentWidth:     2
 IndentWrappedFunctionNames: false
@@ -69,7 +71,7 @@ PenaltyBreakFirstLessLess: 120
 PenaltyBreakString: 1000
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
-PointerAlignment: Right
+PointerAlignment: Left
 ReflowComments:  true
 SortIncludes:    true
 SpaceAfterCStyleCast: false

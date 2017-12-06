@@ -27,20 +27,20 @@ std::string ToString(DBSlice s);
 std::string EncodeKey(DBKey k);
 
 // ToDBStatus converts a rocksdb Status to a DBStatus.
-DBStatus ToDBStatus(const rocksdb::Status &status);
+DBStatus ToDBStatus(const rocksdb::Status& status);
 
 // FmtStatus formats the given arguments printf-style into a DBStatus.
-DBStatus FmtStatus(const char *fmt, ...);
+DBStatus FmtStatus(const char* fmt, ...);
 
 // CockroachComparator returns CockroachDB's custom mvcc-aware RocksDB
 // comparator. The caller does not assume ownership.
-const ::rocksdb::Comparator *CockroachComparator();
+const ::rocksdb::Comparator* CockroachComparator();
 
 // GetDBBatchInserter returns a WriteBatch::Handler that operates on a
 // WriteBatchBase. The caller assumes ownership of the returned handler.
-::rocksdb::WriteBatch::Handler *GetDBBatchInserter(::rocksdb::WriteBatchBase *batch);
+::rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch);
 
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.
-MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator *const iter_rep, DBKey start, DBKey end,
+MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start, DBKey end,
                                          int64_t now_nanos);
