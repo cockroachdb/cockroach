@@ -72,6 +72,7 @@ typedef struct {
   int num_cpu;
   int max_open_files;
   bool use_switching_env;
+  bool must_exist;
 } DBOptions;
 
 // Create a new cache with the specified size.
