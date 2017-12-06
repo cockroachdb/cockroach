@@ -410,6 +410,7 @@ func (g *jsonArrayGenerator) ResolvedType() types.TTable {
 // Start implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Start() error {
 	g.nextIndex = -1
+	g.json.JSON = g.json.JSON.MaybeDecode()
 	return nil
 }
 
@@ -419,14 +420,26 @@ func (g *jsonArrayGenerator) Close() {}
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Next() (bool, error) {
 	g.nextIndex++
-	return g.json.FetchValIdx(g.nextIndex) != nil, nil
+	next, err := g.json.FetchValIdx(g.nextIndex)
+	if err != nil {
+		return false, err
+	}
+	return next != nil, nil
 }
 
 // Values implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Values() tree.Datums {
-	val := g.json.FetchValIdx(g.nextIndex)
+	val, err := g.json.FetchValIdx(g.nextIndex)
+	if err != nil {
+		// TODO(justin): propagate this error.
+		panic("unexpected JSON error")
+	}
 	if g.asText {
-		text := val.AsText()
+		text, err := val.AsText()
+		if err != nil {
+			// TODO(justin): propagate this error.
+			panic("unexpected JSON error")
+		}
 		if text == nil {
 			return tree.Datums{
 				tree.DNull,
