@@ -51,18 +51,20 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
 
     return <div className={className}>
       {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
-      <span
+      <button
         className={leftClassName}
+        disabled={_.includes(disabledArrows, ArrowDirection.LEFT)}
         dangerouslySetInnerHTML={trustIcon(leftArrow)}
         onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
-      </span>
+      </button>
       <span className="dropdown__title">{this.props.title}{this.props.title ? ":" : ""}</span>
       <Select className="dropdown__select" clearable={false} searchable={false} options={options} value={selected} onChange={onChange} />
-      <span
+      <button
         className={rightClassName}
+        disabled={_.includes(disabledArrows, ArrowDirection.RIGHT)}
         dangerouslySetInnerHTML={trustIcon(rightArrow)}
         onClick={() => this.props.onArrowClick(ArrowDirection.RIGHT)}>
-      </span>
+      </button>
     </div>;
   }
 }
