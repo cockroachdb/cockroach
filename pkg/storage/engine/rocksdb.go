@@ -295,6 +295,11 @@ type RocksDBConfig struct {
 	Attrs roachpb.Attributes
 	// Dir is the data directory for this store.
 	Dir string
+	// If true, creating the instance fails if the target directory does not hold
+	// an initialized RocksDB instance.
+	//
+	// Makes no sense for in-memory instances.
+	MustExist bool
 	// MaxSizeBytes is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size.
 	MaxSizeBytes int64
@@ -440,6 +445,7 @@ func (r *RocksDB) open() error {
 			logging_enabled: C.bool(log.V(3)),
 			num_cpu:         C.int(runtime.NumCPU()),
 			max_open_files:  C.int(maxOpenFiles),
+			must_exist:      C.bool(r.cfg.MustExist),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Wrap(err, "could not open rocksdb instance")
