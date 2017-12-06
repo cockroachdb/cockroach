@@ -1549,7 +1549,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
   options.WAL_ttl_seconds = db_opts.wal_ttl_seconds;
   options.comparator = &kComparator;
-  options.create_if_missing = true;
+  options.create_if_missing = !db_opts.must_exist;
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));
   options.merge_operator.reset(new DBMergeOperator);
   options.prefix_extractor.reset(new DBPrefixExtractor);
