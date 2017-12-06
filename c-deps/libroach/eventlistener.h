@@ -31,8 +31,8 @@ class DBEventListener : public rocksdb::EventListener {
   uint64_t GetCompactions() const;
 
   // EventListener methods.
-  virtual void OnFlushCompleted(rocksdb::DB *db, const rocksdb::FlushJobInfo &flush_job_info) override;
-  virtual void OnCompactionCompleted(rocksdb::DB *db, const rocksdb::CompactionJobInfo &ci) override;
+  virtual void OnFlushCompleted(rocksdb::DB* db, const rocksdb::FlushJobInfo& flush_job_info) override;
+  virtual void OnCompactionCompleted(rocksdb::DB* db, const rocksdb::CompactionJobInfo& ci) override;
 
  private:
   std::atomic<uint64_t> flushes_;

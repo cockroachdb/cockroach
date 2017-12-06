@@ -19,24 +19,25 @@ static const bool kDebug = false;
 
 DBEventListener::DBEventListener() : flushes_(0), compactions_(0) {}
 
-void DBEventListener::OnFlushCompleted(rocksdb::DB *db, const rocksdb::FlushJobInfo &flush_job_info) {
+void DBEventListener::OnFlushCompleted(rocksdb::DB* db, const rocksdb::FlushJobInfo& flush_job_info) {
   ++flushes_;
 
   if (kDebug) {
-    const rocksdb::TableProperties &p = flush_job_info.table_properties;
-    fprintf(stderr, "OnFlushCompleted:\n  %40s:  entries=%d  data=%.1fMB  index=%.1fMB  filter=%.1fMB\n",
+    const rocksdb::TableProperties& p = flush_job_info.table_properties;
+    fprintf(stderr, "OnFlushCompleted:\n  %40s:  entries=%d  data=%.1fMB  "
+                    "index=%.1fMB  filter=%.1fMB\n",
             flush_job_info.file_path.c_str(), (int)p.num_entries, float(p.data_size) / (1024.0 * 1024.0),
             float(p.index_size) / (1024.0 * 1024.0), float(p.filter_size) / (1024.0 * 1024.0));
   }
 }
 
-void DBEventListener::OnCompactionCompleted(rocksdb::DB *db, const rocksdb::CompactionJobInfo &ci) {
+void DBEventListener::OnCompactionCompleted(rocksdb::DB* db, const rocksdb::CompactionJobInfo& ci) {
   ++compactions_;
 
   if (kDebug) {
     fprintf(stderr, "OnCompactionCompleted: input=%d output=%d\n", ci.base_input_level, ci.output_level);
     for (auto iter = ci.table_properties.begin(); iter != ci.table_properties.end(); ++iter) {
-      const rocksdb::TableProperties &p = *iter->second;
+      const rocksdb::TableProperties& p = *iter->second;
       fprintf(stderr, "  %40s: entries=%d  data=%.1fMB  index=%.1fMB  filter=%.1fMB\n", iter->first.c_str(),
               (int)p.num_entries, float(p.data_size) / (1024.0 * 1024.0), float(p.index_size) / (1024.0 * 1024.0),
               float(p.filter_size) / (1024.0 * 1024.0));
