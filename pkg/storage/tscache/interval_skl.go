@@ -20,6 +20,7 @@ import (
 	"container/list"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -97,6 +98,10 @@ const (
 	encodedTxnIDSize   = int(unsafe.Sizeof(uuid.UUID{}))
 	encodedValSize     = encodedTsSize + encodedTxnIDSize
 	defaultMinSklPages = 2
+
+	// maximum key size enforced by andy-kimball/arenaskl, which will panic if
+	// keys exceed this limit.
+	maxSklKeyLen = math.MaxUint32 // 4GB
 )
 
 // intervalSkl efficiently tracks the latest logical time at which any key or

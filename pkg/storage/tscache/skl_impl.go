@@ -15,8 +15,11 @@
 package tscache
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -73,8 +76,10 @@ func (tc *sklImpl) getSkl(readCache bool) *intervalSkl {
 
 // Add implements the Cache interface.
 func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
-	skl := tc.getSkl(readCache)
+	checkKeyLen(start)
+	checkKeyLen(end)
 
+	skl := tc.getSkl(readCache)
 	val := cacheValue{ts: ts, txnID: txnID}
 	if len(end) == 0 {
 		skl.Add(nonNil(start), val)
@@ -125,4 +130,13 @@ func nonNil(b []byte) []byte {
 		return emptyStartKey
 	}
 	return b
+}
+
+// checkKeyLen asserts that the key length is below the maximum key length
+// allowed by intervalSkl. This is very large (4 GB), so we just fatal if
+// we see keys of this size. We should be catching this at a higher level.
+func checkKeyLen(k roachpb.Key) {
+	if l, max := len(k), maxSklKeyLen; l > max {
+		log.Fatalf(context.TODO(), "key with length %d exceeds maximum key length of %d", l, max)
+	}
 }
