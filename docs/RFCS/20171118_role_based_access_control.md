@@ -5,7 +5,6 @@
 - RFC PR: [#20149](https://github.com/cockroachdb/cockroach/pull/20149)
 - Cockroach Issue: [#20371](https://github.com/cockroachdb/cockroach/issues/20371)
 
-
 Table of Contents
 =================
 
@@ -39,12 +38,9 @@ Table of Contents
          * [Virtual tables](#virtual-tables)
       * [Drawbacks](#drawbacks)
          * [Use of leases to signal role changes](#use-of-leases-to-signal-role-changes)
+         * [Code location](#code-location)
       * [Rationale and Alternatives](#rationale-and-alternatives)
          * [Internal representation of memberships](#internal-representation-of-memberships)
-      * [Unresolved questions](#unresolved-questions)
-         * [Leases on system tables](#leases-on-system-tables)
-         * [Existence of an admin user before migrations](#existence-of-an-admin-user-before-migrations)
-         * [Code location](#code-location)
       * [Future improvements](#future-improvements)
 
 # Summary
@@ -485,7 +481,9 @@ Migrations from older versions will perform the following tasks:
 * add `root` as a member of `admin` with `isAdmin = true`
 * give admin the same privileges as the `root` user
 
-We intentionally do not remove `root` privileges to allow for binary downgrade.
+Notes:
+* we intentionally do not remove `root` privileges to allow for binary downgrade.
+* is a user named `admin` exists, `log.Fatal` the migration and ask the user to downgrade/drop the user/try again.
 
 ### Non-enterprise functionality
 
@@ -583,6 +581,15 @@ subverts the original purpose.
 
 If a more appropriate solution is found, it can replace the current mechanism at a later date.
 
+### Code location
+
+The role manipulation code is very similar to user manipulation (it's just a field inside `system.users`), making
+it preferable to reuse most of the code. We also need the role logic (expand roles, check privileges, etc..) to
+keep working in non-enterprise mode.
+
+These make it tricky to place all the role-related code in `pkg/ccl`. We need to figure out exactly which code
+can be kept separate.
+
 ## Rationale and Alternatives
 
 ### Internal representation of memberships
@@ -608,36 +615,6 @@ Dual tables: one for direct role membership information, one for expanded member
 * the expanded table can use an index on the user or even an array type for the list of roles
 * **Pros**: fast lookup of a users's memberships
 * **Cons**: slightly more complex role manipulation
-
-## Unresolved questions
-
-These must be resolved before moving into the final comment period.
-
-### Leases on system tables
-
-We need to check whether leases can be acquired on system tables (specifically, the `role_members` table).
-
-If not, an alternative would be to make the `role_members` table a non-system table, or to use an separate
-empty table to acquire leases on.
-
-### Existence of an `admin` user before migrations
-
-One of the migrations needed for role-based access control is the addition of the `admin` role to the
-`system.users` table.
-
-We should decide what to do if a user with that name exists. Some possibilities:
-* just overwrite it (clear the password hash and set the `isRole` field) and document the upgrade breakage.
-* rename it: this would involve renaming all privileges as well. Surfacing this to the user would be tricky.
-* fail the migration with a message clearly saying the user must be removed/renamed.
-
-### Code location
-
-The role manipulation code is very similar to user manipulation (it's just a field inside `system.users`), making
-it preferable to reuse most of the code. We also need the role logic (expand roles, check privileges, etc..) to
-keep working in non-enterprise mode.
-
-These make it tricky to place all the role-related code in `pkg/ccl`. We need to figure out exactly which code
-can be kept separate.
 
 ## Future improvements
 
