@@ -165,15 +165,10 @@ func (s *FastIntSet) ForEach(f func(i int)) {
 		}
 		return
 	}
-	for i, v := 0, s.small; v > 0; {
-		ntz := bits.TrailingZeros64(v)
-		if ntz == 64 {
-			return
-		}
-		i += ntz
+	for v := s.small; v != 0; {
+		i := bits.TrailingZeros64(v)
 		f(i)
-		i++
-		v >>= uint64(ntz + 1)
+		v &^= 1 << uint(i)
 	}
 }
 
