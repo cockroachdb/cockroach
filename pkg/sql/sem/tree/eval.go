@@ -2163,7 +2163,14 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if right == DNull && !expr.fn.nullableArgs {
 		return DNull, nil
 	}
-	return expr.fn.fn(ctx, left, right)
+	res, err := expr.fn.fn(ctx, left, right)
+	// FIXME(joey): Add test knob condition.
+	if true {
+		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
+			panic(fmt.Sprintf("binary op %q: %s", expr.String(), err))
+		}
+	}
+	return res, err
 }
 
 // Eval implements the TypedExpr interface.
@@ -2910,7 +2917,20 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 		return nil, errors.Wrapf(err, "%s()", fName)
 	}
+	// FIXME(joey): Logic test test knob only folks :clap:
+	if true {
+		if err := ensureExpectedType(expr.fn.FixedReturnType(), res); err != nil {
+			panic(fmt.Sprintf("function %q: %s", expr.String(), err))
+		}
+	}
 	return res, nil
+}
+
+func ensureExpectedType(exp types.T, d Datum) error {
+	if !exp.Equivalent(types.Any) && !d.ResolvedType().Equivalent(exp) {
+		return errors.Errorf("expected return type %q, got: %q", exp, d.ResolvedType())
+	}
+	return nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -3028,7 +3048,14 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if d == DNull {
 		return DNull, nil
 	}
-	return expr.fn.fn(ctx, d)
+	res, err := expr.fn.fn(ctx, d)
+	// FIXME(joey): Add test knob condition.
+	if true {
+		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
+			panic(fmt.Sprintf("unary op %q: %s", expr.String(), err))
+		}
+	}
+	return res, err
 }
 
 // Eval implements the TypedExpr interface.
