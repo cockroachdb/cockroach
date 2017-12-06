@@ -1087,7 +1087,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	)
 
 	sql.NewSchemaChangeManager(
-		s.st,
+		s.cfg.AmbientCtx,
 		testingKnobs,
 		*s.db,
 		s.node.Descriptor,
