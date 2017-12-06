@@ -12,11 +12,11 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include <rocksdb/iterator.h>
+#include <libroach.h>
 #include <rocksdb/comparator.h>
+#include <rocksdb/iterator.h>
 #include <rocksdb/write_batch.h>
 #include <rocksdb/write_batch_base.h>
-#include <libroach.h>
 
 // ToString returns a c++ string with the contents of a DBSlice.
 std::string ToString(DBSlice s);
@@ -30,7 +30,7 @@ std::string EncodeKey(DBKey k);
 DBStatus ToDBStatus(const rocksdb::Status& status);
 
 // FmtStatus formats the given arguments printf-style into a DBStatus.
-DBStatus FmtStatus(const char *fmt, ...);
+DBStatus FmtStatus(const char* fmt, ...);
 
 // CockroachComparator returns CockroachDB's custom mvcc-aware RocksDB
 // comparator. The caller does not assume ownership.
@@ -42,5 +42,5 @@ const ::rocksdb::Comparator* CockroachComparator();
 
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.
-MVCCStatsResult MVCCComputeStatsInternal(
-    ::rocksdb::Iterator* const iter_rep, DBKey start, DBKey end, int64_t now_nanos);
+MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start, DBKey end,
+                                         int64_t now_nanos);

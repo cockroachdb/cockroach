@@ -1116,6 +1116,12 @@ $(SQLPARSER_ROOT)/help_messages.go: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/he
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
+# Format libroach .cc and .h files (excluding protos) using clang-format if installed.
+# We also exclude the auto-generated keys.h
+.PHONY: c-deps-fmt
+c-deps-fmt: $(shell find $(LIBROACH_SRC_DIR) \( -name '*.cc' -o -name '*.h' \) -not \( -name '*.pb.cc' -o -name '*.pb.h' -o -name 'keys.h' \))
+	clang-format -i $^
+
 .PHONY: clean-c-deps
 clean-c-deps:
 	rm -rf $(JEMALLOC_DIR)

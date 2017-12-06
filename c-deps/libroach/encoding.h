@@ -16,6 +16,7 @@
 #define ROACHLIB_ENCODING_H
 
 #include <stdint.h>
+#include "rocksdb/slice.h"
 
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer.
@@ -33,7 +34,7 @@ bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value);
 // true on a successful decode. The decoded value is returned in *value.
 bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value);
 
-#endif // ROACHLIB_ENCODING_H
+#endif  // ROACHLIB_ENCODING_H
 
 // local variables:
 // mode: c++
