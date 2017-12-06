@@ -161,11 +161,12 @@ func (HomogeneousType) String() string {
 	return "anyelement..."
 }
 
-// VariadicType is a TypeList implementation which accepts any number of
-// arguments and matches when each argument is either NULL or of the type
-// typ.
+// VariadicType is a TypeList implementation which accepts a fixed number of
+// arguments at the beginning and an arbitrary number of homogenous arguments
+// at the end.
 type VariadicType struct {
-	Typ types.T
+	FixedTypes []types.T
+	Splat      types.T
 }
 
 func (v VariadicType) match(types []types.T) bool {
@@ -178,29 +179,51 @@ func (v VariadicType) match(types []types.T) bool {
 }
 
 func (v VariadicType) matchAt(typ types.T, i int) bool {
-	return typ == types.Null || v.Typ.Equivalent(typ)
+	if i < len(v.FixedTypes) {
+		return typ == types.Null || v.FixedTypes[i].Equivalent(typ)
+	}
+	return typ == types.Null || v.Splat.Equivalent(typ)
 }
 
 func (v VariadicType) matchLen(l int) bool {
-	return true
+	return l >= len(v.FixedTypes)
 }
 
 func (v VariadicType) getAt(i int) types.T {
-	return v.Typ
+	if i < len(v.FixedTypes) {
+		return v.FixedTypes[i]
+	}
+	return v.Splat
 }
 
 // Length implements the TypeList interface.
 func (v VariadicType) Length() int {
-	return 1
+	return len(v.FixedTypes) + 1
 }
 
 // Types implements the TypeList interface.
 func (v VariadicType) Types() []types.T {
-	return []types.T{v.Typ}
+	result := make([]types.T, len(v.FixedTypes)+1)
+	for i := range v.FixedTypes {
+		result[i] = v.FixedTypes[i]
+	}
+	result[len(result)-1] = v.Splat
+	return result
 }
 
 func (v VariadicType) String() string {
-	return fmt.Sprintf("%s...", v.Typ)
+	var s bytes.Buffer
+	for i, t := range v.FixedTypes {
+		if i != 0 {
+			s.WriteString(", ")
+		}
+		s.WriteString(t.String())
+	}
+	if len(v.FixedTypes) > 0 {
+		s.WriteString(", ")
+	}
+	s.WriteString(fmt.Sprintf("%s...", v.Splat))
+	return s.String()
 }
 
 // UnknownReturnType is returned from ReturnTypers when the arguments provided are

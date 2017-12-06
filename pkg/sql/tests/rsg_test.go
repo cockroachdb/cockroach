@@ -187,8 +187,11 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				args = append(args, r.GenerateRandomArg(typ))
 			}
 		case tree.VariadicType:
+			for _, t := range ft.FixedTypes {
+				args = append(args, r.GenerateRandomArg(t))
+			}
 			for i := r.Intn(5); i > 0; i-- {
-				args = append(args, r.GenerateRandomArg(ft.Typ))
+				args = append(args, r.GenerateRandomArg(ft.Splat))
 			}
 		default:
 			panic(fmt.Sprintf("unknown fn.Types: %T", ft))
