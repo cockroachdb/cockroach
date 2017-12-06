@@ -1012,7 +1012,7 @@ $(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_JS) $(UI_MA
 	find $(UI_ROOT)/dist$* -mindepth 1 -not -name dist$*.go -delete
 	set -e; for dll in $(notdir $(UI_DLLS)); do ln -s ../dist/$$dll $(UI_ROOT)/dist$*/$$dll; done
 	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) --config webpack.$*.js
-	go-bindata -nometadata -pkg dist$* -o $@ -prefix $(UI_ROOT)/dist$* $(UI_ROOT)/dist$*/...
+	go-bindata -pkg dist$* -o $@ -prefix $(UI_ROOT)/dist$* $(UI_ROOT)/dist$*/...
 	$(SED_INPLACE) -f $(UI_ROOT)/process-bindata.sed $@
 	gofmt -s -w $@
 
