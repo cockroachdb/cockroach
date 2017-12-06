@@ -832,8 +832,8 @@ func TestIntervalSklFill2(t *testing.T) {
 	const n = 10000
 	const txnID = "123"
 
-	// n >> 500 so the intervalSkl's pages will be filled.
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, 500, makeMetrics())
+	// n >> 1000 so the intervalSkl's pages will be filled.
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, 1000, makeMetrics())
 	key := []byte("some key")
 
 	for i := 0; i < n; i++ {
@@ -1135,6 +1135,28 @@ func assertRatchet(t *testing.T, before, after cacheValue) {
 	// still hold.
 	_, upgrade := ratchetValue(after, before)
 	require.False(t, upgrade, "ratchet inversion from %s to %s", before, after)
+}
+
+// TestIntervalSklMaxEncodedSize ensures that we do not enter an infinite page
+// rotation loop for ranges that are too large to fit in a single page. Instead,
+// we detect this scenerio early and panic.
+func TestIntervalSklMaxEncodedSize(t *testing.T) {
+	ts := makeTS(200, 0)
+	val := makeVal(ts, "1")
+
+	key := make([]byte, 65)
+	encSize := encodedRangeSize(key, nil, 0)
+
+	t.Run("fit", func(t *testing.T) {
+		size := uint32(initialSklAllocSize + encSize)
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, size, makeMetrics())
+		require.NotPanics(t, func() { s.Add(key, val) })
+	})
+	t.Run("!fit", func(t *testing.T) {
+		size := uint32(initialSklAllocSize + encSize - 1)
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, size, makeMetrics())
+		require.Panics(t, func() { s.Add(key, val) })
+	})
 }
 
 func BenchmarkIntervalSklAdd(b *testing.B) {
