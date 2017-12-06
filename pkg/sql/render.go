@@ -208,7 +208,7 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	if group != nil && group.requiresIsNotNullFilter() {
+	if group != nil && group.requiresIsDistinctFromNullFilter() {
 		if where == nil {
 			var err error
 			where, err = p.initWhere(ctx, r, nil)
@@ -216,7 +216,7 @@ func (p *planner) SelectClause(
 				return nil, err
 			}
 		}
-		group.addIsNotNullFilter(where, r)
+		group.addIsDistinctFromNullFilter(where, r)
 	}
 
 	limitPlan, err := p.Limit(ctx, limit)
