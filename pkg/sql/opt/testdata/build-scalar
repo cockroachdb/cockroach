@@ -1,0 +1,51 @@
+build-scalar
+1
+----
+const (1) (type: int)
+
+build-scalar
+1
+----
+const (1) (type: int)
+
+build-scalar
+1 + 2
+----
+plus (type: int)
+ └── inputs
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
+
+
+build-scalar string
+@1
+----
+variable (0) (type: string)
+
+build-scalar int
+@1 + 2
+----
+plus (type: int)
+ └── inputs
+      ├── variable (0) (type: int)
+      └── const (2) (type: int)
+
+build-scalar int int
+@1 >= 5 AND @1 <= 10 AND @2 < 4
+----
+and (type: bool)
+ └── inputs
+      ├── and (type: bool)
+      │    ├── inputs
+      │    │    ├── ge (type: bool)
+      │    │    │    ├── inputs
+      │    │    │    │    ├── variable (0) (type: int)
+      │    │    │    │    ├── const (5) (type: int)
+      │    │    ├──  │ (t │e: bool)
+      │    │    │    └──  │puts
+      │    │    │         ├── variable (0) (type: int)
+      │    │    │         └── const (10) (type: int)
+      └──  │ (t │e: bool)
+           └──  │puts
+                ├── variable (1) (type: int)
+                └── const (4) (type: int)
