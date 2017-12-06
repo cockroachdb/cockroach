@@ -44,7 +44,7 @@ func MakeGarbageCollector(now hlc.Timestamp, policy config.GCPolicy) GarbageColl
 // key. Returns the index of the first key to be GC'd and the
 // timestamp including, and after which, all values should be garbage
 // collected. If no values should be GC'd, returns -1 for the index
-// and the zero timestamp. keys must be in descending time
+// and the zero timestamp. Keys must be in descending time
 // order. Values deleted at or before the returned timestamp can be
 // deleted without invalidating any reads in the time interval
 // (gc.expiration, \infinity).
