@@ -27,7 +27,7 @@ CANCEL JOB 'foo'
 query error NULL is not a valid job ID
 CANCEL JOB (SELECT id FROM system.jobs LIMIT 1)
 
-query error argument of CANCEL QUERY must be type string, not type int
+query error query ID must be of type string, not int
 CANCEL QUERY 1
 
 query error odd length hex string
@@ -35,3 +35,14 @@ CANCEL QUERY 'f54'
 
 query error not found
 CANCEL QUERY '14d2355b9cccbca50000000000000001'
+
+query error not found
+CANCEL QUERY ARRAY['14d2355b9cccbca50000000000000001', '14d2355b9cccbca50000000000000001']
+
+# Concatenate an extra value so that the arrays are not empty to make
+# sure we get an error.
+query error not found
+CANCEL QUERY ARRAY(SELECT query_id FROM [SHOW QUERIES] LIMIT 1) || '14d2355b9cccbca50000000000000001'
+
+query error not found
+CANCEL QUERY ARRAY(SELECT query_id FROM [SHOW QUERIES]) || '14d2355b9cccbca50000000000000001'
