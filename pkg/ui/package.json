@@ -18,6 +18,7 @@
     "react-addons-create-fragment": "^15.4.2",
     "react-codemirror": "^1.0.0",
     "react-dom": "^15.4.2",
+    "react-motion": "^0.5.2",
     "react-paginate": "^4.4.3",
     "react-redux": "^5.0.3",
     "react-router": "<4.0.0",
@@ -42,16 +43,17 @@
     "@types/d3-drag": "^1.1.0",
     "@types/d3-timer": "^1.0.5",
     "@types/dagre-layout": "^0.8.0",
-    "@types/enzyme": "^2.7.6",
+    "@types/enzyme": "^2.8.12",
     "@types/fetch-mock": "^5.8.1",
     "@types/highlight.js": "^9.1.9",
     "@types/lodash": "^4.14.56",
     "@types/mocha": "^2.2.40",
     "@types/nvd3": "^1.8.36",
     "@types/prop-types": "^15.5.1",
-    "@types/react": "^15.0.18",
+    "@types/react": "^15.0.39",
     "@types/react-codemirror": "^0.2.6",
     "@types/react-dom": "^0.14.23",
+    "@types/react-motion": "^0.0.23",
     "@types/react-paginate": "^4.3.1",
     "@types/react-redux": "^4.4.38",
     "@types/react-router": "<4.0.0",
@@ -70,7 +72,7 @@
     "css-loader": "^0.28.0",
     "d3": "<4.0.0",
     "dagre-layout": "^0.8.0",
-    "enzyme": "^2.8.2",
+    "enzyme": "^2.9.1",
     "express": "^4.15.2",
     "fetch-mock": "^5.9.4",
     "file-loader": "^0.11.1",
@@ -112,5 +114,8 @@
   "engines": {
     "node": ">=6",
     "yarn": ">=1.0.0"
+  },
+  "resolutions": {
+    "@types/react": "~15.0.39"
   }
 }
