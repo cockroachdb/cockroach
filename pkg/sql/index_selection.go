@@ -796,6 +796,12 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 	}
 
 	for i, needed := range scan.valNeededForCol {
+		// This is possible during a schema change when we have
+		// additional mutation columns.
+		if i >= len(v.desc.Columns) {
+			return false
+		}
+
 		if needed {
 			colID := v.desc.Columns[i].ID
 			if !v.index.ContainsColumnID(colID) {
