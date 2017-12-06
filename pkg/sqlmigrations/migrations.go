@@ -571,9 +571,9 @@ func addRoles(ctx context.Context, r runner) error {
 		return err
 	}
 
-	// Create the `admin` role. We overwrite any existing user named "admin".
+	// Create the `admin` role.
 	const upsertAdminStmt = `
-		UPSERT INTO system.users (username, "hashedPassword", "isRole")
+		INSERT INTO system.users (username, "hashedPassword", "isRole")
 		  VALUES ($1, '', true);
 						`
 
@@ -587,6 +587,10 @@ func addRoles(ctx context.Context, r runner) error {
 		if err == nil {
 			res.Close(ctx)
 			break
+		}
+		if sqlbase.IsUniquenessConstraintViolationError(err) {
+			log.Fatalf(ctx, `cannot create role %q, a user with that name exists. Please drop the user `+
+				`using a previous version of CockroachDB and try again`, sqlbase.AdminRole)
 		}
 		log.Warningf(ctx, "failed to insert %s role into the system.users table: %s", sqlbase.AdminRole, err)
 	}
