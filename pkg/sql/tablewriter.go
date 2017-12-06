@@ -351,7 +351,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	}
 
 	return tu.fetcher.Init(
-		false /* reverse */, false /*returnRangeInfo*/, tu.alloc, tableArgs,
+		false /* reverse */, false /*returnRangeInfo*/, false /* isCheck */, tu.alloc, tableArgs,
 	)
 }
 
@@ -827,7 +827,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
-		false /* reverse */, false /* returnRangeInfo */, td.alloc, tableArgs,
+		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, td.alloc, tableArgs,
 	); err != nil {
 		return resume, err
 	}
@@ -921,7 +921,7 @@ func (td *tableDeleter) deleteIndexScan(
 		ValNeededForCol: valNeededForCol,
 	}
 	if err := rf.Init(
-		false /* reverse */, false /* returnRangeInfo */, td.alloc, tableArgs,
+		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, td.alloc, tableArgs,
 	); err != nil {
 		return resume, err
 	}

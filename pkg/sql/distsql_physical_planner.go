@@ -656,6 +656,7 @@ func initTableReaderSpec(
 	s := distsqlrun.TableReaderSpec{
 		Table:   *n.desc,
 		Reverse: n.reverse,
+		IsCheck: n.run.isCheck,
 	}
 	if n.index != &n.desc.PrimaryIndex {
 		for i := range n.desc.Indexes {
@@ -669,6 +670,13 @@ func initTableReaderSpec(
 			err := errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
 			return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
 		}
+	}
+
+	// When a TableReader is running scrub checks, do not allow a
+	// post-processor. This is because the outgoing stream is a fixed
+	// format (distsqlrun.ScrubTypes).
+	if n.run.isCheck {
+		return s, distsqlrun.PostProcessSpec{}, nil
 	}
 
 	post := distsqlrun.PostProcessSpec{

@@ -224,11 +224,11 @@ func (n *scrubNode) startScrubTable(
 					"cannot specify INDEX option more than once")
 			}
 			indexesSet = true
-			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName, ts)
+			checks, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName, ts)
 			if err != nil {
 				return err
 			}
-			n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
+			n.run.checkQueue = append(n.run.checkQueue, checks...)
 		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -239,7 +239,8 @@ func (n *scrubNode) startScrubTable(
 					"cannot use AS OF SYSTEM TIME with PHYSICAL option")
 			}
 			physicalCheckSet = true
-			// TODO(joey): Initialize physical index to check.
+			physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
+			n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
 		case *tree.ScrubOptionConstraint:
 			if constraintsSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -266,15 +267,15 @@ func (n *scrubNode) startScrubTable(
 			return err
 		}
 		n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
-
-		constraintsToCheck, err := createConstraintCheckOperations(ctx, p, nil, /* constraintNames */
-			tableDesc, tableName, ts)
+		constraintsToCheck, err := createConstraintCheckOperations(
+			ctx, p, nil /* constraintNames */, tableDesc, tableName, ts)
 		if err != nil {
 			return err
 		}
 		n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
 
-		// TODO(joey): Initialize physical index to check.
+		physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
+		n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
 	}
 	return nil
 }
@@ -405,9 +406,22 @@ func tableColumnsProjection(tableName string, columns []string) string {
 	return buf.String()
 }
 
+// createPhysicalCheckOperations will return the physicalCheckOperation
+// for all indexes on a table.
+func createPhysicalCheckOperations(
+	tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+) (checks []checkOperation) {
+	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.PrimaryIndex))
+	for i := range tableDesc.Indexes {
+		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.Indexes[i]))
+	}
+	return checks
+}
+
 // createIndexCheckOperations will return the checkOperations for the
 // provided indexes. If indexNames is nil, then all indexes are
-// returned. TODO(joey): This can be simplified with
+// returned.
+// TODO(joey): This can be simplified with
 // TableDescriptor.FindIndexByName(), but this will only report the
 // first invalid index.
 func createIndexCheckOperations(
@@ -559,6 +573,9 @@ func scrubRunDistSQL(
 		return rows, err
 	} else if recv.err != nil {
 		return rows, recv.err
+	} else if rows.Len() == 0 {
+		rows.Close(ctx)
+		return nil, nil
 	}
 
 	return rows, nil
