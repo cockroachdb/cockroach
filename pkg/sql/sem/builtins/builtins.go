@@ -1337,17 +1337,54 @@ CockroachDB supports the following flags:
 		},
 	},
 
-	// https://www.postgresql.org/docs/10/static/functions-datetime.html#functions-datetime-trunc
+	// https://www.postgresql.org/docs/10/static/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC
+	//
+	// PostgreSQL documents date_trunc for timestamp, timestamptz and
+	// interval. It will also handle date and time inputs by casting them,
+	// so we support those for compatibility. This gives us the following
+	// function signatures:
+	//
+	//  date_trunc(string, time)        -> interval
+	//  date_trunc(string, date)        -> timestamptz
+	//  date_trunc(string, timestamp)   -> timestamp
+	//  date_trunc(string, timestamptz) -> timestamptz
+	//
+	// See the following snippet from running the functions in PostgreSQL:
+	//
+	// 		postgres=# select pg_typeof(date_trunc('month', '2017-04-11 00:00:00'::timestamp));
+	// 							pg_typeof
+	// 		-----------------------------
+	// 		timestamp without time zone
+	//
+	// 		postgres=# select pg_typeof(date_trunc('month', '2017-04-11 00:00:00'::date));
+	// 						pg_typeof
+	// 		--------------------------
+	// 		timestamp with time zone
+	//
+	// 		postgres=# select pg_typeof(date_trunc('month', '2017-04-11 00:00:00'::time));
+	// 		pg_typeof
+	// 		-----------
+	// 		interval
+	//
+	// This implicit casting behavior is mentioned in the PostgreSQL documentation:
+	// https://www.postgresql.org/docs/10/static/functions-datetime.html
+	// > source is a value expression of type timestamp or interval. (Values
+	// > of type date and time are cast automatically to timestamp or interval,
+	// > respectively.)
+	//
 	"date_trunc": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// extract timeSpan fromTime.
-				fromTS := args[1].(*tree.DTimestamp)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				fromTS := args[1].(*tree.DTimestamp)
+				tsTZ, err := truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDTimestamp(tsTZ.Time.In(ctx.GetLocation()), time.Microsecond), nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
@@ -1356,7 +1393,7 @@ CockroachDB supports the following flags:
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: tree.FixedReturnType(types.Date),
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
@@ -1371,12 +1408,16 @@ CockroachDB supports the following flags:
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
-			ReturnType: tree.FixedReturnType(types.Time),
+			ReturnType: tree.FixedReturnType(types.Interval),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				fromTime := args[1].(*tree.DTime)
-				return truncateTime(fromTime, timeSpan)
+				time, err := truncateTime(fromTime, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DInterval{Duration: duration.Duration{Nanos: int64(*time) * 1000}}, nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero.\n\n" +
@@ -3054,7 +3095,7 @@ func extractStringFromTimestamp(
 	}
 }
 
-func truncateTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
+func truncateTime(fromTime *tree.DTime, timeSpan string) (*tree.DTime, error) {
 	t := timeofday.TimeOfDay(*fromTime)
 	hour := t.Hour()
 	min := t.Minute()
@@ -3085,7 +3126,7 @@ func truncateTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 
 func truncateTimestamp(
 	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
-) (tree.Datum, error) {
+) (*tree.DTimestampTZ, error) {
 	year := fromTime.Year()
 	month := fromTime.Month()
 	day := fromTime.Day()
