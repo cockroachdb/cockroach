@@ -6,19 +6,17 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-#include <memory>
-#include <rocksdb/iterator.h>
-#include <rocksdb/comparator.h>
-#include <rocksdb/write_batch.h>
-#include <rocksdb/utilities/write_batch_with_index.h>
-#include <libroachccl.h>
 #include "../db.h"
+#include <libroachccl.h>
+#include <memory>
+#include <rocksdb/comparator.h>
+#include <rocksdb/iterator.h>
+#include <rocksdb/utilities/write_batch_with_index.h>
+#include <rocksdb/write_batch.h>
 
-const DBStatus kSuccess = { NULL, 0 };
+const DBStatus kSuccess = {NULL, 0};
 
-DBStatus DBBatchReprVerify(
-  DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats
-) {
+DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();
 
   // TODO(dan): Inserting into a batch just to iterate over it is unfortunate.
