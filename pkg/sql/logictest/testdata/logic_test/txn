@@ -778,6 +778,43 @@ ROLLBACK
 statement ok
 BEGIN
 
+query T
+SHOW transaction_read_only
+----
+off
+
+statement ok
+SET TRANSACTION READ ONLY
+
+query T
+SHOW transaction_read_only
+----
+on
+
+statement ok
+SET TRANSACTION READ WRITE
+
+query T
+SHOW transaction_read_only
+----
+off
+
+statement ok
+SET transaction_read_only = true
+
+query T
+SHOW transaction_read_only
+----
+on
+
+statement ok
+SET transaction_read_only = false
+
+query T
+SHOW transaction_read_only
+----
+off
+
 statement error read mode specified multiple times
 SET TRANSACTION READ ONLY, READ WRITE
 
@@ -785,10 +822,107 @@ statement ok
 ROLLBACK
 
 statement ok
-BEGIN READ WRITE; COMMIT
+BEGIN READ WRITE
 
-statement error read only not supported
+query T
+SHOW transaction_read_only
+----
+off
+
+statement ok
+COMMIT
+
+statement ok
 BEGIN READ ONLY
+
+query T
+SHOW transaction_read_only
+----
+on
+
+statement ok
+COMMIT
+
+# Test default read-only status.
+query T
+SHOW default_transaction_read_only
+----
+off
+
+statement ok
+SET default_transaction_read_only = true
+
+query T
+SHOW default_transaction_read_only
+----
+on
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE
+
+query T
+SHOW default_transaction_read_only
+----
+off
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY
+
+query T
+SHOW default_transaction_read_only
+----
+on
+
+statement ok
+BEGIN
+
+statement ok
+SAVEPOINT cockroach_restart
+
+query T
+SHOW transaction_read_only
+----
+on
+
+# Can override setting.
+statement ok
+SET TRANSACTION READ WRITE
+
+query T
+SHOW transaction_read_only
+----
+off
+
+# Rolling back to savepoint doesn't reset to default.
+# TODO(jordan) fix this if necessary.
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+query T
+SHOW transaction_read_only
+----
+off
+
+statement ok
+COMMIT
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY
+
+statement error cannot execute CREATE TABLE in a read-only transaction
+CREATE TABLE a (a int)
+
+statement error cannot execute INSERT in a read-only transaction
+INSERT INTO a VALUES(1)
+
+statement error cannot execute UPDATE in a read-only transaction
+UPDATE a SET a = 1
+
+statement error cannot execute UPSERT in a read-only transaction
+UPSERT INTO a VALUES(2)
+
+statement error cannot execute DELETE in a read-only transaction
+DELETE FROM a
 
 query T
 SHOW TRANSACTION STATUS

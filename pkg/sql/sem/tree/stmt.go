@@ -101,6 +101,18 @@ func CanModifySchema(stmt Statement) bool {
 	return ok && scm.modifiesSchema()
 }
 
+// CanWriteData returns true if the statement can modify data.
+func CanWriteData(stmt Statement) bool {
+	if stmt.StatementType() == RowsAffected {
+		return true
+	}
+	switch stmt.(type) {
+	case *Insert, *Delete, *Update:
+		return true
+	}
+	return false
+}
+
 // HiddenFromStats is a pseudo-interface to be implemented
 // by statements that should not show up in per-app statistics.
 type HiddenFromStats interface {
@@ -514,12 +526,12 @@ func (*SetZoneConfig) StatementType() StatementType { return RowsAffected }
 func (*SetZoneConfig) StatementTag() string { return "CONFIGURE ZONE" }
 
 // StatementType implements the Statement interface.
-func (*SetDefaultIsolation) StatementType() StatementType { return Ack }
+func (*SetSessionCharacteristics) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*SetDefaultIsolation) StatementTag() string { return "SET" }
+func (*SetSessionCharacteristics) StatementTag() string { return "SET" }
 
-func (*SetDefaultIsolation) hiddenFromStats() {}
+func (*SetSessionCharacteristics) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
 func (*ShowVar) StatementType() StatementType { return Rows }
@@ -793,21 +805,21 @@ func (n *ResumeJob) String() string                { return AsString(n) }
 func (n *Revoke) String() string                   { return AsString(n) }
 func (n *RollbackToSavepoint) String() string      { return AsString(n) }
 func (n *RollbackTransaction) String() string      { return AsString(n) }
-func (n *Savepoint) String() string                { return AsString(n) }
-func (n *Scatter) String() string                  { return AsString(n) }
-func (n *Scrub) String() string                    { return AsString(n) }
-func (n *Select) String() string                   { return AsString(n) }
-func (n *SelectClause) String() string             { return AsString(n) }
-func (n *SetClusterSetting) String() string        { return AsString(n) }
-func (n *SetZoneConfig) String() string            { return AsString(n) }
-func (n *SetDefaultIsolation) String() string      { return AsString(n) }
-func (n *SetTransaction) String() string           { return AsString(n) }
-func (n *SetVar) String() string                   { return AsString(n) }
-func (n *ShowBackup) String() string               { return AsString(n) }
-func (n *ShowClusterSetting) String() string       { return AsString(n) }
-func (n *ShowColumns) String() string              { return AsString(n) }
-func (n *ShowConstraints) String() string          { return AsString(n) }
-func (n *ShowCreateTable) String() string          { return AsString(n) }
+func (n *Savepoint) String() string                 { return AsString(n) }
+func (n *Scatter) String() string                   { return AsString(n) }
+func (n *Scrub) String() string                     { return AsString(n) }
+func (n *Select) String() string                    { return AsString(n) }
+func (n *SelectClause) String() string              { return AsString(n) }
+func (n *SetClusterSetting) String() string         { return AsString(n) }
+func (n *SetZoneConfig) String() string             { return AsString(n) }
+func (n *SetSessionCharacteristics) String() string { return AsString(n) }
+func (n *SetTransaction) String() string            { return AsString(n) }
+func (n *SetVar) String() string                    { return AsString(n) }
+func (n *ShowBackup) String() string                { return AsString(n) }
+func (n *ShowClusterSetting) String() string        { return AsString(n) }
+func (n *ShowColumns) String() string               { return AsString(n) }
+func (n *ShowConstraints) String() string           { return AsString(n) }
+func (n *ShowCreateTable) String() string           { return AsString(n) }
 func (n *ShowCreateView) String() string           { return AsString(n) }
 func (n *ShowDatabases) String() string            { return AsString(n) }
 func (n *ShowGrants) String() string               { return AsString(n) }
