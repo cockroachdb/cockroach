@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // DefaultRotationPeriod is the rotation period used if not specified.
@@ -31,6 +32,20 @@ type StoreEncryptionSpec struct {
 	KeyPath        string
 	OldKeyPath     string
 	RotationPeriod time.Duration
+}
+
+// Convert to a serialized EncryptionOptions protobuf.
+func (es StoreEncryptionSpec) toEncryptionOptions() ([]byte, error) {
+	opts := EncryptionOptions{
+		KeySource: EncryptionKeySource_KeyFiles,
+		KeyFiles: &EncryptionKeyFiles{
+			CurrentKey: es.KeyPath,
+			OldKey:     es.OldKeyPath,
+		},
+		DataKeyRotationPeriod: int64(es.RotationPeriod / time.Second),
+	}
+
+	return protoutil.Marshal(&opts)
 }
 
 // String returns a fully parsable version of the encryption spec.
@@ -181,6 +196,11 @@ func PopulateStoreSpecWithEncryption(
 			// TODO(mberhault): figure out how to pass encryption settings through to C++-CCL.
 			// Tell the store we absolutely need the switching env.
 			storeSpecs.Specs[i].UseSwitchingEnv = true
+			opts, err := es.toEncryptionOptions()
+			if err != nil {
+				return err
+			}
+			storeSpecs.Specs[i].ExtraOptions = opts
 			found = true
 			break
 		}
