@@ -25,7 +25,7 @@
 class DBEventListener : public rocksdb::EventListener {
  public:
   DBEventListener();
-  virtual ~DBEventListener() { }
+  virtual ~DBEventListener() {}
 
   uint64_t GetFlushes() const;
   uint64_t GetCompactions() const;
@@ -39,5 +39,4 @@ class DBEventListener : public rocksdb::EventListener {
   std::atomic<uint64_t> compactions_;
 };
 
-
-#endif // ROACHLIB_EVENTLISTENER_H
+#endif  // ROACHLIB_EVENTLISTENER_H
