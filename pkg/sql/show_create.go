@@ -278,7 +278,7 @@ func showCreatePartitioning(
 	buf.WriteString(` (`)
 	for i := 0; i < int(partDesc.NumColumns); i++ {
 		if i != 0 {
-			fmt.Printf(", ")
+			fmt.Fprintf(buf, ", ")
 		}
 		fmt.Fprintf(buf, idxDesc.ColumnNames[colOffset+i])
 	}
