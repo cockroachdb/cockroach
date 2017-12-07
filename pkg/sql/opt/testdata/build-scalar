@@ -43,3 +43,25 @@ and (type: bool)
            └── inputs
                 ├── variable (1) (type: int)
                 └── const (4) (type: int)
+
+build-scalar,normalize int int
+@1 >= 5 AND @1 <= 10 AND @2 > 0 AND @2 < 10
+----
+and (type: bool)
+ └── inputs
+      ├── ge (type: bool)
+      │    └── inputs
+      │         ├── variable (0) (type: int)
+      │         └── const (5) (type: int)
+      ├── le (type: bool)
+      │    └── inputs
+      │         ├── variable (0) (type: int)
+      │         └── const (10) (type: int)
+      ├── gt (type: bool)
+      │    └── inputs
+      │         ├── variable (1) (type: int)
+      │         └── const (0) (type: int)
+      └── lt (type: bool)
+           └── inputs
+                ├── variable (1) (type: int)
+                └── const (10) (type: int)
