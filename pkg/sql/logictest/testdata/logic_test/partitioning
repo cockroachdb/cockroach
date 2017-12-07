@@ -519,7 +519,3 @@ ok12  CREATE TABLE ok12 (
    PARTITION p1 VALUES IN ((1)),
    PARTITION p2 VALUES IN ((2))
 )
-
-# TODO(dan): Partition names should follow the same foldings and uniqueness
-# rules as table names. Add some more tests to the `case_sensitive_names` logic
-# test.

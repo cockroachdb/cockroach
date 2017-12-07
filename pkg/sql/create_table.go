@@ -823,7 +823,7 @@ func addPartitionedBy(
 
 	for _, l := range partBy.List {
 		p := sqlbase.PartitioningDescriptor_List{
-			Name: l.Name.Normalize(),
+			Name: string(l.Name),
 		}
 		for _, expr := range l.Exprs {
 			encodedTuple, err := valueEncodePartitionTuple(
@@ -845,7 +845,7 @@ func addPartitionedBy(
 	}
 	for _, r := range partBy.Range {
 		p := sqlbase.PartitioningDescriptor_Range{
-			Name: r.Name.Normalize(),
+			Name: string(r.Name),
 		}
 		encodedTuple, err := valueEncodePartitionTuple(
 			tree.PartitionByRange, evalCtx, r.Expr, cols)
