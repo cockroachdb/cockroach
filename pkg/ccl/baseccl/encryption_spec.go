@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mberhault/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
@@ -31,6 +32,21 @@ type StoreEncryptionSpec struct {
 	KeyPath        string
 	OldKeyPath     string
 	RotationPeriod time.Duration
+}
+
+// Convert to a serialized EncryptionOptions protobuf.
+func (sec StoreEncryptionSpec) toEncryptionOptions() ([]byte, error) {
+	opts := EncryptionOptions{
+		// Leave the key source blank, we only have one.
+		// KeySource: EncryptionKeySource_KeyFiles
+		KeyFiles: &EncryptionKeyFiles{
+			CurrentKey: sec.KeyPath,
+			OldKey:     sec.OldKeyPath,
+		},
+		DataKeyRotationPeriod: int64(sec.RotationPeriod / time.Second),
+	}
+
+	return protoutil.Marshal(&opts)
 }
 
 // String returns a fully parsable version of the encryption spec.
@@ -181,6 +197,11 @@ func PopulateStoreSpecWithEncryption(
 			// TODO(mberhault): figure out how to pass encryption settings through to C++-CCL.
 			// Tell the store we absolutely need the switching env.
 			storeSpecs.Specs[i].UseSwitchingEnv = true
+			if opts, err := es.toEncryptionOptions(); err != nil {
+				return err
+			} else {
+				storeSpecs.Specs[i].ExtraOptions = opts
+			}
 			found = true
 			break
 		}

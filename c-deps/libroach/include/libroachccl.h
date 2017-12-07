@@ -14,6 +14,9 @@
 extern "C" {
 #endif
 
+// GetCCLHooks returns a Hooks object with ccl hooks.
+Hooks* GetCCLHooks();
+
 // DBBatchReprVerify asserts that all keys in a BatchRepr are between the
 // specified start and end keys and computes the MVCCStatsResult for it.
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats);
