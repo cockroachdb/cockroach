@@ -138,9 +138,15 @@ func initVariableExpr(e *expr, index int) {
 	e.private = index
 }
 
+// isIndexedVar checks if e is a variableOp that represents an
+// indexed variable with the given index.
+func isIndexedVar(e *expr, index int) bool {
+	return e.op == variableOp && e.private.(int) == index
+}
+
 // Applies a set of normalization rules to a scalar expression.
 //
-// For now, we expect to build exprs from TypedExprs which have went through a
+// For now, we expect to build exprs from TypedExprs which have gone through a
 // normalization process; we include additional rules.
 func normalizeScalar(e *expr) {
 	for _, input := range e.children {

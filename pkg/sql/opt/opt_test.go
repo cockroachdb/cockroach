@@ -227,36 +227,46 @@ func TestOpt(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
-				cmds := strings.Split(d.cmd, ",")
-
 				var e *expr
+				var types []types.T
 
-				switch cmds[0] {
-				case "build-scalar":
-					typedExpr, err := parseScalarExpr(d.sql, d.cmdArgs)
-					if err != nil {
-						d.fatalf(t, "%v", err)
-					}
-
-					e = func() *expr {
-						defer func() {
-							if r := recover(); r != nil {
-								d.fatalf(t, "buildScalar: %v", r)
-							}
-						}()
-						return buildScalar(&buildContext{}, typedExpr)
-					}()
-				default:
-					d.fatalf(t, "unsupported command: %s", d.cmd)
-					return ""
-				}
-
-				for _, cmd := range cmds[1:] {
+				for _, cmd := range strings.Split(d.cmd, ",") {
 					switch cmd {
+					case "build-scalar":
+						var err error
+						types, err = parseTypes(d.cmdArgs)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+						typedExpr, err := parseScalarExpr(d.sql, types)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+
+						e = func() *expr {
+							defer func() {
+								if r := recover(); r != nil {
+									d.fatalf(t, "buildScalar: %v", r)
+								}
+							}()
+							return buildScalar(&buildContext{}, typedExpr)
+						}()
 					case "normalize":
 						normalizeScalar(e)
+					case "index-constraints":
+						if e == nil {
+							d.fatalf(t, "no expression for index-constraints")
+						}
+
+						evalCtx := tree.MakeTestingEvalContext()
+						spans := MakeIndexConstraints(e, types, &evalCtx)
+						var buf bytes.Buffer
+						for _, sp := range spans {
+							fmt.Fprintf(&buf, "%s\n", sp)
+						}
+						return buf.String()
 					default:
-						d.fatalf(t, "unsupported command: %s", d.cmd)
+						d.fatalf(t, "unsupported command: %s", cmd)
 						return ""
 					}
 				}
@@ -274,6 +284,18 @@ func parseType(typeStr string) (types.T, error) {
 	return coltypes.CastTargetToDatumType(colType), nil
 }
 
+func parseTypes(typeStrs []string) ([]types.T, error) {
+	res := make([]types.T, len(typeStrs))
+	for i, typeStr := range typeStrs {
+		var err error
+		res[i], err = parseType(typeStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
 type indexedVars struct {
 	types []types.T
 }
@@ -285,6 +307,9 @@ func (*indexedVars) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, 
 }
 
 func (iv *indexedVars) IndexedVarResolvedType(idx int) types.T {
+	if idx >= len(iv.types) {
+		panic("out of bounds IndexedVar; not enough types provided")
+	}
 	return iv.types[idx]
 }
 
@@ -292,23 +317,14 @@ func (*indexedVars) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	panic("unimplemented")
 }
 
-func parseScalarExpr(sql string, indexVarTypes []string) (tree.TypedExpr, error) {
+func parseScalarExpr(sql string, indexVarTypes []types.T) (tree.TypedExpr, error) {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		return nil, err
 	}
 
 	// Set up an indexed var helper so we can type-check the expression.
-	iv := &indexedVars{
-		types: make([]types.T, len(indexVarTypes)),
-	}
-	for i, typeStr := range indexVarTypes {
-		var err error
-		iv.types[i], err = parseType(typeStr)
-		if err != nil {
-			return nil, err
-		}
-	}
+	iv := &indexedVars{types: indexVarTypes}
 
 	sema := tree.MakeSemaContext(false /* privileged */)
 	iVarHelper := tree.MakeIndexedVarHelper(iv, len(iv.types))
