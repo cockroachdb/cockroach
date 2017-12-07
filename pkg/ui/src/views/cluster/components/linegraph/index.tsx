@@ -79,6 +79,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     // TODO(couchand): handle the following cases:
     //   - first series is missing data points
     //   - series are missing data points at different timestamps
+    if (!this.props.data.results) {
+        return;
+    }
+
     const datapoints = this.props.data.results[0].datapoints;
     const timeScale = this.chart.xAxis.scale();
 
