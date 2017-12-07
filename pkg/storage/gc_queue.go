@@ -138,6 +138,8 @@ type gcQueueScore struct {
 	GCBytes                  int64
 	GCByteAge                int64
 	ExpMinGCByteAgeReduction int64
+
+	TimeToDrop time.Duration
 }
 
 func (r gcQueueScore) String() string {
@@ -151,10 +153,14 @@ func (r gcQueueScore) String() string {
 	if r.LikelyLastGC != 0 {
 		likelyLastGC = fmt.Sprintf("%s ago", r.LikelyLastGC)
 	}
+	timeToDrop := "n/a"
+	if r.TimeToDrop != 0 {
+		timeToDrop = fmt.Sprintf("in %s", r.TimeToDrop)
+	}
 	return fmt.Sprintf("queue=%t with %.2f/fuzz(%.2f)=%.2f=valScaleScore(%.2f)*deadFrac(%.2f)+intentScore(%.2f)\n"+
-		"likely last GC: %s, %s non-live, curr. age %s*s, min exp. reduction: %s*s",
+		"likely last GC: %s, time to drop: %s, %s non-live, curr. age %s*s, min exp. reduction: %s*s",
 		r.ShouldQueue, r.FinalScore, r.FuzzFactor, r.FinalScore/r.FuzzFactor, r.ValuesScalableScore,
-		r.DeadFraction, r.IntentScore, likelyLastGC, humanizeutil.IBytes(r.GCBytes),
+		r.DeadFraction, r.IntentScore, likelyLastGC, timeToDrop, humanizeutil.IBytes(r.GCBytes),
 		humanizeutil.IBytes(r.GCByteAge), humanizeutil.IBytes(r.ExpMinGCByteAgeReduction))
 }
 
@@ -186,9 +192,7 @@ func makeGCQueueScore(
 	// Use desc.RangeID for fuzzing the final score, so that different ranges
 	// have slightly different priorities and even symmetrical workloads don't
 	// trigger GC at the same time.
-	r := makeGCQueueScoreImpl(
-		ctx, int64(desc.RangeID), now, ms, zone.GC.TTLSeconds,
-	)
+	r := makeGCQueueScoreImpl(ctx, int64(desc.RangeID), now, ms, zone.GC)
 	if (gcThreshold != hlc.Timestamp{}) {
 		r.LikelyLastGC = time.Duration(now.WallTime - gcThreshold.Add(r.TTL.Nanoseconds(), 0).WallTime)
 	}
@@ -284,11 +288,11 @@ func makeGCQueueScore(
 // ttl*GCBytes`, and that a decent trigger for GC is a multiple of
 // `ttl*GCBytes`.
 func makeGCQueueScoreImpl(
-	ctx context.Context, fuzzSeed int64, now hlc.Timestamp, ms enginepb.MVCCStats, ttlSeconds int32,
+	ctx context.Context, fuzzSeed int64, now hlc.Timestamp, ms enginepb.MVCCStats, gc config.GCPolicy,
 ) gcQueueScore {
 	ms.AgeTo(now.WallTime)
 	var r gcQueueScore
-	r.TTL = time.Duration(ttlSeconds) * time.Second
+	r.TTL = time.Duration(gc.TTLSeconds) * time.Second
 
 	// Treat a zero TTL as a one-second TTL, which avoids a priority of infinity
 	// and otherwise behaves indistinguishable given that we can't possibly hope
@@ -345,9 +349,14 @@ func makeGCQueueScoreImpl(
 	// but not an issue in practice.
 	r.FuzzFactor = 0.75 + rand.New(rand.NewSource(fuzzSeed)).Float64()/2.0
 
+	// If there's a drop deadline, compute the drop duration from now.
+	r.TimeToDrop = time.Duration(gc.Internal.DropDeadline.WallTime - now.WallTime)
+
 	// Compute priority.
 	valScore := r.DeadFraction * r.ValuesScalableScore
-	r.ShouldQueue = r.FuzzFactor*valScore > gcKeyScoreThreshold || r.FuzzFactor*r.IntentScore > gcIntentScoreThreshold
+	r.ShouldQueue = r.FuzzFactor*valScore > gcKeyScoreThreshold ||
+		r.FuzzFactor*r.IntentScore > gcIntentScoreThreshold ||
+		r.TimeToDrop <= 0
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
 
 	return r
@@ -525,6 +534,11 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 		return nil
 	}
 
+	if r.TimeToDrop <= 0 {
+		log.Eventf(ctx, "clearing dropped replica with score %s", r)
+		return gcq.processDrop(ctx, repl, sysCfg, now)
+	}
+
 	log.Eventf(ctx, "processing replica with score %s", r)
 	return gcq.processImpl(ctx, repl, sysCfg, now)
 }
@@ -555,6 +569,52 @@ func chunkGCRequest(
 	}
 
 	return ret
+}
+
+func (gcq *gcQueue) processDrop(
+	ctx context.Context, repl *Replica, sysCfg config.SystemConfig, now hlc.Timestamp,
+) error {
+	desc := repl.Desc()
+	start := roachpb.Key(desc.StartKey)
+	end := roachpb.Key(desc.EndKey)
+
+	var ba roachpb.BatchRequest
+	ba.RangeID = desc.RangeID
+	ba.Timestamp = now
+
+	// Update the GC threshold to this drop time.
+	gcr := &roachpb.GCRequest{
+		Span: roachpb.Span{
+			Key:    start,
+			EndKey: end,
+		},
+		Threshold: now,
+	}
+	ba.Add(gcr)
+
+	// A clear request to efficiently remove all user data from the range.
+	// TODO: uncomment with change to add ClearRange kv api call.
+	/*
+		crr := &roachpb.ClearRangeRequest{
+			Span: roachpb.Span{
+				Key:    start,
+				EndKey: end,
+			},
+		}
+		ba.Add(crr)
+	*/
+
+	if _, pErr := repl.Send(ctx, ba); pErr != nil {
+		log.ErrEvent(ctx, pErr.String())
+		return pErr.GoError()
+	}
+
+	// After successfully inserting a RocksDB::DeleteRange (via ClearRange),
+	// we send a request to compact the range to immediately free up space.
+	if rocksdb, ok := repl.store.Engine().(*engine.RocksDB); ok {
+		return rocksdb.CompactRange(engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end})
+	}
+	return nil
 }
 
 func (gcq *gcQueue) processImpl(
