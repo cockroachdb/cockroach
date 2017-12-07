@@ -7,7 +7,7 @@
 
 set -euxo pipefail
 
-if [ -z "$1" ]; then
+if [ -z "${1-}" ]; then
   echo "Usage: $0 <num_periods> [shutdown command...]"
   exit 1
 fi
@@ -46,7 +46,7 @@ fi
 
 # Shut down.
 
-if [ -z "$1" ]; then
+if [ -z "${1-}" ]; then
   /sbin/shutdown -h
 else
   # Run whatever command was passed on the command line.
