@@ -156,7 +156,7 @@ func TestJSONRoundTrip(t *testing.T) {
 		`true`,
 		` true `,
 		`
-        
+
         true
         `,
 		`false`,
@@ -318,6 +318,8 @@ func TestMakeJSON(t *testing.T) {
 		{int64(1), "1"},
 		{1.4, "1.4"},
 		{map[string]interface{}{"foo": 4}, `{"foo": 4}`},
+		{FromInt(1), `1`},
+		{[]KeyValuePair{MakeKeyValuePair("b", FromInt(1)), MakeKeyValuePair("a", FromInt(2))}, `{"a": 2, "b": 1}`},
 	}
 
 	for _, tc := range testCases {
