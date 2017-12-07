@@ -62,9 +62,17 @@ typedef struct DBCache DBCache;
 typedef struct DBEngine DBEngine;
 typedef struct DBIterator DBIterator;
 
+// Hooks are set by CCL code and called from OSS code.
+typedef void (*options_fn)(const DBSlice);
+
+typedef struct {
+  options_fn options_hook;
+} Hooks;
+
 // DBOptions contains local database options.
 typedef struct {
   DBCache* cache;
+  Hooks* hooks;
   uint64_t block_size;
   uint64_t wal_ttl_seconds;
   bool logging_enabled;
@@ -72,6 +80,7 @@ typedef struct {
   int max_open_files;
   bool use_switching_env;
   bool must_exist;
+  DBSlice extra_options;
 } DBOptions;
 
 // Create a new cache with the specified size.

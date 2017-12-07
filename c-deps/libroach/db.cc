@@ -1566,6 +1566,12 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options = DBMakeOptions(db_opts);
 
+  if (db_opts.hooks) {
+    db_opts.hooks->options_hook(db_opts.extra_options);
+  } else {
+    std::cout << "OSS: No hooks found!\n";
+  }
+
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
   options.listeners.emplace_back(event_listener);

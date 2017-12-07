@@ -62,6 +62,19 @@ import (
 // #include <libroach.h>
 import "C"
 
+// DBHooks is a struct of hooks called by OSS code if non-NULL.
+type DBHooks *C.Hooks
+
+// DBHookInitializer returns a set of DBHooks.
+var DBHookInitializer func() DBHooks
+
+func getDBHooks() DBHooks {
+	if DBHookInitializer != nil {
+		return DBHookInitializer()
+	}
+	return nil
+}
+
 var minWALSyncInterval = settings.RegisterDurationSetting(
 	"rocksdb.min_wal_sync_interval",
 	"minimum duration between syncs of the RocksDB WAL",
@@ -315,6 +328,9 @@ type RocksDBConfig struct {
 	// UseSwitchingEnv is true if the switching env is needed (eg: encryption-at-rest).
 	// This may force the store version to versionSwitchingEnv if currently lower.
 	UseSwitchingEnv bool
+	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
+	// to C CCL code.
+	ExtraOptions []byte
 }
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -457,6 +473,7 @@ func (r *RocksDB) open() error {
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.Dir)),
 		C.DBOptions{
 			cache:             r.cache.cache,
+			hooks:             getDBHooks(),
 			block_size:        C.uint64_t(blockSize),
 			wal_ttl_seconds:   C.uint64_t(walTTL),
 			logging_enabled:   C.bool(log.V(3)),
@@ -464,6 +481,7 @@ func (r *RocksDB) open() error {
 			max_open_files:    C.int(maxOpenFiles),
 			use_switching_env: C.bool(newVersion == versionCurrent),
 			must_exist:        C.bool(r.cfg.MustExist),
+			extra_options:     goToCSlice(r.cfg.ExtraOptions),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Wrap(err, "could not open rocksdb instance")

@@ -7,14 +7,39 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "../db.h"
+#include <iostream>
 #include <libroachccl.h>
 #include <memory>
 #include <rocksdb/comparator.h>
 #include <rocksdb/iterator.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 #include <rocksdb/write_batch.h>
+#include "../protosccl/ccl/baseccl/encryption_options.pb.h"
 
 const DBStatus kSuccess = {NULL, 0};
+
+void parse_extra_options(const DBSlice s) {
+  if (s.len == 0) {
+    std::cout << "CCL: No extra options passed\n";
+    return;
+  }
+  cockroach::ccl::baseccl::EncryptionOptions opts;
+  if (!opts.ParseFromArray(s.data, s.len)) {
+    std::cout << "CCL: Failed to parse extra options\n";
+    return;
+  }
+
+  std::cout << "CCL: Found extra options:\n"
+            << "  active key: " << opts.key_files().current_key() << "\n"
+            << "  old key: " << opts.key_files().old_key() << "\n"
+            << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
+}
+
+Hooks* GetCCLHooks() {
+  auto ret = new Hooks();
+  ret->options_hook = &parse_extra_options;
+  return ret;
+}
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();
