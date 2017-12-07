@@ -6,8 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-#ifndef LIBROACHCCL_H
-#define LIBROACHCCL_H
+#pragma once
 
 #include <libroach.h>
 
@@ -22,5 +21,3 @@ DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nan
 #ifdef __cplusplus
 }  // extern "C"
 #endif
-
-#endif  // LIBROACHCCL_H

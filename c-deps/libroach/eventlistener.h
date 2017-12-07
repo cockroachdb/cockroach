@@ -12,8 +12,7 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#ifndef ROACHLIB_EVENTLISTENER_H
-#define ROACHLIB_EVENTLISTENER_H
+#pragma once
 
 #include <atomic>
 
@@ -38,5 +37,3 @@ class DBEventListener : public rocksdb::EventListener {
   std::atomic<uint64_t> flushes_;
   std::atomic<uint64_t> compactions_;
 };
-
-#endif  // ROACHLIB_EVENTLISTENER_H
