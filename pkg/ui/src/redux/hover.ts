@@ -15,8 +15,13 @@ export const HOVER_OFF = "cockroachui/hover/HOVER_OFF";
  * HoverInfo is conveys the current hover position to the state.
  */
 export interface HoverInfo {
+  // The logical hover state.
   hoverChart: string;
   hoverTime: moment.Moment;
+
+  // The physical hover state.
+  x: number;
+  y: number;
 }
 
 export class HoverState {
@@ -26,16 +31,20 @@ export class HoverState {
   hoverChart: string;
   // What point in time are we hovering over?
   hoverTime: moment.Moment;
+
+  // The page x-coordinate of the mouse.
+  x: number;
+  // The page y-coordinate of the mouse.
+  y: number;
 }
 
 export function hoverReducer(state = new HoverState(), action: Action): HoverState {
   switch (action.type) {
     case HOVER_ON:
-      const { payload: hi } = action as PayloadAction<HoverInfo>;
+      const { payload: hoverInfo } = action as PayloadAction<HoverInfo>;
       return {
         currentlyHovering: true,
-        hoverChart: hi.hoverChart,
-        hoverTime: hi.hoverTime,
+        ...hoverInfo,
       };
     case HOVER_OFF:
       return new HoverState();
@@ -44,10 +53,10 @@ export function hoverReducer(state = new HoverState(), action: Action): HoverSta
   }
 }
 
-export function hoverOn(hi: HoverInfo): PayloadAction<HoverInfo> {
+export function hoverOn(hoverInfo: HoverInfo): PayloadAction<HoverInfo> {
   return {
     type: HOVER_ON,
-    payload: hi,
+    payload: hoverInfo,
   };
 }
 
