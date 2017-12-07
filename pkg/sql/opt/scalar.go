@@ -144,6 +144,15 @@ func isIndexedVar(e *expr, index int) bool {
 	return e.op == variableOp && e.private.(int) == index
 }
 
+func initTupleExpr(e *expr, children []*expr) {
+	// In general, the order matters in a tuple so we use an "ordered list"
+	// operator. In some cases (IN) the order doesn't matter; we could convert
+	// those to listOp during normalization, but there doesn't seem to be a
+	// benefit at this time.
+	e.op = orderedListOp
+	e.children = children
+}
+
 // Applies a set of normalization rules to a scalar expression.
 //
 // For now, we expect to build exprs from TypedExprs which have gone through a

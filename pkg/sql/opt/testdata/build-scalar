@@ -131,3 +131,62 @@ or (type: bool)
  └── gt (type: bool)
       ├── variable (2) (type: int)
       └── const (2) (type: int)
+
+build-scalar int int
+(@1, @2) = (1, 2)
+----
+eq (type: bool)
+ ├── ordered-list (type: tuple{int, int})
+ │    ├── variable (0) (type: int)
+ │    └── variable (1) (type: int)
+ └── ordered-list (type: tuple{int, int})
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
+
+build-scalar int
+(@1) IN (1, 2)
+----
+in (type: bool)
+ ├── variable (0) (type: int)
+ └── ordered-list (type: tuple{int, int})
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
+
+build-scalar,normalize int
+(@1) IN (1, 2)
+----
+in (type: bool)
+ ├── variable (0) (type: int)
+ └── ordered-list (type: tuple{int, int})
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
+
+build-scalar int int
+(@1, @2) IN ((1, 2), (3, 4))
+----
+in (type: bool)
+ ├── ordered-list (type: tuple{int, int})
+ │    ├── variable (0) (type: int)
+ │    └── variable (1) (type: int)
+ └── ordered-list (type: tuple{tuple{int, int}, tuple{int, int}})
+      ├── ordered-list (type: tuple{int, int})
+      │    ├── const (1) (type: int)
+      │    └── const (2) (type: int)
+      └── ordered-list (type: tuple{int, int})
+           ├── const (3) (type: int)
+           └── const (4) (type: int)
+
+build-scalar,normalize int int
+(@1, @2) IN ((1, 2), (3, 4))
+----
+in (type: bool)
+ ├── ordered-list (type: tuple{int, int})
+ │    ├── variable (0) (type: int)
+ │    └── variable (1) (type: int)
+ └── ordered-list (type: tuple{tuple{int, int}, tuple{int, int}})
+      ├── ordered-list (type: tuple{int, int})
+      │    ├── const (1) (type: int)
+      │    └── const (2) (type: int)
+      └── ordered-list (type: tuple{int, int})
+           ├── const (3) (type: int)
+           └── const (4) (type: int)
