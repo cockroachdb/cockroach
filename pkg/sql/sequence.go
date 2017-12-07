@@ -23,8 +23,16 @@ import (
 	"golang.org/x/net/context"
 )
 
+func readOnlyError(s string) error {
+	return pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+		"cannot execute %s in a read-only transaction", s)
+}
+
 // IncrementSequence implements the tree.SequenceAccessor interface.
 func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
+	if p.session.TxnState.readOnly {
+		return 0, readOnlyError("nextval()")
+	}
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
 	if err != nil {
 		return 0, err
@@ -85,6 +93,9 @@ func (p *planner) GetLatestValueInSessionForSequence(
 func (p *planner) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64,
 ) error {
+	if p.session.TxnState.readOnly {
+		return readOnlyError("setval()")
+	}
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
 	if err != nil {
 		return err

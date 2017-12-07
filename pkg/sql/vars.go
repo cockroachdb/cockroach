@@ -63,6 +63,13 @@ var nopVar = sessionVar{
 	Reset: func(*Session) error { return nil },
 }
 
+func formatBoolAsPostgresSetting(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
 // varGen is the main definition array for all session variables.
 // Note to maintainers: try to keep this sorted in the source code.
 var varGen = map[string]sessionVar{
@@ -171,7 +178,7 @@ var varGen = map[string]sessionVar{
 			// isolation level as keywords/identifiers (e.g. JDBC), and SET
 			// DEFAULT_TRANSACTION_ISOLATION TO '...', which takes an
 			// expression (e.g. psycopg2). But that's how it is.  Just ensure
-			// this code keeps in sync with SetDefaultIsolation() in set.go.
+			// this code keeps in sync with SetSessionCharacteristics() in set.go.
 			s, err := getStringVal(session, `default_transaction_isolation`, values)
 			if err != nil {
 				return err
@@ -188,6 +195,24 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(session *Session) string { return session.DefaultIsolationLevel.ToLowerCaseString() },
+		Reset: func(session *Session) error {
+			session.DefaultIsolationLevel = enginepb.IsolationType(0)
+			return nil
+		},
+	},
+
+	// See https://www.postgresql.org/docs/9.3/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-READ-ONLY
+	`default_transaction_read_only`: {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
+			s, err := getSingleBool("default_transaction_read_only", session, values)
+			if err != nil {
+				return err
+			}
+			session.DefaultReadOnly = bool(*s)
+
+			return nil
+		},
+		Get: func(session *Session) string { return formatBoolAsPostgresSetting(session.DefaultReadOnly) },
 		Reset: func(session *Session) error {
 			session.DefaultIsolationLevel = enginepb.IsolationType(0)
 			return nil
@@ -380,11 +405,17 @@ var varGen = map[string]sessionVar{
 		Get: func(session *Session) string { return getTransactionState(&session.TxnState) },
 	},
 
-	// Supported for PG driver compatibility only.
 	// See https://www.postgresql.org/docs/10/static/hot-standby.html#HOT-STANDBY-USERS
 	`transaction_read_only`: {
-		// We don't support setting this in any way.
-		Get: func(*Session) string { return "off" },
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
+			s, err := getSingleBool("transaction_read_only", session, values)
+			if err != nil {
+				return err
+			}
+			session.TxnState.setReadOnly(bool(*s))
+			return nil
+		},
+		Get: func(session *Session) string { return formatBoolAsPostgresSetting(session.TxnState.readOnly) },
 	},
 
 	// CockroachDB extension.

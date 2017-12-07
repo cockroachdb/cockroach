@@ -28,6 +28,7 @@ client_min_messages            ·
 database                       test
 datestyle                      ISO
 default_transaction_isolation  serializable
+default_transaction_read_only  off
 distsql                        off
 extra_float_digits             ·
 intervalstyle                  postgres

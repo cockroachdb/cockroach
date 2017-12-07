@@ -17,20 +17,39 @@ package sql
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
-func (p *planner) SetDefaultIsolation(n *tree.SetDefaultIsolation) (planNode, error) {
+func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (planNode, error) {
 	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... ' above.
 	// Ensure both versions stay in sync.
-	switch n.Isolation {
+	switch n.Modes.Isolation {
 	case tree.SerializableIsolation:
 		p.session.DefaultIsolationLevel = enginepb.SERIALIZABLE
 	case tree.SnapshotIsolation:
 		p.session.DefaultIsolationLevel = enginepb.SNAPSHOT
+	case tree.UnspecifiedIsolation:
 	default:
-		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Isolation)
+		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Modes.Isolation)
+	}
+
+	switch n.Modes.ReadWriteMode {
+	case tree.ReadOnly:
+		p.session.DefaultReadOnly = true
+	case tree.ReadWrite:
+		p.session.DefaultReadOnly = false
+	case tree.UnspecifiedReadWriteMode:
+	default:
+		return nil, fmt.Errorf("unsupported default read write mode: %s", n.Modes.ReadWriteMode)
+	}
+
+	switch n.Modes.UserPriority {
+	case tree.UnspecifiedUserPriority:
+	default:
+		return nil, pgerror.Unimplemented("default transaction priority",
+			"unsupported session default: transaction priority")
 	}
 	return &zeroNode{}, nil
 }

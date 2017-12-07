@@ -827,6 +827,7 @@ func (e *Executor) execParsed(
 				e.cfg.Clock.PhysicalTime(), /* sqlTimestamp */
 				session.DefaultIsolationLevel,
 				roachpb.NormalUserPriority,
+				session.DefaultReadOnly,
 			)
 		}
 
@@ -1469,12 +1470,13 @@ func (e *Executor) execStmtInAbortedTxn(
 			// state, so this is consistent.
 			// The old txn has already been rolled back; we start a new txn with the
 			// same sql timestamp and isolation as the current one.
-			curTs, curIso, curPri := txnState.sqlTimestamp, txnState.isolation, txnState.priority
+			curTs, curIso, curPri, curRo := txnState.sqlTimestamp, txnState.isolation,
+				txnState.priority, txnState.readOnly
 			txnState.finishSQLTxn(session)
 			txnState.resetForNewSQLTxn(
 				e, session,
 				false /* implicitTxn */, true, /* retryIntent */
-				curTs /* sqlTimestamp */, curIso /* isolation */, curPri /* priority */)
+				curTs /* sqlTimestamp */, curIso /* isolation */, curPri /* priority */, curRo /* readOnly */)
 		}
 		// TODO(andrei/cdo): add a counter for user-directed retries.
 		return nil
