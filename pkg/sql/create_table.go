@@ -804,10 +804,22 @@ func addPartitionedBy(
 ) error {
 	partDesc.NumColumns = uint32(len(partBy.Fields))
 
+	colMismatchErr := func() error {
+		// We don't have the fields for our parent partitions handy, but we can use
+		// the names from the index we're partitioning. They must have matched or we
+		// would have already returned an error.
+		partCols := append([]string(nil), indexDesc.ColumnNames[:colOffset]...)
+		for _, p := range partBy.Fields {
+			partCols = append(partCols, string(p))
+		}
+		return fmt.Errorf("declared partition columns (%s) are not a prefix of index being partitioned (%s)",
+			strings.Join(partCols, ", "), strings.Join(indexDesc.ColumnNames, ", "))
+	}
+
 	var cols []sqlbase.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
 		if colOffset+i >= len(indexDesc.ColumnNames) {
-			return errors.New("declared partition columns must match index being partitioned")
+			return colMismatchErr()
 		}
 		// Search by name because some callsites of this method have not
 		// allocated ids yet (so they are still all the 0 value).
@@ -817,7 +829,7 @@ func addPartitionedBy(
 		}
 		cols = append(cols, col)
 		if string(partBy.Fields[i]) != col.Name {
-			return errors.New("declared partition columns must match index being partitioned")
+			return colMismatchErr()
 		}
 	}
 
