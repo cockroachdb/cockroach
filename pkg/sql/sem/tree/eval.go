@@ -29,6 +29,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -1938,6 +1939,14 @@ func (s backgroundCtxProvider) Ctx() context.Context {
 
 var _ CtxProvider = backgroundCtxProvider{}
 
+// EvalContextTestingKnobs contains test knobs.
+type EvalContextTestingKnobs struct {}
+
+var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -2004,6 +2013,8 @@ type EvalContext struct {
 	SkipNormalize bool
 
 	collationEnv CollationEnvironment
+
+	TestingKnobs EvalContextTestingKnobs
 
 	Mon *mon.BytesMonitor
 

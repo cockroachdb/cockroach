@@ -29,4 +29,5 @@ type TestingKnobs struct {
 	SQLLeaseManager  ModuleTestingKnobs
 	SQLSchemaChanger ModuleTestingKnobs
 	DistSQL          ModuleTestingKnobs
+	SQLEvalContext   ModuleTestingKnobs
 }
