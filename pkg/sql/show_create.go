@@ -288,7 +288,7 @@ func showCreatePartitioning(
 			buf.WriteString(`, `)
 		}
 		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
-		fmt.Fprintf(buf, part.Name)
+		tree.FormatNode(buf, tree.FmtSimple, tree.Name(part.Name))
 		buf.WriteString(` VALUES IN (`)
 		for j, values := range part.Values {
 			if j != 0 {
