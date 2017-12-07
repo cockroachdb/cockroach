@@ -119,11 +119,16 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       return;
     }
 
+    const positionX = e.clientX + window.scrollX;
+    const positionY = e.clientY + window.scrollY;
+
     // Only dispatch if we have something to change to avoid action spamming.
-    if (this.props.hoverState.hoverChart !== this.props.chartKey || !result.isSame(this.props.hoverState.hoverTime)) {
+    if (this.props.hoverState.hoverChart !== this.props.chartKey || !result.isSame(this.props.hoverState.hoverTime) || this.props.hoverState.x !== positionX || this.props.hoverState.y !== positionY) {
       this.props.hoverOn({
         hoverChart: this.props.chartKey,
         hoverTime: result,
+        x: positionX,
+        y: positionY,
       });
     }
   }
