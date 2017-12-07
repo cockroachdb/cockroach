@@ -37,10 +37,20 @@
 #include "protos/storage/engine/enginepb/mvcc.pb.h"
 #include "protos/storage/engine/enginepb/rocksdb.pb.h"
 
+const DBStatus kSuccess = {NULL, 0};
+
 extern "C" {
 static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
   fprintf(stderr, "%s symbol missing; expected to be supplied by Go\n", name);
   abort();
+}
+
+// DBOpenHook in OSS mode only verifies that no extra options are specified.
+__attribute__((weak)) DBStatus DBOpenHook(const DBOptions opts) {
+  if (opts.extra_options.len != 0) {
+    return FmtStatus("DBOPtions has extra_options, but OSS code cannot handle them");
+  }
+  return kSuccess;
 }
 
 // These are Go functions exported by storage/engine. We provide these stubs,
@@ -187,8 +197,6 @@ struct DBSnapshot : public DBEngine {
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
 };
-
-const DBStatus kSuccess = {NULL, 0};
 
 std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
 
@@ -1565,6 +1573,12 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
 
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options = DBMakeOptions(db_opts);
+
+  // Call hooks to handle db_opts.extra_options.
+  auto hook_status = DBOpenHook(db_opts);
+  if (hook_status.data != NULL) {
+    return hook_status;
+  }
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
