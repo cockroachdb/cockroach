@@ -1210,28 +1210,48 @@ alter_zone_database_stmt:
   }
 
 alter_zone_table_stmt:
-  ALTER TABLE qualified_name opt_partition EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER TABLE qualified_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
       ZoneSpecifier: tree.ZoneSpecifier{
         TableOrIndex: tree.TableNameWithIndex{Table: $3.normalizableTableName()},
-        Partition: tree.Name($4),
       },
-      YAMLConfig: $8.expr(),
+      YAMLConfig: $7.expr(),
+    }
+  }
+| ALTER PARTITION unrestricted_name OF TABLE qualified_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetZoneConfig{
+      ZoneSpecifier: tree.ZoneSpecifier{
+        TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableName()},
+        Partition: tree.Name($3),
+      },
+      YAMLConfig: $10.expr(),
     }
   }
 
 alter_zone_index_stmt:
-  ALTER INDEX table_name_with_index opt_partition EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr_const
   {
     /* SKIP DOC */
     $$.val = &tree.SetZoneConfig{
       ZoneSpecifier: tree.ZoneSpecifier{
         TableOrIndex: $3.tableWithIdx(),
-        Partition: tree.Name($4),
       },
-      YAMLConfig: $8.expr(),
+      YAMLConfig: $7.expr(),
+    }
+  }
+| ALTER PARTITION unrestricted_name OF INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetZoneConfig{
+      ZoneSpecifier: tree.ZoneSpecifier{
+        TableOrIndex: $6.tableWithIdx(),
+        Partition: tree.Name($3),
+      },
+      YAMLConfig: $10.expr(),
     }
   }
 
@@ -2492,7 +2512,7 @@ session_var:
 // %Help: SHOW STATISTICS - display table statistics
 // %Category: Misc
 // %Text: SHOW STATISTICS FOR TABLE <table_name>
-// 
+//
 // Returns the available statistics for a table.
 // The statistics can include a histogram ID, which can
 // be used with SHOW HISTOGRAM.
@@ -2507,7 +2527,7 @@ show_stats_stmt:
 // %Help: SHOW HISTOGRAM - display histogram
 // %Category: Misc
 // %Text: SHOW HISTOGRAM <histogram_id>
-// 
+//
 // Returns the data in the histogram with the
 // given ID (as returned by SHOW STATISTICS).
 // %SeeAlso: SHOW STATISTICS
@@ -2790,15 +2810,29 @@ show_zone_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
       TableOrIndex: tree.TableNameWithIndex{Table: $7.normalizableTableName()},
-      Partition: tree.Name($8),
     }}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index opt_partition
+| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION unrestricted_name OF TABLE qualified_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
+      TableOrIndex: tree.TableNameWithIndex{Table: $10.normalizableTableName()},
+      Partition: tree.Name($7),
+    }}
+  }
+| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index
   {
     /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
       TableOrIndex: $7.tableWithIdx(),
-      Partition: tree.Name($8),
+    }}
+  }
+| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION unrestricted_name OF INDEX table_name_with_index
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
+      TableOrIndex: $10.tableWithIdx(),
+      Partition: tree.Name($7),
     }}
   }
 | EXPERIMENTAL SHOW ZONE CONFIGURATIONS
