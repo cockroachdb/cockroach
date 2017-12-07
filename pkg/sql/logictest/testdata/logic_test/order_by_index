@@ -94,28 +94,29 @@ EXPLAIN(METADATA) SELECT k FROM kv JOIN (VALUES (1,2)) AS z(a,b) ON kv.k = z.a O
 2  join    ·         ·                 (k, v, a[omitted], b[omitted])  ·
 2  ·       type      inner             ·                               ·
 2  ·       equality  (k) = (a)         ·                               ·
-3  scan    ·         ·                 (k, v)                          k!=NULL; key(k)
-3  ·       table     kv@primary        ·                               ·
+3  scan    ·         ·                 (k, v)                          k!=NULL; weak-key(k,v)
+3  ·       table     kv@foo            ·                               ·
 3  ·       spans     ALL               ·                               ·
-3  values  ·         ·                 (column1, column2[omitted])     ·
-3  ·       size      2 columns, 1 row  ·                               ·
+3  filter  ·         ·                 (column1, column2[omitted])     column1!=NULL
+4  values  ·         ·                 (column1, column2[omitted])     ·
+4  ·       size      2 columns, 1 row  ·                               ·
 
 query ITTTTT
 EXPLAIN(METADATA) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-0  sort    ·               ·                (k)                             k!=NULL; key(k)
-0  ·       order           -v               ·                               ·
-1  render  ·               ·                (k, v)                          k!=NULL; v!=NULL; key(k)
-2  join    ·               ·                (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; key(k)
-2  ·       type            inner            ·                               ·
-2  ·       equality        (k, v) = (k, v)  ·                               ·
-2  ·       mergeJoinOrder  +"(k=k)"         ·                               ·
-3  scan    ·               ·                (k, v)                          k!=NULL; key(k); +k
-3  ·       table           kv@primary       ·                               ·
-3  ·       spans           ALL              ·                               ·
-3  scan    ·               ·                (k, v)                          k!=NULL; key(k); +k
-3  ·       table           kv@primary       ·                               ·
-3  ·       spans           ALL              ·                               ·
+0  nosort  ·               ·                  (k)                             k!=NULL
+0  ·       order           -v                 ·                               ·
+1  render  ·               ·                  (k, v)                          k!=NULL; v!=NULL; key(k,v); -v
+2  join    ·               ·                  (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; key(k,v); -v
+2  ·       type            inner              ·                               ·
+2  ·       equality        (k, v) = (k, v)    ·                               ·
+2  ·       mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                               ·
+3  scan    ·               ·                  (k, v)                          k!=NULL; v!=NULL; key(k,v); -v,+k
+3  ·       table           kv@foo             ·                               ·
+3  ·       spans           -/NULL             ·                               ·
+3  scan    ·               ·                  (k, v)                          k!=NULL; v!=NULL; key(k,v); -v,+k
+3  ·       table           kv@foo             ·                               ·
+3  ·       spans           -/NULL             ·                               ·
 
 # The underlying index can be forced manually, of course.
 query ITTTTT
@@ -123,17 +124,17 @@ EXPLAIN(METADATA) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@f
 ----
 0  nosort  ·               ·                  (k)                             k!=NULL
 0  ·       order           -v                 ·                               ·
-1  render  ·               ·                  (k, v)                          k!=NULL; v!=NULL; -v
-2  join    ·               ·                  (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; -v
+1  render  ·               ·                  (k, v)                          k!=NULL; v!=NULL; key(k,v); -v
+2  join    ·               ·                  (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; key(k,v); -v
 2  ·       type            inner              ·                               ·
 2  ·       equality        (k, v) = (k, v)    ·                               ·
 2  ·       mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                               ·
-3  scan    ·               ·                  (k, v)                          k!=NULL; weak-key(k,v); -v,+k
+3  scan    ·               ·                  (k, v)                          k!=NULL; v!=NULL; key(k,v); -v,+k
 3  ·       table           kv@foo             ·                               ·
-3  ·       spans           ALL                ·                               ·
-3  scan    ·               ·                  (k, v)                          k!=NULL; weak-key(k,v); -v,+k
+3  ·       spans           -/NULL             ·                               ·
+3  scan    ·               ·                  (k, v)                          k!=NULL; v!=NULL; key(k,v); -v,+k
 3  ·       table           kv@foo             ·                               ·
-3  ·       spans           ALL                ·                               ·
+3  ·       spans           -/NULL             ·                               ·
 
 # Check the extended syntax cannot be used in case of renames.
 statement error source name "kv" not found in FROM clause
