@@ -1516,7 +1516,8 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 
 			rangeValues[string(endKey)] = struct{}{}
 			if bytes.Compare(lastEndKey, endKey) >= 0 {
-				return fmt.Errorf("values must be strictly increasing: %s vs %s", roachpb.Key(lastEndKey), roachpb.Key(endKey))
+				return fmt.Errorf("values must be strictly increasing: %s is out of order",
+					tree.AsString(datums))
 			}
 			lastEndKey = endKey
 		}
