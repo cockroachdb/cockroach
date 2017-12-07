@@ -672,6 +672,12 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 			if os.IsNotExist(err) {
 				return nil
 			}
+			// Special-case: if the store-dir is configured using the root of some fs,
+			// e.g. "/mnt/db", we might have special fs-created files like lost+found
+			// that we can't read, so just ignore them rather than crashing.
+			if os.IsPermission(err) && filepath.Base(path) == "lost+found" {
+				return nil
+			}
 			return err
 		}
 		if info.Mode().IsRegular() {
