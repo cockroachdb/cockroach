@@ -1289,7 +1289,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		BinOp{
 			LeftType:   types.JSON,
 			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
+			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 				if err != nil {
