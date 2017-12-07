@@ -99,7 +99,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 	}
 	var stores string
 	for j := 0; j < *flagStores; j++ {
-		stores += " --store=/mnt/data" + strconv.Itoa(j)
+		stores += " --store=/mnt/data" + strconv.Itoa(j) + "/cockroach-data"
 	}
 
 	var name string
