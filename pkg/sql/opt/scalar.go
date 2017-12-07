@@ -138,9 +138,15 @@ func initVariableExpr(e *expr, index int) {
 	e.private = index
 }
 
+// isIndexedVar checks if e is a variableOp that represents an
+// indexed variable with the given index.
+func isIndexedVar(e *expr, index int) bool {
+	return e.op == variableOp && e.private.(int) == index
+}
+
 // Applies a set of normalization rules to a scalar expression.
 //
-// For now, we expect to build exprs from TypedExprs which have went through a
+// For now, we expect to build exprs from TypedExprs which have gone through a
 // normalization process; we include additional rules.
 func normalizeScalar(e *expr) {
 	for _, input := range e.children {
@@ -151,19 +157,19 @@ func normalizeScalar(e *expr) {
 		// Merge in any children that have the same operator. Example:
 		//   a and (b and c)  ->  a and b and c
 		var found bool
-		numNewChildren := len(e.children)
+		newNumChildren := len(e.children)
 		for _, child := range e.children {
 			if child.op == e.op {
 				found = true
 				// We will add the grandchildren as direct children of this node (and
 				// remove the child). The child has been normalized already, so we don't
 				// need to look deeper.
-				numNewChildren += len(child.children) - 1
+				newNumChildren += len(child.children) - 1
 			}
 		}
 		if found {
 			saved := e.children
-			e.children = make([]*expr, 0, numNewChildren)
+			e.children = make([]*expr, 0, newNumChildren)
 
 			for _, child := range saved {
 				if child.op == e.op {

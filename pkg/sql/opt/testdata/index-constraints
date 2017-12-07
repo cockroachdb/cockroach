@@ -1,0 +1,92 @@
+build-scalar,normalize,index-constraints int
+@1 > 2
+----
+[/3 - ]
+
+build-scalar,normalize,index-constraints int
+@1 >= 2
+----
+[/2 - ]
+
+build-scalar,normalize,index-constraints int
+@1 < 2
+----
+[ - /1]
+
+build-scalar,normalize,index-constraints int
+@1 = 2
+----
+[/2 - /2]
+
+build-scalar,normalize,index-constraints int
+@1 > 2 AND @1 < 4
+----
+[/3 - /3]
+
+build-scalar,normalize,index-constraints int
+@1 >= 2 AND @1 <= 4
+----
+[/2 - /4]
+
+build-scalar,normalize,index-constraints int int
+@1 > 2 AND @2 > 5
+----
+[/3/6 - ]
+
+build-scalar,normalize,index-constraints int int
+@1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
+----
+[/1/8 - /2/9]
+
+build-scalar,normalize,index-constraints int int
+@1 > 1 AND @1 < 4 AND @2 > 5 AND @2 < 8
+----
+[/2/6 - /3/7]
+
+build-scalar,normalize,index-constraints int int
+@1 > 1 AND @1 < 4 AND @2 = 5
+----
+[/2/5 - /3/5]
+
+build-scalar,normalize,index-constraints int int
+@1 = 1 AND @2 > 3 AND @2 < 5
+----
+[/1/4 - /1/4]
+
+build-scalar,normalize,index-constraints int int
+@1 = 1 AND @2 > 3 AND @2 < 8
+----
+[/1/4 - /1/7]
+
+build-scalar,normalize,index-constraints int
+@1 > 2 AND @1 < 1
+----
+
+# Tests with a type that doesn't support Prev.
+build-scalar,normalize,index-constraints string
+@1 > 'a' AND @1 < 'z'
+----
+[/e'a\x00' - /'z')
+
+build-scalar,normalize,index-constraints string int
+@1 > 'a' AND @1 < 'z' AND @2 = 5
+----
+[/e'a\x00'/5 - /'z')
+
+# Tests with a type that doesn't support Next or Prev.
+build-scalar,normalize,index-constraints decimal
+@1 > 1.5
+----
+(/1.5 - ]
+
+build-scalar,normalize,index-constraints decimal
+@1 > 1.5 AND @1 < 2
+----
+(/1.5 - /2)
+
+# Note the difference here between decimal and int: we
+# can't extend the exclusive start key.
+build-scalar,normalize,index-constraints decimal decimal
+@1 > 1.5 AND @2 > 2
+----
+(/1.5 - ]
