@@ -137,3 +137,41 @@ func initVariableExpr(e *expr, index int) {
 	e.op = variableOp
 	e.private = index
 }
+
+// Applies a set of normalization rules to a scalar expression.
+//
+// For now, we expect to build exprs from TypedExprs which have went through a
+// normalization process; we include additional rules.
+func normalizeScalar(e *expr) {
+	for _, input := range e.children {
+		normalizeScalar(input)
+	}
+
+	if e.op == andOp || e.op == orOp {
+		// Merge in any children that have the same operator. Example:
+		//   a and (b and c)  ->  a and b and c
+		var found bool
+		newNumChildren := len(e.children)
+		for _, child := range e.children {
+			if child.op == e.op {
+				found = true
+				// We will add the grandchildren as direct children of this node (and
+				// remove the child). The child has been normalized already, so we don't
+				// need to look deeper.
+				newNumChildren += len(child.children) - 1
+			}
+		}
+		if found {
+			saved := e.children
+			e.children = make([]*expr, 0, newNumChildren)
+
+			for _, child := range saved {
+				if child.op == e.op {
+					e.children = append(e.children, child.children...)
+				} else {
+					e.children = append(e.children, child)
+				}
+			}
+		}
+	}
+}
