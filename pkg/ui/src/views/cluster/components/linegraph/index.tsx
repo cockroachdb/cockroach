@@ -76,6 +76,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   mouseMove = (e: any) => {
+    if (!this.props.data.results) {
+        return;
+    }
+
     const datapoints = this.props.data.results[0].datapoints;
     const timeScale = this.chart.xAxis.scale();
 
