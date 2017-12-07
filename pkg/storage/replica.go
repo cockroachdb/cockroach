@@ -3504,10 +3504,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update protected state (last index, last term, raft log size and raft
 	// leader ID) and set raft log entry cache. We clear any older, uncommitted
 	// log entries and cache the latest ones.
-	//
-	// Note also that we're likely to send messages related to the Entries we
-	// just appended, and these entries need to be inlined when sending them to
-	// followers - populating the cache here saves a lot of that work.
 	r.mu.Lock()
 	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
@@ -4180,35 +4176,17 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 		drop := false
 		switch message.Type {
 		case raftpb.MsgApp:
-			// Iterate over the entries to inline sideloaded commands.
-			for j := range message.Entries {
-				cow := false
-				newEnt, err := maybeInlineSideloadedRaftCommand(
-					ctx,
-					r.RangeID,
-					message.Entries[j],
-					r.raftMu.sideloaded,
-					r.store.raftEntryCache,
-				)
-				if err != nil {
-					// We can simply drop the message since it could always get lost
-					// in transit anyway.
-					log.Errorf(ctx, "while inlining sideloaded commands: %s", err)
-					drop = true
-					continue
-				}
-				if newEnt != nil {
-					if !cow {
-						cow = true
-						// Copy the whole slice to avoid data races. Entries are
-						// usually shared between multiple outgoing messages,
-						// and while it would be possible to only modify them
-						// only the first time around, that isn't easy to
-						// implement (since you have to do nontrivial work to
-						// decide whether inlining needs to happen).
-						message.Entries = append([]raftpb.Entry(nil), message.Entries...)
-					}
-					message.Entries[j] = *newEnt
+			// FOR REVIEW: this assertion will be quick for all non-sideloaded
+			// commands. Is it worth always performing the assertion?
+			if util.RaceEnabled || true {
+				// Iterate over the entries to assert that all sideloaded commands
+				// are already inlined. replicaRaftStorage.Entries already performs
+				// the sideload inlining for stable entries and raft.unstable always
+				// contain fat entries. Since these are the only two sources that
+				// raft.sendAppend gathers entries from to populate MsgApps, we
+				// should never see thin entries here.
+				for j := range message.Entries {
+					assertSideloadedRaftCommandInlined(ctx, &message.Entries[j])
 				}
 			}
 
