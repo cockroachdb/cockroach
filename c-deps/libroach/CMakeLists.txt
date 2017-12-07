@@ -43,9 +43,11 @@ target_include_directories(roach
 
 add_library(roachccl
   ccl/db.cc
+  protosccl/ccl/baseccl/encryption_options.pb.cc
 )
 target_include_directories(roachccl
   PRIVATE ../rocksdb/include
+  PRIVATE ../protobuf/src protosccl
 )
 target_link_libraries(roachccl roach)
 

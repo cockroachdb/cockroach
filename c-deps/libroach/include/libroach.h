@@ -72,7 +72,11 @@ typedef struct {
   int max_open_files;
   bool use_switching_env;
   bool must_exist;
+  DBSlice extra_options;
 } DBOptions;
+
+// OpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
+DBStatus OpenHook(const DBOptions opts);
 
 // Create a new cache with the specified size.
 DBCache* DBNewCache(uint64_t size);

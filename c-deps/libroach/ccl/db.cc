@@ -7,14 +7,41 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "../db.h"
+#include <iostream>
 #include <libroachccl.h>
 #include <memory>
 #include <rocksdb/comparator.h>
 #include <rocksdb/iterator.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 #include <rocksdb/write_batch.h>
+#include "../protosccl/ccl/baseccl/encryption_options.pb.h"
 
 const DBStatus kSuccess = {NULL, 0};
+
+DBStatus parse_extra_options(const DBSlice s) {
+  if (s.len == 0) {
+    return kSuccess;
+  }
+
+  cockroach::ccl::baseccl::EncryptionOptions opts;
+  if (!opts.ParseFromArray(s.data, s.len)) {
+    return FmtStatus("failed to parse extra options");
+  }
+
+  if (opts.key_source() != cockroach::ccl::baseccl::KeyFiles) {
+    return FmtStatus("unknown encryption key source: %d", opts.key_source());
+  }
+
+  std::cout << "found encryption options:\n"
+            << "  active key: " << opts.key_files().current_key() << "\n"
+            << "  old key: " << opts.key_files().old_key() << "\n"
+            << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
+
+  return FmtStatus("encryption is not supported");
+}
+
+// OpenHook parses the extra_options field of DBOptions.
+DBStatus OpenHook(const DBOptions opts) { return parse_extra_options(opts.extra_options); }
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();
