@@ -184,7 +184,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       return (
         <div key={key}>
           <MetricsDataProvider id={key}>
-            { React.cloneElement(graph, { hoverOn, hoverOff, hoverState }) }
+            { React.cloneElement(graph, { hoverOn, hoverOff, hoverState, chartKey: key }) }
           </MetricsDataProvider>
         </div>
       );
