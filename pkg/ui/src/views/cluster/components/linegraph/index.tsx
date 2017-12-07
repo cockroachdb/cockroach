@@ -25,6 +25,7 @@ interface LineGraphProps extends MetricsDataComponentProps {
   hoverOn?: typeof hoverOn;
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
+  chartKey?: string;
 }
 
 /**
@@ -119,9 +120,9 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     }
 
     // Only dispatch if we have something to change to avoid action spamming.
-    if (this.props.hoverState.hoverChart !== this.props.title || !result.isSame(this.props.hoverState.hoverTime)) {
+    if (this.props.hoverState.hoverChart !== this.props.chartKey || !result.isSame(this.props.hoverState.hoverTime)) {
       this.props.hoverOn({
-        hoverChart: this.props.title,
+        hoverChart: this.props.chartKey,
         hoverTime: result,
       });
     }

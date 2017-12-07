@@ -19,6 +19,7 @@ import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
+import extend from "src/util/nextState";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
@@ -192,10 +193,11 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     const graphs = dashboards[dashboard].component(dashboardProps);
     const graphComponents = _.map(graphs, (graph, idx) => {
       const key = `nodes.${dashboard}.${idx}`;
+      const forward = extend(forwardParams, { chartKey: key });
       return (
         <div key={key}>
           <MetricsDataProvider id={key}>
-            { React.cloneElement(graph, forwardParams) }
+            { React.cloneElement(graph, forward) }
           </MetricsDataProvider>
         </div>
       );
