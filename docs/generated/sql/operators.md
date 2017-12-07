@@ -11,7 +11,7 @@
 <table><thead>
 <tr><td><code>#>></code></td><td>Return</td></tr>
 </thead><tbody>
-<tr><td>jsonb <code>#>></code> <a href="string.html">string[]</a></td><td>jsonb</td></tr>
+<tr><td>jsonb <code>#>></code> <a href="string.html">string[]</a></td><td><a href="string.html">string</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>%</code></td><td>Return</td></tr>
