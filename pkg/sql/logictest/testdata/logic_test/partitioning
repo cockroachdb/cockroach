@@ -130,13 +130,13 @@ CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
     PARTITION p1 VALUES IN ((DEFAULT, 1))
 )
 
-statement error values must be strictly increasing
+statement error values must be strictly increasing: \(1\) is out of order
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < 2,
     PARTITION p2 VALUES < 1
 )
 
-statement error values must be strictly increasing
+statement error values must be strictly increasing: \(1\) is out of order
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < MAXVALUE,
     PARTITION p2 VALUES < 1
@@ -171,7 +171,7 @@ CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
     PARTITION p1 VALUES < (MAXVALUE, 1)
 )
 
-statement error values must be strictly increasing
+statement error values must be strictly increasing: \('x' COLLATE da\) is out of order
 CREATE TABLE t (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < ('ü' COLLATE da),
     PARTITION p2 VALUES < ('x' COLLATE da)
@@ -183,7 +183,7 @@ CREATE TABLE collate_da (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a)
     PARTITION p2 VALUES < ('ü' COLLATE da)
 )
 
-statement error values must be strictly increasing
+statement error values must be strictly increasing: \(e'\\u00FC' COLLATE de\) is out of order
 CREATE TABLE t (a STRING COLLATE de PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < ('x' COLLATE de),
     PARTITION p2 VALUES < ('ü' COLLATE de)
