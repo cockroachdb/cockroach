@@ -42,6 +42,11 @@ func (node ZoneSpecifier) TargetsIndex() bool {
 
 // Format implements the NodeFormatter interface.
 func (node ZoneSpecifier) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.Partition != "" {
+		buf.WriteString("PARTITION ")
+		FormatNode(buf, f, &node.Partition)
+		buf.WriteString(" OF ")
+	}
 	if node.NamedZone != "" {
 		buf.WriteString("RANGE ")
 		FormatNode(buf, f, &node.NamedZone)
@@ -55,10 +60,6 @@ func (node ZoneSpecifier) Format(buf *bytes.Buffer, f FmtFlags) {
 			buf.WriteString("TABLE ")
 		}
 		FormatNode(buf, f, &node.TableOrIndex)
-	}
-	if node.Partition != "" {
-		buf.WriteString(" PARTITION ")
-		FormatNode(buf, f, &node.Partition)
 	}
 }
 
