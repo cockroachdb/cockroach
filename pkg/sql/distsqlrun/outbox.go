@@ -33,6 +33,11 @@ const outboxFlushPeriod = 100 * time.Microsecond
 // an encoding available.
 const preferredEncoding = sqlbase.DatumEncoding_ASCENDING_KEY
 
+type flowStream interface {
+	Send(*ProducerMessage) error
+	Recv() (*ConsumerSignal, error)
+}
+
 // outbox implements an outgoing mailbox as a RowReceiver that receives rows and
 // sends them to a gRPC stream. Its core logic runs in a goroutine. We send rows
 // when we accumulate outboxBufRows or every outboxFlushPeriod (whichever comes
@@ -45,11 +50,7 @@ type outbox struct {
 	addr    string
 	// The rows received from the RowChannel will be forwarded on this stream once
 	// it is established.
-	stream DistSQL_FlowStreamClient
-
-	// syncFlowStream is set if we are outputting to a sync flow stream; in
-	// that case addr and stream will not be set.
-	syncFlowStream DistSQL_RunSyncFlowServer
+	stream flowStream
 
 	encoder StreamEncoder
 	// numRows is the number of rows that have been accumulated in the encoder.
@@ -77,7 +78,7 @@ func newOutbox(flowCtx *FlowCtx, addr string, flowID FlowID, streamID StreamID) 
 // stream. The flow context should be provided via setFlowCtx when it is
 // available.
 func newOutboxSyncFlowStream(stream DistSQL_RunSyncFlowServer) *outbox {
-	return &outbox{syncFlowStream: stream}
+	return &outbox{stream: stream}
 }
 
 func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
@@ -141,16 +142,10 @@ func (m *outbox) flush(ctx context.Context) error {
 	if log.V(3) {
 		log.Infof(ctx, "flushing outbox")
 	}
-	var sendErr error
-	if m.stream != nil {
-		sendErr = m.stream.Send(msg)
-	} else {
-		sendErr = m.syncFlowStream.Send(msg)
-	}
+	sendErr := m.stream.Send(msg)
 	if sendErr != nil {
 		// Make sure the stream is not used any more.
 		m.stream = nil
-		m.syncFlowStream = nil
 		if log.V(1) {
 			log.Errorf(ctx, "outbox flush error: %s", sendErr)
 		}
@@ -177,10 +172,9 @@ func (m *outbox) flush(ctx context.Context) error {
 // If an error is returned, it's either a communication error from the outbox's
 // stream, or otherwise the error has already been forwarded on the stream.
 // Depending on the specific error, the stream might or might not need to be
-// closed. In case it doesn't, m.stream (and also m.syncFlowStream) have been
-// set to nil.
+// closed. In case it doesn't, m.stream has been set to nil.
 func (m *outbox) mainLoop(ctx context.Context) error {
-	if m.syncFlowStream == nil {
+	if m.stream == nil {
 		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr).Connect(ctx)
 		if err != nil {
 			return err
@@ -261,7 +255,6 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				// the consumer will not consume more rows from this outbox. Make sure
 				// the stream is not used any more.
 				m.stream = nil
-				m.syncFlowStream = nil
 				return drainSignal.err
 			}
 			drainCh = nil
@@ -290,10 +283,6 @@ type drainSignal struct {
 	err error
 }
 
-type receivable interface {
-	Recv() (*ConsumerSignal, error)
-}
-
 // listenForDrainSignalFromConsumer returns a channel that will be pinged once the
 // consumer has closed its send-side of the stream, or has sent a drain signal.
 //
@@ -304,13 +293,7 @@ type receivable interface {
 func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
 	ch := make(chan drainSignal, 1)
 
-	var stream receivable
-	if m.stream != nil {
-		stream = m.stream
-	} else {
-		stream = m.syncFlowStream
-	}
-
+	stream := m.stream
 	if err := m.flowCtx.stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
 		sendDrainSignal := func(drainRequested bool, err error) bool {
 			select {
@@ -364,8 +347,8 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 
 func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	err := m.mainLoop(ctx)
-	if m.stream != nil {
-		closeErr := m.stream.CloseSend()
+	if stream, ok := m.stream.(DistSQL_FlowStreamClient); ok {
+		closeErr := stream.CloseSend()
 		if err == nil {
 			err = closeErr
 		}
