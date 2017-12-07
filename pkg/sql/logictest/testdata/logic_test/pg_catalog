@@ -1093,6 +1093,7 @@ client_min_messages            ·             NULL      NULL        NULL        
 database                       test          NULL      NULL        NULL        string
 datestyle                      ISO           NULL      NULL        NULL        string
 default_transaction_isolation  serializable  NULL      NULL        NULL        string
+default_transaction_read_only  off           NULL      NULL        NULL        string
 distsql                        off           NULL      NULL        NULL        string
 extra_float_digits             ·             NULL      NULL        NULL        string
 intervalstyle                  postgres      NULL      NULL        NULL        string
@@ -1121,6 +1122,7 @@ client_min_messages            ·             NULL  user     NULL      ·       
 database                       test          NULL  user     NULL      test          test
 datestyle                      ISO           NULL  user     NULL      ISO           ISO
 default_transaction_isolation  serializable  NULL  user     NULL      serializable  serializable
+default_transaction_read_only  off           NULL  user     NULL      off           off
 distsql                        off           NULL  user     NULL      off           off
 extra_float_digits             ·             NULL  user     NULL      ·             ·
 intervalstyle                  postgres      NULL  user     NULL      postgres      postgres
@@ -1149,6 +1151,7 @@ client_min_messages            NULL    NULL     NULL     NULL        NULL
 database                       NULL    NULL     NULL     NULL        NULL
 datestyle                      NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation  NULL    NULL     NULL     NULL        NULL
+default_transaction_read_only  NULL    NULL     NULL     NULL        NULL
 distsql                        NULL    NULL     NULL     NULL        NULL
 extra_float_digits             NULL    NULL     NULL     NULL        NULL
 intervalstyle                  NULL    NULL     NULL     NULL        NULL

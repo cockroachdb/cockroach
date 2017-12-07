@@ -2282,9 +2282,9 @@ set_session_stmt:
     $$.val = $2.stmt()
   }
 // Special form for pg compatibility:
-| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_iso_level
+| SET SESSION CHARACTERISTICS AS TRANSACTION transaction_mode_list
   {
-    $$.val = &tree.SetDefaultIsolation{Isolation: $6.isoLevel()}
+    $$.val = &tree.SetSessionCharacteristics{Modes: $6.transactionModes()}
   }
 
 // %Help: SET TRANSACTION - configure the transaction settings
