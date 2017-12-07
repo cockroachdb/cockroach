@@ -12,8 +12,7 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#ifndef LIBROACH_H
-#define LIBROACH_H
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -297,5 +296,3 @@ DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 #ifdef __cplusplus
 }  // extern "C"
 #endif
-
-#endif  // LIBROACH_H
