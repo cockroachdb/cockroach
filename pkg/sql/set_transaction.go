@@ -69,18 +69,16 @@ func (p *planner) setUserPriority(userPriority tree.UserPriority) error {
 	return p.session.TxnState.setPriority(up)
 }
 
-// Note: This setting currently doesn't have any effect and therefor is not
-// persisted anywhere. If this changes, care needs to be taken to restore it
-// when ROLLBACK TO SAVEPOINT starts a new sql transaction.
 func (p *planner) setReadWriteMode(readWriteMode tree.ReadWriteMode) error {
 	switch readWriteMode {
 	case tree.UnspecifiedReadWriteMode:
 		return nil
 	case tree.ReadOnly:
-		return errors.New("read only not supported")
+		p.session.TxnState.setReadOnly(true)
 	case tree.ReadWrite:
-		return nil
+		p.session.TxnState.setReadOnly(false)
 	default:
 		return errors.Errorf("unknown read mode: %s", readWriteMode)
 	}
+	return nil
 }

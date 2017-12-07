@@ -198,6 +198,9 @@ type Session struct {
 	// DefaultIsolationLevel indicates the default isolation level of
 	// newly created transactions.
 	DefaultIsolationLevel enginepb.IsolationType
+	// DefaultReadOnly indicates the default read-only status of
+	// newly created transactions.
+	DefaultReadOnly bool
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
 	DistSQLMode DistSQLExecMode
@@ -999,6 +1002,9 @@ type txnState struct {
 	// The transaction's priority.
 	priority roachpb.UserPriority
 
+	// THe transaction's read only state.
+	readOnly bool
+
 	// mon tracks txn-bound objects like the running state of
 	// planNode in the midst of performing a computation. We
 	// host this here instead of TxnState because TxnState is
@@ -1041,6 +1047,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	sqlTimestamp time.Time,
 	isolation enginepb.IsolationType,
 	priority roachpb.UserPriority,
+	readOnly bool,
 ) {
 	if ts.sp != nil || ts.txnResults != nil {
 		log.Fatalf(s.Ctx(),
@@ -1125,6 +1132,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	if err := ts.setPriority(priority); err != nil {
 		panic(err)
 	}
+	ts.setReadOnly(readOnly)
 
 	// Discard the old schemaChangers, if any.
 	ts.schemaChangers = schemaChangerCollection{}
@@ -1271,6 +1279,10 @@ func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
 	}
 	ts.priority = userPriority
 	return nil
+}
+
+func (ts *txnState) setReadOnly(readOnly bool) {
+	ts.readOnly = readOnly
 }
 
 // isSerializableRestart returns true if the KV transaction is serializable and
