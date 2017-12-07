@@ -13,6 +13,15 @@ statement error user root does not have ALL privileges
 REVOKE SELECT ON DATABASE a FROM root
 
 statement ok
+CREATE USER readwrite
+
+statement error pq: user "test-user" does not exist
+GRANT ALL ON DATABASE a TO readwrite, "test-user"
+
+statement ok
+INSERT INTO system.users VALUES('test-user','');
+
+statement ok
 GRANT ALL ON DATABASE a TO readwrite, "test-user"
 
 statement error syntax error
