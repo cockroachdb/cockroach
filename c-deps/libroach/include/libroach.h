@@ -65,7 +65,7 @@ typedef struct DBIterator DBIterator;
 
 // DBOptions contains local database options.
 typedef struct {
-  DBCache *cache;
+  DBCache* cache;
   uint64_t block_size;
   uint64_t wal_ttl_seconds;
   bool logging_enabled;
@@ -80,16 +80,16 @@ DBCache* DBNewCache(uint64_t size);
 
 // Add a reference to an existing cache. Note that the underlying
 // RocksDB cache is shared between the original and new reference.
-DBCache* DBRefCache(DBCache *cache);
+DBCache* DBRefCache(DBCache* cache);
 
 // Release a cache, decrementing the reference count on the underlying
 // RocksDB cache. Note that the RocksDB cache will not be freed until
 // all of the references have been released.
-void DBReleaseCache(DBCache *cache);
+void DBReleaseCache(DBCache* cache);
 
 // Opens the database located in "dir", creating it if it doesn't
 // exist.
-DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions options);
+DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions options);
 
 // Destroys the database located in "dir". As the name implies, this
 // operation is destructive. Use with caution.
@@ -128,7 +128,7 @@ DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end);
 // (exclusive). Unlike DBDeleteRange, this function finds the keys to
 // delete by iterating over the supplied iterator and creating
 // tombstones for the individual keys.
-DBStatus DBDeleteIterRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end);
+DBStatus DBDeleteIterRange(DBEngine* db, DBIterator* iter, DBKey start, DBKey end);
 
 // Applies a batch of operations (puts, merges and deletes) to the
 // database atomically and closes the batch. It is only valid to call
@@ -147,7 +147,7 @@ DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr, bool sync);
 // only valid until the next call to a method using the DBEngine and
 // should thus be copied immediately. It is only valid to call this
 // function on an engine created by DBNewBatch.
-DBSlice DBBatchRepr(DBEngine *db);
+DBSlice DBBatchRepr(DBEngine* db);
 
 // Creates a new snapshot of the database for use in DBGet() and
 // DBNewIter(). It is the caller's responsibility to call DBClose().
@@ -224,15 +224,15 @@ typedef struct {
 MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);
 
 bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
-                          int64_t target_size, bool allow_meta2_splits, DBString* split_key);
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split, int64_t target_size,
+                          bool allow_meta2_splits, DBString* split_key);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
   int64_t block_cache_hits;
   int64_t block_cache_misses;
-  size_t  block_cache_usage;
-  size_t  block_cache_pinned_usage;
+  size_t block_cache_usage;
+  size_t block_cache_pinned_usage;
   int64_t bloom_filter_prefix_checked;
   int64_t bloom_filter_prefix_useful;
   int64_t memtable_total_size;
@@ -298,4 +298,4 @@ DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 }  // extern "C"
 #endif
 
-#endif // LIBROACH_H
+#endif  // LIBROACH_H

@@ -17,11 +17,10 @@ extern "C" {
 
 // DBBatchReprVerify asserts that all keys in a BatchRepr are between the
 // specified start and end keys and computes the MVCCStatsResult for it.
-DBStatus DBBatchReprVerify(
-  DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats);
+DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif // LIBROACHCCL_H
+#endif  // LIBROACHCCL_H
