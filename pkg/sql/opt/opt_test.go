@@ -227,14 +227,18 @@ func TestOpt(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
-				switch d.cmd {
+				cmds := strings.Split(d.cmd, ",")
+
+				var e *expr
+
+				switch cmds[0] {
 				case "build-scalar":
 					typedExpr, err := parseScalarExpr(d.sql, d.cmdArgs)
 					if err != nil {
 						d.fatalf(t, "%v", err)
 					}
 
-					e := func() *expr {
+					e = func() *expr {
 						defer func() {
 							if r := recover(); r != nil {
 								d.fatalf(t, "buildScalar: %v", r)
@@ -242,11 +246,21 @@ func TestOpt(t *testing.T) {
 						}()
 						return buildScalar(&buildContext{}, typedExpr)
 					}()
-					return e.String()
 				default:
 					d.fatalf(t, "unsupported command: %s", d.cmd)
 					return ""
 				}
+
+				for _, cmd := range cmds[1:] {
+					switch cmd {
+					case "normalize":
+						normalizeScalar(e)
+					default:
+						d.fatalf(t, "unsupported command: %s", d.cmd)
+						return ""
+					}
+				}
+				return e.String()
 			})
 		})
 	}
