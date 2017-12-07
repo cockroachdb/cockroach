@@ -79,6 +79,10 @@ be run as shown in the [README](README.md).
   regenerate the associated `.pb.{go,cc,h}` or `.js` files using `make
   generate`.
 
+- If you edit the SQL built-in functions or operators or update the SQL grammar,
+  you will need to manually regenerate the associated `docs/generated` files via
+  `make generate PKG=./docs/...`.
+
 - You can also run `build/builder.sh make generate` from the
   repository root to get the intended result.
 
