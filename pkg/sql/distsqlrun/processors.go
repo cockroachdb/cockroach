@@ -18,6 +18,7 @@ import (
 	"context"
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -435,21 +436,23 @@ type rowSourceBase struct {
 	consumerStatus ConsumerStatus
 }
 
-// consumerDone helps processors RowSource.ConsumerDone.
+// consumerDone helps processors implement RowSource.ConsumerDone.
 func (rb *rowSourceBase) consumerDone(name string) {
-	if rb.consumerStatus != NeedMoreRows {
+	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.consumerStatus)))
+	if status != NeedMoreRows {
 		log.Fatalf(context.Background(), "%s already done or closed: %d",
 			name, rb.consumerStatus)
 	}
-	rb.consumerStatus = DrainRequested
+	atomic.StoreUint32((*uint32)(&rb.consumerStatus), uint32(DrainRequested))
 }
 
-// consumerDone helps processors RowSource.ConsumerClosed.
+// consumerDone helps processors implement RowSource.ConsumerClosed.
 func (rb *rowSourceBase) consumerClosed(name string) {
-	if rb.consumerStatus == ConsumerClosed {
+	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.consumerStatus)))
+	if status == ConsumerClosed {
 		log.Fatalf(context.Background(), "%s already closed", name)
 	}
-	rb.consumerStatus = ConsumerClosed
+	atomic.StoreUint32((*uint32)(&rb.consumerStatus), uint32(ConsumerClosed))
 }
 
 // noopProcessor is a processor that simply passes rows through from the
