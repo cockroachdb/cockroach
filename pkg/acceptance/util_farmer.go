@@ -15,6 +15,7 @@
 package acceptance
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -99,7 +100,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 	}
 	var stores string
 	for j := 0; j < *flagStores; j++ {
-		stores += " --store=/mnt/data" + strconv.Itoa(j)
+		stores += fmt.Sprintf(" --store=/mnt/data%d/cockroach-data", j)
 	}
 
 	var name string
