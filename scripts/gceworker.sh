@@ -2,11 +2,12 @@
 
 set -euo pipefail
 
+cd "$(dirname "${0}")/.."
+source build/shlib.sh
+
 export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroach-workers}}
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
 NAME=${GCEWORKER_NAME-gceworker-$(id -un)}
-
-cd "$(dirname "$0")/.."
 
 cmd=${1-}
 if [[ "${cmd}" ]]; then
@@ -28,7 +29,7 @@ case "${cmd}" in
            --scopes "default,cloud-platform"
 
     # Retry while vm and sshd to start up.
-    "$(dirname "${0}")/travis_retry.sh" gcloud compute ssh "${NAME}" --command=true
+    retry gcloud compute ssh "${NAME}" --command=true
 
     gcloud compute copy-files "build/bootstrap" "${NAME}:bootstrap"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
@@ -48,7 +49,7 @@ case "${cmd}" in
     gcloud compute instances delete "${NAME}"
     ;;
     ssh)
-    gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+    retry gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     sync)
     if ! hash unison 2>/dev/null; then
