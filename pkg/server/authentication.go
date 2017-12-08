@@ -238,7 +238,7 @@ func (s *authenticationServer) verifyPassword(
 	ctx context.Context, username string, password string,
 ) (bool, error) {
 	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, s.server.sqlExecutor, s.memMetrics, username,
+		ctx, s.server.execCfg, s.memMetrics, username,
 	)
 	if err != nil {
 		return false, err

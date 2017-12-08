@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -38,7 +39,7 @@ import (
 	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
 )
 
-var noRewindExpected = cmdPos(-1)
+var noRewindExpected = CmdPos(-1)
 
 type testContext struct {
 	manualClock *hlc.ManualClock
@@ -107,13 +108,14 @@ func (tc *testContext) createOpenState(
 	txnStateMon.Start(tc.ctx, &tc.mon, mon.BoundAccount{})
 
 	ts := txnState2{
-		Ctx:          ctx,
-		sp:           sp,
-		cancel:       cancel,
-		sqlTimestamp: timeutil.Now(),
-		isolation:    enginepb.SERIALIZABLE,
-		priority:     roachpb.NormalUserPriority,
-		mon:          &txnStateMon,
+		Ctx:           ctx,
+		sp:            sp,
+		cancel:        cancel,
+		sqlTimestamp:  timeutil.Now(),
+		isolation:     enginepb.SERIALIZABLE,
+		priority:      roachpb.NormalUserPriority,
+		mon:           &txnStateMon,
+		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
 	ts.mu.txn = client.NewTxn(tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */, client.RootTxn)
 
@@ -168,7 +170,7 @@ func (tc *testContext) createNoTxnState() (State, *txnState2) {
 //
 // Pass noRewindExpected for expRewPos if a rewind is not expected.
 func checkAdv(
-	adv advanceInfo, expCode advanceCode, expFlush flushOpt, expRewPos cmdPos, expEv txnEvent,
+	adv advanceInfo, expCode advanceCode, expFlush flushOpt, expRewPos CmdPos, expEv txnEvent,
 ) error {
 	if adv.code != expCode {
 		return errors.Errorf("expected code: %s, but got: %s (%+v)", expCode, adv.code, adv)
@@ -243,7 +245,7 @@ func TestTransitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.TODO()
-	dummyRewCap := rewindCapability{rewindPos: cmdPos(12)}
+	dummyRewCap := rewindCapability{rewindPos: CmdPos(12)}
 	testCon := makeTestContext()
 	tranCtx := transitionCtx{
 		db:      testCon.mockDB,
@@ -311,7 +313,8 @@ func TestTransitions(t *testing.T) {
 				// We expect to stayInPlace; upon starting a txn the statement is
 				// executed again, this time in state Open.
 				expCode:  stayInPlace,
-				expFlush: flush,
+				expFlush: noFlush,
+				expEv:    txnStart,
 			},
 			expTxn: &expKVTxn{
 				debugName:    &implicitTxnName,
@@ -336,6 +339,7 @@ func TestTransitions(t *testing.T) {
 			expAdv: expAdvance{
 				expCode:  advanceOne,
 				expFlush: flush,
+				expEv:    txnStart,
 			},
 			expTxn: &expKVTxn{
 				debugName:    &explicitTxnName,
@@ -729,6 +733,7 @@ func TestTransitions(t *testing.T) {
 			expAdv: expAdvance{
 				expCode:  advanceOne,
 				expFlush: flush,
+				expEv:    txnRestart,
 			},
 			expTxn: &expKVTxn{},
 		},
@@ -746,7 +751,7 @@ func TestTransitions(t *testing.T) {
 				expFlush: flush,
 				expEv:    txnAborted,
 			},
-			expTxn: nil,
+			expTxn: &expKVTxn{},
 		},
 		//
 		// Tests starting from the CommitWait state.
@@ -767,13 +772,13 @@ func TestTransitions(t *testing.T) {
 			expTxn: nil,
 		},
 		{
-			name: "CommitWait->Aborted",
+			name: "CommitWait+err",
 			init: func() (State, *txnState2, error) {
 				return testCon.createCommitWaitState()
 			},
 			ev:        eventNonRetriableErr{IsCommit: False},
 			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
-			expState:  stateAborted{RetryIntent: True},
+			expState:  stateCommitWait{},
 			expAdv: expAdvance{
 				expCode:  skipBatch,
 				expFlush: flush,

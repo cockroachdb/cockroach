@@ -145,7 +145,9 @@ type ResultsGroup interface {
 type StatementResult interface {
 	// BeginResult should be called prior to any of the other methods.
 	// TODO(andrei): remove BeginResult and SetColumns, and have
-	// NewStatementResult() take in a tree.Statement
+	// NewStatementResult() take in a tree.Statement. But that might not work
+	// because a statement's tag might depend on the state that it's being
+	// executed in?
 	BeginResult(stmt tree.Statement)
 	// GetPGTag returns the PGTag of the statement passed into BeginResult.
 	PGTag() string
@@ -155,7 +157,11 @@ type StatementResult interface {
 	// SetColumns should be called after BeginResult and before AddRow if the
 	// StatementType is tree.Rows.
 	SetColumns(columns sqlbase.ResultColumns)
-	// AddRow takes the passed in row and adds it to the current result.
+	// AddRow takes the passed in row and adds it to the current result. If an
+	// error is returned, it is a communication error; in this case the only
+	// further allowed call on the ResultWriter set of interfaces is
+	// ResultsGroup.Close(). In particular, StatementResult.CloseResult() cannot
+	// be called.
 	AddRow(ctx context.Context, row tree.Datums) error
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
@@ -189,6 +195,8 @@ type bufferedWriter struct {
 	currentResult    Result
 	resultInProgress bool
 
+	deliveredCallback func()
+
 	err error
 }
 
@@ -220,9 +228,15 @@ func (b *bufferedWriter) NewResultsGroup() ResultsGroup {
 func (b *bufferedWriter) SetEmptyQuery() {
 }
 
-// SetEmptyQuery implements the ResultsGroup interface.
+// NewStatementResult is part of the ResultsGroup interface.
 func (b *bufferedWriter) NewStatementResult() StatementResult {
 	return b
+}
+
+// NewCommandResult creates a CommandResult backed by the bufferedWriter.
+// !!! still in use?
+func (b *bufferedWriter) NewCommandResult() CommandResult {
+	panic("unimplemented")
 }
 
 // CanAutomaticallyRetry implements the ResultsGroup interface.
@@ -241,6 +255,9 @@ func (b *bufferedWriter) Close() {
 	b.pastResults = append(b.pastResults, b.currentGroupResults...)
 	b.currentGroupResults = nil
 	b.resultInProgress = false
+}
+func (b *bufferedWriter) SetResultsDeliveredCallback(callback func()) {
+	b.deliveredCallback = callback
 }
 
 // Flush implements the ResultsGroup interface.
@@ -298,6 +315,11 @@ func (b *bufferedWriter) RowsAffected() int {
 	return b.currentResult.RowsAffected
 }
 
+// CloseResultWithError implements the StatementResult interface.
+func (b *bufferedWriter) CloseResultWithError(err error) error {
+	panic("!!! unimplemented")
+}
+
 // CloseResult implements the StatementResult interface.
 func (b *bufferedWriter) CloseResult() error {
 	if !b.resultInProgress {
@@ -305,6 +327,11 @@ func (b *bufferedWriter) CloseResult() error {
 	}
 	b.currentGroupResults = append(b.currentGroupResults, b.currentResult)
 	b.resultInProgress = false
+	// bufferedWriter doesn't have a notion of results delivery; pretend that
+	// they're delivered as soon as they're received.
+	if b.deliveredCallback != nil {
+		b.deliveredCallback()
+	}
 	return nil
 }
 

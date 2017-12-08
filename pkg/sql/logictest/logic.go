@@ -1196,6 +1196,7 @@ func (t *logicTest) processSubtest(
 			}
 			if !s.skip {
 				for i := 0; i < repeat; i++ {
+					log.Infof(context.TODO(), "!!! executing statement: %q", stmt.sql)
 					if ok := t.execStatement(stmt); !ok {
 						return errors.Errorf("%s: error in statement, skipping to next file", stmt.pos)
 					}

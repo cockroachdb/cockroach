@@ -427,7 +427,7 @@ func (mm *BytesMonitor) MaximumBytes() int64 {
 type BoundAccount struct {
 	used int64
 	// reserved is a small buffer to amortize the cost of growing an account. It
-	// decreases as curAllocated increases (and vice-versa).
+	// decreases as used increases (and vice-versa).
 	reserved int64
 	mon      *BytesMonitor
 }
