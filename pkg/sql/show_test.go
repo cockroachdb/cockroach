@@ -494,7 +494,9 @@ func TestShowQueries(t *testing.T) {
 	sqlutils.CreateTable(t, conn1, tableName, "num INT", 0, nil)
 
 	found := false
-	execKnobs.StatementFilter = func(ctx context.Context, stmt string, resultWriter sql.ResultsWriter, err error) error {
+	// TODO(andrei): The statement filter below wrongly uses t.Fatal(). It's going
+	// to run on a different goroutine.
+	execKnobs.StatementFilter = func(ctx context.Context, stmt string, err error) {
 		if stmt == selectStmt {
 			found = true
 			const showQuery = "SELECT node_id, query FROM [SHOW CLUSTER QUERIES]"
@@ -535,7 +537,6 @@ func TestShowQueries(t *testing.T) {
 				t.Fatalf("unexpected number of running queries: %d, expected %d", count, expectedCount)
 			}
 		}
-		return nil
 	}
 
 	if _, err := conn2.Exec(selectStmt); err != nil {

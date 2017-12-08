@@ -165,7 +165,7 @@ func anonymizeStmt(stmt Statement) string {
 }
 
 // sqlStats carries per-application statistics for all applications on
-// each node. It hangs off Executor.
+// each node.
 type sqlStats struct {
 	st *cluster.Settings
 	syncutil.Mutex
@@ -281,14 +281,20 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 // queries scrubbed of their identifiers. Any statements which cannot be
 // scrubbed will be omitted from the returned map.
 func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
+	return e.sqlStats.getScrubbedStmtStats(e.cfg.VirtualSchemas)
+}
+
+func (s *sqlStats) getScrubbedStmtStats(
+	vt *VirtualSchemaHolder,
+) []roachpb.CollectedStatementStatistics {
+	s.Lock()
+	defer s.Unlock()
 	var ret []roachpb.CollectedStatementStatistics
-	vt := e.cfg.VirtualSchemas
-	e.sqlStats.Lock()
-	salt := ClusterSecret.Get(&e.cfg.Settings.SV)
-	for appName, a := range e.sqlStats.apps {
+	salt := ClusterSecret.Get(&s.st.SV)
+	for appName, a := range s.apps {
 		if cap(ret) == 0 {
 			// guesstimate that we'll need apps*(queries-per-app).
-			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(e.sqlStats.apps))
+			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(s.apps))
 		}
 		hashedAppName := HashForReporting(salt, appName)
 		a.Lock()
@@ -315,7 +321,6 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 		}
 		a.Unlock()
 	}
-	e.sqlStats.Unlock()
 	return ret
 }
 
