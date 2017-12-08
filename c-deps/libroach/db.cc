@@ -43,6 +43,9 @@ static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
   abort();
 }
 
+// OpenHook does nothing in OSS mode.
+__attribute__((weak)) void OpenHook(const DBOptions opts) { std::cout << "OSS: No hooks found!\n"; }
+
 // These are Go functions exported by storage/engine. We provide these stubs,
 // which simply panic if called, to to allow intermediate build products to link
 // successfully. Otherwise, when building ccl/storageccl/engineccl, Go will
@@ -1566,11 +1569,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options = DBMakeOptions(db_opts);
 
-  if (db_opts.hooks) {
-    db_opts.hooks->options_hook(db_opts.extra_options);
-  } else {
-    std::cout << "OSS: No hooks found!\n";
-  }
+  OpenHook(db_opts);
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
