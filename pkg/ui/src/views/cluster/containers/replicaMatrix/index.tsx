@@ -7,6 +7,7 @@ import { refreshReplicaMatrix, refreshNodes } from "src/redux/apiReducers";
 import { cockroach } from "oss/src/js/protos";
 import { NodeStatus$Properties } from "src/util/proto";
 import Matrix from "./Matrix";
+import ZoneConfigList from "./ZoneConfigList";
 import {TreeNode, setAtPath, TreePath} from "./tree";
 import "./index.styl";
 import ReplicaMatrixResponse = cockroach.server.serverpb.ReplicaMatrixResponse;
@@ -40,6 +41,9 @@ function makeNodeTree(nodes: NodeDescriptor[]): TreeNode<NodeDescriptor> {
   });
   return root;
 }
+
+const ZONE_CONFIGS_DOCS_URL =
+  "https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html";
 
 class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
   render() {
@@ -84,24 +88,41 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
     }
 
     return (
-      <ReplicaMatrix
-        label={<em># Replicas</em>}
-        cols={nodeTree}
-        rows={dbTree}
-        colNodeLabel={(_, path, isPlaceholder) => (
-          isPlaceholder ? "" : path[path.length - 1]
-        )}
-        colLeafLabel={(node, path, isPlaceholder) => (
-          isPlaceholder
-            ? ""
-            : node === null
-              ? path[path.length - 1]
-              : `n${node.node_id.toString()}`
-        )}
-        rowNodeLabel={(row: TableDesc) => (`DB: ${row.dbName}`)}
-        rowLeafLabel={(row: TableDesc) => (row.tableName)}
-        getValue={getValue}
-      />
+      <table>
+        <tbody>
+          <tr>
+            <td style={{ verticalAlign: "top", paddingRight: 20 }}>
+              <h2>
+                Zone Configs{" "}
+                <a href={ZONE_CONFIGS_DOCS_URL}>
+                  <small>(?)</small>
+                </a>
+              </h2>
+              <ZoneConfigList />
+            </td>
+            <td>
+              <ReplicaMatrix
+                label={<em># Replicas</em>}
+                cols={nodeTree}
+                rows={dbTree}
+                colNodeLabel={(_, path, isPlaceholder) => (
+                  isPlaceholder ? "" : path[path.length - 1]
+                )}
+                colLeafLabel={(node, path, isPlaceholder) => (
+                  isPlaceholder
+                    ? ""
+                    : node === null
+                    ? path[path.length - 1]
+                    : `n${node.node_id.toString()}`
+                )}
+                rowNodeLabel={(row: TableDesc) => (`DB: ${row.dbName}`)}
+                rowLeafLabel={(row: TableDesc) => (row.tableName)}
+                getValue={getValue}
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
     );
   }
 }
@@ -116,7 +137,7 @@ class ReplicaMatrixMain extends React.Component<ReplicaMatrixProps, {}> {
     return (
       <div>
         <div className="section">
-          <h1>Replica Matrix</h1>
+          <h1>Data Distribution</h1>
         </div>
         <div className="section">
           <ReplicaMatrix {...this.props} />
