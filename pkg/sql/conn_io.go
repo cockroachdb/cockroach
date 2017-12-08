@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -409,7 +410,7 @@ type clientComm interface {
 	// createStatementResult creates a StatementResult for stmt. pos is the stmt's
 	// position within the connection and is used to enforce that results are
 	// created in order and also to discard results through clientLock.rtrim(pos).
-	createStatementResult(stmt tree.Statement, pos cmdPos) StatementResult
+	createStatementResult(stmt tree.Statement, pos cmdPos) CommandResult
 
 	// lockCommunication ensures that no further results are delivered to the
 	// client. The returned clientLock can be queried to see what results have
@@ -460,8 +461,63 @@ type clientComm interface {
 	flush() error
 }
 
-// WIP(andrei)
-var _ clientComm
+// CommandResult represents the result of a statement. It which needs to be
+// ultimately delivered to the client. The pgwire module implements this.
+type CommandResult interface {
+	RestrictedCommandResult
+
+	// Close marks a result as complete. All results must be eventually closed
+	// through Close()/CloseWithErr(). No further uses of the CommandResult are
+	// allowed.
+	// The implementation is free to deliver it to the client at will (except if
+	// there's a clientLock in effect).
+	Close()
+
+	// CloseWithErr is like close, except it tells the client that an execution
+	// error has happened. All rows previously accumulated on the result might be
+	// discarded; only this error might be delivered to the client as a result of
+	// the command.
+	CloseWithErr(err error)
+}
+
+// RestrictedCommandResult is a subset of CommandResult meant to make it clear
+// that its clients don't close the CommandResult.
+type RestrictedCommandResult interface {
+	// SetColumns informs the client about the schema of the result.
+	SetColumns(sqlbase.ResultColumns)
+
+	// ResetStmtType allows a client to change the statement type of the current
+	// result, from the original one set when the result was created trough
+	// clientComm.createStatementResult.
+	ResetStmtType(stmt tree.Statement)
+
+	// AddRow accumulates a result row.
+	AddRow(context.Context, tree.Datums) error
+
+	// SetResultsDelivered takes a callback that will be called once all the
+	// results have been delivered to the client. This is used by SQL to
+	// unregister queries from a registry of running queries.
+	//
+	// This can be called multiple times, each time overwriting the previous
+	// value. The callback can be nil, in which case nothing will be called.
+	SetResultsDeliveredCallback(callback func())
+
+	// SetError accumulates an execution error that needs to be reported to the
+	// client. No further calls other that Err() and Close() are allowed - in
+	// particular, CloseWithErr() is not allowed.
+	SetError(error)
+
+	// Err returns the error previously set with SetError(), if any.
+	Err() error
+
+	// IncrementRowsAffected increments a counter by n. This is used for all
+	// result types other than tree.Rows.
+	IncrementRowsAffected(n int)
+
+	// RowsAffected returns either the number of times AddRow was called, or the
+	// sum of all n passed into IncrementRowsAffected.
+	RowsAffected() int
+}
 
 // clientLock is an interface returned by clientComm.lockCommunication(). It
 // represents a lock on the delivery of results to a SQL client. While such a
@@ -519,6 +575,12 @@ var _ = rewindCapability{}.rewindPos
 func (rc *rewindCapability) rewindAndUnlock(ctx context.Context) {
 	rc.cl.rtrim(rc.rewindPos)
 	rc.buf.rewind(ctx, rc.rewindPos)
+	rc.cl.Close()
+}
+
+// close relinquishes these rewind capability without performing the rewind.
+// The clientComm is unlocked and so results can be delivered again to clients.
+func (rc *rewindCapability) close() {
 	rc.cl.Close()
 }
 

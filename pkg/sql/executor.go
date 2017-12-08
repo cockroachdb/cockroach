@@ -304,6 +304,8 @@ type ExecutorTestingKnobs struct {
 	// optionally change their results. The filter function is invoked after each
 	// statement has been executed.
 	StatementFilter StatementFilter
+	// WIP(andrei): StatementFilter2 is replacing StatementFilter.
+	StatementFilter2 StatementFilter2
 
 	// BeforePrepare is called by the Executor before preparing any statement. It
 	// gives access to the planner that will be used to do the prepare. If any of
@@ -317,9 +319,7 @@ type ExecutorTestingKnobs struct {
 
 	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
 	// statement.
-	AfterExecute func(
-		ctx context.Context, stmt string, res StatementResult, err error,
-	)
+	AfterExecute func(ctx context.Context, stmt string, err error)
 
 	// DisableAutoCommit, if set, disables the auto-commit functionality of some
 	// SQL statements. That functionality allows some statements to commit
@@ -514,7 +514,11 @@ func (e *Executor) Prepare(
 	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
-	protoTS, err := isAsOf(session, stmt.AST, e.cfg.Clock.Now())
+	evalCtx := session.extendedEvalCtx(
+		session.TxnState.mu.txn,
+		e.cfg.Clock.PhysicalTime(),
+		e.cfg.Clock.PhysicalTime()).EvalContext
+	protoTS, err := isAsOf(stmt.AST, &evalCtx, e.cfg.Clock.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -776,7 +780,13 @@ func (e *Executor) execParsed(
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
 				var err error
-				protoTS, err = isAsOf(session, stmtsToExec[0].AST, e.cfg.Clock.Now())
+				evalCtx := session.extendedEvalCtx(
+					session.TxnState.mu.txn,
+					e.cfg.Clock.PhysicalTime(),
+					e.cfg.Clock.PhysicalTime()).EvalContext
+				protoTS, err = isAsOf(
+					stmtsToExec[0].AST, &evalCtx, e.cfg.Clock.Now(),
+				)
 				if err != nil {
 					return err
 				}
@@ -864,7 +874,7 @@ func (e *Executor) execParsed(
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			if err := txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session); err != nil {
+			if err := txnState.schemaChangers.execSchemaChanges(session.Ctx(), &e.cfg); err != nil {
 				return err
 			}
 		}
@@ -2066,6 +2076,8 @@ func shouldUseDistSQL(
 //
 // cols represents the columns of the result rows. Should be nil if
 // stmt.AST.StatementType() != tree.Rows.
+//
+// If an error is returned, it is to be considered a query execution error.
 func initStatementResult(res StatementResult, stmt Statement, cols sqlbase.ResultColumns) error {
 	stmtAst := stmt.AST
 	res.BeginResult(stmtAst)
@@ -2127,10 +2139,10 @@ func (e *Executor) execStmt(
 	// Complete execution: record results and optionally run the test
 	// hook.
 	recordStatementSummary(
-		planner, stmt, useDistSQL, automaticRetryCount, res, err, &e.EngineMetrics,
+		planner, stmt, useDistSQL, automaticRetryCount, res.RowsAffected(), err, &e.EngineMetrics,
 	)
 	if e.cfg.TestingKnobs.AfterExecute != nil {
-		e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res, err)
+		e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), err)
 	}
 	if err != nil {
 		return err
@@ -2187,9 +2199,10 @@ func (e *Executor) execStmtInParallel(
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 		err = e.execLocal(planner, planner.curPlan.plan, bufferedWriter)
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
-		recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err, &e.EngineMetrics)
+		recordStatementSummary(
+			planner, stmt, false, 0, bufferedWriter.RowsAffected(), err, &e.EngineMetrics)
 		if e.cfg.TestingKnobs.AfterExecute != nil {
-			e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), bufferedWriter, err)
+			e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), err)
 		}
 		results := bufferedWriter.results()
 		results.Close(ctx)
@@ -2445,7 +2458,9 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 //
 // max is a lower bound on what the transaction's timestamp will be.
 // Used to check that the user didn't specify a timestamp in the future.
-func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
+func isAsOf(
+	stmt tree.Statement, evalCtx *tree.EvalContext, max hlc.Timestamp,
+) (*hlc.Timestamp, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -2466,7 +2481,7 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 
 		asOf = sc.From.AsOf
 	case *tree.ShowTrace:
-		return isAsOf(session, s.Statement, max)
+		return isAsOf(s.Statement, evalCtx, max)
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
 			return nil, nil
@@ -2476,13 +2491,7 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 		return nil, nil
 	}
 
-	// the evalCtx is not needed for the purposes of evaluating AOST. See #16424.
-	evalCtx := session.extendedEvalCtx(
-		nil,         /* txn */
-		time.Time{}, /* txnTimestamp */
-		time.Time{}, /* stmtTimestamp */
-	)
-	ts, err := EvalAsOfTimestamp(&evalCtx.EvalContext, asOf, max)
+	ts, err := EvalAsOfTimestamp(evalCtx, asOf, max)
 	return &ts, err
 }
 

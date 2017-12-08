@@ -118,7 +118,7 @@ func TestCancelParallelQuery(t *testing.T) {
 								<-sem
 							}
 						},
-						AfterExecute: func(ctx context.Context, stmt string, resultWriter sql.StatementResult, err error) {
+						AfterExecute: func(ctx context.Context, stmt string, err error) {
 							// if queryToBlock
 							if strings.Contains(stmt, "(1)") {
 								// Ensure queryToBlock errored out with the cancellation error.

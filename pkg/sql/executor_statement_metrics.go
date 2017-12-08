@@ -92,7 +92,7 @@ func recordStatementSummary(
 	stmt Statement,
 	distSQLUsed bool,
 	automaticRetryCount int,
-	resultWriter StatementResult,
+	rowsAffected int,
 	err error,
 	m *sqlEngineMetrics,
 ) {
@@ -103,7 +103,6 @@ func recordStatementSummary(
 	runLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[plannerStartExecStmt])
 
 	// Collect the statistics.
-	numRows := resultWriter.RowsAffected()
 	runLat := runLatRaw.Seconds()
 
 	parseLat := phaseTimes[sessionEndParse].
@@ -134,7 +133,7 @@ func recordStatementSummary(
 	}
 
 	planner.statsCollector.RecordStatement(
-		stmt, distSQLUsed, automaticRetryCount, numRows, err,
+		stmt, distSQLUsed, automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
 
@@ -152,7 +151,7 @@ func recordStatementSummary(
 				"run %.2fµs (%.1f%%), "+
 				"overhead %.2fµs (%.1f%%), "+
 				"batch age %.3fms, session age %.4fs",
-			numRows, automaticRetryCount,
+			rowsAffected, automaticRetryCount,
 			parseLat*1e6, 100*parseLat/svcLat,
 			planLat*1e6, 100*planLat/svcLat,
 			runLat*1e6, 100*runLat/svcLat,

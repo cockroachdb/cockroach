@@ -255,7 +255,7 @@ func TestStreamingWireFailure(t *testing.T) {
 					// We use an AfterExecute filter to get access to the server-side
 					// execution error. The client will be disconnected by the time this
 					// runs.
-					AfterExecute: func(ctx context.Context, stmt string, resultWriter StatementResult, err error) {
+					AfterExecute: func(ctx context.Context, stmt string, err error) {
 						if strings.Contains(stmt, "generate_series") {
 							serverErrChan <- err
 						}

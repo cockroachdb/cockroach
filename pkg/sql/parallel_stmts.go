@@ -72,10 +72,9 @@ func MakeParallelizeQueue(analyzer DependencyAnalyzer) ParallelizeQueue {
 	}
 }
 
-// Add inserts the current plan in the queue and executes the provided
-// function when all plans that it depends on have completed
-// successfully, obeying the guarantees made by the ParallelizeQueue
-// above.
+// Add inserts the current plan in the queue and executes the provided function
+// when all plans that it depends on have completed successfully, obeying the
+// guarantees made by the ParallelizeQueue above.
 //
 // Add should not be called concurrently with Wait. See Wait's comment for more
 // details.

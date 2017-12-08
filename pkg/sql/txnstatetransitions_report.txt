@@ -85,9 +85,9 @@ Open{ImplicitTxn:false, RetryIntent:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
 		TxnFinish{}
 		TxnReleased{}
+		TxnRestart{}
 	missing events:
 		RetryIntentSet{}
-		TxnRestart{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 Open{ImplicitTxn:true, RetryIntent:false}
