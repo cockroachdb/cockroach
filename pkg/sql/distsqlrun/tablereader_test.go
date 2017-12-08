@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 
@@ -114,41 +115,68 @@ func TestTableReader(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		ts := c.spec
-		ts.Table = *td
+		t.Run("", func(t *testing.T) {
+			for _, rowSource := range []bool{false, true} {
+				t.Run(fmt.Sprintf("row-source=%t", rowSource), func(t *testing.T) {
+					ts := c.spec
+					ts.Table = *td
 
-		evalCtx := tree.MakeTestingEvalContext()
-		defer evalCtx.Stop(context.Background())
-		flowCtx := FlowCtx{
-			EvalCtx:  evalCtx,
-			Settings: s.ClusterSettings(),
-			// Pass a DB without a TxnCoordSender.
-			txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
-			nodeID: s.NodeID(),
-		}
+					evalCtx := tree.MakeTestingEvalContext()
+					defer evalCtx.Stop(context.Background())
+					flowCtx := FlowCtx{
+						ctx:      context.Background(),
+						EvalCtx:  evalCtx,
+						Settings: s.ClusterSettings(),
+						// Pass a DB without a TxnCoordSender.
+						txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
+						nodeID: s.NodeID(),
+					}
 
-		out := &RowBuffer{}
-		tr, err := newTableReader(&flowCtx, &ts, &c.post, out)
-		if err != nil {
-			t.Fatal(err)
-		}
-		tr.Run(context.Background(), nil)
-		if !out.ProducerClosed {
-			t.Fatalf("output RowReceiver not closed")
-		}
+					var res sqlbase.EncDatumRows
+					var tr *tableReader
+					if rowSource {
+						var err error
+						tr, err = newTableReader(&flowCtx, &ts, &c.post, nil)
+						if err != nil {
+							t.Fatal(err)
+						}
+						for {
+							row, meta := tr.Next()
+							if !meta.Empty() {
+								t.Fatalf("unexpected metadata: %+v", meta)
+							}
+							if row == nil {
+								break
+							}
+							res = append(res, row)
+						}
+					} else {
+						out := &RowBuffer{}
+						var err error
+						tr, err = newTableReader(&flowCtx, &ts, &c.post, out)
+						if err != nil {
+							t.Fatal(err)
+						}
+						tr.Run(context.Background(), nil)
+						if !out.ProducerClosed {
+							t.Fatalf("output RowReceiver not closed")
+						}
 
-		var res sqlbase.EncDatumRows
-		for {
-			row := out.NextNoMeta(t)
-			if row == nil {
-				break
+						for {
+							row := out.NextNoMeta(t)
+							if row == nil {
+								break
+							}
+							res = append(res, row)
+						}
+					}
+
+					if result := res.String(tr.OutputTypes()); result != c.expected {
+						t.Errorf("invalid results: %s, expected %s'", result, c.expected)
+					}
+				})
 			}
-			res = append(res, row)
-		}
-
-		if result := res.String(tr.OutputTypes()); result != c.expected {
-			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
-		}
+		})
 	}
 }
 
@@ -186,6 +214,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	defer evalCtx.Stop(context.Background())
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
+		ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: tc.Server(0).ClusterSettings(),
 		// Pass a DB without a TxnCoordSender.
@@ -201,47 +230,71 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 		OutputColumns: []uint32{0},
 	}
 
-	out := &RowBuffer{}
-	tr, err := newTableReader(&flowCtx, &spec, &post, out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr.Run(context.TODO(), nil)
-	if !out.ProducerClosed {
-		t.Fatalf("output RowReceiver not closed")
-	}
-	var res sqlbase.EncDatumRows
-	var metas []ProducerMetadata
-	for {
-		row, meta := out.Next()
-		if !meta.Empty() {
-			metas = append(metas, meta)
-			continue
-		}
-		if row == nil {
-			break
-		}
-		res = append(res, row)
-	}
-	if len(res) != 3 {
-		t.Fatalf("expected 3 rows, got: %d", len(res))
-	}
-	if len(metas) != 1 {
-		t.Fatalf("expected one meta with misplanned ranges, got: %+v", metas)
-	}
-	misplannedRanges := metas[0].Ranges
-	if len(misplannedRanges) != 2 {
-		t.Fatalf("expected 2 misplanned ranges, got: %+v", misplannedRanges)
-	}
-	// The metadata about misplanned ranges can come in any order (it depends on
-	// the order in which parallel sub-batches complete after having been split by
-	// DistSender).
-	sort.Slice(misplannedRanges, func(i, j int) bool {
-		return misplannedRanges[i].Lease.Replica.NodeID < misplannedRanges[j].Lease.Replica.NodeID
-	})
-	if misplannedRanges[0].Lease.Replica.NodeID != 2 ||
-		misplannedRanges[1].Lease.Replica.NodeID != 3 {
-		t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
+	for _, rowSource := range []bool{false, true} {
+		t.Run(fmt.Sprintf("row-source=%t", rowSource), func(t *testing.T) {
+			var res sqlbase.EncDatumRows
+			var metas []ProducerMetadata
+
+			if rowSource {
+				tr, err := newTableReader(&flowCtx, &spec, &post, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for {
+					row, meta := tr.Next()
+					if !meta.Empty() {
+						metas = append(metas, meta)
+						continue
+					}
+					if row == nil {
+						break
+					}
+					res = append(res, row)
+				}
+			} else {
+				out := &RowBuffer{}
+				tr, err := newTableReader(&flowCtx, &spec, &post, out)
+				if err != nil {
+					t.Fatal(err)
+				}
+				tr.Run(context.Background(), nil)
+				if !out.ProducerClosed {
+					t.Fatalf("output RowReceiver not closed")
+				}
+				for {
+					row, meta := out.Next()
+					if !meta.Empty() {
+						metas = append(metas, meta)
+						continue
+					}
+					if row == nil {
+						break
+					}
+					res = append(res, row)
+				}
+			}
+
+			if len(res) != 3 {
+				t.Fatalf("expected 3 rows, got: %d", len(res))
+			}
+			if len(metas) != 1 {
+				t.Fatalf("expected one meta with misplanned ranges, got: %+v", metas)
+			}
+			misplannedRanges := metas[0].Ranges
+			if len(misplannedRanges) != 2 {
+				t.Fatalf("expected 2 misplanned ranges, got: %+v", misplannedRanges)
+			}
+			// The metadata about misplanned ranges can come in any order (it depends on
+			// the order in which parallel sub-batches complete after having been split by
+			// DistSender).
+			sort.Slice(misplannedRanges, func(i, j int) bool {
+				return misplannedRanges[i].Lease.Replica.NodeID < misplannedRanges[j].Lease.Replica.NodeID
+			})
+			if misplannedRanges[0].Lease.Replica.NodeID != 2 ||
+				misplannedRanges[1].Lease.Replica.NodeID != 3 {
+				t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
+			}
+		})
 	}
 }
 
@@ -261,6 +314,7 @@ func BenchmarkTableReader(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
+		ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
 		// Pass a DB without a TxnCoordSender.
@@ -274,18 +328,12 @@ func BenchmarkTableReader(b *testing.B) {
 	post := PostProcessSpec{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		out := &RowBuffer{}
-		tr, err := newTableReader(&flowCtx, &spec, &post, out)
+		tr, err := newTableReader(&flowCtx, &spec, &post, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
-		tr.Run(context.Background(), nil)
-		if !out.ProducerClosed {
-			b.Fatalf("output RowReceiver not closed")
-		}
-
 		for {
-			row, meta := out.Next()
+			row, meta := tr.Next()
 			if !meta.Empty() {
 				b.Fatalf("unexpected metadata: %+v", meta)
 			}
@@ -293,5 +341,6 @@ func BenchmarkTableReader(b *testing.B) {
 				break
 			}
 		}
+		tr.ConsumerClosed()
 	}
 }
