@@ -173,6 +173,9 @@ type queryMeta struct {
 
 	// Cancellation function for the context associated with this query's transaction.
 	ctxCancel context.CancelFunc
+
+	// If set, this query will not be reported as part of SHOW QUERIES.
+	hidden bool
 }
 
 // cancel cancels the query associated with this queryMeta, by closing the associated
@@ -630,6 +633,7 @@ func resetPlanner(
 	p *planner,
 	s *Session,
 	txn *client.Txn,
+	evalCtx tree.EvalContext,
 	clusterID uuid.UUID,
 	nodeID roachpb.NodeID,
 	reCache *tree.RegexpCache,
@@ -644,7 +648,7 @@ func resetPlanner(
 	p.semaCtx.Location = &s.Location
 	p.semaCtx.SearchPath = s.SearchPath
 
-	p.evalCtx = s.evalCtx()
+	p.evalCtx = evalCtx
 	p.evalCtx.Planner = p
 	p.evalCtx.ClusterID = clusterID
 	p.evalCtx.NodeID = nodeID
@@ -689,7 +693,7 @@ func newPlanner(
 	reCache *tree.RegexpCache,
 ) *planner {
 	p := &planner{}
-	resetPlanner(p, session, txn, clusterID, nodeID, reCache)
+	resetPlanner(p, session, txn, session.evalCtx(), clusterID, nodeID, reCache)
 	return p
 }
 

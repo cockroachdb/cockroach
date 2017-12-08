@@ -295,5 +295,9 @@ type transitionCtx struct {
 	// have a span.
 	tracer opentracing.Tracer
 
-	defaultIsolationLevel enginepb.IsolationType
+	// defaultIsolationLevel is the isolation level used for new transactions.
+	// It's a pointer for convinience: it will point into sessionData so that
+	// sessionData can change without the transitionCtx needing to be
+	// reconstructed.
+	defaultIsolationLevel *enginepb.IsolationType
 }

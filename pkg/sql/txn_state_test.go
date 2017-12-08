@@ -238,12 +238,13 @@ func TestTransitions(t *testing.T) {
 	ctx := context.TODO()
 	dummyRewCap := rewindCapability{rewindPos: cursorPosition{12, 13}}
 	testCon := makeTestContext()
+	isoLevel := enginepb.SERIALIZABLE
 	tranCtx := transitionCtx{
 		db:                    testCon.mockDB,
 		nodeID:                roachpb.NodeID(5),
 		clock:                 testCon.clock,
 		tracer:                tracing.NewTracer(),
-		defaultIsolationLevel: enginepb.SERIALIZABLE,
+		defaultIsolationLevel: &isoLevel,
 		connMon:               &testCon.mon,
 	}
 
@@ -799,12 +800,13 @@ func TestAutoRetryCounter(t *testing.T) {
 		stmtIdx:     20,
 	}
 	testCon := makeTestContext()
+	isoLevel := enginepb.SERIALIZABLE
 	tranCtx := transitionCtx{
 		db:                    testCon.mockDB,
 		nodeID:                roachpb.NodeID(5),
 		clock:                 testCon.clock,
 		tracer:                tracing.NewTracer(),
-		defaultIsolationLevel: enginepb.SERIALIZABLE,
+		defaultIsolationLevel: &isoLevel,
 		connMon:               &testCon.mon,
 	}
 

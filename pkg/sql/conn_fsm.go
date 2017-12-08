@@ -416,7 +416,7 @@ func (ts *txnState2) noTxnToOpen(
 		connCtx,
 		txnTyp,
 		tranCtx.clock.PhysicalTime(), /* sqlTimestamp */
-		tranCtx.defaultIsolationLevel,
+		*tranCtx.defaultIsolationLevel,
 		roachpb.NormalUserPriority,
 		tranCtx,
 	)
