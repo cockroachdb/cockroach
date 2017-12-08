@@ -668,7 +668,7 @@ $(COCKROACH) build go-install generate: $(UI_ROOT)/distccl/bindata.go
 
 $(COCKROACH) build buildoss buildshort: BUILDMODE = build -i -o $(COCKROACH)
 
-BUILDINFO = .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
+BUILDINFO = .buildinfo/tag .buildinfo/rev
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
@@ -676,8 +676,7 @@ $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lint
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
-	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
-	-X "github.com/cockroachdb/cockroach/pkg/build.baseBranch=$(shell cat .buildinfo/basebranch)"
+	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
@@ -866,9 +865,6 @@ $(ARCHIVE).tmp: $(ARCHIVE_EXTRAS)
 .buildinfo/tag: | .buildinfo
 	@{ git describe --tags --dirty 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
 
-.buildinfo/basebranch: | .buildinfo
-	@git describe --tags --abbrev=0 | tr -d \\n > $@
-
 .buildinfo/rev: | .buildinfo
 	@git rev-parse HEAD > $@
 
@@ -877,7 +873,6 @@ ifneq ($(GIT_DIR),)
 # to keep it up-to-date.
 .buildinfo/tag: .ALWAYS_REBUILD
 .buildinfo/rev: .ALWAYS_REBUILD
-.buildinfo/basebranch: .ALWAYS_REBUILD
 endif
 
 CPP_PROTO_ROOT := $(LIBROACH_SRC_DIR)/protos
