@@ -273,7 +273,7 @@ type distSQLReceiver struct {
 	updateClock func(observedTs hlc.Timestamp)
 }
 
-// rowResultWriter is a subset of StatementResultWriter to be used with the
+// rowResultWriter is a subset of CommandResult to be used with the
 // distSQLReceiver. It's implemented by RowResultWriter.
 type rowResultWriter interface {
 	AddRow(ctx context.Context, row tree.Datums) error

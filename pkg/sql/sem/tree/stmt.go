@@ -40,6 +40,7 @@ import (
 // the wire.
 type StatementType int
 
+//go:generate stringer -type=StatementType
 const (
 	// Ack indicates that the statement does not have a meaningful
 	// return. Examples include SET, BEGIN, COMMIT.
