@@ -7,7 +7,8 @@ import { refreshReplicaMatrix, refreshNodes } from "src/redux/apiReducers";
 import { cockroach } from "oss/src/js/protos";
 import { NodeStatus$Properties } from "src/util/proto";
 import Matrix from "./Matrix";
-import { TreeNode, setAtPath, TreePath } from "./tree";
+import ZoneConfigList from "./ZoneConfigList";
+import {TreeNode, setAtPath, TreePath} from "./tree";
 import "./index.styl";
 
 type ReplicaMatrixResponse = cockroach.server.serverpb.ReplicaMatrixResponse;
@@ -42,7 +43,9 @@ function makeNodeTree(nodes: NodeDescriptor[]): TreeNode<NodeDescriptor> {
   return root;
 }
 
-// Specialize the generic Matrix component.
+const ZONE_CONFIGS_DOCS_URL =
+  "https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html";
+
 class ReplicaMatrix extends Matrix<TableDesc, NodeDescriptor> {}
 
 class DataDistribution extends React.Component<DataDistributionProps, {}> {
@@ -76,10 +79,6 @@ class DataDistribution extends React.Component<DataDistributionProps, {}> {
       })),
     };
 
-    interface IReplicaMatrix { new(): Matrix<TableDesc, NodeDescriptor>; }
-    // tslint:disable-next-line:variable-name
-    const ReplicaMatrix = Matrix as IReplicaMatrix;
-
     function getValue(dbPath: TreePath, nodePath: TreePath): number {
       const [dbName, tableName] = dbPath;
       const nodeID = nodePath[nodePath.length - 1];
@@ -92,24 +91,41 @@ class DataDistribution extends React.Component<DataDistributionProps, {}> {
     }
 
     return (
-      <ReplicaMatrix
-        label={<em># Replicas</em>}
-        cols={nodeTree}
-        rows={dbTree}
-        colNodeLabel={(_, path, isPlaceholder) => (
-          isPlaceholder ? "" : path[path.length - 1]
-        )}
-        colLeafLabel={(node, path, isPlaceholder) => (
-          isPlaceholder
-            ? ""
-            : node === null
-              ? path[path.length - 1]
-              : `n${node.node_id.toString()}`
-        )}
-        rowNodeLabel={(row: TableDesc) => (`DB: ${row.dbName}`)}
-        rowLeafLabel={(row: TableDesc) => (row.tableName)}
-        getValue={getValue}
-      />
+      <table>
+        <tbody>
+          <tr>
+            <td style={{ verticalAlign: "top", paddingRight: 20 }}>
+              <h2>
+                Zone Configs{" "}
+                <a href={ZONE_CONFIGS_DOCS_URL}>
+                  <small>(?)</small>
+                </a>
+              </h2>
+              <ZoneConfigList />
+            </td>
+            <td>
+              <ReplicaMatrix
+                label={<em># Replicas</em>}
+                cols={nodeTree}
+                rows={dbTree}
+                colNodeLabel={(_, path, isPlaceholder) => (
+                  isPlaceholder ? "" : path[path.length - 1]
+                )}
+                colLeafLabel={(node, path, isPlaceholder) => (
+                  isPlaceholder
+                    ? ""
+                    : node === null
+                    ? path[path.length - 1]
+                    : `n${node.node_id.toString()}`
+                )}
+                rowNodeLabel={(row: TableDesc) => (`DB: ${row.dbName}`)}
+                rowLeafLabel={(row: TableDesc) => (row.tableName)}
+                getValue={getValue}
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
     );
   }
 }

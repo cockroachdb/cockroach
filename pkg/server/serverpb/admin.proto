@@ -506,7 +506,22 @@ message ReplicaMatrixRequest {
 }
 
 message ReplicaMatrixResponse {
-  repeated ReplicaMatrixCell cells = 1;
+  message ZoneConfig {
+    // id is 0 for the default zone config.
+    // Otherwise, it's the id of a database or table descriptor.
+    int64 id = 1;
+
+    // cli_specifier is ".default" for the default zone config.
+    // Otherwise, it's of the form [database.]table[@index[.partition]]
+    string cli_specifier = 2;
+
+    config.ZoneConfig config = 3 [(gogoproto.nullable) = false];
+
+    string config_yaml = 4;
+  }
+
+  repeated ReplicaMatrixCell cells = 1 [(gogoproto.nullable) = false];
+  repeated ZoneConfig zone_configs = 2 [(gogoproto.nullable) = false];
 }
 
 message ReplicaMatrixCell {
