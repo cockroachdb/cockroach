@@ -17,6 +17,7 @@ package sqlccl
 import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -168,4 +169,8 @@ func RepartitioningFastPathAvailable(
 		}
 	}
 	return true, nil
+}
+
+func init() {
+	sql.RepartitioningFastPathAvailable = RepartitioningFastPathAvailable
 }

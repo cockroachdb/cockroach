@@ -157,7 +157,7 @@ func (p *planner) showCreateTable(
 			if err := p.showCreateInterleave(ctx, &idx, &buf, dbPrefix); err != nil {
 				return "", err
 			}
-			if err := showCreatePartitioning(
+			if err := ShowCreatePartitioning(
 				a, desc, &idx, &idx.Partitioning, &buf, 1 /* indent */, 0, /* colOffset */
 			); err != nil {
 				return "", err
@@ -191,7 +191,7 @@ func (p *planner) showCreateTable(
 	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, &buf, dbPrefix); err != nil {
 		return "", err
 	}
-	if err := showCreatePartitioning(
+	if err := ShowCreatePartitioning(
 		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &buf, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
@@ -244,9 +244,9 @@ func (p *planner) showCreateInterleave(
 	return nil
 }
 
-// showCreatePartitioning returns a PARTITION BY clause for the specified
+// ShowCreatePartitioning returns a PARTITION BY clause for the specified
 // index, if applicable.
-func showCreatePartitioning(
+func ShowCreatePartitioning(
 	a *sqlbase.DatumAlloc,
 	tableDesc *sqlbase.TableDescriptor,
 	idxDesc *sqlbase.IndexDescriptor,
@@ -305,7 +305,7 @@ func showCreatePartitioning(
 			buf.WriteString(`)`)
 		}
 		buf.WriteString(`)`)
-		if err := showCreatePartitioning(
+		if err := ShowCreatePartitioning(
 			a, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
 			colOffset+int(partDesc.NumColumns),
 		); err != nil {
