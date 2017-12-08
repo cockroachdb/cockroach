@@ -573,16 +573,17 @@ func (s *adminServer) TableStats(
 		err    error
 	}
 
-	// Send a SpanStats query to each node. Set a timeout on the context for
-	// these queries.
-	responses := make(chan nodeResponse)
-	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
-	defer cancel()
+	// Send a SpanStats query to each node.
+	responses := make(chan nodeResponse, len(nodeIDs))
 	for nodeID := range nodeIDs {
-		nodeID := nodeID
+		nodeID := nodeID // avoid data race
 		if err := s.server.stopper.RunAsyncTask(
-			nodeCtx, "server.adminServer: requesting remote stats",
+			ctx, "server.adminServer: requesting remote stats",
 			func(ctx context.Context) {
+				// Set a generous timeout on the context for each individual query.
+				ctx, cancel := context.WithTimeout(ctx, 5*base.NetworkTimeout)
+				defer cancel()
+
 				var spanResponse *serverpb.SpanStatsResponse
 				client, err := s.server.status.dialNode(ctx, nodeID)
 				if err == nil {
@@ -594,16 +595,11 @@ func (s *adminServer) TableStats(
 					spanResponse, err = client.SpanStats(ctx, &req)
 				}
 
-				response := nodeResponse{
+				// Channel is buffered, can always write.
+				responses <- nodeResponse{
 					nodeID: nodeID,
 					resp:   spanResponse,
 					err:    err,
-				}
-				select {
-				case responses <- response:
-					// Response processed.
-				case <-ctx.Done():
-					// Context completed, response no longer needed.
 				}
 			}); err != nil {
 			return nil, err
@@ -627,6 +623,7 @@ func (s *adminServer) TableStats(
 				tableStatResponse.ReplicaCount += int64(resp.resp.RangeCount)
 			}
 		case <-ctx.Done():
+			// Caller gave up, stop doing work.
 			return nil, ctx.Err()
 		}
 	}
