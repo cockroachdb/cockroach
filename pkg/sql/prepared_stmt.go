@@ -48,12 +48,14 @@ type PreparedStatement struct {
 	// Types contains the final types of the placeholders, after type checking.
 	// These may differ from the types in TypeHints, if a user provides an
 	// imprecise type hint like sending an int for an oid comparison.
-	Types       tree.PlaceholderTypes
-	Columns     sqlbase.ResultColumns
+	Types   tree.PlaceholderTypes
+	Columns sqlbase.ResultColumns
+	// TODO(andrei): The connExecutor doesn't use this. Delete it once the
+	// Executor is gone.
 	portalNames map[string]struct{}
 
 	// InTypes represents the inferred types for placeholder, using protocol
-	// identifiers.
+	// identifiers. Used for reporting on Describe.
 	InTypes []oid.Oid
 
 	memAcc mon.BoundAccount
@@ -189,7 +191,7 @@ func (ps PreparedStatements) closeAll(ctx context.Context, s *Session) {
 		stmt.close(ctx)
 	}
 	for _, portal := range s.PreparedPortals.portals {
-		portal.memAcc.Close(ctx)
+		portal.close(ctx)
 	}
 }
 
@@ -219,8 +221,38 @@ type PreparedPortal struct {
 	memAcc mon.BoundAccount
 }
 
+// newPreparedPortal creates a new PreparedPortal.
+//
+// When no longer in use, the PrepatedPortal needs to be close()d.
+func (ex *connExecutor) newPreparedPortal(
+	ctx context.Context,
+	name string,
+	stmt *PreparedStatement,
+	qargs tree.QueryArguments,
+	outFormats []pgwirebase.FormatCode,
+) (*PreparedPortal, error) {
+	portal := &PreparedPortal{
+		Stmt:       stmt,
+		Qargs:      qargs,
+		OutFormats: outFormats,
+		memAcc:     ex.sessionMon.MakeBoundAccount(),
+	}
+	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
+	if err := portal.memAcc.Grow(ctx, sz); err != nil {
+		return nil, err
+	}
+	return portal, nil
+}
+
+func (p *PreparedPortal) close(ctx context.Context) {
+	p.memAcc.Close(ctx)
+}
+
 // PreparedPortals is a mapping of PreparedPortal names to their corresponding
 // PreparedPortals.
+//
+// TODO(andrei): The connExecutor doesn't use this. Delete it once the Executor
+// is gone.
 type PreparedPortals struct {
 	session *Session
 	portals map[string]*PreparedPortal
@@ -263,7 +295,7 @@ func (pp PreparedPortals) New(
 	stmt.portalNames[name] = struct{}{}
 
 	if prevPortal, ok := pp.Get(name); ok {
-		prevPortal.memAcc.Close(ctx)
+		prevPortal.close(ctx)
 	}
 
 	pp.portals[name] = portal
@@ -275,7 +307,7 @@ func (pp PreparedPortals) New(
 func (pp PreparedPortals) Delete(ctx context.Context, name string) bool {
 	if portal, ok := pp.Get(name); ok {
 		delete(portal.Stmt.portalNames, name)
-		portal.memAcc.Close(ctx)
+		portal.close(ctx)
 		delete(pp.portals, name)
 		return true
 	}

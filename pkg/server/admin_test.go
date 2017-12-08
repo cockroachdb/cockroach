@@ -240,7 +240,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	const testdb = "test"
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
-		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
+		&sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := "CREATE DATABASE " + testdb
@@ -412,7 +412,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			session := sql.NewSession(
 				ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
-				nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
+				&sql.MemoryMetrics{}, nil /* conn */)
 			session.StartUnlimitedMonitor()
 			defer session.Finish(ts.sqlExecutor)
 			setupQueries := []string{
@@ -557,7 +557,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
-		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
+		&sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	setupQueries := []string{
 		"CREATE DATABASE test",
@@ -668,7 +668,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
-		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
+		&sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := `
@@ -713,7 +713,7 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer span.Finish()
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
-		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
+		&sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	setupQueries := []string{

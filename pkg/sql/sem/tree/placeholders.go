@@ -29,6 +29,8 @@ import (
 type PlaceholderTypes map[string]types.T
 
 // QueryArguments relates placeholder names to their provided query argument.
+//
+// A nil value represents a NULL argument.
 type QueryArguments map[string]TypedExpr
 
 var emptyQueryArgumentStr = "{}"

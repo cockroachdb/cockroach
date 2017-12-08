@@ -16,13 +16,8 @@ package sql
 
 import (
 	"context"
-	"database/sql/driver"
 	"math"
-	"net/url"
-	"strings"
 	"testing"
-
-	"github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -31,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -52,7 +46,7 @@ func withExecutor(test func(e *Executor, s *Session, evalCtx *tree.EvalContext),
 	e := s.Executor().(*Executor)
 	session := NewSession(
 		ctx, SessionArgs{User: security.RootUser}, e,
-		nil /* remote */, &MemoryMetrics{}, nil /* conn */)
+		&MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(e)
 
@@ -208,85 +202,5 @@ func TestBufferedWriterReset(t *testing.T) {
 	gw.Reset(ctx)
 	if numRes := len(gw.currentGroupResults); numRes != 0 {
 		t.Fatalf("expected no results after reset, got %d", numRes)
-	}
-}
-
-// Test that, if a communication error is encountered during streaming of
-// results, the statement will return a StreamingWireFailure error. That's
-// important because pgwire recognizes that error.
-func TestStreamingWireFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// This test uses libpq because it needs to control when a network connection
-	// is closed. The Go sql package doesn't easily let you do that.
-
-	// We're going to run a query and kill the network connection while it's
-	// running. The query needs to have a large enough set of results such that
-	// a) they overflow the results buffer and cause them to actually be sent over
-	// the network as they are produced, giving the server an opportunity to find
-	// out that the network connection dropped.
-	// b) beyond the point above, it takes a little while for
-	// the server to actually find out that the network has been closed after the
-	// client has closed it. That's why this query is much larger than would be
-	// needed just for a).
-	//
-	// TODO(andrei): It's unfortunate that the server finds out about the status
-	// of network connection every now and then, when it wants to flush some
-	// results - for one it forces this test in using this big hammer of
-	// generating tons and tons of results. What we'd like is for the server to
-	// figure out the status of the connection concurrently with the query
-	// execution - then this test would be able to wait for the server to figure
-	// out that the connection is toast and then unblock the query.
-	const query = "SELECT * FROM generate_series(1, 200000)"
-
-	var conn driver.Conn
-	serverErrChan := make(chan error)
-
-	var ts serverutils.TestServerInterface
-	ts, _, _ = serverutils.StartServer(t,
-		base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLExecutor: &ExecutorTestingKnobs{
-					BeforeExecute: func(ctx context.Context, stmt string, _ /* isParallel */ bool) {
-						if strings.Contains(stmt, "generate_series") {
-							if err := conn.Close(); err != nil {
-								t.Error(err)
-							}
-						}
-					},
-					// We use an AfterExecute filter to get access to the server-side
-					// execution error. The client will be disconnected by the time this
-					// runs.
-					AfterExecute: func(ctx context.Context, stmt string, resultWriter StatementResult, err error) {
-						if strings.Contains(stmt, "generate_series") {
-							serverErrChan <- err
-						}
-					},
-				},
-			},
-		},
-	)
-	ctx := context.TODO()
-	defer ts.Stopper().Stop(ctx)
-
-	pgURL, cleanup := sqlutils.PGUrl(
-		t, ts.ServingAddr(), "StartServer", url.User(security.RootUser))
-	defer cleanup()
-	var err error
-	conn, err = pq.Open(pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	ex := conn.(driver.ExecerContext)
-
-	// The BeforeExecute filter will kill the connection (form the client side) in
-	// the middle of the query. Therefor, the client expects a ErrBadConn, and the
-	// server expects a WireFailureError.
-	if _, err := ex.ExecContext(ctx, query, nil); err != driver.ErrBadConn {
-		t.Fatalf("expected ErrBadConn, got: %v", err)
-	}
-	serverErr := <-serverErrChan
-	if _, ok := serverErr.(WireFailureError); !ok {
-		t.Fatalf("expected WireFailureError, got %v ", err)
 	}
 }

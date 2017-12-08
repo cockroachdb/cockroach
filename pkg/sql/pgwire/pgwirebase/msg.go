@@ -14,6 +14,8 @@
 
 package pgwirebase
 
+import "math"
+
 //ClientMessageType represents a client pgwire message.
 //go:generate stringer -type=ClientMessageType
 type ClientMessageType byte
@@ -80,3 +82,10 @@ const (
 	// PreparePortal represents a portal.
 	PreparePortal PrepareType = 'P'
 )
+
+// MaxPreparedStatementArgs is the maximum number of arguments a prepared
+// statement can have when prepared via the Postgres wire protocol. This is not
+// documented by Postgres, but is a consequence of the fact that a 16-bit
+// integer in the wire format is used to indicate the number of values to bind
+// during prepared statement execution.
+const MaxPreparedStatementArgs = math.MaxUint16
