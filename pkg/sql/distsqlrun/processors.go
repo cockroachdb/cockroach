@@ -348,6 +348,11 @@ func (h *ProcOutputHelper) Close() {
 	h.output.ProducerDone()
 }
 
+// consumerClosed stops output of additional rows from ProcessRow.
+func (h *ProcOutputHelper) consumerClosed() {
+	h.rowIdx = h.maxRowIdx
+}
+
 type processorBase struct {
 	out ProcOutputHelper
 }
