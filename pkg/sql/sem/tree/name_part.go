@@ -70,12 +70,6 @@ func (u UnrestrictedName) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-// Normalize normalizes to lowercase and Unicode Normalization Form C
-// (NFC).
-func (u UnrestrictedName) Normalize() string {
-	return Name(u).Normalize()
-}
-
 // ToStrings converts the name list to an array of regular strings.
 func (l NameList) ToStrings() []string {
 	if l == nil {
