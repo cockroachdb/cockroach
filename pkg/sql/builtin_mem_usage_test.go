@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // lowMemoryBudget is the memory budget used to test builtins are recording
@@ -59,6 +60,7 @@ CREATE TABLE d.t (a STRING)
 	}
 
 	for i := 0; i < numRows; i++ {
+		log.Infof(context.TODO(), "!!! test sending insert: %d", i)
 		if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (REPEAT('a', $1))`, rowSize); err != nil {
 			return err
 		}

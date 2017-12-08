@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -752,9 +753,11 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	tableSpan := tableDesc.TableSpan()
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
+	log.Infof(context.TODO(), "!!! test about to drop")
 	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
 		t.Fatal(err)
 	}
+	log.Infof(context.TODO(), "!!! test drop done")
 
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.

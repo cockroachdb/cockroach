@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
@@ -56,6 +57,7 @@ func (n *cancelQueryNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	log.Infof(params.ctx, "!!! cancel queryID: %s", queryIDDatum)
 
 	queryIDString := tree.AsStringWithFlags(queryIDDatum, tree.FmtBareStrings)
 	queryID, err := uint128.FromString(queryIDString)
