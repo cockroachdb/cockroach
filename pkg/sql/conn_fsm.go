@@ -195,6 +195,10 @@ func (eventTxnReleased) Event()     {}
 // TxnStateTransitions describe the transitions used by a connExecutor's
 // fsm.Machine. Args.Extended is a txnState, which is muted by the Actions.
 //
+// This state machine accepts the eventNonRetriableErr{IsCommit: True} in all
+// states. This contract is in place to support the cleanup of connExecutor ->
+// this event can always be sent when the connExecutor is tearing down.
+//
 // NOTE: The Args.Ctx passed to the actions is the connExecutor's context. While
 // we are inside a SQL txn, the txn's ctx should be used for operations (i.e
 // txnState.Ctx, which is a child ctx). This is so because transitions that move
@@ -215,6 +219,17 @@ var TxnStateTransitions = Compile(Pattern{
 				return args.Extended.(*txnState2).noTxnToOpen(
 					args.Ctx, args.Event.(eventTxnStart),
 					args.Payload.(eventTxnStartPayload))
+			},
+		},
+		eventNonRetriableErr{IsCommit: Any}: {
+			// This event doesn't change state, but it produces a skipBatch advance
+			// code.
+			Description: "anything but BEGIN or extended protocol command error",
+			Next:        stateNoTxn{},
+			Action: func(args Args) error {
+				ts := args.Extended.(*txnState2)
+				ts.setAdvanceInfo(skipBatch, flush, noRewind, noEvent)
+				return nil
 			},
 		},
 	},
@@ -284,6 +299,19 @@ var TxnStateTransitions = Compile(Pattern{
 				ts := args.Extended.(*txnState2)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
 				ts.setAdvanceInfo(skipBatch, flush, noRewind, txnAborted)
+				ts.txnAbortCount.Inc(1)
+				return nil
+			},
+		},
+		// SAVEPOINT cockroach_restart: we just change the state (RetryIntent) if it
+		// wasn't set already.
+		eventRetryIntentSet{}: {
+			Description: "SAVEPOINT cockroach_restart",
+			Next:        stateOpen{ImplicitTxn: False, RetryIntent: True},
+			Action: func(args Args) error {
+				// We flush after setting the retry intent; we know what statement
+				// caused this event and we don't need to rewind past it.
+				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, flush, noRewind, noEvent)
 				return nil
 			},
 		},
@@ -298,17 +326,7 @@ var TxnStateTransitions = Compile(Pattern{
 				ts := args.Extended.(*txnState2)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
 				ts.setAdvanceInfo(skipBatch, flush, noRewind, txnAborted)
-				return nil
-			},
-		},
-		// SAVEPOINT cockroach_restart: we just change the state (RetryIntent).
-		eventRetryIntentSet{}: {
-			Description: "SAVEPOINT cockroach_restart",
-			Next:        stateOpen{ImplicitTxn: False, RetryIntent: True},
-			Action: func(args Args) error {
-				// We flush after setting the retry intent; we know what statement
-				// caused this event and we don't need to rewind past it.
-				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, flush, noRewind, noEvent)
+				ts.txnAbortCount.Inc(1)
 				return nil
 			},
 		},
@@ -354,7 +372,7 @@ var TxnStateTransitions = Compile(Pattern{
 	//
 	// Note that we don't handle any error events here. Any statement but a
 	// ROLLBACK is expected to not be passed to the state machine.
-	stateAborted{RetryIntent: Any}: {
+	stateAborted{RetryIntent: Var("retryIntent")}: {
 		eventTxnFinish{}: {
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
@@ -363,6 +381,15 @@ var TxnStateTransitions = Compile(Pattern{
 				ts.finishSQLTxn(ts.Ctx)
 				ts.setAdvanceInfo(
 					advanceOne, flush, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
+				return nil
+			},
+		},
+		eventNonRetriableErr{IsCommit: Any}: {
+			// This event doesn't change state, but it returns a skipBatch code.
+			Description: "any other statement",
+			Next:        stateAborted{RetryIntent: Var("retryIntent")},
+			Action: func(args Args) error {
+				args.Extended.(*txnState2).setAdvanceInfo(skipBatch, flush, noRewind, noEvent)
 				return nil
 			},
 		},
@@ -410,17 +437,17 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
 			Next:        stateOpen{ImplicitTxn: False, RetryIntent: True},
 			Action: func(args Args) error {
-				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, flush, noRewind, noEvent)
+				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, flush, noRewind, txnRestart)
 				return nil
 			},
 		},
-		eventNonRetriableErr{IsCommit: False}: {
+		eventNonRetriableErr{IsCommit: Any}: {
 			Next: stateAborted{RetryIntent: True},
 			Action: func(args Args) error {
 				ts := args.Extended.(*txnState2)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(eventNonRetriableErrPayload).err)
-				ts.mu.txn = nil
 				ts.setAdvanceInfo(skipBatch, flush, noRewind, txnAborted)
+				ts.txnAbortCount.Inc(1)
 				return nil
 			},
 		},
@@ -438,11 +465,13 @@ var TxnStateTransitions = Compile(Pattern{
 				return nil
 			},
 		},
-		eventNonRetriableErr{IsCommit: False}: {
+		eventNonRetriableErr{IsCommit: Any}: {
+			// This event doesn't change state, but it returns a skipBatch code.
+			//
 			// Note that we don't expect any errors from error on COMMIT in this
 			// state.
 			Description: "any other statement",
-			Next:        stateAborted{RetryIntent: True},
+			Next:        stateCommitWait{},
 			Action: func(args Args) error {
 				args.Extended.(*txnState2).setAdvanceInfo(skipBatch, flush, noRewind, noEvent)
 				return nil
@@ -483,16 +512,13 @@ func (ts *txnState2) noTxnToOpen(
 		payload.readOnly,
 		payload.tranCtx,
 	)
-	// When starting a transaction from the NoTxn state, we don't advance the
-	// cursor - we want the same statement to be executed again. Note that this is
-	// true for both implicit and explicit transactions. See execStmtInNoTxn() for
-	// details.
-	//
-	// Flushing here shouldn't matter - all the results for statements executed
-	// before the statement that generated this event should have been already
-	// flushed (since we're not in a txn), and we shouldn't have generated any
-	// results for the statement that generated this event (which is why we can
-	// stayInPlace here).
-	ts.setAdvanceInfo(advCode, flush, noRewind, noEvent)
+
+	flushOpt := flush
+	if advCode == stayInPlace {
+		// Nothing to flush if we're going to execute the statement again.
+		flushOpt = noFlush
+	}
+
+	ts.setAdvanceInfo(advCode, flushOpt, noRewind, txnStart)
 	return nil
 }

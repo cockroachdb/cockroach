@@ -129,6 +129,10 @@ type queryMeta struct {
 
 	// Cancellation function for the context associated with this query's transaction.
 	ctxCancel context.CancelFunc
+
+	// If set, this query will not be reported as part of SHOW QUERIES. This is
+	// set based on the statement implementing tree.HiddenFromShowQueries.
+	hidden bool
 }
 
 // cancel cancels the query associated with this queryMeta, by closing the associated
@@ -284,6 +288,7 @@ type SessionArgs struct {
 	Database        string
 	User            string
 	ApplicationName string
+	RemoteAddr      net.Addr
 }
 
 // SessionRegistry stores a set of all sessions on this node.
@@ -367,7 +372,6 @@ func NewSession(
 	ctx context.Context,
 	args SessionArgs,
 	e *Executor,
-	remote net.Addr,
 	memMetrics *MemoryMetrics,
 	conn pgwirebase.Conn,
 ) *Session {
@@ -419,8 +423,8 @@ func NewSession(
 	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 
 	remoteStr := "<admin>"
-	if remote != nil {
-		remoteStr = remote.String()
+	if args.RemoteAddr != nil {
+		remoteStr = args.RemoteAddr.String()
 	}
 	s.ClientAddr = remoteStr
 
@@ -1315,26 +1319,30 @@ func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChang
 	scc.schemaChangers = append(scc.schemaChangers, schemaChanger)
 }
 
+func (scc *schemaChangerCollection) reset() {
+	scc.schemaChangers = nil
+}
+
 // execSchemaChanges releases schema leases and runs the queued
 // schema changers. This needs to be run after the transaction
 // scheduling the schema change has finished.
 //
 // The list of closures is cleared after (attempting) execution.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context, e *Executor, session *Session,
+	ctx context.Context, cfg *ExecutorConfig,
 ) error {
-	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
-		e.cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
+	if cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
+		cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
 	var firstError error
 	for _, sc := range scc.schemaChangers {
-		sc.db = e.cfg.DB
-		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
-		sc.distSQLPlanner = e.distSQLPlanner
+		sc.db = cfg.DB
+		sc.testingKnobs = cfg.SchemaChangerTestingKnobs
+		sc.distSQLPlanner = cfg.DistSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			evalCtx := createSchemaChangeEvalCtx(e.cfg.Clock.Now())
+			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now())
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
@@ -1357,7 +1365,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			break
 		}
 	}
-	scc.schemaChangers = scc.schemaChangers[:0]
+	scc.schemaChangers = nil
 	return firstError
 }
 
@@ -1484,14 +1492,19 @@ type SessionTracing struct {
 	curSp opentracing.Span
 }
 
-// StartTracing starts "session tracing". After calling this, all SQL
-// transactions running on this session will be traced. The current transaction,
-// if any, will also be traced (except that children spans of the current txn
-// span that have already been created will not be traced).
+// StartTracing starts "session tracing". It enables recording on the span in
+// the passed-in context After calling this, all SQL transactions running on
+// this session will be traced.
+// This method takes in a span and includes it in the recording. It is expected
+// that the span corresponding to the transaction in which session recording is
+// started will be passed in - and so the remainder of that transaction will
+// also be recorded. Of course, children spans of the current txn span that have
+// already been created will not be traced.
 //
 // StopTracing() needs to be called to finish this trace.
 //
 // Args:
+// sp: The current transaction's span. See above.
 // kvTracingEnabled: If set, the traces will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the messages
 //   are per-row.
@@ -1518,6 +1531,9 @@ func (st *SessionTracing) StartTracing(
 }
 
 // StopTracing stops the trace that was started with StartTracing().
+//
+// This method takes in the span of the current trasaction and includes its
+// recording in the session recording.
 //
 // An error is returned if tracing was not active.
 func (st *SessionTracing) StopTracing() error {
@@ -1568,6 +1584,9 @@ func (st *SessionTracing) onFinishSQLTxn() error {
 // (in onFinishSQLTxn).
 //
 // sp is the span corresponding to the new SQL transaction.
+//
+// TODO(andrei): onNewSQLTxn is not used by the connExecutor, so it can be
+// deleted once the Session is gone.
 func (st *SessionTracing) onNewSQLTxn(sp opentracing.Span) {
 	if !st.Enabled() {
 		return
@@ -1855,6 +1874,8 @@ type sessionDataMutator struct {
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool
+	// TODO(andrei): sessionTracing will always be owned by sessionDataMutator
+	// once the old Session goes away, and so won't need to be a pointer any more.
 	sessionTracing *SessionTracing
 	// applicationNamedChanged, if set, is called when the "application name"
 	// variable is updated.
@@ -1973,7 +1994,7 @@ func (s *sqlStatsCollectorImpl) PhaseTimes() *phaseTimes {
 	return &s.phaseTimes
 }
 
-// SQLStats is part of the sqlStatsCollector interface.
+// RecordStatement is part of the sqlStatsCollector interface.
 func (s *sqlStatsCollectorImpl) RecordStatement(
 	stmt Statement,
 	distSQLUsed bool,
@@ -1987,7 +2008,7 @@ func (s *sqlStatsCollectorImpl) RecordStatement(
 		parseLat, planLat, runLat, svcLat, ovhLat)
 }
 
-// RecordStatement is part of the sqlStatsCollector interface.
+// SQLStats is part of the sqlStatsCollector interface.
 func (s *sqlStatsCollectorImpl) SQLStats() *sqlStats {
 	return s.sqlStats
 }

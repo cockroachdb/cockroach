@@ -209,7 +209,7 @@ func NewWindowingError(in string) error {
 // conditions under which Postgres returns this code, nor its relationship to
 // code CodeTransactionResolutionUnknownError. I couldn't find good
 // documentation on these codes.
-func NewStatementCompletionUnknownError(err *roachpb.AmbiguousResultError) error {
+func NewStatementCompletionUnknownError(err error) error {
 	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, err.Error())
 }
 

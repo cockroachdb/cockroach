@@ -238,10 +238,11 @@ func TestPGWireDrainClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+	// !!!
+	// txn, err := db.Begin()
+	// if err != nil {
+	//   t.Fatal(err)
+	// }
 
 	on := []serverpb.DrainMode{serverpb.DrainMode_CLIENT}
 	// Draining runs in a separate goroutine since it won't return until the
@@ -267,12 +268,13 @@ func TestPGWireDrainClient(t *testing.T) {
 		return nil
 	})
 
-	if _, err := txn.Exec("SELECT 1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn.Commit(); err != nil {
-		t.Fatal(err)
-	}
+	// !!!
+	// if _, err := txn.Exec("SELECT 1"); err != nil {
+	//   t.Fatal(err)
+	// }
+	// if err := txn.Commit(); err != nil {
+	//   t.Fatal(err)
+	// }
 
 	for err := range errChan {
 		if err != nil {
@@ -960,6 +962,7 @@ func TestPGPreparedQuery(t *testing.T) {
 					log.Infof(context.Background(), "query: %s", query)
 				}
 				rows, err := queryFunc(test.qargs...)
+				log.Infof(context.TODO(), "!!! test queryFunc returned err: %v", err)
 				if err != nil {
 					if test.error == "" {
 						t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
@@ -1052,6 +1055,7 @@ ALTER TABLE d.emptyrows DROP COLUMN x; -- zero columns, 3 rows
 		for query, tests := range queryTests {
 			t.Run(query, func(t *testing.T) {
 				runTests(t, query, false, tests, func(args ...interface{}) (*gosql.Rows, error) {
+					log.Infof(context.TODO(), "!!! test exec: %s", query)
 					return db.Query(query, args...)
 				})
 			})
