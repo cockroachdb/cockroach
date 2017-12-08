@@ -64,7 +64,7 @@ const (
 // copy behavior.
 type phaseTimes [sessionNumPhases]time.Time
 
-type sqlEngineMetrics struct {
+type SQLEngineMetrics struct {
 	// The subset of SELECTs that are processed through DistSQL.
 	DistSQLSelectCount    *metric.Counter
 	DistSQLExecLatency    *metric.Histogram
@@ -73,15 +73,15 @@ type sqlEngineMetrics struct {
 	SQLServiceLatency     *metric.Histogram
 }
 
-// sqlEngineMetrics implements the metric.Struct interface
-var _ metric.Struct = sqlEngineMetrics{}
+// SQLEngineMetrics implements the metric.Struct interface
+var _ metric.Struct = SQLEngineMetrics{}
 
 // MetricStruct is part of the metric.Struct interface.
-func (sqlEngineMetrics) MetricStruct() {}
+func (SQLEngineMetrics) MetricStruct() {}
 
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
-// accounting in the passed-in sqlEngineMetrics.
+// accounting in the passed-in SQLEngineMetrics.
 // - distSQLUsed reports whether the query was distributed.
 // - automaticRetryCount is the count of implicit txn retries
 //   so far.
@@ -92,9 +92,9 @@ func recordStatementSummary(
 	stmt Statement,
 	distSQLUsed bool,
 	automaticRetryCount int,
-	resultWriter StatementResult,
+	rowsAffected int,
 	err error,
-	m *sqlEngineMetrics,
+	m *SQLEngineMetrics,
 ) {
 	phaseTimes := planner.statsCollector.PhaseTimes()
 
@@ -103,7 +103,6 @@ func recordStatementSummary(
 	runLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[plannerStartExecStmt])
 
 	// Collect the statistics.
-	numRows := resultWriter.RowsAffected()
 	runLat := runLatRaw.Seconds()
 
 	parseLat := phaseTimes[sessionEndParse].
@@ -134,7 +133,7 @@ func recordStatementSummary(
 	}
 
 	planner.statsCollector.RecordStatement(
-		stmt, distSQLUsed, automaticRetryCount, numRows, err,
+		stmt, distSQLUsed, automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
 
@@ -152,7 +151,7 @@ func recordStatementSummary(
 				"run %.2fµs (%.1f%%), "+
 				"overhead %.2fµs (%.1f%%), "+
 				"batch age %.3fms, session age %.4fs",
-			numRows, automaticRetryCount,
+			rowsAffected, automaticRetryCount,
 			parseLat*1e6, 100*parseLat/svcLat,
 			planLat*1e6, 100*planLat/svcLat,
 			runLat*1e6, 100*runLat/svcLat,

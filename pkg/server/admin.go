@@ -156,7 +156,7 @@ func (s *adminServer) NewContextAndSessionForRPC(
 ) (context.Context, *sql.Session) {
 	ctx = s.server.AnnotateCtx(ctx)
 	session := sql.NewSession(
-		ctx, args, s.server.sqlExecutor, nil /* remote */, s.memMetrics, nil /* conn */)
+		ctx, args, s.server.sqlExecutor, s.memMetrics, nil /* conn */)
 	session.StartMonitor(&s.memMonitor, mon.BoundAccount{})
 	return ctx, session
 }

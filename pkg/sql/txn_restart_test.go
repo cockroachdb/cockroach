@@ -339,11 +339,9 @@ func (ta *TxnAborter) GetExecCount(stmt string) (int, bool) {
 	return 0, false
 }
 
-func (ta *TxnAborter) statementFilter(
-	ctx context.Context, stmt string, r sql.ResultsWriter, err error,
-) error {
+func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, err error) {
 	ta.mu.Lock()
-	log.Infof(ctx, "statement filter running on: %s, with err=%s", stmt, err)
+	log.Infof(ctx, "statement filter running on: %s, with err=%v", stmt, err)
 	ri, ok := ta.mu.stmtsToAbort[stmt]
 	shouldAbort := false
 	if ok {
@@ -361,10 +359,9 @@ func (ta *TxnAborter) statementFilter(
 	ta.mu.Unlock()
 	if shouldAbort {
 		if err := ta.abortTxn(ri.key); err != nil {
-			return errors.Wrap(err, "TxnAborter failed to abort")
+			panic(fmt.Sprintf("TxnAborter failed to abort", err))
 		}
 	}
-	return nil
 }
 
 // executorKnobs are the bridge between the TxnAborter and the sql.Executor.
@@ -427,7 +424,8 @@ func (ta *TxnAborter) VerifyAndClear() error {
 func (ta *TxnAborter) Close(t testing.TB) {
 	ta.abortDB.Close()
 	if err := ta.VerifyAndClear(); err != nil {
-		t.Error(err)
+		file, line, _ := caller.Lookup(1)
+		t.Errorf("%s:%d %s", file, line, err)
 	}
 }
 
@@ -583,9 +581,9 @@ INSERT INTO t.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timestamp());
 
 	// Start a txn.
 	if _, err := sqlDB.Exec(`
-DELETE FROM t.test WHERE true;
-BEGIN;
-`); err != nil {
+	DELETE FROM t.test WHERE true;
+	BEGIN;
+	`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1413,41 +1411,42 @@ COMMIT;
 	}
 }
 
-// Test that if as part of a transaction A we receive a retryable error intended
-// for a different transaction B, we don't retry transaction A.
-func TestRetryableErrorForWrongTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	bogusTxnID := "deadb33f-baaa-aaaa-aaaa-aaaaaaaaaaad"
-
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
-INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	tx, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// We're going to use FORCE_RETRY() to generate an error for a different
-	// transaction than the one we initiate.
-	_, err = tx.Exec(`SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL, $1)`, bogusTxnID)
-	if isRetryableErr(err) {
-		t.Fatalf("expected non-retryable error, got: %s", err)
-	}
-	if !testutils.IsError(err, "pq: retryable error from another txn.* forced by crdb_internal.force_retry()") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
-}
+// !!! also delete the built-in. Now layers below SQL deal with this.
+// // Test that if as part of a transaction A we receive a retryable error intended
+// // for a different transaction B, we don't retry transaction A.
+// func TestRetryableErrorForWrongTxn(t *testing.T) {
+//   defer leaktest.AfterTest(t)()
+//   bogusTxnID := "deadb33f-baaa-aaaa-aaaa-aaaaaaaaaaad"
+//
+//   params, _ := tests.CreateTestServerParams()
+//   s, sqlDB, _ := serverutils.StartServer(t, params)
+//   defer s.Stopper().Stop(context.TODO())
+//   if _, err := sqlDB.Exec(`
+// CREATE DATABASE t;
+// CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+// INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
+// `); err != nil {
+//     t.Fatal(err)
+//   }
+//
+//   tx, err := sqlDB.Begin()
+//   if err != nil {
+//     t.Fatal(err)
+//   }
+//
+//   // We're going to use FORCE_RETRY() to generate an error for a different
+//   // transaction than the one we initiate.
+//   _, err = tx.Exec(`SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL, $1)`, bogusTxnID)
+//   if isRetryableErr(err) {
+//     t.Fatalf("expected non-retryable error, got: %s", err)
+//   }
+//   if !testutils.IsError(err, "pq: retryable error from another txn.* forced by crdb_internal.force_retry()") {
+//     t.Fatalf("unexpected error: %v", err)
+//   }
+//   if err := tx.Rollback(); err != nil {
+//     t.Fatal(err)
+//   }
+// }
 
 // Test that retryable errors are handled properly through DistSQL.
 func TestDistSQLRetryableError(t *testing.T) {
@@ -1572,6 +1571,7 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	checkState := func(tx *gosql.Tx, ts time.Time) {
+		t.Helper()
 		r := tx.QueryRow("SHOW TRANSACTION ISOLATION LEVEL")
 		var iso string
 		var pri string

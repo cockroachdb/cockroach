@@ -240,8 +240,13 @@ func (s *Server) maybeReportDiagnostics(
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) && diagnosticsMetricsEnabled.Get(&s.st.SV) {
 		s.reportDiagnostics(running)
 	}
-	s.sqlExecutor.ResetStatementStats(ctx)
-	s.sqlExecutor.ResetUnimplementedCounts()
+	if s.cfg.UseFrontendV2 {
+		s.pgServer.SQLServer.ResetStatementStats(ctx)
+		s.pgServer.SQLServer.ResetUnimplementedCounts()
+	} else {
+		s.sqlExecutor.ResetStatementStats(ctx)
+		s.sqlExecutor.ResetUnimplementedCounts()
+	}
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
@@ -270,9 +275,16 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		schema = nil
 	}
 	info.Schema = schema
-	info.SqlStats = s.sqlExecutor.GetScrubbedStmtStats()
 	info.UnimplementedErrors = make(map[string]int64)
-	s.sqlExecutor.FillUnimplementedErrorCounts(info.UnimplementedErrors)
+	if s.cfg.UseFrontendV2 {
+		log.Infof(context.TODO(), "!!! server asking v2 for stats")
+		info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
+		s.pgServer.SQLServer.FillUnimplementedErrorCounts(info.UnimplementedErrors)
+	} else {
+		log.Infof(context.TODO(), "!!! server asking v1 for stats")
+		info.SqlStats = s.sqlExecutor.GetScrubbedStmtStats()
+		s.sqlExecutor.FillUnimplementedErrorCounts(info.UnimplementedErrors)
+	}
 	return &info
 }
 

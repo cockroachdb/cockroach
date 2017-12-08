@@ -18,6 +18,7 @@ digraph finite_state_machine {
 	"Aborted{RetryIntent:true}" -> "Open{ImplicitTxn:false, RetryIntent:true}" [label = <TxnStart{ImplicitTxn:false}<BR/><I>ROLLBACK TO SAVEPOINT cockroach_restart</I>>]
 	"CommitWait{}" -> "Aborted{RetryIntent:true}" [label = <NonRetriableErr{IsCommit:false}<BR/><I>any other statement</I>>]
 	"CommitWait{}" -> "NoTxn{}" [label = <TxnFinish{}<BR/><I>COMMIT</I>>]
+	"NoTxn{}" -> "NoTxn{}" [label = <NonRetriableErr{IsCommit:false}<BR/><I>extended protocol command error</I>>]
 	"NoTxn{}" -> "Open{ImplicitTxn:false, RetryIntent:false}" [label = <TxnStart{ImplicitTxn:false}<BR/><I>BEGIN, or before a statement running as an implicit txn</I>>]
 	"NoTxn{}" -> "Open{ImplicitTxn:true, RetryIntent:false}" [label = <TxnStart{ImplicitTxn:true}<BR/><I>BEGIN, or before a statement running as an implicit txn</I>>]
 	"Open{ImplicitTxn:false, RetryIntent:false}" -> "Aborted{RetryIntent:false}" [label = "NonRetriableErr{IsCommit:false}"]

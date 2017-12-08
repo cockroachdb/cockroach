@@ -206,7 +206,7 @@ type Executor struct {
 	// Transient stats.
 	SelectCount   *metric.Counter
 	TxnBeginCount *metric.Counter
-	EngineMetrics sqlEngineMetrics
+	EngineMetrics SQLEngineMetrics
 
 	// txnCommitCount counts the number of times a COMMIT was attempted.
 	TxnCommitCount *metric.Counter
@@ -286,7 +286,7 @@ func (*ExecutorTestingKnobs) ModuleTestingKnobs() {}
 
 // StatementFilter is the type of callback that
 // ExecutorTestingKnobs.StatementFilter takes.
-type StatementFilter func(context.Context, string, ResultsWriter, error) error
+type StatementFilter func(context.Context, string, error)
 
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
@@ -306,9 +306,7 @@ type ExecutorTestingKnobs struct {
 
 	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
 	// statement.
-	AfterExecute func(
-		ctx context.Context, stmt string, res StatementResult, err error,
-	)
+	AfterExecute func(ctx context.Context, stmt string, err error)
 
 	// DisableAutoCommit, if set, disables the auto-commit functionality of some
 	// SQL statements. That functionality allows some statements to commit
@@ -357,7 +355,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),
 		TxnRollbackCount: metric.NewCounter(MetaTxnRollback),
 		SelectCount:      metric.NewCounter(MetaSelect),
-		EngineMetrics: sqlEngineMetrics{
+		EngineMetrics: SQLEngineMetrics{
 			DistSQLSelectCount: metric.NewCounter(MetaDistSQLSelect),
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
 			DistSQLExecLatency: metric.NewLatency(MetaDistSQLExecLatency,
@@ -475,10 +473,10 @@ func (dc *databaseCacheHolder) updateSystemConfig(cfg config.SystemConfig) {
 	dc.mu.Unlock()
 }
 
-// Prepare returns the result types of the given statement. pinfo may
-// contain partial type information for placeholders. Prepare will
-// populate the missing types. The PreparedStatement is returned (or
-// nil if there are no results).
+// Prepare returns the result types of the given statement. placeholderHints may
+// contain partial type information for placeholders. Prepare will populate the
+// missing types. The PreparedStatement is returned (or nil if there are no
+// results).
 func (e *Executor) Prepare(
 	stmt Statement, stmtStr string, session *Session, placeholderHints tree.PlaceholderTypes,
 ) (res *PreparedStatement, err error) {
@@ -503,7 +501,11 @@ func (e *Executor) Prepare(
 	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
-	protoTS, err := isAsOf(session, stmt.AST, e.cfg.Clock.Now())
+	evalCtx := session.extendedEvalCtx(
+		session.TxnState.mu.txn,
+		e.cfg.Clock.PhysicalTime(),
+		e.cfg.Clock.PhysicalTime()).EvalContext
+	protoTS, err := isAsOf(stmt.AST, &evalCtx, e.cfg.Clock.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -758,7 +760,13 @@ func (e *Executor) execParsed(
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
 				var err error
-				protoTS, err = isAsOf(session, stmtsToExec[0].AST, e.cfg.Clock.Now())
+				evalCtx := session.extendedEvalCtx(
+					session.TxnState.mu.txn,
+					e.cfg.Clock.PhysicalTime(),
+					e.cfg.Clock.PhysicalTime()).EvalContext
+				protoTS, err = isAsOf(
+					stmtsToExec[0].AST, &evalCtx, e.cfg.Clock.Now(),
+				)
 				if err != nil {
 					return err
 				}
@@ -846,7 +854,7 @@ func (e *Executor) execParsed(
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			if err := txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session); err != nil {
+			if err := txnState.schemaChangers.execSchemaChanges(session.Ctx(), &e.cfg); err != nil {
 				return err
 			}
 		}
@@ -1261,9 +1269,7 @@ func (e *Executor) execSingleStatement(
 		}
 	}
 	if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-		if err := filter(session.Ctx(), stmt.String(), session.ResultsWriter, err); err != nil {
-			return err
-		}
+		filter(session.Ctx(), stmt.String(), err)
 	}
 	if err != nil {
 		// If error contains a context cancellation error, wrap it with a
@@ -1662,16 +1668,21 @@ func (e *Executor) execStmtInOpenTxn(
 		return res.CloseResult()
 
 	case *tree.Execute:
-		// Substitute the placeholder information and actual statement with that of
-		// the saved prepared statement and pass control back to the ordinary
-		// execute path.
-		ps, newPInfo, err := getPreparedStatementForExecute(
-			&session.PreparedStatements, session.data.SearchPath, s,
-		)
+		name := s.Name.String()
+		ps, ok := session.PreparedStatements.Get(name)
+		if !ok {
+			err := pgerror.NewErrorf(
+				pgerror.CodeInvalidSQLStatementNameError,
+				"prepared statement %q does not exist", name,
+			)
+			return err
+		}
+		var err error
+		pinfo, err = fillInPlaceholders(ps, name, s.Params, session.data.SearchPath)
 		if err != nil {
 			return err
 		}
-		pinfo = newPInfo
+
 		stmt.AST = ps.Statement
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
@@ -2084,6 +2095,8 @@ func shouldUseDistSQL(
 //
 // cols represents the columns of the result rows. Should be nil if
 // stmt.AST.StatementType() != tree.Rows.
+//
+// If an error is returned, it is to be considered a query execution error.
 func initStatementResult(res StatementResult, stmt Statement, cols sqlbase.ResultColumns) error {
 	stmtAst := stmt.AST
 	res.BeginResult(stmtAst)
@@ -2157,10 +2170,10 @@ func (e *Executor) execStmt(
 	// Complete execution: record results and optionally run the test
 	// hook.
 	recordStatementSummary(
-		planner, stmt, useDistSQL, automaticRetryCount, res, err, &e.EngineMetrics,
+		planner, stmt, useDistSQL, automaticRetryCount, res.RowsAffected(), err, &e.EngineMetrics,
 	)
 	if e.cfg.TestingKnobs.AfterExecute != nil {
-		e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res, err)
+		e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), err)
 	}
 	if err != nil {
 		return err
@@ -2217,9 +2230,10 @@ func (e *Executor) execStmtInParallel(
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 		err = e.execLocal(planner, planner.curPlan.plan, bufferedWriter)
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
-		recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err, &e.EngineMetrics)
+		recordStatementSummary(
+			planner, stmt, false, 0, bufferedWriter.RowsAffected(), err, &e.EngineMetrics)
 		if e.cfg.TestingKnobs.AfterExecute != nil {
-			e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), bufferedWriter, err)
+			e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), err)
 		}
 		results := bufferedWriter.results()
 		results.Close(ctx)
@@ -2231,6 +2245,10 @@ func (e *Executor) execStmtInParallel(
 	}
 
 	return cols, nil
+}
+
+func (e *Executor) Cfg() *ExecutorConfig {
+	return &e.cfg
 }
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL
@@ -2475,7 +2493,9 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 //
 // max is a lower bound on what the transaction's timestamp will be.
 // Used to check that the user didn't specify a timestamp in the future.
-func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
+func isAsOf(
+	stmt tree.Statement, evalCtx *tree.EvalContext, max hlc.Timestamp,
+) (*hlc.Timestamp, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -2496,7 +2516,7 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 
 		asOf = sc.From.AsOf
 	case *tree.ShowTrace:
-		return isAsOf(session, s.Statement, max)
+		return isAsOf(s.Statement, evalCtx, max)
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
 			return nil, nil
@@ -2506,13 +2526,7 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 		return nil, nil
 	}
 
-	// the evalCtx is not needed for the purposes of evaluating AOST. See #16424.
-	evalCtx := session.extendedEvalCtx(
-		nil,         /* txn */
-		time.Time{}, /* txnTimestamp */
-		time.Time{}, /* stmtTimestamp */
-	)
-	ts, err := EvalAsOfTimestamp(&evalCtx.EvalContext, asOf, max)
+	ts, err := EvalAsOfTimestamp(evalCtx, asOf, max)
 	return &ts, err
 }
 
