@@ -70,16 +70,13 @@ func (node *SetTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
 	node.Modes.Format(buf, f)
 }
 
-// SetDefaultIsolation represents a SET SESSION CHARACTERISTICS AS TRANSACTION statement.
-type SetDefaultIsolation struct {
-	Isolation IsolationLevel
+// SetSessionCharacteristics represents a SET SESSION CHARACTERISTICS AS TRANSACTION statement.
+type SetSessionCharacteristics struct {
+	Modes TransactionModes
 }
 
 // Format implements the NodeFormatter interface.
-func (node *SetDefaultIsolation) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL")
-	if node.Isolation != UnspecifiedIsolation {
-		buf.WriteByte(' ')
-		buf.WriteString(node.Isolation.String())
-	}
+func (node *SetSessionCharacteristics) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION")
+	node.Modes.Format(buf, f)
 }

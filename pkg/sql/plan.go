@@ -368,10 +368,18 @@ func (p *planner) newPlan(
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
 	// where the table already exists. This will generate some false
 	// refreshes, but that's expected to be quite rare in practice.
-	if tree.CanModifySchema(stmt) {
+	canModifySchema := tree.CanModifySchema(stmt)
+	if canModifySchema {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
 			return nil, errors.Wrap(err,
 				"schema change statement cannot follow a statement that has written in the same transaction")
+		}
+	}
+
+	if p.session.TxnState.readOnly {
+		if canModifySchema || tree.CanWriteData(stmt) {
+			return nil, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+				"cannot execute %s in a read-only transaction", stmt.StatementTag())
 		}
 	}
 
@@ -471,8 +479,8 @@ func (p *planner) newPlan(
 		return p.SetVar(ctx, n)
 	case *tree.SetTransaction:
 		return p.SetTransaction(n)
-	case *tree.SetDefaultIsolation:
-		return p.SetDefaultIsolation(n)
+	case *tree.SetSessionCharacteristics:
+		return p.SetSessionCharacteristics(n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:
