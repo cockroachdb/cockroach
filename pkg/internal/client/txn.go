@@ -797,6 +797,7 @@ func (txn *Txn) Exec(
 // book-keeping.
 //
 // TODO(andrei): I think this is called in the wrong place. See #18170.
+// !!! still used?
 func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
 	txn.commitTriggers = nil
 	log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",

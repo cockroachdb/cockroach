@@ -16,6 +16,7 @@ package sessiondata
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -55,6 +56,7 @@ type SessionData struct {
 	// SequenceState gives access to the SQL sequences that have been manipulated
 	// by the session.
 	SequenceState *SequenceState
+	RemoteAddr    net.Addr
 
 	mu struct {
 		syncutil.Mutex

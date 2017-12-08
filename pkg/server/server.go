@@ -518,7 +518,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
-	s.registry.AddMetricStruct(s.sqlExecutor)
+	if !s.cfg.UseFrontendV2 {
+		s.registry.AddMetricStruct(s.sqlExecutor)
+	}
 
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,
@@ -527,8 +529,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&s.internalMemMetrics,
 		&rootSQLMemoryMonitor,
 		s.cfg.HistogramWindowInterval(),
+		&execCfg,
 	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
+	if s.cfg.UseFrontendV2 {
+		s.registry.AddMetricStruct(s.pgServer.StatementCounters())
+		s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
+	}
 
 	sqlExecutor.ExecCfg = &execCfg
 	s.execCfg = &execCfg
@@ -1162,6 +1169,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 
 	s.sqlExecutor.Start(ctx, s.execCfg.DistSQLPlanner)
 	s.distSQLServer.Start()
+	s.pgServer.Start(ctx, s.stopper)
 
 	s.serveMode.set(modeOperational)
 
@@ -1264,7 +1272,13 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
-			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+			var serveFn func(ctx context.Context, conn net.Conn) error
+			if s.cfg.UseFrontendV2 {
+				serveFn = s.pgServer.ServeConn2
+			} else {
+				serveFn = s.pgServer.ServeConn
+			}
+			if err := serveFn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 				// Report the error on this connection's context, so that we
 				// know which remote client caused the error when looking at
 				// the logs.
@@ -1336,6 +1350,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 func (s *Server) doDrain(
 	ctx context.Context, modes []serverpb.DrainMode, setTo bool,
 ) ([]serverpb.DrainMode, error) {
+	log.Infof(ctx, "!!! Server.doDrain")
 	for _, mode := range modes {
 		switch mode {
 		case serverpb.DrainMode_CLIENT:

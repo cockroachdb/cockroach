@@ -211,6 +211,7 @@ func init() {
 
 		VarFlag(f, &serverCfg.Stores, cliflags.Store)
 		VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+		BoolFlag(f, &serverCfg.UseFrontendV2, cliflags.UseFrontendV2, serverCfg.UseFrontendV2)
 
 		// Usage for the unix socket is odd as we use a real file, whereas
 		// postgresql and clients consider it a directory and build a filename

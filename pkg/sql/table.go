@@ -480,6 +480,18 @@ const (
 	dontBlockForDBCacheUpdate releaseOpt = false
 )
 
+func (tc *TableCollection) releaseLeases(ctx context.Context) {
+	if len(tc.leasedTables) > 0 {
+		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
+		for _, table := range tc.leasedTables {
+			if err := tc.leaseMgr.Release(table); err != nil {
+				log.Warning(ctx, err)
+			}
+		}
+		tc.leasedTables = tc.leasedTables[:0]
+	}
+}
+
 // releaseTables releases all tables currently held by the TableCollection.
 func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) error {
 	tc.timestamp = hlc.Timestamp{}

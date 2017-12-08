@@ -47,10 +47,10 @@ CommitWait{}
 		TxnStart{ImplicitTxn:true}
 NoTxn{}
 	handled events:
+		NonRetriableErr{IsCommit:false}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 	missing events:
-		NonRetriableErr{IsCommit:false}
 		NonRetriableErr{IsCommit:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
