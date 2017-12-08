@@ -108,10 +108,10 @@ type RowSource interface {
 	// Types returns the schema for the rows in this source.
 	Types() []sqlbase.ColumnType
 
-	// Next returns the next record that a producer has pushed into this
-	// RowSource. At most one of the return values will be non-empty. Both of them
-	// can be empty when the RowSource has been exhausted - no more records are
-	// coming and any further method calls will be no-ops.
+	// Next returns the next record from the source. At most one of the return
+	// values will be non-empty. Both of them can be empty when the RowSource has
+	// been exhausted - no more records are coming and any further method calls
+	// will be no-ops.
 	//
 	// A ProducerMetadata record may contain an error. In that case, this
 	// interface is oblivious about the semantics: implementers may continue
@@ -126,8 +126,8 @@ type RowSource interface {
 	// RowSource to drain, and separately discard any future data rows.
 	Next() (sqlbase.EncDatumRow, ProducerMetadata)
 
-	// ConsumerDone lets the producer know that we will not need any more data
-	// rows. The producer is expected to start draining and only send metadata
+	// ConsumerDone lets the source know that we will not need any more data
+	// rows. The source is expected to start draining and only send metadata
 	// rows.
 	//
 	// May block. If the consumer of the source stops consuming rows before
@@ -136,9 +136,8 @@ type RowSource interface {
 	// all the rows were consumed (i.e. after Next() returned an empty row).
 	ConsumerDone()
 
-	// ConsumerClosed informs the producer that the consumer will not be reading
-	// any more rows. The producer is expected to shut down without sending
-	// anything else.
+	// ConsumerClosed informs the source that the consumer is done and will not
+	// make any more calls to Next().
 	//
 	// Like ConsumerDone(), if the consumer of the source stops consuming rows
 	// before Next indicates that there are no more rows, ConsumerDone() and/or
@@ -186,11 +185,16 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 	}
 }
 
-func sendTraceData(ctx context.Context, dst RowReceiver) {
+func getTraceData(ctx context.Context) []tracing.RecordedSpan {
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
-		if rec := tracing.GetRecording(sp); rec != nil {
-			dst.Push(nil /* row */, ProducerMetadata{TraceData: rec})
-		}
+		return tracing.GetRecording(sp)
+	}
+	return nil
+}
+
+func sendTraceData(ctx context.Context, dst RowReceiver) {
+	if rec := getTraceData(ctx); rec != nil {
+		dst.Push(nil /* row */, ProducerMetadata{TraceData: rec})
 	}
 }
 
