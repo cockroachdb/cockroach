@@ -38,56 +38,60 @@ func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error
 			"can't have more than 1 EXECUTE per statement")
 	}
 	p.curPlan.plannedExecute = true
-	ps, newPInfo, err := getPreparedStatementForExecute(
-		p.preparedStatements, p.EvalContext().SessionData.SearchPath, n,
+	name := n.Name.String()
+	ps, ok := p.preparedStatements.Get(name)
+	if !ok {
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInvalidSQLStatementNameError,
+			"prepared statement %q does not exist", name,
+		)
+	}
+	pInfo, err := fillInPlaceholders(
+		ps, name, n.Params, p.EvalContext().SessionData.SearchPath,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	p.semaCtx.Placeholders.Assign(newPInfo)
+	p.semaCtx.Placeholders.Assign(pInfo)
 
 	return p.newPlan(ctx, ps.Statement, nil /* desiredTypes */)
 }
 
-// getPreparedStatementForExecute implements the EXECUTE foo(args) SQL
-// statement, returning the referenced prepared statement and correctly updated
-// placeholder info.
+// fillInPlaceholder helps with the EXECUTE foo(args) SQL statement: it takes in
+// a prepared statement returning
+// the referenced prepared statement and correctly updated placeholder info.
 // See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
-func getPreparedStatementForExecute(
-	preparedStmts preparedStatementsAccessor, searchPath sessiondata.SearchPath, s *tree.Execute,
-) (ps *PreparedStatement, pInfo *tree.PlaceholderInfo, err error) {
-	name := s.Name.String()
-	prepared, ok := preparedStmts.Get(name)
-	if !ok {
-		return ps, pInfo, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
-			"prepared statement %q does not exist", name)
-	}
-
-	if len(prepared.TypeHints) != len(s.Params) {
-		return ps, pInfo, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+func fillInPlaceholders(
+	ps *PreparedStatement, name string, params tree.Exprs, searchPath sessiondata.SearchPath,
+) (*tree.PlaceholderInfo, error) {
+	if len(ps.TypeHints) != len(params) {
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"wrong number of parameters for prepared statement %q: expected %d, got %d",
-			name, len(prepared.TypeHints), len(s.Params))
+			name, len(ps.TypeHints), len(params))
 	}
 
-	qArgs := make(tree.QueryArguments, len(s.Params))
+	qArgs := make(tree.QueryArguments, len(params))
 	var t transform.ExprTransformContext
-	for i, e := range s.Params {
+	for i, e := range params {
 		idx := strconv.Itoa(i + 1)
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.TypeHints[idx], "EXECUTE parameter", nil /* semaCtx */, nil /* evalCtx */)
+		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+			e, ps.TypeHints[idx], "EXECUTE parameter", /* context */
+			nil /* semaCtx */, nil /* evalCtx */)
 		if err != nil {
-			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
+			return nil, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
 		if err := t.AssertNoAggregationOrWindowing(
 			typedExpr, "EXECUTE parameters", searchPath,
 		); err != nil {
-			return ps, pInfo, err
+			return nil, err
 		}
 		qArgs[idx] = typedExpr
 	}
-	return prepared, &tree.PlaceholderInfo{
+	return &tree.PlaceholderInfo{
 			Values:    qArgs,
-			TypeHints: prepared.TypeHints,
-			Types:     prepared.Types},
+			TypeHints: ps.TypeHints,
+			Types:     ps.Types,
+		},
 		nil
 }

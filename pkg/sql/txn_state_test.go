@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -39,7 +40,7 @@ import (
 	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
 )
 
-var noRewindExpected = cmdPos(-1)
+var noRewindExpected = CmdPos(-1)
 
 type testContext struct {
 	manualClock *hlc.ManualClock
@@ -110,13 +111,14 @@ func (tc *testContext) createOpenState(
 	txnStateMon.Start(tc.ctx, &tc.mon, mon.BoundAccount{})
 
 	ts := txnState2{
-		Ctx:          ctx,
-		sp:           sp,
-		cancel:       cancel,
-		sqlTimestamp: timeutil.Now(),
-		isolation:    enginepb.SERIALIZABLE,
-		priority:     roachpb.NormalUserPriority,
-		mon:          &txnStateMon,
+		Ctx:           ctx,
+		sp:            sp,
+		cancel:        cancel,
+		sqlTimestamp:  timeutil.Now(),
+		isolation:     enginepb.SERIALIZABLE,
+		priority:      roachpb.NormalUserPriority,
+		mon:           &txnStateMon,
+		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
 	ts.mu.txn = client.NewTxn(tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */, client.RootTxn)
 
@@ -171,14 +173,9 @@ func (tc *testContext) createNoTxnState() (State, *txnState2) {
 // checkAdv returns an error if adv does not match all the expected fields.
 //
 // Pass noRewindExpected for expRewPos if a rewind is not expected.
-func checkAdv(
-	adv advanceInfo, expCode advanceCode, expFlush flushOpt, expRewPos cmdPos, expEv txnEvent,
-) error {
+func checkAdv(adv advanceInfo, expCode advanceCode, expRewPos CmdPos, expEv txnEvent) error {
 	if adv.code != expCode {
 		return errors.Errorf("expected code: %s, but got: %s (%+v)", expCode, adv.code, adv)
-	}
-	if adv.flush != bool(expFlush) {
-		return errors.Errorf("expected flush: %t, but got: %+v", expFlush, adv)
 	}
 	if expRewPos == noRewindExpected {
 		if adv.rewCap != (rewindCapability{}) {
@@ -247,7 +244,7 @@ func TestTransitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.TODO()
-	dummyRewCap := rewindCapability{rewindPos: cmdPos(12)}
+	dummyRewCap := rewindCapability{rewindPos: CmdPos(12)}
 	testCon := makeTestContext()
 	tranCtx := transitionCtx{
 		db:      testCon.mockDB,
@@ -258,9 +255,8 @@ func TestTransitions(t *testing.T) {
 	}
 
 	type expAdvance struct {
-		expCode  advanceCode
-		expFlush flushOpt
-		expEv    txnEvent
+		expCode advanceCode
+		expEv   txnEvent
 	}
 
 	implicitTxnName := sqlImplicitTxnName
@@ -314,8 +310,8 @@ func TestTransitions(t *testing.T) {
 			expAdv: expAdvance{
 				// We expect to stayInPlace; upon starting a txn the statement is
 				// executed again, this time in state Open.
-				expCode:  stayInPlace,
-				expFlush: flush,
+				expCode: stayInPlace,
+				expEv:   txnStart,
 			},
 			expTxn: &expKVTxn{
 				debugName:    &implicitTxnName,
@@ -338,8 +334,8 @@ func TestTransitions(t *testing.T) {
 			evPayload: makeEventTxnStartPayload(iso, pri, tree.ReadWrite, timeutil.Now(), tranCtx),
 			expState:  stateOpen{ImplicitTxn: False, RetryIntent: False},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
+				expCode: advanceOne,
+				expEv:   txnStart,
 			},
 			expTxn: &expKVTxn{
 				debugName:    &explicitTxnName,
@@ -364,8 +360,7 @@ func TestTransitions(t *testing.T) {
 			ev:       eventRetryIntentSet{},
 			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
+				expCode: advanceOne,
 			},
 			expTxn: &expKVTxn{},
 		},
@@ -385,9 +380,8 @@ func TestTransitions(t *testing.T) {
 			evPayload: eventTxnFinishPayload{commit: true},
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
-				expEv:    txnCommit,
+				expCode: advanceOne,
+				expEv:   txnCommit,
 			},
 			expTxn: nil,
 		},
@@ -407,9 +401,8 @@ func TestTransitions(t *testing.T) {
 			evPayload: eventTxnFinishPayload{commit: true},
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
-				expEv:    txnCommit,
+				expCode: advanceOne,
+				expEv:   txnCommit,
 			},
 			expTxn: nil,
 		},
@@ -432,9 +425,8 @@ func TestTransitions(t *testing.T) {
 			},
 			expState: stateOpen{ImplicitTxn: False, RetryIntent: False},
 			expAdv: expAdvance{
-				expCode:  rewind,
-				expFlush: noFlush,
-				expEv:    txnRestart,
+				expCode: rewind,
+				expEv:   txnRestart,
 			},
 			// Expect non-nil txn.
 			expTxn: &expKVTxn{
@@ -462,9 +454,8 @@ func TestTransitions(t *testing.T) {
 			},
 			expState: stateOpen{ImplicitTxn: False, RetryIntent: False},
 			expAdv: expAdvance{
-				expCode:  rewind,
-				expFlush: noFlush,
-				expEv:    txnRestart,
+				expCode: rewind,
+				expEv:   txnRestart,
 			},
 			// Expect non-nil txn.
 			expTxn: &expKVTxn{
@@ -491,9 +482,8 @@ func TestTransitions(t *testing.T) {
 			},
 			expState: stateRestartWait{},
 			expAdv: expAdvance{
-				expCode:  skipBatch,
-				expFlush: flush,
-				expEv:    txnRestart,
+				expCode: skipBatch,
+				expEv:   txnRestart,
 			},
 			// Expect non-nil txn.
 			expTxn: &expKVTxn{
@@ -524,9 +514,8 @@ func TestTransitions(t *testing.T) {
 			},
 			expState: stateNoTxn{},
 			expAdv: expAdvance{
-				expCode:  skipBatch,
-				expFlush: flush,
-				expEv:    txnAborted,
+				expCode: skipBatch,
+				expEv:   txnAborted,
 			},
 			// Expect nil txn.
 			expTxn: nil,
@@ -542,9 +531,8 @@ func TestTransitions(t *testing.T) {
 			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
-				expCode:  skipBatch,
-				expFlush: flush,
-				expEv:    txnAborted,
+				expCode: skipBatch,
+				expEv:   txnAborted,
 			},
 			// Expect nil txn.
 			expTxn: nil,
@@ -569,9 +557,8 @@ func TestTransitions(t *testing.T) {
 			},
 			expState: stateAborted{RetryIntent: False},
 			expAdv: expAdvance{
-				expCode:  skipBatch,
-				expFlush: flush,
-				expEv:    txnAborted,
+				expCode: skipBatch,
+				expEv:   txnAborted,
 			},
 			expTxn: &expKVTxn{
 				isFinalized: &varTrue,
@@ -597,9 +584,8 @@ func TestTransitions(t *testing.T) {
 			},
 			expState: stateNoTxn{},
 			expAdv: expAdvance{
-				expCode:  skipBatch,
-				expFlush: flush,
-				expEv:    txnAborted,
+				expCode: skipBatch,
+				expEv:   txnAborted,
 			},
 			// Expect the txn to have been cleared.
 			expTxn: nil,
@@ -615,9 +601,8 @@ func TestTransitions(t *testing.T) {
 			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
 			expState:  stateAborted{RetryIntent: False},
 			expAdv: expAdvance{
-				expCode:  skipBatch,
-				expFlush: flush,
-				expEv:    txnAborted,
+				expCode: skipBatch,
+				expEv:   txnAborted,
 			},
 			expTxn: &expKVTxn{
 				isFinalized: &varTrue,
@@ -635,9 +620,8 @@ func TestTransitions(t *testing.T) {
 			ev:       eventTxnReleased{},
 			expState: stateCommitWait{},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
-				expEv:    txnCommit,
+				expCode: advanceOne,
+				expEv:   txnCommit,
 			},
 			expTxn: &expKVTxn{
 				isFinalized: &varTrue,
@@ -653,9 +637,8 @@ func TestTransitions(t *testing.T) {
 			ev:       eventTxnRestart{},
 			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
-				expEv:    txnRestart,
+				expCode: advanceOne,
+				expEv:   txnRestart,
 			},
 			// We would like to test that the transaction's epoch bumped if the txn
 			// performed any operations, but it's not easy to do the test.
@@ -675,9 +658,8 @@ func TestTransitions(t *testing.T) {
 			evPayload: eventTxnFinishPayload{commit: false},
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
-				expEv:    txnAborted,
+				expCode: advanceOne,
+				expEv:   txnAborted,
 			},
 			expTxn: nil,
 		},
@@ -692,9 +674,8 @@ func TestTransitions(t *testing.T) {
 			evPayload: makeEventTxnStartPayload(iso, pri, tree.ReadWrite, timeutil.Now(), tranCtx),
 			expState:  stateOpen{ImplicitTxn: False, RetryIntent: True},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
-				expEv:    noEvent,
+				expCode: advanceOne,
+				expEv:   noEvent,
 			},
 			expTxn: &expKVTxn{
 				isFinalized: &varFalse,
@@ -715,9 +696,8 @@ func TestTransitions(t *testing.T) {
 			evPayload: eventTxnFinishPayload{commit: false},
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
-				expEv:    txnAborted,
+				expCode: advanceOne,
+				expEv:   txnAborted,
 			},
 			expTxn: nil,
 		},
@@ -731,8 +711,8 @@ func TestTransitions(t *testing.T) {
 			ev:       eventTxnRestart{},
 			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
+				expCode: advanceOne,
+				expEv:   txnRestart,
 			},
 			expTxn: &expKVTxn{},
 		},
@@ -746,11 +726,10 @@ func TestTransitions(t *testing.T) {
 			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
 			expState:  stateAborted{RetryIntent: True},
 			expAdv: expAdvance{
-				expCode:  skipBatch,
-				expFlush: flush,
-				expEv:    txnAborted,
+				expCode: skipBatch,
+				expEv:   txnAborted,
 			},
-			expTxn: nil,
+			expTxn: &expKVTxn{},
 		},
 		//
 		// Tests starting from the CommitWait state.
@@ -764,23 +743,21 @@ func TestTransitions(t *testing.T) {
 			evPayload: eventTxnFinishPayload{commit: true},
 			expState:  stateNoTxn{},
 			expAdv: expAdvance{
-				expCode:  advanceOne,
-				expFlush: flush,
-				expEv:    txnCommit,
+				expCode: advanceOne,
+				expEv:   txnCommit,
 			},
 			expTxn: nil,
 		},
 		{
-			name: "CommitWait->Aborted",
+			name: "CommitWait + err",
 			init: func() (State, *txnState2, error) {
 				return testCon.createCommitWaitState()
 			},
 			ev:        eventNonRetriableErr{IsCommit: False},
 			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
-			expState:  stateAborted{RetryIntent: True},
+			expState:  stateCommitWait{},
 			expAdv: expAdvance{
-				expCode:  skipBatch,
-				expFlush: flush,
+				expCode: skipBatch,
 			},
 			expTxn: &expKVTxn{
 				isFinalized: &varTrue,
@@ -819,7 +796,7 @@ func TestTransitions(t *testing.T) {
 				expRewPos = dummyRewCap.rewindPos
 			}
 			if err := checkAdv(
-				adv, tc.expAdv.expCode, tc.expAdv.expFlush, expRewPos, tc.expAdv.expEv,
+				adv, tc.expAdv.expCode, expRewPos, tc.expAdv.expEv,
 			); err != nil {
 				t.Fatal(err)
 			}

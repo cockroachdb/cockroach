@@ -141,7 +141,7 @@ type copyTxnOpt struct {
 
 // run consumes all the copy-in data from the network connection and inserts it
 // in the database.
-func (c *copyMachine) run(ctx context.Context) (retErr error) {
+func (c *copyMachine) run(ctx context.Context) error {
 	defer c.rowsMemAcc.Close(ctx)
 
 	// Send the message describing the columns to the client.

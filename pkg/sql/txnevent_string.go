@@ -4,9 +4,9 @@ package sql
 
 import "strconv"
 
-const _txnEvent_name = "noEventtxnCommittxnAbortedtxnRestart"
+const _txnEvent_name = "noEventtxnStarttxnCommittxnAbortedtxnRestart"
 
-var _txnEvent_index = [...]uint8{0, 7, 16, 26, 36}
+var _txnEvent_index = [...]uint8{0, 7, 15, 24, 34, 44}
 
 func (i txnEvent) String() string {
 	if i < 0 || i >= txnEvent(len(_txnEvent_index)-1) {
