@@ -43,7 +43,7 @@ SET DISTSQL = ON
 statement ok
 SET CLUSTER SETTING sql.distsql.merge_joins.enabled = true;
 
-# ensure merge joins are planned when there's orderings.
+# Ensure merge joins are planned when we have adequate orderings.
 query ITTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
@@ -67,6 +67,52 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b
 3  ·       table           data@primary       ·                                                                                   ·
 3  ·       spans           ALL                ·                                                                                   ·
 
+# Test planning with USING plus an extra ON condition (#20569), possibly adding another equality column.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM data AS l JOIN data as r USING(a, b) WHERE l.c = r.c AND a + b + l.c + l.d + r.d < 8]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzsllGL2kwUhu-_XxHO1YrzQWYSXQ0UptAbC3XLsndtLrLmVANuRiYT6LL430uSLa4xzjGMBQW9CKjzzLyceQLvG-QqxXnyggVEP4ADAwEMAmAQAoMRxAw2Wi2wKJSuljTALP0Nkc8gyzelqX6OGSyURojewGRmjRDBU_K8xkdMUtTAIEWTZOv6kI3OXhL9KtPEJMDgoTSRJzmTgsmAyRDiLQNVmveddxs-v3qrpFjtb_YXhHgbMyhMskSI-JZdRU5xNOduN6VT1Ji2dxsyKYZMBsMqRq_VHSP4hnqJX1WWt0ewxl_m7gM--KSz5Wr_p2o0c--u-kjuDT0pBtUzqJ9h_ZwMvJ-l7wcLbxJF0Wz-NPA-z7-8M6NqxfgEpuMOmLxnctK6id18gxPmW-ZdM-sc01z9rzatZd0Hh3sH84sVkF9JTnE05-1FOf-LIi7WA34lOcXRnDdfz-9rcLEe8CvJKY7mvPl6fl_Di_WAX0lOcTTnzdd_W5w7hvCIxUblBZ7UjP1qjJgusbmsQpV6gd-1WtTHNF8faq7ueSkWpvlXNF9mefNXFfB0eOwCT11g7pSbj-w07zEy0Q8eu8BTF5g75W6N7IAWbdr_SAf2eQdWmO_PzG_ToYvgdpgQ3A4TgtthSnCCJgQfuQhuhwnB7TAhuB2mBCdoQvCxi-D3LoraYUJRO0woaocpRQmaUHTioqgdJhS1w4SidphSlKAJRacuinKnnkDQhKQETVhK0JSmFE51Bbey4NYW3OqCY19wKwzcqTHwg8rQy1Y7Tdlqpylb7TRpK4FTtvYpS4d31qct9aUpW3v1pd44ZetBebDaGm__-xMAAP__1afPNg==
+
+query IIIIII rowsort
+SELECT * FROM data AS l JOIN data as r USING(a, b) WHERE l.c = r.c AND a + b + l.c + l.d + r.d < 8
+----
+1  1  1  1  1  1
+1  1  1  1  1  2
+1  1  1  1  1  3
+1  1  1  2  1  1
+1  1  1  2  1  2
+1  1  1  3  1  1
+1  1  2  1  2  1
+1  1  2  1  2  2
+1  1  2  2  2  1
+1  1  3  1  3  1
+1  2  1  1  1  1
+1  2  1  1  1  2
+1  2  1  2  1  1
+1  2  2  1  2  1
+1  3  1  1  1  1
+2  1  1  1  1  1
+2  1  1  1  1  2
+2  1  1  2  1  1
+2  1  2  1  2  1
+2  2  1  1  1  1
+3  1  1  1  1  1
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM data AS l JOIN data as r USING(c, d) WHERE l.a + l.b = r.a + r.b AND c + d + l.a + l.b < 6]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzslk9r20wQh-_vpxBzkni3oJVkJREEVCil7sEpIbdWB8Xa2gJHa1YraAj-7mUlp65ld8Zi5YvxxVh_Hu3M7LPwe4NKFmKWv4gaku_AgUEADEJgEAGDCWQM1krORV1LZV7pgGnxCxKfQVmtG21uZwzmUglI3kCXeiUggaf8eSUeRV4IBQwKofNy1S6yVuVLrl7TItc5MPhcrrRQieO6bho6_ztp5Jlf3v4GnvOj8f1w7sRJkkxnT8DgodGJk3KWBiwNWRpBtmEgG70tZVfB86uzzOvl_urvSMag1vlCQMI3bPyuxi4y-GeRu081lVSFUKLY-1hmSOqVI51-yevlV1lW_UZX4qd22wK9e1Uulu8XpumZ47op327cveOmE_M_9jzn4-yT2WE3vTF3brEt9v6Mz3yXbYc4YWncG-JuOqHFdI60PpMf5Lo_xKMLR3sL84s8ESN1dd4Twa8nAjkRwUWKOVJX5xUzuIqJiBlepJgjdXVeMcOrmIiY0UWKOVJX5xUzuop5Yrg90tijqNeyqsVJ6dU3oxHFQnSjrmWj5uKbkvN2me7yoeXagFWIWndPg-5iWnWPTIGnw7ENfGcDc6u6-QSn-YCRBcPg2Aa-s4G5Vd29kR3QQZ_2_6ZDfN4hCvP9mfl9OrIRHIcJwXGYEByHKcEJmhB8YiM4DhOC4zAhOA5TghM0IXhsI_iNjaI4TCiKw4SiOEwpStCEorc2iuIwoSgOE4riMKUoQROK3tkoyq1yAkETkhI0YSlBU5pSOJUV7MKCXVqwiwuWecEuMHCrxMAPIsMgW3GashWnKVtxmrSVwClbh4Slwz0bkpaG0pStg_LSYJyy9SA8oLZmm_9-BwAA__9focLj
+
+query IIIIII rowsort
+SELECT * FROM data AS l JOIN data as r USING(c, d) WHERE l.a + l.b = r.a + r.b AND c + d + l.a + l.b < 6
+----
+1  1  1  1  1  1
+1  1  1  2  1  2
+1  1  1  2  2  1
+1  1  2  1  1  2
+1  1  2  1  2  1
+1  2  1  1  1  1
+2  1  1  1  1  1
 
 # ORDER BY on the mergeJoinOrder columns should not require a SORT node
 query ITTTTT
