@@ -18,25 +18,26 @@
 
 const DBStatus kSuccess = {NULL, 0};
 
-void parse_extra_options(const DBSlice s) {
+DBStatus parse_extra_options(const DBSlice s) {
   if (s.len == 0) {
-    std::cout << "CCL: No extra options passed\n";
-    return;
-  }
-  cockroach::ccl::baseccl::EncryptionOptions opts;
-  if (!opts.ParseFromArray(s.data, s.len)) {
-    std::cout << "CCL: Failed to parse extra options\n";
-    return;
+    return kSuccess;
   }
 
-  std::cout << "CCL: Found extra options:\n"
+  cockroach::ccl::baseccl::EncryptionOptions opts;
+  if (!opts.ParseFromArray(s.data, s.len)) {
+    return FmtStatus("failed to parse extra options");
+  }
+
+  std::cout << "found encryption options:\n"
             << "  active key: " << opts.key_files().current_key() << "\n"
             << "  old key: " << opts.key_files().old_key() << "\n"
             << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
+
+  return FmtStatus("encryption is not supported");
 }
 
 // OpenHook parses the extra_options field of DBOptions.
-void OpenHook(const DBOptions opts) { parse_extra_options(opts.extra_options); }
+DBStatus OpenHook(const DBOptions opts) { return parse_extra_options(opts.extra_options); }
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();

@@ -76,7 +76,7 @@ typedef struct {
 } DBOptions;
 
 // OpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
-void OpenHook(const DBOptions opts);
+DBStatus OpenHook(const DBOptions opts);
 
 // Create a new cache with the specified size.
 DBCache* DBNewCache(uint64_t size);
