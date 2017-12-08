@@ -35,11 +35,8 @@ void parse_extra_options(const DBSlice s) {
             << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
 }
 
-Hooks* GetCCLHooks() {
-  auto ret = new Hooks();
-  ret->options_hook = &parse_extra_options;
-  return ret;
-}
+// OpenHook parses the extra_options field of DBOptions.
+void OpenHook(const DBOptions opts) { parse_extra_options(opts.extra_options); }
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();

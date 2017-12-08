@@ -62,17 +62,9 @@ typedef struct DBCache DBCache;
 typedef struct DBEngine DBEngine;
 typedef struct DBIterator DBIterator;
 
-// Hooks are set by CCL code and called from OSS code.
-typedef void (*options_fn)(const DBSlice);
-
-typedef struct {
-  options_fn options_hook;
-} Hooks;
-
 // DBOptions contains local database options.
 typedef struct {
   DBCache* cache;
-  Hooks* hooks;
   uint64_t block_size;
   uint64_t wal_ttl_seconds;
   bool logging_enabled;
@@ -82,6 +74,10 @@ typedef struct {
   bool must_exist;
   DBSlice extra_options;
 } DBOptions;
+
+// OpenHook is called at the beginning of DBImpl::Open. It can be implemented
+// in CCL code.
+void OpenHook(const DBOptions opts);
 
 // Create a new cache with the specified size.
 DBCache* DBNewCache(uint64_t size);

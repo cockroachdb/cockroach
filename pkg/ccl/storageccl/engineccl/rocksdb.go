@@ -32,14 +32,6 @@ import (
 // #include <libroachccl.h>
 import "C"
 
-func init() {
-	engine.DBHookInitializer = setupCCLHooks
-}
-
-func setupCCLHooks() engine.DBHooks {
-	return engine.DBHooks(unsafe.Pointer(C.GetCCLHooks()))
-}
-
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified
 // start and end keys and computes the enginepb.MVCCStats for it.
 func VerifyBatchRepr(
