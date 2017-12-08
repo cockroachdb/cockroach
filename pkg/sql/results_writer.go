@@ -146,7 +146,9 @@ type ResultsGroup interface {
 type StatementResult interface {
 	// BeginResult should be called prior to any of the other methods.
 	// TODO(andrei): remove BeginResult and SetColumns, and have
-	// NewStatementResult() take in a tree.Statement
+	// NewStatementResult() take in a tree.Statement. But that might not work
+	// because a statement's tag might depend on the state that it's being
+	// executed in?
 	BeginResult(stmt tree.Statement)
 	// GetPGTag returns the PGTag of the statement passed into BeginResult.
 	PGTag() string
@@ -156,7 +158,11 @@ type StatementResult interface {
 	// SetColumns should be called after BeginResult and before AddRow if the
 	// StatementType is tree.Rows.
 	SetColumns(columns sqlbase.ResultColumns)
-	// AddRow takes the passed in row and adds it to the current result.
+	// AddRow takes the passed in row and adds it to the current result. If an
+	// error is returned, it is a communication error; in this case the only
+	// further allowed call on the ResultWriter set of interfaces is
+	// ResultsGroup.Close(). In particular, StatementResult.CloseResult() cannot
+	// be called.
 	AddRow(ctx context.Context, row tree.Datums) error
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
@@ -170,6 +176,24 @@ type StatementResult interface {
 	// CloseResult cannot be called unless there's a corresponding BeginResult
 	// prior.
 	CloseResult() error
+
+	// CloseResultWithError sends a query execution error to the client. The
+	// StatementResult is also closed and no further results can be sent.
+	//
+	// err can be nil, in which case this behaves like CloseResult().
+	//
+	// WIP(andrei): this is supposed to replace CloseResult().
+	CloseResultWithError(err error) error
+
+	// SetResultsDelivered takes a callback that will be called once all the
+	// results have been delivered to the client. This is used by SQL to
+	// unregister queries from a registry of running queries.
+	//
+	// This has to be called before CloseResult() is called.
+	//
+	// This can be called multiple times, each time overwriting the previous
+	// value. The callback can be nil, in which case nothing will be called.
+	SetResultsDeliveredCallback(callback func())
 }
 
 type bufferedWriter struct {
@@ -184,6 +208,8 @@ type bufferedWriter struct {
 	// currentResult and resultInProgress spans a statement.
 	currentResult    Result
 	resultInProgress bool
+
+	deliveredCallback func()
 }
 
 func newBufferedWriter(acc mon.BoundAccount) *bufferedWriter {
@@ -225,6 +251,9 @@ func (b *bufferedWriter) Close() {
 	b.pastResults = append(b.pastResults, b.currentGroupResults...)
 	b.currentGroupResults = nil
 	b.resultInProgress = false
+}
+func (b *bufferedWriter) SetResultsDeliveredCallback(callback func()) {
+	b.deliveredCallback = callback
 }
 
 // Flush implements the ResultsGroup interface.
@@ -282,6 +311,11 @@ func (b *bufferedWriter) RowsAffected() int {
 	return b.currentResult.RowsAffected
 }
 
+// CloseResultWithError implements the StatementResult interface.
+func (b *bufferedWriter) CloseResultWithError(err error) error {
+	panic("!!! unimplemented")
+}
+
 // CloseResult implements the StatementResult interface.
 func (b *bufferedWriter) CloseResult() error {
 	if !b.resultInProgress {
@@ -289,6 +323,11 @@ func (b *bufferedWriter) CloseResult() error {
 	}
 	b.currentGroupResults = append(b.currentGroupResults, b.currentResult)
 	b.resultInProgress = false
+	// bufferedWriter doesn't have a notion of results delivery; pretend that
+	// they're delivered as soon as they're received.
+	if b.deliveredCallback != nil {
+		b.deliveredCallback()
+	}
 	return nil
 }
 

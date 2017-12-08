@@ -106,14 +106,19 @@ type stmtBuf struct {
 
 		// batches contains the elements of the buffer.
 		batches []queryStrOrPreparedStmt
+
 		// startPos indicates the index of the first statement currently in batches
 		// relative to the start of the connection.
+		// TODO(andrei): I think this is only accessed by the reader, and thus can
+		// be taken out of mu.
 		startPos queryStrPos
-		// curPos is the current position of the cursor going through the statements.
-		// At any time, curPos indicates the position of the statement to be returned
-		// by curStmt().
-		curPos cursorPosition
 	}
+	// curPos is the current position of the cursor going through the statements.
+	// At any time, curPos indicates the position of the statement to be returned
+	// by curStmt().
+	// curPos is not protected by mu because it's only accessed by the single
+	// reader.
+	curPos cursorPosition
 }
 
 // queryStrOrPreparedStmt represents an element of the stmtBuf: either a query
@@ -188,15 +193,16 @@ func (buf *stmtBuf) Close() {
 	buf.mu.Unlock()
 }
 
-// push adds a query string to the end of the buffer. If a curStmt() call was
-// blocked waiting for this query string to arrive, it will be woken up.
-func (buf *stmtBuf) push(ctx context.Context, stmts tree.StatementList) {
+// pushQueryStr adds an element to the end of the buffer. If a curStmt()
+// call was blocked waiting for this query string to arrive, it will be woken
+// up.
+func (buf *stmtBuf) push(ctx context.Context, elem queryStrOrPreparedStmt) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if buf.mu.closed {
 		log.Fatal(ctx, "cannot push after Close()")
 	}
-	buf.mu.queryStrings = append(buf.mu.queryStrings, stmts)
+	buf.mu.batches = append(buf.mu.batches, elem)
 	buf.mu.cond.Signal()
 }
 
@@ -209,15 +215,15 @@ func (buf *stmtBuf) push(ctx context.Context, stmts tree.StatementList) {
 //
 // If the buffer has previously been Close()d, or is closed while this is
 // blocked, io.EOF is returned.
-func (buf *stmtBuf) curStmt(ctx context.Context) (tree.Statement, cursorPosition, error) {
+func (buf *stmtBuf) curStmt(ctx context.Context) (queryOrPreparedStmt, cursorPosition, error) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	for {
 		if buf.mu.closed {
 			return queryOrPreparedStmt{}, cursorPosition{}, io.EOF
 		}
-		curPos := buf.mu.curPos
-		qsIdx, err := buf.translateQueryStrPosLocked(curPos.queryStrPos)
+		curPos := buf.curPos
+		batchIdx, err := buf.translateQueryStrPosLocked(curPos.queryStrPos)
 		if err != nil {
 			return queryOrPreparedStmt{}, cursorPosition{}, err
 		}
@@ -226,7 +232,7 @@ func (buf *stmtBuf) curStmt(ctx context.Context) (tree.Statement, cursorPosition
 			if int(curPos.stmtIdx) >= batch.length() {
 				log.Fatalf(ctx, "corrupt cursor: %s", curPos)
 			}
-			return buf.mu.queryStrings[qsIdx][curPos.stmtIdx], curPos, nil
+			return batch.get(curPos.stmtIdx), curPos, nil
 		}
 		if (batchIdx != len(buf.mu.batches)) || (curPos.stmtIdx != 0) {
 			return queryOrPreparedStmt{}, cursorPosition{}, errors.Errorf(
@@ -237,12 +243,36 @@ func (buf *stmtBuf) curStmt(ctx context.Context) (tree.Statement, cursorPosition
 	}
 }
 
+// nextPos takes a position and returns the position of the next statement in
+// the buffer.
+func (buf *stmtBuf) nextPos(pos cursorPosition) (cursorPosition, error) {
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	if (pos.queryStrPos < buf.mu.startPos) ||
+		(int(pos.queryStrPos) >= int(buf.mu.startPos)+len(buf.mu.batches)) {
+		return invalidPos, errors.Errorf("pos not in buffer: %d. Buffer starts from: %d and has length: %d.",
+			pos.queryStrPos, buf.mu.startPos, len(buf.mu.batches))
+	}
+	if int(pos.stmtIdx) == buf.mu.batches[pos.queryStrPos].length()-1 {
+		// We were positioned on the last statement in a batch. Time to advance to
+		// the next one.
+		return cursorPosition{
+			queryStrPos: pos.queryStrPos + 1,
+			stmtIdx:     0,
+		}, nil
+	}
+	return cursorPosition{
+		queryStrPos: pos.queryStrPos,
+		stmtIdx:     pos.stmtIdx + 1,
+	}, nil
+}
+
 // translateQueryStrPosLocked translates an absolute position of a query string
 // (counting from the connection start) to the index of the respective query
 // string among the query strings currently buffered in buf (so, it returns an
 // index relative to the start of the buffer).
 //
-// Attempting to translate a position that's below buf.startPos returns an
+// Attempting to translate a position that's below buf.mu.startPos returns an
 // error.
 func (buf *stmtBuf) translateQueryStrPosLocked(pos queryStrPos) (int, error) {
 	if pos < buf.mu.startPos {
@@ -266,16 +296,16 @@ func (buf *stmtBuf) ltrim(ctx context.Context, pos cursorPosition) {
 		log.Fatalf(ctx, "invalid ltrim query string position: %s. buf starting at: %d",
 			pos, buf.mu.startPos)
 	}
-	if buf.mu.curPos.compare(pos) < 0 {
+	if buf.curPos.compare(pos) < 0 {
 		log.Fatalf(ctx, "invalid ltrim position: %s when cursor is: %s",
-			pos, buf.mu.curPos)
+			pos, buf.curPos)
 	}
 	// Remove query strings one by one.
 	for {
-		if (len(buf.mu.queryStrings) == 0) || (buf.mu.startPos == pos.queryStrPos) {
+		if (len(buf.mu.batches) == 0) || (buf.mu.startPos == pos.queryStrPos) {
 			break
 		}
-		buf.mu.queryStrings = buf.mu.queryStrings[1:]
+		buf.mu.batches = buf.mu.batches[1:]
 		buf.mu.startPos++
 	}
 }
@@ -286,17 +316,17 @@ func (buf *stmtBuf) ltrim(ctx context.Context, pos cursorPosition) {
 func (buf *stmtBuf) advanceOne(ctx context.Context) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
-	curBatchIdx, err := buf.translateQueryStrPosLocked(buf.mu.curPos.queryStrPos)
+	curBatchIdx, err := buf.translateQueryStrPosLocked(buf.curPos.queryStrPos)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
-	if int(buf.mu.curPos.stmtIdx) == len(buf.mu.queryStrings[curBatchIdx])-1 {
-		// We were positioned on the last statement in a query string. Time to
-		// advance to the next query string.
-		buf.mu.curPos.queryStrPos++
-		buf.mu.curPos.stmtIdx = 0
+	if int(buf.curPos.stmtIdx) == buf.mu.batches[curBatchIdx].length()-1 {
+		// We were positioned on the last statement in a batch. Time to advance to
+		// the next one.
+		buf.curPos.queryStrPos++
+		buf.curPos.stmtIdx = 0
 	} else {
-		buf.mu.curPos.stmtIdx++
+		buf.curPos.stmtIdx++
 	}
 }
 
@@ -306,10 +336,8 @@ func (buf *stmtBuf) advanceOne(ctx context.Context) {
 // The statement over which the cursor will be positioned when this returns may
 // not be in the buffer yet.
 func (buf *stmtBuf) seekToNextQueryStr() {
-	buf.mu.Lock()
-	buf.mu.curPos.stmtIdx = 0
-	buf.mu.curPos.queryStrPos++
-	buf.mu.Unlock()
+	buf.curPos.stmtIdx = 0
+	buf.curPos.queryStrPos++
 }
 
 // rewind resets the buffer's position to pos.
@@ -319,7 +347,7 @@ func (buf *stmtBuf) rewind(ctx context.Context, pos cursorPosition) {
 	if pos.queryStrPos < buf.mu.startPos {
 		log.Fatalf(ctx, "attempting to rewind below buffer start")
 	}
-	buf.mu.curPos = pos
+	buf.curPos = pos
 }
 
 // clientComm is the interface used by the ConnExecutor for creating results to
@@ -381,8 +409,7 @@ type clientComm interface {
 	flush() error
 }
 
-// WIP(andrei)
-var _ clientComm
+var invalidPos = cursorPosition{queryStrPos: -1, stmtIdx: -1}
 
 // clientLock is an interface returned by clientComm.lockCommunication(). It
 // represents a lock on the delivery of results to a SQL client. While such a
@@ -400,6 +427,8 @@ type clientLock interface {
 	// clientPos returns the position of the latest statement for which results
 	// have been sent to the client. The position is relative to the start of the
 	// connection.
+	// If no results have been delivered to the client, invalidPos is returned
+	// (which is smaller than any valid position).
 	clientPos() cursorPosition
 
 	// rtrim iterates backwards through the results and drops all results with

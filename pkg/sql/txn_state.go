@@ -220,6 +220,10 @@ const (
 	// txnFinished means that a transaction has just finished.
 	txnFinished
 
+	// txnReleased a `RELEASE SAVEPOINT cockroach_restart` statement ran
+	// successfully.
+	txnReleased
+
 	// txnRestarted means that a transaction has just been restarted.
 	txnRestarted
 
@@ -259,6 +263,13 @@ type errFields struct {
 	// TODO(andrei): Figure out something more restricted to use as the tag, and
 	// do the same for the ResultWriter interface.
 	stmt tree.Statement
+
+	// rewCap is optional. It may be filled in case err is retriable. If it is
+	// filled in, then it guarantees that we can rewind to the beginning of the
+	// current transaction (and so we can auto-retry). If it's not filled in, then
+	// the state machine needs to check whether rewinding is possible.
+	// If filled, then the state machine has to call rewindAndUnblock() on it.
+	rewCap *rewindCapability
 }
 
 // txnStartingFields contains inputEvent fields specific to
@@ -279,7 +290,7 @@ type txnStartingFields struct {
 // noTopLevelTransition events.
 type noTopLevelTransitionFields struct {
 	// retryIntent, if != retryIntentUnknown, informs the state machine that the
-	// client has opted into the client-directed retries mechanism.  Setting this
+	// client has opted into the client-directed retries mechanism. Setting this
 	// is only valid when the txn is in the Open state. A value of
 	// retryIntentNotSet is never valid here - once a retry intent is set, in
 	// cannot be taken back - the client cannot opt out of the client-directed
@@ -320,9 +331,10 @@ const (
 	// to the module delivering results to the client.
 	dontFlushResult flushResultOpt = iota
 	// flushSpecialTxnPrefix means that all the results produced so far can be
-	// delivered to the client; we're never going to need to rewind past the
-	// current point. This is set, for example, after a BEGIN statement - the
-	// BEGIN itself is never executed twice, so its results can be flushed asap.
+	// delivered to the client; we're never going to need to rewind beyond (and
+	// including to) the current point. This is set, for example, after a BEGIN
+	// statement - the BEGIN itself is never executed twice, so its results can be
+	// flushed asap.
 	flushSpecialTxnPrefix
 )
 
@@ -352,6 +364,10 @@ func makeBeginTxnEvent(typ txnType, firstStmtPos cursorPosition) inputEvent {
 
 func makeTxnFinishedEvent() inputEvent {
 	return inputEvent{typ: txnFinished}
+}
+
+func makeTxnReleasedEvent() inputEvent {
+	return inputEvent{typ: txnReleased}
 }
 
 func makeTxnRestartEvent(firstStmtPos cursorPosition) inputEvent {
@@ -706,7 +722,11 @@ type transitionCtx struct {
 	// have a span.
 	tracer opentracing.Tracer
 
-	DefaultIsolationLevel enginepb.IsolationType
+	// defaultIsolationLevel is the isolation level used for new transactions.
+	// It's a pointer for convinience: it will point into sessionData so that
+	// sessionData can change without the transitionCtx needing to be
+	// reconstructed.
+	defaultIsolationLevel *enginepb.IsolationType
 }
 
 // Here's a list of all the supported transitions. Note that this only talks
@@ -740,6 +760,8 @@ type transitionCtx struct {
 // _ - undefined value
 // x - any value when present on the left-hand side, the value from the lhs when
 //     present on the rhs.
+//
+// TODO(andrei): Handle the CommitWait state!
 
 // performStateTransition deals with maintaining the transaction state after a
 // statement has been executed. It performs the state transition indicated by
@@ -802,7 +824,7 @@ func (ts *txnState2) performStateTransition(
 				ctx,
 				ev.txnStartingDetails.txnType,
 				tranCtx.clock.PhysicalTime(), /* sqlTimestamp */
-				tranCtx.DefaultIsolationLevel,
+				*tranCtx.defaultIsolationLevel,
 				roachpb.NormalUserPriority,
 				ev.txnStartingDetails.firstStmtPos,
 				rew,
@@ -838,8 +860,14 @@ func (ts *txnState2) performStateTransition(
 			// b) move to RestartWait, expecting the client to perform the
 			// client-directed retry protocol, or
 			// c) move to Aborted.
-
-			rewCap, canAutoRetry := rew.getRewindTxnCapability()
+			var rewCap rewindCapability
+			var canAutoRetry bool
+			if ev.errDetails.rewCap != nil {
+				canAutoRetry = true
+				rewCap = *ev.errDetails.rewCap
+			} else {
+				rewCap, canAutoRetry = rew.getRewindTxnCapability()
+			}
 			if canAutoRetry {
 				// We leave the transaction in Open. In particular, we don't move to
 				// RestartWait, as there'd be nothing to move us back from RestartWait

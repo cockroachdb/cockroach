@@ -314,6 +314,8 @@ type ExecutorTestingKnobs struct {
 	// optionally change their results. The filter function is invoked after each
 	// statement has been executed.
 	StatementFilter StatementFilter
+	// WIP(andrei): StatementFilter2 is replacing StatementFilter.
+	StatementFilter2 StatementFilter2
 
 	// BeforePrepare is called by the Executor before preparing any statement. It
 	// gives access to the planner that will be used to do the prepare. If any of
@@ -1806,7 +1808,10 @@ func (e *Executor) execStmtInOpenTxn(
 		// We're not executing in parallel. We can use the cached planner on the
 		// session.
 		p = &session.planner
-		resetPlanner(p, session, txnState.mu.txn, e.cfg.ClusterID(), e.cfg.NodeID.Get(), e.reCache)
+		resetPlanner(
+			p, session,
+			txnState.mu.txn, session.evalCtx(),
+			e.cfg.ClusterID(), e.cfg.NodeID.Get(), e.reCache)
 	}
 	p.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	p.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
@@ -2165,6 +2170,8 @@ func shouldUseDistSQL(
 //
 // cols represents the columns of the result rows. Should be nil if
 // stmt.AST.StatementType() != tree.Rows.
+//
+// If an error is returned, it is to be considered a query execution error.
 func initStatementResult(res StatementResult, stmt Statement, cols sqlbase.ResultColumns) error {
 	stmtAst := stmt.AST
 	res.BeginResult(stmtAst)

@@ -117,7 +117,6 @@ const flushSet bool = true
 
 var _ = noFlush
 
-var invalidPos = cursorPosition{queryStrPos: -1, stmtIdx: -1}
 var noRewind = cursorPosition{queryStrPos: -1, stmtIdx: -1}
 
 type testContext struct {
@@ -314,12 +313,13 @@ func TestTransitions(t *testing.T) {
 		stmtIdx:     20,
 	}
 	testCon := makeTestContext()
+	isoLevel := enginepb.SERIALIZABLE
 	tranCtx := transitionCtx{
 		db:                    testCon.mockDB,
 		nodeID:                roachpb.NodeID(5),
 		clock:                 testCon.clock,
 		tracer:                tracing.NewTracer(),
-		DefaultIsolationLevel: enginepb.SERIALIZABLE,
+		defaultIsolationLevel: &isoLevel,
 		connMon:               &testCon.mon,
 	}
 

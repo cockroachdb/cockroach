@@ -1221,6 +1221,17 @@ func (c *v3Conn) RowsAffected() int {
 	return c.streamingState.rowsAffected
 }
 
+// CloseResultWithError implements the StatementResult interface.
+func (c *v3Conn) CloseResultWithError(err error) error {
+	panic("!!! not implemented")
+}
+
+// SetResultsDeliveredCallback implements the StatementResult interface.
+func (c *v3Conn) SetResultsDeliveredCallback(callback func()) {
+	panic("!!! not implemented")
+	// WIP(andrei): see calls to c.session.FinishPlan() in this file.
+}
+
 // CloseResult implements the StatementResult interface.
 // It sends a "command complete" server message.
 func (c *v3Conn) CloseResult() error {
