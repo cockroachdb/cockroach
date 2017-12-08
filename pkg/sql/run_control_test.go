@@ -88,6 +88,11 @@ func TestCancelSelectQuery(t *testing.T) {
 
 }
 
+// NOTE(andrei): This test less than great; it verifies only incidental
+// behavior, namely that canceling a query in fact cancels the context of the
+// whole transaction, which causes other parallel queries to also get canceled.
+// It also relies on the insertNode to notice a cancelation, although there's no
+// contract that says the node needs to do that.
 func TestCancelParallelQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const queryToBlock = "INSERT INTO nums VALUES (1) RETURNING NOTHING;"
@@ -118,7 +123,7 @@ func TestCancelParallelQuery(t *testing.T) {
 								<-sem
 							}
 						},
-						AfterExecute: func(ctx context.Context, stmt string, resultWriter sql.StatementResult, err error) {
+						AfterExecute: func(ctx context.Context, stmt string, err error) {
 							// if queryToBlock
 							if strings.Contains(stmt, "(1)") {
 								// Ensure queryToBlock errored out with the cancellation error.

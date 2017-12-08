@@ -223,7 +223,7 @@ type runner struct {
 
 func (r *runner) newRootSession(ctx context.Context) *sql.Session {
 	args := sql.SessionArgs{User: security.NodeUser}
-	s := sql.NewSession(ctx, args, r.sqlExecutor, nil /* remote */, r.memMetrics, nil /* conn */)
+	s := sql.NewSession(ctx, args, r.sqlExecutor, r.memMetrics, nil /* conn */)
 	s.StartUnlimitedMonitor()
 	return s
 }

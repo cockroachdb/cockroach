@@ -690,4 +690,10 @@ in the history of the cluster.`,
 When no node ID is specified, also lists all nodes that have been decommissioned
 in the history of the cluster.`,
 	}
+
+	// !!!
+	UseFrontendV2 = FlagInfo{
+		Name:        "use-frontend-v2",
+		Description: CertsDir.Description,
+	}
 )

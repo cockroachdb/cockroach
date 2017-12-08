@@ -79,7 +79,7 @@ func TestStmtBuf(t *testing.T) {
 
 	// Check that, while we don't manually advance the cursor, we keep getting the
 	// same statement.
-	expPos := cmdPos(0)
+	expPos := CmdPos(0)
 	for i := 0; i < 2; i++ {
 		cmd, pos, err := buf.curCmd(ctx)
 		if err != nil {
@@ -152,7 +152,7 @@ func TestStmtBufSignal(t *testing.T) {
 		_ = buf.Push(ctx, ExecStmt{Stmt: s1})
 	}()
 
-	expPos := cmdPos(0)
+	expPos := CmdPos(0)
 	cmd, pos, err := buf.curCmd(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +179,7 @@ func TestStmtBufLtrim(t *testing.T) {
 	// Advance the cursor so that we can trim.
 	buf.advanceOne(ctx)
 	buf.advanceOne(ctx)
-	trimPos := cmdPos(2)
+	trimPos := CmdPos(2)
 	buf.ltrim(ctx, trimPos)
 	if l := len(buf.mu.data); l != 3 {
 		t.Fatalf("expected 3 left, got: %d", l)
@@ -263,7 +263,7 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 	assertPrepareStmt(t, cmd, "p2")
 
 	// Rewind to the first prepared stmt.
-	buf.rewind(ctx, cmdPos(1))
+	buf.rewind(ctx, CmdPos(1))
 	cmd, _, err = buf.curCmd(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -281,14 +281,23 @@ func TestStmtBufBatching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	buf.StartBatch()
+
+	// Start a new batch.
+	mustPush(ctx, t, buf, Sync{})
+
 	mustPush(ctx, t, buf, ExecStmt{Stmt: s1})
 	mustPush(ctx, t, buf, ExecStmt{Stmt: s1})
-	buf.StartBatch()
+
+	// Start a new batch.
+	mustPush(ctx, t, buf, Sync{})
+
 	mustPush(ctx, t, buf, ExecStmt{Stmt: s1})
 	mustPush(ctx, t, buf, ExecStmt{Stmt: s1})
 	mustPush(ctx, t, buf, ExecStmt{Stmt: s1})
-	buf.StartBatch()
+
+	// Start a new batch.
+	mustPush(ctx, t, buf, Sync{})
+
 	mustPush(ctx, t, buf, ExecStmt{Stmt: s1})
 
 	// Go to 2nd batch.
@@ -299,8 +308,8 @@ func TestStmtBufBatching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pos != cmdPos(2) {
-		t.Fatalf("expected pos to be %d, got: %d", 2, pos)
+	if pos != CmdPos(3) {
+		t.Fatalf("expected pos to be %d, got: %d", 3, pos)
 	}
 
 	// Go to 3rd batch.
@@ -311,13 +320,13 @@ func TestStmtBufBatching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pos != cmdPos(5) {
-		t.Fatalf("expected pos to be %d, got: %d", 5, pos)
+	if pos != CmdPos(7) {
+		t.Fatalf("expected pos to be %d, got: %d", 7, pos)
 	}
 
 	// Async start a 4th batch; that will unblock the seek below.
 	go func() {
-		buf.StartBatch()
+		mustPush(ctx, t, buf, Sync{})
 		_ = buf.Push(ctx, ExecStmt{Stmt: s1})
 	}()
 
@@ -329,7 +338,7 @@ func TestStmtBufBatching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pos != cmdPos(6) {
-		t.Fatalf("expected pos to be %d, got: %d", 6, pos)
+	if pos != CmdPos(9) {
+		t.Fatalf("expected pos to be %d, got: %d", 9, pos)
 	}
 }

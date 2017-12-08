@@ -71,6 +71,7 @@ const (
 	TempDirsRecordFilename                = "temp-dirs-record.txt"
 	defaultEventLogEnabled                = true
 	defaultEnableWebSessionAuthentication = false
+	defaultUseFrontendV2                  = true
 
 	maximumMaxClockOffset = 5 * time.Second
 
@@ -234,6 +235,9 @@ type Config struct {
 	// the Admin API's HTTP endpoints.
 	EnableWebSessionAuthentication bool
 
+	// !!!
+	UseFrontendV2 bool
+
 	enginesCreated bool
 }
 
@@ -366,6 +370,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
 		EventLogEnabled:                defaultEventLogEnabled,
 		EnableWebSessionAuthentication: defaultEnableWebSessionAuthentication,
+		UseFrontendV2:                  defaultUseFrontendV2,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
