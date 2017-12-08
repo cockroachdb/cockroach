@@ -62,6 +62,7 @@ type tableReader struct {
 	fetcher sqlbase.MultiRowFetcher
 	alloc   sqlbase.DatumAlloc
 
+	started bool
 	isCheck bool
 	// fetcherResultToColIdx maps RowFetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
@@ -73,6 +74,7 @@ type tableReader struct {
 }
 
 var _ Processor = &tableReader{}
+var _ RowSource = &tableReader{}
 
 // newTableReader creates a tableReader.
 func newTableReader(
@@ -207,9 +209,8 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	ctx, span := processorSpan(ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
-	txn := tr.flowCtx.txn
-	if txn == nil {
-		log.Fatalf(ctx, "tableReader outside of txn")
+	if tr.out.output == nil {
+		panic("output RowReceiver not initialized for emitting rows")
 	}
 
 	log.VEventf(ctx, 1, "starting")
@@ -217,62 +218,20 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting")
 	}
 
-	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
-	if err := tr.fetcher.StartScan(
-		ctx, txn, tr.spans, true /* limit batches */, tr.limitHint, false, /* traceKV */
-	); err != nil {
-		log.Errorf(ctx, "scan error: %s", err)
-		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-		tr.out.Close()
-		return
+	for {
+		row, meta := tr.Next(ctx)
+		// Emit the row; stop if no more rows are needed.
+		if row != nil || meta.Err != nil {
+			status := tr.out.output.Push(row, meta)
+			if status != NeedMoreRows {
+				break
+			}
+		}
+		if row == nil || tr.out.rowIdx == tr.out.maxRowIdx {
+			break
+		}
 	}
 
-	for {
-		var row sqlbase.EncDatumRow
-		var err error
-		if !tr.isCheck {
-			row, _, _, err = tr.fetcher.NextRow(ctx)
-		} else {
-			// If we are running a scrub physical check, we use a specialized
-			// procedure that runs additional checks while fetching the row
-			// data.
-			row, err = tr.fetcher.NextRowWithErrors(ctx)
-			// There are four cases that can happen after NextRowWithErrors:
-			// 1) We encounter a ScrubError. We do not propagate the error up,
-			//    but instead generate and emit a row for the final results.
-			// 2) No errors were found. We simply continue scanning the data
-			//    and discard the row values, as they are not needed for any
-			//    results.
-			// 3) A non-scrub error was encountered. This was not considered a
-			//    physical data error, and so we propagate this to the user
-			//    immediately.
-			// 4) There was no error or row data. This signals that there is
-			//    no more data to scan.
-			//
-			// NB: Cases 3 and 4 are handled further below, in the standard
-			// table scanning code path.
-			if v, ok := err.(*scrub.Error); ok {
-				row, err = tr.generateScrubErrorRow(row, v)
-			} else if err == nil && row != nil {
-				continue
-			}
-		}
-		if err != nil || row == nil {
-			if err != nil {
-				err = scrub.UnwrapScrubError(err)
-				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-			}
-			break
-		}
-		// Emit the row; stop if no more rows are needed.
-		consumerStatus, err := tr.out.EmitRow(ctx, row)
-		if err != nil || consumerStatus != NeedMoreRows {
-			if err != nil {
-				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-			}
-			break
-		}
-	}
 	tr.sendMisplannedRangesMetadata(ctx)
 	sendTraceData(ctx, tr.out.output)
 	tr.out.Close()
@@ -346,4 +305,75 @@ func (tr *tableReader) prettyPrimaryKeyValues(
 	}
 	primaryKeyValues.WriteByte(')')
 	return primaryKeyValues.String()
+}
+
+func (tr *tableReader) Types() []sqlbase.ColumnType {
+	return tr.out.outputTypes
+}
+
+func (tr *tableReader) Next(ctx context.Context) (sqlbase.EncDatumRow, ProducerMetadata) {
+	if !tr.started {
+		tr.started = true
+
+		if tr.flowCtx.txn == nil {
+			log.Fatalf(ctx, "tableReader outside of txn")
+		}
+
+		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
+		if err := tr.fetcher.StartScan(
+			ctx, tr.flowCtx.txn, tr.spans, true /* limit batches */, tr.limitHint, false, /* traceKV */
+		); err != nil {
+			log.Errorf(ctx, "scan error: %s", err)
+			return nil, ProducerMetadata{Err: err}
+		}
+	}
+
+	for {
+		var row sqlbase.EncDatumRow
+		var err error
+		if !tr.isCheck {
+			row, _, _, err = tr.fetcher.NextRow(ctx)
+		} else {
+			// If we are running a scrub physical check, we use a specialized
+			// procedure that runs additional checks while fetching the row
+			// data.
+			row, err = tr.fetcher.NextRowWithErrors(ctx)
+			// There are four cases that can happen after NextRowWithErrors:
+			// 1) We encounter a ScrubError. We do not propagate the error up,
+			//    but instead generate and emit a row for the final results.
+			// 2) No errors were found. We simply continue scanning the data
+			//    and discard the row values, as they are not needed for any
+			//    results.
+			// 3) A non-scrub error was encountered. This was not considered a
+			//    physical data error, and so we propagate this to the user
+			//    immediately.
+			// 4) There was no error or row data. This signals that there is
+			//    no more data to scan.
+			//
+			// NB: Cases 3 and 4 are handled further below, in the standard
+			// table scanning code path.
+			if v, ok := err.(*scrub.Error); ok {
+				row, err = tr.generateScrubErrorRow(row, v)
+			} else if err == nil && row != nil {
+				continue
+			}
+		}
+		if row == nil || err != nil {
+			return nil, ProducerMetadata{Err: scrub.UnwrapScrubError(err)}
+		}
+
+		outRow, status, err := tr.out.ProcessRow(ctx, row)
+		if outRow == nil && err == nil && status == NeedMoreRows {
+			continue
+		}
+		return outRow, ProducerMetadata{Err: err}
+	}
+}
+
+func (tr *tableReader) ConsumerDone() {
+	// TODO(peter): what to do here?
+}
+
+func (tr *tableReader) ConsumerClosed() {
+	// TODO(peter): what to do here?
 }
