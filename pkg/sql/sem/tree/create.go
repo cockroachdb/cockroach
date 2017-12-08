@@ -740,6 +740,10 @@ type PartitionBy struct {
 
 // Format implements the NodeFormatter interface.
 func (node *PartitionBy) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node == nil {
+		buf.WriteString(` PARTITION BY NOTHING`)
+		return
+	}
 	if len(node.List) > 0 {
 		buf.WriteString(` PARTITION BY LIST (`)
 	} else if len(node.Range) > 0 {
