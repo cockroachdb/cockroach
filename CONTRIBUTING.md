@@ -96,7 +96,7 @@ be run as shown in the [README](README.md).
 
 ## Style Guide
 
-See our separate [style guide](STYLE.md) document.
+See our separate [style guide](docs/style.md) document.
 
 ## Commit Messages
 
