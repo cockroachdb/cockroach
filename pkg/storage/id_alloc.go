@@ -81,15 +81,19 @@ func newIDAllocator(
 }
 
 // Allocate allocates a new ID from the global KV DB.
-func (ia *idAllocator) Allocate() (uint32, error) {
+func (ia *idAllocator) Allocate(ctx context.Context) (uint32, error) {
 	ia.once.Do(ia.start)
 
-	id := <-ia.ids
-	// when the channel is closed, the zero value is returned.
-	if id == 0 {
-		return id, errors.Errorf("could not allocate ID; system is draining")
+	select {
+	case id := <-ia.ids:
+		// when the channel is closed, the zero value is returned.
+		if id == 0 {
+			return id, errors.Errorf("could not allocate ID; system is draining")
+		}
+		return id, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	}
-	return id, nil
 }
 
 func (ia *idAllocator) start() {
