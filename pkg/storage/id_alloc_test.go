@@ -56,7 +56,7 @@ func TestIDAllocator(t *testing.T) {
 	for i := 0; i < maxI; i++ {
 		go func() {
 			for j := 0; j < maxJ; j++ {
-				id, err := idAlloc.Allocate()
+				id, err := idAlloc.Allocate(context.Background())
 				errChan <- err
 				allocd <- id
 			}
@@ -111,7 +111,7 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
-	value, err := idAlloc.Allocate()
+	value, err := idAlloc.Allocate(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 		t.Errorf("failed to create IDAllocator: %v", err)
 	}
 
-	firstID, err := idAlloc.Allocate()
+	firstID, err := idAlloc.Allocate(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	// Should be able to get the allocated IDs, and there will be one
 	// background allocateBlock to get ID continuously.
 	for i := 0; i < 8; i++ {
-		id, err := idAlloc.Allocate()
+		id, err := idAlloc.Allocate(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -194,7 +194,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 				errChan <- nil
 			}
 
-			id, err := idAlloc.Allocate()
+			id, err := idAlloc.Allocate(context.Background())
 			errChan <- err
 			allocd <- id
 		}()
@@ -204,6 +204,16 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 	for i := 0; i < routines; i++ {
 		if err := <-errChan; err != nil {
 			t.Fatal(err)
+		}
+	}
+
+	// Attempt a few allocations with a context timeout while allocations are
+	// blocked. All attempts should hit a context deadline exceeded error.
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	for i := 0; i < routines; i++ {
+		id, err := idAlloc.Allocate(ctx)
+		if id != 0 || err != context.DeadlineExceeded {
+			t.Errorf("expected context cancellation, found id=%d, err=%v", id, err)
 		}
 	}
 
@@ -226,7 +236,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 
 	// Check if the following allocations return expected ID.
 	for i := 0; i < routines; i++ {
-		id, err := idAlloc.Allocate()
+		id, err := idAlloc.Allocate(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -254,7 +264,7 @@ func TestAllocateWithStopper(t *testing.T) {
 		return idAlloc
 	}()
 
-	if _, err := idAlloc.Allocate(); !testutils.IsError(err, "system is draining") {
+	if _, err := idAlloc.Allocate(context.Background()); !testutils.IsError(err, "system is draining") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
