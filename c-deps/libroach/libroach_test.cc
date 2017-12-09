@@ -1,5 +1,3 @@
-#include <iostream>
-int main() {
-  std::cout << "Running libroach unittest\n";
-  return 0;
-}
+#include <gtest/gtest.h>
+
+TEST(Libroach, Noop) { ASSERT_TRUE(true); }

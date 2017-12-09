@@ -396,6 +396,7 @@ PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
 LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
+GOOGLETEST_SRC_DIR := $(C_DEPS_DIR)/googletest
 
 HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 
@@ -464,6 +465,7 @@ PROTOBUF_DIR := $(BUILD_DIR)/protobuf
 ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(STDMALLOC_SUFFIX)$(if $(ENABLE_ROCKSDB_ASSERTIONS),_assert)
 SNAPPY_DIR   := $(BUILD_DIR)/snappy
 LIBROACH_DIR := $(BUILD_DIR)/libroach
+GOOGLETEST_DIR := $(BUILD_DIR)/googletest
 # Can't share with protobuf because protoc is always built for the host.
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
@@ -584,12 +586,19 @@ $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(BOOTSTRAP_TARGET)
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
 	cd $(SNAPPY_DIR) && cmake $(CMAKE_FLAGS) $(SNAPPY_SRC_DIR)
 
-$(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
+$(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(GOOGLETEST_DIR)/Makefile $(BOOTSTRAP_TARGET)
 	rm -rf $(LIBROACH_DIR)
 	mkdir -p $(LIBROACH_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/libroach-rebuild. See above for rationale.
 	cd $(LIBROACH_DIR) && cmake $(CMAKE_FLAGS) $(LIBROACH_SRC_DIR) -DCMAKE_BUILD_TYPE=Release
+
+$(GOOGLETEST_DIR)/Makefile: $(C_DEPS_DIR)/googletest-rebuild $(BOOTSTRAP_TARGET)
+	rm -rf $(GOOGLETEST_DIR)
+	mkdir -p $(GOOGLETEST_DIR)
+	@# NOTE: If you change the CMake flags below, bump the version in
+	@# $(C_DEPS_DIR)/googletest-rebuild. See above for rationale.
+	cd $(GOOGLETEST_DIR) && cmake $(CMAKE_FLAGS) $(GOOGLETEST_SRC_DIR)/googletest
 
 # We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
 # having to name the artifact (for .PHONY), which can vary by platform, and so
@@ -624,9 +633,14 @@ libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 libroachccl: $(LIBROACH_DIR)/Makefile libroach
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
+.PHONY: libgtest
+libgtest: $(GOOGLETEST_DIR)/Makefile
+	@$(MAKE) --no-print-directory -C $(GOOGLETEST_DIR)
+
 .PHONY: testlibroach
-testlibroach: $(LIBROACH_DIR)/Makefile
+testlibroach: $(LIBROACH_DIR)/Makefile libgtest
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) check
+
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
 # On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of

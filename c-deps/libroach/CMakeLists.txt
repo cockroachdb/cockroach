@@ -60,38 +60,34 @@ enable_testing()
 
 # Tests executables are named after the source file (eg: libroach_test for libroach_test.cc)
 # Test names are the same as test executables.
-# Assuming no extra dependencies/includes/source files, you can just add your test source
-# to one of the two lists below:
-
-# Tests that link libroach.
 set(tests
   libroach_test.cc
-)
-
-# Tests that link libroachccl.
-set (ccl_tests
   ccl/libroach_ccl_test.cc
 )
-
-set(all_tests ${tests} ${ccl_tests})
 
 # "test" doesn't depend on the actual tests. Let's add a "check" target
 # that depends on all test executables and runs "ctest".
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
-foreach(tsrc ${all_tests})
-  get_filename_component(tname ${tsrc} NAME_WE)
-  add_executable(${tname} ${tsrc})
-  add_test(${tname} ${tname})
-	add_dependencies(check ${tname})
-endforeach(tsrc)
+add_subdirectory(../googletest/googletest
+                 ${CMAKE_BINARY_DIR}/googletest
+                 EXCLUDE_FROM_ALL)
 
 foreach(tsrc ${tests})
-  get_filename_component(tname ${tsrc} NAME_WE)
-  target_link_libraries(${tname} roach)
-endforeach(tsrc)
+  get_filename_component(filename ${tsrc} NAME_WE)
+  get_filename_component(dirname ${tsrc} DIRECTORY)
+  if("${dirname}" STREQUAL "" )
+    set(tname ${filename})
+  else()
+    set(tname ${dirname}_${filename})
+  endif()
 
-foreach(tsrc ${ccl_tests})
-  get_filename_component(tname ${tsrc} NAME_WE)
-  target_link_libraries(${tname} roachccl)
+  add_executable(${tname} ${tsrc})
+  target_include_directories(${tname}
+    PRIVATE ../googletest/googletest/include
+  )
+  target_link_libraries(${tname} roachccl gtest_main)
+
+  add_test(${tname} ${tname})
+  add_dependencies(check ${tname})
 endforeach(tsrc)
