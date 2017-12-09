@@ -89,7 +89,7 @@ foreach(tsrc ${tests})
     PRIVATE ../googletest/googletest/include
     PRIVATE ../rocksdb/include
   )
-  target_link_libraries(${tname} roachccl gtest_main)
+  target_link_libraries(${tname} roachccl gtest_main pthread)
 
   set_target_properties(${tname} PROPERTIES
     CXX_STANDARD 11
