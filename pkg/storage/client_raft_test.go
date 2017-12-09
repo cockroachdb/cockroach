@@ -3635,13 +3635,9 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 		t.Fatal("replica should not be nil for RHS range")
 	}
 
-	// TODO(spencer): Raft messages seem to turn up
-	// occasionally on restart, which initialize the replica, so
-	// this is not a test failure. Not sure how to work around this
-	// problem.
 	// Verify the raft group isn't initialized yet.
 	if repl.IsRaftGroupInitialized() {
-		log.Errorf(context.TODO(), "expected raft group to be uninitialized")
+		t.Fatal("expected raft group to be uninitialized")
 	}
 
 	// Send an increment and verify that initializes the Raft group.

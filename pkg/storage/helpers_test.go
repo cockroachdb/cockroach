@@ -176,6 +176,12 @@ func (s *Store) SetReplicaScannerActive(active bool) {
 	s.setScannerActive(active)
 }
 
+// SetSplitQueueProcessTimeout sets the timeout for processing a replica in the
+// split queue.
+func (s *Store) SetSplitQueueProcessTimeout(dur time.Duration) {
+	s.splitQueue.SetProcessTimeout(dur)
+}
+
 // GetOrCreateReplica passes through to its lowercase sibling.
 func (s *Store) GetOrCreateReplica(
 	ctx context.Context,
@@ -345,6 +351,14 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 		t = w
 	}
 	return t
+}
+
+// PermittingLargeSnapshots returns whether the replica is permitting large
+// snapshots.
+func (r *Replica) PermittingLargeSnapshots() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.permitLargeSnapshots
 }
 
 // GetRaftLogSize returns the raft log size.

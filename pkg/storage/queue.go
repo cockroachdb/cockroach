@@ -302,6 +302,13 @@ func (bq *baseQueue) Disabled() bool {
 	return bq.mu.disabled
 }
 
+// SetProcessTimeout sets the timeout for processing a replica.
+func (bq *baseQueue) SetProcessTimeout(dur time.Duration) {
+	bq.processMu.Lock()
+	bq.processTimeout = dur
+	bq.processMu.Unlock()
+}
+
 // Start launches a goroutine to process entries in the queue. The
 // provided stopper is used to finish processing.
 func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {

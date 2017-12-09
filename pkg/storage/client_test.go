@@ -874,6 +874,11 @@ func (m *multiTestContext) stopStore(i int) {
 
 	m.mu.Lock()
 	m.stoppers[i] = nil
+	// Break the transport breaker for this node so that messages sent between a
+	// store stopping and that store restarting will never remain in-flight in
+	// the transport and end up reaching the store. This has been the cause of
+	// flakiness in the past.
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Break()
 	m.senders[i].RemoveStore(m.stores[i])
 	m.stores[i] = nil
 	m.mu.Unlock()
@@ -905,6 +910,7 @@ func (m *multiTestContext) restartStore(i int) {
 		m.t.Fatal(err)
 	}
 	m.senders[i].AddStore(store)
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Reset()
 	m.mu.Unlock()
 	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, func(ctx context.Context) {
 		now := m.clock.Now()
