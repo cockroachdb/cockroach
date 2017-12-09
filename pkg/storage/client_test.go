@@ -881,6 +881,7 @@ func (m *multiTestContext) stopStore(i int) {
 	m.mu.Lock()
 	m.stoppers[i] = nil
 	m.senders[i].RemoveStore(m.stores[i])
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Break()
 	m.stores[i] = nil
 	m.mu.Unlock()
 }
@@ -914,6 +915,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 		m.t.Fatal(err)
 	}
 	m.senders[i].AddStore(store)
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Reset()
 	m.mu.Unlock()
 	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, func(ctx context.Context) {
 		now := m.clock.Now()

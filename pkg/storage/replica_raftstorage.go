@@ -391,7 +391,19 @@ func (r *Replica) GetSnapshot(
 	defer r.mu.RUnlock()
 	rangeID := r.RangeID
 
-	if r.exceedsDoubleSplitSizeRLocked() {
+	// TODO(nvanbenschoten): We should never block snapshots indefinitely. Doing
+	// so can reduce a range's ability to recover from an under-replicated state
+	// and can cause unavailability even when a majority of replicas remain
+	// live. For instance, if a range gets too large to snapshot and requires a
+	// split in order to do so again, the loss of one up-to-date replica could
+	// cause it to permanently lose quorum.
+	//
+	// For now we still need this check because unbounded snapshots can result
+	// in OOM errors that crash entire nodes. However, once snapshots are
+	// streamed from disk to disk, never needing to buffer in-memory on the
+	// sending or receiving side, we should be able to remove any snapshot size
+	// limit. See #16954 for more.
+	if r.exceedsDoubleSplitSizeRLocked() && !r.mu.permitLargeSnapshots {
 		maxBytes := r.mu.maxBytes
 		size := r.mu.state.Stats.Total()
 		err := errors.Errorf(
