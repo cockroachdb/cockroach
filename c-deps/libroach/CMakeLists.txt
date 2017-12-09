@@ -49,22 +49,56 @@ target_include_directories(roachccl
 )
 target_link_libraries(roachccl roach)
 
-include(CTest)
-enable_testing()
-
-add_executable(encoding_test encoding_test.cc)
-target_include_directories(encoding_test PRIVATE ../rocksdb/include)
-target_link_libraries(encoding_test roach)
-add_test(encoding_test encoding_test)
-
-add_custom_target(check
-  COMMAND ${CMAKE_CTEST_COMMAND} -V
-  DEPENDS encoding_test
-)
-
-set_target_properties(roach roachccl encoding_test PROPERTIES
+set_target_properties(roach roachccl PROPERTIES
   CXX_STANDARD 11
   CXX_STANDARD_REQUIRED YES
   CXX_EXTENSIONS NO
   COMPILE_OPTIONS "-Werror;-Wall;-Wno-sign-compare"
 )
+
+enable_testing()
+
+# Tests executables are named after the source file (eg: libroach_test for libroach_test.cc)
+# Test names are the same as test executables.
+set(tests
+  encoding_test.cc
+  libroach_test.cc
+  ccl/libroach_ccl_test.cc
+)
+
+# "test" doesn't depend on the actual tests. Let's add a "check" target
+# that depends on all test executables and runs "ctest".
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} -V)
+
+add_subdirectory(../googletest/googletest
+                 ${CMAKE_BINARY_DIR}/googletest
+                 EXCLUDE_FROM_ALL)
+
+foreach(tsrc ${tests})
+  get_filename_component(filename ${tsrc} NAME_WE)
+  get_filename_component(dirname ${tsrc} DIRECTORY)
+  if("${dirname}" STREQUAL "" )
+    set(tname ${filename})
+  else()
+    set(tname ${dirname}_${filename})
+  endif()
+
+  # Add a new executable and set includes/libraries/properties.
+  add_executable(${tname} ${tsrc})
+  target_include_directories(${tname}
+    PRIVATE ../googletest/googletest/include
+    PRIVATE ../rocksdb/include
+  )
+  target_link_libraries(${tname} roachccl gtest_main)
+
+  set_target_properties(${tname} PROPERTIES
+    CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+    COMPILE_OPTIONS "-Werror;-Wall;-Wno-sign-compare"
+  )
+
+  # Add the executable to the set of tests run by the "check" target.
+  add_test(${tname} ${tname})
+  add_dependencies(check ${tname})
+endforeach(tsrc)

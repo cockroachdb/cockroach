@@ -14,11 +14,12 @@
 
 #include <cinttypes>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <random>
 #include <vector>
 #include "encoding.h"
 
-int main() {
+TEST(Libroach, Encoding) {
   // clang-format off
   std::vector<uint32_t> cases32{
     0, 1, 2, 3,
@@ -46,18 +47,13 @@ int main() {
 
   cases64.insert(cases64.end(), cases32.begin(), cases32.end());
 
-  int nfailed = 0;
-
   for (auto it = cases32.begin(); it != cases32.end(); it++) {
     std::string buf;
     EncodeUint32(&buf, *it);
     uint32_t out;
     rocksdb::Slice slice(buf);
     DecodeUint32(&slice, &out);
-    if (*it != out) {
-      nfailed++;
-      printf("uint32: %" PRIu32 " != %" PRIu32 "\n", *it, out);
-    }
+    EXPECT_EQ(*it, out);
   }
 
   for (auto it = cases64.begin(); it != cases64.end(); it++) {
@@ -66,11 +62,6 @@ int main() {
     uint64_t out;
     rocksdb::Slice slice(buf);
     DecodeUint64(&slice, &out);
-    if (*it != out) {
-      nfailed++;
-      printf("uint64: %" PRIu64 " != %" PRIu64 "\n", *it, out);
-    }
+    EXPECT_EQ(*it, out);
   }
-
-  return nfailed > 0;
 }
