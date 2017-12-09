@@ -624,6 +624,9 @@ libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 libroachccl: $(LIBROACH_DIR)/Makefile libroach
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
+.PHONY: testlibroach
+testlibroach: $(LIBROACH_DIR)/Makefile
+	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) check
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
 # On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
