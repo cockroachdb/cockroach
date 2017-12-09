@@ -311,3 +311,14 @@ func TestBytesMonitor(t *testing.T) {
 	limitedMonitor.Stop(ctx)
 	m.Stop(ctx)
 }
+
+func BenchmarkBoundAccountGrow(b *testing.B) {
+	ctx := context.Background()
+	m := MakeMonitor("test", MemoryResource, nil, nil, 1e9, 1e9)
+	m.Start(ctx, nil, MakeStandaloneBudget(1e9))
+
+	a := m.MakeBoundAccount()
+	for i := 0; i < b.N; i++ {
+		_ = a.Grow(ctx, 1)
+	}
+}
