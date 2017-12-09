@@ -430,7 +430,7 @@ libprotobuf: $(PROTOBUF_DIR)/Makefile
 
 .PHONY: libsnappy
 libsnappy: $(SNAPPY_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(SNAPPY_DIR)
+	@$(MAKE) --no-print-directory -C $(SNAPPY_DIR) snappy
 
 .PHONY: librocksdb
 librocksdb: $(ROCKSDB_DIR)/Makefile
