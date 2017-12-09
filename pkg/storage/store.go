@@ -1778,9 +1778,9 @@ func (s *Store) IsDraining() bool {
 // range ID and returns a RangeDescriptor whose Replicas are a copy
 // of the supplied replicas slice, with appropriate ReplicaIDs assigned.
 func (s *Store) NewRangeDescriptor(
-	start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
-	id, err := s.rangeIDAlloc.Allocate()
+	id, err := s.rangeIDAlloc.Allocate(ctx)
 	if err != nil {
 		return nil, err
 	}
