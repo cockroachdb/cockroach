@@ -1,0 +1,3 @@
+# Cross-compilation does strange things with CMake. Tell it the pthreads check passes.
+set(THREADS_PTHREAD_ARG "0" CACHE STRING "Result from TRY_RUN" FORCE)
+
