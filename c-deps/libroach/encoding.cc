@@ -15,8 +15,6 @@
 #include "encoding.h"
 #include "rocksdb/slice.h"
 
-// TODO(benesch): Set up a CI pipeline to test these functions.
-
 void EncodeUint32(std::string* buf, uint32_t v) {
   const uint8_t tmp[sizeof(v)] = {
       uint8_t(v >> 24),

@@ -49,7 +49,20 @@ target_include_directories(roachccl
 )
 target_link_libraries(roachccl roach)
 
-set_target_properties(roach roachccl PROPERTIES
+include(CTest)
+enable_testing()
+
+add_executable(encoding_test encoding_test.cc)
+target_include_directories(encoding_test PRIVATE ../rocksdb/include)
+target_link_libraries(encoding_test roach)
+add_test(encoding_test encoding_test)
+
+add_custom_target(check
+  COMMAND ${CMAKE_CTEST_COMMAND} -V
+  DEPENDS encoding_test
+)
+
+set_target_properties(roach roachccl encoding_test PROPERTIES
   CXX_STANDARD 11
   CXX_STANDARD_REQUIRED YES
   CXX_EXTENSIONS NO
