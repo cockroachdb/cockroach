@@ -310,6 +310,8 @@ func (p *planner) groupBy(
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
 	group.run.addNullBucketIfEmpty = len(groupByExprs) == 0
 
+	// TODO(peter): This memory isn't being accounted for. The similar code in
+	// sql/distsqlrun/aggregator.go does account for the memory.
 	group.run.buckets = make(map[string]struct{})
 
 	if log.V(2) {

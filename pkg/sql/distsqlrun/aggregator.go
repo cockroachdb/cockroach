@@ -285,11 +285,13 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 			return err
 		}
 
-		if err := ag.bucketsAcc.Grow(ctx, int64(len(encoded))); err != nil {
-			return err
+		if _, ok := ag.buckets[string(encoded)]; !ok {
+			if err := ag.bucketsAcc.Grow(ctx, int64(len(encoded))); err != nil {
+				return err
+			}
+			ag.buckets[string(encoded)] = struct{}{}
 		}
 
-		ag.buckets[string(encoded)] = struct{}{}
 		// Feed the func holders for this bucket the non-grouping datums.
 		for i, a := range ag.aggregations {
 			if a.FilterColIdx != nil {
