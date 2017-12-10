@@ -3406,6 +3406,11 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
 			// Cases like "something\%" are not optimized, but this does not affect correctness.
 			anyEnd := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
 			anyStart := pattern[0] == '%'
+
+			// singleAnyEnd and anyEnd are mutually exclusive
+			// (similarly with Start).
+			singleAnyEnd := pattern[len(pattern)-1] == '_' && pattern[len(pattern)-2] != '\\'
+			singleAnyStart := pattern[0] == '_'
 			switch {
 			case anyEnd && anyStart:
 				return func(s string) bool {
@@ -3415,21 +3420,88 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
 					}
 					return strings.Contains(s, substr)
 				}
+
 			case anyEnd:
 				return func(s string) bool {
 					prefix := pattern[:len(pattern)-1]
+					if singleAnyStart {
+						if len(s) == 0 {
+							return false
+						}
+
+						prefix = prefix[1:]
+						s = s[1:]
+					}
 					if caseInsensitive {
 						s, prefix = strings.ToUpper(s), strings.ToUpper(prefix)
 					}
 					return strings.HasPrefix(s, prefix)
 				}
+
 			case anyStart:
 				return func(s string) bool {
 					suffix := pattern[1:]
+					if singleAnyEnd {
+						if len(s) == 0 {
+							return false
+						}
+
+						suffix = suffix[:len(suffix)-1]
+						s = s[:len(s)-1]
+					}
 					if caseInsensitive {
 						s, suffix = strings.ToUpper(s), strings.ToUpper(suffix)
 					}
 					return strings.HasSuffix(s, suffix)
+				}
+
+			case singleAnyStart && singleAnyEnd:
+				return func(s string) bool {
+					if len(s) < 2 {
+						return false
+					}
+
+					substr := pattern[1 : len(pattern)-1]
+					s = s[1 : len(s)-1]
+					if caseInsensitive {
+						s, substr = strings.ToUpper(s), strings.ToUpper(substr)
+					}
+
+					return s == substr
+				}
+
+			case singleAnyStart:
+				return func(s string) bool {
+					if len(s) < 1 {
+						return false
+					}
+
+					substr := pattern[1:]
+					s = s[1:]
+					if caseInsensitive {
+						s, substr = strings.ToUpper(s), strings.ToUpper(substr)
+					}
+
+					// singleAnyStart && anyEnd handled in
+					// case anyEnd.
+					return s == substr
+				}
+
+			case singleAnyEnd:
+				return func(s string) bool {
+					if len(s) < 1 {
+						return false
+					}
+
+					substr := pattern[:len(pattern)-1]
+					s = s[:len(s)-1]
+					if caseInsensitive {
+						s, substr = strings.ToUpper(s), strings.ToUpper(substr)
+					}
+
+					// singleAnyEnd && anyStart handled in
+					// case anyStart.
+					return s == substr
 				}
 			}
 		}
