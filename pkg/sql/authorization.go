@@ -112,7 +112,7 @@ func (p *planner) MemberOfWithAdminOption(
 		}
 		visited[m] = struct{}{}
 
-		rows, err := internalExecutor.QueryRowsInTransaction(
+		rows, _ /* cols */, err := internalExecutor.QueryRowsInTransaction(
 			ctx,
 			"expand-roles",
 			p.Txn(),
