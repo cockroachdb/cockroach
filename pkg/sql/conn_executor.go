@@ -110,3 +110,180 @@ package sql
 //
 // These steps are all orchestrated through clientComm.lockCommunication() and
 // rewindCapability{}.
+
+// WIP(andrei)
+// func execPrepare(stmt PrepareStmt) {
+//
+// 	// The unnamed prepared statement can be freely overwritten.
+// 	if name != "" {
+//  	 if c.session.PreparedStatements.Exists(name) {
+//    	 return c.sendError(pgerror.NewErrorf(pgerror.CodeDuplicatePreparedStatementError, "prepared statement %q already exists", name))
+//   	}
+// 	}
+//
+//   // Convert the inferred SQL types back to an array of pgwire Oids.
+//   inTypes := make([]oid.Oid, 0, len(stmt.TypeHints))
+//   if len(stmt.TypeHints) > maxPreparedStatementArgs {
+//     return c.stmtBuf.Push(
+//       SendError{
+//         Err: pgerror.NewErrorf(
+//           pgerror.CodeProtocolViolationError,
+//           "more than %d arguments to prepared statement: %d",
+//           maxPreparedStatementArgs, len(stmt.TypeHints)),
+//       })
+//   }
+//   for k, t := range stmt.TypeHints {
+//     i, err := strconv.Atoi(k)
+//     if err != nil || i < 1 {
+//       return c.sendError(pgerror.NewErrorf(pgerror.CodeUndefinedParameterError, "invalid placeholder name: $%s", k))
+//     }
+//     // Placeholder names are 1-indexed; the arrays in the protocol are
+//     // 0-indexed.
+//     i--
+//     // Grow inTypes to be at least as large as i. Prepopulate all
+//     // slots with the hints provided, if any.
+//     for j := len(inTypes); j <= i; j++ {
+//       inTypes = append(inTypes, 0)
+//       if j < len(inTypeHints) {
+//         inTypes[j] = inTypeHints[j]
+//       }
+//     }
+//     // OID to Datum is not a 1-1 mapping (for example, int4 and int8
+//     // both map to TypeInt), so we need to maintain the types sent by
+//     // the client.
+//     if inTypes[i] != 0 {
+//       continue
+//     }
+//     inTypes[i] = t.Oid()
+//   }
+//   for i, t := range inTypes {
+//     if t == 0 {
+//       return c.sendError(pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeError, "could not determine data type of placeholder $%d", i+1))
+//     }
+//   }
+//   // Attach pgwire-specific metadata to the PreparedStatement.
+//   stmt.ProtocolMeta = preparedStatementMeta{inTypes: inTypes}
+//   c.writeBuf.initMsg(pgwirebase.ServerMsgParseComplete)
+//   return c.writeBuf.finishMsg(c.wr)
+// }
+//
+// func execDescribe() {
+// switch typ {
+// case pgwirebase.PrepareStatement:
+//   stmt, ok := c.session.PreparedStatements.Get(name)
+//   if !ok {
+//     return c.stmtBuf.Push(
+//       SendError{
+//         Err: pgerror.NewErrorf(
+//           pgerror.CodeInvalidSQLStatementNameError,
+//           "unknown prepared statement %q", name),
+//       })
+//   }
+//
+//   stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
+//   c.writeBuf.initMsg(pgwirebase.ServerMsgParameterDescription)
+//   c.writeBuf.putInt16(int16(len(stmtMeta.inTypes)))
+//   for _, t := range stmtMeta.inTypes {
+//     c.writeBuf.putInt32(int32(t))
+//   }
+//   if err := c.writeBuf.finishMsg(c.wr); err != nil {
+//     return err
+//   }
+//
+//   if stmtHasNoData(stmt.Statement) {
+//     return c.sendNoData(c.wr)
+//   }
+//   return c.sendRowDescription(ctx, stmt.Columns, nil, c.wr)
+// case pgwirebase.PreparePortal:
+//   portal, ok := c.session.PreparedPortals.Get(name)
+//   if !ok {
+//     return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidCursorNameError, "unknown portal %q", name))
+//   }
+//
+//   portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
+//
+//   if stmtHasNoData(portal.Stmt.Statement) {
+//     return c.sendNoData(c.wr)
+//   }
+//   return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, c.wr)
+// default:
+//   return errors.Errorf("unknown describe type: %s", typ)
+// }
+//
+// }
+//
+// func execDescribe() {
+//   switch typ {
+//   case pgwirebase.PrepareStatement:
+//     c.session.PreparedStatements.Delete(ctx, name)
+//   case pgwirebase.PreparePortal:
+//     c.session.PreparedPortals.Delete(ctx, name)
+//   default:
+//     return errors.Errorf("unknown close type: %s", typ)
+//   }
+//   c.writeBuf.initMsg(pgwirebase.ServerMsgCloseComplete)
+//   return c.writeBuf.finishMsg(c.wr)
+// }
+//
+// func execBind() {
+// // The unnamed portal can be freely overwritten.
+// if portalName != "" {
+//   if c.session.PreparedPortals.Exists(portalName) {
+//     return c.sendError(pgerror.NewErrorf(pgerror.CodeDuplicateCursorError, "portal %q already exists", portalName))
+//   }
+// }
+// stmt, ok := c.session.PreparedStatements.Get(statementName)
+// if !ok {
+//   return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError, "unknown prepared statement %q", statementName))
+// }
+//
+//
+// if numValues != numQArgs {
+//   return c.stmtBuf.Push(
+//     sql.SendError{
+//       Err: pgwirebase.NewProtocolViolationErrorf(
+//         "expected %d arguments, got %d", numQArgs, numValues),
+//     })
+// }
+//
+// return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "wrong number of format codes specified: %d for %d arguments", numQArgFormatCodes, numQArgs))
+// return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "expected 0, 1, or %d for number of format codes, got %d", numColumns, numColumnFormatCodes))
+//
+// // Create the new PreparedPortal in the connection's Session.
+// portal, err := c.session.PreparedPortals.New(ctx, portalName, stmt, qargs)
+// if err != nil {
+//   return err
+// }
+//
+// if log.V(2) {
+//   log.Infof(ctx, "portal: %q for %q, args %q, formats %q", portalName, stmt.Statement, qargs, columnFormatCodes)
+// }
+//
+// c.writeBuf.initMsg(pgwirebase.ServerMsgBindComplete)
+// return c.writeBuf.finishMsg(c.wr)
+// }
+//
+// func execExecPortal() {
+// portal, ok := c.session.PreparedPortals.Get(portalName)
+// if !ok {
+//   return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidCursorNameError, "unknown portal %q", portalName))
+// }
+// stmt := portal.Stmt
+// portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
+// pinfo := &tree.PlaceholderInfo{
+//   TypeHints: stmt.TypeHints,
+//   Types:     stmt.Types,
+//   Values:    portal.Qargs,
+// }
+//
+// tracing.AnnotateTrace()
+// c.streamingState.reset(portalMeta.outFormats, false [> sendDescription */, int(limit))
+// c.session.ResultsWriter = c
+// err = c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
+// if err != nil {
+//   if err := c.setError(err); err != nil {
+//     return err
+//   }
+// }
+// return c.done()
+// }
