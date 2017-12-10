@@ -434,7 +434,7 @@ message TableDescriptor {
   // Invariants:
   // 1. not more than two subsequent versions of the table
   // descriptor can be leased. This is to make the system
-  // easy to reason about, by permiting mutation state
+  // easy to reason about, by permitting mutation state
   // changes (reflected in the next version), only when the existing
   // state (reflected in the current version) is present on all
   // outstanding unexpired leases.
@@ -623,6 +623,13 @@ message TableDescriptor {
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
   optional SequenceOpts sequence_opts = 28;
+
+  // The GC deadline is set when a table is truncated or dropped,
+  // based on the current time and the GC TTL for the table. It's
+  // the timestamp after which the table's contents will be cleared
+  // from the cluster. In nanoseconds since the epoch.
+  optional int64 gc_deadline = 29 [(gogoproto.nullable) = false,
+           (gogoproto.customname) = "GCDeadline"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

@@ -241,6 +241,25 @@ message DeleteRangeResponse {
   repeated bytes keys = 2 [(gogoproto.casttype) = "Key"];
 }
 
+// A ClearRangeRequest is the argument to the ClearRange() method. It
+// specifies a range of keys to clear from the underlying engine. Note
+// that this differs from the behavior of DeleteRange, which sets
+// transactional intents and writes tombstones to the deleted
+// keys. ClearRange is used when permanently dropping or truncating
+// table data.
+message ClearRangeRequest {
+  option (gogoproto.equal) = true;
+
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  util.hlc.Timestamp gc_threshold = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "GCThreshold"];
+}
+
+// A ClearRangeResponse is the return value from the ClearRange() method.
+message ClearRangeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // ScanOptions is a collection of options for a batch of scans. The options
 // apply to all the scans in the batch.
 //
@@ -248,7 +267,7 @@ message DeleteRangeResponse {
 // requests (i.e.  {Reverse,}ScanReques), except for
 // {Begin,End}TransactionRequest which are still allowed. Moreover, the batch
 // cannot mix forward and reverse scans.
-// 
+//
 // TODO(andrei): add option to stop scan(s) when an intent is encountered.
 message ScanOptions {
   option (gogoproto.equal) = true;
@@ -476,7 +495,7 @@ message AdminTransferLeaseRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  int32 target = 2 [(gogoproto.casttype) = "StoreID"];  
+  int32 target = 2 [(gogoproto.casttype) = "StoreID"];
 }
 
 message AdminTransferLeaseResponse {
@@ -1088,6 +1107,7 @@ message RequestUnion {
   IncrementRequest increment = 4;
   DeleteRequest delete = 5;
   DeleteRangeRequest delete_range = 6;
+  ClearRangeRequest clear_range = 38;
   ScanRequest scan = 7;
   BeginTransactionRequest begin_transaction = 8;
   EndTransactionRequest end_transaction = 9;
@@ -1137,6 +1157,7 @@ message ResponseUnion {
   IncrementResponse increment = 4;
   DeleteResponse delete = 5;
   DeleteRangeResponse delete_range = 6;
+  ClearRangeResponse clear_range = 38;
   ScanResponse scan = 7;
   BeginTransactionResponse begin_transaction = 8;
   EndTransactionResponse end_transaction = 9;
