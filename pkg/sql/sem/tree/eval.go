@@ -3418,6 +3418,14 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
 			case anyEnd:
 				return func(s string) bool {
 					prefix := pattern[:len(pattern)-1]
+					// This can still occur since the
+					// checks at the beginning of this case
+					// block does not check the first
+					// character for '_'.
+					if prefix[0] == '_' {
+						prefix = prefix[1:]
+						s = s[1:]
+					}
 					if caseInsensitive {
 						s, prefix = strings.ToUpper(s), strings.ToUpper(prefix)
 					}
@@ -3426,6 +3434,14 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
 			case anyStart:
 				return func(s string) bool {
 					suffix := pattern[1:]
+					// This can still occur since the
+					// checks at the beginning of this case
+					// block does not check the last
+					// character for '_'.
+					if suffix[len(suffix)-1] == '_' {
+						suffix = suffix[:len(suffix)-1]
+						s = s[:len(s)-1]
+					}
 					if caseInsensitive {
 						s, suffix = strings.ToUpper(s), strings.ToUpper(suffix)
 					}
