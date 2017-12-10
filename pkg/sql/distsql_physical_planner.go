@@ -1926,9 +1926,16 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
 		// input columns).
 		joinColMap := make([]int, 0, len(n.columns))
-		// There should be no merged columns when ON clause is present
-		if n.pred.numMergedEqualityColumns != 0 {
-			panic("merged columns with ON condition")
+
+		if mergedColNum > 0 {
+			for i := 0; i < mergedColNum; i++ {
+				joinColMap = append(joinColMap, i)
+			}
+		} else if n.pred.numMergedEqualityColumns > 0 {
+			// This is an inner join; map the merged columns to the left columns
+			for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
+				joinColMap = append(joinColMap, leftPlan.planToStreamColMap[i])
+			}
 		}
 		for i := 0; i < n.pred.numLeftCols; i++ {
 			joinColMap = append(joinColMap, mergedColNum+leftPlan.planToStreamColMap[i])
