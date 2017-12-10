@@ -16,6 +16,7 @@ package mon
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"testing"
 
@@ -52,6 +53,8 @@ func TestMemoryAllocations(t *testing.T) {
 	// The following invariants will be checked at every step of the
 	// test underneath.
 	checkInvariants := func() {
+		t.Helper()
+
 		var sum int64
 		fail := false
 		for accI := range accs {
@@ -59,7 +62,7 @@ func TestMemoryAllocations(t *testing.T) {
 				t.Errorf("account %d went negative: %d", accI, accs[accI].curAllocated)
 				fail = true
 			}
-			sum += accs[accI].curAllocated
+			sum += accs[accI].totalAllocated()
 		}
 		if m.mu.curAllocated < 0 {
 			t.Errorf("monitor current count went negative: %d", m.mu.curAllocated)
@@ -73,7 +76,7 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("monitor current budget went negative: %d", m.mu.curBudget.curAllocated)
 			fail = true
 		}
-		avail := m.mu.curBudget.curAllocated + m.reserved.curAllocated
+		avail := m.mu.curBudget.totalAllocated() + m.reserved.curAllocated
 		if sum > avail {
 			t.Errorf("total account sum %d greater than total monitor budget %d", sum, avail)
 			fail = true
@@ -82,7 +85,7 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.curAllocated)
 			fail = true
 		}
-		if m.mu.curBudget.curAllocated != pool.mu.curAllocated {
+		if m.mu.curBudget.totalAllocated() != pool.mu.curAllocated {
 			t.Errorf("monitor budget %d different from pool cur %d", m.mu.curBudget.curAllocated, pool.mu.curAllocated)
 			fail = true
 		}
@@ -98,7 +101,7 @@ func TestMemoryAllocations(t *testing.T) {
 	var reportAndCheck func(string, ...interface{})
 	if log.V(2) {
 		// Detailed output: report the intermediate values of the
-		// important variables at every stafe of the test.
+		// important variables at every stage of the test.
 		linesBetweenHeaderReminders = 5
 		generateHeader = func() {
 			fmt.Println("")
@@ -110,6 +113,7 @@ func TestMemoryAllocations(t *testing.T) {
 			fmt.Println("")
 		}
 		reportAndCheck = func(extraFmt string, extras ...interface{}) {
+			t.Helper()
 			fmt.Printf("%5d %5d %5d %5d ", m.mu.curAllocated, m.mu.curBudget.curAllocated, m.reserved.curAllocated, pool.mu.curAllocated)
 			for accI := range accs {
 				fmt.Printf("%5d ", accs[accI].curAllocated)
@@ -127,7 +131,10 @@ func TestMemoryAllocations(t *testing.T) {
 		} else {
 			generateHeader = func() {}
 		}
-		reportAndCheck = func(_ string, _ ...interface{}) { checkInvariants() }
+		reportAndCheck = func(_ string, _ ...interface{}) {
+			t.Helper()
+			checkInvariants()
+		}
 	}
 
 	for _, max := range maxs {
@@ -309,6 +316,25 @@ func TestBytesMonitor(t *testing.T) {
 	limitedMonitor.releaseBytes(ctx, 10)
 
 	limitedMonitor.Stop(ctx)
+	m.Stop(ctx)
+}
+
+func TestMemoryAllocationEdgeCases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	m := MakeMonitor("test", MemoryResource, nil, nil, 1e9, 1e9)
+	m.Start(ctx, nil, MakeStandaloneBudget(1e9))
+
+	a := m.MakeBoundAccount()
+	if err := a.Grow(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Grow(ctx, math.MaxInt64); err == nil {
+		t.Fatalf("expected error, but found success")
+	}
+
+	a.Close(ctx)
 	m.Stop(ctx)
 }
 
