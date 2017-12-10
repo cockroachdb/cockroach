@@ -134,6 +134,7 @@ struct DBImpl : public DBEngine {
 
 struct DBBatch : public DBEngine {
   int updates;
+  bool has_delete_range;
   rocksdb::WriteBatchWithIndex batch;
 
   DBBatch(DBEngine* db);
@@ -1360,7 +1361,7 @@ DBString DBEngine::GetUserProperties() {
   return ToDBString(all.SerializeAsString());
 }
 
-DBBatch::DBBatch(DBEngine* db) : DBEngine(db->rep), updates(0), batch(&kComparator) {}
+DBBatch::DBBatch(DBEngine* db) : DBEngine(db->rep), updates(0), has_delete_range(false), batch(&kComparator) {}
 
 DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db) : DBEngine(db->rep), updates(0) {}
 
@@ -1808,6 +1809,11 @@ DBStatus DBBatch::Get(DBKey key, DBString* value) {
   if (updates == 0) {
     return base.Get(value);
   }
+  if (has_delete_range) {
+    // TODO(peter): We don't support iterators when the batch contains
+    // delete range entries.
+    return FmtStatus("cannot read from a batch containing delete range entries");
+  }
   std::unique_ptr<rocksdb::WBWIIterator> iter(batch.NewIterator());
   iter->Seek(base.key);
   return ProcessDeltaKey(&base, iter.get(), base.key, value);
@@ -1849,10 +1855,10 @@ DBStatus DBImpl::DeleteRange(DBKey start, DBKey end) {
 }
 
 DBStatus DBBatch::DeleteRange(DBKey start, DBKey end) {
-  // TODO(peter): We don't support iteration on a batch containing a
-  // range tombstone, so prohibit such tombstones from behing added to
-  // a readable batch.
-  return FmtStatus("unsupported");
+  ++updates;
+  has_delete_range = true;
+  batch.DeleteRange(EncodeKey(start), EncodeKey(end));
+  return kSuccess;
 }
 
 DBStatus DBWriteOnlyBatch::DeleteRange(DBKey start, DBKey end) {
@@ -1980,6 +1986,11 @@ DBIterator* DBImpl::NewIter(rocksdb::ReadOptions* read_opts) {
 
 DBIterator* DBBatch::NewIter(rocksdb::ReadOptions* read_opts) {
   DBIterator* iter = new DBIterator;
+  if (has_delete_range) {
+    // TODO(peter): We don't support iterators when the batch contains
+    // delete range entries.
+    return NULL;
+  }
   rocksdb::Iterator* base = rep->NewIterator(*read_opts);
   rocksdb::WBWIIterator* delta = batch.NewIterator();
   iter->rep.reset(new BaseDeltaIterator(base, delta, read_opts->prefix_same_as_start));

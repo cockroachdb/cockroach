@@ -1358,9 +1358,6 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 }
 
 func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
-	if !r.writeOnly {
-		panic("readable batch")
-	}
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
