@@ -140,16 +140,16 @@ k v
 7 8
 
 # Check that EXPLAIN does not destroy data (#6613)
-query ITTT colnames
+query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-Level  Type    Field  Description
-0      delete  ·      ·
-0      ·       from   unindexed
-1      render  ·      ·
-2      scan    ·      ·
-2      ·       table  unindexed@primary
-2      ·       spans  ALL
+Tree            Field  Description
+delete          ·      ·
+ │              from   unindexed
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  unindexed@primary
+·               spans  ALL
 
 query II colnames,rowsort
 SELECT k, v FROM unindexed
@@ -179,16 +179,16 @@ DELETE FROM indexed WHERE value = 5
 statement ok
 INSERT INTO unindexed VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 
-query ITTT
+query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
 ----
-0  delete  ·      ·
-0  ·       from   unindexed
-1  nosort  ·      ·
-1  ·       order  +v
-2  scan    ·      ·
-2  ·       table  unindexed@primary
-2  ·       spans  ALL
+delete          ·      ·
+ │              from   unindexed
+ └── nosort     ·      ·
+      │         order  +v
+      └── scan  ·      ·
+·               table  unindexed@primary
+·               spans  ALL
 
 query II
 DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC RETURNING v,k
@@ -207,16 +207,16 @@ DELETE FROM unindexed ORDER BY v RETURNING k,v
 statement ok
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
-query ITTT
+query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-0  delete  ·      ·
-0  ·       from   unindexed
-1  limit   ·      ·
-2  render  ·      ·
-3  scan    ·      ·
-3  ·       table  unindexed@primary
-3  ·       spans  ALL
+delete               ·      ·
+ │                   from   unindexed
+ └── limit           ·      ·
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  unindexed@primary
+·                    spans  ALL
 
 query I
 SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 2 RETURNING v]
@@ -233,43 +233,43 @@ SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 ----
 1
 
-query ITTT
+query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-0  delete  ·      ·
-0  ·       from   indexed
-1  limit   ·      ·
-2  render  ·      ·
-3  scan    ·      ·
-3  ·       table  indexed@indexed_value_idx
-3  ·       spans  /5-/6
-3  ·       limit  10
+delete               ·      ·
+ │                   from   indexed
+ └── limit           ·      ·
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  indexed@indexed_value_idx
+·                    spans  /5-/6
+·                    limit  10
 
-query ITTT
+query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
-0  delete  ·      ·
-0  ·       from   indexed
-1  limit   ·      ·
-2  render  ·      ·
-3  scan    ·      ·
-3  ·       table  indexed@primary
-3  ·       spans  ALL
-3  ·       limit  10
+delete               ·      ·
+ │                   from   indexed
+ └── limit           ·      ·
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  indexed@primary
+·                    spans  ALL
+·                    limit  10
 
-query ITTT
+query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-0  delete      ·      ·
-0  ·           from   indexed
-1  limit       ·      ·
-2  index-join  ·      ·
-3  scan        ·      ·
-3  ·           table  indexed@indexed_value_idx
-3  ·           spans  /5-/6
-3  ·           limit  10
-3  scan        ·      ·
-3  ·           table  indexed@primary
+delete                ·      ·
+ │                    from   indexed
+ └── limit            ·      ·
+      └── index-join  ·      ·
+           ├── scan   ·      ·
+           │          table  indexed@indexed_value_idx
+           │          spans  /5-/6
+           │          limit  10
+           └── scan   ·      ·
+·                     table  indexed@primary
 
 # Ensure that if the fast path is selected, DELETE is still a valid
 # data source (#19805).

@@ -591,22 +591,22 @@ INSERT INTO select_t VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 
 # Check that INSERT supports ORDER BY (MySQL extension)
 
-query ITTT
+query TTT
 EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
 ----
-0  insert  ·          ·
-0  ·       into       insert_t(x, v, rowid)
-0  ·       default 0  NULL
-0  ·       default 1  NULL
-0  ·       default 2  unique_rowid()
-1  sort    ·          ·
-1  ·       order      -v
-2  render  ·          ·
-2  ·       render 0   x
-2  ·       render 1   v
-3  scan    ·          ·
-3  ·       table      select_t@primary
-3  ·       spans      ALL
+insert               ·          ·
+ │                   into       insert_t(x, v, rowid)
+ │                   default 0  NULL
+ │                   default 1  NULL
+ │                   default 2  unique_rowid()
+ └── sort            ·          ·
+      │              order      -v
+      └── render     ·          ·
+           │         render 0   x
+           │         render 1   v
+           └── scan  ·          ·
+·                    table      select_t@primary
+·                    spans      ALL
 
 query II
 INSERT INTO insert_t TABLE select_t ORDER BY v DESC RETURNING x, v
@@ -621,23 +621,23 @@ INSERT INTO insert_t TABLE select_t ORDER BY v DESC RETURNING x, v
 statement ok
 TRUNCATE TABLE insert_t
 
-query ITTT
+query TTT
 EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ----
-0  insert  ·          ·
-0  ·       into       insert_t(x, v, rowid)
-0  ·       default 0  NULL
-0  ·       default 1  NULL
-0  ·       default 2  unique_rowid()
-1  limit   ·          ·
-1  ·       count      1
-2  render  ·          ·
-2  ·       render 0   x
-2  ·       render 1   v
-3  scan    ·          ·
-3  ·       table      select_t@primary
-3  ·       spans      ALL
-3  ·       limit      1
+insert               ·          ·
+ │                   into       insert_t(x, v, rowid)
+ │                   default 0  NULL
+ │                   default 1  NULL
+ │                   default 2  unique_rowid()
+ └── limit           ·          ·
+      │              count      1
+      └── render     ·          ·
+           │         render 0   x
+           │         render 1   v
+           └── scan  ·          ·
+·                    table      select_t@primary
+·                    spans      ALL
+·                    limit      1
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
@@ -660,50 +660,50 @@ SELECT * FROM insert_t
 
 # Check the grouping of LIMIT and ORDER BY
 
-query ITTT
+query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
-0  insert  ·     ·
-0  ·       into  insert_t(x, v, rowid)
-1  limit   ·     ·
-2  values  ·     ·
-2  ·       size  2 columns, 2 rows
+insert            ·     ·
+ │                into  insert_t(x, v, rowid)
+ └── limit        ·     ·
+      └── values  ·     ·
+·                 size  2 columns, 2 rows
 
-query ITTT
+query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
-0  insert  ·         ·
-0  ·       into      insert_t(x, v, rowid)
-1  limit   ·         ·
-2  sort    ·         ·
-2  ·       order     +column2
-2  ·       strategy  top 1
-3  values  ·         ·
-3  ·       size      2 columns, 2 rows
+insert                 ·         ·
+ │                     into      insert_t(x, v, rowid)
+ └── limit             ·         ·
+      └── sort         ·         ·
+           │           order     +column2
+           │           strategy  top 1
+           └── values  ·         ·
+·                      size      2 columns, 2 rows
 
-query ITTT
+query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-0  insert  ·         ·
-0  ·       into      insert_t(x, v, rowid)
-1  limit   ·         ·
-2  sort    ·         ·
-2  ·       order     +column2
-2  ·       strategy  top 1
-3  values  ·         ·
-3  ·       size      2 columns, 2 rows
+insert                 ·         ·
+ │                     into      insert_t(x, v, rowid)
+ └── limit             ·         ·
+      └── sort         ·         ·
+           │           order     +column2
+           │           strategy  top 1
+           └── values  ·         ·
+·                      size      2 columns, 2 rows
 
-query ITTT
+query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
-0  insert  ·         ·
-0  ·       into      insert_t(x, v, rowid)
-1  limit   ·         ·
-2  sort    ·         ·
-2  ·       order     +column2
-2  ·       strategy  top 1
-3  values  ·         ·
-3  ·       size      2 columns, 2 rows
+insert                 ·         ·
+ │                     into      insert_t(x, v, rowid)
+ └── limit             ·         ·
+      └── sort         ·         ·
+           │           order     +column2
+           │           strategy  top 1
+           └── values  ·         ·
+·                      size      2 columns, 2 rows
 
 statement error pq: multiple LIMIT clauses not allowed
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) LIMIT 1) LIMIT 1

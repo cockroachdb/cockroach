@@ -1035,7 +1035,7 @@ func Example_sql_table() {
 	c.RunWithArgs([]string{"sql", "--format=raw", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain select s from t.t union all select s from t.t"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
@@ -1240,20 +1240,20 @@ func Example_sql_table() {
 	// |   hai |
 	// +-------+
 	// (1 row)
-	// sql --format=pretty -e explain(indent) select s from t.t union all select s from t.t
-	// +-------+--------+-------+--------------------+
-	// | Level |  Type  | Field |    Description     |
-	// +-------+--------+-------+--------------------+
-	// |     0 | append |       |  -> append         |
-	// |     1 | render |       |    -> render       |
-	// |     2 | scan   |       |       -> scan      |
-	// |     2 |        | table |          t@primary |
-	// |     2 |        | spans |          ALL       |
-	// |     1 | render |       |    -> render       |
-	// |     2 | scan   |       |       -> scan      |
-	// |     2 |        | table |          t@primary |
-	// |     2 |        | spans |          ALL       |
-	// +-------+--------+-------+--------------------+
+	// sql --format=pretty -e explain select s from t.t union all select s from t.t
+	// +----------------+-------+-------------+
+	// |      Tree      | Field | Description |
+	// +----------------+-------+-------------+
+	// | append         |       |             |
+	// |  ├── render    |       |             |
+	// |  │    └── scan |       |             |
+	// |  │             | table | t@primary   |
+	// |  │             | spans | ALL         |
+	// |  └── render    |       |             |
+	// |       └── scan |       |             |
+	// |                | table | t@primary   |
+	// |                | spans | ALL         |
+	// +----------------+-------+-------------+
 	// (9 rows)
 }
 
