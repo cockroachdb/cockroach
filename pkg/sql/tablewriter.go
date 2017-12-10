@@ -27,8 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // expressionCarrier handles visiting sub-expressions.
@@ -781,6 +783,11 @@ func (td *tableDeleter) deleteAllRows(
 	return td.deleteAllRowsFast(ctx, resume, limit, traceKV)
 }
 
+// deleteAllRowsFast employs a ClearRange KV API call to delete the
+// underlying data quickly. Unlike DeleteRange, ClearRange doesn't
+// leave tombstone data on individual keys, instead using a more
+// efficient ranged tombstone, preventing unnecessary write
+// amplification.
 func (td *tableDeleter) deleteAllRowsFast(
 	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
@@ -794,6 +801,37 @@ func (td *tableDeleter) deleteAllRowsFast(
 			EndKey: tablePrefix.PrefixEnd(),
 		}
 	}
+	// If GCDeadline isn't set, assume this drop request is from a version
+	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
+	if td.tableDesc().GCDeadline == 0 {
+		return td.legacyDeleteAllRowsFast(ctx, resume, limit, traceKV)
+	}
+
+	// Assert that GC deadline is in the past.
+	if timeutil.Since(timeutil.Unix(0, td.tableDesc().GCDeadline)) < 0 {
+		panic(fmt.Sprintf("not past the GC deadline: %s", td.tableDesc()))
+	}
+	log.VEventf(ctx, 2, "ClearRange %s - %s", resume.Key, resume.EndKey)
+	crr := &roachpb.ClearRangeRequest{
+		Span: roachpb.Span{
+			Key:    resume.Key,
+			EndKey: resume.EndKey,
+		},
+		GCThreshold: hlc.Timestamp{WallTime: td.tableDesc().GCDeadline},
+	}
+	td.b.AddRawRequest(crr)
+	if _, err := td.finalize(ctx, traceKV); err != nil {
+		return resume, err
+	}
+	return roachpb.Span{}, nil
+}
+
+// legacyDeleteAllRowsFast handles cases where no GC deadline is set
+// and so deletion must fall back to relying on DeleteRange and the
+// eventual range GC cycle.
+func (td *tableDeleter) legacyDeleteAllRowsFast(
+	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
+) (roachpb.Span, error) {
 	log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
@@ -889,6 +927,8 @@ func (td *tableDeleter) deleteIndexFast(
 	if traceKV {
 		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
+	// TODO(vivekmenezes): adapt index deletion to use the same GC
+	// deadline / ClearRange fast path that table deletion uses.
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
 	if _, err := td.finalize(ctx, traceKV); err != nil {

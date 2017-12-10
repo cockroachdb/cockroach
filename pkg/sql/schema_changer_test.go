@@ -2422,7 +2422,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2439,7 +2439,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if !newTableDesc.Adding() {
 		t.Fatalf("bad state = %s", newTableDesc.State)
 	}
-	if err := zoneExists(sqlDB, true, newTableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, newTableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2509,6 +2509,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 
 	// Add a zone config.
 	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0 // Set TTL so the data is deleted immediately.
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -2517,7 +2518,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2550,7 +2551,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	if newTableDesc.Adding() {
 		t.Fatalf("bad state = %s", newTableDesc.State)
 	}
-	if err := zoneExists(sqlDB, true, newTableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, newTableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2569,7 +2570,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		return errors.Errorf("table descriptor exists after table is truncated: %d", tableDesc.ID)
 	})
 
-	if err := zoneExists(sqlDB, false, tableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, nil, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
