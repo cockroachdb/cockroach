@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type dropTableNode struct {
@@ -309,11 +310,34 @@ func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.Tabl
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return err
 	}
+
+	// If the table is not interleaved, use the GCDeadline mechanism
+	// to schedule usage of the more efficient ClearRange pathway.
+	if !tableDesc.IsInterleaved() {
+		// Get the zone config applying to this table in order to
+		// set the GC deadline.
+		_, zoneCfg, _, err := GetZoneConfigInTxn(
+			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "",
+		)
+		if err != nil {
+			return err
+		}
+		tableDesc.GCDeadline = timeutil.Now().UnixNano() + int64(zoneCfg.GC.TTLSeconds)*1E9
+	}
+
 	tableDesc.State = sqlbase.TableDescriptor_DROP
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return err
 	}
+
+	// Initiate an immediate schema change. When dropping a table
+	// in a session, the data and the descriptor are not deleted.
+	// Instead, that is taken care of asynchronously by the schema
+	// change manager, which is notified via a system config gossip.
+	// The schema change manager will properly schedule deletion of
+	// the underlying data when the GC deadline expires.
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
+
 	return nil
 }
 
