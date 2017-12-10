@@ -74,8 +74,8 @@ add_subdirectory(../googletest/googletest
                  ${CMAKE_BINARY_DIR}/googletest
                  EXCLUDE_FROM_ALL)
 
-# This is a known problem with googletest. Just doing what the internet says.
-set(THREADS_PTHREAD_ARG "2" CACHE STRING "Forcibly set by CMakeLists.txt." FORCE)
+# Disable pthreads, or googletest fails during acceptance tests.
+set(THREADS_PTHREAD_ARG OFF)
 
 foreach(tsrc ${tests})
   get_filename_component(filename ${tsrc} NAME_WE)

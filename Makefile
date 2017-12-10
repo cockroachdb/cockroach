@@ -634,7 +634,7 @@ check-libroach: $(LIBROACH_DIR)/Makefile libgtest
 
 .PHONY: libgtest
 libgtest: $(GOOGLETEST_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(GOOGLETEST_DIR)
+	@$(MAKE) --no-print-directory -C $(GOOGLETEST_DIR) gtest_main
 
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
