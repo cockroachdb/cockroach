@@ -42,7 +42,7 @@ const flushSet bool = true
 
 var _ = noFlush
 
-var noRewind = cursorPosition{queryStrPos: -1, stmtIdx: -1}
+var noRewind = cmdPos(-1)
 
 type testContext struct {
 	manualClock *hlc.ManualClock
@@ -172,7 +172,7 @@ func (tc *testContext) createNoTxnState() (State, *txnState2) {
 //
 // Pass noFlush/flushSet for expFlush. Pass noRewind for expRewPos if a rewind
 // is not expected.
-func checkAdv(adv advanceInfo, expCode advanceCode, expFlush bool, expRewPos cursorPosition) error {
+func checkAdv(adv advanceInfo, expCode advanceCode, expFlush bool, expRewPos cmdPos) error {
 	if adv.code != expCode {
 		return errors.Errorf("expected code: %s, but got: %s (%+v)", expCode, adv.code, adv)
 	}
@@ -185,7 +185,7 @@ func checkAdv(adv advanceInfo, expCode advanceCode, expFlush bool, expRewPos cur
 		}
 	} else {
 		if adv.rewCap.rewindPos != expRewPos {
-			return errors.Errorf("expected rewind to %s, but got: %+v", expRewPos, adv)
+			return errors.Errorf("expected rewind to %d, but got: %+v", expRewPos, adv)
 		}
 	}
 	return nil
@@ -243,7 +243,7 @@ func TestTransitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.TODO()
-	dummyRewCap := rewindCapability{rewindPos: cursorPosition{12, 13}}
+	dummyRewCap := rewindCapability{rewindPos: cmdPos(12)}
 	testCon := makeTestContext()
 	tranCtx := transitionCtx{
 		db:                    testCon.mockDB,
