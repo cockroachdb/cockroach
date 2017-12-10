@@ -74,8 +74,7 @@ add_subdirectory(../googletest/googletest
                  ${CMAKE_BINARY_DIR}/googletest
                  EXCLUDE_FROM_ALL)
 
-# Disable pthreads, or googletest fails during acceptance tests.
-set(THREADS_PTHREAD_ARG OFF)
+set(THREADS_PTHREAD_ARG 0)
 
 foreach(tsrc ${tests})
   get_filename_component(filename ${tsrc} NAME_WE)
