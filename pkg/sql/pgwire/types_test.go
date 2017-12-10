@@ -126,7 +126,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 
 	b := buf.wrapped.Bytes()
 
-	got, err := decodeOidDatum(oid.T__int8, formatText, b[4:])
+	got, err := decodeOidDatum(oid.T__int8, pgwirebase.FormatText, b[4:])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,14 +137,14 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	}
 }
 
-func benchmarkWriteType(b *testing.B, d tree.Datum, format formatCode) {
+func benchmarkWriteType(b *testing.B, d tree.Datum, format pgwirebase.FormatCode) {
 	ctx := context.Background()
 
 	buf := newWriteBuffer()
 	buf.bytecount = metric.NewCounter(metric.Metadata{Name: ""})
 
 	writeMethod := buf.writeTextDatum
-	if format == formatBinary {
+	if format == pgwirebase.FormatBinary {
 		writeMethod = buf.writeBinaryDatum
 	}
 
@@ -162,36 +162,36 @@ func benchmarkWriteType(b *testing.B, d tree.Datum, format formatCode) {
 	}
 }
 
-func benchmarkWriteBool(b *testing.B, format formatCode) {
+func benchmarkWriteBool(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.DBoolTrue, format)
 }
 
-func benchmarkWriteInt(b *testing.B, format formatCode) {
+func benchmarkWriteInt(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDInt(1234), format)
 }
 
-func benchmarkWriteFloat(b *testing.B, format formatCode) {
+func benchmarkWriteFloat(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDFloat(12.34), format)
 }
 
-func benchmarkWriteDecimal(b *testing.B, format formatCode) {
+func benchmarkWriteDecimal(b *testing.B, format pgwirebase.FormatCode) {
 	dec := new(tree.DDecimal)
 	s := "-1728718718271827121233.1212121212"
 	if err := dec.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", format)
 	}
-	benchmarkWriteType(b, dec, formatText)
+	benchmarkWriteType(b, dec, pgwirebase.FormatText)
 }
 
-func benchmarkWriteBytes(b *testing.B, format formatCode) {
+func benchmarkWriteBytes(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDBytes("testing"), format)
 }
 
-func benchmarkWriteString(b *testing.B, format formatCode) {
+func benchmarkWriteString(b *testing.B, format pgwirebase.FormatCode) {
 	benchmarkWriteType(b, tree.NewDString("testing"), format)
 }
 
-func benchmarkWriteDate(b *testing.B, format formatCode) {
+func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
 	d, err := tree.ParseDDate("2010-09-28", time.UTC)
 	if err != nil {
 		b.Fatal(err)
@@ -199,7 +199,7 @@ func benchmarkWriteDate(b *testing.B, format formatCode) {
 	benchmarkWriteType(b, d, format)
 }
 
-func benchmarkWriteTimestamp(b *testing.B, format formatCode) {
+func benchmarkWriteTimestamp(b *testing.B, format pgwirebase.FormatCode) {
 	ts, err := tree.ParseDTimestamp("2010-09-28 12:00:00.1", time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
@@ -207,7 +207,7 @@ func benchmarkWriteTimestamp(b *testing.B, format formatCode) {
 	benchmarkWriteType(b, ts, format)
 }
 
-func benchmarkWriteTimestampTZ(b *testing.B, format formatCode) {
+func benchmarkWriteTimestampTZ(b *testing.B, format pgwirebase.FormatCode) {
 	tstz, err := tree.ParseDTimestampTZ("2010-09-28 12:00:00.1", time.UTC, time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
@@ -215,7 +215,7 @@ func benchmarkWriteTimestampTZ(b *testing.B, format formatCode) {
 	benchmarkWriteType(b, tstz, format)
 }
 
-func benchmarkWriteInterval(b *testing.B, format formatCode) {
+func benchmarkWriteInterval(b *testing.B, format pgwirebase.FormatCode) {
 	i, err := tree.ParseDInterval("PT12H2M")
 	if err != nil {
 		b.Fatal(err)
@@ -223,7 +223,7 @@ func benchmarkWriteInterval(b *testing.B, format formatCode) {
 	benchmarkWriteType(b, i, format)
 }
 
-func benchmarkWriteTuple(b *testing.B, format formatCode) {
+func benchmarkWriteTuple(b *testing.B, format pgwirebase.FormatCode) {
 	i := tree.NewDInt(1234)
 	f := tree.NewDFloat(12.34)
 	s := tree.NewDString("testing")
@@ -231,7 +231,7 @@ func benchmarkWriteTuple(b *testing.B, format formatCode) {
 	benchmarkWriteType(b, t, format)
 }
 
-func benchmarkWriteArray(b *testing.B, format formatCode) {
+func benchmarkWriteArray(b *testing.B, format pgwirebase.FormatCode) {
 	a := tree.NewDArray(types.Int)
 	for i := 0; i < 3; i++ {
 		if err := a.Append(tree.NewDInt(tree.DInt(1234))); err != nil {
@@ -242,78 +242,78 @@ func benchmarkWriteArray(b *testing.B, format formatCode) {
 }
 
 func BenchmarkWriteTextBool(b *testing.B) {
-	benchmarkWriteBool(b, formatText)
+	benchmarkWriteBool(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryBool(b *testing.B) {
-	benchmarkWriteBool(b, formatBinary)
+	benchmarkWriteBool(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextInt(b *testing.B) {
-	benchmarkWriteInt(b, formatText)
+	benchmarkWriteInt(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryInt(b *testing.B) {
-	benchmarkWriteInt(b, formatBinary)
+	benchmarkWriteInt(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextFloat(b *testing.B) {
-	benchmarkWriteFloat(b, formatText)
+	benchmarkWriteFloat(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryFloat(b *testing.B) {
-	benchmarkWriteFloat(b, formatBinary)
+	benchmarkWriteFloat(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextDecimal(b *testing.B) {
-	benchmarkWriteDecimal(b, formatText)
+	benchmarkWriteDecimal(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryDecimal(b *testing.B) {
-	benchmarkWriteDecimal(b, formatBinary)
+	benchmarkWriteDecimal(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextBytes(b *testing.B) {
-	benchmarkWriteBytes(b, formatText)
+	benchmarkWriteBytes(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryBytes(b *testing.B) {
-	benchmarkWriteBytes(b, formatBinary)
+	benchmarkWriteBytes(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextString(b *testing.B) {
-	benchmarkWriteString(b, formatText)
+	benchmarkWriteString(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryString(b *testing.B) {
-	benchmarkWriteString(b, formatBinary)
+	benchmarkWriteString(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextDate(b *testing.B) {
-	benchmarkWriteDate(b, formatText)
+	benchmarkWriteDate(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryDate(b *testing.B) {
-	benchmarkWriteDate(b, formatBinary)
+	benchmarkWriteDate(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextTimestamp(b *testing.B) {
-	benchmarkWriteTimestamp(b, formatText)
+	benchmarkWriteTimestamp(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryTimestamp(b *testing.B) {
-	benchmarkWriteTimestamp(b, formatBinary)
+	benchmarkWriteTimestamp(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextTimestampTZ(b *testing.B) {
-	benchmarkWriteTimestampTZ(b, formatText)
+	benchmarkWriteTimestampTZ(b, pgwirebase.FormatText)
 }
 func BenchmarkWriteBinaryTimestampTZ(b *testing.B) {
-	benchmarkWriteTimestampTZ(b, formatBinary)
+	benchmarkWriteTimestampTZ(b, pgwirebase.FormatBinary)
 }
 
 func BenchmarkWriteTextInterval(b *testing.B) {
-	benchmarkWriteInterval(b, formatText)
+	benchmarkWriteInterval(b, pgwirebase.FormatText)
 }
 
 func BenchmarkWriteTextTuple(b *testing.B) {
-	benchmarkWriteTuple(b, formatText)
+	benchmarkWriteTuple(b, pgwirebase.FormatText)
 }
 
 func BenchmarkWriteTextArray(b *testing.B) {
-	benchmarkWriteArray(b, formatText)
+	benchmarkWriteArray(b, pgwirebase.FormatText)
 }
 
 func BenchmarkDecodeBinaryDecimal(b *testing.B) {
@@ -341,7 +341,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
-		got, err := decodeOidDatum(oid.T_numeric, formatBinary, bytes)
+		got, err := decodeOidDatum(oid.T_numeric, pgwirebase.FormatBinary, bytes)
 		b.StopTimer()
 		evalCtx := tree.NewTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
