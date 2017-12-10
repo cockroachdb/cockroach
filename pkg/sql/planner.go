@@ -332,7 +332,7 @@ func (p *planner) ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, 
 func (p *planner) QueryRow(
 	ctx context.Context, sql string, args ...interface{},
 ) (tree.Datums, error) {
-	rows, err := p.queryRows(ctx, sql, args...)
+	rows, _ /* cols */, err := p.queryRows(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (p *planner) QueryRow(
 // queryRows executes a SQL query string where multiple result rows are returned.
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
-) ([]tree.Datums, error) {
+) ([]tree.Datums, sqlbase.ResultColumns, error) {
 	// makeInternalPlan() clobbers p.curplan and the placeholder info
 	// map, so we have to save/restore them here.
 	defer func(psave planTop, pisave tree.PlaceholderInfo) {
@@ -358,8 +358,9 @@ func (p *planner) queryRows(
 	}(p.curPlan, p.semaCtx.Placeholders)
 
 	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	cols := planColumns(p.curPlan.plan)
 	defer p.curPlan.close(ctx)
 
 	params := runParams{
@@ -368,7 +369,7 @@ func (p *planner) queryRows(
 		p:               p,
 	}
 	if err := p.curPlan.start(params); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var rows []tree.Datums
 	if err := forEachRow(params, p.curPlan.plan, func(values tree.Datums) error {
@@ -378,9 +379,9 @@ func (p *planner) queryRows(
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return rows, nil
+	return rows, cols, nil
 }
 
 // exec executes a SQL query string and returns the number of rows

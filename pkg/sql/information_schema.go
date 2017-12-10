@@ -1071,7 +1071,7 @@ func forEachRole(
 		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),
 	)
 	defer cleanup()
-	rows, err := p.queryRows(ctx, query)
+	rows, _ /* cols */, err := p.queryRows(ctx, query)
 	if err != nil {
 		return err
 	}

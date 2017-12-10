@@ -58,7 +58,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//  - convert column IDs to a list of column names
 			//  - if the statistic has a histogram, we return the statistic ID as a
 			//    "handle" which can be used with SHOW HISTOGRAM.
-			rows, err := p.queryRows(
+			rows, _ /* cols */, err := p.queryRows(
 				ctx,
 				`SELECT "statisticID",
 					      name,

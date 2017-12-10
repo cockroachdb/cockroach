@@ -22,10 +22,21 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
 )
 
 const maxMessageSize = 1 << 24
+
+// FormatCode represents a pgwire data format.
+//
+//go:generate stringer -type=FormatCode
+type FormatCode uint16
+
+const (
+	// FormatText is the default, text format.
+	FormatText FormatCode = 0
+	// FormatBinary is an alternative, binary, encoding.
+	FormatBinary FormatCode = 1
+)
 
 var _ BufferedReader = &bufio.Reader{}
 var _ BufferedReader = &bytes.Buffer{}
@@ -78,7 +89,7 @@ func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 	// size includes itself.
 	size -= 4
 	if size > maxMessageSize || size < 0 {
-		return nread, errors.Errorf("message size %d out of bounds (0..%d)",
+		return nread, NewProtocolViolationErrorf("message size %d out of bounds (0..%d)",
 			size, maxMessageSize)
 	}
 
@@ -102,7 +113,7 @@ func (b *ReadBuffer) ReadTypedMsg(rd BufferedReader) (ClientMessageType, int, er
 func (b *ReadBuffer) GetString() (string, error) {
 	pos := bytes.IndexByte(b.Msg, 0)
 	if pos == -1 {
-		return "", errors.Errorf("NUL terminator not found")
+		return "", NewProtocolViolationErrorf("NUL terminator not found")
 	}
 	// Note: this is a conversion from a byte slice to a string which avoids
 	// allocation and copying. It is safe because we never reuse the bytes in our
@@ -124,7 +135,7 @@ func (b *ReadBuffer) GetPrepareType() (PrepareType, error) {
 // GetBytes returns the buffer's contents as a []byte.
 func (b *ReadBuffer) GetBytes(n int) ([]byte, error) {
 	if len(b.Msg) < n {
-		return nil, errors.Errorf("insufficient data: %d", len(b.Msg))
+		return nil, NewProtocolViolationErrorf("insufficient data: %d", len(b.Msg))
 	}
 	v := b.Msg[:n]
 	b.Msg = b.Msg[n:]
@@ -134,7 +145,7 @@ func (b *ReadBuffer) GetBytes(n int) ([]byte, error) {
 // GetUint16 returns the buffer's contents as a uint16.
 func (b *ReadBuffer) GetUint16() (uint16, error) {
 	if len(b.Msg) < 2 {
-		return 0, errors.Errorf("insufficient data: %d", len(b.Msg))
+		return 0, NewProtocolViolationErrorf("insufficient data: %d", len(b.Msg))
 	}
 	v := binary.BigEndian.Uint16(b.Msg[:2])
 	b.Msg = b.Msg[2:]
@@ -144,7 +155,7 @@ func (b *ReadBuffer) GetUint16() (uint16, error) {
 // GetUint32 returns the buffer's contents as a uint32.
 func (b *ReadBuffer) GetUint32() (uint32, error) {
 	if len(b.Msg) < 4 {
-		return 0, errors.Errorf("insufficient data: %d", len(b.Msg))
+		return 0, NewProtocolViolationErrorf("insufficient data: %d", len(b.Msg))
 	}
 	v := binary.BigEndian.Uint32(b.Msg[:4])
 	b.Msg = b.Msg[4:]
@@ -154,6 +165,10 @@ func (b *ReadBuffer) GetUint32() (uint32, error) {
 // NewUnrecognizedMsgTypeErr creates an error for an unrecognized pgwire
 // message.
 func NewUnrecognizedMsgTypeErr(typ ClientMessageType) error {
-	return pgerror.NewErrorf(
-		pgerror.CodeProtocolViolationError, "unrecognized client message type %v", typ)
+	return NewProtocolViolationErrorf("unrecognized client message type %v", typ)
+}
+
+// NewProtocolViolationErrorf creates a pgwire ProtocolViolationError.
+func NewProtocolViolationErrorf(format string, args ...interface{}) error {
+	return pgerror.NewErrorf(pgerror.CodeProtocolViolationError, format, args...)
 }

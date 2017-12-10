@@ -62,7 +62,7 @@ type preparedStatementMeta struct {
 // preparedPortalMeta is pgwire-specific metadata which is attached to each
 // sql.PreparedPortal on a v3Conn's sql.Session.
 type preparedPortalMeta struct {
-	outFormats []formatCode
+	outFormats []pgwirebase.FormatCode
 }
 
 // readTimeoutConn overloads net.Conn.Read by periodically calling
@@ -148,11 +148,13 @@ type streamingState struct {
 
 	// formatCodes is an array of which indicates whether each column of a row
 	// should be sent as binary or text format. If it is nil then we send as text.
-	formatCodes     []formatCode
+	formatCodes     []pgwirebase.FormatCode
 	sendDescription bool
-	limit           int
-	emptyQuery      bool
-	err             error
+	// limit is a feature of pgwire that we don't really support. We accept it and
+	// don't complain as long as the statement produces fewer results than this.
+	limit      int
+	emptyQuery bool
+	err        error
 
 	// hasSentResults is set if any results have been sent on the client
 	// connection since the last time Close() or Flush() were called. This is used
@@ -180,7 +182,9 @@ type streamingState struct {
 	firstRow bool
 }
 
-func (s *streamingState) reset(formatCodes []formatCode, sendDescription bool, limit int) {
+func (s *streamingState) reset(
+	formatCodes []pgwirebase.FormatCode, sendDescription bool, limit int,
+) {
 	s.formatCodes = formatCodes
 	s.sendDescription = sendDescription
 	s.limit = limit
@@ -194,13 +198,11 @@ func (s *streamingState) reset(formatCodes []formatCode, sendDescription bool, l
 func makeV3Conn(
 	conn net.Conn, metrics *ServerMetrics, sqlMemoryPool *mon.BytesMonitor, executor *sql.Executor,
 ) v3Conn {
-	wb := newWriteBuffer()
-	wb.bytecount = metrics.BytesOutCount
 	return v3Conn{
 		conn:          conn,
 		rd:            bufio.NewReader(conn),
 		wr:            bufio.NewWriter(conn),
-		writeBuf:      wb,
+		writeBuf:      newWriteBuffer(metrics.BytesOutCount),
 		metrics:       metrics,
 		executor:      executor,
 		sqlMemoryPool: sqlMemoryPool,
@@ -726,7 +728,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 
 	stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
 	numQArgs := uint16(len(stmtMeta.inTypes))
-	qArgFormatCodes := make([]formatCode, numQArgs)
+	qArgFormatCodes := make([]pgwirebase.FormatCode, numQArgs)
 	// From the docs on number of argument format codes to bind:
 	// This can be zero to indicate that there are no arguments or that the
 	// arguments all use the default format (text); or one, in which case the
@@ -745,7 +747,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 		if err != nil {
 			return err
 		}
-		fmtCode := formatCode(c)
+		fmtCode := pgwirebase.FormatCode(c)
 		for i := range qArgFormatCodes {
 			qArgFormatCodes[i] = fmtCode
 		}
@@ -756,7 +758,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 			if err != nil {
 				return err
 			}
-			qArgFormatCodes[i] = formatCode(c)
+			qArgFormatCodes[i] = pgwirebase.FormatCode(c)
 		}
 	default:
 		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "wrong number of format codes specified: %d for %d arguments", numQArgFormatCodes, numQArgs))
@@ -793,7 +795,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 	}
 
 	numColumns := uint16(len(stmt.Columns))
-	columnFormatCodes := make([]formatCode, numColumns)
+	columnFormatCodes := make([]pgwirebase.FormatCode, numColumns)
 
 	// From the docs on number of result-column format codes to bind:
 	// This can be zero to indicate that there are no result columns or that
@@ -814,7 +816,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 		if err != nil {
 			return err
 		}
-		fmtCode := formatCode(c)
+		fmtCode := pgwirebase.FormatCode(c)
 		for i := range columnFormatCodes {
 			columnFormatCodes[i] = fmtCode
 		}
@@ -825,7 +827,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 			if err != nil {
 				return err
 			}
-			columnFormatCodes[i] = formatCode(c)
+			columnFormatCodes[i] = pgwirebase.FormatCode(c)
 		}
 	default:
 		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "expected 0, 1, or %d for number of format codes, got %d", numColumns, numColumnFormatCodes))
@@ -962,7 +964,10 @@ func (c *v3Conn) sendNoData(w io.Writer) error {
 // sendRowDescription sends a row description over the wire for the given
 // slice of columns.
 func (c *v3Conn) sendRowDescription(
-	ctx context.Context, columns []sqlbase.ResultColumn, formatCodes []formatCode, w io.Writer,
+	ctx context.Context,
+	columns []sqlbase.ResultColumn,
+	formatCodes []pgwirebase.FormatCode,
+	w io.Writer,
 ) error {
 	c.writeBuf.initMsg(pgwirebase.ServerMsgRowDescription)
 	c.writeBuf.putInt16(int16(len(columns)))
@@ -988,7 +993,7 @@ func (c *v3Conn) sendRowDescription(
 		// TODO(justin): It would be good to include this information when possible.
 		c.writeBuf.putInt32(-1)
 		if formatCodes == nil {
-			c.writeBuf.putInt16(int16(formatText))
+			c.writeBuf.putInt16(int16(pgwirebase.FormatText))
 		} else {
 			c.writeBuf.putInt16(int16(formatCodes[i]))
 		}
@@ -999,10 +1004,10 @@ func (c *v3Conn) sendRowDescription(
 // BeginCopyIn is part of the pgwirebase.Conn interface.
 func (c *v3Conn) BeginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) error {
 	c.writeBuf.initMsg(pgwirebase.ServerMsgCopyInResponse)
-	c.writeBuf.writeByte(byte(formatText))
+	c.writeBuf.writeByte(byte(pgwirebase.FormatText))
 	c.writeBuf.putInt16(int16(len(columns)))
 	for range columns {
-		c.writeBuf.putInt16(int16(formatText))
+		c.writeBuf.putInt16(int16(pgwirebase.FormatText))
 	}
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
 		return sql.NewWireFailureError(err)
@@ -1213,14 +1218,14 @@ func (c *v3Conn) AddRow(ctx context.Context, row tree.Datums) error {
 	c.writeBuf.initMsg(pgwirebase.ServerMsgDataRow)
 	c.writeBuf.putInt16(int16(len(row)))
 	for i, col := range row {
-		fmtCode := formatText
+		fmtCode := pgwirebase.FormatText
 		if formatCodes != nil {
 			fmtCode = formatCodes[i]
 		}
 		switch fmtCode {
-		case formatText:
+		case pgwirebase.FormatText:
 			c.writeBuf.writeTextDatum(ctx, col, c.session.Location())
-		case formatBinary:
+		case pgwirebase.FormatBinary:
 			c.writeBuf.writeBinaryDatum(ctx, col, c.session.Location())
 		default:
 			c.writeBuf.setError(errors.Errorf("unsupported format code %s", fmtCode))
