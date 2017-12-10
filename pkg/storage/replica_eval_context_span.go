@@ -66,6 +66,11 @@ func (rec *SpanSetReplicaEvalContext) ClusterSettings() *cluster.Settings {
 	return rec.i.ClusterSettings()
 }
 
+// Clock returns the Replica's clock.
+func (rec *SpanSetReplicaEvalContext) Clock() *hlc.Clock {
+	return rec.i.Clock()
+}
+
 // DB returns the Replica's client DB.
 func (rec *SpanSetReplicaEvalContext) DB() *client.DB {
 	return rec.i.DB()

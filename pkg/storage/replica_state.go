@@ -138,6 +138,11 @@ func (r *Replica) Tracer() opentracing.Tracer {
 	return r.store.Tracer()
 }
 
+// Clock returns the hlc clock shared by this replica.
+func (r *Replica) Clock() *hlc.Clock {
+	return r.store.Clock()
+}
+
 // DB returns the Replica's client DB.
 func (r *Replica) DB() *client.DB {
 	return r.store.DB()
