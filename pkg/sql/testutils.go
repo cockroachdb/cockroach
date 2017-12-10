@@ -60,3 +60,31 @@ func makeTestingExtendedEvalContext() extendedEvalContext {
 		EvalContext: tree.MakeTestingEvalContext(),
 	}
 }
+
+// StmtBufReader is an exported interface for reading a StmtBuf.
+// Normally only the write interface of the buffer is exported, as it is used by
+// the pgwire.
+type StmtBufReader struct {
+	buf *StmtBuf
+}
+
+// MakeStmtBufReader creates a StmtBufReader.
+func MakeStmtBufReader(buf *StmtBuf) StmtBufReader {
+	return StmtBufReader{buf: buf}
+}
+
+// CurCmd returns the current command in the buffer.
+func (r StmtBufReader) CurCmd(ctx context.Context) (Command, error) {
+	cmd, _ /* pos */, err := r.buf.curCmd(ctx)
+	return cmd, err
+}
+
+// AdvanceOne moves the cursor one position over.
+func (r *StmtBufReader) AdvanceOne(ctx context.Context) {
+	r.buf.advanceOne(ctx)
+}
+
+// SeekToNextBatch skips to the beginning of the next batch of commands.
+func (r *StmtBufReader) SeekToNextBatch(ctx context.Context) error {
+	return r.buf.seekToNextBatch(ctx)
+}

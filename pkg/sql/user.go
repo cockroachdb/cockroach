@@ -64,7 +64,7 @@ func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, err
 	newPlanner, cleanup := newInternalPlanner(
 		"get-all-users-and-roles", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
 	defer cleanup()
-	rows, err := newPlanner.queryRows(ctx, query)
+	rows, _ /* cols */, err := newPlanner.queryRows(ctx, query)
 	if err != nil {
 		return nil, err
 	}
