@@ -76,6 +76,14 @@ func (c cursorPosition) compare(other cursorPosition) int {
 // the reader's position. The reader has to manually move the cursor using
 // advanceOne(), seekToNextQueryStr() and rewind().
 //
+// The buffer keeps track of "query strings" instead of splitting them into
+// constituent statements and joining all the query strings because of the
+// error semantics that users need: in case of an execution error, a whole query
+// string needs to be skipped.
+//
+// The stmtBuf can also contained PreparedStatement's (with arguments). A
+// prepared statement is modeled as a batch.
+//
 // In practice, the writer is a module responsible for communicating with a SQL
 // client (i.e.  pgwire) and the reader is a ConnExecutor.
 //
@@ -96,15 +104,70 @@ type stmtBuf struct {
 		// cond is signaled when new statements are pushed.
 		cond *sync.Cond
 
-		queryStrings []tree.StatementList
-		// startPos indicates the index of queryStrings[0] relative to the start of
-		// the connection.
+		// batches contains the elements of the buffer.
+		batches []queryStrOrPreparedStmt
+		// startPos indicates the index of the first statement currently in batches
+		// relative to the start of the connection.
 		startPos queryStrPos
 		// curPos is the current position of the cursor going through the statements.
 		// At any time, curPos indicates the position of the statement to be returned
 		// by curStmt().
 		curPos cursorPosition
 	}
+}
+
+// queryStrOrPreparedStmt represents an element of the stmtBuf: either a query
+// string (so, potentially multiple statements) or a single prepared statement.
+// Given the pgwire protocol, there's no such thing as executing multiple
+// prepared statements in any sort of a batch; that's why only one is supported
+// here.
+type queryStrOrPreparedStmt struct {
+	// nil if prepatedStmt is populated.
+	queryStr tree.StatementList
+	// nil if queryStr is populater.
+	preparedStmt *PreparedStatement
+	// If preparedStmt is populated, pinfo provides the arguments.
+	pinfo *tree.PlaceholderInfo
+}
+
+// length returns the number of statements in the batch. If the batch is a
+// prepared statement, the number is 1.
+func (q *queryStrOrPreparedStmt) length() int {
+	if q.queryStr != nil {
+		return len(q.queryStr)
+	}
+	return 1
+}
+
+// get returns the query at position i. If q is a prepared statement, the only
+// valid position is 0.
+func (q *queryStrOrPreparedStmt) get(i stmtIdx) queryOrPreparedStmt {
+	if q.queryStr != nil {
+		if int(i) >= len(q.queryStr) {
+			panic(fmt.Sprintf("invalid position %d in query string of len: %d",
+				i, len(q.queryStr)))
+		}
+		return queryOrPreparedStmt{query: q.queryStr[i]}
+	}
+	if i != 0 {
+		panic(fmt.Sprintf("invalid position %d for a prepared statement",
+			i))
+	}
+	return queryOrPreparedStmt{
+		preparedStmt: q.preparedStmt,
+		pinfo:        q.pinfo,
+	}
+}
+
+// queryOrPreparedStmt represents one query that's part of the stmtBuf; this is
+// what curStmt() returns.
+type queryOrPreparedStmt struct {
+	// nil if prepatedStmt is populated.
+	query tree.Statement
+	// nil if queryStr is populater.
+	preparedStmt *PreparedStatement
+	// If preparedStmt is populated, pinfo provides the arguments.
+	pinfo *tree.PlaceholderInfo
 }
 
 // newStmtBuf creates a stmtBuf.
@@ -151,22 +214,22 @@ func (buf *stmtBuf) curStmt(ctx context.Context) (tree.Statement, cursorPosition
 	defer buf.mu.Unlock()
 	for {
 		if buf.mu.closed {
-			return nil, cursorPosition{}, io.EOF
+			return queryOrPreparedStmt{}, cursorPosition{}, io.EOF
 		}
 		curPos := buf.mu.curPos
 		qsIdx, err := buf.translateQueryStrPosLocked(curPos.queryStrPos)
 		if err != nil {
-			return nil, cursorPosition{}, err
+			return queryOrPreparedStmt{}, cursorPosition{}, err
 		}
-		if qsIdx < len(buf.mu.queryStrings) {
-			qs := buf.mu.queryStrings[qsIdx]
-			if int(curPos.stmtIdx) >= len(qs) {
+		if batchIdx < len(buf.mu.batches) {
+			batch := buf.mu.batches[batchIdx]
+			if int(curPos.stmtIdx) >= batch.length() {
 				log.Fatalf(ctx, "corrupt cursor: %s", curPos)
 			}
 			return buf.mu.queryStrings[qsIdx][curPos.stmtIdx], curPos, nil
 		}
-		if (qsIdx != len(buf.mu.queryStrings)) || (curPos.stmtIdx != 0) {
-			return nil, cursorPosition{}, errors.Errorf(
+		if (batchIdx != len(buf.mu.batches)) || (curPos.stmtIdx != 0) {
+			return queryOrPreparedStmt{}, cursorPosition{}, errors.Errorf(
 				"can only wait for next query string; corrupt cursor: %s", curPos)
 		}
 		// Wait for the next statement to arrive to the buffer.
