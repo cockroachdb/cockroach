@@ -142,27 +142,27 @@ fetched: /t/a_desc/2/'two' -> NULL
 output row: [2]
 
 # Index selection occurs in direct join operands too.
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
 ----
-0  render      ·               ·
-1  render      ·               ·
-2  join        ·               ·
-2  ·           type            inner
-2  ·           equality        (b) = (b)
-2  ·           mergeJoinOrder  +"(b=b)"
-3  index-join  ·               ·
-4  scan        ·               ·
-4  ·           table           t@bc
-4  ·           spans           /!NULL-/"3"
-4  scan        ·               ·
-4  ·           table           t@primary
-3  index-join  ·               ·
-4  scan        ·               ·
-4  ·           table           t@bc
-4  ·           spans           /!NULL-/"3"
-4  scan        ·               ·
-4  ·           table           t@primary
+render                     ·               ·
+ └── render                ·               ·
+      └── join             ·               ·
+           │               type            inner
+           │               equality        (b) = (b)
+           │               mergeJoinOrder  +"(b=b)"
+           ├── index-join  ·               ·
+           │    ├── scan   ·               ·
+           │    │          table           t@bc
+           │    │          spans           /!NULL-/"3"
+           │    └── scan   ·               ·
+           │               table           t@primary
+           └── index-join  ·               ·
+                ├── scan   ·               ·
+                │          table           t@bc
+                │          spans           /!NULL-/"3"
+                └── scan   ·               ·
+·                          table           t@primary
 
 statement ok
 TRUNCATE TABLE t
@@ -192,11 +192,11 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 1 AND b > 'b']
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
-0  render  ·  ·
-1  norows  ·  ·
+render       ·  ·
+ └── norows  ·  ·
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b]
@@ -312,11 +312,11 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a + 1 = 4]
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
-0  render  ·  ·
-1  norows  ·  ·
+render       ·  ·
+ └── norows  ·  ·
 
 # Make sure that mixed type comparison operations are not used
 # for selecting indexes.
@@ -347,86 +347,86 @@ SELECT b FROM t WHERE c > 4.0 AND a < 4
 ----
 4
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE c > 1
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  ALL
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  /!NULL-/4/1
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  /!NULL-/4/1
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  ALL
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE c < 1.0
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  ALL
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  /!NULL-/5
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  /!NULL-/5
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  /!NULL-/4/1
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  /!NULL-/4/1
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  /5/1-/5/2
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  /5/1-/5/2
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  /5/1-/5/2
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  /5/1-/5/2
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@bc
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@bc
+·          spans  ALL
 
 # Note the span is reversed because of #20203.
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@b_desc
-1  ·       spans  /5-/4 /1-/0
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@b_desc
+·          spans  /5-/4 /1-/0
 
 statement ok
 CREATE TABLE abcd (
@@ -440,21 +440,21 @@ CREATE TABLE abcd (
 
 # Verify that we prefer the index where more columns are constrained, even if it
 # has more keys per row.
-query ITTT
+query TTT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) = (1, 4)
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abcd@abcd
-1  ·       spans  /1/4-/1/5
+render     ·      ·
+ └── scan  ·      ·
+·          table  abcd@abcd
+·          spans  /1/4-/1/5
 
-query ITTT
+query TTT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abcd@abcd
-1  ·       spans  /1/4-/1/5 /2/9-/2/10
+render     ·      ·
+ └── scan  ·      ·
+·          table  abcd@abcd
+·          spans  /1/4-/1/5 /2/9-/2/10
 
 statement ok
 CREATE TABLE ab (
@@ -477,13 +477,13 @@ SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 1 a
 1 b
 
-query ITTT
+query TTT
 EXPLAIN SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  ab@baz
-1  ·       spans  /!NULL-/1/"c"
+render     ·      ·
+ └── scan  ·      ·
+·          table  ab@baz
+·          spans  /!NULL-/1/"c"
 
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
@@ -497,25 +497,25 @@ abz    abz_c_b_key  true      1  c       DESC       false    false
 abz    abz_c_b_key  true      2  b       ASC        false    false
 abz    abz_c_b_key  true      3  a       ASC        false    true
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
-0  limit   ·      ·
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  abz@primary
-2  ·       spans  ALL
-2  ·       limit  1
+limit           ·      ·
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  abz@primary
+·               spans  ALL
+·               limit  1
 
-query ITTT
+query TTT
 EXPLAIN SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ----
-0  limit   ·      ·
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  abz@abz_c_b_key
-2  ·       spans  ALL
-2  ·       limit  1
+limit           ·      ·
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  abz@abz_c_b_key
+·               spans  ALL
+·               limit  1
 
 # Issue #14426: verify we don't have an internal filter that contains "a IN ()"
 # (which causes an error in DistSQL due to expression serialization).
@@ -526,15 +526,15 @@ CREATE TABLE tab0(
   b INT
 )
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
-0  render  ·         ·                                     (k)        k!=NULL; key(k)
-0  ·       render 0  test.tab0.k                           ·          ·
-1  scan    ·         ·                                     (k, a, b)  k!=NULL; key(k)
-1  ·       table     tab0@primary                          ·          ·
-1  ·       spans     ALL                                   ·          ·
-1  ·       filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)  ·          ·
+render     0  render  ·         ·                                     (k)  k!=NULL; key(k)
+ │         0  ·       render 0  test.tab0.k                           ·    ·
+ └── scan  1  scan    ·         ·                                     (k)  k!=NULL; key(k)
+·          1  ·       table     tab0@primary                          ·    ·
+·          1  ·       spans     ALL                                   ·    ·
+·          1  ·       filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)  ·    ·
 
 query I
 SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
@@ -613,17 +613,17 @@ CREATE TABLE test2 (id BIGSERIAL PRIMARY KEY, k TEXT UNIQUE, v INT DEFAULT 42);
 # Plan check:
 # The query is using an index-join and the limit is propagated to the scan.
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
-0  limit       ·      ·
-1  index-join  ·      ·
-2  revscan     ·      ·
-2  ·           table  test2@test2_k_key
-2  ·           spans  /!NULL-/"100"/PrefixEnd
-2  ·           limit  20
-2  scan        ·      ·
-2  ·           table  test2@primary
+limit              ·      ·
+ └── index-join    ·      ·
+      ├── revscan  ·      ·
+      │            table  test2@test2_k_key
+      │            spans  /!NULL-/"100"/PrefixEnd
+      │            limit  20
+      └── scan     ·      ·
+·                  table  test2@primary
 
 # Result check: The following query must not issue more than the
 # requested LIMIT K/V reads, even though an index join batches 100
@@ -706,7 +706,7 @@ INSERT INTO favorites (customerid, guid_id, resource_type, device_group, jurisdi
          (5, '5', 'GAME', 'web', 'MT', 'xxx', 'en_GB', 'ts3'),
          (6, '6', 'GAME', 'web', 'MT', 'xxx', 'en_GB', 'ts4')
 
-query ITTT
+query TTT
 EXPLAIN SELECT
   resource_key,
   count(resource_key) total
@@ -720,14 +720,14 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-0  sort    ·         ·
-0  ·       order     -total
-1  group   ·         ·
-1  ·       group by  @1-@1
-2  render  ·         ·
-3  scan    ·         ·
-3  ·       table     favorites@favorites_glob_fav_idx
-3  ·       spans     /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+sort                 ·         ·
+ │                   order     -total
+ └── group           ·         ·
+      │              group by  @1-@1
+      └── render     ·         ·
+           └── scan  ·         ·
+·                    table     favorites@favorites_glob_fav_idx
+·                    spans     /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
 
 query TI rowsort
 SELECT
@@ -783,17 +783,17 @@ INSERT INTO abcd VALUES
 (1,    10,   5),
 (1,    10,   10)
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
 ----
-0  render  ·         ·               (a, b, c, d)                         a=CONST; b!=NULL
-0  ·       render 0  test.abcd.a     ·                                    ·
-0  ·       render 1  test.abcd.b     ·                                    ·
-0  ·       render 2  test.abcd.c     ·                                    ·
-0  ·       render 3  test.abcd.d     ·                                    ·
-1  scan    ·         ·               (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
-1  ·       table     abcd@abcd       ·                                    ·
-1  ·       spans     /NULL/6-/!NULL  ·                                    ·
+render     0  render  ·         ·               (a, b, c, d)  a=CONST; b!=NULL
+ │         0  ·       render 0  test.abcd.a     ·             ·
+ │         0  ·       render 1  test.abcd.b     ·             ·
+ │         0  ·       render 2  test.abcd.c     ·             ·
+ │         0  ·       render 3  test.abcd.d     ·             ·
+ └── scan  1  scan    ·         ·               (a, b, c, d)  a=CONST; b!=NULL
+·          1  ·       table     abcd@abcd       ·             ·
+·          1  ·       spans     /NULL/6-/!NULL  ·             ·
 
 query IIII rowsort
 SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
@@ -803,17 +803,17 @@ NULL  10  1     NULL
 NULL  10  5     NULL
 NULL  10  10    NULL
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
 ----
-0  render  ·         ·                    (a, b, c, d)                         a=CONST; b!=NULL
-0  ·       render 0  test.abcd.a          ·                                    ·
-0  ·       render 1  test.abcd.b          ·                                    ·
-0  ·       render 2  test.abcd.c          ·                                    ·
-0  ·       render 3  test.abcd.d          ·                                    ·
-1  scan    ·         ·                    (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
-1  ·       table     abcd@abcd            ·                                    ·
-1  ·       spans     /NULL/!NULL-/NULL/5  ·                                    ·
+render     0  render  ·         ·                    (a, b, c, d)  a=CONST; b!=NULL
+ │         0  ·       render 0  test.abcd.a          ·             ·
+ │         0  ·       render 1  test.abcd.b          ·             ·
+ │         0  ·       render 2  test.abcd.c          ·             ·
+ │         0  ·       render 3  test.abcd.d          ·             ·
+ └── scan  1  scan    ·         ·                    (a, b, c, d)  a=CONST; b!=NULL
+·          1  ·       table     abcd@abcd            ·             ·
+·          1  ·       spans     /NULL/!NULL-/NULL/5  ·             ·
 
 query IIII rowsort
 SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
@@ -823,17 +823,17 @@ NULL  1  1     NULL
 NULL  1  5     NULL
 NULL  1  10    NULL
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
 ----
-0  render  ·         ·             (a, b, c, d)                         a=CONST; +b
-0  ·       render 0  test.abcd.a   ·                                    ·
-0  ·       render 1  test.abcd.b   ·                                    ·
-0  ·       render 2  test.abcd.c   ·                                    ·
-0  ·       render 3  test.abcd.d   ·                                    ·
-1  scan    ·         ·             (a, b, c, d, rowid[hidden,omitted])  a=CONST; rowid!=NULL; weak-key(b,c,d,rowid); +b
-1  ·       table     abcd@abcd     ·                                    ·
-1  ·       spans     /NULL-/!NULL  ·                                    ·
+render     0  render  ·         ·             (a, b, c, d)  a=CONST; +b
+ │         0  ·       render 0  test.abcd.a   ·             ·
+ │         0  ·       render 1  test.abcd.b   ·             ·
+ │         0  ·       render 2  test.abcd.c   ·             ·
+ │         0  ·       render 3  test.abcd.d   ·             ·
+ └── scan  1  scan    ·         ·             (a, b, c, d)  a=CONST; +b
+·          1  ·       table     abcd@abcd     ·             ·
+·          1  ·       spans     /NULL-/!NULL  ·             ·
 
 query IIII partialsort(1,2)
 SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
@@ -855,17 +855,17 @@ NULL  10    1     NULL
 NULL  10    5     NULL
 NULL  10    10    NULL
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
 ----
-0  render  ·         ·                     (a, b, c, d)                         a=CONST; b=CONST; c!=NULL; +c
-0  ·       render 0  test.abcd.a           ·                                    ·
-0  ·       render 1  test.abcd.b           ·                                    ·
-0  ·       render 2  test.abcd.c           ·                                    ·
-0  ·       render 3  test.abcd.d           ·                                    ·
-1  scan    ·         ·                     (a, b, c, d, rowid[hidden,omitted])  a=CONST; b=CONST; c!=NULL; rowid!=NULL; weak-key(c,d,rowid); +c
-1  ·       table     abcd@abcd             ·                                    ·
-1  ·       spans     /1/NULL/1-/1/NULL/10  ·                                    ·
+render     0  render  ·         ·                     (a, b, c, d)  a=CONST; b=CONST; c!=NULL; +c
+ │         0  ·       render 0  test.abcd.a           ·             ·
+ │         0  ·       render 1  test.abcd.b           ·             ·
+ │         0  ·       render 2  test.abcd.c           ·             ·
+ │         0  ·       render 3  test.abcd.d           ·             ·
+ └── scan  1  scan    ·         ·                     (a, b, c, d)  a=CONST; b=CONST; c!=NULL; +c
+·          1  ·       table     abcd@abcd             ·             ·
+·          1  ·       spans     /1/NULL/1-/1/NULL/10  ·             ·
 
 query IIII 
 SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c

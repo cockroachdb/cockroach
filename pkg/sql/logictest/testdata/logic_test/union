@@ -143,31 +143,31 @@ SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 
 3
 2
 
-query ITTT rowsort
+query TTT rowsort
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
-0  union   ·      ·
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  uniontest@primary
-2  ·       spans  ALL
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  uniontest@primary
-2  ·       spans  ALL
+union           ·      ·
+ ├── render     ·      ·
+ │    └── scan  ·      ·
+ │              table  uniontest@primary
+ │              spans  ALL
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  uniontest@primary
+·               spans  ALL
 
-query ITTT rowsort
+query TTT rowsort
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-0  append  ·      ·
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  uniontest@primary
-2  ·       spans  ALL
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  uniontest@primary
-2  ·       spans  ALL
+append          ·      ·
+ ├── render     ·      ·
+ │    └── scan  ·      ·
+ │              table  uniontest@primary
+ │              spans  ALL
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  uniontest@primary
+·               spans  ALL
 
 query II
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
@@ -201,12 +201,12 @@ query error column z does not exist
 SELECT 1 UNION SELECT 3 ORDER BY z
 
 # Check that EXPLAIN properly releases memory for virtual tables.
-query ITTT
+query TTT
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
-0  union   ·     ·
-1  values  ·     ·
-1  ·       size  1 column, 1 row
-1  render  ·     ·
-2  values  ·     ·
-2  ·       size  3 columns, 5 rows
+union             ·     ·
+ ├── values       ·     ·
+ │                size  1 column, 1 row
+ └── render       ·     ·
+      └── values  ·     ·
+·                 size  3 columns, 5 rows

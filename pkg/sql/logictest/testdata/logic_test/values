@@ -28,12 +28,12 @@ VALUES ((SELECT 1)), ((SELECT 2))
 2
 
 # the subquery's plan must be visible in EXPLAIN
-query ITTT
+query TTT
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
-0  values    ·           ·
-0  ·         size        1 column, 2 rows
-0  ·         subqueries  1
-1  limit     ·           ·
-2  render    ·           ·
-3  emptyrow  ·           ·
+values                   ·           ·
+ │                       size        1 column, 2 rows
+ │                       subqueries  1
+ └── limit               ·           ·
+      └── render         ·           ·
+           └── emptyrow  ·           ·

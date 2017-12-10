@@ -140,24 +140,24 @@ query IT rowsort label-sq-str
 SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared
 
 # Merge join.
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-0  render  ·               ·                    (x, str)                                 x!=NULL; key(x)
-0  ·       render 0        test.numtosquare.x   ·                                        ·
-0  ·       render 1        test.numtostr.str    ·                                        ·
-1  join    ·               ·                    (x, xsquared[omitted], y[omitted], str)  x=y; x!=NULL; key(x)
-1  ·       type            inner                ·                                        ·
-1  ·       equality        (x) = (y)            ·                                        ·
-1  ·       mergeJoinOrder  +"(x=y)"             ·                                        ·
-2  scan    ·               ·                    (x, xsquared[omitted])                   x!=NULL; key(x); +x
-2  ·       table           numtosquare@primary  ·                                        ·
-2  ·       spans           ALL                  ·                                        ·
-2  ·       filter          (x % 2) = 0          ·                                        ·
-2  scan    ·               ·                    (y, str)                                 y!=NULL; key(y); +y
-2  ·       table           numtostr@primary     ·                                        ·
-2  ·       spans           ALL                  ·                                        ·
-2  ·       filter          (y % 2) = 0          ·                                        ·
+render          0  render  ·               ·                    (x, str)  x!=NULL; key(x)
+ │              0  ·       render 0        test.numtosquare.x   ·         ·
+ │              0  ·       render 1        test.numtostr.str    ·         ·
+ └── join       1  join    ·               ·                    (x, str)  x!=NULL; key(x)
+      │         1  ·       type            inner                ·         ·
+      │         1  ·       equality        (x) = (y)            ·         ·
+      │         1  ·       mergeJoinOrder  +"(x=y)"             ·         ·
+      ├── scan  2  scan    ·               ·                    (x, str)  x!=NULL; key(x)
+      │         2  ·       table           numtosquare@primary  ·         ·
+      │         2  ·       spans           ALL                  ·         ·
+      │         2  ·       filter          (x % 2) = 0          ·         ·
+      └── scan  2  scan    ·               ·                    (x, str)  x!=NULL; key(x)
+·               2  ·       table           numtostr@primary     ·         ·
+·               2  ·       spans           ALL                  ·         ·
+·               2  ·       filter          (y % 2) = 0          ·         ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
@@ -273,18 +273,18 @@ SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str
 statement ok
 SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str LIMIT 10
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-0  render  ·         ·                    (x)                                      x!=NULL; key(x)
-0  ·       render 0  x                    ·                                        ·
-1  render  ·         ·                    (x, "2 * x"[omitted], "x + 1"[omitted])  x!=NULL; key(x)
-1  ·       render 0  test.numtosquare.x   ·                                        ·
-1  ·       render 1  NULL                 ·                                        ·
-1  ·       render 2  NULL                 ·                                        ·
-2  scan    ·         ·                    (x, xsquared[omitted])                   x!=NULL; key(x)
-2  ·       table     numtosquare@primary  ·                                        ·
-2  ·       spans     ALL                  ·                                        ·
+render          0  render  ·         ·                    (x)  x!=NULL; key(x)
+ │              0  ·       render 0  x                    ·    ·
+ └── render     1  render  ·         ·                    (x)  x!=NULL; key(x)
+      │         1  ·       render 0  test.numtosquare.x   ·    ·
+      │         1  ·       render 1  NULL                 ·    ·
+      │         1  ·       render 2  NULL                 ·    ·
+      └── scan  2  scan    ·         ·                    (x)  x!=NULL; key(x)
+·               2  ·       table     numtosquare@primary  ·    ·
+·               2  ·       spans     ALL                  ·    ·
 
 # Verifies that unused renders don't cause us to do rendering instead of a
 # simple projection.

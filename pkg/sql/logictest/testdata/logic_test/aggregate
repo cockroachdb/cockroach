@@ -250,18 +250,18 @@ query error column "s" must appear in the GROUP BY clause or be used in an aggre
 SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
 
 # Selecting and grouping on a more complex expression works.
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
-0  group   ·            ·                      (count, "k + v")                ·
-0  ·       aggregate 0  count_rows()           ·                               ·
-0  ·       aggregate 1  test.kv.k + test.kv.v  ·                               ·
-0  ·       group by     @1-@1                  ·                               ·
-1  render  ·            ·                      ("k + v")                       ·
-1  ·       render 0     test.kv.k + test.kv.v  ·                               ·
-2  scan    ·            ·                      (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
-2  ·       table        kv@primary             ·                               ·
-2  ·       spans        ALL                    ·                               ·
+group           0  group   ·            ·                      (count, "k + v")  ·
+ │              0  ·       aggregate 0  count_rows()           ·                 ·
+ │              0  ·       aggregate 1  test.kv.k + test.kv.v  ·                 ·
+ │              0  ·       group by     @1-@1                  ·                 ·
+ └── render     1  render  ·            ·                      (count, "k + v")  ·
+      │         1  ·       render 0     test.kv.k + test.kv.v  ·                 ·
+      └── scan  2  scan    ·            ·                      (count, "k + v")  ·
+·               2  ·       table        kv@primary             ·                 ·
+·               2  ·       spans        ALL                    ·                 ·
 
 query II rowsort
 SELECT COUNT(*), k+v FROM kv GROUP BY k+v
@@ -275,23 +275,23 @@ SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
-0  render  ·            ·             (count, "k + v")                ·
-0  ·       render 0     count_rows    ·                               ·
-0  ·       render 1     k + v         ·                               ·
-1  group   ·            ·             (count_rows, k, v)              ·
-1  ·       aggregate 0  count_rows()  ·                               ·
-1  ·       aggregate 1  test.kv.k     ·                               ·
-1  ·       aggregate 2  test.kv.v     ·                               ·
-1  ·       group by     @1-@2         ·                               ·
-2  render  ·            ·             (k, v)                          k!=NULL; key(k)
-2  ·       render 0     test.kv.k     ·                               ·
-2  ·       render 1     test.kv.v     ·                               ·
-3  scan    ·            ·             (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
-3  ·       table        kv@primary    ·                               ·
-3  ·       spans        ALL           ·                               ·
+render               0  render  ·            ·             (count, "k + v")  ·
+ │                   0  ·       render 0     count_rows    ·                 ·
+ │                   0  ·       render 1     k + v         ·                 ·
+ └── group           1  group   ·            ·             (count, "k + v")  ·
+      │              1  ·       aggregate 0  count_rows()  ·                 ·
+      │              1  ·       aggregate 1  test.kv.k     ·                 ·
+      │              1  ·       aggregate 2  test.kv.v     ·                 ·
+      │              1  ·       group by     @1-@2         ·                 ·
+      └── render     2  render  ·            ·             (count, "k + v")  ·
+           │         2  ·       render 0     test.kv.k     ·                 ·
+           │         2  ·       render 1     test.kv.v     ·                 ·
+           └── scan  3  scan    ·            ·             (count, "k + v")  ·
+·                    3  ·       table        kv@primary    ·                 ·
+·                    3  ·       spans        ALL           ·                 ·
 
 query II rowsort
 SELECT COUNT(*), k+v FROM kv GROUP BY k, v
@@ -533,29 +533,29 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
 14.0
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT COUNT(k) FROM kv
 ----
-0  group   ·            ·
-0  ·       aggregate 0  count(k)
-1  render  ·            ·
-1  ·       render 0     k
-2  scan    ·            ·
-2  ·       table        kv@primary
-2  ·       spans        ALL
+group           ·            ·
+ │              aggregate 0  count(k)
+ └── render     ·            ·
+      │         render 0     k
+      └── scan  ·            ·
+·               table        kv@primary
+·               spans        ALL
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
 ----
-0  group   ·            ·
-0  ·       aggregate 0  count(k)
-0  ·       aggregate 1  sum(k)
-0  ·       aggregate 2  max(k)
-1  render  ·            ·
-1  ·       render 0     k
-2  scan    ·            ·
-2  ·       table        kv@primary
-2  ·       spans        ALL
+group           ·            ·
+ │              aggregate 0  count(k)
+ │              aggregate 1  sum(k)
+ │              aggregate 2  max(k)
+ └── render     ·            ·
+      │         render 0     k
+      └── scan  ·            ·
+·               table        kv@primary
+·               spans        ALL
 
 statement ok
 CREATE TABLE abc (
@@ -568,17 +568,17 @@ CREATE TABLE abc (
 statement ok
 INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 ----
-0  group   ·            ·
-0  ·       aggregate 0  min(a)
-1  render  ·            ·
-1  ·       render 0     a
-2  scan    ·            ·
-2  ·       table        abc@primary
-2  ·       spans        ALL
-2  ·       limit        1
+group           ·            ·
+ │              aggregate 0  min(a)
+ └── render     ·            ·
+      │         render 0     a
+      └── scan  ·            ·
+·               table        abc@primary
+·               spans        ALL
+·               limit        1
 
 query TRBR
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
@@ -648,136 +648,136 @@ SELECT MIN(x) FROM xyz
 ----
 1
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz
 ----
-0  group   ·            ·
-0  ·       aggregate 0  min(x)
-1  render  ·            ·
-1  ·       render 0     x
-2  scan    ·            ·
-2  ·       table        xyz@xy
-2  ·       spans        ALL
-2  ·       limit        1
+group           ·            ·
+ │              aggregate 0  min(x)
+ └── render     ·            ·
+      │         render 0     x
+      └── scan  ·            ·
+·               table        xyz@xy
+·               spans        ALL
+·               limit        1
 
 query I
 SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 4
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-0  group   ·            ·
-0  ·       aggregate 0  min(x)
-1  render  ·            ·
-1  ·       render 0     x
-2  scan    ·            ·
-2  ·       table        xyz@xy
-2  ·       spans        /0-/1 /4-/5 /7-/8
-2  ·       limit        1
+group           ·            ·
+ │              aggregate 0  min(x)
+ └── render     ·            ·
+      │         render 0     x
+      └── scan  ·            ·
+·               table        xyz@xy
+·               spans        /0-/1 /4-/5 /7-/8
+·               limit        1
 
 query I
 SELECT MAX(x) FROM xyz
 ----
 7
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz
 ----
-0  group    ·            ·
-0  ·        aggregate 0  max(x)
-1  render   ·            ·
-1  ·        render 0     x
-2  revscan  ·            ·
-2  ·        table        xyz@xy
-2  ·        spans        ALL
-2  ·        limit        1
+group              ·            ·
+ │                 aggregate 0  max(x)
+ └── render        ·            ·
+      │            render 0     x
+      └── revscan  ·            ·
+·                  table        xyz@xy
+·                  spans        ALL
+·                  limit        1
 
 query I
 SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 2
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 1
 ----
-0  group   ·            ·
-0  ·       aggregate 0  min(y)
-1  render  ·            ·
-1  ·       render 0     y
-2  scan    ·            ·
-2  ·       table        xyz@xy
-2  ·       spans        /1/!NULL-/2
-2  ·       limit        1
+group           ·            ·
+ │              aggregate 0  min(y)
+ └── render     ·            ·
+      │         render 0     y
+      └── scan  ·            ·
+·               table        xyz@xy
+·               spans        /1/!NULL-/2
+·               limit        1
 
 query I
 SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 2
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
-0  group    ·            ·
-0  ·        aggregate 0  max(y)
-1  render   ·            ·
-1  ·        render 0     y
-2  revscan  ·            ·
-2  ·        table        xyz@xy
-2  ·        spans        /1/!NULL-/2
-2  ·        limit        1
+group              ·            ·
+ │                 aggregate 0  max(y)
+ └── render        ·            ·
+      │            render 0     y
+      └── revscan  ·            ·
+·                  table        xyz@xy
+·                  spans        /1/!NULL-/2
+·                  limit        1
 
 query I
 SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 NULL
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 7
 ----
-0  group   ·            ·
-0  ·       aggregate 0  min(y)
-1  render  ·            ·
-1  ·       render 0     y
-2  scan    ·            ·
-2  ·       table        xyz@xy
-2  ·       spans        /7/!NULL-/8
-2  ·       limit        1
+group           ·            ·
+ │              aggregate 0  min(y)
+ └── render     ·            ·
+      │         render 0     y
+      └── scan  ·            ·
+·               table        xyz@xy
+·               spans        /7/!NULL-/8
+·               limit        1
 
 query I
 SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 NULL
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 7
 ----
-0  group    ·            ·
-0  ·        aggregate 0  max(y)
-1  render   ·            ·
-1  ·        render 0     y
-2  revscan  ·            ·
-2  ·        table        xyz@xy
-2  ·        spans        /7/!NULL-/8
-2  ·        limit        1
+group              ·            ·
+ │                 aggregate 0  max(y)
+ └── render        ·            ·
+      │            render 0     y
+      └── revscan  ·            ·
+·                  table        xyz@xy
+·                  spans        /7/!NULL-/8
+·                  limit        1
 
 query I
 SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 1
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-0  group   ·            ·
-0  ·       aggregate 0  min(x)
-1  render  ·            ·
-1  ·       render 0     x
-2  scan    ·            ·
-2  ·       table        xyz@zyx
-2  ·       spans        /3/2-/3/3
-2  ·       limit        1
+group           ·            ·
+ │              aggregate 0  min(x)
+ └── render     ·            ·
+      │         render 0     x
+      └── scan  ·            ·
+·               table        xyz@zyx
+·               spans        /3/2-/3/3
+·               limit        1
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)]
@@ -791,17 +791,17 @@ SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 1
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-0  group    ·            ·
-0  ·        aggregate 0  max(x)
-1  render   ·            ·
-1  ·        render 0     x
-2  revscan  ·            ·
-2  ·        table        xyz@zyx
-2  ·        spans        /3/2-/3/3
-2  ·        limit        1
+group              ·            ·
+ │                 aggregate 0  max(x)
+ └── render        ·            ·
+      │            render 0     x
+      └── revscan  ·            ·
+·                  table        xyz@zyx
+·                  spans        /3/2-/3/3
+·                  limit        1
 
 # VARIANCE/STDDEV
 
@@ -834,16 +834,16 @@ SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 NULL
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
-0  group   ·            ·
-0  ·       aggregate 0  variance(x)
-1  render  ·            ·
-1  ·       render 0     x
-2  scan    ·            ·
-2  ·       table        xyz@xy
-2  ·       spans        /1-/2
+group           ·            ·
+ │              aggregate 0  variance(x)
+ └── render     ·            ·
+      │         render 0     x
+      └── scan  ·            ·
+·               table        xyz@xy
+·               spans        /1-/2
 
 query RRR
 SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
@@ -979,17 +979,17 @@ INSERT INTO ab VALUES
   (4, 40),
   (5, 50)
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 ----
-0  group   ·            ·
-0  ·       aggregate 0  min(a)
-1  render  ·            ·
-1  ·       render 0     a
-2  scan    ·            ·
-2  ·       table        abc@primary
-2  ·       spans        ALL
-2  ·       limit        1
+group           ·            ·
+ │              aggregate 0  min(a)
+ └── render     ·            ·
+      │         render 0     a
+      └── scan  ·            ·
+·               table        abc@primary
+·               spans        ALL
+·               limit        1
 
 # Verify we only buffer one row.
 query T
@@ -1000,17 +1000,17 @@ fetched: /ab/primary/1 -> NULL
 fetched: /ab/primary/1/b -> 10
 output row: [1]
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 ----
-0  group    ·            ·
-0  ·        aggregate 0  max(a)
-1  render   ·            ·
-1  ·        render 0     a
-2  revscan  ·            ·
-2  ·        table        abc@primary
-2  ·        spans        ALL
-2  ·        limit        1
+group              ·            ·
+ │                 aggregate 0  max(a)
+ └── render        ·            ·
+      │            render 0     a
+      └── revscan  ·            ·
+·                  table        abc@primary
+·                  spans        ALL
+·                  limit        1
 
 # Verify we only buffer one row.
 query T
@@ -1021,68 +1021,68 @@ fetched: /ab/primary/5/b -> 50
 fetched: /ab/primary/5 -> NULL
 output row: [5]
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 ----
-0  sort    ·            ·
-0  ·       order        +count
-1  group   ·            ·
-1  ·       aggregate 0  v
-1  ·       aggregate 1  count(k)
-1  ·       group by     @1-@1
-2  render  ·            ·
-2  ·       render 0     v
-2  ·       render 1     k
-3  scan    ·            ·
-3  ·       table        kv@primary
-3  ·       spans        ALL
+sort                 ·            ·
+ │                   order        +count
+ └── group           ·            ·
+      │              aggregate 0  v
+      │              aggregate 1  count(k)
+      │              group by     @1-@1
+      └── render     ·            ·
+           │         render 0     v
+           │         render 1     k
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 ----
-0  sort    ·            ·
-0  ·       order        +count
-1  group   ·            ·
-1  ·       aggregate 0  v
-1  ·       aggregate 1  count_rows()
-1  ·       group by     @1-@1
-2  render  ·            ·
-2  ·       render 0     v
-3  scan    ·            ·
-3  ·       table        kv@primary
-3  ·       spans        ALL
+sort                 ·            ·
+ │                   order        +count
+ └── group           ·            ·
+      │              aggregate 0  v
+      │              aggregate 1  count_rows()
+      │              group by     @1-@1
+      └── render     ·            ·
+           │         render 0     v
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 ----
-0  sort    ·            ·
-0  ·       order        +count
-1  group   ·            ·
-1  ·       aggregate 0  v
-1  ·       aggregate 1  count(1)
-1  ·       group by     @1-@1
-2  render  ·            ·
-2  ·       render 0     v
-2  ·       render 1     1
-3  scan    ·            ·
-3  ·       table        kv@primary
-3  ·       spans        ALL
+sort                 ·            ·
+ │                   order        +count
+ └── group           ·            ·
+      │              aggregate 0  v
+      │              aggregate 1  count(1)
+      │              group by     @1-@1
+      └── render     ·            ·
+           │         render 0     v
+           │         render 1     1
+           └── scan  ·            ·
+·                    table        kv@primary
+·                    spans        ALL
 
 # Check that filters propagate through no-op aggregation.
-query ITTT
+query TTT
 EXPLAIN(EXPRS) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
 ----
-0  group   ·            ·
-0  ·       aggregate 0  v
-0  ·       aggregate 1  count(1)
-0  ·       group by     @1-@1
-1  render  ·            ·
-1  ·       render 0     v
-1  ·       render 1     1
-2  scan    ·            ·
-2  ·       table        kv@primary
-2  ·       spans        ALL
-2  ·       filter       v > 10
+group           ·            ·
+ │              aggregate 0  v
+ │              aggregate 1  count(1)
+ │              group by     @1-@1
+ └── render     ·            ·
+      │         render 0     v
+      │         render 1     1
+      └── scan  ·            ·
+·               table        kv@primary
+·               spans        ALL
+·               filter       v > 10
 
 # Verify that FILTER works.
 
@@ -1130,44 +1130,44 @@ query error aggregate functions are not allowed in FILTER
 SELECT v, COUNT(*) FILTER (WHERE COUNT(*) > 5) FROM filter_test GROUP BY v
 
 # Check that filter expressions are only rendered once.
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ----
-0  group   ·            ·
-0  ·       aggregate 0  count_rows() FILTER (WHERE k > 5)
-0  ·       aggregate 1  max(k > 5) FILTER (WHERE k > 5)
-0  ·       group by     @1-@1
-1  render  ·            ·
-1  ·       render 0     v
-1  ·       render 1     k > 5
-2  scan    ·            ·
-2  ·       table        filter_test@primary
-2  ·       spans        ALL
+group           ·            ·
+ │              aggregate 0  count_rows() FILTER (WHERE k > 5)
+ │              aggregate 1  max(k > 5) FILTER (WHERE k > 5)
+ │              group by     @1-@1
+ └── render     ·            ·
+      │         render 0     v
+      │         render 1     k > 5
+      └── scan  ·            ·
+·               table        filter_test@primary
+·               spans        ALL
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-0  group   ·            ·                                                               (count int)                                                    ·
-0  ·       aggregate 0  (count_rows() FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]  ·                                                              ·
-0  ·       group by     @1-@1                                                           ·                                                              ·
-1  render  ·            ·                                                               (v int, "k > 5" bool)                                          ·
-1  ·       render 0     (v)[int]                                                        ·                                                              ·
-1  ·       render 1     ((k)[int] > (5)[int])[bool]                                     ·                                                              ·
-2  scan    ·            ·                                                               (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  rowid!=NULL; key(rowid)
-2  ·       table        filter_test@primary                                             ·                                                              ·
-2  ·       spans        ALL                                                             ·                                                              ·
+group           0  group   ·            ·                                                               (count int)  ·
+ │              0  ·       aggregate 0  (count_rows() FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]  ·            ·
+ │              0  ·       group by     @1-@1                                                           ·            ·
+ └── render     1  render  ·            ·                                                               (count int)  ·
+      │         1  ·       render 0     (v)[int]                                                        ·            ·
+      │         1  ·       render 1     ((k)[int] > (5)[int])[bool]                                     ·            ·
+      └── scan  2  scan    ·            ·                                                               (count int)  ·
+·               2  ·       table        filter_test@primary                                             ·            ·
+·               2  ·       spans        ALL                                                             ·            ·
 
 # Tests with * inside GROUP BY.
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT 1 FROM kv GROUP BY kv.*;
 ----
-0  render  ·         ·
-0  ·       render 0  1
-1  group   ·         ·
-1  ·       group by  @1-@4
-2  scan    ·         ·
-2  ·       table     kv@primary
-2  ·       spans     ALL
+render          ·         ·
+ │              render 0  1
+ └── group      ·         ·
+      │         group by  @1-@4
+      └── scan  ·         ·
+·               table     kv@primary
+·               spans     ALL
 
 query I
 SELECT 1 FROM kv GROUP BY kv.*;
@@ -1179,27 +1179,27 @@ SELECT 1 FROM kv GROUP BY kv.*;
 1
 1
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
-0  group   ·            ·
-0  ·       aggregate 0  sum(d)
-0  ·       group by     @1-@4
-1  render  ·            ·
-1  ·       render 0     k
-1  ·       render 1     v
-1  ·       render 2     w
-1  ·       render 3     s
-1  ·       render 4     d
-2  join    ·            ·
-2  ·       type         inner
-2  ·       pred         test.kv.k >= test.abc.d
-3  scan    ·            ·
-3  ·       table        kv@primary
-3  ·       spans        ALL
-3  scan    ·            ·
-3  ·       table        abc@primary
-3  ·       spans        ALL
+group                ·            ·
+ │                   aggregate 0  sum(d)
+ │                   group by     @1-@4
+ └── render          ·            ·
+      │              render 0     k
+      │              render 1     v
+      │              render 2     w
+      │              render 3     s
+      │              render 4     d
+      └── join       ·            ·
+           │         type         inner
+           │         pred         test.kv.k >= test.abc.d
+           ├── scan  ·            ·
+           │         table        kv@primary
+           │         spans        ALL
+           └── scan  ·            ·
+·                    table        abc@primary
+·                    spans        ALL
 
 query R rowsort
 SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
@@ -1218,17 +1218,17 @@ statement ok
 INSERT INTO opt_test VALUES (1, NULL), (2, 10), (3, NULL), (4, 5)
 
 # Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
 ----
-0  group   ·            ·                     (min)            ·
-0  ·       aggregate 0  min(test.opt_test.v)  ·                ·
-1  render  ·            ·                     (v)              v!=NULL; +v
-1  ·       render 0     test.opt_test.v       ·                ·
-2  scan    ·            ·                     (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
-2  ·       table        opt_test@v            ·                ·
-2  ·       spans        /!NULL-               ·                ·
-2  ·       limit        1                     ·                ·
+group           0  group   ·            ·                     (min)  ·
+ │              0  ·       aggregate 0  min(test.opt_test.v)  ·      ·
+ └── render     1  render  ·            ·                     (min)  ·
+      │         1  ·       render 0     test.opt_test.v       ·      ·
+      └── scan  2  scan    ·            ·                     (min)  ·
+·               2  ·       table        opt_test@v            ·      ·
+·               2  ·       spans        /!NULL-               ·      ·
+·               2  ·       limit        1                     ·      ·
 
 # Without the "v IS NOT NULL" constraint, this result would incorrectly be NULL.
 query I
@@ -1243,17 +1243,17 @@ SELECT MIN(v) FROM opt_test@primary
 5
 
 # Repeat test when there is an existing filter.
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
 ----
-0  group   ·            ·                     (min)   ·
-0  ·       aggregate 0  min(test.opt_test.v)  ·       ·
-1  render  ·            ·                     (v)     v!=NULL; +v
-1  ·       render 0     test.opt_test.v       ·       ·
-2  scan    ·            ·                     (k, v)  k!=NULL; v!=NULL; key(k,v); +v
-2  ·       table        opt_test@v            ·       ·
-2  ·       spans        /!NULL-               ·       ·
-2  ·       filter       k != 4                ·       ·
+group           0  group   ·            ·                     (min)  ·
+ │              0  ·       aggregate 0  min(test.opt_test.v)  ·      ·
+ └── render     1  render  ·            ·                     (min)  ·
+      │         1  ·       render 0     test.opt_test.v       ·      ·
+      └── scan  2  scan    ·            ·                     (min)  ·
+·               2  ·       table        opt_test@v            ·      ·
+·               2  ·       spans        /!NULL-               ·      ·
+·               2  ·       filter       k != 4                ·      ·
 
 query I
 SELECT MIN(v) FROM opt_test WHERE k <> 4
@@ -1263,28 +1263,28 @@ SELECT MIN(v) FROM opt_test WHERE k <> 4
 # Check the optimization when the argument is non-trivial. The renderNode can't
 # present an ordering on v+1 so the optimization is not applied, but the IS NOT
 # NULL filter should be added.
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 ----
-0  group   ·            ·                                             (min)      ·
-0  ·       aggregate 0  min(test.opt_test.v + 1)                      ·          ·
-1  render  ·            ·                                             ("v + 1")  ·
-1  ·       render 0     test.opt_test.v + 1                           ·          ·
-2  scan    ·            ·                                             (k, v)     k!=NULL; v!=NULL; key(k)
-2  ·       table        opt_test@primary                              ·          ·
-2  ·       spans        /!NULL-                                       ·          ·
-2  ·       filter       (k != 4) AND ((v + 1) IS DISTINCT FROM NULL)  ·          ·
+group           0  group   ·            ·                                             (min)  ·
+ │              0  ·       aggregate 0  min(test.opt_test.v + 1)                      ·      ·
+ └── render     1  render  ·            ·                                             (min)  ·
+      │         1  ·       render 0     test.opt_test.v + 1                           ·      ·
+      └── scan  2  scan    ·            ·                                             (min)  ·
+·               2  ·       table        opt_test@primary                              ·      ·
+·               2  ·       spans        /!NULL-                                       ·      ·
+·               2  ·       filter       (k != 4) AND ((v + 1) IS DISTINCT FROM NULL)  ·      ·
 
 # Verify that we don't use the optimization if there is a GROUP BY.
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
 ----
-0  group  ·            ·                     (min)   ·
-0  ·      aggregate 0  min(test.opt_test.v)  ·       ·
-0  ·      group by     @1-@1                 ·       ·
-1  scan   ·            ·                     (k, v)  k!=NULL; key(k)
-1  ·      table        opt_test@primary      ·       ·
-1  ·      spans        ALL                   ·       ·
+group      0  group  ·            ·                     (min)  ·
+ │         0  ·      aggregate 0  min(test.opt_test.v)  ·      ·
+ │         0  ·      group by     @1-@1                 ·      ·
+ └── scan  1  scan   ·            ·                     (min)  ·
+·          1  ·      table        opt_test@primary      ·      ·
+·          1  ·      spans        ALL                   ·      ·
 
 query I rowsort
 SELECT MIN(v) FROM opt_test GROUP BY k
@@ -1345,21 +1345,21 @@ SELECT (b, a) FROM ab GROUP BY (b, a)
 (2,1)
 (4,3)
 
-query ITTT
+query TTT
 EXPLAIN(EXPRS) SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
-0  render  ·            ·
-0  ·       render 0     (b, a)
-1  group   ·            ·
-1  ·       aggregate 0  b
-1  ·       aggregate 1  a
-1  ·       group by     @1-@2
-2  render  ·            ·
-2  ·       render 0     b
-2  ·       render 1     a
-3  scan    ·            ·
-3  ·       table        ab@primary
-3  ·       spans        ALL
+render               ·            ·
+ │                   render 0     (b, a)
+ └── group           ·            ·
+      │              aggregate 0  b
+      │              aggregate 1  a
+      │              group by     @1-@2
+      └── render     ·            ·
+           │         render 0     b
+           │         render 1     a
+           └── scan  ·            ·
+·                    table        ab@primary
+·                    spans        ALL
 
 query TT rowsort
 SELECT MIN(y), (b, a)
@@ -1370,29 +1370,29 @@ d  (2,1)
 b  (4,3)
 d  (4,3)
 
-query ITTT
+query TTT
 EXPLAIN(EXPRS)
    SELECT MIN(y), (b, a)
      FROM ab, xy GROUP BY (x, (a, b))
 ----
-0  render  ·            ·
-0  ·       render 0     min
-0  ·       render 1     (b, a)
-1  group   ·            ·
-1  ·       aggregate 0  min(y)
-1  ·       aggregate 1  b
-1  ·       aggregate 2  a
-1  ·       group by     @1-@3
-2  render  ·            ·
-2  ·       render 0     x
-2  ·       render 1     a
-2  ·       render 2     b
-2  ·       render 3     y
-3  join    ·            ·
-3  ·       type         cross
-4  scan    ·            ·
-4  ·       table        ab@primary
-4  ·       spans        ALL
-4  scan    ·            ·
-4  ·       table        xy@primary
-4  ·       spans        ALL
+render                    ·            ·
+ │                        render 0     min
+ │                        render 1     (b, a)
+ └── group                ·            ·
+      │                   aggregate 0  min(y)
+      │                   aggregate 1  b
+      │                   aggregate 2  a
+      │                   group by     @1-@3
+      └── render          ·            ·
+           │              render 0     x
+           │              render 1     a
+           │              render 2     b
+           │              render 3     y
+           └── join       ·            ·
+                │         type         cross
+                ├── scan  ·            ·
+                │         table        ab@primary
+                │         spans        ALL
+                └── scan  ·            ·
+·                         table        xy@primary
+·                         spans        ALL

@@ -38,7 +38,7 @@ type Node struct {
 //   tp := New()
 //   root := n.Child("root")
 //   root.Child("child-1")
-//   root.Child("child-2").Child("grandchild")
+//   root.Child("child-2").Child("grandchild").AddLine("grandchild-more-info")
 //   root.Child("child-3")
 //
 //   fmt.Print(tp.String())
@@ -49,6 +49,7 @@ type Node struct {
 //    ├── child-1
 //    ├── child-2
 //    │    └── grandchild
+//    │        grandchild-more-info
 //    └── child-3
 //
 // Note that the Child calls can't be rearranged arbitrarily; they have
@@ -88,6 +89,14 @@ func (n Node) Child(text string) Node {
 		row[i] = ' '
 	}
 	if indent >= k {
+		// Connect through any empty lines.
+		for i := len(n.tree.rows) - 1; i >= 0 && len(n.tree.rows[i]) == 0; i-- {
+			n.tree.rows[i] = make([]rune, indent-k+len(edgeLink))
+			for j := 0; j < indent-k+len(edgeLink); j++ {
+				n.tree.rows[i][j] = ' '
+			}
+			copy(n.tree.rows[i][indent-k:], edgeLink)
+		}
 		copy(row[indent-k:], edgeLast)
 	}
 	copy(row[indent:], runes)
@@ -104,6 +113,10 @@ func (n Node) Child(text string) Node {
 		// Connect to the previous sibling.
 		copy(n.tree.rows[last][indent-k:], edgeMid)
 		for i := last + 1; i < len(n.tree.rows); i++ {
+			// Add spaces if necessary.
+			for len(n.tree.rows[i]) < indent-k+len(edgeLink) {
+				n.tree.rows[i] = append(n.tree.rows[i], ' ')
+			}
 			copy(n.tree.rows[i][indent-k:], edgeLink)
 		}
 	}
@@ -116,6 +129,25 @@ func (n Node) Child(text string) Node {
 		tree:  n.tree,
 		level: n.level + 1,
 	}
+}
+
+// AddEmptyLine adds an empty line to the output; used to introduce vertical
+// spacing as needed.
+func (n Node) AddEmptyLine() {
+	n.tree.rows = append(n.tree.rows, []rune{})
+}
+
+// FormattedRows returns the formatted rows. Can only be called on the result of
+// treeprinter.New.
+func (n Node) FormattedRows() []string {
+	if n.level != 0 {
+		panic("Only the root can be stringified")
+	}
+	res := make([]string, len(n.tree.rows))
+	for i, r := range n.tree.rows {
+		res[i] = string(r)
+	}
+	return res
 }
 
 func (n Node) String() string {
