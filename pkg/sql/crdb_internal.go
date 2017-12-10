@@ -180,7 +180,8 @@ CREATE TABLE crdb_internal.tables (
   format_version           STRING NOT NULL,
   state                    STRING NOT NULL,
   sc_lease_node_id         INT,
-  sc_lease_expiration_time TIMESTAMP
+  sc_lease_expiration_time TIMESTAMP,
+  gc_deadline              TIMESTAMP
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -219,6 +220,12 @@ CREATE TABLE crdb_internal.tables (
 					timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 				)
 			}
+			gcDeadlineDatum := tree.DNull
+			if table.GCDeadline != 0 {
+				gcDeadlineDatum = tree.MakeDTimestamp(
+					timeutil.Unix(0, table.GCDeadline), time.Nanosecond,
+				)
+			}
 			if err := addRow(
 				tree.NewDInt(tree.DInt(int64(table.ID))),
 				tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
@@ -231,6 +238,7 @@ CREATE TABLE crdb_internal.tables (
 				tree.NewDString(table.State.String()),
 				leaseNodeDatum,
 				leaseExpDatum,
+				gcDeadlineDatum,
 			); err != nil {
 				return err
 			}

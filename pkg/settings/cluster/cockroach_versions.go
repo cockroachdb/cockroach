@@ -37,6 +37,7 @@ const (
 	VersionMeta2Splits
 	VersionRPCNetworkStats
 	VersionRPCVersionCheck
+	VersionClearRange
 
 	// Add new versions here (step one of two)
 
@@ -46,7 +47,7 @@ const (
 // backwards-incompatible features were introduced.
 //
 // NB: The version upgrade process requires the versions as seen by a cluster to be monotonic. Once
-// we've added 1.1-2 (VersionMVCCNetworkStats), we can't go back and add 1.0-4
+// we've added 1.1-2 (VersionClearRange), we can't go back and add 1.0-4
 // (VersionFixSomeCriticalBug) because clusters running 1.1-2 can't coordinate the switch over to
 // the functionality added by 1.0-4. Such clusters would need to be wiped. As a result, we recommend
 // not bumping to a new minor version until the prior 1.X.0 release has been performed.
@@ -102,6 +103,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionRPCVersionCheck is https://github.com/cockroachdb/cockroach/pull/20587.
 		Key:     VersionRPCVersionCheck,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 5},
+	},
+	{
+		// VersionClearRange is https://github.com/cockroachdb/cockroach/pull/20601.
+		Key:     VersionClearRange,
+		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 6},
 	},
 
 	// Add new versions here (step two of two).
