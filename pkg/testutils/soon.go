@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -33,15 +32,9 @@ const DefaultSucceedsSoonDuration = 45 * time.Second
 // an exponential backoff starting at 1ns and ending at the maximum
 // duration (currently 15s).
 func SucceedsSoon(t testing.TB, fn func() error) {
-	SucceedsSoonDepth(1, t, fn)
-}
-
-// SucceedsSoonDepth is like SucceedsSoon() but with an additional
-// stack depth offset.
-func SucceedsSoonDepth(depth int, t testing.TB, fn func() error) {
+	t.Helper()
 	if err := retry.ForDuration(DefaultSucceedsSoonDuration, fn); err != nil {
-		file, line, _ := caller.Lookup(depth + 1)
-		t.Fatalf("%s:%d, condition failed to evaluate within %s: %s\n%s",
-			file, line, DefaultSucceedsSoonDuration, err, string(debug.Stack()))
+		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
+			DefaultSucceedsSoonDuration, err, string(debug.Stack()))
 	}
 }

@@ -963,6 +963,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	}
 
 	verifySplitsAtTablePrefixes := func(maxTableID int) {
+		t.Helper()
 		// We expect splits at each of the user tables and at a few fixed system
 		// range boundaries, but not at system table boundaries.
 		expKeys := []roachpb.Key{
@@ -987,7 +988,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
 
-		testutils.SucceedsSoonDepth(1, t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			rows, err := store.DB().Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 			if err != nil {
 				return err
