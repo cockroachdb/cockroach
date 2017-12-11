@@ -214,6 +214,7 @@ func TestJSONRoundTrip(t *testing.T) {
 		// a validation that the input is valid UTF8, but that seems wasteful when it
 		// should be checked higher up.
 		string([]byte{'"', 0xa7, '"'}),
+		`[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]`,
 	}
 	for _, tc := range testCases {
 		j, err := ParseJSON(tc)
@@ -436,6 +437,41 @@ func TestJSONRandomFetch(t *testing.T) {
 	}
 }
 
+func TestJSONFetchFromBig(t *testing.T) {
+	size := 100
+
+	obj := make(map[string]interface{})
+	for i := 0; i < size; i++ {
+		obj[fmt.Sprintf("key%d", i)] = i
+	}
+	j, err := MakeJSON(obj)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runDecodedAndEncoded(t, "fetch big", j, func(t *testing.T, j JSON) {
+		for i := 0; i < size; i++ {
+			result, err := j.FetchValKey(fmt.Sprintf("key%d", i))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			expected, err := MakeJSON(i)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cmp, err := result.Compare(expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cmp != 0 {
+				t.Errorf("expected %d, got %d", i, result)
+			}
+		}
+	})
+}
+
 func TestJSONFetchIdx(t *testing.T) {
 	json := jsonTestShorthand
 	cases := map[string][]struct {
@@ -460,6 +496,14 @@ func TestJSONFetchIdx(t *testing.T) {
 			{0, json(`1`)},
 			{1, json(`2`)},
 			{2, json(`{"foo":"bar"}`)},
+		},
+		// Trigger the offset-value
+		`[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]`: {
+			{0, json(`0`)},
+			{1, json(`1`)},
+			{2, json(`2`)},
+			{10, json(`10`)},
+			{35, json(`35`)},
 		},
 	}
 
@@ -1090,6 +1134,37 @@ func TestNegativeRandomJSONContains(t *testing.T) {
 	}
 }
 
+func BenchmarkFetchFromArray(b *testing.B) {
+	for _, arraySize := range []int{1, 10, 100, 1000} {
+		b.Run(fmt.Sprintf("array size %d", arraySize), func(b *testing.B) {
+			ary := make([]interface{}, arraySize)
+			for i := 0; i < len(ary); i++ {
+				ary[i] = i
+			}
+			j, err := MakeJSON(ary)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			_, encoding, err := j.encode(nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			encoded, err := newEncodedFromRoot(encoding)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				_, _ = encoded.FetchValIdx(rand.Intn(arraySize))
+			}
+		})
+	}
+}
+
 func BenchmarkFetchKey(b *testing.B) {
 	for _, objectSize := range []int{1, 10, 100, 1000} {
 		b.Run(fmt.Sprintf("object size %d", objectSize), func(b *testing.B) {
@@ -1133,30 +1208,12 @@ func BenchmarkFetchKey(b *testing.B) {
 			})
 
 			b.Run("fetch key encoded", func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					b.StopTimer()
-					encoded, err := newEncodedFromRoot(encoding)
-					if err != nil {
-						b.Fatal(err)
-					}
-					b.StartTimer()
-
-					_, _ = encoded.FetchValKey(keys[rand.Intn(len(keys))])
+				encoded, err := newEncodedFromRoot(encoding)
+				if err != nil {
+					b.Fatal(err)
 				}
-			})
-
-			b.Run("repeated fetch key encoded", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					b.StopTimer()
-					encoded, err := newEncodedFromRoot(encoding)
-					if err != nil {
-						b.Fatal(err)
-					}
-					b.StartTimer()
-
-					key := keys[rand.Intn(len(keys))]
-					_, _ = encoded.FetchValKey(key)
-					_, _ = encoded.FetchValKey(key)
+					_, _ = encoded.FetchValKey(keys[rand.Intn(len(keys))])
 				}
 			})
 		})

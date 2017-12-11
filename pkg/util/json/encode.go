@@ -22,15 +22,7 @@ import (
 
 // This file implements the format described in the JSONB encoding RFC.
 
-const nullTag = 0x00000000
-const stringTag = 0x10000000
-const numberTag = 0x20000000
-const falseTag = 0x30000000
-const trueTag = 0x40000000
-const containerTag = 0x50000000
-
-const jEntryTypeMask = 0x70000000
-const jEntryOffLenMask = 0x0FFFFFFF
+const offlenStride = 32
 
 const arrayContainerTag = 0x80000000
 const objectContainerTag = 0x40000000
@@ -56,37 +48,46 @@ func checkLength(length int) error {
 
 // Note: the encoding of each of null, true, and false are the encoding of length 0.
 // Their values are purely dictated by their type.
-func (jsonNull) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
-	return nullTag, appendTo, nil
+func (jsonNull) encode(appendTo []byte) (e jEntry, b []byte, err error) {
+	return nullJEntry, appendTo, nil
 }
 
-func (jsonTrue) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
-	return trueTag, appendTo, nil
+func (jsonTrue) encode(appendTo []byte) (e jEntry, b []byte, err error) {
+	return trueJEntry, appendTo, nil
 }
 
-func (jsonFalse) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
-	return falseTag, appendTo, nil
+func (jsonFalse) encode(appendTo []byte) (e jEntry, b []byte, err error) {
+	return falseJEntry, appendTo, nil
 }
 
-func (j jsonString) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
+func (j jsonString) encode(appendTo []byte) (e jEntry, b []byte, err error) {
 	if err := checkLength(len(j)); err != nil {
-		return 0, b, err
+		return jEntry{}, b, err
 	}
-	return stringTag | uint32(len(j)), append(appendTo, []byte(j)...), nil
+	return makeStringJEntry(len(j)), append(appendTo, []byte(j)...), nil
 }
 
-func (j jsonNumber) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
+func (j jsonNumber) encode(appendTo []byte) (e jEntry, b []byte, err error) {
 	decOffset := len(appendTo)
 	dec := apd.Decimal(j)
 	appendTo = encoding.EncodeUntaggedDecimalValue(appendTo, &dec)
 	lengthInBytes := len(appendTo) - decOffset
 	if err := checkLength(lengthInBytes); err != nil {
-		return 0, b, err
+		return jEntry{}, b, err
 	}
-	return numberTag | uint32(lengthInBytes), appendTo, nil
+	return makeNumberJEntry(lengthInBytes), appendTo, nil
 }
 
-func (j jsonArray) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
+// encodingModeForIdx determines which encoding mode we choose to use for a
+// given i-th entry in an array or object.
+func encodingModeForIdx(i int, offset uint32) encodingMode {
+	if i%offlenStride == 0 {
+		return offsetEncode(offset)
+	}
+	return lengthMode
+}
+
+func (j jsonArray) encode(appendTo []byte) (e jEntry, b []byte, err error) {
 	encodingStartPosition := len(appendTo)
 	// Array container header.
 	appendTo = encoding.EncodeUint32Ascending(appendTo, arrayContainerTag|uint32(len(j)))
@@ -95,22 +96,27 @@ func (j jsonArray) encode(appendTo []byte) (jEntry uint32, b []byte, err error) 
 	for i := 0; i < len(j); i++ {
 		appendTo = append(appendTo, 0, 0, 0, 0)
 	}
+	offset := uint32(0)
 	for i := 0; i < len(j); i++ {
-		var nextJEntry uint32
+		var nextJEntry jEntry
 		nextJEntry, appendTo, err = j[i].encode(appendTo)
 		if err != nil {
-			return 0, appendTo, err
+			return jEntry{}, appendTo, err
 		}
-		appendTo = encoding.PutUint32Ascending(appendTo, nextJEntry, jEntryIdx+i*4)
+
+		length := nextJEntry.length
+		offset += length
+
+		appendTo = encoding.PutUint32Ascending(appendTo, nextJEntry.encoded(encodingModeForIdx(i, offset)), jEntryIdx+i*4)
 	}
 	lengthInBytes := len(appendTo) - encodingStartPosition
 	if err := checkLength(lengthInBytes); err != nil {
-		return 0, b, err
+		return jEntry{}, b, err
 	}
-	return containerTag | uint32(lengthInBytes), appendTo, nil
+	return makeContainerJEntry(lengthInBytes), appendTo, nil
 }
 
-func (j jsonObject) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
+func (j jsonObject) encode(appendTo []byte) (e jEntry, b []byte, err error) {
 	encodingStartPosition := len(appendTo)
 	// Object container header.
 	appendTo = encoding.EncodeUint32Ascending(appendTo, objectContainerTag|uint32(len(j)))
@@ -120,29 +126,38 @@ func (j jsonObject) encode(appendTo []byte) (jEntry uint32, b []byte, err error)
 	for i := 0; i < len(j)*2; i++ {
 		appendTo = append(appendTo, 0, 0, 0, 0)
 	}
+	offset := uint32(0)
 	// Encode all keys.
 	for i := 0; i < len(j); i++ {
-		var nextJEntry uint32
+		var nextJEntry jEntry
 		nextJEntry, appendTo, err = j[i].k.encode(appendTo)
 		if err != nil {
-			return 0, appendTo, err
+			return jEntry{}, appendTo, err
 		}
-		appendTo = encoding.PutUint32Ascending(appendTo, nextJEntry, jEntryIdx+i*4)
+
+		length := nextJEntry.length
+		offset += length
+
+		appendTo = encoding.PutUint32Ascending(appendTo, nextJEntry.encoded(encodingModeForIdx(i, offset)), jEntryIdx+i*4)
 	}
 	// Encode all values.
 	for i := 0; i < len(j); i++ {
-		var nextJEntry uint32
+		var nextJEntry jEntry
 		nextJEntry, appendTo, err = j[i].v.encode(appendTo)
 		if err != nil {
-			return 0, appendTo, err
+			return jEntry{}, appendTo, err
 		}
-		appendTo = encoding.PutUint32Ascending(appendTo, nextJEntry, jEntryIdx+(len(j)+i)*4)
+
+		length := nextJEntry.length
+		offset += length
+
+		appendTo = encoding.PutUint32Ascending(appendTo, nextJEntry.encoded(encodingModeForIdx(i, offset)), jEntryIdx+(len(j)+i)*4)
 	}
 	lengthInBytes := len(appendTo) - encodingStartPosition
 	if err := checkLength(lengthInBytes); err != nil {
-		return 0, b, err
+		return jEntry{}, b, err
 	}
-	return containerTag | uint32(lengthInBytes), appendTo, nil
+	return makeContainerJEntry(lengthInBytes), appendTo, nil
 }
 
 // EncodeJSON encodes a JSON value as a sequence of bytes.
@@ -162,13 +177,13 @@ func EncodeJSON(appendTo []byte, j JSON) ([]byte, error) {
 		// Reserve space for scalar jEntry.
 		jEntryIdx := len(appendTo)
 		appendTo = encoding.EncodeUint32Ascending(appendTo, 0)
-		var jEntry uint32
+		var entry jEntry
 		var err error
-		jEntry, appendTo, err = j.encode(appendTo)
+		entry, appendTo, err = j.encode(appendTo)
 		if err != nil {
 			return appendTo, err
 		}
-		appendTo = encoding.PutUint32Ascending(appendTo, jEntry, jEntryIdx)
+		appendTo = encoding.PutUint32Ascending(appendTo, entry.encoded(lengthMode), jEntryIdx)
 		return appendTo, nil
 	}
 }
@@ -181,13 +196,13 @@ func DecodeJSON(b []byte) ([]byte, JSON, error) {
 	}
 	switch containerHeader & containerHeaderTypeMask {
 	case scalarContainerTag:
-		var jEntry uint32
+		var entry jEntry
 		var err error
-		b, jEntry, err = encoding.DecodeUint32Ascending(b)
+		b, entry, err = decodeJEntry(b, 0)
 		if err != nil {
 			return b, nil, err
 		}
-		return decodeJSONValue(jEntry, b)
+		return decodeJSONValue(entry, b)
 	case arrayContainerTag:
 		return decodeJSONArray(containerHeader, b)
 	case objectContainerTag:
@@ -203,7 +218,7 @@ func FromEncoding(b []byte) (JSON, error) {
 
 func decodeJSONArray(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 	length := containerHeader & containerHeaderLenMask
-	b, jEntries, err := decodeJEntries(length, b)
+	b, jEntries, err := decodeJEntries(int(length), b)
 	if err != nil {
 		return b, nil, err
 	}
@@ -219,36 +234,37 @@ func decodeJSONArray(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 	return b, result, nil
 }
 
-func decodeJEntries(n uint32, b []byte) ([]byte, []uint32, error) {
+func decodeJEntries(n int, b []byte) ([]byte, []jEntry, error) {
 	var err error
-	jEntries := make([]uint32, n)
-	for i := uint32(0); i < n; i++ {
-		var nextJEntry uint32
-		b, nextJEntry, err = encoding.DecodeUint32Ascending(b)
+	jEntries := make([]jEntry, n)
+	off := uint32(0)
+	for i := 0; i < n; i++ {
+		var nextJEntry jEntry
+		b, nextJEntry, err = decodeJEntry(b, off)
 		if err != nil {
 			return b, nil, err
 		}
+		off += nextJEntry.length
 		jEntries[i] = nextJEntry
 	}
 	return b, jEntries, nil
 }
 
 func decodeJSONObject(containerHeader uint32, b []byte) ([]byte, JSON, error) {
-	length := containerHeader & containerHeaderLenMask
+	length := int(containerHeader & containerHeaderLenMask)
 
-	b, keyJEntries, err := decodeJEntries(length, b)
+	b, jEntries, err := decodeJEntries(length*2, b)
 	if err != nil {
 		return b, nil, err
 	}
 
-	b, valueJEntries, err := decodeJEntries(length, b)
-	if err != nil {
-		return b, nil, err
-	}
+	// There are `length` key entries at the start and `length` value entries at the back.
+	keyJEntries := jEntries[:length]
+	valueJEntries := jEntries[length:]
 
 	result := make(jsonObject, length)
 	// Decode the keys.
-	for i := uint32(0); i < length; i++ {
+	for i := 0; i < length; i++ {
 		var nextJSON JSON
 		b, nextJSON, err = decodeJSONValue(keyJEntries[i], b)
 		if err != nil {
@@ -262,7 +278,7 @@ func decodeJSONObject(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 	}
 
 	// Decode the values.
-	for i := uint32(0); i < length; i++ {
+	for i := 0; i < length; i++ {
 		var nextJSON JSON
 		b, nextJSON, err = decodeJSONValue(valueJEntries[i], b)
 		if err != nil {
@@ -281,8 +297,8 @@ func decodeJSONNumber(b []byte) ([]byte, JSON, error) {
 	return b, jsonNumber(d), nil
 }
 
-func decodeJSONValue(jEntry uint32, b []byte) ([]byte, JSON, error) {
-	switch jEntry & jEntryTypeMask {
+func decodeJSONValue(e jEntry, b []byte) ([]byte, JSON, error) {
+	switch e.typCode {
 	case trueTag:
 		return b, TrueJSONValue, nil
 	case falseTag:
@@ -290,8 +306,7 @@ func decodeJSONValue(jEntry uint32, b []byte) ([]byte, JSON, error) {
 	case nullTag:
 		return b, NullJSONValue, nil
 	case stringTag:
-		length := jEntry & jEntryOffLenMask
-		return b[length:], jsonString(b[:length]), nil
+		return b[e.length:], jsonString(b[:e.length]), nil
 	case numberTag:
 		return decodeJSONNumber(b)
 	case containerTag:

@@ -37,16 +37,16 @@ var rewriteResultsInTestfiles = flag.Bool(
 func assertEncodeRoundTrip(t *testing.T, j JSON) {
 	encoded, err := EncodeJSON(nil, j)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(j, err)
 	}
 	_, decoded, err := DecodeJSON(encoded)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(j, err)
 	}
 
 	c, err := j.Compare(decoded)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(j, err)
 	}
 	if c != 0 {
 		t.Fatalf("expected %s, got %s (encoding %v)", j, decoded, encoded)
@@ -183,6 +183,7 @@ func TestJSONEncodeRoundTrip(t *testing.T) {
 		`[1, {"a": 3}, null, {"b": null}]`,
 		`{"🤔": "foo"}`,
 		`"6U閆崬밺뀫颒myj츥휘:$薈mY햚#rz飏+玭V㭢뾿愴YꖚX亥ᮉ푊\u0006垡㐭룝\"厓ᔧḅ^Sqpv媫\"⤽걒\"˽Ἆ?ꇆ䬔未tv{DV鯀Tἆl凸g\\㈭ĭ즿UH㽤"`,
+		`{"a":"b","c":"d"}`,
 	}
 
 	for _, tc := range cases {
@@ -193,6 +194,7 @@ func TestJSONEncodeRoundTrip(t *testing.T) {
 
 		assertEncodeRoundTrip(t, j)
 	}
+
 }
 
 // This tests that the stringified version is the same, for testing precision
