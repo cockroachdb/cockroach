@@ -1245,8 +1245,17 @@ func (s Span) EqualValue(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
 }
 
-// Overlaps returns whether the two spans overlap.
+// Overlaps returns true WLOG for span A and B iff:
+// 1. Both spans contain one key (just the start key) and they are equal; or
+// 2. The span with only one key is contained inside the other span; or
+// 3. The end key of span A is strictly greater than the start key of span B
+//    and the end key of span B is strictly greater than the start key of span
+//    A.
 func (s Span) Overlaps(o Span) bool {
+	if !s.Valid() || !o.Valid() {
+		return false
+	}
+
 	if len(s.EndKey) == 0 && len(o.EndKey) == 0 {
 		return s.Key.Equal(o.Key)
 	} else if len(s.EndKey) == 0 {
@@ -1259,6 +1268,10 @@ func (s Span) Overlaps(o Span) bool {
 
 // Contains returns whether the receiver contains the given span.
 func (s Span) Contains(o Span) bool {
+	if !s.Valid() || !o.Valid() {
+		return false
+	}
+
 	if len(s.EndKey) == 0 && len(o.EndKey) == 0 {
 		return s.Key.Equal(o.Key)
 	} else if len(s.EndKey) == 0 {
@@ -1291,6 +1304,41 @@ func (s Span) AsRange() interval.Range {
 func (s Span) String() string {
 	const maxChars = math.MaxInt32
 	return PrettyPrintRange(s.Key, s.EndKey, maxChars)
+}
+
+// SplitOnKey returns two spans where the left span has EndKey and right span
+// has start Key of the split key, respectively.
+// If the split key lies outside the span, the original span is returned on the
+// left (and right is an invalid span with empty keys).
+func (s Span) SplitOnKey(key Key) (left Span, right Span) {
+	// Cannot split on or before start key or on or after end key.
+	if bytes.Compare(key, s.Key) <= 0 || bytes.Compare(key, s.EndKey) >= 0 {
+		return s, Span{}
+	}
+
+	return Span{Key: s.Key, EndKey: key}, Span{Key: key, EndKey: s.EndKey}
+}
+
+// Valid returns whether or not the span is a "valid span".
+// A valid span cannot have an empty start and end key and must satisfy either:
+// 1. The end key is empty.
+// 2. The start key is lexicographically-ordered before the end key.
+func (s Span) Valid() bool {
+	// s.Key can be empty if it is KeyMin.
+	// Can't have both KeyMin start and end keys.
+	if len(s.Key) == 0 && len(s.EndKey) == 0 {
+		return false
+	}
+
+	if len(s.EndKey) == 0 {
+		return true
+	}
+
+	if bytes.Compare(s.Key, s.EndKey) >= 0 {
+		return false
+	}
+
+	return true
 }
 
 // Spans is a slice of spans.
