@@ -485,10 +485,7 @@ func (e *Executor) Prepare(
 	prepared := &PreparedStatement{
 		TypeHints:   placeholderHints,
 		portalNames: make(map[string]struct{}),
-		// We need a memory account available in order to prepare a statement, since we
-		// might need to allocate memory for constant-folded values in the process of
-		// planning it.
-		memAcc: session.mon.MakeBoundAccount(),
+		memAcc:      session.mon.MakeBoundAccount(),
 	}
 
 	if stmt.AST == nil {
@@ -553,7 +550,12 @@ func (e *Executor) Prepare(
 	if plan == nil {
 		return prepared, nil
 	}
-	defer plan.Close(session.Ctx())
+	defer func() {
+		plan.Close(session.Ctx())
+		// NB: if we start caching the plan, we'll want to keep around the memory
+		// account used for the plan, rather than clearing it.
+		prepared.memAcc.Clear(session.Ctx())
+	}()
 	prepared.Columns = planColumns(plan)
 	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
