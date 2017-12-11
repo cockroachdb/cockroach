@@ -291,6 +291,40 @@ func TestEval(t *testing.T) {
 		// LIKE and NOT LIKE
 		{`'TEST' LIKE 'TEST'`, `true`},
 		{`'TEST' LIKE 'test'`, `false`},
+		{`'TEST' LIKE 'TESTER'`, `false`},
+		{`'TEST' LIKE ''`, `false`},
+
+		{`'' LIKE ''`, `true`},
+		// Regex special characters.
+		{`'[' LIKE '['`, `true`},
+		{`'.' LIKE '.'`, `true`},
+		{`'.A' LIKE '._'`, `true`},
+		{`'AB' LIKE '._'`, `false`},
+		{`'.*B' LIKE '.*B'`, `true`},
+		{`'AB' LIKE '.*B'`, `false`},
+
+		// Escaped character cases.
+		{`'[' LIKE '\['`, `true`},
+		{`'.' LIKE '\.'`, `true`},
+		{`'\A' LIKE '\\A'`, `true`},
+		{`'A' LIKE '\\A'`, `false`},
+		{`'_' LIKE '\_'`, `true`},
+		{`'\' LIKE '\\'`, `true`},
+		{`'\\' LIKE '\\'`, `false`},
+		{`'\\' LIKE '\\_'`, `true`},
+		{`'\\' LIKE '_\\'`, `true`},
+		{`'A\' LIKE '_\\'`, `true`},
+		{`'%' LIKE '\%'`, `true`},
+		{`'ABC' LIKE '\AB%'`, `true`},
+		{`'ABC' LIKE '\AB_'`, `true`},
+		{`'ABC' LIKE '%B\C'`, `true`},
+		{`'ABC' LIKE '_B\C'`, `true`},
+		{`'TEST' LIKE 'TE\ST'`, `true`},
+		{`'_漢' LIKE '\__'`, `true`},
+		{`'漢漢' LIKE '漢\漢'`, `true`},
+		{`'_漢' LIKE '\_\漢'`, `true`},
+
+		// optimizedLikeFunc expressions.
 		{`'TEST' LIKE 'TE%'`, `true`},
 		{`'TEST' LIKE '%E%'`, `true`},
 		{`'TEST' LIKE '%e%'`, `false`},
@@ -299,9 +333,12 @@ func TestEval(t *testing.T) {
 		{`'TEST' LIKE 'TE_'`, `false`},
 		{`'TEST' LIKE '%'`, `true`},
 		{`'TEST' LIKE '%R'`, `false`},
-		{`'TEST' LIKE 'TESTER'`, `false`},
-		{`'TEST' LIKE ''`, `false`},
-		{`'' LIKE ''`, `true`},
+		{`'T' LIKE '\_'`, `false`},
+		{`'T' LIKE '\%'`, `false`},
+		{`'TE_T' LIKE 'TE\_T'`, `true`},
+		{`'TE\AT' LIKE 'TE\_T'`, `false`},
+		{`'TES%T' LIKE 'TES\%T'`, `true`},
+		{`'TES\AT' LIKE 'TES\%T'`, `false`},
 		{`'T' LIKE '_'`, `true`},
 		{`'TE' LIKE '_'`, `false`},
 		{`'TE' LIKE '_%'`, `true`},
@@ -316,6 +353,10 @@ func TestEval(t *testing.T) {
 		{`'A' LIKE '_T'`, `false`},
 		{`'TEST' LIKE '_E%'`, `true`},
 		{`'TEST' LIKE '_E\%'`, `false`},
+		{`'TES_' LIKE '%S\_'`, `true`},
+		{`'TES%' LIKE '%S\%'`, `true`},
+		{`'TES_' LIKE '_ES\_'`, `true`},
+		{`'TES%' LIKE '_ES\%'`, `true`},
 		{`'TEST' LIKE '%S_'`, `true`},
 		{`'TEST' LIKE '%S\_'`, `false`},
 		{`'TEST' NOT LIKE '%E%'`, `false`},
@@ -911,27 +952,29 @@ func TestEval(t *testing.T) {
 	defer ctx.Mon.Stop(context.Background())
 	defer ctx.ActiveMemAcc.Close(context.Background())
 	for _, d := range testData {
-		expr, err := parser.ParseExpr(d.expr)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		// expr.TypeCheck to avoid constant folding.
-		typedExpr, err := expr.TypeCheck(nil, types.Any)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		// We have to manually close this account because we're doing the evaluations
-		// ourselves.
-		if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		r, err := typedExpr.Eval(ctx)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		if s := r.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.expr)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			// expr.TypeCheck to avoid constant folding.
+			typedExpr, err := expr.TypeCheck(nil, types.Any)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			// We have to manually close this account because we're doing the evaluations
+			// ourselves.
+			if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			r, err := typedExpr.Eval(ctx)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			if s := r.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+		})
 	}
 }
 
