@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -237,7 +238,8 @@ func testGossipRestartFirstNodeNeedsIncomingInner(
 	db := makePGClient(t, c.PGUrl(ctx, 0))
 	defer db.Close()
 
-	testutils.SucceedsSoon(t, func() error {
+	// NB: This was flaky with `SucceedsSoon`.
+	if err := retry.ForDuration(2*time.Minute, func() error {
 		const query = "SELECT COUNT(replicas) FROM crdb_internal.ranges WHERE ARRAY_POSITION(replicas, 1) IS NOT NULL"
 		var count int
 		if err := db.QueryRow(query).Scan(&count); err != nil {
@@ -249,7 +251,9 @@ func testGossipRestartFirstNodeNeedsIncomingInner(
 			return err
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	log.Infof(ctx, "killing all nodes")
 	for i := 0; i < num; i++ {
