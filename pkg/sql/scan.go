@@ -163,7 +163,7 @@ func (n *scanNode) startExec(params runParams) error {
 		ValNeededForCol:  n.valNeededForCol.Copy(),
 	}
 	return n.run.fetcher.Init(n.reverse, false, /* returnRangeInfo */
-		false /* isCheck */, &params.p.alloc, tableArgs)
+		false /* isCheck */, &params.p.alloc, nil /* TODO(dan): BEFORE MERGE */, tableArgs)
 }
 
 func (n *scanNode) Close(context.Context) {

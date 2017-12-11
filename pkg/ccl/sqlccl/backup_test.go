@@ -262,6 +262,7 @@ func backupAndRestore(
 	ctx context.Context, t *testing.T, tc *testcluster.TestCluster, dest string, numAccounts int,
 ) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	var data [][]string
 	{
 		sqlDB.Exec(t, `CREATE INDEX balance_idx ON data.bank (balance)`)
 		testutils.SucceedsSoon(t, func() error {
@@ -281,6 +282,8 @@ func backupAndRestore(
 		sqlDB.QueryRow(t, `BACKUP DATABASE data TO $1`, dest).Scan(
 			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.sys, &exported.bytes,
 		)
+		data = sqlDB.QueryStr(t, `SELECT * FROM data.bank`)
+
 		// When numAccounts == 0, our approxBytes formula breaks down because
 		// backups of no data still contain the system.users and system.descriptor
 		// tables. Just skip the check in this case.
@@ -306,6 +309,8 @@ func backupAndRestore(
 		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(ctx)
 		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+
+		sqlDBRestore.CheckQueryResults(t, fmt.Sprintf(`TABLE EXPERIMENTAL_BACKUP_SOURCE data.bank FROM ('%s')`, dest), data)
 
 		// Create some other descriptors to change up IDs
 		sqlDBRestore.Exec(t, `CREATE DATABASE other`)
@@ -1754,9 +1759,14 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 				fullBackup, incBackup,
 			)
 			sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s.bank`, name), rowCount)
+			origData := sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.bank AS OF SYSTEM TIME %s`, timestamp))
 			sqlDB.CheckQueryResults(t,
 				fmt.Sprintf(`SELECT * FROM %s.bank ORDER BY id`, name),
-				sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.bank AS OF SYSTEM TIME %s`, timestamp)),
+				origData,
+			)
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT * FROM EXPERIMENTAL_BACKUP_SOURCE data.bank FROM ('%s', '%s') AS OF SYSTEM TIME %s`, fullBackup, incBackup, timestamp),
+				origData,
 			)
 		})
 	}

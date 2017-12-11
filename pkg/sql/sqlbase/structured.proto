@@ -573,6 +573,11 @@ message TableDescriptor {
   repeated uint32 dependsOn = 25 [(gogoproto.customname) = "DependsOn",
            (gogoproto.casttype) = "ID"];
 
+  message BackupSource {
+    repeated string uris = 1;
+  }
+  optional BackupSource backup_source = 29;
+
   message Reference {
     // The ID of the relation that depends on this one.
     optional uint32 id = 1 [(gogoproto.nullable) = false,

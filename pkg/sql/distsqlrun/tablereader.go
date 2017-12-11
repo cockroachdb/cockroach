@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -137,7 +138,7 @@ func newTableReader(
 
 	if _, _, err := initRowFetcher(
 		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), spec.Reverse,
-		neededColumns, spec.IsCheck, &tr.alloc,
+		neededColumns, spec.IsCheck, &tr.alloc, flowCtx.Settings,
 	); err != nil {
 		return nil, err
 	}
@@ -158,6 +159,7 @@ func initRowFetcher(
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
+	settings *cluster.Settings,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
@@ -178,7 +180,7 @@ func initRowFetcher(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		reverseScan, true /* returnRangeInfo */, isCheck, alloc, tableArgs,
+		reverseScan, true /* returnRangeInfo */, isCheck, alloc, settings, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}

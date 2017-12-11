@@ -187,7 +187,7 @@ func (irj *interleavedReaderJoiner) initMultiRowFetcher(
 	}
 
 	return irj.fetcher.Init(reverseScan, true /* returnRangeInfo */, true /* isCheck */, alloc,
-		args...)
+		irj.flowCtx.Settings, args...)
 }
 
 // sendMisplannedRangesMetadata sends information about the non-local ranges

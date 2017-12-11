@@ -444,7 +444,8 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   DISCARD DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL
+%token <str>   EXISTS EXECUTE
+%token <str>   EXPERIMENTAL EXPERIMENTAL_BACKUP_SOURCE EXPERIMENTAL_FINGERPRINTS
 %token <str>   EXPLAIN EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
@@ -853,6 +854,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <str>   unrestricted_name type_function_name
 %type <str>   non_reserved_word
 %type <str>   non_reserved_word_or_sconst
+%type <[]string>   non_reserved_word_or_sconst_list
 %type <tree.Expr>  zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
@@ -978,6 +980,16 @@ stmt_list:
     } else {
       $$.val = []tree.Statement(nil)
     }
+  }
+
+non_reserved_word_or_sconst_list:
+  non_reserved_word_or_sconst
+  {
+    $$.val = []string{$1}
+  }
+| non_reserved_word_or_sconst_list ',' non_reserved_word_or_sconst
+  {
+    $$.val = append($1.strs(), $3)
   }
 
 stmt:
@@ -4771,6 +4783,11 @@ table_ref:
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.ParenTableExpr{Expr: $2.tblExpr()}, Ordinality: $4.bool(), As: $5.aliasClause()}
   }
+| EXPERIMENTAL_BACKUP_SOURCE targets FROM '(' non_reserved_word_or_sconst_list ')'
+  {
+    // TODO(dan): targetList is too general
+    $$.val = &tree.BackupSourceExpr{Targets: $2.targetList(), From: $5.strs()}
+  }
 
 // The following syntax is a CockroachDB extension:
 //     SELECT ... FROM [ EXPLAIN .... ] WHERE ...
@@ -7281,6 +7298,7 @@ reserved_keyword:
 | ELSE
 | END
 | EXCEPT
+| EXPERIMENTAL_BACKUP_SOURCE
 | FALSE
 | FETCH
 | FOR

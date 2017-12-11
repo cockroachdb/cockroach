@@ -905,6 +905,8 @@ func TestParse(t *testing.T) {
 		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT PRIMARY KEY, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
+		{`TABLE EXPERIMENTAL_BACKUP_SOURCE foo FROM (bar)`},
+
 		{`SET ROW (1, true, NULL)`},
 
 		// Regression for #15926

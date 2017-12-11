@@ -215,6 +215,7 @@ func (*AliasedTableExpr) tableExpr() {}
 func (*ParenTableExpr) tableExpr()   {}
 func (*JoinTableExpr) tableExpr()    {}
 func (*FuncExpr) tableExpr()         {}
+func (*BackupSourceExpr) tableExpr() {}
 
 // StatementSource encapsulates one of the other statements as a data source.
 type StatementSource struct {

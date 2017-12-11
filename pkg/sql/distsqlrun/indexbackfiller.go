@@ -118,7 +118,7 @@ func (ib *indexBackfiller) init() error {
 		ValNeededForCol: valNeededForCol,
 	}
 	return ib.fetcher.Init(
-		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &ib.alloc, tableArgs,
+		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &ib.alloc, ib.flowCtx.Settings, tableArgs,
 	)
 }
 

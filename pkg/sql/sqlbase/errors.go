@@ -221,8 +221,8 @@ type singleKVFetcher struct {
 	done bool
 }
 
-// nextKV implements the kvFetcher interface.
-func (f *singleKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
+// NextKV implements the kvFetcher interface.
+func (f *singleKVFetcher) NextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
 	if f.done {
 		return false, roachpb.KeyValue{}, nil
 	}
@@ -230,9 +230,9 @@ func (f *singleKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, e
 	return true, f.kv, nil
 }
 
-// getRangesInfo implements the kvFetcher interface.
-func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic("getRangesInfo() called on singleKVFetcher")
+// GetRangesInfo implements the kvFetcher interface.
+func (f *singleKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
+	panic("GetRangesInfo() called on singleKVFetcher")
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
@@ -284,7 +284,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			ValNeededForCol:  valNeededForCol,
 		}
 		if err := rf.Init(
-			false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &DatumAlloc{}, tableArgs,
+			false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &DatumAlloc{}, nil /* TODO(dan): BEFORE MERGE */, tableArgs,
 		); err != nil {
 			return err
 		}

@@ -24,7 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -164,7 +166,7 @@ type txnKVFetcher struct {
 	rangeInfos []roachpb.RangeInfo
 }
 
-func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
+func (f *txnKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
 	if !f.returnRangeInfo {
 		panic("GetRangeInfo() called on kvFetcher that wasn't configured with returnRangeInfo")
 	}
@@ -213,53 +215,58 @@ func (f *txnKVFetcher) getBatchSize() int64 {
 	}
 }
 
+// KVFetcherParams ...
+type KVFetcherParams struct {
+	Timestamp       hlc.Timestamp
+	Spans           roachpb.Spans
+	Reverse         bool
+	UseBatchLimit   bool
+	FirstBatchLimit int64
+	ReturnRangeInfo bool
+	Settings        *cluster.Settings
+}
+
 // makeKVFetcher initializes a kvFetcher for the given spans.
 //
-// If useBatchLimit is true, batches are limited to kvBatchSize. If
-// firstBatchLimit is also set, the first batch is limited to that value.
+// If UseBatchLimit is true, batches are limited to kvBatchSize. If
+// FirstBatchLimit is also set, the first batch is limited to that value.
 // Subsequent batches are larger, up to kvBatchSize.
 //
 // Batch limits can only be used if the spans are ordered.
-func makeKVFetcher(
-	txn *client.Txn,
-	spans roachpb.Spans,
-	reverse bool,
-	useBatchLimit bool,
-	firstBatchLimit int64,
-	returnRangeInfo bool,
-) (txnKVFetcher, error) {
-	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
-		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
-			firstBatchLimit, useBatchLimit)
+func makeKVFetcher(txn *client.Txn, params KVFetcherParams) (*txnKVFetcher, error) {
+	if params.FirstBatchLimit < 0 || (!params.UseBatchLimit && params.FirstBatchLimit != 0) {
+		return nil, errors.Errorf("invalid batch limit %d (UseBatchLimit: %t)",
+			params.FirstBatchLimit, params.UseBatchLimit)
 	}
 
-	if useBatchLimit {
+	if params.UseBatchLimit {
 		// Verify the spans are ordered if a batch limit is used.
-		for i := 1; i < len(spans); i++ {
-			if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
-				return txnKVFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
+		for i := 1; i < len(params.Spans); i++ {
+			if params.Spans[i].Key.Compare(params.Spans[i-1].EndKey) < 0 {
+				return nil, errors.Errorf("unordered spans (%s %s)",
+					params.Spans[i-1], params.Spans[i])
 			}
 		}
 	}
 
 	// Make a copy of the spans because we update them.
-	copySpans := make(roachpb.Spans, len(spans))
-	for i := range spans {
-		if reverse {
+	copySpans := make(roachpb.Spans, len(params.Spans))
+	for i := range params.Spans {
+		if params.Reverse {
 			// Reverse scans receive the spans in decreasing order.
-			copySpans[len(spans)-i-1] = spans[i]
+			copySpans[len(params.Spans)-i-1] = params.Spans[i]
 		} else {
-			copySpans[i] = spans[i]
+			copySpans[i] = params.Spans[i]
 		}
 	}
 
-	return txnKVFetcher{
+	return &txnKVFetcher{
 		txn:             txn,
 		spans:           copySpans,
-		reverse:         reverse,
-		useBatchLimit:   useBatchLimit,
-		firstBatchLimit: firstBatchLimit,
-		returnRangeInfo: returnRangeInfo,
+		reverse:         params.Reverse,
+		useBatchLimit:   params.UseBatchLimit,
+		firstBatchLimit: params.FirstBatchLimit,
+		returnRangeInfo: params.ReturnRangeInfo,
 	}, nil
 }
 
@@ -341,9 +348,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
-// nextKV returns the next key/value (initiating fetches as necessary). When
+// NextKV returns the next key/value (initiating fetches as necessary). When
 // there are no more keys, returns false and an empty key/value.
-func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
+func (f *txnKVFetcher) NextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
 	var kv roachpb.KeyValue
 	for {
 		for len(f.kvs) == 0 && len(f.responses) > 0 {

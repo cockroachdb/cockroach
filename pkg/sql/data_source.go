@@ -440,9 +440,23 @@ func (p *planner) getDataSource(
 
 		return renameSource(src, t.As, false)
 
+	case *tree.BackupSourceExpr:
+		desc, tn, err := BackupSourceGetDesc(ctx, p, t)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil)
+
 	default:
 		return planDataSource{}, errors.Errorf("unsupported FROM type %T", src)
 	}
+}
+
+// BackupSourceGetDesc ...
+var BackupSourceGetDesc = func(
+	_ context.Context, _ PlanHookState, _ *tree.BackupSourceExpr,
+) (*sqlbase.TableDescriptor, *tree.TableName, error) {
+	return nil, nil, errors.New("EXPERIMENTAL_BACKUP_SOURCE requires a CCL binary")
 }
 
 func (p *planner) QualifyWithDatabase(

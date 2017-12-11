@@ -84,8 +84,8 @@ type spanKVFetcher struct {
 	kvs []roachpb.KeyValue
 }
 
-// nextKV implements the kvFetcher interface.
-func (f *spanKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
+// NextKV implements the kvFetcher interface.
+func (f *spanKVFetcher) NextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
 	if len(f.kvs) == 0 {
 		return false, roachpb.KeyValue{}, nil
 	}
@@ -94,9 +94,9 @@ func (f *spanKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, err
 	return true, kv, nil
 }
 
-// getRangesInfo implements the kvFetcher interface.
-func (f *spanKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic("getRangesInfo() called on spanKVFetcher")
+// GetRangesInfo implements the kvFetcher interface.
+func (f *spanKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
+	panic("GetRangesInfo() called on spanKVFetcher")
 }
 
 // fkBatchChecker accumulates foreign key checks and sends them out as a single
@@ -443,7 +443,7 @@ func makeBaseFKHelper(
 		IsSecondaryIndex: b.searchIdx.ID != b.searchTable.PrimaryIndex.ID,
 		Cols:             b.searchTable.Columns,
 	}
-	err = b.rf.Init(false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, alloc, tableArgs)
+	err = b.rf.Init(false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, alloc, nil /* TODO(dan): BEFORE MERGE */, tableArgs)
 	if err != nil {
 		return b, err
 	}

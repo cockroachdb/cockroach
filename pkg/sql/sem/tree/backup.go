@@ -95,3 +95,23 @@ func (o KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
 		}
 	}
 }
+
+// BackupSourceExpr represents an EXPERIMENTAL_BACKUP_SOURCE statement.
+type BackupSourceExpr struct {
+	Targets TargetList
+	From    []string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *BackupSourceExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(`EXPERIMENTAL_BACKUP_SOURCE `)
+	FormatNode(buf, f, node.Targets)
+	buf.WriteString(" FROM (")
+	for i, from := range node.From {
+		if i != 0 {
+			buf.WriteString(`, `)
+		}
+		buf.WriteString(from)
+	}
+	buf.WriteString(")")
+}

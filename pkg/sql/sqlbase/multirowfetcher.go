@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -36,9 +37,10 @@ import (
 // this to avoid using log.V in the hot path.
 const debugRowFetch = false
 
-type kvFetcher interface {
-	nextKV(ctx context.Context) (bool, roachpb.KeyValue, error)
-	getRangesInfo() []roachpb.RangeInfo
+// KVFetcher ...
+type KVFetcher interface {
+	NextKV(ctx context.Context) (bool, roachpb.KeyValue, error)
+	GetRangesInfo() []roachpb.RangeInfo
 }
 
 type tableInfo struct {
@@ -127,6 +129,8 @@ type MultiRowFetcherTableArgs struct {
 //      // Process res.row
 //   }
 type MultiRowFetcher struct {
+	settings *cluster.Settings
+
 	// tables is a slice of all the tables and their descriptors for which
 	// rows are returned.
 	tables []tableInfo
@@ -170,7 +174,7 @@ type MultiRowFetcher struct {
 
 	// -- Fields updated during a scan --
 
-	kvFetcher      kvFetcher
+	kvFetcher      KVFetcher
 	indexKey       []byte // the index key of the current row
 	prettyValueBuf *bytes.Buffer
 
@@ -200,12 +204,14 @@ func (mrf *MultiRowFetcher) Init(
 	returnRangeInfo bool,
 	isCheck bool,
 	alloc *DatumAlloc,
+	settings *cluster.Settings,
 	tables ...MultiRowFetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		panic("no tables to fetch from")
 	}
 
+	mrf.settings = settings
 	mrf.reverse = reverse
 	mrf.returnRangeInfo = returnRangeInfo
 	mrf.alloc = alloc
@@ -370,16 +376,41 @@ func (mrf *MultiRowFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := makeKVFetcher(txn, spans, mrf.reverse, limitBatches, firstBatchLimit, mrf.returnRangeInfo)
+	kvFetcherParams := KVFetcherParams{
+		// TODO(dan): BEFORE MERGE is this the correct timestamp?
+		Timestamp:       txn.OrigTimestamp(),
+		Spans:           spans,
+		Reverse:         mrf.reverse,
+		UseBatchLimit:   limitBatches,
+		FirstBatchLimit: firstBatchLimit,
+		ReturnRangeInfo: mrf.returnRangeInfo,
+		Settings:        mrf.settings,
+	}
+	var f KVFetcher
+	var err error
+	if mrf.tables[0].desc.BackupSource != nil {
+		// TODO(dan): BEFORE MERGE error if BackupSource is set for some but not
+		// others.
+		f, err = MakeBackupSourceKVFetcher(ctx, kvFetcherParams, mrf.tables[0].desc)
+	} else {
+		f, err = makeKVFetcher(txn, kvFetcherParams)
+	}
 	if err != nil {
 		return err
 	}
-	return mrf.StartScanFrom(ctx, &f)
+	return mrf.StartScanFrom(ctx, f)
+}
+
+// MakeBackupSourceKVFetcher ...
+var MakeBackupSourceKVFetcher = func(
+	_ context.Context, _ KVFetcherParams, _ *TableDescriptor,
+) (KVFetcher, error) {
+	return nil, errors.New("EXPERIMENTAL_BACKUP_SOURCE requires a CCL binary")
 }
 
 // StartScanFrom initializes and starts a scan from the given kvFetcher. Can be
 // used multiple times.
-func (mrf *MultiRowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
+func (mrf *MultiRowFetcher) StartScanFrom(ctx context.Context, f KVFetcher) error {
 	mrf.indexKey = nil
 	mrf.kvFetcher = f
 	// Retrieve the first key.
@@ -393,7 +424,7 @@ func (mrf *MultiRowFetcher) NextKey(ctx context.Context) (rowDone bool, err erro
 	var ok bool
 
 	for {
-		ok, mrf.kv, err = mrf.kvFetcher.nextKV(ctx)
+		ok, mrf.kv, err = mrf.kvFetcher.NextKV(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -1088,7 +1119,7 @@ func (mrf *MultiRowFetcher) Key() roachpb.Key {
 // GetRangeInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
 func (mrf *MultiRowFetcher) GetRangeInfo() []roachpb.RangeInfo {
-	return mrf.kvFetcher.getRangesInfo()
+	return mrf.kvFetcher.GetRangesInfo()
 }
 
 // Only unique secondary indexes have extra columns to decode (namely the
