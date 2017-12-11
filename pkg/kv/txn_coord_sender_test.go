@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -63,14 +64,15 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) (*localtestcluster.LocalTestCluster, *TxnCoordSender) {
-	return createTestDBWithContext(t, client.DefaultDBContext())
+	return createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), nil)
 }
 
-func createTestDBWithContext(
-	t testing.TB, dbCtx client.DBContext,
+func createTestDBWithContextAndKnobs(
+	t testing.TB, dbCtx client.DBContext, knobs *storage.StoreTestingKnobs,
 ) (*localtestcluster.LocalTestCluster, *TxnCoordSender) {
 	s := &localtestcluster.LocalTestCluster{
-		DBContext: &dbCtx,
+		DBContext:         &dbCtx,
+		StoreTestingKnobs: knobs,
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	return s, s.Sender.(*TxnCoordSender)
@@ -747,6 +749,59 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 	})
 
 	verifyCleanup(key, sender, s.Eng, t)
+}
+
+// TestTxnCoordSenderGCWithAmbiguousResultErr verifies that the coordinator
+// cleans up extant transactions and intents after an ambiguous result error is
+// observed, even if the error is on the first request.
+func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testutils.RunTrueAndFalse(t, "errOnFirst", func(t *testing.T, errOnFirst bool) {
+		key := roachpb.Key("a")
+		are := roachpb.NewAmbiguousResultError("very ambiguous")
+		knobs := &storage.StoreTestingKnobs{
+			TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+				for _, req := range ba.Requests {
+					if putReq, ok := req.GetInner().(*roachpb.PutRequest); ok && putReq.Key.Equal(key) {
+						return roachpb.NewError(are)
+					}
+				}
+				return nil
+			},
+		}
+
+		s, sender := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), knobs)
+		defer s.Stop()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */)
+		if !errOnFirst {
+			otherKey := roachpb.Key("other")
+			if err := txn.Put(ctx, otherKey, []byte("value")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := txn.Put(ctx, key, []byte("value")); !testutils.IsError(err, "result is ambiguous") {
+			t.Fatalf("expected error %v, found %v", are, err)
+		}
+		txnID := txn.Proto().ID
+
+		// After the context is canceled, the transaction should be cleaned up.
+		cancel()
+		testutils.SucceedsSoon(t, func() error {
+			// Locking the TxnCoordSender to prevent a data race.
+			sender.txnMu.Lock()
+			_, ok := sender.txnMu.txns[txnID]
+			sender.txnMu.Unlock()
+			if ok {
+				return errors.Errorf("expected garbage collection")
+			}
+			return nil
+		})
+
+		verifyCleanup(key, sender, s.Eng, t)
+	})
 }
 
 // TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
