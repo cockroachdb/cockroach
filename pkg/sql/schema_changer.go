@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var (
@@ -894,6 +895,7 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 // processing the schema change this manager acts as a backup
 // execution mechanism.
 type SchemaChangeManager struct {
+	ambientCtx   log.AmbientContext
 	db           client.DB
 	gossip       *gossip.Gossip
 	leaseMgr     *LeaseManager
@@ -908,6 +910,7 @@ type SchemaChangeManager struct {
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
 	st *cluster.Settings,
+	ambientCtx log.AmbientContext,
 	testingKnobs *SchemaChangerTestingKnobs,
 	db client.DB,
 	nodeDesc roachpb.NodeDescriptor,
@@ -920,6 +923,7 @@ func NewSchemaChangeManager(
 	jobRegistry *jobs.Registry,
 ) *SchemaChangeManager {
 	return &SchemaChangeManager{
+		ambientCtx:     ambientCtx,
 		db:             db,
 		gossip:         gossip,
 		leaseMgr:       leaseMgr,
@@ -964,10 +968,17 @@ func (s *SchemaChangeManager) newTimer() *time.Timer {
 // Start starts a goroutine that runs outstanding schema changes
 // for tables received in the latest system configuration via gossip.
 func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(context.TODO(), func(ctx context.Context) {
+	stopper.RunWorker(s.ambientCtx.AnnotateCtx(context.Background()), func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
+		// TODO(tschottdorf): it is not clear that inserting this delay is
+		// useful.
+		//
+		// Vivek wrote: I believe the only reason to pace these is to allow
+		// different schema changes to execute on different nodes and distribute
+		// the load. But that was a thought a long time ago. You can safely move
+		// the break inside the if statement.
 		delay := 360 * time.Second
 		if s.testingKnobs.AsyncExecQuickly {
 			delay = 20 * time.Millisecond
@@ -1068,8 +1079,12 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
 						evalCtx := createSchemaChangeEvalCtx(s.clock.Now())
-						// TODO(andrei): create a proper ctx for executing schema changes.
-						if err := sc.exec(ctx, false /* inSession */, evalCtx); err != nil {
+
+						execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
+						err := sc.exec(execCtx, false /* inSession */, evalCtx)
+						cleanup()
+
+						if err != nil {
 							if shouldLogSchemaChangeError(err) {
 								log.Warningf(ctx, "Error executing schema change: %s", err)
 							}
@@ -1086,9 +1101,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// Advance the execAfter time so that this schema
 						// changer doesn't get called again for a while.
 						sc.execAfter = timeutil.Now().Add(delay)
+
+						// Only attempt to run one schema changer.
+						break
 					}
-					// Only attempt to run one schema changer.
-					break
 				}
 				timer = s.newTimer()
 

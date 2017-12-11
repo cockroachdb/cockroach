@@ -929,6 +929,7 @@ If problems persist, please see https://www.cockroachlabs.com/docs/v` + serverVe
 	}
 	sql.NewSchemaChangeManager(
 		s.st,
+		s.cfg.AmbientCtx,
 		testingKnobs,
 		*s.db,
 		s.node.Descriptor,
