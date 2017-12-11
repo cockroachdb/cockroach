@@ -118,9 +118,7 @@ func (t *partitioningTest) parse() error {
 			return errors.Errorf("expected *tree.CreateTable got %T", stmt)
 		}
 		const parentID, tableID = keys.MaxReservedDescID + 1, keys.MaxReservedDescID + 2
-		// TODO(dan): makeCSVTableDescriptor happens to be exactly the code we
-		// want. Rename it to something more general.
-		t.parsed.tableDesc, err = makeCSVTableDescriptor(
+		t.parsed.tableDesc, err = makeSimpleTableDescriptor(
 			ctx, createTable, parentID, tableID, hlc.UnixNano())
 		if err != nil {
 			return err
