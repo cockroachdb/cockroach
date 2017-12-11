@@ -428,6 +428,7 @@ message SpanStatsRequest {
 
 message SpanStatsResponse {
   int32 range_count = 2;
+  uint64 approximate_disk_bytes = 3;
   cockroach.storage.engine.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
 }
 
