@@ -341,5 +341,5 @@ func (c *RowContainer) Replace(ctx context.Context, i int, newRow tree.Datums) e
 
 // MemUsage returns the current accounted memory usage.
 func (c *RowContainer) MemUsage() int64 {
-	return c.memAcc.CurrentlyAllocated()
+	return c.memAcc.Used()
 }
