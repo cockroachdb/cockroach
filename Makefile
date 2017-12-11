@@ -616,7 +616,7 @@ libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
-libroachccl: $(LIBROACH_DIR)/Makefile libroach
+libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET) libroach
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
@@ -652,6 +652,7 @@ SQLPARSER_TARGETS = \
 GO_PROTOS_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
 GW_PROTOS_TARGET := $(LOCAL_BIN)/.gw_protobuf_sources
 CPP_PROTOS_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
+CPP_PROTOS_CCL_TARGET := $(LOCAL_BIN)/.cpp_ccl_protobuf_sources
 
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
@@ -813,7 +814,7 @@ lintshort: ## Run a fast subset of the style checkers and linters.
 	$(XGO) test $(PKG_ROOT)/testutils/lint -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestLint/$(TESTS)'
 
 .PHONY: protobuf
-protobuf: $(GO_PROTOS_TARGET) $(GW_PROTOS_TARGET) $(CPP_PROTOS_TARGET)
+protobuf: $(GO_PROTOS_TARGET) $(GW_PROTOS_TARGET) $(CPP_PROTOS_TARGET) $(CPP_PROTOS_CCL_TARGET)
 protobuf: ## Regenerate generated code for protobuf definitions.
 
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
@@ -880,6 +881,7 @@ ifneq ($(GIT_DIR),)
 endif
 
 CPP_PROTO_ROOT := $(LIBROACH_SRC_DIR)/protos
+CPP_PROTO_CCL_ROOT := $(LIBROACH_SRC_DIR)/protosccl
 
 GOGO_PROTOBUF_PATH := ./vendor/github.com/gogo/protobuf
 PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
@@ -918,6 +920,10 @@ CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/i
 CPP_HEADERS := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.cc))
 
+CPP_PROTOS_CCL := $(filter %ccl/baseccl/encryption_options.proto,$(GO_PROTOS))
+CPP_HEADERS_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.proto=%.pb.h))
+CPP_SOURCES_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.proto=%.pb.cc))
+
 UI_PROTOS := $(UI_JS) $(UI_TS)
 
 $(GO_PROTOS_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
@@ -943,6 +949,13 @@ $(CPP_PROTOS_TARGET): $(PROTOC) $(CPP_PROTOS)
 	mkdir -p $(CPP_PROTO_ROOT)
 	build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(CPP_PROTO_ROOT) $(CPP_PROTOS)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
+	touch $@
+
+$(CPP_PROTOS_CCL_TARGET): $(PROTOC) $(CPP_PROTOS_CCL)
+	$(FIND_RELEVANT) -type f \( -name '*.pb.h' -o -name '*.pb.cc' \) -exec rm {} +
+	mkdir -p $(CPP_PROTO_CCL_ROOT)
+	build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(CPP_PROTO_CCL_ROOT) $(CPP_PROTOS_CCL)
+	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS_CCL) $(CPP_SOURCES_CCL)
 	touch $@
 
 .SECONDARY: $(UI_JS)
