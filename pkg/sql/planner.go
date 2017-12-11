@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -171,7 +173,8 @@ func makeInternalPlanner(
 		-1, noteworthyInternalMemoryUsageBytes/5)
 	s.TxnState.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
-	p := s.newPlanner(nil, txn)
+	// TODO(andrei): figure out how to pass proper arguments to this planner.
+	p := newPlanner(s, txn, uuid.UUID{}, roachpb.NodeID(0), nil /* reCache */)
 
 	if txn != nil {
 		if txn.Proto().OrigTimestamp == (hlc.Timestamp{}) {

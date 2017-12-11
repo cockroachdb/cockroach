@@ -669,7 +669,8 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		sqlTypeHints[strconv.Itoa(i+1)] = v
 	}
 	// Create the new PreparedStatement in the connection's Session.
-	stmt, err := c.session.PreparedStatements.NewFromString(c.executor, name, query, sqlTypeHints)
+	stmt, err := c.session.PreparedStatements.NewFromString(
+		name, query, sqlTypeHints, c.executor.GetDatabaseCache(), c.executor.GetExecCfg(), c.executor.GetReCache())
 	if err != nil {
 		return c.sendError(err)
 	}
