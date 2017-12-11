@@ -19,6 +19,7 @@ option go_package = "storagebase";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
+import "storage/engine/enginepb/compact.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "storage/storagebase/state.proto";
@@ -115,6 +116,11 @@ message ReplicatedEvalResult {
   }
   reserved 16;
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
+
+  // suggested_compactions are sent to the engine's compactor to
+  // reclaim storage space after garbage collection or cleared /
+  // rebalanced ranges.
+  repeated storage.engine.enginepb.Compaction suggested_compactions = 19 [(gogoproto.nullable) = false];
 
   reserved 10001 to 10013;
 }

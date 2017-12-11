@@ -353,6 +353,7 @@ type Store struct {
 	cfg                StoreConfig
 	db                 *client.DB
 	engine             engine.Engine               // The underlying key-value store
+	compactor          *engine.Compactor           // Schedules compaction of the engine
 	tsCache            tscache.Cache               // Most recent timestamps for keys / key ranges
 	allocator          Allocator                   // Makes allocation decisions
 	rangeIDAlloc       *idAllocator                // Range ID allocator
@@ -831,11 +832,12 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		log.Fatalf(context.Background(), "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:   eng,
-		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
+		cfg:       cfg,
+		db:        cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:    eng,
+		compactor: engine.NewCompactor(eng),
+		nodeDesc:  nodeDesc,
+		metrics:   newStoreMetrics(cfg.HistogramWindowInterval),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
@@ -1203,6 +1205,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 		log.Event(ctx, "computed initial metrics")
 	}
+
+	// Start the storage engine compactor.
+	s.compactor.Start(s.AnnotateCtx(context.Background()), s.stopper)
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)

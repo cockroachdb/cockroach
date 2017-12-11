@@ -257,6 +257,7 @@ message ClearRangeRequest {
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   util.hlc.Timestamp gc_threshold = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "GCThreshold"];
+  Span suggested_compaction = 3 [(gogoproto.nullable) = false];
 }
 
 // A ClearRangeResponse is the return value from the ClearRange() method.

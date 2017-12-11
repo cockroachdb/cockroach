@@ -109,6 +109,19 @@ DBStatus DBSyncWAL(DBEngine* db);
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
 
+// Forces an immediate compaction over keys in the specified range.
+// Note that if start is empty, it indicates the start of the database.
+// If end is empty, it indicates the end of the database.
+DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end);
+
+// If a key range has been cleared and will never be used again, this
+// is the most efficient means to recover space. It simply unlinks
+// any SSTable files completely subsumed by the specified key span.
+// In general, it makes sense to invoke this method first, followed by
+// calls to DBCompactRange in order to clean up remaining keys stored
+// in SSTables containing keys outside this span.
+DBStatus DBDeleteFilesInRange(DBEngine* db, DBKey start, DBKey end);
+
 // Sets the database entry for "key" to "value".
 DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
 

@@ -17,6 +17,7 @@
 #include <google/protobuf/stubs/stringprintf.h>
 #include <mutex>
 #include <rocksdb/cache.h>
+#include <rocksdb/convenience.h>
 #include <rocksdb/db.h>
 #include <rocksdb/env.h>
 #include <rocksdb/filter_policy.h>
@@ -1632,6 +1633,10 @@ DBStatus DBSyncWAL(DBEngine* db) {
 }
 
 DBStatus DBCompact(DBEngine* db) {
+  return DBCompactRange(db, DBKey(), DBKey());
+}
+
+DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end) {
   rocksdb::CompactRangeOptions options;
   // By default, RocksDB doesn't recompact the bottom level (unless
   // there is a compaction filter, which we don't use). However,
@@ -1646,15 +1651,28 @@ DBStatus DBCompact(DBEngine* db) {
   // compactions on smaller ranges of keys. The resulting compacted
   // database is the same size, but the temporary disk space needed
   // for the compaction is dramatically reduced
+  std::vector<rocksdb::LiveFileMetaData> all_metadata;
   std::vector<rocksdb::LiveFileMetaData> metadata;
-  db->rep->GetLiveFilesMetaData(&metadata);
+  db->rep->GetLiveFilesMetaData(&all_metadata);
+
+  std::string start_key(EncodeKey(start));
+  std::string end_key(EncodeKey(end));
 
   int max_level = 0;
-  for (int i = 0; i < metadata.size(); i++) {
-    if (max_level < metadata[i].level) {
-      max_level = metadata[i].level;
+  for (int i = 0; i < all_metadata.size(); i++) {
+    // Skip any SSTables which fall outside the specified range, if a
+    // range was specified.
+    if ((start_key.length() > 0 && all_metadata[i].largestkey < start_key) ||
+        (end_key.length() > 0 && all_metadata[i].smallestkey >= end_key)) {
+      continue;
     }
+    if (max_level < all_metadata[i].level) {
+      max_level = all_metadata[i].level;
+    }
+    // Gather the set of SSTables to compact.
+    metadata.push_back(all_metadata[i]);
   }
+  all_metadata.clear();
 
   if (max_level == db->rep->NumberLevels() - 1) {
     // A naive approach to selecting ranges to compact would be to
@@ -1727,6 +1745,14 @@ DBStatus DBCompact(DBEngine* db) {
   // entire database. Due to the level_compaction_dynamic_level_bytes
   // setting, this will only happen on very small databases.
   return ToDBStatus(db->rep->CompactRange(options, NULL, NULL));
+}
+
+DBStatus DBDeleteFilesInRange(DBEngine* db, DBKey start, DBKey end) {
+  std::string start_key = EncodeKey(start);
+  std::string end_key = EncodeKey(end);
+  rocksdb::Slice start_key_slice(start_key);
+  rocksdb::Slice end_key_slice(end_key);
+  return ToDBStatus(rocksdb::DeleteFilesInRange(db->rep, db->rep->DefaultColumnFamily(), &start_key_slice, &end_key_slice));
 }
 
 DBStatus DBImpl::Put(DBKey key, DBSlice value) {

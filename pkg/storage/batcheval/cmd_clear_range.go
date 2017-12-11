@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -98,6 +99,16 @@ func ClearRange(
 	stateLoader := MakeStateLoader(cArgs.EvalCtx)
 	if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &gcThreshold); err != nil {
 		return result.Result{}, err
+	}
+
+	// Suggest a compaction for the cleared range.
+	pd.Replicated.SuggestedCompactions = []enginepb.Compaction{
+		{
+			StartKey: args.SuggestedCompaction.Key,
+			EndKey:   args.SuggestedCompaction.EndKey,
+			Cleared:  true,
+			Bytes:    -(cArgs.Stats.KeyBytes + cArgs.Stats.ValBytes),
+		},
 	}
 
 	// Clear the key span.

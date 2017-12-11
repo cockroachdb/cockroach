@@ -59,6 +59,15 @@ func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
 }
 
+// StoreSuggestedCompactionKey returns a store-local key for a
+// suggested compaction. It combines the specified start and end keys.
+func StoreSuggestedCompactionKey(start, end roachpb.RKey) roachpb.Key {
+	detail := make(roachpb.RKey, 0, len(start)+1+len(end)+1)
+	detail = encoding.EncodeBytesAscending(detail, start)
+	detail = encoding.EncodeBytesAscending(detail, end)
+	return MakeStoreKey(localStoreSuggestedCompactionSuffix, detail)
+}
+
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)
