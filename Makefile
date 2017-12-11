@@ -584,7 +584,9 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
 	mkdir -p $(LIBROACH_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/libroach-rebuild. See above for rationale.
-	cd $(LIBROACH_DIR) && cmake $(CMAKE_FLAGS) $(LIBROACH_SRC_DIR) -DCMAKE_BUILD_TYPE=Release
+	cd $(LIBROACH_DIR) && cmake $(CMAKE_FLAGS) $(LIBROACH_SRC_DIR) -DCMAKE_BUILD_TYPE=Release \
+		-DPROTOBUF_LIB=$(PROTOBUF_DIR)/libprotobuf.a -DROCKSDB_LIB=$(ROCKSDB_DIR)/librocksdb.a \
+		-DJEMALLOC_LIB=$(JEMALLOC_DIR)/lib/libjemalloc.a -DSNAPPY_LIB=$(SNAPPY_DIR)/libsnappy.a
 
 # We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
 # having to name the artifact (for .PHONY), which can vary by platform, and so
@@ -620,7 +622,7 @@ libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET) libroach
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
-check-libroach: $(LIBROACH_DIR)/Makefile
+check-libroach: $(LIBROACH_DIR)/Makefile libjemalloc libprotobuf libsnappy librocksdb
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) check
 
 override TAGS += make $(NATIVE_SPECIFIER_TAG)

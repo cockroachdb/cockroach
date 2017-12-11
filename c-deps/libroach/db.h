@@ -15,11 +15,21 @@
 #include <libroach.h>
 #include <rocksdb/comparator.h>
 #include <rocksdb/iterator.h>
+#include <rocksdb/status.h>
 #include <rocksdb/write_batch.h>
 #include <rocksdb/write_batch_base.h>
 
+// DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
+rocksdb::Status DBOpenHook(const DBOptions opts);
+
+// ToDBSlice returns a DBSlice from a rocksdb::Slice
+DBSlice ToDBSlice(const rocksdb::Slice& s);
+
 // ToString returns a c++ string with the contents of a DBSlice.
 std::string ToString(DBSlice s);
+
+// ToString returns a c++ string with the contents of a DBString.
+std::string ToString(DBString s);
 
 // MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
