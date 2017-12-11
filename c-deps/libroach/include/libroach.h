@@ -75,9 +75,6 @@ typedef struct {
   DBSlice extra_options;
 } DBOptions;
 
-// DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
-DBStatus DBOpenHook(const DBOptions opts);
-
 // Create a new cache with the specified size.
 DBCache* DBNewCache(uint64_t size);
 
