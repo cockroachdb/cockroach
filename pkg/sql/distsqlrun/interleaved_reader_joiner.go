@@ -34,7 +34,7 @@ type postProcHelper struct {
 }
 
 // interleavedReaderJoiner is at the start of a computation flow: it performs KV
-// operations to retrieve rows for two tables (parent and child), internally
+// operations to retrieve rows for two tables (ancestor and child), internally
 // filters the rows, performs a merge join with equality constraints.
 // See docs/RFCS/20171025_interleaved_table_joins.md
 type interleavedReaderJoiner struct {
@@ -52,10 +52,14 @@ type interleavedReaderJoiner struct {
 	fetcher sqlbase.MultiRowFetcher
 	alloc   sqlbase.DatumAlloc
 
-	// TODO(richardwu): If we need to buffer more than 1 parent row for
+	// TODO(richardwu): If we need to buffer more than 1 ancestor row for
 	// prefix joins, subset joins, and/or outer joins, we need to buffer an
-	// arbitrary number of parent and child rows.
-	parentRow sqlbase.EncDatumRow
+	// arbitrary number of ancestor and child rows.
+	// We can use streamMerger here for simplicity.
+	ancestorRow sqlbase.EncDatumRow
+	// ancestorTablePos is the corresponding index of theancestor table in
+	// tablePosts and tableIDs.
+	ancestorTablePos int
 }
 
 var _ Processor = &interleavedReaderJoiner{}
@@ -77,8 +81,8 @@ func newInterleavedReaderJoiner(
 	// TODO(richardwu): Support all types of joins by re-using
 	// streamMerger.
 	// We give up streaming joined rows for full interleave prefix joins
-	// unless we refactor streamMerger to stream rows if the first
-	// (left/parent) batch only has one row.
+	// unless we refactor streamMerger to stream rows if either batch (i.e. the ancestor's batch)
+	// only has one row.
 	if spec.Type != JoinType_INNER {
 		return nil, errors.Errorf("interleavedReaderJoiner only supports inner joins")
 	}
@@ -101,10 +105,22 @@ func newInterleavedReaderJoiner(
 	// We need to take spans from all tables and merge them together
 	// for MultiRowFetcher.
 	allSpans := make(roachpb.Spans, 0, len(spec.Tables))
+
+	// We need to figure out which table is the ancestor.
+	var ancestorTablePos int
+	minAncestors := -1
 	for i, table := range spec.Tables {
 		index, _, err := table.Desc.FindIndexByIndexIdx(int(table.IndexIdx))
 		if err != nil {
 			return nil, err
+		}
+
+		// The simplest way is to find the table with the fewest
+		// interleave ancestors.
+		// TODO(richardwu): Adapt this for sibling joins and multi-table joins.
+		if minAncestors == -1 || len(index.Interleave.Ancestors) < minAncestors {
+			minAncestors = len(index.Interleave.Ancestors)
+			ancestorTablePos = i
 		}
 
 		if err := tablePosts[i].post.Init(
@@ -124,10 +140,11 @@ func newInterleavedReaderJoiner(
 	allSpans, _ = roachpb.MergeSpans(allSpans)
 
 	irj := &interleavedReaderJoiner{
-		flowCtx:    flowCtx,
-		tableIDs:   tableIDs,
-		tablePosts: tablePosts,
-		allSpans:   allSpans,
+		flowCtx:          flowCtx,
+		tableIDs:         tableIDs,
+		tablePosts:       tablePosts,
+		allSpans:         allSpans,
+		ancestorTablePos: ancestorTablePos,
 	}
 
 	if err := irj.initMultiRowFetcher(
@@ -242,17 +259,18 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 			break
 		}
 
-		var helper postProcHelper
-		helperIdx := -1
-		for i, h := range irj.tablePosts {
+		// Lookup the helper that belongs to this row.
+		var helper *postProcHelper
+		isAncestorRow := false
+		for i := range irj.tablePosts {
+			h := &irj.tablePosts[i]
 			if desc.ID == h.tableID && index.ID == h.indexID {
 				helper = h
-				helperIdx = i
+				if i == irj.ancestorTablePos {
+					isAncestorRow = true
+				}
 				break
 			}
-		}
-		if helperIdx == -1 {
-			panic("row fetched does not belong to any tables being scanned")
 		}
 
 		// We post-process the intermediate row from either table.
@@ -269,25 +287,32 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 			continue
 		}
 
-		// The first table is assumed to be the parent table.
-		if helperIdx == 0 {
-			// A new parent row is fetched. We re-assign our reference
-			// to the most recent parent row.
+		if isAncestorRow {
+			// A new ancestor row is fetched. We re-assign our reference
+			// to the most recent ancestor row.
 			// This is safe because tableRow is a newly alloc'd
 			// row.
-			irj.parentRow = tableRow
+			irj.ancestorRow = tableRow
 			continue
 		}
 
 		// A child row (tableRow) is fetched.
 
-		if irj.parentRow == nil {
-			// A child row was fetched before any parent rows. This
+		if irj.ancestorRow == nil {
+			// A child row was fetched before any ancestor rows. This
 			// is fine and shouldn't affect the desired outcome.
 			continue
 		}
 
-		renderedRow, err := irj.render(irj.parentRow, tableRow)
+		// TODO(richardwu): Generalize this to 2+ tables and sibling
+		// tables.
+		var renderedRow sqlbase.EncDatumRow
+		if irj.ancestorTablePos == 0 {
+			renderedRow, err = irj.render(irj.ancestorRow, tableRow)
+		} else {
+			renderedRow, err = irj.render(tableRow, irj.ancestorRow)
+		}
+
 		if err != nil {
 			irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			break
