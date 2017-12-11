@@ -86,7 +86,7 @@ Set up your cluster following the
 You can either set up your cluster following the
 [instructions provided in the Kubernetes docs](https://kubernetes.io/docs/getting-started-guides/gce/)
 or by using the hosted
-[Container Engine](https://cloud.google.com/container-engine/docs) service:
+[Kubernetes Engine](https://cloud.google.com/container-engine/docs) service:
 
 ```shell
 gcloud container clusters create NAME
