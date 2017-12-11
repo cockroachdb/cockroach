@@ -84,7 +84,7 @@ message ReplicatedEvalResult {
   Merge merge = 4;
   roachpb.ComputeChecksumRequest compute_checksum = 5;
   bool is_lease_request = 6;
-  bool is_freeze = 7;
+  reserved 7;
   // Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
   // to verify the validity of the command (for lease coverage and GC
   // threshold).
