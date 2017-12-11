@@ -105,7 +105,7 @@ func LoadCSV(
 	var parentID = defaultCSVParentID
 	walltime := timeutil.Now().UnixNano()
 
-	tableDesc, err := makeCSVTableDescriptor(ctx, createTable, parentID, defaultCSVTableID, walltime)
+	tableDesc, err := makeSimpleTableDescriptor(ctx, createTable, parentID, defaultCSVTableID, walltime)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -298,7 +298,11 @@ func readCreateTableFromStore(
 	return create, nil
 }
 
-func makeCSVTableDescriptor(
+// makeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
+// node without the full machinery. Many parts of the syntax are unsupported
+// (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
+// but this is enough for our csv IMPORT and for some unit tests.
+func makeSimpleTableDescriptor(
 	ctx context.Context, create *tree.CreateTable, parentID, tableID sqlbase.ID, walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
 	sql.HoistConstraints(create)
@@ -1018,7 +1022,7 @@ func importPlanHook(
 		}
 
 		parentID := defaultCSVParentID
-		tableDesc, err := makeCSVTableDescriptor(ctx, create, parentID, defaultCSVTableID, walltime)
+		tableDesc, err := makeSimpleTableDescriptor(ctx, create, parentID, defaultCSVTableID, walltime)
 		if err != nil {
 			return err
 		}
