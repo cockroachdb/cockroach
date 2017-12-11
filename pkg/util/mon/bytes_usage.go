@@ -17,6 +17,7 @@ package mon
 import (
 	"fmt"
 	"math"
+	"math/bits"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -575,7 +576,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 		// We only report changes in binary magnitude of the size. This is to
 		// limit the amount of log messages when a size blowup is caused by
 		// many small allocations.
-		if util.RoundUpPowerOfTwo(mm.mu.curAllocated) != util.RoundUpPowerOfTwo(mm.mu.curAllocated-x) {
+		if bits.Len64(uint64(mm.mu.curAllocated)) != bits.Len64(uint64(mm.mu.curAllocated-x)) {
 			log.Infof(ctx, "%s: bytes usage increases to %s (+%d)",
 				mm.name,
 				humanizeutil.IBytes(mm.mu.curAllocated), x)
