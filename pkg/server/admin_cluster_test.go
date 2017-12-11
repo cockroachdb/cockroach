@@ -34,7 +34,6 @@ import (
 
 func TestAdminAPITableStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#8890")
 
 	const nodeCount = 3
 	tc := testcluster.StartTestCluster(t, nodeCount, base.TestClusterArgs{
@@ -50,12 +49,12 @@ func TestAdminAPITableStats(t *testing.T) {
 	// Create clients (SQL, HTTP) connected to server 0.
 	db := tc.ServerConn(0)
 
-	client, err := server0.GetHTTPClient()
+	client, err := server0.GetAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	client.Timeout = base.NetworkTimeout * 3
+	client.Timeout = time.Hour // basically no timeout
 
 	// Make a single table and insert some data. The database and test have
 	// names which require escaping, in order to verify that database and
