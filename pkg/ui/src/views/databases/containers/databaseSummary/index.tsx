@@ -54,7 +54,7 @@ export class DatabaseSummaryBase extends React.Component<DatabaseSummaryProps, {
             table: tblInfo.name,
           }));
         }
-        if (_.isUndefined(tblInfo.size)) {
+        if (_.isUndefined(tblInfo.physicalSize)) {
           props.refreshTableStats(new protos.cockroach.server.serverpb.TableStatsRequest({
             database: props.name,
             table: tblInfo.name,

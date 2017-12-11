@@ -118,12 +118,14 @@ class TableMain extends React.Component<TableMainProps, {}> {
               <SummaryBar>
                 <SummaryHeadlineStat
                   title="Size"
-                  tooltip="Total disk size of this table."
-                  value={ tableInfo.size }
+                  /* TODO (tschottdorf): where is this tooltip shown? Can't find it. */
+                  tooltip="Approximate total disk size of this table across all replicas."
+                  value={ tableInfo.physicalSize }
                   format={ Bytes }/>
                 <SummaryHeadlineStat
                   title="Ranges"
-                  tooltip="The total count of ranges in this database"
+                  /* TODO (tschottdorf): where is this tooltip shown? Can't find it. */
+                  tooltip="The total count of replicas in this database across all replicas."
                   value={ tableInfo.rangeCount }/>
               </SummaryBar>
             </div>
