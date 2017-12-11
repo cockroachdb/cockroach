@@ -533,19 +533,6 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 	// we're just trying to clean up and will happily log the failed Rollback error
 	// if someone beat us.
 	if txn.status() == roachpb.PENDING {
-		// We don't need to send a rollback if no requests have been sent.
-		txn.mu.Lock()
-		if !txn.mu.active {
-			// Simulate the effect of sending a rollback.
-			txn.mu.finalized = true
-			// Let's set the status to ABORTED; unclear if this is necessary, but
-			// can't hurt.
-			txn.mu.Proto.Status = roachpb.ABORTED
-			txn.mu.Unlock()
-			return
-		}
-		txn.mu.Unlock()
-
 		if replyErr := txn.rollback(ctx); replyErr != nil {
 			if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
 				log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
