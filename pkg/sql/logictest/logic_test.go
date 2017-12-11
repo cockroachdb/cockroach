@@ -205,6 +205,12 @@ import (
 //    Limits the kvfetcher batch size; it can be used to trigger certain error
 //    conditions or corner cases around limited batches.
 //
+//  - subtest <testname>
+//    Defines the start of a subtest. The subtest is any number of statements
+//    that occur after this command until the end of file or the next subtest
+//    command.
+//    The lines before the first subtest command are considered a subtest called
+//    "base".
 //
 // The overall architecture of TestLogic is as follows:
 //
@@ -953,347 +959,446 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	t.lastProgress = timeutil.Now()
 
 	repeat := 1
+	subtestName := "base"
 	s := newLineScanner(file, t.varMap)
 	for s.Scan() {
-		if *maxErrs > 0 && t.failures >= *maxErrs {
-			t.Fatalf("%s:%d: too many errors encountered, skipping the rest of the input",
-				path, s.line)
-		}
+		// Since the subtest also has a for s.Scan, don't double scan which would
+		// amount to skipping this line.
+		dontScanFirstLine := true
+		// Check for a new subtest here, so when not executing a section of the file
+		// we don't skip any potential tests.
 		line := s.Text()
-		t.emit(line)
 		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
-		}
-		cmd := fields[0]
-		if strings.HasPrefix(cmd, "#") {
-			// Skip comment lines.
-			continue
-		}
-		if len(fields) == 2 && fields[1] == "error" {
-			return fmt.Errorf("%s:%d: no expected error provided", path, s.line)
-		}
-		switch cmd {
-		case "repeat":
-			// A line "repeat X" makes the test repeat the following statement or query X times.
-			var err error
-			count := 0
+		if len(fields) > 0 && fields[0] == "subtest" {
 			if len(fields) != 2 {
-				err = errors.New("invalid line format")
-			} else if count, err = strconv.Atoi(fields[1]); err == nil && count < 2 {
-				err = errors.New("invalid count")
+				return errors.Errorf(
+					"%s:%d expected only one field following the subtest command",
+					path, s.line,
+				)
 			}
-			if err != nil {
-				return fmt.Errorf("%s:%d invalid repeat line: %s", path, s.line, err)
-			}
-			repeat = count
-
-		case "sleep":
-			var err error
-			var duration time.Duration
-			// A line "sleep Xs" makes the test sleep for X seconds.
-			if len(fields) != 2 {
-				err = errors.New("invalid line format")
-			} else if duration, err = time.ParseDuration(fields[1]); err != nil {
-				err = errors.New("invalid duration")
-			}
-			if err != nil {
-				return fmt.Errorf("%s:%d invalid sleep line: %s", path, s.line, err)
-			}
-			time.Sleep(duration)
-
-		case "statement":
-			stmt := logicStatement{pos: fmt.Sprintf("\n%s:%d", path, s.line)}
-			// Parse "statement error <regexp>"
-			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
-				stmt.expectErrCode = m[1]
-				stmt.expectErr = m[2]
-			}
-			var buf bytes.Buffer
-			for s.Scan() {
+			subtestName = fields[1]
+			// Since the current line is actually a subtest command, to avoid double
+			// processing this subtest command, the subtest should scan the first
+			// line.
+			dontScanFirstLine = false
+		}
+		var subtestError error
+		t.t.Run(subtestName, func(subtestT *testing.T) {
+			for dontScanFirstLine || s.Scan() {
+				dontScanFirstLine = false
+				if *maxErrs > 0 && t.failures >= *maxErrs {
+					subtestT.Fatalf("%s:%d: too many errors encountered, skipping the rest of the input",
+						path, s.line)
+				}
 				line := s.Text()
 				t.emit(line)
-				if line == "" {
-					break
+				fields := strings.Fields(line)
+				if len(fields) == 0 {
+					continue
 				}
-				fmt.Fprintln(&buf, line)
-			}
-			stmt.sql = strings.TrimSpace(buf.String())
-			if config.parallelStmts {
-				stmt.parallelizeStmts()
-			}
-			if !s.skip {
-				for i := 0; i < repeat; i++ {
-					if ok := t.execStatement(stmt); !ok {
-						return fmt.Errorf("%s: error in statement, skipping to next file", stmt.pos)
-					}
+				cmd := fields[0]
+				if strings.HasPrefix(cmd, "#") {
+					// Skip comment lines.
+					continue
 				}
-			} else {
-				s.skip = false
-			}
-			repeat = 1
-			t.success(path)
-
-		case "query":
-			query := logicQuery{pos: fmt.Sprintf("\n%s:%d", path, s.line)}
-			// Parse "query error <regexp>"
-			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
-				query.expectErrCode = m[1]
-				query.expectErr = m[2]
-			} else if len(fields) < 2 {
-				return fmt.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
-			} else {
-				// Parse "query <type-string> <options> <label>"
-				query.colTypes = fields[1]
-				if len(fields) >= 3 {
-					query.rawOpts = fields[2]
-
-					tokens := strings.Split(query.rawOpts, ",")
-
-					// One of the options can be partialSort(1,2,3); we want this to be
-					// a single token.
-					for i := 0; i < len(tokens)-1; i++ {
-						if strings.HasPrefix(tokens[i], "partialsort(") && !strings.HasSuffix(tokens[i], ")") {
-							// Merge this token with the next.
-							tokens[i] = tokens[i] + "," + tokens[i+1]
-							// Delete tokens[i+1].
-							copy(tokens[i+1:], tokens[i+2:])
-							tokens = tokens[:len(tokens)-1]
-							// Look at the new token again.
-							i--
-						}
-					}
-
-					for _, opt := range tokens {
-						if strings.HasPrefix(opt, "partialsort(") && strings.HasSuffix(opt, ")") {
-							s := opt
-							s = strings.TrimPrefix(s, "partialsort(")
-							s = strings.TrimSuffix(s, ")")
-
-							var orderedCols []int
-							for _, c := range strings.Split(s, ",") {
-								colIdx, err := strconv.Atoi(c)
-								if err != nil || colIdx < 1 {
-									return fmt.Errorf("%s: invalid sort mode: %s", query.pos, opt)
-								}
-								orderedCols = append(orderedCols, colIdx-1)
-							}
-							if len(orderedCols) == 0 {
-								return fmt.Errorf("%s: invalid sort mode: %s", query.pos, opt)
-							}
-
-							query.sorter = func(numCols int, values []string) {
-								partialSort(numCols, orderedCols, values)
-							}
-							continue
-						}
-
-						switch opt {
-						case "nosort":
-							query.sorter = nil
-
-						case "rowsort":
-							query.sorter = rowSort
-
-						case "valuesort":
-							query.sorter = valueSort
-
-						case "colnames":
-							query.colNames = true
-
-						default:
-							return fmt.Errorf("%s: unknown sort mode: %s", query.pos, opt)
-						}
-					}
+				if len(fields) == 2 && fields[1] == "error" {
+					subtestError = errors.Errorf("%s:%d: no expected error provided", path, s.line)
+					subtestT.Error(subtestError)
+					return
 				}
-				if len(fields) >= 4 {
-					query.label = fields[3]
-				}
-			}
-
-			var buf bytes.Buffer
-			separator := false
-			for s.Scan() {
-				line := s.Text()
-				t.emit(line)
-				if line == "----" {
-					separator = true
-					if query.expectErr != "" {
-						return fmt.Errorf(
-							"%s: invalid ---- delimiter after a query expecting an error: %s",
-							query.pos, query.expectErr,
+				switch cmd {
+				case "subtest":
+					if len(fields) != 2 {
+						subtestError = errors.Errorf(
+							"%s:%d expected only one field following the subtest command",
+							path, s.line,
 						)
+						subtestT.Error(subtestError)
+						return
 					}
-					break
-				}
-				if strings.TrimSpace(s.Text()) == "" {
-					break
-				}
-				fmt.Fprintln(&buf, line)
-			}
-			query.sql = strings.TrimSpace(buf.String())
+					// Set the new subtest name and start the next subtest.
+					subtestName = fields[1]
+					return
+				case "repeat":
+					// A line "repeat X" makes the test repeat the following statement or query X times.
+					var err error
+					count := 0
+					if len(fields) != 2 {
+						err = errors.New("invalid line format")
+					} else if count, err = strconv.Atoi(fields[1]); err == nil && count < 2 {
+						err = errors.New("invalid count")
+					}
+					if err != nil {
+						subtestError = errors.Errorf("%s:%d invalid repeat line: %s", path, s.line, err)
+						subtestT.Error(subtestError)
+						return
+					}
+					repeat = count
 
-			query.checkResults = true
-			if separator {
-				// Query results are either a space separated list of values up to a
-				// blank line or a line of the form "xx values hashing to yyy". The
-				// latter format is used by sqllogictest when a large number of results
-				// match the query.
-				if s.Scan() {
-					if m := resultsRE.FindStringSubmatch(s.Text()); m != nil {
-						var err error
-						query.expectedValues, err = strconv.Atoi(m[1])
-						if err != nil {
-							return err
+				case "sleep":
+					var err error
+					var duration time.Duration
+					// A line "sleep Xs" makes the test sleep for X seconds.
+					if len(fields) != 2 {
+						err = errors.New("invalid line format")
+					} else if duration, err = time.ParseDuration(fields[1]); err != nil {
+						err = errors.New("invalid duration")
+					}
+					if err != nil {
+						subtestError = errors.Errorf("%s:%d invalid sleep line: %s", path, s.line, err)
+						subtestT.Error(subtestError)
+						return
+					}
+					time.Sleep(duration)
+
+				case "statement":
+					stmt := logicStatement{pos: fmt.Sprintf("\n%s:%d", path, s.line)}
+					// Parse "statement error <regexp>"
+					if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
+						stmt.expectErrCode = m[1]
+						stmt.expectErr = m[2]
+					}
+					var buf bytes.Buffer
+					for s.Scan() {
+						line := s.Text()
+						t.emit(line)
+						if line == "" {
+							break
 						}
-						query.expectedHash = m[2]
-						query.checkResults = false
+						fmt.Fprintln(&buf, line)
+					}
+					stmt.sql = strings.TrimSpace(buf.String())
+					if config.parallelStmts {
+						stmt.parallelizeStmts()
+					}
+					if !s.skip {
+						for i := 0; i < repeat; i++ {
+							if ok := t.execStatement(stmt); !ok {
+								subtestError = errors.Errorf("%s: error in statement, skipping to next file", stmt.pos)
+								subtestT.Error(subtestError)
+								return
+							}
+						}
 					} else {
-						for {
-							query.expectedResultsRaw = append(query.expectedResultsRaw, s.Text())
-							results := strings.Fields(s.Text())
-							if len(results) == 0 {
-								break
+						s.skip = false
+					}
+					repeat = 1
+					t.success(path)
+
+				case "query":
+					query := logicQuery{pos: fmt.Sprintf("\n%s:%d", path, s.line)}
+					// Parse "query error <regexp>"
+					if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
+						query.expectErrCode = m[1]
+						query.expectErr = m[2]
+					} else if len(fields) < 2 {
+						subtestError = errors.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
+						subtestT.Error(subtestError)
+						return
+					} else {
+						// Parse "query <type-string> <options> <label>"
+						query.colTypes = fields[1]
+						if len(fields) >= 3 {
+							query.rawOpts = fields[2]
+
+							tokens := strings.Split(query.rawOpts, ",")
+
+							// One of the options can be partialSort(1,2,3); we want this to be
+							// a single token.
+							for i := 0; i < len(tokens)-1; i++ {
+								if strings.HasPrefix(tokens[i], "partialsort(") && !strings.HasSuffix(tokens[i], ")") {
+									// Merge this token with the next.
+									tokens[i] = tokens[i] + "," + tokens[i+1]
+									// Delete tokens[i+1].
+									copy(tokens[i+1:], tokens[i+2:])
+									tokens = tokens[:len(tokens)-1]
+									// Look at the new token again.
+									i--
+								}
 							}
-							query.expectedResults = append(query.expectedResults, results...)
-							if !s.Scan() {
-								break
+
+							for _, opt := range tokens {
+								if strings.HasPrefix(opt, "partialsort(") && strings.HasSuffix(opt, ")") {
+									s := opt
+									s = strings.TrimPrefix(s, "partialsort(")
+									s = strings.TrimSuffix(s, ")")
+
+									var orderedCols []int
+									for _, c := range strings.Split(s, ",") {
+										colIdx, err := strconv.Atoi(c)
+										if err != nil || colIdx < 1 {
+											subtestError = errors.Errorf("%s: invalid sort mode: %s", query.pos, opt)
+											subtestT.Error(subtestError)
+											return
+										}
+										orderedCols = append(orderedCols, colIdx-1)
+									}
+									if len(orderedCols) == 0 {
+										subtestError = errors.Errorf("%s: invalid sort mode: %s", query.pos, opt)
+										subtestT.Error(subtestError)
+										return
+									}
+
+									query.sorter = func(numCols int, values []string) {
+										partialSort(numCols, orderedCols, values)
+									}
+									continue
+								}
+
+								switch opt {
+								case "nosort":
+									query.sorter = nil
+
+								case "rowsort":
+									query.sorter = rowSort
+
+								case "valuesort":
+									query.sorter = valueSort
+
+								case "colnames":
+									query.colNames = true
+
+								default:
+									subtestError = errors.Errorf("%s: unknown sort mode: %s", query.pos, opt)
+									subtestT.Error(subtestError)
+									return
+								}
 							}
 						}
-						query.expectedValues = len(query.expectedResults)
+						if len(fields) >= 4 {
+							query.label = fields[3]
+						}
 					}
-				}
-			} else if query.label != "" {
-				// Label and no separator; we won't be directly checking results; we
-				// cross-check results between all queries with the same label.
-				query.checkResults = false
-			}
 
-			if !s.skip {
-				for i := 0; i < repeat; i++ {
-					if err := t.execQuery(query); err != nil {
-						t.Error(err)
+					var buf bytes.Buffer
+					separator := false
+					for s.Scan() {
+						line := s.Text()
+						t.emit(line)
+						if line == "----" {
+							separator = true
+							if query.expectErr != "" {
+								subtestError = errors.Errorf(
+									"%s: invalid ---- delimiter after a query expecting an error: %s",
+									query.pos, query.expectErr,
+								)
+								subtestT.Error(subtestError)
+								return
+							}
+							break
+						}
+						if strings.TrimSpace(s.Text()) == "" {
+							break
+						}
+						fmt.Fprintln(&buf, line)
 					}
+					query.sql = strings.TrimSpace(buf.String())
+
+					query.checkResults = true
+					if separator {
+						// Query results are either a space separated list of values up to a
+						// blank line or a line of the form "xx values hashing to yyy". The
+						// latter format is used by sqllogictest when a large number of results
+						// match the query.
+						if s.Scan() {
+							if m := resultsRE.FindStringSubmatch(s.Text()); m != nil {
+								var err error
+								query.expectedValues, err = strconv.Atoi(m[1])
+								if err != nil {
+									subtestError = err
+									subtestT.Error(subtestError)
+									return
+								}
+								query.expectedHash = m[2]
+								query.checkResults = false
+							} else {
+								for {
+									query.expectedResultsRaw = append(query.expectedResultsRaw, s.Text())
+									results := strings.Fields(s.Text())
+									if len(results) == 0 {
+										break
+									}
+									query.expectedResults = append(query.expectedResults, results...)
+									if !s.Scan() {
+										break
+									}
+								}
+								query.expectedValues = len(query.expectedResults)
+							}
+						}
+					} else if query.label != "" {
+						// Label and no separator; we won't be directly checking results; we
+						// cross-check results between all queries with the same label.
+						query.checkResults = false
+					}
+
+					if !s.skip {
+						for i := 0; i < repeat; i++ {
+							if err := t.execQuery(query); err != nil {
+								t.Error(err)
+							}
+						}
+					} else {
+						s.skip = false
+					}
+					repeat = 1
+					t.success(path)
+
+				case "let":
+					// let $<name>
+					// <query>
+					if len(fields) != 2 {
+						subtestError = errors.Errorf("let command requires one argument, found: %v", fields)
+						subtestT.Error(subtestError)
+						return
+					}
+					varName := fields[1]
+					if !varRE.MatchString(varName) {
+						subtestError = errors.Errorf("invalid target name for let: %s", varName)
+						subtestT.Error(subtestError)
+						return
+					}
+
+					pos := fmt.Sprintf("\n%s:%d", path, s.line)
+					var buf bytes.Buffer
+					for s.Scan() {
+						line := s.Text()
+						t.emit(line)
+						if line == "" {
+							break
+						}
+						fmt.Fprintln(&buf, line)
+					}
+					sql := strings.TrimSpace(buf.String())
+					rows, err := t.db.Query(sql)
+					if err != nil {
+						subtestError = errors.Wrapf(err, "%s: error running query %s", pos, sql)
+						subtestT.Error(subtestError)
+						return
+					}
+					if !rows.Next() {
+						subtestError = errors.Errorf("%s: no rows returned by query %s", pos, sql)
+						subtestT.Error(subtestError)
+						return
+					}
+					var val string
+					if err := rows.Scan(&val); err != nil {
+						subtestError = errors.Wrapf(err, "%s: error getting result from query %s", pos, sql)
+						subtestT.Error(subtestError)
+						return
+					}
+					if rows.Next() {
+						subtestError = errors.Errorf("%s: more than one row returned by query  %s", pos, sql)
+						subtestT.Error(subtestError)
+						return
+					}
+					t.varMap[varName] = val
+
+				case "halt", "hash-threshold":
+
+				case "user":
+					if len(fields) < 2 {
+						subtestError = errors.Errorf("user command requires one argument, found: %v", fields)
+						subtestT.Error(subtestError)
+						return
+					}
+					if len(fields[1]) == 0 {
+						subtestError = errors.Errorf("user command requires a non-blank argument")
+						subtestT.Error(subtestError)
+						return
+					}
+					cleanupUserFunc := t.setUser(fields[1])
+					defer cleanupUserFunc()
+
+				case "skipif":
+					if len(fields) < 2 {
+						subtestError = errors.Errorf("skipif command requires one argument, found: %v", fields)
+						subtestT.Error(subtestError)
+						return
+					}
+					switch fields[1] {
+					case "":
+						subtestError = errors.Errorf("skipif command requires a non-blank argument")
+						subtestT.Error(subtestError)
+						return
+					case "mysql", "mssql":
+					case "postgresql", "cockroachdb":
+						s.skip = true
+						continue
+					default:
+						subtestError = errors.Errorf("unimplemented test statement: %s", s.Text())
+						subtestT.Error(subtestError)
+						return
+					}
+
+				case "onlyif":
+					if len(fields) < 2 {
+						subtestError = errors.Errorf("onlyif command requires one argument, found: %v", fields)
+						subtestT.Error(subtestError)
+						return
+					}
+					switch fields[1] {
+					case "":
+						subtestError = errors.New("onlyif command requires a non-blank argument")
+						subtestT.Error(subtestError)
+						return
+					case "cockroachdb":
+					case "mysql":
+						s.skip = true
+						continue
+					case "mssql":
+						s.skip = true
+						continue
+					default:
+						subtestError = errors.Errorf("unimplemented test statement: %s", s.Text())
+						subtestT.Error(subtestError)
+						return
+					}
+
+				case "traceon":
+					if len(fields) != 2 {
+						subtestError = errors.Errorf("traceon requires a filename argument, found: %v", fields)
+						subtestT.Error(subtestError)
+						return
+					}
+					t.traceStart(fields[1])
+
+				case "traceoff":
+					if t.traceFile == nil {
+						subtestError = errors.Errorf("no trace active")
+						subtestT.Error(subtestError)
+						return
+					}
+					t.traceStop()
+
+				case "kv-batch-size":
+					// kv-batch-size limits the kvfetcher batch size. It can be used to
+					// trigger certain error conditions around limited batches.
+					if len(fields) != 2 {
+						subtestError = errors.Errorf(
+							"kv-batch-size needs an integer argument, found: %v",
+							fields[1:],
+						)
+						subtestT.Error(subtestError)
+						return
+					}
+					batchSize, err := strconv.Atoi(fields[1])
+					if err != nil {
+						subtestError = errors.Errorf("kv-batch-size needs an integer argument; %s", err)
+						subtestT.Error(subtestError)
+						return
+					}
+					t.outf("Setting kv batch size %d", batchSize)
+					defer sqlbase.SetKVBatchSize(int64(batchSize))()
+
+				default:
+					subtestError = errors.Errorf("%s:%d: unknown command: %s", path, s.line, cmd)
+					subtestT.Error(subtestError)
+					return
 				}
-			} else {
-				s.skip = false
 			}
-			repeat = 1
-			t.success(path)
-
-		case "let":
-			// let $<name>
-			// <query>
-			if len(fields) != 2 {
-				return fmt.Errorf("let command requires one argument, found: %v", fields)
-			}
-			varName := fields[1]
-			if !varRE.MatchString(varName) {
-				return fmt.Errorf("invalid target name for let: %s", varName)
-			}
-
-			pos := fmt.Sprintf("\n%s:%d", path, s.line)
-			var buf bytes.Buffer
-			for s.Scan() {
-				line := s.Text()
-				t.emit(line)
-				if line == "" {
-					break
-				}
-				fmt.Fprintln(&buf, line)
-			}
-			sql := strings.TrimSpace(buf.String())
-			rows, err := t.db.Query(sql)
-			if err != nil {
-				return errors.Wrapf(err, "%s: error running query %s", pos, sql)
-			}
-			if !rows.Next() {
-				return fmt.Errorf("%s: no rows returned by query %s", pos, sql)
-			}
-			var val string
-			if err := rows.Scan(&val); err != nil {
-				return errors.Wrapf(err, "%s: error getting result from query %s", pos, sql)
-			}
-			if rows.Next() {
-				return fmt.Errorf("%s: more than one row returned by query  %s", pos, sql)
-			}
-			t.varMap[varName] = val
-
-		case "halt", "hash-threshold":
-
-		case "user":
-			if len(fields) < 2 {
-				return fmt.Errorf("user command requires one argument, found: %v", fields)
-			}
-			if len(fields[1]) == 0 {
-				return errors.New("user command requires a non-blank argument")
-			}
-			cleanupUserFunc := t.setUser(fields[1])
-			defer cleanupUserFunc()
-
-		case "skipif":
-			if len(fields) < 2 {
-				return fmt.Errorf("skipif command requires one argument, found: %v", fields)
-			}
-			switch fields[1] {
-			case "":
-				return errors.New("skipif command requires a non-blank argument")
-			case "mysql", "mssql":
-			case "postgresql", "cockroachdb":
-				s.skip = true
-				continue
-			default:
-				return fmt.Errorf("unimplemented test statement: %s", s.Text())
-			}
-
-		case "onlyif":
-			if len(fields) < 2 {
-				return fmt.Errorf("onlyif command requires one argument, found: %v", fields)
-			}
-			switch fields[1] {
-			case "":
-				return errors.New("onlyif command requires a non-blank argument")
-			case "cockroachdb":
-			case "mysql":
-				s.skip = true
-				continue
-			case "mssql":
-				s.skip = true
-				continue
-			default:
-				return fmt.Errorf("unimplemented test statement: %s", s.Text())
-			}
-
-		case "traceon":
-			if len(fields) != 2 {
-				return fmt.Errorf("traceon requires a filename argument, found: %v", fields)
-			}
-			t.traceStart(fields[1])
-
-		case "traceoff":
-			if t.traceFile == nil {
-				return errors.New("no trace active")
-			}
-			t.traceStop()
-
-		case "kv-batch-size":
-			// kv-batch-size limits the kvfetcher batch size. It can be used to
-			// trigger certain error conditions around limited batches.
-			if len(fields) != 2 {
-				return fmt.Errorf("kv-batch-size needs an integer argument, found: %v", fields[1:])
-			}
-			batchSize, err := strconv.Atoi(fields[1])
-			if err != nil {
-				return fmt.Errorf("kv-batch-size needs an integer argument; %s", err)
-			}
-			t.outf("Setting kv batch size %d", batchSize)
-			defer sqlbase.SetKVBatchSize(int64(batchSize))()
-
-		default:
-			return fmt.Errorf("%s:%d: unknown command: %s", path, s.line, cmd)
-		}
+		})
 	}
-
 	if err := s.Err(); err != nil {
 		return err
 	}

@@ -872,6 +872,8 @@ pkref_b  CREATE TABLE pkref_b (
         FAMILY "primary" (b)
 )
 
+subtest 20042
+
 statement ok
 CREATE TABLE test20042 (
   x STRING PRIMARY KEY
@@ -890,6 +892,8 @@ DELETE FROM test20042 WHERE x = 'pk2';
 
 statement ok
 DELETE FROM test20042 WHERE x = 'pk1';
+
+subtest 20045
 
 statement ok
 CREATE TABLE test20045 (
