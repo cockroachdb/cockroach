@@ -1860,7 +1860,7 @@ func TestQuotaPool(t *testing.T) {
 			t.Fatalf("didn't observe the expected quota acquisition, available: %d", curQuota)
 		}
 
-		testutils.SucceedsSoonDepth(1, t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 1 {
 				return errors.Errorf("expected 1 queued quota release, found: %d", qLen)
 			}
@@ -1876,7 +1876,7 @@ func TestQuotaPool(t *testing.T) {
 		}()
 	}()
 
-	testutils.SucceedsSoonDepth(1, t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if curQuota := leaderRepl.QuotaAvailable(); curQuota != quota {
 			return errors.Errorf("expected available quota %d, got %d", quota, curQuota)
 		}

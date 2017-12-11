@@ -1137,7 +1137,8 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 // at the given key to match the expected slice (across all engines).
 // Fails the test if they do not match.
 func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
-	testutils.SucceedsSoonDepth(1, m.t, func() error {
+	m.t.Helper()
+	testutils.SucceedsSoon(m.t, func() error {
 		actual := m.readIntFromEngines(key)
 		if !reflect.DeepEqual(expected, actual) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
@@ -1205,8 +1206,9 @@ func (m *multiTestContext) advanceClock(ctx context.Context) {
 // getRaftLeader returns the replica that is the current raft leader for the
 // specified rangeID.
 func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Replica {
+	m.t.Helper()
 	var raftLeaderRepl *storage.Replica
-	testutils.SucceedsSoonDepth(1, m.t, func() error {
+	testutils.SucceedsSoon(m.t, func() error {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
 		var latestTerm uint64
