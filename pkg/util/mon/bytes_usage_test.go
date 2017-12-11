@@ -58,11 +58,11 @@ func TestMemoryAllocations(t *testing.T) {
 		var sum int64
 		fail := false
 		for accI := range accs {
-			if accs[accI].curAllocated < 0 {
-				t.Errorf("account %d went negative: %d", accI, accs[accI].curAllocated)
+			if accs[accI].used < 0 {
+				t.Errorf("account %d went negative: %d", accI, accs[accI].used)
 				fail = true
 			}
-			sum += accs[accI].totalAllocated()
+			sum += accs[accI].allocated()
 		}
 		if m.mu.curAllocated < 0 {
 			t.Errorf("monitor current count went negative: %d", m.mu.curAllocated)
@@ -72,21 +72,21 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("total account sum %d different from monitor count %d", sum, m.mu.curAllocated)
 			fail = true
 		}
-		if m.mu.curBudget.curAllocated < 0 {
-			t.Errorf("monitor current budget went negative: %d", m.mu.curBudget.curAllocated)
+		if m.mu.curBudget.used < 0 {
+			t.Errorf("monitor current budget went negative: %d", m.mu.curBudget.used)
 			fail = true
 		}
-		avail := m.mu.curBudget.totalAllocated() + m.reserved.curAllocated
+		avail := m.mu.curBudget.allocated() + m.reserved.used
 		if sum > avail {
 			t.Errorf("total account sum %d greater than total monitor budget %d", sum, avail)
 			fail = true
 		}
-		if pool.mu.curAllocated > pool.reserved.curAllocated {
-			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.curAllocated)
+		if pool.mu.curAllocated > pool.reserved.used {
+			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.used)
 			fail = true
 		}
-		if m.mu.curBudget.totalAllocated() != pool.mu.curAllocated {
-			t.Errorf("monitor budget %d different from pool cur %d", m.mu.curBudget.curAllocated, pool.mu.curAllocated)
+		if m.mu.curBudget.allocated() != pool.mu.curAllocated {
+			t.Errorf("monitor budget %d different from pool cur %d", m.mu.curBudget.used, pool.mu.curAllocated)
 			fail = true
 		}
 
@@ -114,9 +114,9 @@ func TestMemoryAllocations(t *testing.T) {
 		}
 		reportAndCheck = func(extraFmt string, extras ...interface{}) {
 			t.Helper()
-			fmt.Printf("%5d %5d %5d %5d ", m.mu.curAllocated, m.mu.curBudget.curAllocated, m.reserved.curAllocated, pool.mu.curAllocated)
+			fmt.Printf("%5d %5d %5d %5d ", m.mu.curAllocated, m.mu.curBudget.used, m.reserved.used, pool.mu.curAllocated)
 			for accI := range accs {
-				fmt.Printf("%5d ", accs[accI].curAllocated)
+				fmt.Printf("%5d ", accs[accI].used)
 			}
 			fmt.Print("\t")
 			fmt.Printf(extraFmt, extras...)
@@ -181,7 +181,7 @@ func TestMemoryAllocations(t *testing.T) {
 							m.ClearAccount(ctx, &accs[accI])
 							reportAndCheck("C [%5d]", accI)
 						case 2:
-							osz := rnd.Int63n(accs[accI].curAllocated + 1)
+							osz := rnd.Int63n(accs[accI].used + 1)
 							nsz := randomSize(rnd, mmax)
 							reportAndCheck("R [%5d] %5d %5d", accI, osz, nsz)
 							err := m.ResizeItem(ctx, &accs[accI], osz, nsz)
@@ -256,7 +256,7 @@ func TestBytesAccount(t *testing.T) {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.ResizeItem(ctx, &a2, a2.curAllocated, 40); err != nil {
+	if err := m.ResizeItem(ctx, &a2, a2.used, 40); err != nil {
 		t.Fatalf("monitor refused reset + allocation: %v", err)
 	}
 
