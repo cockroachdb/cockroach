@@ -47,6 +47,10 @@ BENCHES :=
 ## Space delimited list of logic test files to run, for make testlogic.
 FILES :=
 
+## Regex for matching logic test subtests. This is always matched after "FILES"
+## if they are provided.
+SUBTESTS :=
+
 ## Test timeout to use for regular tests.
 TESTTIMEOUT := 4m
 
@@ -96,7 +100,8 @@ help: ## Print help for targets with comments.
 		"make test PKG=./pkg/sql/parser TESTS=TestParse" "Run the TestParse test in the ./pkg/sql/parser package." \
 		"make bench PKG=./pkg/sql/parser BENCHES=BenchmarkParse" "Run the BenchmarkParse benchmark in the ./pkg/sql/parser package." \
 		"make testlogic" "Run all SQL Logic Tests." \
-		"make testlogic FILES=prepare" "Run the logic test with filename prepare."
+		"make testlogic FILES=prepare" "Run the logic test with filename prepare." \
+		"make testlogic FILES=fk SUBTESTS='(20042|20045)'" "Run the logic test with filename fk and only subtests 20042 and 20045."
 
 # Possible values:
 # <empty>: use the default toolchain
@@ -744,7 +749,7 @@ check test testshort testrace bench: gotestdashi
 # Run make testlogic to run all of the logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
 testlogic: ## Run SQL Logic Tests.
-testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$,TestLogic)
+testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$$(if $(SUBTESTS),/$(SUBTESTS)),TestLogic)
 testlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
 testlogic: bin/logictest.test
 	cd pkg/sql/logictest && logictest.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
