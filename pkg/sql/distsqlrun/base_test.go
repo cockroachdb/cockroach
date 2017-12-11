@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+// TODO(asubiotto): Add test and benchmark for RowChannel juggling batches.
+
 // Benchmark a pipeline of RowChannels.
 func BenchmarkRowChannelPipeline(b *testing.B) {
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
