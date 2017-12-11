@@ -485,7 +485,7 @@ func (e *Executor) Prepare(
 	prepared := &PreparedStatement{
 		TypeHints:   placeholderHints,
 		portalNames: make(map[string]struct{}),
-		memAcc:      session.mon.MakeBoundAccount(),
+		memAcc:      session.sessionMon.MakeBoundAccount(),
 	}
 
 	if stmt.AST == nil {
