@@ -333,7 +333,7 @@ Because all of the resources in this example have been tagged with the label `ap
 we can clean up everything that we created in one quick command using a selector on that label:
 
 ```shell
-kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services,poddisruptionbudget -l app=cockroachdb
+kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services,poddisruptionbudget,jobs,rolebinding,clusterrolebinding,role,clusterrole,serviceaccount -l app=cockroachdb
 ```
 
 If running in secure mode, you'll want to cleanup old certificate requests:
