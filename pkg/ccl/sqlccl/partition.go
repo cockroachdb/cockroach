@@ -31,10 +31,6 @@ const (
 
 // partitionLeafSpans returns the spans covered by all partitions which are not
 // subpartitioned, which we call a "leaf covering".
-//
-// TODO(dan): We have to do the same "sort by num DEFAULTS" trick that
-// indexCoveringsForPartitioning does, but there's currently no test that fails
-// if we don't.
 func partitionLeafSpans(
 	a *sqlbase.DatumAlloc,
 	tableDesc *sqlbase.TableDescriptor,
