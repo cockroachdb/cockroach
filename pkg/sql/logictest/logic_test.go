@@ -234,6 +234,22 @@ import (
 // -d <glob>  selects all files matching <glob>. This can mix and
 //            match wildcards (*/?) or groups like {a,b,c}.
 //
+// -tags <tags> only run test lines containted within tagged sections matching
+//              the regex <tags>.
+//              Tagged sections can be defined in a logic test file using
+//              commented lines.
+//              open a tagged section: # <tag_name1> <tag_name2>
+//              close a tagged section: # </tag_name1> <tag_name2>
+//              Multiple opening and closing tags can be included on a single
+//              comment line.
+//              Tagged sections can overlap with each other.
+//              Tagged sections can be opened and closed more than once within
+//              the same file. But they can't open twice or close when not
+//              opened. This allows one to include the setup required for a
+//              specific subtest.
+//              Tagged sections without a closing tag will just be considered
+//              open until the end of the file.
+//
 // -bigtest   cancels any -d setting and selects all relevant input
 //            files from CockroachDB's fork of Sqllogictest.
 //
@@ -261,7 +277,7 @@ import (
 // -flex-types    tolerate when a result column is produced with a
 //                different numeric type than the one expected by the
 //                test. This enables reusing tests designed for
-//                database with sligtly different typing semantics.
+//                database with slightly different typing semantics.
 //
 // Test output:
 //
@@ -303,6 +319,7 @@ var (
 
 	// Input selection
 	logictestdata = flag.String("d", "testdata/logic_test/[^.]*", "test data glob")
+	tags          = flag.String("t", "", "test data glob")
 	bigtest       = flag.Bool(
 		"bigtest", false, "use the big set of logic test files (overrides testdata)",
 	)
@@ -937,6 +954,8 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 	return []logicTestConfigIdx{idx}
 }
 
+var tagsRE = regexp.MustCompile(`<([^<>]*)>`)
+
 func (t *logicTest) processTestFile(path string, config testClusterConfig) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -951,6 +970,13 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	defer t.printCompletion(path, config)
 
 	t.lastProgress = timeutil.Now()
+
+	var activeTagRE *regexp.Regexp
+	if tags != nil && len(*tags) > 0 {
+		activeTagRE = regexp.MustCompile(*tags)
+	}
+	activeTags := make(map[string]int)
+	tagsActive := activeTagRE == nil
 
 	repeat := 1
 	s := newLineScanner(file, t.varMap)
@@ -967,7 +993,47 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		}
 		cmd := fields[0]
 		if strings.HasPrefix(cmd, "#") {
+			// Do we care about tags at all? If not, skip this entirely.
+			if activeTagRE == nil {
+				// Skip comment lines.
+				continue
+			}
+			// Are there any tags in the comments? And do we care?
+			if foundTags := tagsRE.FindAllStringSubmatch(line, -1); len(foundTags) > 0 {
+				for _, tag := range foundTags {
+					if len(tag) < 2 || len(tag[1]) < 1 {
+						return fmt.Errorf("%s:%d error parsing tag", path, s.line)
+					}
+					if tag[1][0] == '/' {
+						closeTag := tag[1][1:]
+						if len(closeTag) <= 1 {
+							return fmt.Errorf("%s:%d error parsing closing tag", path, s.line)
+						}
+						if _, exists := activeTags[closeTag]; !exists {
+							return fmt.Errorf("%s:%d tag %s closed but was never opened", path, s.line, closeTag)
+						}
+						delete(activeTags, closeTag)
+					} else {
+						if startLine, exists := activeTags[tag[1]]; exists {
+							return fmt.Errorf("%s:%d tag %s was already started on line %d", path, s.line, tag[1], startLine)
+						}
+						activeTags[tag[1]] = s.line
+					}
+				}
+				tagsActive = false
+				for tag := range activeTags {
+					if activeTagRE.MatchString(tag) {
+						tagsActive = true
+						break
+					}
+				}
+			}
+
 			// Skip comment lines.
+			continue
+		}
+		if !tagsActive {
+			// Skip if we do not have any valid tags.
 			continue
 		}
 		if len(fields) == 2 && fields[1] == "error" {
