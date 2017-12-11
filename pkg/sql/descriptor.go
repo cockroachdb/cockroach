@@ -106,7 +106,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	return true, p.createDescriptorWithID(ctx, idKey, id, descriptor)
+	return true, p.createDescriptorWithID(ctx, idKey, id, descriptor, true)
 }
 
 func descExists(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (bool, error) {
@@ -119,7 +119,11 @@ func descExists(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (bool, 
 }
 
 func (p *planner) createDescriptorWithID(
-	ctx context.Context, idKey roachpb.Key, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
+	ctx context.Context,
+	idKey roachpb.Key,
+	id sqlbase.ID,
+	descriptor sqlbase.DescriptorProto,
+	addDesc bool,
 ) error {
 	descriptor.SetID(id)
 	// TODO(pmattis): The error currently returned below is likely going to be
@@ -150,8 +154,10 @@ func (p *planner) createDescriptorWithID(
 		return expectDescriptor(systemConfig, descKey, descDesc)
 	})
 
-	if desc, ok := descriptor.(*sqlbase.TableDescriptor); ok {
-		p.session.tables.addUncommittedTable(*desc)
+	if addDesc {
+		if desc, ok := descriptor.(*sqlbase.TableDescriptor); ok {
+			p.session.tables.addUncommittedTable(*desc)
+		}
 	}
 
 	return p.txn.Run(ctx, b)

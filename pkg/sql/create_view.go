@@ -153,7 +153,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		desc.DependsOn = append(desc.DependsOn, backrefID)
 	}
 
-	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, true); err != nil {
 		return err
 	}
 
