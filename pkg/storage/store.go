@@ -4277,24 +4277,31 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	return nil
 }
 
+// StoreKeySpanStats carries the result of a stats computation over a key range.
+type StoreKeySpanStats struct {
+	ReplicaCount         int
+	MVCC                 enginepb.MVCCStats
+	ApproximateDiskBytes uint64
+}
+
 // ComputeStatsForKeySpan computes the aggregated MVCCStats for all replicas on
 // this store which contain any keys in the supplied range.
-func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.MVCCStats, int) {
-	var output enginepb.MVCCStats
-	var count int
+func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeySpanStats, error) {
+	var result StoreKeySpanStats
 
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		desc := repl.Desc()
 		if bytes.Compare(startKey, desc.EndKey) >= 0 || bytes.Compare(desc.StartKey, endKey) >= 0 {
 			return true // continue
 		}
-
-		output.Add(repl.GetMVCCStats())
-		count++
+		result.MVCC.Add(repl.GetMVCCStats())
+		result.ReplicaCount++
 		return true
 	})
 
-	return output, count
+	var err error
+	result.ApproximateDiskBytes, err = s.engine.ApproximateSize(startKey.AsRawKey(), endKey.AsRawKey())
+	return result, err
 }
 
 // AllocatorDryRun runs the given replica through the allocator without actually

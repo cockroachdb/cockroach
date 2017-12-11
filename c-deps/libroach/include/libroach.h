@@ -112,6 +112,10 @@ DBStatus DBSyncWAL(DBEngine* db);
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
 
+// Store the approximate on-disk size of the given key range into the
+// supplied uint64. Does not take into account the memtables.
+DBStatus DBApproximateSize(DBEngine* db, DBKey start, DBKey end, uint64_t *size);
+
 // Sets the database entry for "key" to "value".
 DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
 
