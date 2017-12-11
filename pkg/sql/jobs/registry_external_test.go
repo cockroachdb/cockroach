@@ -118,7 +118,6 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	resumeCounts := make(map[int64]int)
 	// done prevents jobs from finishing.
 	done := make(chan struct{})
-	defer close(done)
 	// resumeCalled does a locked, blocking send when a job is started/resumed. A
 	// receive on it will block until a job is running.
 	resumeCalled := make(chan struct{})
@@ -128,11 +127,11 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		hookCallCount++
 		lock.Unlock()
 		return jobs.FakeResumer{OnResume: func(job *jobs.Job) error {
-			lock.Lock()
 			select {
 			case resumeCalled <- struct{}{}:
 			case <-done:
 			}
+			lock.Lock()
 			resumeCounts[*job.ID()]++
 			lock.Unlock()
 			<-done
@@ -175,31 +174,35 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		return nil
 	})
 
-	lock.Lock()
-	if e, a := 2, resumeCounts[jobMap[1]]; e != a {
-		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
-	}
-	lock.Unlock()
+	testutils.SucceedsSoon(t, func() error {
+		lock.Lock()
+		defer lock.Unlock()
+		if e, a := 2, resumeCounts[jobMap[1]]; e != a {
+			return errors.Errorf("expected resumeCount to be %d, but got %d", e, a)
+		}
+		return nil
+	})
 
 	nodeLiveness.FakeIncrementEpoch(3)
 	<-resumeCalled
+	close(done)
 	testutils.SucceedsSoon(t, func() error {
 		lock.Lock()
-		if e, a := 2, resumeCounts[jobMap[3]]; e != a {
-			return errors.Errorf("expected resumeCount to be %d, but got %d", e, a)
+		defer lock.Unlock()
+		if e, a := 2, resumeCounts[jobMap[3]]; e > a {
+			return errors.Errorf("expected resumeCount to be > %d, but got %d", e, a)
 		}
-		if e, a := 1, resumeCounts[jobMap[2]]; e != a {
-			return errors.Errorf("expected resumeCount to be %d, but got %d", e, a)
+		if e, a := 1, resumeCounts[jobMap[2]]; e > a {
+			return errors.Errorf("expected resumeCount to be > %d, but got %d", e, a)
 		}
 		count := 0
 		for _, ct := range resumeCounts {
 			count += ct
 		}
 
-		if e, a := 5, count; e != a {
-			return errors.Errorf("expected total jobs to be %d, but got %d", e, a)
+		if e, a := 5, count; e > a {
+			return errors.Errorf("expected total jobs to be > %d, but got %d", e, a)
 		}
-		lock.Unlock()
 		return nil
 	})
 }
