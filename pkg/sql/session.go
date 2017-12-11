@@ -174,9 +174,6 @@ type queryMeta struct {
 	// Cancellation function for the context associated with this query's transaction.
 	// Set to session.txnState.cancel in executor.
 	ctxCancel context.CancelFunc
-
-	// Reference to the Session that contains this query.
-	session *Session
 }
 
 // cancel cancels the query associated with this queryMeta, by closing the associated
@@ -720,7 +717,6 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) {
 	s.mu.Lock()
 	s.mu.ActiveQueries[queryID] = queryMeta
-	queryMeta.session = s
 	s.mu.Unlock()
 	// addActiveQuery is called from the main goroutine of the session;
 	// and at this stage, this query is a synchronous query for our purposes.
