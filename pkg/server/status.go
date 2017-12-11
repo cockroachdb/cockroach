@@ -1278,9 +1278,13 @@ func (s *statusServer) SpanStats(
 
 	output := &serverpb.SpanStatsResponse{}
 	err = s.stores.VisitStores(func(store *storage.Store) error {
-		stats, count := store.ComputeStatsForKeySpan(req.StartKey.Next(), req.EndKey)
-		output.TotalStats.Add(stats)
-		output.RangeCount += int32(count)
+		result, err := store.ComputeStatsForKeySpan(req.StartKey.Next(), req.EndKey)
+		if err != nil {
+			return err
+		}
+		output.TotalStats.Add(result.MVCC)
+		output.RangeCount += int32(result.ReplicaCount)
+		output.ApproximateDiskBytes += result.ApproximateDiskBytes
 		return nil
 	})
 	if err != nil {

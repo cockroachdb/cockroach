@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,7 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -271,6 +276,63 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 		rocksdb.Close()
 	}
 	return err
+}
+
+func TestRocksDBApproximateDiskBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	rocksdb, err := NewRocksDB(
+		RocksDBConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
+		},
+		RocksDBCache{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rocksdb.Close()
+
+	rnd, seed := randutil.NewPseudoRand()
+
+	log.Infof(context.Background(), "seed is %d", seed)
+
+	for i := 0; i < 10; i++ {
+		ts := hlc.Timestamp{WallTime: rnd.Int63()}
+		key := roachpb.Key(randutil.RandBytes(rnd, 1<<10))
+		key = append(key, []byte(fmt.Sprintf("#%d", i))...) // make unique
+		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 1<<20))
+		value.InitChecksum(key)
+		if err := MVCCPut(context.Background(), rocksdb, nil, key, ts, value, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := rocksdb.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		keyOnlySize, err := rocksdb.ApproximateDiskBytes(key, key.Next())
+		if err != nil {
+			t.Fatal(err)
+		}
+		const mb = int64(1 << 20)
+		if min, max, act := mb/2, 2*mb, int64(keyOnlySize); act < min || act > max {
+			t.Fatalf("iteration %d: new kv pair estimated at %s; expected between %s and %s",
+				i+1, humanizeutil.IBytes(act), humanizeutil.IBytes(min), humanizeutil.IBytes(max))
+		}
+
+		allSize, err := rocksdb.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if min, max, act := int64(i)*mb, int64(i+2)*mb, int64(allSize); act < min || act > max {
+			t.Fatalf("iteration %d: total size estimated at %s; expected between %s and %s",
+				i+1, humanizeutil.IBytes(act), humanizeutil.IBytes(min), humanizeutil.IBytes(max))
+		}
+
+	}
 }
 
 func TestSSTableInfosString(t *testing.T) {
