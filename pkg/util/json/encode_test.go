@@ -194,7 +194,6 @@ func TestJSONEncodeRoundTrip(t *testing.T) {
 
 		assertEncodeRoundTrip(t, j)
 	}
-
 }
 
 // This tests that the stringified version is the same, for testing precision
