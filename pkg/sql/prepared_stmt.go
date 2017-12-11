@@ -91,7 +91,11 @@ func (ps PreparedStatements) Exists(name string) bool {
 //
 // ps.session.Ctx() is used as the logging context for the prepare operation.
 func (ps PreparedStatements) NewFromString(
-	e *Executor, name, query string, placeholderHints tree.PlaceholderTypes,
+	name, query string,
+	placeholderHints tree.PlaceholderTypes,
+	dbCache DBCacheHolder,
+	execCfg *ExecutorConfig,
+	reCache *tree.RegexpCache,
 ) (*PreparedStatement, error) {
 	sessionEventf(ps.session, "parsing: %s", query)
 
@@ -110,7 +114,7 @@ func (ps PreparedStatements) NewFromString(
 		return nil, errWrongNumberOfPreparedStatements(len(stmts))
 	}
 
-	return ps.New(e, name, st, query, placeholderHints)
+	return ps.New(name, st, query, placeholderHints, dbCache.dbCache, execCfg, reCache)
 }
 
 // New creates a new PreparedStatement with the provided name and corresponding
@@ -119,10 +123,16 @@ func (ps PreparedStatements) NewFromString(
 //
 // ps.session.Ctx() is used as the logging context for the prepare operation.
 func (ps PreparedStatements) New(
-	e *Executor, name string, stmt Statement, stmtStr string, placeholderHints tree.PlaceholderTypes,
+	name string,
+	stmt Statement,
+	stmtStr string,
+	placeholderHints tree.PlaceholderTypes,
+	dbCache *databaseCache,
+	execCfg *ExecutorConfig,
+	reCache *tree.RegexpCache,
 ) (*PreparedStatement, error) {
 	// Prepare the query. This completes the typing of placeholders.
-	pStmt, err := e.Prepare(stmt, stmtStr, ps.session, placeholderHints)
+	pStmt, err := Prepare(stmt, stmtStr, ps.session, placeholderHints, dbCache, execCfg, reCache)
 	if err != nil {
 		return nil, err
 	}
