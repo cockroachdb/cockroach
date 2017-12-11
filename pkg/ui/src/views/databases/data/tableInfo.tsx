@@ -1,4 +1,6 @@
 import * as protos from "src/js/protos";
+import { FixLong } from "src/util/fixLong";
+
 import _ from "lodash";
 
 type TableDetailsResponse = protos.cockroach.server.serverpb.TableDetailsResponse;
@@ -11,7 +13,8 @@ export class TableInfo {
   public id: number;
   public numColumns: number;
   public numIndices: number;
-  public size: number;
+  public physical_size: number;
+  public mvcc_stats: protos.cockroach.storage.engine.enginepb.MVCCStats$Properties;
   public rangeCount: number;
   public createStatement: string;
   public grants: protos.cockroach.server.serverpb.TableDetailsResponse.Grant$Properties[];
@@ -23,8 +26,12 @@ export class TableInfo {
       this.rangeCount = stats && stats.range_count && stats.range_count.toNumber();
       this.createStatement = details && details.create_table_statement;
       this.grants = details && details.grants;
-      if (stats && stats.stats) {
-          this.size = stats.stats.val_bytes.add(stats.stats.sys_bytes).toNumber();
+      if (stats) {
+          this.mvcc_stats = stats.stats;
+          this.physical_size = FixLong(stats.approximate_disk_bytes).toNumber();
+          if (!this.physical_size) {
+            this.physical_size = Number(1024); // 1kb
+          }
       }
   }
 }

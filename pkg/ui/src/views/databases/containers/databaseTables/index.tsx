@@ -38,7 +38,7 @@ const DatabaseTableListSortedTable = SortedTable as new () => SortedTable<TableI
 class DatabaseSummaryTables extends DatabaseSummaryBase {
   totalSize() {
     const tableInfos = this.props.tableInfos;
-    return _.sumBy(tableInfos, (ti) => ti.size);
+    return _.sumBy(tableInfos, (ti) => ti.physical_size);
   }
 
   totalRangeCount() {
@@ -81,8 +81,8 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
                       },
                       {
                         title: "Size",
-                        cell: (tableInfo) => Bytes(tableInfo.size),
-                        sort: (tableInfo) => tableInfo.size,
+                        cell: (tableInfo) => Bytes(tableInfo.physical_size),
+                        sort: (tableInfo) => tableInfo.physical_size,
                       },
                       {
                         title: "Ranges",
