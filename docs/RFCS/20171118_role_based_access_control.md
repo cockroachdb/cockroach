@@ -108,7 +108,7 @@ Some terminology used in this RFC:
 * **inherit**: the behavior that grants a role's privileges to its members
 * **`A ∈ B`**: user or role `A` is a member of role `B`
 * **direct member**: A is a direct member of B if `A ∈ B`
-* **indirect member**: A is an indirect member of B if `A ∈ C ... ∈ B` where `...` is be an arbitrary number of memberships
+* **indirect member**: A is an indirect member of B if `A ∈ C ... ∈ B` where `...` is an arbitrary number of memberships
 
 ## User-level explanation
 
