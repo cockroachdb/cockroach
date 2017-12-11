@@ -18,18 +18,18 @@
 
 const DBStatus kSuccess = {NULL, 0};
 
-DBStatus parse_extra_options(const DBSlice s) {
+rocksdb::Status parse_extra_options(const DBSlice s) {
   if (s.len == 0) {
-    return kSuccess;
+    return rocksdb::Status::OK();
   }
 
   cockroach::ccl::baseccl::EncryptionOptions opts;
   if (!opts.ParseFromArray(s.data, s.len)) {
-    return FmtStatus("failed to parse extra options");
+    return rocksdb::Status::InvalidArgument("failed to parse extra options");
   }
 
   if (opts.key_source() != cockroach::ccl::baseccl::KeyFiles) {
-    return FmtStatus("unknown encryption key source: %d", opts.key_source());
+    return rocksdb::Status::InvalidArgument("unknown encryption key source");
   }
 
   std::cout << "found encryption options:\n"
@@ -37,11 +37,11 @@ DBStatus parse_extra_options(const DBSlice s) {
             << "  old key: " << opts.key_files().old_key() << "\n"
             << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
 
-  return FmtStatus("encryption is not supported");
+  return rocksdb::Status::InvalidArgument("encryption is not supported");
 }
 
 // DBOpenHook parses the extra_options field of DBOptions.
-DBStatus DBOpenHook(const DBOptions opts) { return parse_extra_options(opts.extra_options); }
+rocksdb::Status DBOpenHook(const DBOptions opts) { return parse_extra_options(opts.extra_options); }
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();
