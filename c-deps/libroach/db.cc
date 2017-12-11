@@ -200,6 +200,8 @@ struct DBIterator {
 
 std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
 
+std::string ToString(DBString s) { return std::string(s.data, s.len); }
+
 rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data, s.len); }
 
 rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data, s.len); }
