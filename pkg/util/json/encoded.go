@@ -278,6 +278,44 @@ func (j *jsonEncoded) IterObjectKey() (*ObjectKeyIterator, error) {
 	return dec.IterObjectKey()
 }
 
+func (j *jsonEncoded) arrayNthJEntry(n int, off int) (jEntry, error) {
+	return getJEntryAt(j.value, containerHeaderLen+n*jEntryLen, off)
+}
+
+func parseJEntry(jEntry uint32) (isOff bool, offlen int) {
+	return (jEntry & jEntryIsOffFlag) != 0, int(jEntry & jEntryOffLenMask)
+}
+
+// arrayBeginningOfIdx finds the offset to the beginning of the given entry.
+func (j *jsonEncoded) arrayBeginningOfIdx(idx int) (int, error) {
+	if idx == 0 {
+		return 0, nil
+	}
+
+	offset := 0
+	curIdx := idx - 1
+	for curIdx >= 0 {
+		// We need to manually extract the JEntry here because this is a case where
+		// we logically care if it's an offset or a length.
+		e, err := getUint32At(j.value, containerHeaderLen+curIdx*jEntryLen)
+		if err != nil {
+			return 0, err
+		}
+		isOff, offlen := parseJEntry(e)
+		if isOff {
+			return offlen + offset, nil
+		}
+		offset += offlen
+		curIdx--
+	}
+	return offset, nil
+}
+
+func (j *jsonEncoded) arrayGetDataRange(begin, end int) []byte {
+	dataStart := containerHeaderLen + j.containerLen*jEntryLen
+	return j.value[dataStart+begin : dataStart+end]
+}
+
 func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.FetchValIdx(idx)
@@ -290,18 +328,25 @@ func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 		if idx < 0 || idx >= j.containerLen {
 			return nil, nil
 		}
-		iter := j.iterArrayValues()
-		resultJEntry, resultData, _, err := iter.nextEncoded()
+
+		// We need to find the bounds for a given index, but this is nontrivial,
+		// since some headers store an offset and some store a length.
+
+		// First, we seek for the beginning of the current entry by stepping
+		// backwards via arrayBeginningOfIdx.
+		begin, err := j.arrayBeginningOfIdx(idx)
 		if err != nil {
 			return nil, err
 		}
-		for i := 0; i < idx; i++ {
-			resultJEntry, resultData, _, err = iter.nextEncoded()
-			if err != nil {
-				return nil, err
-			}
+
+		// Once we know where this entry starts, we can derive the end from its own
+		// JEntry.
+		entry, err := j.arrayNthJEntry(idx, begin)
+		if err != nil {
+			return nil, err
 		}
-		return newEncoded(resultJEntry, resultData)
+
+		return newEncoded(entry, j.arrayGetDataRange(begin, begin+int(entry.length)))
 	}
 	return nil, nil
 }
