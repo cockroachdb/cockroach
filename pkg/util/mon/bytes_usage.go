@@ -181,7 +181,7 @@ type BytesMonitor struct {
 
 		// curBudget represents the budget allocated at the pool on behalf of
 		// this monitor.
-		curBudget BytesAccount
+		curBudget bytesAccount
 	}
 
 	// name identifies this monitor in logging messages.
@@ -409,16 +409,16 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	mm.reserved.Clear(ctx)
 }
 
-// BytesAccount tracks the cumulated allocations for one client of a pool or
+// bytesAccount tracks the cumulated allocations for one client of a pool or
 // monitor. BytesMonitor has an account to its pool; BytesMonitor clients have
 // an account to the monitor. This allows each client to release all the bytes
-// at once when it completes its work. Internally, BytesAccount amortizes
+// at once when it completes its work. Internally, bytesAccount amortizes
 // allocations from whichever BytesMonitor it is associated with by allocating
-// additional memory and parceling it out (see BytesAccount.reserved).
+// additional memory and parceling it out (see bytesAccount.reserved).
 //
 // See the comments in bytes_usage.go for a fuller picture of how these accounts
 // are used in CockroachDB.
-type BytesAccount struct {
+type bytesAccount struct {
 	used int64
 	// reserved is a small buffer to amortize the cost of growing an account. It
 	// decreases as curAllocated increases (and vice-versa).
@@ -426,31 +426,16 @@ type BytesAccount struct {
 }
 
 // Used returns the number of bytes currently allocated through this account.
-func (acc BytesAccount) Used() int64 {
+func (acc bytesAccount) Used() int64 {
 	return acc.used
 }
 
-func (acc BytesAccount) allocated() int64 {
+func (acc bytesAccount) allocated() int64 {
 	return acc.used + acc.reserved
 }
 
-// OpenAccount creates a new empty account.
-func (mm *BytesMonitor) OpenAccount(_ *BytesAccount) {
-	// TODO(knz): conditionally track accounts in the monitor (#9122).
-}
-
-// OpenAndInitAccount creates a new account and pre-allocates some initial
-// amount of bytes. Upon success, acc.curAllocated will be equal to
-// initialAllocation while acc.reserved may be greater than or equal to zero.
-func (mm *BytesMonitor) OpenAndInitAccount(
-	ctx context.Context, acc *BytesAccount, initialAllocation int64,
-) error {
-	mm.OpenAccount(acc)
-	return mm.GrowAccount(ctx, acc, initialAllocation)
-}
-
-// GrowAccount requests a new allocation in an account.
-func (mm *BytesMonitor) GrowAccount(ctx context.Context, acc *BytesAccount, extraSize int64) error {
+// growAccount requests a new allocation in an account.
+func (mm *BytesMonitor) growAccount(ctx context.Context, acc *bytesAccount, extraSize int64) error {
 	if acc.reserved < extraSize {
 		minExtra := mm.roundSize(extraSize)
 		if err := mm.reserveBytes(ctx, minExtra); err != nil {
@@ -463,25 +448,23 @@ func (mm *BytesMonitor) GrowAccount(ctx context.Context, acc *BytesAccount, extr
 	return nil
 }
 
-// CloseAccount releases all the cumulated allocations of an account at once.
-func (mm *BytesMonitor) CloseAccount(ctx context.Context, acc *BytesAccount) {
-	if acc.used == 0 && acc.reserved == 0 {
-		// Fast path so as to avoid locking the monitor.
-		return
+// closeAccount releases all the cumulated allocations of an account at once.
+func (mm *BytesMonitor) closeAccount(ctx context.Context, acc *bytesAccount) {
+	if a := acc.allocated(); a > 0 {
+		mm.releaseBytes(ctx, a)
 	}
-	mm.releaseBytes(ctx, acc.allocated())
 }
 
-// ClearAccount releases all the cumulated allocations of an account at once
+// clearAccount releases all the cumulated allocations of an account at once
 // and primes it for reuse.
-func (mm *BytesMonitor) ClearAccount(ctx context.Context, acc *BytesAccount) {
-	mm.CloseAccount(ctx, acc)
+func (mm *BytesMonitor) clearAccount(ctx context.Context, acc *bytesAccount) {
+	mm.closeAccount(ctx, acc)
 	acc.used = 0
 	acc.reserved = 0
 }
 
-// ShrinkAccount releases part of the cumulated allocations by the specified size.
-func (mm *BytesMonitor) ShrinkAccount(ctx context.Context, acc *BytesAccount, delta int64) {
+// chrinkAccount releases part of the cumulated allocations by the specified size.
+func (mm *BytesMonitor) shrinkAccount(ctx context.Context, acc *bytesAccount, delta int64) {
 	if acc.used < delta {
 		panic(fmt.Sprintf("%s: no bytes in account to release, current %d, free %d",
 			mm.name, acc.used, delta))
@@ -494,36 +477,36 @@ func (mm *BytesMonitor) ShrinkAccount(ctx context.Context, acc *BytesAccount, de
 	}
 }
 
-// ResizeItem requests a size change for an object already registered
+// resizeItem requests a size change for an object already registered
 // in an account. The reservation is not modified if the new allocation is
 // refused, so that the caller can keep using the original item
 // without an accounting error. This is better than calling ClearAccount
 // then GrowAccount because if the Clear succeeds and the Grow fails
 // the original item becomes invisible from the perspective of the
 // monitor.
-func (mm *BytesMonitor) ResizeItem(
-	ctx context.Context, acc *BytesAccount, oldSize, newSize int64,
+func (mm *BytesMonitor) resizeItem(
+	ctx context.Context, acc *bytesAccount, oldSize, newSize int64,
 ) error {
 	delta := newSize - oldSize
 	switch {
 	case delta > 0:
-		return mm.GrowAccount(ctx, acc, delta)
+		return mm.growAccount(ctx, acc, delta)
 	case delta < 0:
-		mm.ShrinkAccount(ctx, acc, -delta)
+		mm.shrinkAccount(ctx, acc, -delta)
 	}
 	return nil
 }
 
-// BoundAccount implements a BytesAccount attached to a specific monitor.
+// BoundAccount implements a bytesAccount attached to a specific monitor.
 type BoundAccount struct {
-	BytesAccount
+	bytesAccount
 	mon *BytesMonitor
 }
 
 // MakeStandaloneBudget creates a BoundAccount suitable for root
 // monitors.
 func MakeStandaloneBudget(capacity int64) BoundAccount {
-	return BoundAccount{BytesAccount: BytesAccount{used: capacity}}
+	return BoundAccount{bytesAccount: bytesAccount{used: capacity}}
 }
 
 // MakeBoundAccount creates a BoundAccount connected to the given monitor.
@@ -538,7 +521,7 @@ func (b *BoundAccount) Clear(ctx context.Context) {
 		// monitor -- "bytes out of the aether". This needs not be closed.
 		return
 	}
-	b.mon.ClearAccount(ctx, &b.BytesAccount)
+	b.mon.clearAccount(ctx, &b.bytesAccount)
 }
 
 // Close is an accessor for b.mon.CloseAccount.
@@ -548,27 +531,22 @@ func (b *BoundAccount) Close(ctx context.Context) {
 		// monitor -- "bytes out of the aether". This needs not be closed.
 		return
 	}
-	b.mon.CloseAccount(ctx, &b.BytesAccount)
+	b.mon.closeAccount(ctx, &b.bytesAccount)
 }
 
 // ResizeItem is an accessor for b.mon.ResizeItem.
 func (b *BoundAccount) ResizeItem(ctx context.Context, oldSz, newSz int64) error {
-	return b.mon.ResizeItem(ctx, &b.BytesAccount, oldSz, newSz)
+	return b.mon.resizeItem(ctx, &b.bytesAccount, oldSz, newSz)
 }
 
 // Grow is an accessor for b.mon.GrowAccount.
 func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
-	if x < b.reserved {
-		b.reserved -= x
-		b.used += x
-		return nil
-	}
-	return b.mon.GrowAccount(ctx, &b.BytesAccount, x)
+	return b.mon.growAccount(ctx, &b.bytesAccount, x)
 }
 
 // Shrink is an accessor for b.mon.ShrinkAccount.
 func (b *BoundAccount) Shrink(ctx context.Context, x int64) {
-	b.mon.ShrinkAccount(ctx, &b.BytesAccount, x)
+	b.mon.shrinkAccount(ctx, &b.bytesAccount, x)
 }
 
 // reserveBytes declares an allocation to this monitor. An error is returned if
@@ -651,7 +629,7 @@ func (mm *BytesMonitor) increaseBudget(ctx context.Context, minExtra int64) erro
 		log.Infof(ctx, "%s: requesting %d bytes from the pool", mm.name, minExtra)
 	}
 
-	return mm.pool.GrowAccount(ctx, &mm.mu.curBudget, minExtra)
+	return mm.pool.growAccount(ctx, &mm.mu.curBudget, minExtra)
 }
 
 // roundSize rounds its argument to the smallest greater or equal
@@ -674,7 +652,7 @@ func (mm *BytesMonitor) releaseBudget(ctx context.Context) {
 	if log.V(2) {
 		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.allocated())
 	}
-	mm.pool.ClearAccount(ctx, &mm.mu.curBudget)
+	mm.pool.clearAccount(ctx, &mm.mu.curBudget)
 }
 
 // adjustBudget ensures that the monitor does not keep many more bytes reserved
@@ -692,6 +670,6 @@ func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 		neededBytes = mm.roundSize(neededBytes - mm.reserved.used)
 	}
 	if neededBytes <= mm.mu.curBudget.used-margin {
-		mm.pool.ShrinkAccount(ctx, &mm.mu.curBudget, mm.mu.curBudget.used-neededBytes)
+		mm.pool.shrinkAccount(ctx, &mm.mu.curBudget, mm.mu.curBudget.used-neededBytes)
 	}
 }
