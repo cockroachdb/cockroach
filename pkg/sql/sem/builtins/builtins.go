@@ -1602,6 +1602,10 @@ CockroachDB supports the following flags:
 
 	"jsonb_typeof": {jsonTypeOfImpl},
 
+	"to_json": {toJSONImpl},
+
+	"to_jsonb": {toJSONImpl},
+
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
@@ -2436,6 +2440,19 @@ var jsonTypeOfImpl = tree.Builtin{
 	Info: "Returns the type of the outermost JSON value as a text string.",
 }
 
+var toJSONImpl = tree.Builtin{
+	Types:      tree.ArgTypes{{"val", types.Any}},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		j, err := asJSON(args[0])
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDJSON(j), nil
+	},
+	Info: "Returns the value as JSON or JSONB.",
+}
+
 func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {
 	result := make([]tree.Builtin, 0, len(types.AnyNonArray))
 	for _, typ := range types.AnyNonArray {
@@ -3187,4 +3204,50 @@ func truncateTimestamp(
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond), nil
+}
+
+func asJSON(d tree.Datum) (json.JSON, error) {
+	switch t := d.(type) {
+	case *tree.DBool:
+		return json.FromBool(bool(*t)), nil
+	case *tree.DInt:
+		return json.FromInt(int(*t)), nil
+	case *tree.DFloat:
+		return json.FromFloat64(float64(*t))
+	case *tree.DDecimal:
+		return json.FromDecimal(t.Decimal), nil
+	case *tree.DString:
+		return json.FromString(string(*t)), nil
+	case *tree.DCollatedString:
+		return json.FromString(t.Contents), nil
+	case *tree.DJSON:
+		return t.JSON, nil
+	case *tree.DArray:
+		jsons := make([]json.JSON, t.Len())
+		for i, e := range t.Array {
+			var err error
+			jsons[i], err = asJSON(e)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return json.FromArrayOfJSON(jsons), nil
+	case *tree.DTuple:
+		m := map[string]interface{}{}
+		for i, e := range t.D {
+			j, err := asJSON(e)
+			if err != nil {
+				return nil, err
+			}
+			m[fmt.Sprintf("f%d", i+1)] = j
+		}
+		return json.FromMap(m)
+	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime:
+		return json.FromString(tree.AsStringWithFlags(t, tree.FmtBareStrings)), nil
+	default:
+		if d == tree.DNull {
+			return json.MakeJSON(nil)
+		}
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSON", d)
+	}
 }
