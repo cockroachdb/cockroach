@@ -15,8 +15,9 @@
 # NB: Despite CMake's portability, this build configuration makes no attempt to
 # support non-GCC-like compilers.
 
-# The CXX_STANDARD property was introduced in version 3.1.
-cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
+# The CXX_STANDARD property was introduced in version 3.1
+# 3.3 fixes https://cmake.org/cmake/help/v3.3/policy/CMP0060.html
+cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
 
 project(roachlib)
 
@@ -60,12 +61,12 @@ set_target_properties(roach roachccl PROPERTIES
 
 enable_testing()
 
-# Tests executables are named after the source file (eg: libroach_test for libroach_test.cc)
-# Test names are the same as test executables.
+# List of tests to build and run. Tests in `ccl/` are linked against roachccl, all others
+# are linked against roach only.
 set(tests
+  db_test.cc
   encoding_test.cc
-  libroach_test.cc
-  ccl/libroach_ccl_test.cc
+  ccl/db_test.cc
 )
 
 # "test" doesn't depend on the actual tests. Let's add a "check" target
@@ -79,7 +80,9 @@ add_subdirectory(../googletest/googletest
                  ${CMAKE_BINARY_DIR}/googletest
                  EXCLUDE_FROM_ALL)
 
+# Iterate over all test sources.
 foreach(tsrc ${tests})
+  # Build target name from filename (eg: ccl_db_test.cc for ccl/db_test.cc).
   get_filename_component(filename ${tsrc} NAME_WE)
   get_filename_component(dirname ${tsrc} DIRECTORY)
   if("${dirname}" STREQUAL "" )
@@ -93,8 +96,16 @@ foreach(tsrc ${tests})
   target_include_directories(${tname}
     PRIVATE ../googletest/googletest/include
     PRIVATE ../rocksdb/include
+    PRIVATE ../protobuf/src
   )
-  target_link_libraries(${tname} roachccl gtest_main pthread)
+
+  # Link `ccl/` tests against roachccl.
+  if(${tsrc} MATCHES "^ccl/")
+    target_link_libraries(${tname} roachccl)
+  endif()
+
+  # Add all other libraries.
+  target_link_libraries(${tname} roach ${PROTOBUF_LIB} ${ROCKSDB_LIB} ${SNAPPY_LIB} ${JEMALLOC_LIB} gtest_main pthread)
 
   set_target_properties(${tname} PROPERTIES
     CXX_STANDARD 11
