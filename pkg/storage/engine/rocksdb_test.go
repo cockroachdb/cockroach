@@ -370,6 +370,27 @@ func TestReadAmplification(t *testing.T) {
 	}
 }
 
+func TestInMemIllegalOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cache := NewRocksDBCache(10 << 20 /* 10mb */)
+	defer cache.Release()
+
+	r := &RocksDB{
+		cfg: RocksDBConfig{
+			MustExist: true,
+		},
+		// dir: empty dir == "mem" RocksDB instance.
+		cache: cache.ref(),
+	}
+	err := r.open()
+	const expErr = `could not open rocksdb instance: Invalid argument: ` +
+		`: does not exist \(create_if_missing is false\)`
+	if !testutils.IsError(err, expErr) {
+		t.Error(err)
+	}
+}
+
 func TestConcurrentBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
