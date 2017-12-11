@@ -116,12 +116,36 @@ kubectl create -f cluster-init.yaml
 
 ### Secure mode
 
+#### Prerequisites
+
 **REQUIRED**: the kubernetes cluster must run with the certificate controller enabled.
 This is done by passing the `--cluster-signing-cert-file` and `--cluster-signing-key-file` flags.
 On minikube, you can tell it to use the minikube-generated CA by specifying:
 ```shell
 minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/ca.key"
 ```
+
+**REQUIRED**: because secure mode creates certificate signing requests and
+secrets, we need to create a `ServiceAccount` with certain `RoleBinding`s using
+[RBAC](https://kubernetes.io/docs/admin/authorization/rbac/) for the CockroachDB
+pods to use. The caller of the below `kubectl create` command must have
+sufficient privileges to create such `Role`s. If you get an error that says
+"attempt to grant extra privileges" when attempting to create the CockroachDB
+cluster the below command, your user not have the necessary privileges. [On
+Google Kubernetes Engine (GKE), you must specifically give yourself the ability
+to create new RBAC
+roles](https://cloud.google.com/kubernetes-engine/docs/how-to/role-based-access-control#prerequisites_for_using_role-based_access_control)
+by running:
+```shell
+kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=<your.google.cloud.email@example.org>
+```
+
+If you are unsure of the email address you are using, you can get it by running
+```shell
+gcloud info | grep Account
+```
+
+#### Creating the cluster
 
 Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
 
