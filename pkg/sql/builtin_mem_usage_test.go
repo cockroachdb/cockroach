@@ -133,12 +133,12 @@ func TestBuiltinsAccountForMemory(t *testing.T) {
 			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			defer evalCtx.ActiveMemAcc.Close(context.Background())
-			previouslyAllocated := evalCtx.ActiveMemAcc.CurrentlyAllocated()
+			previouslyAllocated := evalCtx.ActiveMemAcc.Used()
 			_, err := test.builtin.Fn(evalCtx, test.args)
 			if err != nil {
 				t.Fatal(err)
 			}
-			deltaAllocated := evalCtx.ActiveMemAcc.CurrentlyAllocated() - previouslyAllocated
+			deltaAllocated := evalCtx.ActiveMemAcc.Used() - previouslyAllocated
 			if deltaAllocated != test.expectedAllocation {
 				t.Errorf("Expected to allocate %d, actually allocated %d", test.expectedAllocation, deltaAllocated)
 			}
