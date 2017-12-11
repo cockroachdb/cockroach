@@ -1410,7 +1410,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	idxDesc *IndexDescriptor,
 	partDesc *PartitioningDescriptor,
 	colOffset int,
-	partitionNames map[string]struct{},
+	partitionNames map[string]string,
 ) error {
 	if partDesc.NumColumns == 0 {
 		return nil
@@ -1443,16 +1443,28 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 		return fmt.Errorf("only one LIST or RANGE partitioning may used")
 	}
 
+	checkName := func(name string) error {
+		if len(name) == 0 {
+			return fmt.Errorf("PARTITION name must be non-empty")
+		}
+		if indexName, exists := partitionNames[name]; exists {
+			if indexName == idxDesc.Name {
+				return fmt.Errorf("PARTITION %s: name must be unique (used twice in index %q)",
+					name, indexName)
+			}
+			return fmt.Errorf("PARTITION %s: name must be unique (used in both index %q and index %q)",
+				name, indexName, idxDesc.Name)
+		}
+		partitionNames[name] = idxDesc.Name
+		return nil
+	}
+
 	if len(partDesc.List) > 0 {
 		listValues := make(map[string]struct{}, len(partDesc.List))
 		for _, p := range partDesc.List {
-			if len(p.Name) == 0 {
-				return fmt.Errorf("PARTITION name must be non-empty")
+			if err := checkName(p.Name); err != nil {
+				return err
 			}
-			if _, exists := partitionNames[p.Name]; exists {
-				return fmt.Errorf("PARTITION %s: name must be unique", p.Name)
-			}
-			partitionNames[p.Name] = struct{}{}
 
 			if len(p.Values) == 0 {
 				return fmt.Errorf("PARTITION %s: must contain values", p.Name)
@@ -1489,13 +1501,9 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 		var lastEndKey []byte
 		rangeValues := make(map[string]struct{}, len(partDesc.Range))
 		for _, p := range partDesc.Range {
-			if len(p.Name) == 0 {
-				return fmt.Errorf("partition name must be non-empty")
+			if err := checkName(p.Name); err != nil {
+				return err
 			}
-			if _, exists := partitionNames[p.Name]; exists {
-				return fmt.Errorf("partition name %s must be unique", p.Name)
-			}
-			partitionNames[p.Name] = struct{}{}
 
 			// NB: key encoding is used to check sortedness and uniqueness
 			// because it has to match the behavior of the value when
@@ -1560,7 +1568,7 @@ func (desc *TableDescriptor) FindNonDropPartitionByName(
 // validatePartitioning validates that any PartitioningDescriptors contained in
 // table indexes are well-formed. See validatePartitioningDesc for details.
 func (desc *TableDescriptor) validatePartitioning() error {
-	partitionNames := make(map[string]struct{})
+	partitionNames := make(map[string]string)
 
 	a := &DatumAlloc{}
 	return desc.ForeachNonDropIndex(func(idxDesc *IndexDescriptor) error {
