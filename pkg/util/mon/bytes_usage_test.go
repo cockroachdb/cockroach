@@ -44,7 +44,7 @@ func TestMemoryAllocations(t *testing.T) {
 	t.Logf("random seed: %v", seed)
 
 	ctx := context.Background()
-	accs := make([]BytesAccount, 4)
+	accs := make([]bytesAccount, 4)
 
 	var pool BytesMonitor
 	var m BytesMonitor
@@ -170,7 +170,7 @@ func TestMemoryAllocations(t *testing.T) {
 						case 0:
 							sz := randomSize(rnd, mmax)
 							reportAndCheck("G [%5d] %5d", accI, sz)
-							err := m.GrowAccount(ctx, &accs[accI], sz)
+							err := m.growAccount(ctx, &accs[accI], sz)
 							if err == nil {
 								reportAndCheck("G [%5d] ok", accI)
 							} else {
@@ -178,13 +178,13 @@ func TestMemoryAllocations(t *testing.T) {
 							}
 						case 1:
 							reportAndCheck("C [%5d]", accI)
-							m.ClearAccount(ctx, &accs[accI])
+							m.clearAccount(ctx, &accs[accI])
 							reportAndCheck("C [%5d]", accI)
 						case 2:
 							osz := rnd.Int63n(accs[accI].used + 1)
 							nsz := randomSize(rnd, mmax)
 							reportAndCheck("R [%5d] %5d %5d", accI, osz, nsz)
-							err := m.ResizeItem(ctx, &accs[accI], osz, nsz)
+							err := m.resizeItem(ctx, &accs[accI], osz, nsz)
 							if err == nil {
 								reportAndCheck("R [%5d] ok", accI)
 							} else {
@@ -197,7 +197,7 @@ func TestMemoryAllocations(t *testing.T) {
 					// that closing everything comes back to the initial situation.
 					for accI := range accs {
 						reportAndCheck("CL[%5d]", accI)
-						m.ClearAccount(ctx, &accs[accI])
+						m.clearAccount(ctx, &accs[accI])
 						reportAndCheck("CL[%5d]", accI)
 					}
 
@@ -221,47 +221,43 @@ func TestBytesAccount(t *testing.T) {
 	m.poolAllocationSize = 1
 	maxAllocatedButUnusedBlocks = 1
 
-	var a1, a2 BytesAccount
-
-	m.OpenAccount(&a1)
-	m.OpenAccount(&a2)
-
-	if err := m.GrowAccount(ctx, &a1, 10); err != nil {
+	var a1, a2 bytesAccount
+	if err := m.growAccount(ctx, &a1, 10); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.GrowAccount(ctx, &a2, 30); err != nil {
+	if err := m.growAccount(ctx, &a2, 30); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.GrowAccount(ctx, &a1, 61); err == nil {
+	if err := m.growAccount(ctx, &a1, 61); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	if err := m.GrowAccount(ctx, &a2, 61); err == nil {
+	if err := m.growAccount(ctx, &a2, 61); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	m.ClearAccount(ctx, &a1)
+	m.clearAccount(ctx, &a1)
 
-	if err := m.GrowAccount(ctx, &a2, 61); err != nil {
+	if err := m.growAccount(ctx, &a2, 61); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.ResizeItem(ctx, &a2, 50, 60); err == nil {
+	if err := m.resizeItem(ctx, &a2, 50, 60); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	if err := m.ResizeItem(ctx, &a1, 0, 5); err != nil {
+	if err := m.resizeItem(ctx, &a1, 0, 5); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.ResizeItem(ctx, &a2, a2.used, 40); err != nil {
+	if err := m.resizeItem(ctx, &a2, a2.used, 40); err != nil {
 		t.Fatalf("monitor refused reset + allocation: %v", err)
 	}
 
-	m.CloseAccount(ctx, &a1)
-	m.CloseAccount(ctx, &a2)
+	m.closeAccount(ctx, &a1)
+	m.closeAccount(ctx, &a2)
 
 	if m.mu.curAllocated != 0 {
 		t.Fatal("closing spans leaves bytes in monitor")

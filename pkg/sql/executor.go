@@ -485,12 +485,11 @@ func (e *Executor) Prepare(
 	prepared := &PreparedStatement{
 		TypeHints:   placeholderHints,
 		portalNames: make(map[string]struct{}),
+		// We need a memory account available in order to prepare a statement, since we
+		// might need to allocate memory for constant-folded values in the process of
+		// planning it.
+		memAcc: session.mon.MakeBoundAccount(),
 	}
-
-	// We need a memory account available in order to prepare a statement, since we
-	// might need to allocate memory for constant-folded values in the process of
-	// planning it.
-	prepared.constantAcc = session.mon.MakeBoundAccount()
 
 	if stmt.AST == nil {
 		return prepared, nil
@@ -529,7 +528,7 @@ func (e *Executor) Prepare(
 	planner := session.newPlanner(e, txn)
 	planner.semaCtx.Placeholders.SetTypeHints(placeholderHints)
 	planner.evalCtx.PrepareOnly = true
-	planner.evalCtx.ActiveMemAcc = &prepared.constantAcc
+	planner.evalCtx.ActiveMemAcc = &prepared.memAcc
 
 	if protoTS != nil {
 		planner.asOfSystemTime = true
