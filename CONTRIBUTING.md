@@ -51,7 +51,7 @@ new engineers.
 
    ```shell
    go get -d github.com/cockroachdb/cockroach
-   cd $GOPATH/src/github.com/cockroachdb/cockroach
+   cd $(go env GOPATH)/src/github.com/cockroachdb/cockroach
    ```
 
 3. Run `make build`, `make test`, or anything else our Makefile offers.
