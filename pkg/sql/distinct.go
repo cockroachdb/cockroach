@@ -87,7 +87,7 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 				n.run.suffixMemAcc.Clear(ctx)
 				n.run.suffixSeen = make(map[string]struct{})
 			}
-			if err := n.run.prefixMemAcc.ResizeItem(
+			if err := n.run.prefixMemAcc.Resize(
 				ctx, int64(len(n.run.prefixSeen)), int64(len(prefix))); err != nil {
 				return false, err
 			}

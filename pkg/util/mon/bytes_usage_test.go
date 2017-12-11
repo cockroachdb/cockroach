@@ -188,7 +188,7 @@ func TestMemoryAllocations(t *testing.T) {
 							osz := rnd.Int63n(accs[accI].used + 1)
 							nsz := randomSize(rnd, mmax)
 							reportAndCheck("R [%5d] %5d %5d", accI, osz, nsz)
-							err := accs[accI].ResizeItem(ctx, osz, nsz)
+							err := accs[accI].Resize(ctx, osz, nsz)
 							if err == nil {
 								reportAndCheck("R [%5d] ok", accI)
 							} else {
@@ -249,15 +249,15 @@ func TestBoundAccount(t *testing.T) {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := a2.ResizeItem(ctx, 50, 60); err == nil {
+	if err := a2.Resize(ctx, 50, 60); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	if err := a1.ResizeItem(ctx, 0, 5); err != nil {
+	if err := a1.Resize(ctx, 0, 5); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := a2.ResizeItem(ctx, a2.used, 40); err != nil {
+	if err := a2.Resize(ctx, a2.used, 40); err != nil {
 		t.Fatalf("monitor refused reset + allocation: %v", err)
 	}
 
