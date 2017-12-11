@@ -45,6 +45,7 @@ import (
 //   to their monitor. Grow/Resize requests can be denied (return an error),
 //   which indicates the budget has been reached.
 //
+
 // - different instances of BoundAccount are associated to different usage
 //   categories in components, in principle to track different object
 //   lifetimes.  Each account tracks the total amount of bytes allocated in
@@ -467,13 +468,13 @@ func (b *BoundAccount) Close(ctx context.Context) {
 	}
 }
 
-// ResizeItem requests a size change for an object already registered in an
+// Resize requests a size change for an object already registered in an
 // account. The reservation is not modified if the new allocation is refused,
 // so that the caller can keep using the original item without an accounting
 // error. This is better than calling ClearAccount then GrowAccount because if
 // the Clear succeeds and the Grow fails the original item becomes invisible
 // from the perspective of the monitor.
-func (b *BoundAccount) ResizeItem(ctx context.Context, oldSz, newSz int64) error {
+func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 	delta := newSz - oldSz
 	switch {
 	case delta > 0:

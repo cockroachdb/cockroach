@@ -331,7 +331,7 @@ func (c *RowContainer) Replace(ctx context.Context, i int, newRow tree.Datums) e
 	row := c.At(i)
 	oldSz := c.rowSize(row)
 	if newSz != oldSz {
-		if err := c.memAcc.ResizeItem(ctx, oldSz, newSz); err != nil {
+		if err := c.memAcc.Resize(ctx, oldSz, newSz); err != nil {
 			return err
 		}
 	}
