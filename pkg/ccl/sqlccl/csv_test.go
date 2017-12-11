@@ -786,7 +786,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	}
 	create := stmt.(*tree.CreateTable)
 
-	tableDesc, err := makeCSVTableDescriptor(ctx, create, sqlbase.ID(100), sqlbase.ID(100), 1)
+	tableDesc, err := makeSimpleTableDescriptor(ctx, create, sqlbase.ID(100), sqlbase.ID(100), 1)
 	if err != nil {
 		b.Fatal(err)
 	}
