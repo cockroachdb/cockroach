@@ -51,6 +51,7 @@ var ScrubTypes = []sqlbase.ColumnType{
 // desired column values to an output RowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
+	Batching bool
 	processorBase
 
 	flowCtx *FlowCtx
@@ -197,6 +198,18 @@ func (tr *tableReader) sendMisplannedRangesMetadata(ctx context.Context) {
 	}
 }
 
+func (tr *tableReader) ReadyForFetch() {
+	ctx := context.TODO()
+	if err := tr.fetcher.StartScan(
+		ctx, tr.flowCtx.txn, tr.spans, true /* limit batches */, tr.limitHint, false, /* traceKV */
+	); err != nil {
+		log.Errorf(ctx, "scan error: %s", err)
+		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+		tr.out.Close()
+		return
+	}
+}
+
 // Run is part of the processor interface.
 func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
@@ -218,15 +231,30 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
-	if err := tr.fetcher.StartScan(
-		ctx, txn, tr.spans, true /* limit batches */, tr.limitHint, false, /* traceKV */
-	); err != nil {
-		log.Errorf(ctx, "scan error: %s", err)
-		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-		tr.out.Close()
+	tr.ReadyForFetch()
+	if tr.Batching {
+		rowChan := tr.out.output.(*RowChannel)
+		for {
+			batch := make(RowBatch, 0, RowBatchSize)
+			for i := 0; i < RowBatchSize; i++ {
+				row, _, _, err := tr.fetcher.NextRow(ctx)
+				if err != nil {
+					tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+					return
+				} else if row == nil {
+					break
+				}
+
+				rowCopy := append(sqlbase.EncDatumRow(nil), row...)
+				batch = append(batch, rowCopy)
+			}
+			if len(batch) == 0 {
+				return
+			}
+			rowChan.PushBatch(batch)
+		}
 		return
 	}
-
 	for {
 		var row sqlbase.EncDatumRow
 		var err error
@@ -276,6 +304,11 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	tr.sendMisplannedRangesMetadata(ctx)
 	sendTraceData(ctx, tr.out.output)
 	tr.out.Close()
+}
+
+func (tr *tableReader) NextRow() (sqlbase.EncDatumRow, ProducerMetadata) {
+	row, _, _, err := tr.fetcher.NextRow(context.TODO())
+	return row, ProducerMetadata{Err: err}
 }
 
 // generateScrubErrorRow will create an EncDatumRow describing a
