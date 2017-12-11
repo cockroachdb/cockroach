@@ -48,7 +48,7 @@ static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
 // DBOpenHook in OSS mode only verifies that no extra options are specified.
 __attribute__((weak)) DBStatus DBOpenHook(const DBOptions opts) {
   if (opts.extra_options.len != 0) {
-    return FmtStatus("DBOPtions has extra_options, but OSS code cannot handle them");
+    return FmtStatus("DBOptions has extra_options, but OSS code cannot handle them");
   }
   return kSuccess;
 }
@@ -199,6 +199,8 @@ struct DBIterator {
 };
 
 std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
+
+std::string ToString(DBString s) { return std::string(s.data, s.len); }
 
 rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data, s.len); }
 
