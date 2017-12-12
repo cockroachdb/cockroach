@@ -633,6 +633,11 @@ func (r *Replica) handleReplicatedEvalResult(
 		}
 	}
 
+	for _, sc := range rResult.SuggestedCompactions {
+		r.store.compactor.SuggestCompaction(ctx, sc.StartKey, sc.EndKey, sc.Compaction)
+	}
+	rResult.SuggestedCompactions = nil
+
 	if !rResult.Equal(storagebase.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagebase.ReplicatedEvalResult{}))
 	}

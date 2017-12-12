@@ -106,8 +106,18 @@ DBStatus DBFlush(DBEngine* db);
 // disk. Blocks until the operation is complete.
 DBStatus DBSyncWAL(DBEngine* db);
 
+// Uses GetApproximateSizes with include flags indicating only disk space
+// to estimate the size of sstable files used to store data in the specified
+// range.
+uint64_t DBGetApproximateSize(DBEngine* db, DBKey start, DBKey end);
+
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
+
+// Forces an immediate compaction over keys in the specified range.
+// Note that if start is empty, it indicates the start of the database.
+// If end is empty, it indicates the end of the database.
+DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end);
 
 // Sets the database entry for "key" to "value".
 DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);

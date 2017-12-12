@@ -790,15 +790,16 @@ func (td *tableDeleter) deleteAllRows(
 func (td *tableDeleter) deleteAllRowsFast(
 	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
+	tablePrefix := roachpb.Key(
+		encoding.EncodeUvarintAscending(nil, uint64(td.rd.Helper.TableDesc.ID)),
+	)
+	tableSpan := roachpb.Span{
+		Key:    tablePrefix,
+		EndKey: tablePrefix.PrefixEnd(),
+	}
 	if resume.Key == nil {
-		tablePrefix := roachpb.Key(
-			encoding.EncodeUvarintAscending(nil, uint64(td.rd.Helper.TableDesc.ID)),
-		)
 		// Delete rows and indexes starting with the table's prefix.
-		resume = roachpb.Span{
-			Key:    tablePrefix,
-			EndKey: tablePrefix.PrefixEnd(),
-		}
+		resume = tableSpan
 	}
 	// If GCDeadline isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
