@@ -1022,12 +1022,16 @@ CREATE TABLE pg_catalog.pg_namespace (
 	},
 }
 
+func newSingletonStringArray(s string) tree.Datum {
+	return &tree.DArray{ParamTyp: types.String, Array: tree.Datums{tree.NewDString(s)}}
+}
+
 var (
-	proArgModeInOut    = tree.NewDString("b")
-	proArgModeIn       = tree.NewDString("i")
-	proArgModeOut      = tree.NewDString("o")
-	proArgModeTable    = tree.NewDString("t")
-	proArgModeVariadic = tree.NewDString("v")
+	proArgModeInOut    = newSingletonStringArray("b")
+	proArgModeIn       = newSingletonStringArray("i")
+	proArgModeOut      = newSingletonStringArray("o")
+	proArgModeTable    = newSingletonStringArray("t")
+	proArgModeVariadic = newSingletonStringArray("v")
 
 	// Avoid unused warning for constants.
 	_ = proArgModeInOut
@@ -1062,7 +1066,7 @@ CREATE TABLE pg_catalog.pg_proc (
 	prorettype OID,
 	proargtypes STRING,
 	proallargtypes STRING,
-	proargmodes STRING,
+	proargmodes STRING[],
 	proargnames STRING,
 	proargdefaults STRING,
 	protrftypes STRING,
@@ -1128,12 +1132,23 @@ CREATE TABLE pg_catalog.pg_proc (
 
 				var argmodes tree.Datum
 				var variadicType tree.Datum
-				switch argTypes.(type) {
+				switch v := argTypes.(type) {
 				case tree.VariadicType:
-					argmodes = proArgModeVariadic
-					argType := argTypes.Types()[0]
-					oid := argType.Oid()
-					variadicType = tree.NewDOid(tree.DInt(oid))
+					if len(v.FixedTypes) == 0 {
+						argmodes = proArgModeVariadic
+					} else {
+						ary := tree.NewDArray(types.String)
+						for range v.FixedTypes {
+							if err := ary.Append(tree.NewDString("i")); err != nil {
+								return err
+							}
+						}
+						if err := ary.Append(tree.NewDString("v")); err != nil {
+							return err
+						}
+						argmodes = ary
+					}
+					variadicType = tree.NewDOid(tree.DInt(v.VarType.Oid()))
 				case tree.HomogeneousType:
 					argmodes = proArgModeVariadic
 					argType := types.Any
