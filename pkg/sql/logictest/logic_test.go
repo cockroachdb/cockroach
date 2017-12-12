@@ -967,8 +967,9 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 
 	repeat := 1
 	subtestName := "base"
+	tooManyErrors := false
 	s := newLineScanner(file, t.varMap)
-	for s.Scan() {
+	for !tooManyErrors && s.Scan() {
 		// Since the subtest also has a for s.Scan, don't double scan which would
 		// amount to skipping this line.
 		dontScanFirstLine := true
@@ -994,6 +995,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 			for dontScanFirstLine || s.Scan() {
 				dontScanFirstLine = false
 				if *maxErrs > 0 && t.failures >= *maxErrs {
+					tooManyErrors = true
 					subtestT.Fatalf("%s:%d: too many errors encountered, skipping the rest of the input",
 						path, s.line)
 				}
