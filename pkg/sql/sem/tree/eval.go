@@ -1854,7 +1854,12 @@ func evalDatumsCmp(
 
 func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
 	pattern := string(MustBeDString(right))
-	like := optimizedLikeFunc(pattern, caseInsensitive)
+	like, err := optimizedLikeFunc(pattern, caseInsensitive)
+	if err != nil {
+		return DBoolFalse, pgerror.NewErrorf(
+			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+	}
+
 	if like == nil {
 		key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
 		re, err := ctx.ReCache.GetRegexp(key)
@@ -3384,28 +3389,42 @@ func foldComparisonExpr(
 // Simplifies LIKE/ILIKE expressions that do not need full regular expressions to
 // evaluate the condition. For example, when the expression is just checking to see
 // if a string starts with a given pattern.
-func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
+func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool, error) {
 	switch len(pattern) {
 	case 0:
 		return func(s string) bool {
 			return s == ""
-		}
+		}, nil
 	case 1:
 		switch pattern[0] {
 		case '%':
 			return func(s string) bool {
 				return true
-			}
+			}, nil
 		case '_':
 			return func(s string) bool {
 				return len(s) == 1
-			}
+			}, nil
 		}
 	default:
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
 			// Cases like "something\%" are not optimized, but this does not affect correctness.
 			anyEnd := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
 			anyStart := pattern[0] == '%'
+
+			// singleAnyEnd and anyEnd are mutually exclusive
+			// (similarly with Start).
+			singleAnyEnd := pattern[len(pattern)-1] == '_' && pattern[len(pattern)-2] != '\\'
+			singleAnyStart := pattern[0] == '_'
+
+			// Since we've already checked for escaped characters
+			// at the end, we can un-escape every character.
+			// This is required since we do direct string
+			// comparison.
+			var err error
+			if pattern, err = unescapePattern(pattern, `\`); err != nil {
+				return nil, err
+			}
 			switch {
 			case anyEnd && anyStart:
 				return func(s string) bool {
@@ -3414,27 +3433,75 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
 						s, substr = strings.ToUpper(s), strings.ToUpper(substr)
 					}
 					return strings.Contains(s, substr)
-				}
+				}, nil
+
 			case anyEnd:
 				return func(s string) bool {
 					prefix := pattern[:len(pattern)-1]
+					if singleAnyStart {
+						if len(s) == 0 {
+							return false
+						}
+
+						prefix = prefix[1:]
+						s = s[1:]
+					}
 					if caseInsensitive {
 						s, prefix = strings.ToUpper(s), strings.ToUpper(prefix)
 					}
 					return strings.HasPrefix(s, prefix)
-				}
+				}, nil
+
 			case anyStart:
 				return func(s string) bool {
 					suffix := pattern[1:]
+					if singleAnyEnd {
+						if len(s) == 0 {
+							return false
+						}
+
+						suffix = suffix[:len(suffix)-1]
+						s = s[:len(s)-1]
+					}
 					if caseInsensitive {
 						s, suffix = strings.ToUpper(s), strings.ToUpper(suffix)
 					}
 					return strings.HasSuffix(s, suffix)
-				}
+				}, nil
+
+			case singleAnyStart || singleAnyEnd:
+				return func(s string) bool {
+					if len(s) < 1 || (singleAnyStart && singleAnyEnd && len(s) < 2) {
+						return false
+					}
+
+					if singleAnyStart {
+						pattern = pattern[1:]
+						s = s[1:]
+					}
+
+					if singleAnyEnd {
+						pattern = pattern[:len(pattern)-1]
+						s = s[:len(s)-1]
+					}
+
+					if caseInsensitive {
+						s, pattern = strings.ToUpper(s), strings.ToUpper(pattern)
+					}
+
+					// We don't have to check for
+					// prefixes/suffixes since we do not
+					// have '%':
+					//  - singleAnyEnd && anyStart handled
+					//    in case anyStart
+					//  - singleAnyStart && anyEnd handled
+					//    in case anyEnd
+					return s == pattern
+				}, nil
 			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 type likeKey struct {
@@ -3442,12 +3509,156 @@ type likeKey struct {
 	caseInsensitive bool
 }
 
+// unescapePattern unescapes a pattern for a given escape token.
+// It handles escaped escape tokens properly by maintaining them as the escape
+// token in the return string.
+// For example, suppose we have escape token `\` (e.g. `B` is escaped in
+// `A\BC` and `\` is escaped in `A\\C`).
+// We need to convert
+//    `\` --> ``
+//    `\\` --> `\`
+// We cannot simply use strings.Replace for each conversion since the first
+// conversion will incorrectly replace our escaped escape token `\\` with ``.
+// Another example is if our escape token is `\\` (e.g. after
+// regexp.QuoteMeta).
+// We need to convert
+//    `\\` --> ``
+//    `\\\\` --> `\\`
+func unescapePattern(pattern, escapeToken string) (string, error) {
+	escapedEscapeToken := escapeToken + escapeToken
+
+	// We need to subtract the escaped escape tokens to avoid double
+	// counting.
+	nEscapes := strings.Count(pattern, escapeToken) - strings.Count(pattern, escapedEscapeToken)
+	if nEscapes == 0 {
+		return pattern, nil
+	}
+
+	// Allocate buffer for final un-escaped pattern.
+	ret := make([]byte, len(pattern)-nEscapes*len(escapeToken))
+	retWidth := 0
+	for i := 0; i < nEscapes; i++ {
+		nextIdx := strings.Index(pattern, escapeToken)
+		if nextIdx == len(pattern)-len(escapeToken) {
+			return "", errors.Errorf(`pattern ends with escape character`)
+		}
+
+		retWidth += copy(ret[retWidth:], pattern[:nextIdx])
+
+		if nextIdx < len(pattern)-len(escapedEscapeToken) && pattern[nextIdx:nextIdx+len(escapedEscapeToken)] == escapedEscapeToken {
+			// We have an escaped escape token.
+			// We want to keep it as the original escape token in
+			// the return string.
+			retWidth += copy(ret[retWidth:], escapeToken)
+			pattern = pattern[nextIdx+len(escapedEscapeToken):]
+			continue
+		}
+
+		// Skip over the escape character we removed.
+		pattern = pattern[nextIdx+len(escapeToken):]
+	}
+
+	retWidth += copy(ret[retWidth:], pattern)
+	return string(ret[0:retWidth]), nil
+}
+
+// replaceUnescaped replaces all instances of oldStr that are not escaped (read:
+// preceded) with the specified unescape token with newStr.
+// For example, with an escape token of `\\`
+//    replaceUnescaped("TE\\__ST", "_", ".", `\\`) --> "TE\\_.ST"
+//    replaceUnescaped("TE\\%%ST", "%", ".*", `\\`) --> "TE\\%.*ST"
+// If the preceding escape token is escaped, then oldStr will be replaced.
+// For example
+//    replaceUnescaped("TE\\\\_ST", "_", ".", `\\`) --> "TE\\\\.ST"
+func replaceUnescaped(s, oldStr, newStr string, escapeToken string) string {
+	// We count the number of occurrences of 'oldStr'.
+	// This however can be an overestimate since the oldStr token could be
+	// escaped.  e.g. `\\_`.
+	nOld := strings.Count(s, oldStr)
+	if nOld == 0 {
+		return s
+	}
+
+	// Allocate buffer for final string.
+	// This can be an overestimate since some of the oldStr tokens may
+	// be escaped.
+	// This is fine since we keep track of the running number of bytes
+	// actually copied.
+	// It's rather difficult to count the exact number of unescaped
+	// tokens without manually iterating through the entire string and
+	// keeping track of escaped escape tokens.
+	retLen := len(s)
+	// If len(newStr) - len(oldStr) < 0, then this can under-allocate which
+	// will not behave correctly with copy.
+	if addnBytes := nOld * (len(newStr) - len(oldStr)); addnBytes > 0 {
+		retLen += addnBytes
+	}
+	ret := make([]byte, retLen)
+	retWidth := 0
+	start := 0
+OldLoop:
+	for i := 0; i < nOld; i++ {
+		nextIdx := start + strings.Index(s[start:], oldStr)
+
+		escaped := false
+		for {
+			// We need to look behind to check if the escape token
+			// is really an escape token.
+			// E.g. if our specified escape token is `\\` and oldStr
+			// is `_`, then
+			//    `\\_` --> escaped
+			//    `\\\\_` --> not escaped
+			//    `\\\\\\_` --> escaped
+			curIdx := nextIdx
+			lookbehindIdx := curIdx - len(escapeToken)
+			for lookbehindIdx >= 0 && s[lookbehindIdx:curIdx] == escapeToken {
+				escaped = !escaped
+				curIdx = lookbehindIdx
+				lookbehindIdx = curIdx - len(escapeToken)
+			}
+
+			// The token was not be escaped. Proceed.
+			if !escaped {
+				break
+			}
+
+			// Token was escaped. Copy eveything over and continue.
+			retWidth += copy(ret[retWidth:], s[start:nextIdx+len(oldStr)])
+			start = nextIdx + len(oldStr)
+
+			// Continue with next oldStr token.
+			continue OldLoop
+		}
+
+		// Token was not escaped so we replace it with newStr.
+		// Two copies is more efficient than concatenating the slices.
+		retWidth += copy(ret[retWidth:], s[start:nextIdx])
+		retWidth += copy(ret[retWidth:], newStr)
+		start = nextIdx + len(oldStr)
+	}
+
+	retWidth += copy(ret[retWidth:], s[start:])
+	return string(ret[0:retWidth])
+}
+
 // Pattern implements the RegexpCacheKey interface.
 func (k likeKey) Pattern() (string, error) {
+	// QuoteMeta escapes `\` to `\\`.
 	pattern := regexp.QuoteMeta(k.s)
+
 	// Replace LIKE/ILIKE specific wildcards with standard wildcards
-	pattern = strings.Replace(pattern, "%", ".*", -1)
-	pattern = strings.Replace(pattern, "_", ".", -1)
+	pattern = replaceUnescaped(pattern, `%`, `.*`, `\\`)
+	pattern = replaceUnescaped(pattern, `_`, `.`, `\\`)
+
+	// After QuoteMeta, our original escape character `\` has become
+	// `\\`.
+	// We need to unescape escaped escape tokens `\\` (now `\\\\`) and
+	// other escaped characters `\A` (now `\\A`).
+	var err error
+	if pattern, err = unescapePattern(pattern, `\\`); err != nil {
+		return "", err
+	}
+
 	return anchorPattern(pattern, k.caseInsensitive), nil
 }
 
