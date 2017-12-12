@@ -683,13 +683,18 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 
 // evalCtx creates a tree.EvalContext from the Session's current configuration.
 func (s *Session) evalCtx() tree.EvalContext {
+	var evalContextTestingKnobs tree.EvalContextTestingKnobs
+	if s.execCfg != nil {
+		evalContextTestingKnobs = s.execCfg.EvalContextTestingKnobs
+	}
 	return tree.EvalContext{
-		Location:    &s.Location,
-		Database:    s.Database,
-		User:        s.User,
-		SearchPath:  s.SearchPath,
-		CtxProvider: s,
-		Mon:         &s.TxnState.mon,
+		Location:     &s.Location,
+		Database:     s.Database,
+		User:         s.User,
+		SearchPath:   s.SearchPath,
+		CtxProvider:  s,
+		Mon:          &s.TxnState.mon,
+		TestingKnobs: evalContextTestingKnobs,
 	}
 }
 
