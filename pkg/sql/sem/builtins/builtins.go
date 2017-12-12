@@ -1995,7 +1995,7 @@ CockroachDB supports the following flags:
 	"array_positions": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
 			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
+			ReturnType:   tree.FixedReturnType(types.TArray{Typ: types.Int}),
 			Category:     categoryArray,
 			NullableArgs: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {

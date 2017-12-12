@@ -29,6 +29,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -1288,7 +1289,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		BinOp{
 			LeftType:   types.JSON,
 			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
+			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 				if err != nil {
@@ -1943,6 +1944,27 @@ func (s backgroundCtxProvider) Ctx() context.Context {
 
 var _ CtxProvider = backgroundCtxProvider{}
 
+// EvalContextTestingKnobs contains test knobs.
+type EvalContextTestingKnobs struct {
+	// AssertFuncExprReturnTypes indicates whether FuncExpr evaluations
+	// should assert that the returned Datum matches the expected
+	// ReturnType of the function.
+	AssertFuncExprReturnTypes bool
+	// AssertUnaryExprReturnTypes indicates whether UnaryExpr evaluations
+	// should assert that the returned Datum matches the expected
+	// ReturnType of the function.
+	AssertUnaryExprReturnTypes bool
+	// AssertBinaryExprReturnTypes indicates whether BinaryExpr
+	// evaluations should assert that the returned Datum matches the
+	// expected ReturnType of the function.
+	AssertBinaryExprReturnTypes bool
+}
+
+var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -2009,6 +2031,8 @@ type EvalContext struct {
 	SkipNormalize bool
 
 	collationEnv CollationEnvironment
+
+	TestingKnobs EvalContextTestingKnobs
 
 	Mon *mon.BytesMonitor
 
@@ -2217,7 +2241,16 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if right == DNull && !expr.fn.nullableArgs {
 		return DNull, nil
 	}
-	return expr.fn.fn(ctx, left, right)
+	res, err := expr.fn.fn(ctx, left, right)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.TestingKnobs.AssertBinaryExprReturnTypes {
+		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
+			return nil, errors.Wrapf(err, "binary op %q", expr.String())
+		}
+	}
+	return res, err
 }
 
 // Eval implements the TypedExpr interface.
@@ -2959,7 +2992,23 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 		return nil, errors.Wrapf(err, "%s()", fName)
 	}
+	if ctx.TestingKnobs.AssertFuncExprReturnTypes {
+		if err := ensureExpectedType(expr.fn.FixedReturnType(), res); err != nil {
+			return nil, errors.Wrapf(err, "function %q", expr.String())
+		}
+	}
 	return res, nil
+}
+
+// ensureExpectedType will return an error if a datum does not match the
+// provided type. If the expected type is Any or if the datum is a Null
+// type, then no error will be returned.
+func ensureExpectedType(exp types.T, d Datum) error {
+	if !(exp.FamilyEqual(types.Any) || d.ResolvedType().Equivalent(types.Null) ||
+		d.ResolvedType().Equivalent(exp)) {
+		return errors.Errorf("expected return type %q, got: %q", exp, d.ResolvedType())
+	}
+	return nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -3077,7 +3126,16 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if d == DNull {
 		return DNull, nil
 	}
-	return expr.fn.fn(ctx, d)
+	res, err := expr.fn.fn(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.TestingKnobs.AssertUnaryExprReturnTypes {
+		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
+			return nil, errors.Wrapf(err, "unary op %q", expr.String())
+		}
+	}
+	return res, err
 }
 
 // Eval implements the TypedExpr interface.
