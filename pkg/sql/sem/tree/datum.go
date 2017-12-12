@@ -1041,12 +1041,18 @@ func (*DBytes) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("'\\x")
+	withQuotes := f.withinArray || !f.encodeFlags.BareStrings
+	if withQuotes {
+		buf.WriteByte('\'')
+	}
+	buf.WriteString("\\x")
 	b := string(*d)
 	for i := 0; i < len(b); i++ {
 		buf.Write(stringencoding.RawHexMap[b[i]])
 	}
-	buf.WriteByte('\'')
+	if withQuotes {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
@@ -2049,13 +2055,18 @@ func (d *DInterval) Size() uintptr {
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
+// NewDJSON is a helper routine to create a DJSON initialized from its argument.
+func NewDJSON(j json.JSON) *DJSON {
+	return &DJSON{j}
+}
+
 // ParseDJSON takes a string of JSON and returns a DJSON value.
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not parse JSON")
 	}
-	return &DJSON{j}, nil
+	return NewDJSON(j), nil
 }
 
 // MakeDJSON returns a JSON value given a Go-style representation of JSON.
