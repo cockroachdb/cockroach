@@ -15,6 +15,7 @@
 #include <rocksdb/utilities/write_batch_with_index.h>
 #include <rocksdb/write_batch.h>
 #include "../protosccl/ccl/baseccl/encryption_options.pb.h"
+#include "key_manager.h"
 
 const DBStatus kSuccess = {NULL, 0};
 
@@ -36,6 +37,14 @@ rocksdb::Status parse_extra_options(const DBSlice s) {
             << "  active key: " << opts.key_files().current_key() << "\n"
             << "  old key: " << opts.key_files().old_key() << "\n"
             << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
+
+  std::shared_ptr<FileKeyManager> key_manager(
+      new FileKeyManager(rocksdb::Env::Default(), opts.key_files().current_key(), opts.key_files().old_key()));
+
+  rocksdb::Status status = key_manager->LoadKeys();
+  if (!status.ok()) {
+    return status;
+  }
 
   return rocksdb::Status::InvalidArgument("encryption is not supported");
 }
