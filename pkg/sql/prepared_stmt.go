@@ -52,15 +52,11 @@ type PreparedStatement struct {
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
 
-	memAcc WrappableMemoryAccount
-	// constantAcc handles the allocation of various constant-folded values which
-	// are generated while planning the statement.
-	constantAcc mon.BoundAccount
+	memAcc mon.BoundAccount
 }
 
-func (p *PreparedStatement) close(ctx context.Context, s *Session) {
-	p.memAcc.Wsession(s).Close(ctx)
-	p.constantAcc.Close(ctx)
+func (p *PreparedStatement) close(ctx context.Context) {
+	p.memAcc.Close(ctx)
 }
 
 // PreparedStatements is a mapping of PreparedStatement names to their
@@ -135,12 +131,12 @@ func (ps PreparedStatements) New(
 	// statement name. When we start storing the prepared query plan
 	// during prepare, this should be tallied up to the monitor as well.
 	sz := int64(uintptr(len(name)+len(stmtStr)) + unsafe.Sizeof(*pStmt))
-	if err := pStmt.memAcc.Wsession(ps.session).OpenAndInit(ps.session.Ctx(), sz); err != nil {
+	if err := pStmt.memAcc.Grow(ps.session.Ctx(), sz); err != nil {
 		return nil, err
 	}
 
 	if prevStmt, ok := ps.Get(name); ok {
-		prevStmt.close(ps.session.Ctx(), ps.session)
+		prevStmt.close(ps.session.Ctx())
 	}
 
 	pStmt.Str = stmtStr
@@ -156,11 +152,11 @@ func (ps PreparedStatements) Delete(ctx context.Context, name string) bool {
 			for portalName := range stmt.portalNames {
 				if portal, ok := ps.session.PreparedPortals.Get(name); ok {
 					delete(ps.session.PreparedPortals.portals, portalName)
-					portal.memAcc.Wsession(ps.session).Close(ctx)
+					portal.memAcc.Close(ctx)
 				}
 			}
 		}
-		stmt.close(ctx, ps.session)
+		stmt.close(ctx)
 		delete(ps.stmts, name)
 		return true
 	}
@@ -170,10 +166,10 @@ func (ps PreparedStatements) Delete(ctx context.Context, name string) bool {
 // closeAll de-registers all statements and portals from the monitor.
 func (ps PreparedStatements) closeAll(ctx context.Context, s *Session) {
 	for _, stmt := range ps.stmts {
-		stmt.close(ctx, s)
+		stmt.close(ctx)
 	}
 	for _, portal := range s.PreparedPortals.portals {
-		portal.memAcc.Wsession(s).Close(ctx)
+		portal.memAcc.Close(ctx)
 	}
 }
 
@@ -202,7 +198,7 @@ type PreparedPortal struct {
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
 
-	memAcc WrappableMemoryAccount
+	memAcc mon.BoundAccount
 }
 
 // PreparedPortals is a mapping of PreparedPortal names to their corresponding
@@ -237,18 +233,19 @@ func (pp PreparedPortals) New(
 	ctx context.Context, name string, stmt *PreparedStatement, qargs tree.QueryArguments,
 ) (*PreparedPortal, error) {
 	portal := &PreparedPortal{
-		Stmt:  stmt,
-		Qargs: qargs,
+		Stmt:   stmt,
+		Qargs:  qargs,
+		memAcc: pp.session.mon.MakeBoundAccount(),
 	}
 	sz := int64(uintptr(len(name)) + unsafe.Sizeof(*portal))
-	if err := portal.memAcc.Wsession(pp.session).OpenAndInit(ctx, sz); err != nil {
+	if err := portal.memAcc.Grow(ctx, sz); err != nil {
 		return nil, err
 	}
 
 	stmt.portalNames[name] = struct{}{}
 
 	if prevPortal, ok := pp.Get(name); ok {
-		prevPortal.memAcc.Wsession(pp.session).Close(ctx)
+		prevPortal.memAcc.Close(ctx)
 	}
 
 	pp.portals[name] = portal
@@ -260,7 +257,7 @@ func (pp PreparedPortals) New(
 func (pp PreparedPortals) Delete(ctx context.Context, name string) bool {
 	if portal, ok := pp.Get(name); ok {
 		delete(portal.Stmt.portalNames, name)
-		portal.memAcc.Wsession(pp.session).Close(ctx)
+		portal.memAcc.Close(ctx)
 		delete(pp.portals, name)
 		return true
 	}
