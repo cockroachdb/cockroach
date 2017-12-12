@@ -3430,6 +3430,43 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
+	// Separate the MsgApp messages from all other Raft message types so that we
+	// can take advantage of the optimization discussed in the Raft thesis under
+	// the section: `10.2.1 Writing to the leader’s disk in parallel`. The
+	// optimization suggests that instead of a leader writing new log entries to
+	// disk before replicating them to its followers, the leader can instead
+	// write the entries to disk in parallel with replicating to its followers
+	// and them writing to their disks.
+	//
+	// Here, we invoke this optimization by:
+	// 1. sending all MsgApps.
+	// 2. syncing all entries and Raft state to disk.
+	// 3. sending all other messages.
+	//
+	// Since this is all handled in handleRaftReadyRaftMuLocked, we're assured
+	// that even though we may sync new entries to disk after sending them in
+	// MsgApps to followers, we'll always have them synced to disk before we
+	// process followers' MsgAppResps for the corresponding entries because this
+	// entire method requires RaftMu to be locked. This is a requirement because
+	// etcd/raft does not support commit quorums that do not include the leader,
+	// even though the Raft thesis states that this would technically be safe:
+	// > The leader may even commit an entry before it has been written to its
+	// > own disk, if a majority of followers have written it to their disks;
+	// > this is still safe.
+	//
+	// However, MsgApps are also used to inform followers of committed entries
+	// through the Commit index that they contains. Because the optimization
+	// sends all MsgApps before syncing to disc, we may send out a commit index
+	// in a MsgApp that we have not ourselves written in HardState.Commit. This
+	// is ok, because the Commit index can be treated as volatile state, as is
+	// supported by raft.MustSync. The Raft thesis corroborates this, stating in
+	// section: `3.8 Persisted state and server restarts` that:
+	// > Other state variables are safe to lose on a restart, as they can all be
+	// > recreated. The most interesting example is the commit index, which can
+	// > safely be reinitialized to zero on a restart.
+	mgsApps, otherMsgs := splitMsgApps(rd.Messages)
+	r.sendRaftMessages(ctx, mgsApps)
+
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed via the "distinct" batch
 	// which passes the reads through to the underlying DB.
@@ -3515,7 +3552,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	r.mu.Unlock()
 
-	r.sendRaftMessages(ctx, rd.Messages)
+	r.sendRaftMessages(ctx, otherMsgs)
 
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
@@ -3645,6 +3682,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return stats, expl, errors.Wrap(err, expl)
 	}
 	return stats, "", nil
+}
+
+// splitMsgApps splits the Raft message slice into two slices, one containing
+// MsgApps and one containing all other message types. Each slice retains the
+// relative ordering between messages in the original slice.
+func splitMsgApps(msgs []raftpb.Message) (mgsApps, otherMsgs []raftpb.Message) {
+	splitIdx := 0
+	for i, msg := range msgs {
+		if msg.Type == raftpb.MsgApp {
+			msgs[i], msgs[splitIdx] = msgs[splitIdx], msgs[i]
+			splitIdx++
+		}
+	}
+	return msgs[:splitIdx], msgs[splitIdx:]
 }
 
 func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
