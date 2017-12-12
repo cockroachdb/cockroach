@@ -38,7 +38,7 @@ import (
 
 var cacheImplConstrs = []func(clock *hlc.Clock) Cache{
 	func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
-	func(clock *hlc.Clock) Cache { return newSklImpl(clock, 0, MakeMetrics()) },
+	func(clock *hlc.Clock) Cache { return newSklImpl(clock, TestSklPageSize, MakeMetrics()) },
 }
 
 func forEachCacheImpl(
@@ -452,6 +452,27 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 			t.Errorf("expected 'a'-'c' to have timestamp %s, but found %s", ts1, ts)
 		} else if txn != (noTxnID) {
 			t.Errorf("expected 'a'-'c' to have zero txn id, but found %s", txn)
+		}
+	})
+}
+
+// TestTimestampCacheLargeKeys verifies that the timestamp cache implementations
+// can support arbitrarily large keys lengths. This is important because we don't
+// place a hard limit on this anywhere else.
+func TestTimestampCacheLargeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
+		keyStart := roachpb.Key(make([]byte, 5*TestSklPageSize))
+		keyEnd := keyStart.Next()
+		ts1 := clock.Now()
+		txn1 := uuid.MakeV4()
+
+		tc.Add(keyStart, keyEnd, ts1, txn1, true)
+		if ts, txn := tc.GetMaxRead(keyStart, keyEnd); ts != ts1 {
+			t.Errorf("expected key range to have timestamp %s, but found %s", ts1, ts)
+		} else if txn != txn1 {
+			t.Errorf("expected key range to have txn id %s, but found %s", txn1, txn)
 		}
 	})
 }
