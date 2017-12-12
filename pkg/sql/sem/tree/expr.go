@@ -945,6 +945,12 @@ type FuncExpr struct {
 	fn Builtin
 }
 
+// ResolvedFunc returns the function definition; can only be called after
+// Resolve (which happens during TypeCheck).
+func (node *FuncExpr) ResolvedFunc() *FunctionDefinition {
+	return node.Func.FunctionReference.(*FunctionDefinition)
+}
+
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
 func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext) AggregateFunc {
