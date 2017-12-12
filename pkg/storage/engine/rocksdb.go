@@ -708,9 +708,20 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
-// Compact forces compaction on the database.
+// GetApproximateSize computes approximate size in bytes of sstable
+// files used to store the key value pairs in range start to end.
+func (r *RocksDB) GetApproximateSize(start, end MVCCKey) int64 {
+	return int64(C.DBGetApproximateSize(r.rdb, goToCKey(start), goToCKey(end)))
+}
+
+// Compact forces compaction over the entire database.
 func (r *RocksDB) Compact() error {
 	return statusToError(C.DBCompact(r.rdb))
+}
+
+// CompactRange forces compaction over a specified range of keys in the database.
+func (r *RocksDB) CompactRange(start, end MVCCKey) error {
+	return statusToError(C.DBCompactRange(r.rdb, goToCKey(start), goToCKey(end)))
 }
 
 // Destroy destroys the underlying filesystem data associated with the database.

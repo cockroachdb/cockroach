@@ -228,9 +228,15 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
+	// GetApproximateSize returns the approximate size in bytes used to
+	// store the specified range of key value pairs.
+	GetApproximateSize(start, end MVCCKey) int64
 	// IngestExternalFile links a file into the RocksDB log-structured
 	// merge-tree.
 	IngestExternalFile(ctx context.Context, path string, move bool) error
+	// CompactRange ensures that the specified range of key value pairs is
+	// optimized for space efficiency.
+	CompactRange(start, end MVCCKey) error
 }
 
 // Batch is the interface for batch specific operations.

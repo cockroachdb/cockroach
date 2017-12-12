@@ -111,7 +111,18 @@ func ClearRange(
 		)
 	}
 
-	// Otherwise, clear the key span using engine.ClearRange.
+	// Otherwise, suggest a compaction for the cleared range and clear
+	// the key span using engine.ClearRange.
+	pd.Replicated.SuggestedCompactions = []storagebase.SuggestedCompaction{
+		{
+			StartKey: roachpb.RKey(from.Key),
+			EndKey:   roachpb.RKey(to.Key),
+			Compaction: enginepb.Compaction{
+				Cleared: true,
+				Bytes:   statsDelta.KeyBytes + statsDelta.ValBytes,
+			},
+		},
+	}
 	return pd, batch.ClearRange(from, to)
 }
 
