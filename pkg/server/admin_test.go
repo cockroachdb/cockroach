@@ -1182,6 +1182,46 @@ func TestAdminAPIJobs(t *testing.T) {
 	}
 }
 
+func TestAdminAPILocations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	testLocations := []struct {
+		localityKey   string
+		localityValue string
+		latitude      float64
+		longitude     float64
+	}{
+		{"city", "Des Moines", 41.60054, -93.60911},
+		{"city", "New York City", 40.71427, -74.00597},
+		{"city", "Seattle", 47.60621, -122.33207},
+	}
+	for _, loc := range testLocations {
+		sqlDB.Exec(t,
+			`INSERT INTO system.locations ("localityKey", "localityValue", latitude, longitude) VALUES ($1, $2, $3, $4)`,
+			loc.localityKey, loc.localityValue, loc.latitude, loc.longitude,
+		)
+	}
+	var res serverpb.LocationsResponse
+	if err := getAdminJSONProto(s, "locations", &res); err != nil {
+		t.Fatal(err)
+	}
+	for i, loc := range testLocations {
+		expLoc := serverpb.LocationsResponse_Location{
+			LocalityKey:   loc.localityKey,
+			LocalityValue: loc.localityValue,
+			Latitude:      loc.latitude,
+			Longitude:     loc.longitude,
+		}
+		if !reflect.DeepEqual(res.Locations[i], expLoc) {
+			t.Errorf("%d: expected location %v, but got %v", i, expLoc, res.Locations[i])
+		}
+	}
+}
+
 func TestAdminAPIQueryPlan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

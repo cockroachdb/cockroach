@@ -500,6 +500,7 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
 624432001   3211628798  2         false        false         false
 724530982   908875140   2         true         true          false
 2557995824  780323485   2         false        false         false
+2751284469  3570422629  2         true         true          false
 3505585425  2199392917  2         true         true          false
 3491800018  3270885600  2         true         true          false
 3501101122  3640657984  2         true         true          false
@@ -514,6 +515,7 @@ indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 624432001   false         false           true        false         false
 724530982   true          false           true        false         false
 2557995824  false         false           true        false         false
+2751284469  true          false           true        false         false
 3505585425  true          false           true        false         false
 3491800018  true          false           true        false         false
 3501101122  true          false           true        false         false
@@ -528,6 +530,7 @@ indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclas
 624432001   3211628798  true       false           1 2     0             0         0          NULL      NULL
 724530982   908875140   true       false           1 6     0             0         0          NULL      NULL
 2557995824  780323485   true       false           2 3     0             0         0          NULL      NULL
+2751284469  3570422629  true       false           1 2     0             0         0          NULL      NULL
 3505585425  2199392917  true       false           1 2     0             0         0          NULL      NULL
 3491800018  3270885600  true       false           1 7     0             0         0          NULL      NULL
 3501101122  3640657984  true       false           1 2     0             0         0          NULL      NULL
