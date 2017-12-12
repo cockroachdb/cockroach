@@ -31,6 +31,7 @@
 #include "encoding.h"
 #include "env_switching.h"
 #include "eventlistener.h"
+#include "fmt.h"
 #include "keys.h"
 #include "protos/roachpb/data.pb.h"
 #include "protos/roachpb/internal.pb.h"
@@ -372,11 +373,11 @@ DBStatus ToDBStatus(const rocksdb::Status& status) {
   return ToDBString(status.ToString());
 }
 
-DBStatus FmtStatus(const char* fmt, ...) {
+DBStatus FmtStatus(const char* fmt_str, ...) {
   va_list ap;
-  va_start(ap, fmt);
+  va_start(ap, fmt_str);
   std::string str;
-  google::protobuf::StringAppendV(&str, fmt, ap);
+  fmt::StringAppendV(&str, fmt_str, ap);
   va_end(ap);
   return ToDBString(str);
 }
@@ -1342,8 +1343,8 @@ DBString DBEngine::GetUserProperties() {
     auto ts_min = userprops.find("crdb.ts.min");
     if (ts_min != userprops.end() && !ts_min->second.empty()) {
       if (!DecodeHLCTimestamp(rocksdb::Slice(ts_min->second), sst->mutable_ts_min())) {
-        google::protobuf::SStringPrintf(all.mutable_error(), "unable to decode crdb.ts.min value '%s' in table %s",
-                                        rocksdb::Slice(ts_min->second).ToString(true).c_str(), sst->path().c_str());
+        fmt::SStringPrintf(all.mutable_error(), "unable to decode crdb.ts.min value '%s' in table %s",
+                           rocksdb::Slice(ts_min->second).ToString(true).c_str(), sst->path().c_str());
         break;
       }
     }
@@ -1351,8 +1352,8 @@ DBString DBEngine::GetUserProperties() {
     auto ts_max = userprops.find("crdb.ts.max");
     if (ts_max != userprops.end() && !ts_max->second.empty()) {
       if (!DecodeHLCTimestamp(rocksdb::Slice(ts_max->second), sst->mutable_ts_max())) {
-        google::protobuf::SStringPrintf(all.mutable_error(), "unable to decode crdb.ts.max value '%s' in table %s",
-                                        rocksdb::Slice(ts_max->second).ToString(true).c_str(), sst->path().c_str());
+        fmt::SStringPrintf(all.mutable_error(), "unable to decode crdb.ts.max value '%s' in table %s",
+                           rocksdb::Slice(ts_max->second).ToString(true).c_str(), sst->path().c_str());
         break;
       }
     }
@@ -1744,7 +1745,7 @@ DBStatus DBCompact(DBEngine* db) {
   return ToDBStatus(db->rep->CompactRange(options, NULL, NULL));
 }
 
-DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t *size) {
+DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size) {
   const std::string start_key(EncodeKey(start));
   const std::string end_key(EncodeKey(end));
   const rocksdb::Range r(start_key, end_key);
