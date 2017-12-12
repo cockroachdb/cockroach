@@ -261,16 +261,20 @@ func (h *httpStorage) Conf() roachpb.ExportStorage {
 }
 
 func (h *httpStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	return h.req("GET", basename, nil)
+	resp, err := h.req("GET", basename, nil)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
 }
 
 func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
-	_, err := h.req("PUT", basename, content)
+	_, err := h.reqNoBody("PUT", basename, content)
 	return err
 }
 
 func (h *httpStorage) Delete(_ context.Context, basename string) error {
-	_, err := h.req("DELETE", basename, nil)
+	_, err := h.reqNoBody("DELETE", basename, nil)
 	return err
 }
 
@@ -278,7 +282,16 @@ func (h *httpStorage) Close() error {
 	return nil
 }
 
-func (h *httpStorage) req(method, file string, body io.Reader) (io.ReadCloser, error) {
+// reqNoBody is like req but it closes the response body.
+func (h *httpStorage) reqNoBody(method, file string, body io.Reader) (*http.Response, error) {
+	resp, err := h.req(method, file, body)
+	if resp != nil {
+		resp.Body.Close()
+	}
+	return resp, err
+}
+
+func (h *httpStorage) req(method, file string, body io.Reader) (*http.Response, error) {
 	dest := *h.base
 	if hosts := len(h.hosts); hosts > 1 {
 		if file == "" {
@@ -300,12 +313,15 @@ func (h *httpStorage) req(method, file string, body io.Reader) (io.ReadCloser, e
 	if err != nil {
 		return nil, errors.Wrapf(err, "error exeucting request %s %q", method, url)
 	}
-	if resp.StatusCode != 200 {
+	switch resp.StatusCode {
+	case 200, 201, 204:
+		// ignore
+	default:
 		body, _ := ioutil.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		return nil, errors.Errorf("error response from server: %s %q", resp.Status, body)
 	}
-	return resp.Body, nil
+	return resp, nil
 }
 
 type s3Storage struct {
