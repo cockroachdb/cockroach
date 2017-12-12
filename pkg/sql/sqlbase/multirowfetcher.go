@@ -1031,8 +1031,9 @@ func (mrf *MultiRowFetcher) checkKeyOrdering(ctx context.Context) error {
 	}
 
 	evalCtx := tree.EvalContext{}
-	for i := range mrf.rowReadyTable.index.ColumnIDs {
-		result := mrf.rowReadyTable.decodedRow[i].Compare(&evalCtx, mrf.rowReadyTable.lastDatums[i])
+	for i, id := range mrf.rowReadyTable.index.ColumnIDs {
+		idx := mrf.rowReadyTable.colIdxMap[id]
+		result := mrf.rowReadyTable.decodedRow[idx].Compare(&evalCtx, mrf.rowReadyTable.lastDatums[idx])
 		expectedDirection := mrf.rowReadyTable.index.ColumnDirections[i]
 		if mrf.reverse && expectedDirection == IndexDescriptor_ASC {
 			expectedDirection = IndexDescriptor_DESC
