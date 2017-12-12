@@ -2689,7 +2689,7 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	case *DCollatedString:
 		return NewDCollatedString(d.Contents, expr.Locale, &ctx.collationEnv), nil
 	default:
-		panic(fmt.Sprintf("invalid argument to COLLATE: %s", d))
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", d)
 	}
 }
 
