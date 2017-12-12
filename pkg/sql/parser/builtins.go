@@ -1726,7 +1726,7 @@ CockroachDB supports the following flags:
 	"array_positions": arrayBuiltin(func(typ Type) Builtin {
 		return Builtin{
 			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
-			ReturnType:   fixedReturnType(TArray{typ}),
+			ReturnType:   fixedReturnType(TArray{TypeInt}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
