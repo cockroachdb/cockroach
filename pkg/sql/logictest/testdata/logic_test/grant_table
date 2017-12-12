@@ -41,6 +41,11 @@ system    lease             root       GRANT
 system    lease             root       INSERT
 system    lease             root       SELECT
 system    lease             root       UPDATE
+system    locations         root       DELETE
+system    locations         root       GRANT
+system    locations         root       INSERT
+system    locations         root       SELECT
+system    locations         root       UPDATE
 system    namespace         root       GRANT
 system    namespace         root       SELECT
 system    rangelog          root       DELETE

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
@@ -160,6 +161,18 @@ CREATE TABLE system.table_statistics (
 	PRIMARY KEY ("tableID", "statisticID"),
 	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
 );`
+
+	// locations are used to map a locality specified by a node to geographic
+	// latitude, longitude coordinates, specified as degrees.
+	LocationsTableSchema = `
+CREATE TABLE system.locations (
+  "localityKey"   STRING,
+  "localityValue" STRING,
+  latitude        DECIMAL(18,15) NOT NULL,
+  longitude       DECIMAL(18,15) NOT NULL,
+  PRIMARY KEY ("localityKey", "localityValue"),
+  FAMILY ("localityKey", "localityValue", latitude, longitude)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -214,6 +227,7 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	keys.JobsTableID:            {privilege.ReadWriteData},
 	keys.WebSessionsTableID:     {privilege.ReadWriteData},
 	keys.TableStatisticsTableID: {privilege.ReadWriteData},
+	keys.LocationsTableID:       {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -679,6 +693,48 @@ var (
 		},
 		NextIndexID:    2,
 		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.TableStatisticsTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	latLonDecimal = ColumnType{
+		SemanticType: ColumnType_DECIMAL,
+		Precision:    18,
+		Width:        15,
+	}
+
+	// LocationsTable is the descriptor for the locations table.
+	LocationsTable = TableDescriptor{
+		Name:     "locations",
+		ID:       keys.LocationsTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "localityKey", ID: 1, Type: colTypeString},
+			{Name: "localityValue", ID: 2, Type: colTypeString},
+			{Name: "latitude", ID: 3, Type: latLonDecimal},
+			{Name: "longitude", ID: 4, Type: latLonDecimal},
+		},
+		NextColumnID: 5,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "fam_0_localityKey_localityValue_latitude_longitude",
+				ID:          0,
+				ColumnNames: []string{"localityKey", "localityValue", "latitude", "longitude"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"localityKey", "localityValue"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+		},
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.LocationsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
