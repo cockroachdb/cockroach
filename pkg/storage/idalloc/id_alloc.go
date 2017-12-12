@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package idalloc
 
 import (
 	"context"
@@ -20,21 +20,22 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/pkg/errors"
 )
 
-// An idAllocator is used to increment a key in allocation blocks
+// An Allocator is used to increment a key in allocation blocks
 // of arbitrary size starting at a minimum ID.
 //
 // Note: if all you want is to increment a key and retry on retryable errors,
 // see client.IncrementValRetryable().
-type idAllocator struct {
+type Allocator struct {
 	log.AmbientContext
 
 	idKey     atomic.Value
@@ -46,18 +47,18 @@ type idAllocator struct {
 	once      sync.Once
 }
 
-// newIDAllocator creates a new ID allocator which increments the
+// NewAllocator creates a new ID allocator which increments the
 // specified key in allocation blocks of size blockSize, with
 // allocated IDs starting at minID. Allocated IDs are positive
 // integers.
-func newIDAllocator(
+func NewAllocator(
 	ambient log.AmbientContext,
 	idKey roachpb.Key,
 	db *client.DB,
 	minID uint32,
 	blockSize uint32,
 	stopper *stop.Stopper,
-) (*idAllocator, error) {
+) (*Allocator, error) {
 	// minID can't be the zero value because reads from closed channels return
 	// the zero value.
 	if minID == 0 {
@@ -66,7 +67,7 @@ func newIDAllocator(
 	if blockSize == 0 {
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", blockSize)
 	}
-	ia := &idAllocator{
+	ia := &Allocator{
 		AmbientContext: ambient,
 		db:             db,
 		minID:          minID,
@@ -80,7 +81,7 @@ func newIDAllocator(
 }
 
 // Allocate allocates a new ID from the global KV DB.
-func (ia *idAllocator) Allocate(ctx context.Context) (uint32, error) {
+func (ia *Allocator) Allocate(ctx context.Context) (uint32, error) {
 	ia.once.Do(ia.start)
 
 	select {
@@ -95,7 +96,7 @@ func (ia *idAllocator) Allocate(ctx context.Context) (uint32, error) {
 	}
 }
 
-func (ia *idAllocator) start() {
+func (ia *Allocator) start() {
 	ctx := ia.AnnotateCtx(context.Background())
 	ia.stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer close(ia.ids)
@@ -107,7 +108,7 @@ func (ia *idAllocator) start() {
 				var res client.KeyValue
 				for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 					idKey := ia.idKey.Load().(roachpb.Key)
-					if err := ia.stopper.RunTask(ctx, "storage.idAllocator: allocating block", func(ctx context.Context) {
+					if err := ia.stopper.RunTask(ctx, "storage.Allocator: allocating block", func(ctx context.Context) {
 						res, err = ia.db.Inc(ctx, idKey, int64(ia.blockSize))
 					}); err != nil {
 						log.Warning(ctx, err)
