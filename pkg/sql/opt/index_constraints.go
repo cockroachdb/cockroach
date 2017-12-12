@@ -48,10 +48,14 @@ func (k LogicalKey) String() string {
 	return buf.String()
 }
 
-// set copies the value from the given key.
-func (k *LogicalKey) set(l LogicalKey) {
-	k.Vals = append(k.Vals[:0], l.Vals...)
-	k.Inclusive = l.Inclusive
+// Returns a copy that can be extended independently.
+func (k LogicalKey) clone() LogicalKey {
+	// Since the only modification we allow is extension, it's ok
+	// to alias the slice as long as we limit the capacity.
+	return LogicalKey{
+		Vals:      k.Vals[:len(k.Vals):len(k.Vals)],
+		Inclusive: k.Inclusive,
+	}
 }
 
 // extend appends the given key.
@@ -128,7 +132,7 @@ type LogicalSpans []LogicalSpan
 
 type indexConstraintCalc struct {
 	// types of the columns of the index we are generating constraints for.
-	types []types.T
+	colTypes []types.T
 
 	// andExprs is a set of conjuncts that make up the filter.
 	andExprs []*expr
@@ -143,7 +147,7 @@ func makeIndexConstraintCalc(
 	colTypes []types.T, andExprs []*expr, evalCtx *tree.EvalContext,
 ) indexConstraintCalc {
 	return indexConstraintCalc{
-		types:       colTypes,
+		colTypes:    colTypes,
 		andExprs:    andExprs,
 		evalCtx:     evalCtx,
 		constraints: make([]LogicalSpans, len(colTypes)),
@@ -317,23 +321,42 @@ func (c *indexConstraintCalc) preferInclusive(sp *LogicalSpan) {
 	}
 }
 
-// intersectSpan intersects two LogicalSpans; a is modified with the result.
-//
-// If there is no intersection, returns false (and span a is invalid).
-func (c *indexConstraintCalc) intersectSpan(a *LogicalSpan, b *LogicalSpan) bool {
-	changed := false
+// intersectSpan intersects two LogicalSpans and returns
+// a new LogicalSpan. If there is no intersection, returns ok=false.
+func (c *indexConstraintCalc) intersectSpan(
+	a *LogicalSpan, b *LogicalSpan,
+) (_ LogicalSpan, ok bool) {
+	res := *a
+	changed := 0
 	if c.compare(a.Start, b.Start, compareStartKeys) < 0 {
-		a.Start.set(b.Start)
-		changed = true
+		res.Start = b.Start
+		changed++
 	}
 	if c.compare(a.End, b.End, compareEndKeys) > 0 {
-		a.End.set(b.End)
-		changed = true
+		res.End = b.End
+		changed++
 	}
-	if changed && !c.isSpanValid(a) {
-		return false
+	// If changed is 0 or 2, the result is identical to one of the input spans.
+	if changed == 1 && !c.isSpanValid(&res) {
+		return LogicalSpan{}, false
 	}
-	return true
+	return LogicalSpan{Start: res.Start.clone(), End: res.End.clone()}, true
+}
+
+// intersectSpanSet intersects a span with (the union of) a set of spans. The
+// spans in spanSet must be ordered and non-overlapping. The resulting spans are
+// guaranteed to be ordered and non-overlapping.
+func (c *indexConstraintCalc) intersectSpanSet(a *LogicalSpan, spanSet LogicalSpans) LogicalSpans {
+	c.checkSpans(spanSet)
+
+	res := make(LogicalSpans, 0, len(spanSet))
+	for i := range spanSet {
+		if sp, ok := c.intersectSpan(a, &spanSet[i]); ok {
+			res = append(res, sp)
+		}
+	}
+	c.checkSpans(res)
+	return res
 }
 
 // makeSpansForExpr creates spans for index columns starting at <depth>
@@ -341,7 +364,7 @@ func (c *indexConstraintCalc) intersectSpan(a *LogicalSpan, b *LogicalSpan) bool
 func (c *indexConstraintCalc) makeSpansForExpr(depth int, e *expr) (LogicalSpans, bool) {
 	// Check if the operator is supported.
 	switch e.op {
-	case eqOp, ltOp, gtOp, leOp, geOp:
+	case eqOp, ltOp, gtOp, leOp, geOp, neOp:
 		// We support comparisons when the left-hand side is an indexed var for the
 		// current column and the right-hand side is a constant.
 		if !isIndexedVar(e.children[0], depth) || e.children[1].op != constOp {
@@ -363,6 +386,11 @@ func (c *indexConstraintCalc) makeSpansForExpr(depth int, e *expr) (LogicalSpans
 			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 		case geOp:
 			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
+		case neOp:
+			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
+			sp2 := MakeFullSpan()
+			sp2.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
+			return LogicalSpans{sp, sp2}, true
 		}
 		return LogicalSpans{sp}, true
 
@@ -410,41 +438,117 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 		if !ok {
 			continue
 		}
-		// TODO(radu): for now we assume exprSpans contains exactly one span.
-		// Intersect all existing spans with this new span.
-		for i := 0; i < len(spans); i++ {
-			if !c.intersectSpan(&spans[i], &exprSpans[0]) {
-				// Remove this span.
-				copy(spans[i:], spans[i+1:])
-				spans = spans[:len(spans)-1]
+
+		if len(exprSpans) == 1 {
+			// More efficient path for the common case of a single expression span.
+			for i := 0; i < len(spans); i++ {
+				if spans[i], ok = c.intersectSpan(&spans[i], &exprSpans[0]); !ok {
+					// Remove this span.
+					copy(spans[i:], spans[i+1:])
+					spans = spans[:len(spans)-1]
+				}
 			}
+		} else {
+			var newSpans LogicalSpans
+			for i := range spans {
+				newSpans = append(newSpans, c.intersectSpanSet(&spans[i], exprSpans)...)
+			}
+			spans = newSpans
 		}
 	}
 
 	// Try to extend the spans with constraints on more columns.
-	for i := range spans {
+
+	// newSpans accumulates the extended spans, but is initialized only if we need
+	// to break up a span into multiple spans (otherwise spans is modified in
+	// place).
+	var newSpans LogicalSpans
+	for i := 0; i < len(spans); i++ {
+		start, end := spans[i].Start, spans[i].End
+		startLen, endLen := len(start.Vals), len(end.Vals)
+
 		// Currently startLen, endLen can be at most 1; but this will change
 		// when we will support tuple expressions.
-		startLen := len(spans[i].Start.Vals)
-		if startLen > 0 && depth+startLen < len(c.types) && spans[i].Start.Inclusive {
+
+		if startLen == endLen && startLen > 0 && depth+startLen < len(c.colTypes) &&
+			c.compareKeyVals(start.Vals, end.Vals) == 0 {
+			// Special case when the start and end keys are equal (i.e. an exact value
+			// on this column). This is the only case where we can break up a single
+			// span into multiple spans.
+			//
+			// For example:
+			//  @1 = 1 AND @2 IN (3, 4, 5)
+			//  At depth 0 so far we have:
+			//    [/1 - /1]
+			//  At depth 1 we have:
+			//    [/3 - /3]
+			//    [/4 - /4]
+			//    [/5 - /5]
+			//  We break up the span to get:
+			//    [/1/3 - /1/3]
+			//    [/1/4 - /1/4]
+			//    [/1/5 - /1/5]
+			s := c.calcDepth(depth + startLen)
+			switch len(s) {
+			case 0:
+			case 1:
+				spans[i].Start.extend(s[0].Start)
+				spans[i].End.extend(s[0].End)
+				if newSpans != nil {
+					newSpans = append(newSpans, spans[i])
+				}
+			default:
+				if newSpans == nil {
+					newSpans = make(LogicalSpans, 0, len(spans)-1+len(s))
+					newSpans = append(newSpans, spans[:i]...)
+				}
+				for j := range s {
+					newSpan := spans[i]
+					newSpan.Start.extend(s[j].Start)
+					newSpan.End.extend(s[j].End)
+					newSpans = append(newSpans, newSpan)
+				}
+			}
+			continue
+		}
+
+		if startLen > 0 && depth+startLen < len(c.colTypes) && spans[i].Start.Inclusive {
 			// We can advance the starting boundary. Calculate constraints for the
 			// column that follows.
 			s := c.calcDepth(depth + startLen)
-			// TODO(radu): support multiple constraints.
-			if len(s) == 1 {
+			if len(s) > 0 {
+				// If we have multiple constraints, we can only use the start of the
+				// first one to tighten the span.
+				// For example:
+				//   @1 >= 2 AND @2 IN (1, 2, 3).
+				//   At depth 0 so far we have:
+				//     [/2 - ]
+				//   At depth 1 we have:
+				//     [/1 - /1]
+				//     [/2 - /2]
+				//     [/3 - /3]
+				//   The best we can do is tighten the span to:
+				//     [/2/1 - ]
 				spans[i].Start.extend(s[0].Start)
 			}
 		}
-		endLen := len(spans[i].End.Vals)
-		if endLen > 0 && depth+endLen < len(c.types) && spans[i].End.Inclusive {
+
+		if endLen > 0 && depth+endLen < len(c.colTypes) && spans[i].End.Inclusive {
 			// We can restrict the ending boundary. Calculate constraints for the
 			// column that follows.
 			s := c.calcDepth(depth + endLen)
-			// TODO(radu): support multiple constraints.
-			if len(s) == 1 {
-				spans[i].End.extend(s[0].End)
+			if len(s) > 0 {
+				// If we have multiple constraints, we can only use the end of the
+				// last one to tighten the span.
+				spans[i].End.extend(s[len(s)-1].End)
 			}
 		}
+		if newSpans != nil {
+			newSpans = append(newSpans, spans[i])
+		}
+	}
+	if newSpans != nil {
+		spans = newSpans
 	}
 	c.checkSpans(spans)
 	c.constraints[depth] = spans
