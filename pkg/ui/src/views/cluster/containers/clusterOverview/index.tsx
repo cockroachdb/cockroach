@@ -13,6 +13,9 @@ import capacityChart from "./capacity";
 
 import "./cluster.styl";
 
+// tslint:disable-next-line:no-var-requires
+const spinner = require<string>("assets/spinner.gif");
+
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent(capacityChart);
 
@@ -151,15 +154,23 @@ interface ClusterSummaryProps {
   capacityUsage: CapacityUsageProps;
   nodeLiveness: NodeLivenessProps;
   replicationStatus: ReplicationStatusProps;
+  loading: boolean;
 }
 
 class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
   render() {
-    const children = [
-      ...renderCapacityUsage(this.props.capacityUsage),
-      ...renderNodeLiveness(this.props.nodeLiveness),
-      ...renderReplicationStatus(this.props.replicationStatus),
-    ];
+    const children = [];
+
+    if (this.props.loading) {
+      children.push(<img className="visualization__spinner" src={spinner} />);
+    } else {
+      children.push(
+        ...renderCapacityUsage(this.props.capacityUsage),
+        ...renderNodeLiveness(this.props.nodeLiveness),
+        ...renderReplicationStatus(this.props.replicationStatus)
+      );
+    }
+
     return <section className="cluster-summary" children={children} />;
   }
 }
@@ -169,6 +180,7 @@ function mapStateToClusterSummaryProps (state: AdminUIState) {
     capacityUsage: mapStateToCapacityUsageProps(state),
     nodeLiveness: mapStateToNodeLivenessProps(state),
     replicationStatus: mapStateToReplicationStatusProps(state),
+    loading: !state.cachedData.nodes.data,
   };
 }
 
