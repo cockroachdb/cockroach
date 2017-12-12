@@ -103,6 +103,9 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.HasPrefix(s, "REVOKE") || strings.HasPrefix(s, "GRANT") {
 			return errors.New("TODO(mjibson): figure out why these run slowly, may be a bug")
 		}
+		if strings.HasPrefix(s, "SET SESSION CHARACTERISTICS AS TRANSACTION") {
+			return errors.New("setting session characteristics is unsupported")
+		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(`CREATE DATABASE IF NOT EXISTS ident`); err != nil {
