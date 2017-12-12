@@ -1,5 +1,5 @@
 - Feature Name: Interleaved Table Joins
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-10-03
 - Authors: Richard Wu
 - RFC PR: [#19028](https://github.com/cockroachdb/cockroach/pull/19028)
@@ -95,7 +95,7 @@ docs themselves](https://www.cockroachlabs.com/docs/stable/interleave-in-parent.
 
 To illustrate the current behavior, let us interleave table `child` into
 table `parent`:
-```
+```sql
 CREATE DATABASE foo;
 
 CREATE TABLE IF NOT EXISTS parent (id INT PRIMARY KEY);
@@ -251,7 +251,7 @@ Note every type of join (inner, left, right, full) can easily be supported since
 
 For the query described above where we do a simple join between table `parent`
 and table `child` where `child` is `INTERLEAVED INTO PARENT` `parent`
-```
+```sql
 SELECT * FROM child JOIN parent ON child.parent_id = parent.id
 ```
 
@@ -648,7 +648,7 @@ defined as as node whose subtrees contain `A` and `B`.
 Imagine that we wanted to perform a join between two children tables on their
 parent's primary key. For example, suppose we have table `parent, child1,
 child2`:
-```
+```sql
 CREATE TABLE parent (id INT PRIMARY KEY);
 
 CREATE TABLE child1 (id1 INT, pid INT, PRIMARY KEY (pid, id1)) INTERLEAVE IN PARENT parent (pid);
@@ -844,15 +844,11 @@ customers
 We may want retrieve all `items` that `customers` have purchased joined with
 their customer information (stored in `customers`). The corresponding
 query might look like
-```
-SELECT * FROM
-  customers
+```sql
+SELECT * FROM customers
   JOIN
-    (SELECT
-       *
-     FROM
-       orders JOIN items ON orders.id = items.order_id
-    )
+    SELECT * FROM orders
+    JOIN items ON orders.id = items.order_id
   ON customers.id = orders.cus_id
 ```
 
@@ -986,7 +982,7 @@ processor, namely:
 Although we [do not publicly advertise](https://www.cockroachlabs.com/docs/stable/interleave-in-parent.html)
 interleaving secondary indexes under primary indexes, this is possible
 with the syntax
-```
+```sql
 CREATE INDEX secondary_idx ON foo (id, data) INTERLEAVE IN PARENT foo (id)
 ```
 We can thus identify interleaved joins on `indexJoinNode`s (where `left` and `right`
