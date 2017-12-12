@@ -25,6 +25,9 @@ import (
 // DefaultRotationPeriod is the rotation period used if not specified.
 const DefaultRotationPeriod = time.Hour * 24 * 7 // 1 week, give or take time changes.
 
+// Special value of key paths to mean "no encryption". We do not accept empty fields.
+const plaintextFieldValue = "plain"
+
 // StoreEncryptionSpec contains the details that can be specified in the cli via
 // the --enterprise-encryption flag.
 type StoreEncryptionSpec struct {
@@ -94,16 +97,24 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 				return StoreEncryptionSpec{}, err
 			}
 		case "key":
-			var err error
-			es.KeyPath, err = base.GetAbsoluteStorePath("key", value)
-			if err != nil {
-				return StoreEncryptionSpec{}, err
+			if value == plaintextFieldValue {
+				es.KeyPath = plaintextFieldValue
+			} else {
+				var err error
+				es.KeyPath, err = base.GetAbsoluteStorePath("key", value)
+				if err != nil {
+					return StoreEncryptionSpec{}, err
+				}
 			}
 		case "old-key":
-			var err error
-			es.OldKeyPath, err = base.GetAbsoluteStorePath("old-key", value)
-			if err != nil {
-				return StoreEncryptionSpec{}, err
+			if value == plaintextFieldValue {
+				es.OldKeyPath = plaintextFieldValue
+			} else {
+				var err error
+				es.OldKeyPath, err = base.GetAbsoluteStorePath("old-key", value)
+				if err != nil {
+					return StoreEncryptionSpec{}, err
+				}
 			}
 		case "rotation-period":
 			var err error
