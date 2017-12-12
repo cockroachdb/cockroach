@@ -39,16 +39,22 @@ add_library(roach
 )
 target_include_directories(roach
   PUBLIC  ./include
-  PRIVATE ../protobuf/src ../rocksdb/include protos
+  PRIVATE ../protobuf/src
+  PRIVATE ../rocksdb/include
+  PRIVATE protos
 )
 
 add_library(roachccl
   ccl/db.cc
+  ccl/key.cc
+  ccl/key_manager.cc
   protosccl/ccl/baseccl/encryption_options.pb.cc
 )
 target_include_directories(roachccl
+  PRIVATE .. # CryptoPP headers are directly in the directory. Include .. to be able to include <cryptopp/....h>
+  PRIVATE ../protobuf/src
   PRIVATE ../rocksdb/include
-  PRIVATE ../protobuf/src protosccl
+  PRIVATE protosccl
 )
 target_link_libraries(roachccl roach)
 
@@ -67,6 +73,7 @@ set(tests
   db_test.cc
   encoding_test.cc
   ccl/db_test.cc
+  ccl/key_manager_test.cc
 )
 
 # "test" doesn't depend on the actual tests. Let's add a "check" target
@@ -92,20 +99,34 @@ foreach(tsrc ${tests})
   endif()
 
   # Add a new executable and set includes/libraries/properties.
-  add_executable(${tname} ${tsrc})
+  add_executable(${tname} ${tsrc} testutils.cc)
   target_include_directories(${tname}
     PRIVATE ../googletest/googletest/include
-    PRIVATE ../rocksdb/include
     PRIVATE ../protobuf/src
+    PRIVATE ../rocksdb/include
   )
 
-  # Link `ccl/` tests against roachccl.
+  # Link `ccl/` tests against roachccl and CryptoPP.
   if(${tsrc} MATCHES "^ccl/")
-    target_link_libraries(${tname} roachccl)
+    target_link_libraries(${tname}
+      roachccl
+      ${CRYPTOPP_LIB}
+    )
+    target_include_directories(${tname}
+      PRIVATE ../cryptopp
+    )
   endif()
 
   # Add all other libraries.
-  target_link_libraries(${tname} roach ${PROTOBUF_LIB} ${ROCKSDB_LIB} ${SNAPPY_LIB} ${JEMALLOC_LIB} gtest_main pthread)
+  target_link_libraries(${tname}
+    roach
+    gtest_main
+    pthread
+    ${ROCKSDB_LIB}
+    ${PROTOBUF_LIB}
+    ${JEMALLOC_LIB}
+    ${SNAPPY_LIB}
+  )
 
   set_target_properties(${tname} PROPERTIES
     CXX_STANDARD 11
