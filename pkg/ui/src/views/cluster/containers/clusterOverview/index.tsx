@@ -23,7 +23,7 @@ class ClusterTicker extends React.Component<{}, {}> {
   render() {
     return (
       <section className="section cluster-ticker">
-        <h2>Cluster Overview</h2>
+        <h1>Cluster Overview</h1>
       </section>
     );
   }
