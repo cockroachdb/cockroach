@@ -12,18 +12,14 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include "db.h"
-#include "include/libroach.h"
-#include "testutils.h"
+#include <google/protobuf/stubs/stringprintf.h>
+#include <string>
 
-TEST(Libroach, DBOpenHook) {
-  DBOptions db_opts;
-
-  // Try an empty extra_options.
-  db_opts.extra_options = ToDBSlice("");
-  EXPECT_OK(DBOpenHook(db_opts));
-
-  // Try extra_options with anything at all.
-  db_opts.extra_options = ToDBSlice("blah");
-  EXPECT_ERR(DBOpenHook(db_opts), "DBOptions has extra_options, but OSS code cannot handle them");
+std::string FormatString(const char* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  std::string str;
+  google::protobuf::StringAppendV(&str, fmt, ap);
+  va_end(ap);
+  return str;
 }
