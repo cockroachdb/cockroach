@@ -80,6 +80,9 @@ CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
 statement error pgcode 22023 INCREMENT must not be zero
 CREATE SEQUENCE zero_test INCREMENT 0
 
+statement ok
+CREATE SEQUENCE high_minvalue_test MINVALUE 5
+
 # Test unimplemented syntax.
 statement error pq: unimplemented at or near "EOF"
 CREATE SEQUENCE err_test AS INT2
@@ -286,6 +289,22 @@ query I
 SELECT lastval()
 ----
 11
+
+# Setval doesn't let you set values outside the bounds.
+
+statement ok
+CREATE SEQUENCE setval_bounds_test MINVALUE 5 MAXVALUE 10
+
+query I
+SELECT nextval('setval_bounds_test')
+----
+5
+
+statement error pgcode 22003 pq: setval\(\): value 11 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+SELECT setval('setval_bounds_test', 11)
+
+statement error pgcode 22003 pq: setval\(\): value 0 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+SELECT setval('setval_bounds_test', 0)
 
 # nextval fails with nonexistent sequences.
 

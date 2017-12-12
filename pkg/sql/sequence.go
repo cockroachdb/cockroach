@@ -121,7 +121,16 @@ func (p *planner) SetSequenceValue(
 	if err != nil {
 		return err
 	}
+	opts := descriptor.SequenceOpts
+	if newVal > opts.MaxValue || newVal < opts.MinValue {
+		return pgerror.NewErrorf(
+			pgerror.CodeNumericValueOutOfRangeError,
+			`value %d is out of bounds for sequence "%s" (%d..%d)`,
+			newVal, descriptor.Name, opts.MinValue, opts.MaxValue,
+		)
+	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	// TODO(vilterp): not supposed to use Put here
 	return p.txn.Put(ctx, seqValueKey, newVal)
 }
 
