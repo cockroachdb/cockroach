@@ -1936,6 +1936,9 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 		return errors.Errorf("batch timestamp %v must be after GC threshold %v", ts, threshold)
 	}
 
+	if rspan.Key == nil && rspan.EndKey == nil {
+		return nil
+	}
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
@@ -2874,8 +2877,10 @@ func (r *Replica) evaluateProposal(
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
-	res.Replicated.StartKey = rSpan.Key
-	res.Replicated.EndKey = rSpan.EndKey
+	if !r.ClusterSettings().Version.IsActive(cluster.VersionNoRaftProposalKeys) {
+		res.Replicated.DeprecatedStartKey = rSpan.Key
+		res.Replicated.DeprecatedEndKey = rSpan.EndKey
+	}
 
 	if res.WriteBatch == nil {
 		if res.Local.Err == nil {
@@ -4438,13 +4443,8 @@ func (r *Replica) processRaftCommand(
 	}
 
 	var ts hlc.Timestamp
-	var rSpan roachpb.RSpan
 	if idKey != "" {
 		ts = raftCmd.ReplicatedEvalResult.Timestamp
-		rSpan = roachpb.RSpan{
-			Key:    raftCmd.ReplicatedEvalResult.StartKey,
-			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
-		}
 	}
 
 	r.mu.Lock()
@@ -4463,7 +4463,15 @@ func (r *Replica) processRaftCommand(
 	r.mu.Unlock()
 
 	if forcedErr == nil {
-		forcedErr = roachpb.NewError(r.requestCanProceed(rSpan, ts))
+		// We provide an empty key span because we already know that the Raft
+		// command is allowed to apply within its key range. This is guaranteed
+		// by checks upstream of Raft, which perform the same validation, and by
+		// the CommandQueue, which assures that any modifications to the range's
+		// boundaries will be serialized with this command. Finally, the
+		// leaseAppliedIndex check in checkForcedErrLocked ensures that replays
+		// outside of the CommandQueue's control which break this serialization
+		// ordering will already by caught and an error will be thrown.
+		forcedErr = roachpb.NewError(r.requestCanProceed(roachpb.RSpan{}, ts))
 	}
 
 	// applyRaftCommand will return "expected" errors, but may also indicate
@@ -4547,8 +4555,6 @@ func (r *Replica) processRaftCommand(
 				r.raftMu.sideloaded,
 				term,
 				raftIndex,
-				raftCmd.ReplicatedEvalResult.StartKey,
-				raftCmd.ReplicatedEvalResult.EndKey,
 				*raftCmd.ReplicatedEvalResult.AddSSTable,
 			)
 			r.store.metrics.AddSSTableApplications.Inc(1)

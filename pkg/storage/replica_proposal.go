@@ -292,7 +292,6 @@ func addSSTablePreApply(
 	eng engine.Engine,
 	sideloaded sideloadStorage,
 	term, index uint64,
-	startKey, endKey roachpb.RKey,
 	sst storagebase.ReplicatedEvalResult_AddSSTable,
 ) {
 	checksum := util.CRC32(sst.Data)
@@ -390,8 +389,8 @@ func (r *Replica) handleReplicatedEvalResult(
 	{
 		rResult.IsLeaseRequest = false
 		rResult.Timestamp = hlc.Timestamp{}
-		rResult.StartKey = nil
-		rResult.EndKey = nil
+		rResult.DeprecatedStartKey = nil
+		rResult.DeprecatedEndKey = nil
 	}
 
 	if rResult.BlockReads {

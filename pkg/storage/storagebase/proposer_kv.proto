@@ -71,8 +71,11 @@ message ChangeReplicas {
 message ReplicatedEvalResult {
   option (gogoproto.equal) = true;
 
-  bytes start_key = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
-  bytes end_key = 15 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  // The start and end key of the proposal's range. Since VersionNoRaftProposalKeys
+  // these are no longer used, but the fields are preserved so they can be populated
+  // for versions beneath this. See #16075.
+  bytes deprecated_start_key = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  bytes deprecated_end_key = 15 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
   // Whether to block concurrent readers while processing the proposal data.
   bool block_reads = 1;
   // Updates to the Replica's ReplicaState. By convention and as outlined on
