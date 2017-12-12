@@ -338,7 +338,9 @@ func (nl *NodeLiveness) StartHeartbeat(
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				func() {
-					ctx, cancel := context.WithTimeout(context.Background(), nl.heartbeatInterval/2)
+					// Give the context a timeout approximately as long as the time we
+					// have left before our liveness entry expires.
+					ctx, cancel := context.WithTimeout(context.Background(), nl.livenessThreshold-nl.heartbeatInterval)
 					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "heartbeat")
 					defer cancel()
 					defer sp.Finish()
@@ -572,8 +574,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 		return err
 	}
 
-	log.VEventf(ctx, 1, "incremented node %d liveness epoch to %d",
-		newLiveness.NodeID, newLiveness.Epoch)
+	log.Infof(ctx, "incremented n%d liveness epoch to %d", newLiveness.NodeID, newLiveness.Epoch)
 	nl.maybeUpdate(newLiveness)
 	nl.metrics.EpochIncrements.Inc(1)
 	return nil

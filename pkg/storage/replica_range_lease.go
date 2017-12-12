@@ -254,7 +254,14 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 					}
 				} else if status.Liveness.Epoch == status.Lease.Epoch {
 					// If not owner, increment epoch if necessary to invalidate lease.
-					if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
+					// However, we only do so in the event that the next leaseholder is
+					// considered live at this time. If not, there's no sense in
+					// incrementing the expired leaseholder's epoch.
+					if live, liveErr := p.repl.store.cfg.NodeLiveness.IsLive(nextLeaseHolder.NodeID); !live || liveErr != nil {
+						err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live (err = %v)",
+							status.Liveness.NodeID, nextLeaseHolder.NodeID, liveErr)
+						log.Error(ctx, err)
+					} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
 						log.Error(ctx, err)
 					}
 				}
