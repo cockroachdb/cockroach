@@ -17,43 +17,9 @@ package sql
 import (
 	"math"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
-
-// WrappableMemoryAccount encapsulates a MemoryAccount to
-// give it the Wsession() method below.
-type WrappableMemoryAccount struct {
-	acc mon.BytesAccount
-}
-
-// Wsession captures the current session monitor pointer so it can be provided
-// transparently to the other Account APIs below.
-func (w *WrappableMemoryAccount) Wsession(s *Session) WrappedMemoryAccount {
-	return WrappedMemoryAccount{
-		acc: &w.acc,
-		mon: &s.sessionMon,
-	}
-}
-
-// WrappedMemoryAccount is the transient structure that carries
-// the extra argument to the MemoryAccount APIs.
-type WrappedMemoryAccount struct {
-	acc *mon.BytesAccount
-	mon *mon.BytesMonitor
-}
-
-// OpenAndInit interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) OpenAndInit(ctx context.Context, initialAllocation int64) error {
-	return w.mon.OpenAndInitAccount(ctx, w.acc, initialAllocation)
-}
-
-// Close interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) Close(ctx context.Context) {
-	w.mon.CloseAccount(ctx, w.acc)
-}
 
 // noteworthyMemoryUsageBytes is the minimum size tracked by a
 // transaction or session monitor before the monitor starts explicitly

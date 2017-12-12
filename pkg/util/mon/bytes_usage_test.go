@@ -16,6 +16,7 @@ package mon
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"testing"
 
@@ -43,23 +44,29 @@ func TestMemoryAllocations(t *testing.T) {
 	t.Logf("random seed: %v", seed)
 
 	ctx := context.Background()
-	accs := make([]BytesAccount, 4)
 
 	var pool BytesMonitor
 	var m BytesMonitor
 	var paramHeader func()
 
+	accs := make([]BoundAccount, 4)
+	for i := range accs {
+		accs[i] = m.MakeBoundAccount()
+	}
+
 	// The following invariants will be checked at every step of the
 	// test underneath.
 	checkInvariants := func() {
+		t.Helper()
+
 		var sum int64
 		fail := false
 		for accI := range accs {
-			if accs[accI].curAllocated < 0 {
-				t.Errorf("account %d went negative: %d", accI, accs[accI].curAllocated)
+			if accs[accI].used < 0 {
+				t.Errorf("account %d went negative: %d", accI, accs[accI].used)
 				fail = true
 			}
-			sum += accs[accI].curAllocated
+			sum += accs[accI].allocated()
 		}
 		if m.mu.curAllocated < 0 {
 			t.Errorf("monitor current count went negative: %d", m.mu.curAllocated)
@@ -69,21 +76,21 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("total account sum %d different from monitor count %d", sum, m.mu.curAllocated)
 			fail = true
 		}
-		if m.mu.curBudget.curAllocated < 0 {
-			t.Errorf("monitor current budget went negative: %d", m.mu.curBudget.curAllocated)
+		if m.mu.curBudget.used < 0 {
+			t.Errorf("monitor current budget went negative: %d", m.mu.curBudget.used)
 			fail = true
 		}
-		avail := m.mu.curBudget.curAllocated + m.reserved.curAllocated
+		avail := m.mu.curBudget.allocated() + m.reserved.used
 		if sum > avail {
 			t.Errorf("total account sum %d greater than total monitor budget %d", sum, avail)
 			fail = true
 		}
-		if pool.mu.curAllocated > pool.reserved.curAllocated {
-			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.curAllocated)
+		if pool.mu.curAllocated > pool.reserved.used {
+			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.used)
 			fail = true
 		}
-		if m.mu.curBudget.curAllocated != pool.mu.curAllocated {
-			t.Errorf("monitor budget %d different from pool cur %d", m.mu.curBudget.curAllocated, pool.mu.curAllocated)
+		if m.mu.curBudget.allocated() != pool.mu.curAllocated {
+			t.Errorf("monitor budget %d different from pool cur %d", m.mu.curBudget.used, pool.mu.curAllocated)
 			fail = true
 		}
 
@@ -98,7 +105,7 @@ func TestMemoryAllocations(t *testing.T) {
 	var reportAndCheck func(string, ...interface{})
 	if log.V(2) {
 		// Detailed output: report the intermediate values of the
-		// important variables at every stafe of the test.
+		// important variables at every stage of the test.
 		linesBetweenHeaderReminders = 5
 		generateHeader = func() {
 			fmt.Println("")
@@ -110,9 +117,10 @@ func TestMemoryAllocations(t *testing.T) {
 			fmt.Println("")
 		}
 		reportAndCheck = func(extraFmt string, extras ...interface{}) {
-			fmt.Printf("%5d %5d %5d %5d ", m.mu.curAllocated, m.mu.curBudget.curAllocated, m.reserved.curAllocated, pool.mu.curAllocated)
+			t.Helper()
+			fmt.Printf("%5d %5d %5d %5d ", m.mu.curAllocated, m.mu.curBudget.used, m.reserved.used, pool.mu.curAllocated)
 			for accI := range accs {
-				fmt.Printf("%5d ", accs[accI].curAllocated)
+				fmt.Printf("%5d ", accs[accI].used)
 			}
 			fmt.Print("\t")
 			fmt.Printf(extraFmt, extras...)
@@ -127,7 +135,10 @@ func TestMemoryAllocations(t *testing.T) {
 		} else {
 			generateHeader = func() {}
 		}
-		reportAndCheck = func(_ string, _ ...interface{}) { checkInvariants() }
+		reportAndCheck = func(_ string, _ ...interface{}) {
+			t.Helper()
+			checkInvariants()
+		}
 	}
 
 	for _, max := range maxs {
@@ -163,7 +174,7 @@ func TestMemoryAllocations(t *testing.T) {
 						case 0:
 							sz := randomSize(rnd, mmax)
 							reportAndCheck("G [%5d] %5d", accI, sz)
-							err := m.GrowAccount(ctx, &accs[accI], sz)
+							err := accs[accI].Grow(ctx, sz)
 							if err == nil {
 								reportAndCheck("G [%5d] ok", accI)
 							} else {
@@ -171,13 +182,13 @@ func TestMemoryAllocations(t *testing.T) {
 							}
 						case 1:
 							reportAndCheck("C [%5d]", accI)
-							m.ClearAccount(ctx, &accs[accI])
+							accs[accI].Clear(ctx)
 							reportAndCheck("C [%5d]", accI)
 						case 2:
-							osz := rnd.Int63n(accs[accI].curAllocated + 1)
+							osz := rnd.Int63n(accs[accI].used + 1)
 							nsz := randomSize(rnd, mmax)
 							reportAndCheck("R [%5d] %5d %5d", accI, osz, nsz)
-							err := m.ResizeItem(ctx, &accs[accI], osz, nsz)
+							err := accs[accI].Resize(ctx, osz, nsz)
 							if err == nil {
 								reportAndCheck("R [%5d] ok", accI)
 							} else {
@@ -190,7 +201,7 @@ func TestMemoryAllocations(t *testing.T) {
 					// that closing everything comes back to the initial situation.
 					for accI := range accs {
 						reportAndCheck("CL[%5d]", accI)
-						m.ClearAccount(ctx, &accs[accI])
+						accs[accI].Clear(ctx)
 						reportAndCheck("CL[%5d]", accI)
 					}
 
@@ -205,7 +216,7 @@ func TestMemoryAllocations(t *testing.T) {
 	}
 }
 
-func TestBytesAccount(t *testing.T) {
+func TestBoundAccount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -214,47 +225,44 @@ func TestBytesAccount(t *testing.T) {
 	m.poolAllocationSize = 1
 	maxAllocatedButUnusedBlocks = 1
 
-	var a1, a2 BytesAccount
-
-	m.OpenAccount(&a1)
-	m.OpenAccount(&a2)
-
-	if err := m.GrowAccount(ctx, &a1, 10); err != nil {
+	a1 := m.MakeBoundAccount()
+	a2 := m.MakeBoundAccount()
+	if err := a1.Grow(ctx, 10); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.GrowAccount(ctx, &a2, 30); err != nil {
+	if err := a2.Grow(ctx, 30); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.GrowAccount(ctx, &a1, 61); err == nil {
+	if err := a1.Grow(ctx, 61); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	if err := m.GrowAccount(ctx, &a2, 61); err == nil {
+	if err := a2.Grow(ctx, 61); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	m.ClearAccount(ctx, &a1)
+	a1.Clear(ctx)
 
-	if err := m.GrowAccount(ctx, &a2, 61); err != nil {
+	if err := a2.Grow(ctx, 61); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.ResizeItem(ctx, &a2, 50, 60); err == nil {
+	if err := a2.Resize(ctx, 50, 60); err == nil {
 		t.Fatalf("monitor accepted excessive allocation")
 	}
 
-	if err := m.ResizeItem(ctx, &a1, 0, 5); err != nil {
+	if err := a1.Resize(ctx, 0, 5); err != nil {
 		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
-	if err := m.ResizeItem(ctx, &a2, a2.curAllocated, 40); err != nil {
+	if err := a2.Resize(ctx, a2.used, 40); err != nil {
 		t.Fatalf("monitor refused reset + allocation: %v", err)
 	}
 
-	m.CloseAccount(ctx, &a1)
-	m.CloseAccount(ctx, &a2)
+	a1.Close(ctx)
+	a2.Close(ctx)
 
 	if m.mu.curAllocated != 0 {
 		t.Fatal("closing spans leaves bytes in monitor")
@@ -310,4 +318,36 @@ func TestBytesMonitor(t *testing.T) {
 
 	limitedMonitor.Stop(ctx)
 	m.Stop(ctx)
+}
+
+func TestMemoryAllocationEdgeCases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	m := MakeMonitor("test", MemoryResource,
+		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9 /* noteworthy */)
+	m.Start(ctx, nil, MakeStandaloneBudget(1e9))
+
+	a := m.MakeBoundAccount()
+	if err := a.Grow(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Grow(ctx, math.MaxInt64); err == nil {
+		t.Fatalf("expected error, but found success")
+	}
+
+	a.Close(ctx)
+	m.Stop(ctx)
+}
+
+func BenchmarkBoundAccountGrow(b *testing.B) {
+	ctx := context.Background()
+	m := MakeMonitor("test", MemoryResource,
+		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9 /* noteworthy */)
+	m.Start(ctx, nil, MakeStandaloneBudget(1e9))
+
+	a := m.MakeBoundAccount()
+	for i := 0; i < b.N; i++ {
+		_ = a.Grow(ctx, 1)
+	}
 }
