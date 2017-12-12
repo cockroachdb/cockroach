@@ -1915,6 +1915,9 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 		return errors.Errorf("batch timestamp %v must be after GC threshold %v", ts, threshold)
 	}
 
+	if rspan.Key == nil && rspan.EndKey == nil {
+		return nil
+	}
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
@@ -2867,12 +2870,20 @@ func (r *Replica) evaluateProposal(
 
 	res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
 	res.Replicated.Timestamp = ba.Timestamp
-	rSpan, err := keys.Range(ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
+
+	// If the cluster version is and always will be VersionNoRaftProposalKeys or
+	// greater, we don't need to send the key range through Raft. This decision
+	// is based on the minimum supported version and not the active version
+	// because Raft entries need to be usable even across allowable version
+	// downgrades.
+	if !r.ClusterSettings().Version.IsMinSupported(cluster.VersionNoRaftProposalKeys) {
+		rSpan, err := keys.Range(ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		res.Replicated.DeprecatedStartKey = rSpan.Key
+		res.Replicated.DeprecatedEndKey = rSpan.EndKey
 	}
-	res.Replicated.StartKey = rSpan.Key
-	res.Replicated.EndKey = rSpan.EndKey
 
 	if res.WriteBatch == nil {
 		if res.Local.Err == nil {
@@ -2982,13 +2993,10 @@ func (r *Replica) propose(
 		return nil, nil, noop, roachpb.NewError(err)
 	}
 
-	// Must check that the request is in bounds at proposal time in
-	// addition to application time because some evaluation functions
-	// (especially EndTransaction with SplitTrigger) fail (with a
-	// replicaCorruptionError) if called when out of bounds. This is not
-	// synchronized with anything else, but in cases where it matters
-	// the command is also registered in the command queue for the range
-	// descriptor key.
+	// Only need to check that the request is in bounds at proposal time,
+	// not at application time, because the command queue will synchronize
+	// all requests (notably EndTransaction with SplitTrigger) that may
+	// cause this condition to change.
 	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
 		return nil, nil, noop, roachpb.NewError(err)
 	}
@@ -4523,13 +4531,8 @@ func (r *Replica) processRaftCommand(
 	}
 
 	var ts hlc.Timestamp
-	var rSpan roachpb.RSpan
 	if idKey != "" {
 		ts = raftCmd.ReplicatedEvalResult.Timestamp
-		rSpan = roachpb.RSpan{
-			Key:    raftCmd.ReplicatedEvalResult.StartKey,
-			EndKey: raftCmd.ReplicatedEvalResult.EndKey,
-		}
 	}
 
 	r.mu.Lock()
@@ -4554,15 +4557,16 @@ func (r *Replica) processRaftCommand(
 		// that access to this state will not be serialized by the command queue,
 		// so we must perform this check upstream and downstream of raft.
 		// See #14833.
-		forcedErr = roachpb.NewError(r.requestCanProceed(rSpan, ts))
-		if _, ok := forcedErr.GetDetail().(*roachpb.RangeKeyMismatchError); ok {
-			// TODO(nvanbenschoten): either remove this entire assertion (#20647)
-			// or return it to an expected error case. Either way, this assertion
-			// should be addressed before 2.0 is released.
-			log.Fatalf(ctx, "@nvanbenschoten, no performance for you! If this is seen, please "+
-				"update github.com/cockroachdb/cockroach/pull/20647; (desc=%+v, cmd=%+v): %v",
-				r.Desc(), raftCmd, forcedErr)
-		}
+		//
+		// We provide an empty key span because we already know that the Raft
+		// command is allowed to apply within its key range. This is guaranteed
+		// by checks upstream of Raft, which perform the same validation, and by
+		// the CommandQueue, which assures that any modifications to the range's
+		// boundaries will be serialized with this command. Finally, the
+		// leaseAppliedIndex check in checkForcedErrLocked ensures that replays
+		// outside of the CommandQueue's control which break this serialization
+		// ordering will already by caught and an error will be thrown.
+		forcedErr = roachpb.NewError(r.requestCanProceed(roachpb.RSpan{}, ts))
 	}
 
 	// applyRaftCommand will return "expected" errors, but may also indicate
@@ -4646,8 +4650,6 @@ func (r *Replica) processRaftCommand(
 				r.raftMu.sideloaded,
 				term,
 				raftIndex,
-				raftCmd.ReplicatedEvalResult.StartKey,
-				raftCmd.ReplicatedEvalResult.EndKey,
 				*raftCmd.ReplicatedEvalResult.AddSSTable,
 			)
 			r.store.metrics.AddSSTableApplications.Inc(1)
