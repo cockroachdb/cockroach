@@ -429,7 +429,8 @@ func (e *Executor) Start(
 	ctx = log.WithLogTag(ctx, "startup", nil)
 	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
 	startupSession.StartUnlimitedMonitor()
-	if err := e.virtualSchemas.init(ctx, startupSession.newPlanner(e, nil)); err != nil {
+	if err := e.virtualSchemas.init(
+		ctx, newPlanner(startupSession, nil /* txn */, e.cfg.ClusterID(), e.cfg.NodeID.Get(), e.reCache)); err != nil {
 		log.Fatal(ctx, err)
 	}
 	startupSession.Finish(e)
@@ -471,14 +472,35 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 	return nil
 }
 
+// DBCacheHolder is used by GetDatabaseCache() to export a *databaseCache.
+// pgwire will pass this back into the sql package.
+// WIP(andrei): This will go away with the Executor.
+type DBCacheHolder struct {
+	dbCache *databaseCache
+}
+
+// GetDatabaseCache is like getDatabaseCache(), but exported for the pgwire
+// package. It also returns an exported type.
+// WIP(andrei): This will go away with the Executor.
+func (e *Executor) GetDatabaseCache() DBCacheHolder {
+	dbc := e.getDatabaseCache()
+	return DBCacheHolder{dbc}
+}
+
 // Prepare returns the result types of the given statement. pinfo may
 // contain partial type information for placeholders. Prepare will
 // populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
-func (e *Executor) Prepare(
-	stmt Statement, stmtStr string, session *Session, placeholderHints tree.PlaceholderTypes,
+func Prepare(
+	stmt Statement,
+	stmtStr string,
+	session *Session,
+	placeholderHints tree.PlaceholderTypes,
+	dbCache *databaseCache,
+	execCfg *ExecutorConfig,
+	reCache *tree.RegexpCache,
 ) (res *PreparedStatement, err error) {
-	session.resetForBatch(e)
+	session.resetForBatch(dbCache)
 	sessionEventf(session, "preparing: %s", stmtStr)
 
 	defer session.maybeRecover("preparing", stmtStr)
@@ -499,7 +521,8 @@ func (e *Executor) Prepare(
 	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
-	protoTS, err := isAsOf(session, stmt.AST, e.cfg.Clock.Now())
+	evalCtx := session.evalCtx()
+	protoTS, err := isAsOf(stmt.AST, &evalCtx, execCfg.Clock.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -516,14 +539,14 @@ func (e *Executor) Prepare(
 		// TODO(vivek): perhaps we should be more consistent and update
 		// session.TxnState.mu.txn, but more thought needs to be put into whether that
 		// is really needed.
-		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
+		txn = client.NewTxn(execCfg.DB, execCfg.NodeID.Get())
 		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
 			panic(fmt.Errorf("cannot set up txn for prepare %q: %v", stmtStr, err))
 		}
-		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
+		txn.Proto().OrigTimestamp = execCfg.Clock.Now()
 	}
 
-	planner := session.newPlanner(e, txn)
+	planner := newPlanner(session, txn, execCfg.ClusterID(), execCfg.NodeID.Get(), reCache)
 	planner.semaCtx.Placeholders.SetTypeHints(placeholderHints)
 	planner.evalCtx.PrepareOnly = true
 	planner.evalCtx.ActiveMemAcc = &prepared.memAcc
@@ -537,7 +560,7 @@ func (e *Executor) Prepare(
 		txn.SetFixedTimestamp(session.Ctx(), *protoTS)
 	}
 
-	if filter := e.cfg.TestingKnobs.BeforePrepare; filter != nil {
+	if filter := execCfg.TestingKnobs.BeforePrepare; filter != nil {
 		res, err := filter(session.Ctx(), stmtStr, planner)
 		if res != nil || err != nil {
 			return res, err
@@ -607,7 +630,7 @@ func (e *Executor) ExecuteStatementsBuffered(
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *tree.PlaceholderInfo,
 ) error {
-	session.resetForBatch(e)
+	session.resetForBatch(e.getDatabaseCache())
 	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
 	defer session.maybeRecover("executing", stmts)
@@ -809,7 +832,8 @@ func (e *Executor) execParsed(
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
 				var err error
-				protoTS, err = isAsOf(session, stmtsToExec[0].AST, e.cfg.Clock.Now())
+				evalCtx := session.evalCtx()
+				protoTS, err = isAsOf(stmtsToExec[0].AST, &evalCtx, e.cfg.Clock.Now())
 				if err != nil {
 					return err
 				}
@@ -1759,7 +1783,9 @@ func (e *Executor) execStmtInOpenTxn(
 	case *tree.Prepare:
 		// This must be handled here instead of the common path below
 		// because we need to use the Executor reference.
-		if err := e.PrepareStmt(session, s); err != nil {
+		if err := PrepareStmt(
+			session, s, e.getDatabaseCache(), &e.cfg, e.reCache,
+		); err != nil {
 			return err
 		}
 		res.BeginResult((*tree.Prepare)(nil))
@@ -1784,12 +1810,14 @@ func (e *Executor) execStmtInOpenTxn(
 	if runInParallel {
 		// Create a new planner from the Session to execute the statement, since
 		// we're executing in parallel.
-		p = session.newPlanner(e, txnState.mu.txn)
+		p = newPlanner(
+			session, txnState.mu.txn, e.cfg.ClusterID(),
+			e.cfg.NodeID.Get(), e.reCache)
 	} else {
 		// We're not executing in parallel. We can use the cached planner on the
 		// session.
 		p = &session.planner
-		session.resetPlanner(p, e, txnState.mu.txn)
+		resetPlanner(p, session, txnState.mu.txn, e.cfg.ClusterID(), e.cfg.NodeID.Get(), e.reCache)
 	}
 	p.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	p.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
@@ -2294,6 +2322,18 @@ func (e *Executor) generateQueryID() uint128.Uint128 {
 	return uint128.FromInts((uint64)(timestamp.WallTime), loInt)
 }
 
+// GetExecCfg is exported for the pgwire package.
+// WIP(andrei): This will go away with the Executor.
+func (e *Executor) GetExecCfg() *ExecutorConfig {
+	return &e.cfg
+}
+
+// GetReCache is exported for the pgwire package.
+// WIP(andrei): This will go away with the Executor.
+func (e *Executor) GetReCache() *tree.RegexpCache {
+	return e.reCache
+}
+
 // golangFillQueryArguments populates the placeholder map with
 // types and values from an array of Go values.
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
@@ -2497,7 +2537,9 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 //
 // max is a lower bound on what the transaction's timestamp will be.
 // Used to check that the user didn't specify a timestamp in the future.
-func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
+func isAsOf(
+	stmt tree.Statement, evalCtx *tree.EvalContext, max hlc.Timestamp,
+) (*hlc.Timestamp, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -2518,7 +2560,7 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 
 		asOf = sc.From.AsOf
 	case *tree.ShowTrace:
-		return isAsOf(session, s.Statement, max)
+		return isAsOf(s.Statement, evalCtx, max)
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
 			return nil, nil
@@ -2528,8 +2570,7 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 		return nil, nil
 	}
 
-	evalCtx := session.evalCtx()
-	ts, err := EvalAsOfTimestamp(&evalCtx, asOf, max)
+	ts, err := EvalAsOfTimestamp(evalCtx, asOf, max)
 	return &ts, err
 }
 

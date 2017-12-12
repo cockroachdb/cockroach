@@ -24,7 +24,13 @@ import (
 
 // PrepareStmt implements the PREPARE statement.
 // See https://www.postgresql.org/docs/current/static/sql-prepare.html for details.
-func (e *Executor) PrepareStmt(session *Session, s *tree.Prepare) error {
+func PrepareStmt(
+	session *Session,
+	s *tree.Prepare,
+	dbCache *databaseCache,
+	execCfg *ExecutorConfig,
+	reCache *tree.RegexpCache,
+) error {
 	name := s.Name.String()
 	if session.PreparedStatements.Exists(name) {
 		return pgerror.NewErrorf(pgerror.CodeDuplicatePreparedStatementError,
@@ -35,7 +41,8 @@ func (e *Executor) PrepareStmt(session *Session, s *tree.Prepare) error {
 		typeHints[strconv.Itoa(i+1)] = coltypes.CastTargetToDatumType(t)
 	}
 	_, err := session.PreparedStatements.New(
-		e, name, Statement{AST: s.Statement}, s.Statement.String(), typeHints,
+		name, Statement{AST: s.Statement}, s.Statement.String(), typeHints,
+		dbCache, execCfg, reCache,
 	)
 	return err
 }
