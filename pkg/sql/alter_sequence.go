@@ -154,6 +154,14 @@ func assignSequenceOptions(
 		}
 	}
 
+	if _, startSeen := optionsSeen[tree.SeqOptStart]; !startSeen {
+		if opts.Increment > 0 {
+			opts.Start = opts.MinValue
+		} else {
+			opts.Start = opts.MaxValue
+		}
+	}
+
 	if opts.Start > opts.MaxValue {
 		return pgerror.NewErrorf(
 			pgerror.CodeInvalidParameterValueError,
