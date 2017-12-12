@@ -278,3 +278,12 @@ query T
 SELECT '40 days' COLLATE en::INTERVAL
 ----
 40d
+
+statement ok
+CREATE TABLE foo(a STRING COLLATE en_u_ks_level2)
+
+statement ok
+PREPARE x AS INSERT INTO foo VALUES ($1 COLLATE en_u_ks_level2)
+
+query error incompatible type for COLLATE: NULL
+EXECUTE x(NULL)
