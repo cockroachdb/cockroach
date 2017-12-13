@@ -72,12 +72,14 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 	if n.n.PartitionBy != nil {
-		if err := addPartitionedBy(
-			params.ctx, params.evalCtx, n.tableDesc, &indexDesc, &indexDesc.Partitioning,
-			n.n.PartitionBy, 0, /* colOffset */
-		); err != nil {
+		partitioning, _, err := createPartitionedBy(
+			params.ctx, params.evalCtx, n.tableDesc, &indexDesc, n.n.PartitionBy)
+		if err != nil {
 			return err
 		}
+		indexDesc.Partitioning = partitioning
+		// TODO(benesch): install CHECK constraint to exclude rows that do not
+		// belong to any partition of the index.
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
