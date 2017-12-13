@@ -45,6 +45,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+// AddTestingDialOpts adds extra dialing options to the rpc Context. This should
+// be done before GRPCDial is called.
+func (ctx *Context) AddTestingDialOpts(opts ...grpc.DialOption) {
+	ctx.testingDialOpts = append(ctx.testingDialOpts, opts...)
+}
+
 func newTestServer(t testing.TB, ctx *Context, compression bool) *grpc.Server {
 	tlsConfig, err := ctx.GetServerTLSConfig()
 	if err != nil {
@@ -714,7 +720,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	// We're going to open RPC transport connections using a dialer that returns
 	// PartitionableConns. We'll partition the first opened connection.
 	dialerCh := make(chan *testutils.PartitionableConn, 1)
-	conn, err := clientCtx.GRPCDial(remoteAddr,
+	clientCtx.AddTestingDialOpts(
 		grpc.WithDialer(
 			func(addr string, timeout time.Duration) (net.Conn, error) {
 				if !atomic.CompareAndSwapInt32(&firstConn, 1, 0) {
@@ -745,7 +751,8 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 				Timeout:             5 * time.Millisecond,
 				PermitWithoutStream: false,
 			}),
-	).Connect(context.Background())
+	)
+	conn, err := clientCtx.GRPCDial(remoteAddr).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -292,7 +292,8 @@ type Context struct {
 	ClusterID base.ClusterIDContainer
 
 	// For unittesting.
-	BreakerFactory func() *circuit.Breaker
+	BreakerFactory  func() *circuit.Breaker
+	testingDialOpts []grpc.DialOption
 }
 
 // NewContext creates an rpc Context with the supplied values.
@@ -427,8 +428,8 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 	return dialOpts, nil
 }
 
-// GRPCDial calls grpc.Dial with the options appropriate for the context.
-func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) *Connection {
+// GRPCDial calls grpc.Dial with options appropriate for the context.
+func (ctx *Context) GRPCDial(target string) *Connection {
 	value, ok := ctx.conns.Load(target)
 	if !ok {
 		value, _ = ctx.conns.LoadOrStore(target, newConnection(ctx.Stopper))
@@ -460,7 +461,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) *Connection
 		dialOpts = append(dialOpts,
 			grpc.WithInitialWindowSize(initialWindowSize),
 			grpc.WithInitialConnWindowSize(initialConnWindowSize))
-		dialOpts = append(dialOpts, opts...)
+		dialOpts = append(dialOpts, ctx.testingDialOpts...)
 
 		if sourceAddr != nil {
 			dialOpts = append(dialOpts, grpc.WithDialer(
