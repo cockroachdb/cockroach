@@ -727,3 +727,52 @@ CREATE INDEX y ON test.x(x);
 		t.Fatal(err)
 	}
 }
+
+func TestExpectedInitialRangeCount(t *testing.T) {
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	testutils.SucceedsSoon(t, func() error {
+		lastMigration := backwardCompatibleMigrations[len(backwardCompatibleMigrations)-1]
+		if _, err := kvDB.Get(ctx, migrationKey(lastMigration)); err != nil {
+			return errors.New("last migration has not completed")
+		}
+
+		sysCfg, ok := s.Gossip().GetSystemConfig()
+		if !ok {
+			return errors.New("gossipped system config not available")
+		}
+
+		rows, err := sqlDB.Query(`SELECT range_id, start_key, end_key FROM crdb_internal.ranges`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		nranges := 0
+		for rows.Next() {
+			var rangeID int
+			var startKey, endKey []byte
+			if err := rows.Scan(&rangeID, &startKey, &endKey); err != nil {
+				return err
+			}
+			if sysCfg.NeedsSplit(startKey, endKey) {
+				return fmt.Errorf("range %d needs split", rangeID)
+			}
+			nranges++
+		}
+		if rows.Err() != nil {
+			return err
+		}
+
+		expectedRanges, err := s.ExpectedInitialRangeCount()
+		if err != nil {
+			return err
+		}
+		if expectedRanges != nranges {
+			return fmt.Errorf("expected %d ranges but got %d", expectedRanges, nranges)
+		}
+
+		return nil
+	})
+}
