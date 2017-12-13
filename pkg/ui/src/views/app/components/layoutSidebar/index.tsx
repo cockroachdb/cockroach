@@ -1,7 +1,11 @@
 import React from "react";
 import { Link } from "react-router";
-import * as Icons from "src/views/shared/components/icons";
+import { cockroachIcon, databaseIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
+
+import homeIcon from "!!raw-loader!assets/home.svg";
+import metricsIcon from "!!raw-loader!assets/metrics.svg";
+import jobsIcon from "!!raw-loader!assets/jobs.svg";
 
 interface IconLinkProps {
   icon?: string;
@@ -44,13 +48,13 @@ export default class extends React.Component<{}, {}> {
   render() {
     return <nav className="navigation-bar">
       <ul className="navigation-bar__list">
-        <IconLink to="/overview" icon={Icons.clusterIcon} title="Overview" />
-        <IconLink to="/cluster" icon={Icons.nodesIcon} title="Cluster" />
-        <IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
-        <IconLink to="/jobs" icon={Icons.jobsIcon} title="Jobs"/>
+        <IconLink to="/overview" icon={homeIcon} title="Overview" />
+        <IconLink to="/cluster" icon={metricsIcon} title="Cluster" />
+        <IconLink to="/databases" icon={databaseIcon} title="Databases"/>
+        <IconLink to="/jobs" icon={jobsIcon} title="Jobs"/>
       </ul>
       <ul className="navigation-bar__list navigation-bar__list--bottom">
-        <IconLink to="/" icon={Icons.cockroachIcon} className="cockroach" />
+        <IconLink to="/" icon={cockroachIcon} className="cockroach" />
       </ul>
     </nav>;
   }

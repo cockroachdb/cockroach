@@ -4829,6 +4829,10 @@ raw-body@~2.2.0:
     iconv-lite "0.4.15"
     unpipe "1.0.0"
 
+raw-loader@^0.5.1:
+  version "0.5.1"
+  resolved "https://registry.yarnpkg.com/raw-loader/-/raw-loader-0.5.1.tgz#0c3d0beaed8a01c966d9787bf778281252a979aa"
+
 rc-progress@^2.2.1:
   version "2.2.1"
   resolved "https://registry.yarnpkg.com/rc-progress/-/rc-progress-2.2.1.tgz#3fdefb16bf94f43c187cdbbdeb9fc5010b367ef9"
