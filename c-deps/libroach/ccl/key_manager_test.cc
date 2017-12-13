@@ -29,8 +29,8 @@ TEST(FileKeyManager, ReadKeyFiles) {
       {"32.key", "12345678901234567890123456789012"},
       {"64.key", "1234567890123456789012345678901234567890123456789012345678901234"},
   };
-  for (auto k = keys.cbegin(); k != keys.cend(); ++k) {
-    ASSERT_OK(rocksdb::WriteStringToFile(env.get(), k->contents, k->filename));
+  for (auto k : keys) {
+    ASSERT_OK(rocksdb::WriteStringToFile(env.get(), k.contents, k.filename));
   }
 
   struct TestCase {
@@ -54,10 +54,10 @@ TEST(FileKeyManager, ReadKeyFiles) {
       {"16.key", "32.key", ""},
   };
 
-  for (auto t = test_cases.cbegin(); t != test_cases.cend(); ++t) {
-    FileKeyManager fkm(env.get(), t->new_key, t->old_key);
+  for (auto t : test_cases) {
+    FileKeyManager fkm(env.get(), t.new_key, t.old_key);
     auto status = fkm.LoadKeys();
-    EXPECT_ERR(status, t->error);
+    EXPECT_ERR(status, t.error);
   }
 }
 

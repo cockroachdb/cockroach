@@ -17,44 +17,24 @@
 #include <gtest/gtest.h>
 #include <rocksdb/status.h>
 #include <string>
-#include "util.h"
 
 namespace testutils {
-rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg) {
-  if (strcmp("", err_msg) == 0) {
-    // Expected success.
-    if (status.ok()) {
-      return rocksdb::Status::OK();
-    } else {
-      return rocksdb::Status::InvalidArgument(FormatString("expected success, got error \"%s\"", status.getState()));
-    }
-  }
 
-  // Expected failure.
-  if (status.ok()) {
-    return rocksdb::Status::InvalidArgument(FormatString("expected error \"%s\", got success", err_msg));
-  }
-  if (strcmp(err_msg, status.getState()) == 0) {
-    return rocksdb::Status::OK();
-  }
-  return rocksdb::Status::InvalidArgument(
-      FormatString("expected error \"%s\", got \"%s\"", err_msg, status.getState()));
-}
-
-rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg) {
-  return compareErrorMessage(status, err_msg.c_str());
-}
+rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg);
+rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg);
 
 }  // namespace testutils
 
 // clang-format isn't so great for macros.
 // clang-format off
 
-#define EXPECT_OK(status) EXPECT_TRUE(status.ok()) << "got: " << status.getState();
-#define ASSERT_OK(status) ASSERT_TRUE(status.ok()) << "got: " << status.getState();
+#define EXPECT_OK(status) { auto s(status); EXPECT_TRUE(s.ok()) << "got: " << s.getState(); }
+#define ASSERT_OK(status) { auto s(status); ASSERT_TRUE(s.ok()) << "got: " << s.getState(); }
 
 #define EXPECT_ERR(status, err_msg)\
-  auto s(testutils::compareErrorMessage(status, err_msg)); \
-  EXPECT_TRUE(s.ok()) << s.getState();
+  {\
+    auto s(testutils::compareErrorMessage(status, err_msg)); \
+    EXPECT_TRUE(s.ok()) << s.getState();\
+  }
 
 // clang-format on

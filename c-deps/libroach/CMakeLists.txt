@@ -26,7 +26,6 @@ add_library(roach
   encoding.cc
   env_switching.cc
   eventlistener.cc
-  util.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
@@ -41,8 +40,8 @@ add_library(roach
 target_include_directories(roach
   PUBLIC  ./include
   PRIVATE ../protobuf/src
-  PRIVAGE ../rocksdb/include
-  PRIVAGE protos
+  PRIVATE ../rocksdb/include
+  PRIVATE protos
 )
 
 add_library(roachccl
@@ -100,7 +99,7 @@ foreach(tsrc ${tests})
   endif()
 
   # Add a new executable and set includes/libraries/properties.
-  add_executable(${tname} ${tsrc})
+  add_executable(${tname} ${tsrc} testutils.cc)
   target_include_directories(${tname}
     PRIVATE ../googletest/googletest/include
     PRIVATE ../protobuf/src
