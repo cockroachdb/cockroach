@@ -692,6 +692,18 @@ func TestImportStmt(t *testing.T) {
 			if result != expectedNulls {
 				t.Fatalf("expected %d rows, got %d", expectedNulls, result)
 			}
+
+			// Verify sstsize created > 1 SST files.
+			if tc.name == "schema-in-file-sstsize-dist" {
+				pattern := filepath.Join(dir, fmt.Sprintf("%d", i), "*.sst")
+				matches, err := filepath.Glob(pattern)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(matches) < 2 {
+					t.Fatal("expected > 1 SST files")
+				}
+			}
 		})
 	}
 
