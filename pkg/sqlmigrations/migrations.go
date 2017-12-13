@@ -16,6 +16,7 @@ package sqlmigrations
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"golang.org/x/net/context"
@@ -79,16 +80,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: eventlogUniqueIDDefault,
 	},
 	{
-		name:           "create system.jobs table",
-		workFn:         createJobsTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.jobs table",
+		workFn:           createJobsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.JobsTableID},
 	},
 	{
-		name:           "create system.settings table",
-		workFn:         createSettingsTable,
-		newDescriptors: 1,
-		newRanges:      0, // it lives in gossip range.
+		name:             "create system.settings table",
+		workFn:           createSettingsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.SettingsTableID},
 	},
 	{
 		name:   "enable diagnostics reporting",
@@ -99,12 +98,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: repopulateViewDeps,
 	},
 	{
-		name:           "create system.sessions table",
-		workFn:         createWebSessionsTable,
-		newDescriptors: 1,
-		// The table ID for the sessions table is greater than the previous
-		// table ID by 4 (3 IDs were reserved for non-table entities).
-		newRanges: 4,
+		name:             "create system.sessions table",
+		workFn:           createWebSessionsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.WebSessionsTableID},
 	},
 	{
 		name:   "populate initial version cluster setting table entry",
@@ -115,31 +111,27 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: disableNetTrace,
 	},
 	{
-		name:           "create system.table_statistics table",
-		workFn:         createTableStatisticsTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.table_statistics table",
+		workFn:           createTableStatisticsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.TableStatisticsTableID},
 	},
 	{
 		name:   "add root user",
 		workFn: addRootUser,
 	},
 	{
-		name:           "create system.locations table",
-		workFn:         createLocationsTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.locations table",
+		workFn:           createLocationsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.LocationsTableID},
 	},
 	{
-		name:      addDefaultMetaAndLivenessZoneConfigsName,
-		workFn:    addDefaultMetaAndLivenessZoneConfigs,
-		newRanges: 1,
+		name:   addDefaultMetaAndLivenessZoneConfigsName,
+		workFn: addDefaultMetaAndLivenessZoneConfigs,
 	},
 	{
-		name:           "create system.role_members table",
-		workFn:         createRoleMembersTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.role_members table",
+		workFn:           createRoleMembersTable,
+		newDescriptorIDs: []sqlbase.ID{keys.RoleMembersTableID},
 	},
 	{
 		name:         addSystemUsersIsRoleAndCreateAdminRole,
@@ -167,13 +159,12 @@ type migrationDescriptor struct {
 	// workFn must be idempotent so that we can safely re-run it if a node failed
 	// while running it.
 	workFn func(context.Context, runner) error
-	// newRanges and newDescriptors are the number of additional ranges/descriptors
-	// that would be added by this migration in a fresh cluster. This is needed to
-	// automate certain tests, which check the number of ranges/descriptors
-	// present on server bootup.
-	newRanges, newDescriptors int
 	// doesBackfill should be set to true if the migration triggers a backfill.
 	doesBackfill bool
+	// newDescriptorIDs lists the IDs of any additional descriptors added by this
+	// migration. This is needed to automate certain tests, which check the number
+	// of ranges/descriptors present on server bootup.
+	newDescriptorIDs sqlbase.IDs
 }
 
 type runner struct {
@@ -241,28 +232,26 @@ func NewManager(
 	}
 }
 
-// AdditionalInitialDescriptors returns the number of system descriptors and
-// ranges that have been added by migrations. This is needed for certain tests,
-// which check the number of ranges at node startup.
+// ExpectedDescriptorIDs returns the list of all expected system descriptor IDs,
+// including those added by completed migrations. This is needed for certain
+// tests, which check the number of ranges and system tables at node startup.
 //
 // NOTE: This value may be out-of-date if another node is actively running
 // migrations, and so should only be used in test code where the migration
 // lifecycle is tightly controlled.
-func AdditionalInitialDescriptors(
-	ctx context.Context, db db,
-) (descriptors int, ranges int, _ error) {
+func ExpectedDescriptorIDs(ctx context.Context, db db) (sqlbase.IDs, error) {
 	completedMigrations, err := getCompletedMigrations(ctx, db)
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
+	descriptorIDs := sqlbase.MakeMetadataSchema().DescriptorIDs()
 	for _, migration := range backwardCompatibleMigrations {
-		key := migrationKey(migration)
-		if _, ok := completedMigrations[string(key)]; ok {
-			descriptors += migration.newDescriptors
-			ranges += migration.newRanges
+		if _, ok := completedMigrations[string(migrationKey(migration))]; ok {
+			descriptorIDs = append(descriptorIDs, migration.newDescriptorIDs...)
 		}
 	}
-	return descriptors, ranges, nil
+	sort.Sort(descriptorIDs)
+	return descriptorIDs, nil
 }
 
 // EnsureMigrations should be run during node startup to ensure that all

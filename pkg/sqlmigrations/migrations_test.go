@@ -54,24 +54,6 @@ var (
 		name:   "noop 2",
 		workFn: func(_ context.Context, _ runner) error { return nil },
 	}
-	addOneDescriptorMigration = migrationDescriptor{
-		name:           "add one descriptor",
-		workFn:         func(_ context.Context, _ runner) error { return nil },
-		newDescriptors: 1,
-		newRanges:      1,
-	}
-	addTwoDescriptorsMigration = migrationDescriptor{
-		name:           "add two descriptors",
-		workFn:         func(_ context.Context, _ runner) error { return nil },
-		newDescriptors: 2,
-		newRanges:      2,
-	}
-	addRangelessDescMigration = migrationDescriptor{
-		name:           "add rangeless descriptor",
-		workFn:         func(_ context.Context, _ runner) error { return nil },
-		newDescriptors: 2,
-		newRanges:      1,
-	}
 	errorMigration = migrationDescriptor{
 		name:   "error",
 		workFn: func(_ context.Context, _ runner) error { return errors.New("errorMigration") },
@@ -169,83 +151,49 @@ func TestEnsureMigrations(t *testing.T) {
 		},
 	}
 	testCases := []struct {
-		preCompleted                                    []migrationDescriptor
-		migrations                                      []migrationDescriptor
-		expectedErr                                     string
-		expectedPreDescriptors, expectedPostDescriptors int
-		expectedPreRanges, expectedPostRanges           int
+		preCompleted []migrationDescriptor
+		migrations   []migrationDescriptor
+		expectedErr  string
 	}{
 		{
 			nil,
 			nil,
 			"",
-			0, 0, 0, 0,
 		},
 		{
 			nil,
 			[]migrationDescriptor{noopMigration1},
 			"",
-			0, 0, 0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1},
 			[]migrationDescriptor{noopMigration1},
 			"",
-			0, 0, 0, 0,
 		},
 		{
 			[]migrationDescriptor{},
 			[]migrationDescriptor{noopMigration1, noopMigration2},
 			"",
-			0, 0, 0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1},
 			[]migrationDescriptor{noopMigration1, noopMigration2},
 			"",
-			0, 0, 0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1, noopMigration2, panicMigration},
 			[]migrationDescriptor{noopMigration1, noopMigration2, panicMigration},
 			"",
-			0, 0, 0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1, noopMigration2},
 			[]migrationDescriptor{noopMigration1, noopMigration2, fnGotCalledDescriptor},
 			"",
-			0, 0, 0, 0,
 		},
 		{
 			[]migrationDescriptor{noopMigration1, noopMigration2},
 			[]migrationDescriptor{noopMigration1, noopMigration2, errorMigration},
 			fmt.Sprintf("failed to run migration %q", errorMigration.name),
-			0, 0, 0, 0,
-		},
-		{
-			[]migrationDescriptor{noopMigration1},
-			[]migrationDescriptor{noopMigration1, addOneDescriptorMigration},
-			"",
-			0, 1, 0, 1,
-		},
-		{
-			[]migrationDescriptor{addOneDescriptorMigration},
-			[]migrationDescriptor{addOneDescriptorMigration, addTwoDescriptorsMigration},
-			"",
-			1, 3, 1, 3,
-		},
-		{
-			[]migrationDescriptor{addOneDescriptorMigration},
-			[]migrationDescriptor{addOneDescriptorMigration, addRangelessDescMigration},
-			"",
-			1, 3, 1, 2,
-		},
-		{
-			[]migrationDescriptor{},
-			[]migrationDescriptor{noopMigration1, addOneDescriptorMigration, noopMigration2, addTwoDescriptorsMigration},
-			"",
-			0, 3, 0, 3,
 		},
 	}
 
@@ -259,38 +207,12 @@ func TestEnsureMigrations(t *testing.T) {
 			}
 			backwardCompatibleMigrations = tc.migrations
 
-			preDescriptors, preRanges, err := AdditionalInitialDescriptors(context.Background(), mgr.db)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if preDescriptors != tc.expectedPreDescriptors {
-				t.Errorf("expected %d additional initial descriptors before migration, got %d",
-					tc.expectedPreDescriptors, preDescriptors)
-			}
-			if preRanges != tc.expectedPreRanges {
-				t.Errorf("expected %d additional initial ranges before migration, got %d",
-					tc.expectedPreRanges, preRanges)
-			}
-
-			err = mgr.EnsureMigrations(context.Background())
+			err := mgr.EnsureMigrations(context.Background())
 			if !testutils.IsError(err, tc.expectedErr) {
 				t.Errorf("expected error %q, got error %v", tc.expectedErr, err)
 			}
 			if err != nil {
 				return
-			}
-
-			postDescriptors, postRanges, err := AdditionalInitialDescriptors(context.Background(), mgr.db)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if postDescriptors != tc.expectedPostDescriptors {
-				t.Errorf("expected %d additional initial descriptors after migration, got %d",
-					tc.expectedPostDescriptors, postDescriptors)
-			}
-			if postRanges != tc.expectedPostRanges {
-				t.Errorf("expected %d additional initial ranges after migration, got %d",
-					tc.expectedPostRanges, postRanges)
 			}
 
 			for _, migration := range tc.migrations {
@@ -452,35 +374,17 @@ func TestCreateSystemTable(t *testing.T) {
 	settingsDescVal := sqlbase.WrapDescriptor(&settingsDesc)
 
 	// Start up a test server without running the system.jobs migration.
-	newMigrations := append([]migrationDescriptor(nil), backwardCompatibleMigrations...)
-	seenBackfill := false
-	for i := range newMigrations {
-		disable := false
-		if strings.HasPrefix(newMigrations[i].name, "create system.jobs") {
-			// Disable system.jobs migration, we'll do it manually.
-			disable = true
+	newMigrations := []migrationDescriptor{}
+	for _, m := range backwardCompatibleMigrations {
+		if strings.HasPrefix(m.name, "create system.jobs") {
+			continue
 		}
-		if newMigrations[i].doesBackfill {
+		if m.doesBackfill {
 			// Disable all migrations after (and including) a backfill, the backfill
 			// needs the jobs table and following migrations may depend on these.
-			seenBackfill = true
+			break
 		}
-		if disable || seenBackfill {
-			// We merely replace the workFn and newDescriptors here instead
-			// of completely removing the migration step, because
-			// AdditionalInitialDescriptors needs to see the newRanges
-			// field. This is because another migration adds the web
-			// sessions table with larger ID 19. The split queue always
-			// splits at every table boundary, up to the maximum present
-			// table ID, even if the tables in-between are missing. So when
-			// table 19 is created, table ID 15 (the jobs table) will get a
-			// range, even though the table doesn't exist.
-			newMigrations[i].newDescriptors = 0
-			newMigrations[i].workFn = func(context.Context, runner) error { return nil }
-			// Change the name so that mgr.EnsureMigrations below finds
-			// something to do.
-			newMigrations[i].name = fmt.Sprintf("disabled-%d", i)
-		}
+		newMigrations = append(newMigrations, m)
 	}
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = newMigrations
@@ -536,10 +440,9 @@ func TestCreateSystemTable(t *testing.T) {
 	// migration will get rerun here.
 	mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), MigrationManagerTestingKnobs{}, nil, "clientID")
 	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
-		name:           "create system.jobs table",
-		workFn:         createJobsTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.jobs table",
+		workFn:           createJobsTable,
+		newDescriptorIDs: sqlbase.IDs{keys.JobsTableID},
 	})
 	if err := mgr.EnsureMigrations(ctx); err != nil {
 		t.Fatal(err)
@@ -753,8 +656,6 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 		}
 		newMigrations = append(newMigrations, m)
 	}
-	// The deleted migration has a +1 counter for number of ranges. Set it on a random other one.
-	newMigrations[0].newRanges++
 
 	defer func(prev []migrationDescriptor) {
 		backwardCompatibleMigrations = prev
