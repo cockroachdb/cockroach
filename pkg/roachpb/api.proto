@@ -187,7 +187,29 @@ message IncrementRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Amount to increment by.
   int64 increment = 2;
+
+  message BoundsOptions {
+    option (gogoproto.equal) = true;
+
+    // Return an error if this value is gone under.
+    int64 min_value = 1;
+    // Return an error if this value is exceeded.
+    int64 max_value = 2;
+    // Whether to go back to the start if min_value or max_value is exceeded.
+    bool cycle = 3;
+    // Value to set the key to if max_value or min_value is exceeded and cycle is true.
+    int64 start = 4;
+  }
+
+  // Options for sequence boundaries. When not set, defaults to:
+  // min_value = 0
+  // max_value = math.MaxInt64
+  // cycle = false
+  // start = 0
+  BoundsOptions bounds_options = 3;
 }
 
 // An IncrementResponse is the return value from the Increment

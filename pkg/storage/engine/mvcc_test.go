@@ -423,7 +423,10 @@ func TestMVCCIncrement(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	newVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, nil, 0)
+	newVal, err := MVCCIncrement(
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, nil,
+		0, 0, math.MaxInt64, false, 0,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +441,10 @@ func TestMVCCIncrement(t *testing.T) {
 		t.Errorf("expected increment of 0 to create key/value")
 	}
 
-	newVal, err = MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 2}, nil, 2)
+	newVal, err = MVCCIncrement(
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 2}, nil,
+		2, 0, math.MaxInt64, false, 0,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -456,7 +462,10 @@ func TestMVCCIncrementTxn(t *testing.T) {
 	txn := *txn1
 	for i := 1; i <= 2; i++ {
 		txn.Sequence++
-		newVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, &txn, 1)
+		newVal, err := MVCCIncrement(
+			context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, &txn,
+			1, 0, math.MaxInt64, false, 0,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -491,7 +500,10 @@ func TestMVCCIncrementOldTimestamp(t *testing.T) {
 	// Attempt to increment a value with an older timestamp than
 	// the previous put. This will fail with type mismatch (not
 	// with WriteTooOldError).
-	incVal, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, nil, 1)
+	incVal, err := MVCCIncrement(
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, nil,
+		1, 0, math.MaxInt64, false, 0,
+	)
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok {
 		t.Fatalf("unexpectedly not WriteTooOld: %s", err)
 	} else if expTS := (hlc.Timestamp{WallTime: 3, Logical: 1}); wtoErr.ActualTimestamp != (expTS) {
@@ -2223,11 +2235,18 @@ func TestMVCCIncrementWriteTooOld(t *testing.T) {
 	defer engine.Close()
 
 	// Start with an increment.
-	if val, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 10}, nil, 1); val != 1 || err != nil {
+	val, err := MVCCIncrement(
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 10}, nil,
+		1, 0, math.MaxInt64, false, 0,
+	)
+	if val != 1 || err != nil {
 		t.Fatalf("expected val=1 (got %d): %s", val, err)
 	}
 	// Try a non-transactional increment @t=1ns.
-	val, err := MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, nil, 1)
+	val, err = MVCCIncrement(
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, nil,
+		1, 0, math.MaxInt64, false, 0,
+	)
 	if val != 2 || err == nil {
 		t.Fatalf("expected val=2 (got %d) and nil error: %s", val, err)
 	}
@@ -2236,7 +2255,10 @@ func TestMVCCIncrementWriteTooOld(t *testing.T) {
 		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
 	}
 	// Try a transaction increment @t=1ns.
-	val, err = MVCCIncrement(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, txn1, 1)
+	val, err = MVCCIncrement(
+		context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, txn1,
+		1, 0, math.MaxInt64, false, 0,
+	)
 	if val != 1 || err == nil {
 		t.Fatalf("expected val=1 (got %d) and nil error: %s", val, err)
 	}
@@ -2244,6 +2266,117 @@ func TestMVCCIncrementWriteTooOld(t *testing.T) {
 	if wtoErr, ok := err.(*roachpb.WriteTooOldError); !ok || wtoErr.ActualTimestamp != expTS {
 		t.Fatalf("expected WriteTooOldError with actual time = %s; got %s", expTS, wtoErr)
 	}
+}
+
+// TestMVCCIncrementBounds verifies MVCCIncrement's behavior with respect to
+// its minVal, maxVal, cycle, and start arguments.
+func TestMVCCIncrementBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	type boundsCase struct {
+		key        roachpb.Key
+		initialVal int64
+		incBy      int64
+		minVal     int64
+		maxVal     int64
+		cycle      bool
+		start      int64
+
+		expectedVal int64
+		expectedErr *roachpb.BoundsExceededError
+	}
+
+	cases := []*boundsCase{
+		// Verify behavior with Cycle = false.
+		{
+			initialVal: 0, minVal: 0, maxVal: 5, incBy: 10, cycle: false,
+			expectedErr: &roachpb.BoundsExceededError{
+				MinValue: 0, MaxValue: 5, CurrentValue: 0, IncrementValue: 10, Overflow: false,
+			},
+		},
+		{
+			initialVal: 0, minVal: 0, maxVal: 5, incBy: -1, cycle: false,
+			expectedErr: &roachpb.BoundsExceededError{
+				MinValue: 0, MaxValue: 5, CurrentValue: 0, IncrementValue: -1, Overflow: false,
+			},
+		},
+		{
+			initialVal: math.MaxInt64, minVal: 0, maxVal: math.MaxInt64, incBy: 1, cycle: false,
+			expectedErr: &roachpb.BoundsExceededError{
+				MinValue: 0, MaxValue: math.MaxInt64, CurrentValue: math.MaxInt64,
+				IncrementValue: 1, Overflow: true,
+			},
+			expectedVal: math.MaxInt64,
+		},
+		{
+			initialVal: math.MinInt64, minVal: math.MinInt64, maxVal: 0, incBy: -1, cycle: false,
+			expectedErr: &roachpb.BoundsExceededError{
+				MinValue: math.MinInt64, MaxValue: 0, CurrentValue: math.MinInt64,
+				IncrementValue: -1, Overflow: true,
+			},
+			expectedVal: math.MinInt64,
+		},
+		// Verify behavior with Cycle = true.
+		{
+			initialVal: 0, minVal: 0, maxVal: 5, incBy: 10, cycle: true, start: 0,
+			expectedVal: 0,
+			expectedErr: nil,
+		},
+		{
+			initialVal: 0, minVal: 0, maxVal: 5, incBy: -1, cycle: true, start: 5,
+			expectedVal: 5,
+			expectedErr: nil,
+		},
+		{
+			initialVal: math.MaxInt64, minVal: 0, maxVal: math.MaxInt64, incBy: 1, cycle: true, start: 0,
+			expectedVal: 0,
+			expectedErr: nil,
+		},
+		{
+			initialVal: math.MinInt64, minVal: math.MinInt64, maxVal: 0, incBy: -1, cycle: true, start: 0,
+			expectedVal: 0,
+			expectedErr: nil,
+		},
+	}
+
+	// Assign a different key for each case.
+	for idx, boundsCase := range cases {
+		key := roachpb.Key(fmt.Sprintf("/Table/%d/seqVal", idx))
+		boundsCase.key = key
+		if boundsCase.expectedErr != nil {
+			boundsCase.expectedErr.Key = key
+		}
+	}
+
+	for idx, c := range cases {
+		// Set initial value.
+		val, err := MVCCIncrement(
+			context.Background(), engine, nil, c.key, hlc.Timestamp{Logical: 1}, nil,
+			c.initialVal, math.MinInt64, math.MaxInt64, false, 0,
+		)
+		if val != c.initialVal || err != nil {
+			t.Fatalf("case idx %d: expected val=%d (got %d): %s", idx, c.initialVal, val, err)
+		}
+
+		// Do test increment.
+		incVal, incErr := MVCCIncrement(
+			context.Background(), engine, nil, c.key, hlc.Timestamp{Logical: 2}, nil,
+			c.incBy, c.minVal, c.maxVal, c.cycle, c.start,
+		)
+		callStr := fmt.Sprintf(
+			"case idx %d: expected increment(val=%d, inc=%d, min=%d, max=%d, cycle=%t, start=%d)",
+			idx, c.initialVal, c.incBy, c.minVal, c.maxVal, c.cycle, c.start,
+		)
+		if incVal != c.expectedVal {
+			t.Fatalf("%s to return %d; got %d", callStr, c.expectedVal, incVal)
+		}
+		if !c.expectedErr.Equal(incErr) {
+			t.Fatalf("%s to return err %q; got %q", callStr, c.expectedErr, incErr)
+		}
+	}
+
 }
 
 // TestMVCCReverseScan verifies that MVCCReverseScan scans [start,

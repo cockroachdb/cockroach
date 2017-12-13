@@ -15,6 +15,9 @@
 package sql
 
 import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -87,8 +90,12 @@ func (n *createSequenceNode) startExec(params runParams) error {
 
 	// Initialize the sequence value.
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
+	opts := &roachpb.IncrementRequest_BoundsOptions{
+		MinValue: math.MinInt64,
+		MaxValue: math.MaxInt64,
+	}
 	b := &client.Batch{}
-	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
+	b.IncWithOpts(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment, opts)
 	if err := params.p.txn.Run(params.ctx, b); err != nil {
 		return err
 	}

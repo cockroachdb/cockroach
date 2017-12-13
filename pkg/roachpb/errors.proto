@@ -334,6 +334,17 @@ message TxnPrevAttemptError {
   option (gogoproto.equal) = true;
 }
 
+message BoundsExceededError {
+  option (gogoproto.equal) = true;
+
+  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+  optional int64 current_value = 2 [(gogoproto.nullable) = false];
+  optional int64 increment_value = 3 [(gogoproto.nullable) = false];
+  optional bool overflow = 4 [(gogoproto.nullable) = false];
+  optional int64 min_value = 5 [(gogoproto.nullable) = false];
+  optional int64 max_value = 6 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -369,6 +380,7 @@ message ErrorDetail {
   optional HandledRetryableTxnError handled_retryable_txn_error = 28;
   optional UntrackedTxnError untracked_txn_error = 29;
   optional TxnPrevAttemptError txn_aborted_async_err = 30;
+  optional BoundsExceededError bounds_exceeded = 31;
 }
 
 // TransactionRestart indicates how an error should be handled in a

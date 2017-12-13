@@ -618,3 +618,16 @@ func (*TxnPrevAttemptError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &TxnPrevAttemptError{}
+
+func (e *BoundsExceededError) Error() string {
+	return e.message(nil)
+}
+
+func (e *BoundsExceededError) message(_ *Error) string {
+	return fmt.Sprintf(
+		"key %s with value %d incremented by %d does not fall in range [%d, %d]",
+		e.Key, e.CurrentValue, e.IncrementValue, e.MinValue, e.MaxValue,
+	)
+}
+
+var _ ErrorDetailInterface = &BoundsExceededError{}

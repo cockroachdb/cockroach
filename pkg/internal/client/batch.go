@@ -462,13 +462,28 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 // and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string.
-func (b *Batch) Inc(key interface{}, value int64) {
+func (b *Batch) Inc(key interface{}, incBy int64) {
+	b.IncWithOpts(key, incBy, nil)
+}
+
+// IncWithOpts is the same at Inc, but takes additional options which specify
+// boundaries for the incremented value, and what to do if they are hit.
+// If MaxValue or MinValue is exceeded and Cycle is false, a roachpb.BoundsError is returned.
+// If a bound is exceeded and Cycle is true, the value is set to opts.Start.
+// By default,
+//   MinValue = 0
+//   MaxValue = math.MaxInt
+//   Cycle = false
+//   Start = 0
+func (b *Batch) IncWithOpts(
+	key interface{}, incBy int64, opts *roachpb.IncrementRequest_BoundsOptions,
+) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	b.appendReqs(roachpb.NewIncrement(k, value))
+	b.appendReqs(roachpb.NewIncrement(k, incBy, opts))
 	b.initResult(1, 1, notRaw, nil)
 }
 

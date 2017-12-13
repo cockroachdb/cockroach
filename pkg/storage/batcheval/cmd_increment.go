@@ -15,6 +15,8 @@
 package batcheval
 
 import (
+	"math"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,7 +38,20 @@ func Increment(
 	h := cArgs.Header
 	reply := resp.(*roachpb.IncrementResponse)
 
-	newVal, err := engine.MVCCIncrement(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, h.Txn, args.Increment)
+	minValue := int64(0)
+	maxValue := int64(math.MaxInt64)
+	cycle := false
+	start := int64(0)
+	if opts := args.BoundsOptions; opts != nil {
+		minValue = opts.MinValue
+		maxValue = opts.MaxValue
+		cycle = opts.Cycle
+		start = opts.Start
+	}
+	newVal, err := engine.MVCCIncrement(
+		ctx, batch, cArgs.Stats, args.Key, h.Timestamp, h.Txn,
+		args.Increment, minValue, maxValue, cycle, start,
+	)
 	reply.NewValue = newVal
 	return result.Result{}, err
 }

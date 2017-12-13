@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"math"
 	"sort"
 	"testing"
 	"time"
@@ -98,7 +99,10 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 	store, _ := createTestStore(t, stopper)
 
 	// Increment our key to a negative value.
-	newValue, err := engine.MVCCIncrement(context.Background(), store.Engine(), nil, keys.RangeIDGenerator, store.cfg.Clock.Now(), nil, -1024)
+	newValue, err := engine.MVCCIncrement(
+		context.Background(), store.Engine(), nil, keys.RangeIDGenerator, store.cfg.Clock.Now(), nil,
+		-1024, 0, math.MinInt64, false, 0,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

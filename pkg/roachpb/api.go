@@ -736,12 +736,13 @@ func NewGet(key Key) Request {
 
 // NewIncrement returns a Request initialized to increment the value at
 // key by increment.
-func NewIncrement(key Key, increment int64) Request {
+func NewIncrement(key Key, increment int64, opts *IncrementRequest_BoundsOptions) Request {
 	return &IncrementRequest{
 		Span: Span{
 			Key: key,
 		},
-		Increment: increment,
+		Increment:     increment,
+		BoundsOptions: opts,
 	}
 }
 

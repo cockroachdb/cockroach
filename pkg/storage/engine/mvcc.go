@@ -1199,32 +1199,66 @@ func MVCCIncrement(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	inc int64,
+	minVal int64,
+	maxVal int64,
+	cycle bool,
+	start int64,
 ) (int64, error) {
 	iter := engine.NewIterator(true)
 	defer iter.Close()
 
-	var int64Val int64
+	var curInt64Val int64
+	var newInt64Val int64
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, func(value *roachpb.Value) ([]byte, error) {
 		if value.IsPresent() {
 			var err error
-			if int64Val, err = value.GetInt(); err != nil {
+			if curInt64Val, err = value.GetInt(); err != nil {
 				return nil, errors.Errorf("key %q does not contain an integer value", key)
 			}
 		}
 
 		// Check for overflow and underflow.
-		if willOverflow(int64Val, inc) {
-			return nil, errors.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
+		if willOverflow(curInt64Val, inc) {
+			if cycle {
+				newInt64Val = start
+			} else {
+				// Return the current value, since we failed to change it.
+				newInt64Val = curInt64Val
+				return nil, &roachpb.BoundsExceededError{
+					Key:            key,
+					Overflow:       true,
+					CurrentValue:   curInt64Val,
+					IncrementValue: inc,
+					MaxValue:       maxVal,
+					MinValue:       minVal,
+				}
+			}
+		} else {
+			newInt64Val = curInt64Val + inc
+			if newInt64Val > maxVal || newInt64Val < minVal {
+				if cycle {
+					newInt64Val = start
+				} else {
+					// Return the current value, since we failed to change it.
+					newInt64Val = curInt64Val
+					return nil, &roachpb.BoundsExceededError{
+						Key:            key,
+						CurrentValue:   curInt64Val,
+						IncrementValue: inc,
+						MaxValue:       maxVal,
+						MinValue:       minVal,
+					}
+				}
+			}
 		}
 
-		int64Val = int64Val + inc
 		newValue := roachpb.Value{}
-		newValue.SetInt(int64Val)
+		newValue.SetInt(newInt64Val)
 		newValue.InitChecksum(key)
 		return newValue.RawBytes, nil
 	})
 
-	return int64Val, err
+	return newInt64Val, err
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the
