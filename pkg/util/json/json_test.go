@@ -215,12 +215,14 @@ func TestJSONRoundTrip(t *testing.T) {
 		// should be checked higher up.
 		string([]byte{'"', 0xa7, '"'}),
 	}
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		j, err := ParseJSON(tc)
 		if err != nil {
 			t.Fatal(err)
 		}
-		runDecodedAndEncoded(t, tc, j, func(t *testing.T, j JSON) {
+		// We don't include the actual string here because TeamCity doesn't handle
+		// test names with emojis in them well.
+		runDecodedAndEncoded(t, fmt.Sprintf("%d", i), j, func(t *testing.T, j JSON) {
 			s := j.String()
 
 			j2, err := ParseJSON(s)
