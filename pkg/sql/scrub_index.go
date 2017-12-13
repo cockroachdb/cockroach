@@ -58,8 +58,8 @@ type indexCheckOperation struct {
 type indexCheckRun struct {
 	started bool
 	// Intermediate values.
-	rows     *sqlbase.RowContainer
-	rowIndex int
+	rows      *channelRowContainer
+	rowBuffer tree.Datums
 }
 
 func newIndexCheckOperation(
@@ -142,7 +142,6 @@ func (o *indexCheckOperation) Start(params runParams) error {
 
 	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, physPlan, columnTypes)
 	if err != nil {
-		rows.Close(ctx)
 		return err
 	}
 
@@ -154,10 +153,20 @@ func (o *indexCheckOperation) Start(params runParams) error {
 }
 
 // Next implements the checkOperation interface.
-func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows.At(o.run.rowIndex)
-	o.run.rowIndex++
+func (o *indexCheckOperation) Next(params runParams) (bool, error) {
+	if o.run.rows == nil {
+		return false, nil
+	}
+	var err error
+	o.run.rowBuffer, err = o.run.rows.GetResult()
+	if o.run.rowBuffer != nil {
+		return true, nil
+	}
+	return false, err
+}
 
+func (o *indexCheckOperation) Values(params runParams) (tree.Datums, error) {
+	row := o.run.rowBuffer
 	// Check if this row has results from the left. See the comment above
 	// createIndexCheckQuery indicating why this is true.
 	var isMissingIndexReferenceError bool
@@ -232,17 +241,8 @@ func (o *indexCheckOperation) Started() bool {
 	return o.run.started
 }
 
-// Done implements the checkOperation interface.
-func (o *indexCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
-}
-
-// Close4 implements the checkOperation interface.
-func (o *indexCheckOperation) Close(ctx context.Context) {
-	if o.run.rows != nil {
-		o.run.rows.Close(ctx)
-	}
-}
+// Close implements the checkOperation interface.
+func (o *indexCheckOperation) Close(ctx context.Context) {}
 
 // createIndexCheckQuery will make the index check query for a given
 // table and secondary index. It will also take into account an AS OF

@@ -123,7 +123,12 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 }
 
 // Next implements the checkOperation interface.
-func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, error) {
+func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (bool, error) {
+	return o.run.rows != nil && o.run.hasRowsLeft, nil
+}
+
+// Next implements the checkOperation interface.
+func (o *sqlCheckConstraintCheckOperation) Values(params runParams) (tree.Datums, error) {
 	row := o.run.rows.Values()
 	timestamp := tree.MakeDTimestamp(
 		params.evalCtx.GetStmtTimestamp(), time.Nanosecond)
@@ -169,11 +174,6 @@ func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, 
 // Started implements the checkOperation interface.
 func (o *sqlCheckConstraintCheckOperation) Started() bool {
 	return o.run.started
-}
-
-// Done implements the checkOperation interface.
-func (o *sqlCheckConstraintCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || !o.run.hasRowsLeft
 }
 
 // Close implements the checkOperation interface.
