@@ -119,7 +119,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		go func(nodeNum int) {
 			errors <- at.f.Exec(nodeNum,
 				fmt.Sprintf("find %[1]s -type f -delete && curl -sfSL %s/store%d.tgz | tar -C %[1]s -zx",
-					"/mnt/data0", storeURL, nodeNum+1,
+					"/mnt/data0/cockroach-data", storeURL, nodeNum+1,
 				),
 			)
 		}(i)
