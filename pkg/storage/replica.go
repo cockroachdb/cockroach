@@ -30,7 +30,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -4604,6 +4604,26 @@ func (r *Replica) processRaftCommand(
 			)
 			r.store.metrics.AddSSTableApplications.Inc(1)
 			raftCmd.ReplicatedEvalResult.AddSSTable = nil
+		}
+
+		if raftCmd.ReplicatedEvalResult.Split != nil {
+			// Splits require a new HardState to be written to the new RHS
+			// range (and this needs to be atomic with the main batch). This
+			// cannot be constructed at evaluation time because it differs
+			// on each replica (votes may have already been cast on the
+			// uninitialized replica). Transform the write batch to add the
+			// updated HardState.
+			// See https://github.com/cockroachdb/cockroach/issues/20629
+			//
+			// This is not the most efficient, but it only happens on splits,
+			// which are relatively infrequent and don't write much data.
+			tmpBatch := r.store.engine.NewBatch()
+			if err := tmpBatch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
+				log.Fatal(ctx, err)
+			}
+			splitPreApply(ctx, r.store.cfg.Settings, tmpBatch, raftCmd.ReplicatedEvalResult.Split.SplitTrigger)
+			writeBatch.Data = tmpBatch.Repr()
+			tmpBatch.Close()
 		}
 
 		var delta enginepb.MVCCStats
