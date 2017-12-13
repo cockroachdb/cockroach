@@ -795,13 +795,13 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
-	// We make 4 stores in this test, store1 and store2 are in the same datacenter a,
-	// store3 in the datacenter b, store4 in the datacenter c. all of our replicas are
-	// distributed within these three datacenters. Originally, store4 has much more replicas
-	// than other stores. So if we didn't make the simulation in RebalanceTarget, it will
-	// try to choose store2 as the target store to make an rebalance.
-	// However, we'll immediately remove the replica on the store2 to guarantee the locality diversity.
-	// But after we make the simulation in RebalanceTarget, we could avoid that happen.
+	// We make 5 stores in this test -- 3 in the same datacenter, and 1 each in
+	// 2 other datacenters. All of our replicas are distributed within these 3
+	// datacenters. Originally, the stores that are all alone in their datacenter
+	// are fuller than the other stores. If we didn't simulate RemoveTarget in
+	// RebalanceTarget, we would try to choose store 2 or 3 as the target store
+	// to make a rebalance. However, we would immediately remove the replica on
+	// store 1 or 2 to retain the locality diversity.
 	stores := []*roachpb.StoreDescriptor{
 		{
 			StoreID: 1,
@@ -828,7 +828,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 				},
 			},
 			Capacity: roachpb.StoreCapacity{
-				RangeCount: 56,
+				RangeCount: 55,
 			},
 		},
 		{
@@ -837,7 +837,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 				NodeID: 3,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{
-						{Key: "datacenter", Value: "b"},
+						{Key: "datacenter", Value: "a"},
 					},
 				},
 			},
@@ -851,12 +851,26 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 				NodeID: 4,
 				Locality: roachpb.Locality{
 					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "b"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 100,
+			},
+		},
+		{
+			StoreID: 5,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 5,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
 						{Key: "datacenter", Value: "c"},
 					},
 				},
 			},
 			Capacity: roachpb.StoreCapacity{
-				RangeCount: 150,
+				RangeCount: 100,
 			},
 		},
 	}
@@ -866,18 +880,9 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	st := a.storePool.st
 	EnableStatsBasedRebalancing.Override(&st.SV, false)
 	replicas := []roachpb.ReplicaDescriptor{
-		{
-			StoreID: 1,
-			NodeID:  1,
-		},
-		{
-			StoreID: 3,
-			NodeID:  3,
-		},
-		{
-			StoreID: 4,
-			NodeID:  4,
-		},
+		{NodeID: 1, StoreID: 1},
+		{NodeID: 4, StoreID: 4},
+		{NodeID: 5, StoreID: 5},
 	}
 	repl := &Replica{RangeID: firstRange}
 
@@ -904,7 +909,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		}
 	}
 	for i := 0; i < 10; i++ {
-		result, _ := a.RebalanceTarget(
+		result, details := a.RebalanceTarget(
 			context.Background(),
 			config.Constraints{},
 			status,
@@ -913,7 +918,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			false,
 		)
 		if result != nil {
-			t.Errorf("expected no rebalance, but got %d.", result.StoreID)
+			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
 		}
 	}
 }
