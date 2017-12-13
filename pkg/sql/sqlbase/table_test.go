@@ -819,7 +819,7 @@ func TestEquivSignature(t *testing.T) {
 	}
 }
 
-func TestTightenStartKey(t *testing.T) {
+func TestAdjustStartKeyForInterleave(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -827,11 +827,13 @@ func TestTightenStartKey(t *testing.T) {
 
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 
-	// Create DESC indexes for testing.
+	// Secondary indexes with DESC direction in the last column.
 	r := sqlutils.MakeSQLRunner(sqlDB)
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
+	// Index with implicit primary columns (pid1, cid2).
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_implicit ON %s.child1 (v, cid1)`, sqlutils.TestDB))
 
 	// The interleaved hierarchy is as follows:
 	//    parent		(pid1)
@@ -843,6 +845,7 @@ func TestTightenStartKey(t *testing.T) {
 
 	parentDescIdx := parent.Indexes[0]
 	childDescIdx := child.Indexes[0]
+	childImplicitIdx := child.Indexes[1]
 	grandchildDescIdx := grandchild.Indexes[0]
 
 	testCases := []struct {
@@ -943,11 +946,43 @@ func TestTightenStartKey(t *testing.T) {
 			input:    "/1/#/2/3/#/4",
 			expected: "/1/#/2/4",
 		},
+
+		// Index key with extra columns (implicit primary key columns).
+		// We should expect two extra columns (in addition to the
+		// two index columns).
+
+		// With both index columns (v, cid1).
+		{
+			index:    &childImplicitIdx,
+			input:    "/2/3",
+			expected: "/2/3",
+		},
+		// With both index columns (v, cid1) and one implicit primary
+		// key column (pid1).
+		{
+			index:    &childImplicitIdx,
+			input:    "/2/3/4",
+			expected: "/2/3/4",
+		},
+		// Both index columns (v, cid1) and both implicit primary key
+		// columns (pid1, cid2).
+		{
+			index:    &childImplicitIdx,
+			input:    "/2/3/4/5",
+			expected: "/2/3/4/5",
+		},
+		// Any additional tokens in the key would cause the key to be
+		// interpretted as that of a child.
+		{
+			index:    &childImplicitIdx,
+			input:    "/2/3/4/5/#/10",
+			expected: "/2/3/4/6",
+		},
 	}
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual, err := TightenStartKey(tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)))
+			actual, err := AdjustStartKeyForInterleave(tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -960,7 +995,7 @@ func TestTightenStartKey(t *testing.T) {
 	}
 }
 
-func TestTightenEndKey(t *testing.T) {
+func TestAdjustEndKeyForInterleave(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -968,11 +1003,13 @@ func TestTightenEndKey(t *testing.T) {
 
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 
-	// Create DESC indexes for testing.
+	// Secondary indexes with DESC direction in the last column.
 	r := sqlutils.MakeSQLRunner(sqlDB)
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
+	// Index with implicit primary columns (pid1, cid2).
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_implicit ON %s.child1 (v, cid1)`, sqlutils.TestDB))
 
 	// The interleaved hierarchy is as follows:
 	//    parent		(pid1)
@@ -984,6 +1021,7 @@ func TestTightenEndKey(t *testing.T) {
 
 	parentDescIdx := parent.Indexes[0]
 	childDescIdx := child.Indexes[0]
+	childImplicitIdx := child.Indexes[1]
 	grandchildDescIdx := grandchild.Indexes[0]
 
 	testCases := []struct {
@@ -992,7 +1030,7 @@ func TestTightenEndKey(t *testing.T) {
 		// See ShortToLongKeyFmt for how to represent a key.
 		input string
 		// If the end key is assumed to be inclusive when passed to
-		// to TightenEndKey.
+		// to AdjustEndKeyForInterleave.
 		inclusive bool
 		expected  string
 	}{
@@ -1239,11 +1277,49 @@ func TestTightenEndKey(t *testing.T) {
 			inclusive: true,
 			expected:  "/1/#/3",
 		},
+
+		// Index key with extra columns (implicit primary key columns).
+		// We should expect two extra columns (in addition to the
+		// two index columns).
+
+		// With both index columns (v, cid1).
+		{
+			table:    child,
+			index:    &childImplicitIdx,
+			input:    "/2/3",
+			expected: "/2/3",
+		},
+		// With both index columns (v, cid1) and one implicit primary
+		// key column (pid1).
+		{
+			table:    child,
+			index:    &childImplicitIdx,
+			input:    "/2/3/4",
+			expected: "/2/3/4",
+		},
+		// Both index columns (v, cid1) and both implicit primary key
+		// columns (pid1, cid2).
+		{
+			table:    child,
+			index:    &childImplicitIdx,
+			input:    "/2/3/4/5",
+			expected: "/2/3/4/5",
+		},
+		// Any additional tokens in the key would cause the key to be
+		// interpretted as that of a child.
+		// Note the end key is not fixed since secondary indexes
+		// cannot have interleaved rows anyways.
+		{
+			table:    child,
+			index:    &childImplicitIdx,
+			input:    "/2/3/4/5/#/10",
+			expected: "/2/3/4/5/#/10",
+		},
 	}
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual, err := TightenEndKey(tc.table, tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)), tc.inclusive)
+			actual, err := AdjustEndKeyForInterleave(tc.table, tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)), tc.inclusive)
 			if err != nil {
 				t.Fatal(err)
 			}

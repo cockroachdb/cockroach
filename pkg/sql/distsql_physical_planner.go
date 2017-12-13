@@ -639,6 +639,23 @@ func (dsp *DistSQLPlanner) partitionSpans(
 	return partitions, nil
 }
 
+func adjustPartitionsForInterleave(partitions []spanPartition, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor) ([]spanPartition, error) {
+	for _, part := range partitions {
+		for i := range part.spans {
+			span := &part.spans[i]
+			var err error
+			if span.Key, err = sqlbase.AdjustStartKeyForInterleave(index, span.Key); err != nil {
+				return nil, err
+			}
+			if span.EndKey, err = sqlbase.AdjustEndKeyForInterleave(table, index, span.EndKey, false /* inclusive */); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return partitions, nil
+}
+
 // nodeVersionIsCompatible decides whether a particular node's DistSQL version
 // is compatible with planVer. It uses gossip to find out the node's version
 // range.
@@ -758,6 +775,9 @@ func (dsp *DistSQLPlanner) createTableReaders(
 
 	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
 	if err != nil {
+		return physicalPlan{}, err
+	}
+	if spanPartitions, err = adjustPartitionsForInterleave(spanPartitions, n.desc, n.index); err != nil {
 		return physicalPlan{}, err
 	}
 

@@ -2456,7 +2456,8 @@ func TableEquivSignatures(
 }
 
 // maxKeyTokens returns the maximum number of key tokens in an index's key,
-// including the table ID, index ID, and index column values.
+// including the table ID, index ID, and index column values (ncluding extra
+// columns stored in the key).
 //
 // In general, a key belonging to an interleaved index grandchild is encoded as:
 //
@@ -2475,7 +2476,13 @@ func TableEquivSignatures(
 // We return the maximum number of <tokens> in this prefix.
 func maxKeyTokens(index *IndexDescriptor) int {
 	nTables := len(index.Interleave.Ancestors) + 1
-	nKeys := len(index.ColumnIDs)
+	nKeyCols := len(index.ColumnIDs)
+
+	// Non-unique indexes have additional columns in the key that may
+	// appear in a span (e.g. primary key columns not part of the index).
+	if !index.Unique {
+		nKeyCols += len(index.ExtraColumnIDs)
+	}
 
 	// To illustrate how we compute max # of key tokens, take the
 	// key in the example above and let the respective index be child.
@@ -2490,10 +2497,10 @@ func maxKeyTokens(index *IndexDescriptor) int {
 	// Each <parent-pkX> must be a part of the index's columns (nKeys).
 	// Finally, we do not want to include the interleave sentinel for the
 	// current index (-1).
-	return 3*nTables + nKeys - 1
+	return 3*nTables + nKeyCols - 1
 }
 
-// TightenStartKey pushes forward the start key to the first key belonging to
+// AdjustStartKeyForInterleave pushes forward the start key to the first key belonging to
 // the index (whether it exists or not) in the span.
 // This is relevant for parent spans that have an interleaved child's index key
 // as a start key.
@@ -2510,7 +2517,7 @@ func maxKeyTokens(index *IndexDescriptor) int {
 // We can thus push forward the start key from /1/#/2 to /2. If the start key
 // was /1, we cannot push this forwards since that is the first key we want
 // to read.
-func TightenStartKey(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, error) {
+func AdjustStartKeyForInterleave(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, error) {
 	nIndexTokens := maxKeyTokens(index)
 	keyTokens, err := encoding.DecomposeKeyTokens(start)
 	if err != nil {
@@ -2528,17 +2535,18 @@ func TightenStartKey(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, er
 	return start[:nIndexTokens].PrefixEnd(), nil
 }
 
-// TightenEndKey pushes back the end key to the last key of the last row
-// belonging to the index (whether it exists or not) in the span.
+// AdjustEndKeyForInterleave pushes back* the end key to the last key of the last
+// row belonging to the index (whether it exists or not) in the span.
+// * - the key will be pushed forwards if it's initially inclusive.
 // This is relevant for parent spans that have interleaved children.
 // For example, the parent span composed from the filter PK >= 1 and PK < 3 is
 //    /1 - /3
 // This reads all keys up to the first parent key for PK = 3. If parent had
 // interleaved tables and keys, it would unncessarily scan over interleaved
 // rows under PK2 (e.g. /2/#/5).
-// We can instead "tighten" the end key from /3 to /2/#.
-// TightenEndKey is idempotent upon successive invocation(s).
-func TightenEndKey(
+// We can instead "tighten" or adjust the end key from /3 to /2/#.
+// AdjustEndKeyForInterleave is idempotent upon successive invocation(s).
+func AdjustEndKeyForInterleave(
 	table *TableDescriptor, index *IndexDescriptor, end roachpb.Key, inclusive bool,
 ) (roachpb.Key, error) {
 	// To illustrate, suppose we have the interleaved hierarchy
@@ -2552,10 +2560,22 @@ func TightenEndKey(
 		return roachpb.Key{}, err
 	}
 
+	// Sibling/nibling keys: it is possible for this key to be part
+	// of a sibling tree in the interleaved hierarchy, especially after
+	// partitioning on range split keys.
+	// As such, a sibling may be interpretted as an ancestor (if the sibling
+	// has fewer key-encoded columns) or a descendant (if the sibling has
+	// more key-encoded columns). Similarly for niblings.
+	// This is fine because if the sibling is sorted before or after the
+	// current index (child in our example), it is not possible for us to
+	// adjust the sibling key such that we add or remove child rows from our
+	// span.
+
 	if index.ID != table.PrimaryIndex.ID || len(keyTokens) < nIndexTokens {
 		// Case 1: secondary index, parent key or partial child key:
 		// Secondary indexes cannot have interleaved rows.
-		// We cannot tighten parent keys with respect to a child index.
+		// We cannot adjust or tighten parent keys with respect to a
+		// child index.
 		// Partial child keys e.g. /1/#/1 vs /1/#/1/2 cannot have
 		// interleaved rows.
 		// Nothing to do besides making the end key exclusive if it was
@@ -2613,27 +2633,20 @@ func TightenEndKey(
 	// len(keyTokens) > nIndexTokens
 	// Case 3: tightened child key or grandchild key
 
-	// Since there are more key tokens than the index token, we should
-	// expected an interleaved sentinel next, or else this index key
-	// cannot possibly be generated.
-	if _, isSentinel := encoding.DecodeIfInterleavedSentinel(keyTokens[nIndexTokens]); !isSentinel {
-		panic("expected interleaved sentinel as the next key token")
-	}
-
 	// Case 3a: tightened child key
-	// This could from a previous invocation of TightenEndKey. For
+	// This could from a previous invocation of AdjustEndKeyForInterleave. For
 	// example, if during index selection the key for child was
 	// tightened
 	//	/1/#/2 --> /1/#/1/#
 	// We don't really want to tighten on '#' again.
-	if len(keyTokens) == nIndexTokens+1 {
+	if _, isSentinel := encoding.DecodeIfInterleavedSentinel(keyTokens[nIndexTokens]); isSentinel && len(keyTokens)-1 == nIndexTokens {
 		if inclusive {
 			end = end.PrefixEnd()
 		}
 		return end, nil
 	}
 
-	// Case 3b: grandchild key
+	// Case 3b: grandchild key (or sibling/nibling)
 	// Ideally, we want to form
 	//    /1/#/2/#/3 --> /1/#/2/#
 	// We truncate up to the interleave sentinel after the last index
