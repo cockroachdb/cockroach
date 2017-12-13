@@ -12,9 +12,7 @@ import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 
 import "./cluster.styl";
-
-// tslint:disable-next-line:no-var-requires
-const spinner = require<string>("assets/spinner.gif");
+import spinner from "assets/spinner.gif";
 
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent(capacityChart);
@@ -167,7 +165,7 @@ class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
       children.push(
         ...renderCapacityUsage(this.props.capacityUsage),
         ...renderNodeLiveness(this.props.nodeLiveness),
-        ...renderReplicationStatus(this.props.replicationStatus)
+        ...renderReplicationStatus(this.props.replicationStatus),
       );
     }
 

@@ -1,6 +1,3 @@
-// tslint:disable-next-line:no-var-requires
-const spinner = require<string>("assets/spinner.gif");
-
 import _ from "lodash";
 import React from "react";
 
@@ -9,6 +6,8 @@ import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";
 import { TimestampToMoment } from "src/util/convert";
+
+import spinner from "assets/spinner.gif";
 
 interface LogTableProps {
   rangeID: Long;
