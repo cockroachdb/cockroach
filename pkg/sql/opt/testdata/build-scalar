@@ -7,9 +7,8 @@ build-scalar
 1 + 2
 ----
 plus (type: int)
- └── inputs
-      ├── const (1) (type: int)
-      └── const (2) (type: int)
+ ├── const (1) (type: int)
+ └── const (2) (type: int)
 
 build-scalar string
 @1
@@ -20,152 +19,115 @@ build-scalar int
 @1 + 2
 ----
 plus (type: int)
- └── inputs
-      ├── variable (0) (type: int)
-      └── const (2) (type: int)
+ ├── variable (0) (type: int)
+ └── const (2) (type: int)
 
 build-scalar int int
 @1 >= 5 AND @1 <= 10 AND @2 < 4
 ----
 and (type: bool)
- └── inputs
-      ├── and (type: bool)
-      │    └── inputs
-      │         ├── ge (type: bool)
-      │         │    └── inputs
-      │         │         ├── variable (0) (type: int)
-      │         │         └── const (5) (type: int)
-      │         └── le (type: bool)
-      │              └── inputs
-      │                   ├── variable (0) (type: int)
-      │                   └── const (10) (type: int)
-      └── lt (type: bool)
-           └── inputs
-                ├── variable (1) (type: int)
-                └── const (4) (type: int)
+ ├── and (type: bool)
+ │    ├── ge (type: bool)
+ │    │    ├── variable (0) (type: int)
+ │    │    └── const (5) (type: int)
+ │    └── le (type: bool)
+ │         ├── variable (0) (type: int)
+ │         └── const (10) (type: int)
+ └── lt (type: bool)
+      ├── variable (1) (type: int)
+      └── const (4) (type: int)
 
 build-scalar,normalize int int
 @1 >= 5 AND @1 <= 10 AND @2 > 0 AND @2 < 10
 ----
 and (type: bool)
- └── inputs
-      ├── ge (type: bool)
-      │    └── inputs
-      │         ├── variable (0) (type: int)
-      │         └── const (5) (type: int)
-      ├── le (type: bool)
-      │    └── inputs
-      │         ├── variable (0) (type: int)
-      │         └── const (10) (type: int)
-      ├── gt (type: bool)
-      │    └── inputs
-      │         ├── variable (1) (type: int)
-      │         └── const (0) (type: int)
-      └── lt (type: bool)
-           └── inputs
-                ├── variable (1) (type: int)
-                └── const (10) (type: int)
+ ├── ge (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ ├── le (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (10) (type: int)
+ ├── gt (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (0) (type: int)
+ └── lt (type: bool)
+      ├── variable (1) (type: int)
+      └── const (10) (type: int)
 
 build-scalar,normalize int int
 @1 >= 5 OR @1 <= 10 OR @2 > 0 OR @2 < 10
 ----
 or (type: bool)
- └── inputs
-      ├── ge (type: bool)
-      │    └── inputs
-      │         ├── variable (0) (type: int)
-      │         └── const (5) (type: int)
-      ├── le (type: bool)
-      │    └── inputs
-      │         ├── variable (0) (type: int)
-      │         └── const (10) (type: int)
-      ├── gt (type: bool)
-      │    └── inputs
-      │         ├── variable (1) (type: int)
-      │         └── const (0) (type: int)
-      └── lt (type: bool)
-           └── inputs
-                ├── variable (1) (type: int)
-                └── const (10) (type: int)
+ ├── ge (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ ├── le (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (10) (type: int)
+ ├── gt (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (0) (type: int)
+ └── lt (type: bool)
+      ├── variable (1) (type: int)
+      └── const (10) (type: int)
 
 build-scalar,normalize int int int
 @1 >= 5 AND (@2 = 1 OR @2 > 3) AND (@3 > 2)
 ----
 and (type: bool)
- └── inputs
-      ├── ge (type: bool)
-      │    └── inputs
-      │         ├── variable (0) (type: int)
-      │         └── const (5) (type: int)
-      ├── or (type: bool)
-      │    └── inputs
-      │         ├── eq (type: bool)
-      │         │    └── inputs
-      │         │         ├── variable (1) (type: int)
-      │         │         └── const (1) (type: int)
-      │         └── gt (type: bool)
-      │              └── inputs
-      │                   ├── variable (1) (type: int)
-      │                   └── const (3) (type: int)
-      └── gt (type: bool)
-           └── inputs
-                ├── variable (2) (type: int)
-                └── const (2) (type: int)
+ ├── ge (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ ├── or (type: bool)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── const (1) (type: int)
+ │    └── gt (type: bool)
+ │         ├── variable (1) (type: int)
+ │         └── const (3) (type: int)
+ └── gt (type: bool)
+      ├── variable (2) (type: int)
+      └── const (2) (type: int)
 
 build-scalar,normalize int int int
 @1 >= 5 AND (@2 = 1 OR @2 = 3 OR @2 > 5) AND (@3 > 2)
 ----
 and (type: bool)
- └── inputs
-      ├── ge (type: bool)
-      │    └── inputs
-      │         ├── variable (0) (type: int)
-      │         └── const (5) (type: int)
-      ├── or (type: bool)
-      │    └── inputs
-      │         ├── eq (type: bool)
-      │         │    └── inputs
-      │         │         ├── variable (1) (type: int)
-      │         │         └── const (1) (type: int)
-      │         ├── eq (type: bool)
-      │         │    └── inputs
-      │         │         ├── variable (1) (type: int)
-      │         │         └── const (3) (type: int)
-      │         └── gt (type: bool)
-      │              └── inputs
-      │                   ├── variable (1) (type: int)
-      │                   └── const (5) (type: int)
-      └── gt (type: bool)
-           └── inputs
-                ├── variable (2) (type: int)
-                └── const (2) (type: int)
+ ├── ge (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ ├── or (type: bool)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── const (1) (type: int)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── const (3) (type: int)
+ │    └── gt (type: bool)
+ │         ├── variable (1) (type: int)
+ │         └── const (5) (type: int)
+ └── gt (type: bool)
+      ├── variable (2) (type: int)
+      └── const (2) (type: int)
 
 build-scalar,normalize int int int
 (@1 >= 5 AND @1 <= 10) OR (@2 > 1 AND @2 < 3) OR (@3 > 2)
 ----
 or (type: bool)
- └── inputs
-      ├── and (type: bool)
-      │    └── inputs
-      │         ├── ge (type: bool)
-      │         │    └── inputs
-      │         │         ├── variable (0) (type: int)
-      │         │         └── const (5) (type: int)
-      │         └── le (type: bool)
-      │              └── inputs
-      │                   ├── variable (0) (type: int)
-      │                   └── const (10) (type: int)
-      ├── and (type: bool)
-      │    └── inputs
-      │         ├── gt (type: bool)
-      │         │    └── inputs
-      │         │         ├── variable (1) (type: int)
-      │         │         └── const (1) (type: int)
-      │         └── lt (type: bool)
-      │              └── inputs
-      │                   ├── variable (1) (type: int)
-      │                   └── const (3) (type: int)
-      └── gt (type: bool)
-           └── inputs
-                ├── variable (2) (type: int)
-                └── const (2) (type: int)
+ ├── and (type: bool)
+ │    ├── ge (type: bool)
+ │    │    ├── variable (0) (type: int)
+ │    │    └── const (5) (type: int)
+ │    └── le (type: bool)
+ │         ├── variable (0) (type: int)
+ │         └── const (10) (type: int)
+ ├── and (type: bool)
+ │    ├── gt (type: bool)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── const (1) (type: int)
+ │    └── lt (type: bool)
+ │         ├── variable (1) (type: int)
+ │         └── const (3) (type: int)
+ └── gt (type: bool)
+      ├── variable (2) (type: int)
+      └── const (2) (type: int)

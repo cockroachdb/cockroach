@@ -100,7 +100,7 @@ func (scalarClass) format(e *expr, tp treeprinter.Node) {
 	}
 	fmt.Fprintf(&buf, " (type: %s)", e.scalarProps.typ)
 	n := tp.Child(buf.String())
-	formatExprs(n, "inputs", e.inputs())
+	formatExprs(n, "", e.children)
 }
 
 // The following initializers are called on an already allocated expression
