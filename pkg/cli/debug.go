@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -755,7 +756,26 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return db.Compact()
+	{
+		approxBytesBefore, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		if err != nil {
+			return errors.Wrap(err, "while computing approximate size before compaction")
+		}
+		fmt.Printf("approximate reported database size before compaction: %s\n", humanizeutil.IBytes(int64(approxBytesBefore)))
+	}
+
+	if err := db.Compact(); err != nil {
+		return errors.Wrap(err, "while compacting")
+	}
+
+	{
+		approxBytesAfter, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		if err != nil {
+			return errors.Wrap(err, "while computing approximate size after compaction")
+		}
+		fmt.Printf("approximate reported database size after compaction: %s\n", humanizeutil.IBytes(int64(approxBytesAfter)))
+	}
+	return nil
 }
 
 var debugSSTablesCmd = &cobra.Command{

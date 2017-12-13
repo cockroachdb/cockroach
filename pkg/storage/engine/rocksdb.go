@@ -723,6 +723,15 @@ func (r *RocksDB) Compact() error {
 	return statusToError(C.DBCompact(r.rdb))
 }
 
+// ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
+func (r *RocksDB) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
+	start := MVCCKey{Key: from}
+	end := MVCCKey{Key: to}
+	var result C.uint64_t
+	err := statusToError(C.DBApproximateDiskBytes(r.rdb, goToCKey(start), goToCKey(end), &result))
+	return uint64(result), err
+}
+
 // Destroy destroys the underlying filesystem data associated with the database.
 func (r *RocksDB) Destroy() error {
 	return statusToError(C.DBDestroy(goToCSlice([]byte(r.cfg.Dir))))
