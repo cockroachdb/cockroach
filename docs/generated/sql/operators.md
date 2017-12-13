@@ -352,6 +352,7 @@
 <tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
 <tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
 <tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
+<tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
 <tr><td>oid <code>||</code> oid</td><td>oid</td></tr>
 <tr><td>oid <code>||</code> oid</td><td>oid</td></tr>
 <tr><td>oid <code>||</code> oid</td><td>oid</td></tr>
