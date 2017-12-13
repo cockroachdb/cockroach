@@ -404,3 +404,13 @@ query T
 SELECT json_extract_path('{"a": {"b": 2}}', 'a', 'b', 'c')
 ----
 NULL
+
+query T
+SELECT '[1,2,3]'::JSON || '[4,5,6]'::JSON
+----
+[1,2,3,4,5,6]
+
+query T
+SELECT '{"a": 1, "b": 2}'::JSON || '{"b": 3, "c": 4}'::JSON
+----
+{"a":1,"b":3,"c":4}
