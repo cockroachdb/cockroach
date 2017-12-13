@@ -17,6 +17,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,13 +33,38 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	if err != nil {
 		return 0, err
 	}
+	optsDesc := descriptor.SequenceOpts
+	opts := &roachpb.IncrementRequest_BoundsOptions{
+		Start:    optsDesc.Start,
+		Cycle:    optsDesc.Cycle,
+		MaxValue: optsDesc.MaxValue,
+		MinValue: optsDesc.MinValue,
+	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 	val, err := client.IncrementValRetryable(
-		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment, nil)
+		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment, opts)
 	if err != nil {
-		return 0, err
+		// Handle bound exceeded error. Don't need to implement `cycle` behavior here, since
+		// it's handled in the KV layer.
+		switch t := err.(type) {
+		case *roachpb.BoundsExceededError:
+			return 0, boundsExceededError(t.CurrentValue+t.IncrementValue, t.Overflow, descriptor)
+		default:
+			return 0, err
+		}
 	}
 
+	seqOpts := descriptor.SequenceOpts
+	if val > seqOpts.MaxValue {
+		return 0, pgerror.NewErrorf(
+			pgerror.CodeSequenceGeneratorLimitExceeded,
+			`reached maximum value of sequence "%s" (%d)`, descriptor.Name, seqOpts.MaxValue)
+	}
+	if val < seqOpts.MinValue {
+		return 0, pgerror.NewErrorf(
+			pgerror.CodeSequenceGeneratorLimitExceeded,
+			`reached minimum value of sequence "%s" (%d)`, descriptor.Name, seqOpts.MinValue)
+	}
 	p.session.mu.Lock()
 	defer p.session.mu.Unlock()
 	p.session.mu.SequenceState.lastSequenceIncremented = descriptor.ID
@@ -122,4 +148,21 @@ func (ss *sequenceState) nextvalEverCalled() bool {
 func readOnlyError(s string) error {
 	return pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
 		"cannot execute %s in a read-only transaction", s)
+}
+
+func boundsExceededError(newVal int64, overflow bool, desc *sqlbase.TableDescriptor) error {
+	opts := desc.SequenceOpts
+	var msgWord string
+	var msgVal int64
+	if newVal > opts.MaxValue || (overflow && opts.Increment > 0) {
+		msgWord = "maximum"
+		msgVal = opts.MaxValue
+	} else {
+		msgWord = "minimum"
+		msgVal = opts.MinValue
+	}
+	return pgerror.NewErrorf(
+		pgerror.CodeSequenceGeneratorLimitExceeded,
+		`reached %s value of sequence "%s" (%d)`, msgWord, desc.Name, msgVal,
+	)
 }
