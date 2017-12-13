@@ -390,7 +390,7 @@ func (j *jsonEncoded) shallowDecode() (JSON, error) {
 }
 
 func (j *jsonEncoded) mustDecode() JSON {
-	decoded, err := j.decode()
+	decoded, err := j.shallowDecode()
 	if err != nil {
 		panic(fmt.Sprintf("invalid JSON data: %s, %v", err.Error(), j.value))
 	}
@@ -522,6 +522,15 @@ func (j *jsonEncoded) RemoveIndex(idx int) (JSON, error) {
 	return decoded.RemoveIndex(idx)
 }
 
+// Concat implements the JSON interface.
+func (j *jsonEncoded) Concat(other JSON) (JSON, error) {
+	decoded, err := j.shallowDecode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.Concat(other)
+}
+
 // RemoveKey implements the JSON interface.
 func (j *jsonEncoded) RemoveKey(key string) (JSON, error) {
 	decoded, err := j.shallowDecode()
@@ -599,4 +608,9 @@ func (j *jsonEncoded) encode(appendTo []byte) (jEntry uint32, b []byte, err erro
 // MaybeDecode implements the JSON interface.
 func (j *jsonEncoded) MaybeDecode() JSON {
 	return j.mustDecode()
+}
+
+// tryDecode implements the JSON interface.
+func (j *jsonEncoded) tryDecode() (JSON, error) {
+	return j.shallowDecode()
 }

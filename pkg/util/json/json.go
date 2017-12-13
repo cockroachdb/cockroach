@@ -80,6 +80,9 @@ type JSON interface {
 	// RemoveIndex implements the `-` operator for ints.
 	RemoveIndex(idx int) (JSON, error)
 
+	// Concat implements the `||` operator.
+	Concat(other JSON) (JSON, error)
+
 	// AsText returns the JSON document as a string, with quotes around strings removed, and null as nil.
 	AsText() (*string, error)
 
@@ -106,6 +109,10 @@ type JSON interface {
 
 	// MaybeDecode returns an equivalent JSON which is not a jsonEncoded.
 	MaybeDecode() JSON
+
+	// tryDecode returns an equivalent JSON which is not a jsonEncoded, returning
+	// an error if the encoded data was corrupt.
+	tryDecode() (JSON, error)
 }
 
 type jsonTrue struct{}
@@ -152,6 +159,14 @@ func (j jsonNumber) MaybeDecode() JSON { return j }
 func (j jsonString) MaybeDecode() JSON { return j }
 func (j jsonArray) MaybeDecode() JSON  { return j }
 func (j jsonObject) MaybeDecode() JSON { return j }
+
+func (j jsonNull) tryDecode() (JSON, error)   { return j, nil }
+func (j jsonFalse) tryDecode() (JSON, error)  { return j, nil }
+func (j jsonTrue) tryDecode() (JSON, error)   { return j, nil }
+func (j jsonNumber) tryDecode() (JSON, error) { return j, nil }
+func (j jsonString) tryDecode() (JSON, error) { return j, nil }
+func (j jsonArray) tryDecode() (JSON, error)  { return j, nil }
+func (j jsonObject) tryDecode() (JSON, error) { return j, nil }
 
 func cmpJSONTypes(a Type, b Type) int {
 	if b > a {
@@ -768,6 +783,97 @@ func (jsonTrue) RemoveIndex(int) (JSON, error)   { return nil, errCannotDeleteFr
 func (jsonFalse) RemoveIndex(int) (JSON, error)  { return nil, errCannotDeleteFromScalar }
 func (jsonString) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 func (jsonNumber) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
+
+var errInvalidConcat = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "invalid concatenation of jsonb objects")
+
+func scalarConcat(left, other JSON) (JSON, error) {
+	switch other.Type() {
+	case ArrayJSONType:
+		decoded, err := other.tryDecode()
+		if err != nil {
+			return nil, err
+		}
+		right := decoded.(jsonArray)
+		result := make([]interface{}, len(right)+1)
+		result[0] = left
+		for i := range right {
+			result[i+1] = right[i]
+		}
+		return MakeJSON(result)
+	case ObjectJSONType:
+		return nil, errInvalidConcat
+	default:
+		return MakeJSON([]interface{}{left, other})
+	}
+}
+
+func (jsonNull) Concat(other JSON) (JSON, error)     { return scalarConcat(NullJSONValue, other) }
+func (jsonTrue) Concat(other JSON) (JSON, error)     { return scalarConcat(TrueJSONValue, other) }
+func (jsonFalse) Concat(other JSON) (JSON, error)    { return scalarConcat(FalseJSONValue, other) }
+func (j jsonString) Concat(other JSON) (JSON, error) { return scalarConcat(j, other) }
+func (j jsonNumber) Concat(other JSON) (JSON, error) { return scalarConcat(j, other) }
+
+func (j jsonArray) Concat(other JSON) (JSON, error) {
+	switch other.Type() {
+	case ArrayJSONType:
+		decoded, err := other.tryDecode()
+		if err != nil {
+			return nil, err
+		}
+		right := decoded.(jsonArray)
+		result := make([]interface{}, len(j)+len(right))
+		for i := range j {
+			result[i] = j[i]
+		}
+		for i := range right {
+			result[len(j)+i] = right[i]
+		}
+		return MakeJSON(result)
+	default:
+		result := make([]interface{}, len(j)+1)
+		result[len(result)-1] = other
+		for i := range j {
+			result[i] = j[i]
+		}
+		return MakeJSON(result)
+	}
+}
+
+func (j jsonObject) Concat(other JSON) (JSON, error) {
+	switch other.Type() {
+	case ArrayJSONType:
+		return scalarConcat(j, other)
+	case ObjectJSONType:
+		right := other.MaybeDecode().(jsonObject)
+		// Since both objects are sorted, we can do the merge sort thing to
+		// "concatenate" them.
+		// The capacity here is an overestimate if the two objects share keys.
+		result := make(jsonObject, 0, len(j)+len(right))
+		rightIdx := 0
+		for _, kv := range j {
+			for rightIdx < len(right) && right[rightIdx].k < kv.k {
+				result = append(result, right[rightIdx])
+				rightIdx++
+			}
+			// If we have any matching keys, the value in the right object takes
+			// precedence (this allows || to work as a setter).
+			if rightIdx < len(right) && right[rightIdx].k == kv.k {
+				result = append(result, right[rightIdx])
+				rightIdx++
+			} else {
+				result = append(result, kv)
+			}
+		}
+		// We've exhausted all of the key-value pairs on the left, so just dump in
+		// the remaining ones from the right.
+		for i := rightIdx; i < len(right); i++ {
+			result = append(result, right[i])
+		}
+		return result, nil
+	default:
+		return nil, errInvalidConcat
+	}
+}
 
 func (j jsonString) AsText() (*string, error) {
 	s := string(j)
