@@ -43,9 +43,9 @@ type sqlForeignKeyCheckOperation struct {
 // sqlForeignKeyConstraintCheckRun contains the run-time state for
 // sqlForeignKeyConstraintCheckOperation during local execution.
 type sqlForeignKeyConstraintCheckRun struct {
-	started  bool
-	rows     *sqlbase.RowContainer
-	rowIndex int
+	started   bool
+	rows      *channelRowContainer
+	rowBuffer tree.Datums
 }
 
 func newSQLForeignKeyCheckOperation(
@@ -134,7 +134,6 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 
 	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, physPlan, columnTypes)
 	if err != nil {
-		rows.Close(ctx)
 		return err
 	}
 
@@ -144,9 +143,21 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 }
 
 // Next implements the checkOperation interface.
-func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows.At(o.run.rowIndex)
-	o.run.rowIndex++
+func (o *sqlForeignKeyCheckOperation) Next(params runParams) (bool, error) {
+	if o.run.rows == nil {
+		return false, nil
+	}
+	var err error
+	o.run.rowBuffer, err = o.run.rows.GetResult()
+	if o.run.rowBuffer != nil {
+		return true, nil
+	}
+	return false, err
+}
+
+// Next implements the checkOperation interface.
+func (o *sqlForeignKeyCheckOperation) Values(params runParams) (tree.Datums, error) {
+	row := o.run.rowBuffer
 
 	details := make(map[string]interface{})
 	rowDetails := make(map[string]interface{})
@@ -200,17 +211,8 @@ func (o *sqlForeignKeyCheckOperation) Started() bool {
 	return o.run.started
 }
 
-// Done implements the checkOperation interface.
-func (o *sqlForeignKeyCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
-}
-
 // Close implements the checkOperation interface.
-func (o *sqlForeignKeyCheckOperation) Close(ctx context.Context) {
-	if o.run.rows != nil {
-		o.run.rows.Close(ctx)
-	}
-}
+func (o *sqlForeignKeyCheckOperation) Close(ctx context.Context) {}
 
 // createFKCheckQuery will make the foreign key check query for a given
 // table, the referenced tables and the mapping from table columns to

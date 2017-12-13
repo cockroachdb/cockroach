@@ -47,9 +47,9 @@ type physicalCheckOperation struct {
 // physicalCheckRun contains the run-time state for
 // physicalCheckOperation during local execution.
 type physicalCheckRun struct {
-	started  bool
-	rows     *sqlbase.RowContainer
-	rowIndex int
+	started   bool
+	rows      *channelRowContainer
+	rowBuffer tree.Datums
 }
 
 func newPhysicalCheckOperation(
@@ -145,18 +145,30 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	o.primaryColIdxs = primaryColIdxs
 	o.columns = columns
 	o.run.started = true
-	o.run.rows, err = scrubRunDistSQL(ctx, &planCtx, params.p, &physPlan, distsqlrun.ScrubTypes)
+	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, &physPlan, distsqlrun.ScrubTypes)
 	if err != nil {
-		o.run.rows.Close(ctx)
 		return err
 	}
+	o.run.rows = rows
 	return nil
 }
 
 // Next implements the checkOperation interface.
-func (o *physicalCheckOperation) Next(params runParams) (tree.Datums, error) {
-	row := o.run.rows.At(o.run.rowIndex)
-	o.run.rowIndex++
+func (o *physicalCheckOperation) Next(params runParams) (bool, error) {
+	if o.run.rows == nil {
+		return false, nil
+	}
+	var err error
+	o.run.rowBuffer, err = o.run.rows.GetResult()
+	if o.run.rowBuffer != nil {
+		return true, nil
+	}
+	return false, err
+}
+
+// Next implements the checkOperation interface.
+func (o *physicalCheckOperation) Values(params runParams) (tree.Datums, error) {
+	row := o.run.rowBuffer
 
 	timestamp := tree.MakeDTimestamp(
 		params.evalCtx.GetStmtTimestamp(), time.Nanosecond)
@@ -184,14 +196,5 @@ func (o *physicalCheckOperation) Started() bool {
 	return o.run.started
 }
 
-// Done implements the checkOperation interface.
-func (o *physicalCheckOperation) Done(ctx context.Context) bool {
-	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
-}
-
 // Close implements the checkOperation interface.
-func (o *physicalCheckOperation) Close(ctx context.Context) {
-	if o.run.rows != nil {
-		o.run.rows.Close(ctx)
-	}
-}
+func (o *physicalCheckOperation) Close(_ context.Context) {}

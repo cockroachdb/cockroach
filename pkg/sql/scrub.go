@@ -58,17 +58,21 @@ type checkOperation interface {
 	// the work behind a check.
 	Start(params runParams) error
 
-	// Next will return the next check result. The datums returned have
-	// the column types specified by scrubTypes, which are the valeus
-	// returned to the user.
+	// Next will perform the next of work, returning false if an error is
+	// encountered or if there is no more work to do. The Values() method
+	// will return one row of results each time that Next() returns true.
 	//
-	// Next is not called if Done() is false.
-	Next(params runParams) (tree.Datums, error)
+	// It is illegal to call Next() after it returns false or before
+	// calling Start().
+	Next(params runParams) (bool, error)
 
-	// Done indicates when there are no more results to iterate through.
-	Done(context.Context) bool
+	// Values returns the values at the current row. The result is only valid
+	// until the next call to Next().
+	//
+	// Available after Next().
+	Values(params runParams) (tree.Datums, error)
 
-	// Close will clean up any in progress resources.
+	// Close will release resources.
 	Close(context.Context)
 }
 
@@ -130,6 +134,8 @@ func (n *scrubNode) startExec(params runParams) error {
 }
 
 func (n *scrubNode) Next(params runParams) (bool, error) {
+	// Process each of the queued checks. Once a check has no more values,
+	// the next one is initiated with check.Start().
 	for len(n.run.checkQueue) > 0 {
 		nextCheck := n.run.checkQueue[0]
 		if !nextCheck.Started() {
@@ -138,20 +144,19 @@ func (n *scrubNode) Next(params runParams) (bool, error) {
 			}
 		}
 
-		// Check if the iterator is finished before calling Next. This
-		// happens if there are no more results to report.
-		if !nextCheck.Done(params.ctx) {
+		if hasNext, err := nextCheck.Next(params); err != nil {
+			return false, err
+		} else if hasNext {
 			var err error
-			n.run.row, err = nextCheck.Next(params)
+			n.run.row, err = nextCheck.Values(params)
 			if err != nil {
 				return false, err
 			}
 			return true, nil
 		}
 
+		// Clean up the current check and then pop it off of the queue.
 		nextCheck.Close(params.ctx)
-		// Prepare the next iterator. If we happen to finish this iterator,
-		// we want to begin the next one so we still return a result.
 		n.run.checkQueue = n.run.checkQueue[1:]
 	}
 	return false, nil
@@ -543,21 +548,83 @@ func scrubPlanDistSQL(
 	return &physPlan, nil
 }
 
-// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If
-// RowContainer is returned, the caller must close it.
+var _ rowResultWriter = &channelRowContainer{}
+
+// channelRowContainer implements the rowResultWriter interface. It is a
+// simple implementation of a rowResultWriter that streams and buffers
+// results using a buffered channel.
+type channelRowContainer struct {
+	results chan tree.Datums
+	status  error
+}
+
+// channelRowContainerBufferSize is the size of the buffer for the row
+// container.
+const channelRowContainerBufferSize = 1024
+
+func newChannelRowContainer() *channelRowContainer {
+	return &channelRowContainer{
+		results: make(chan tree.Datums, channelRowContainerBufferSize),
+	}
+}
+
+// AddRow implements the rowResultWriter interface.
+func (c *channelRowContainer) AddRow(ctx context.Context, row tree.Datums) error {
+	// Rows are copied because the Datums memory is re-used for the
+	// next result in a different routine then the consumer.
+	// FIXME(joey): Do we need to do any memory accounting here?
+	data := make(tree.Datums, len(row))
+	copy(data, row)
+	c.results <- data
+	return nil
+}
+
+// IncrementRowsAffected implements the rowResultWriter interface.
+func (*channelRowContainer) IncrementRowsAffected(n int) {}
+
+// StatementType implements the rowResultWriter interface.
+func (*channelRowContainer) StatementType() tree.StatementType { return tree.Rows }
+
+// GetResult blocks until the next result is available. If there is an
+// error or if there are no results left, the result will be nil.
+func (c *channelRowContainer) GetResult() (tree.Datums, error) {
+	if c.status != nil {
+		return nil, c.status
+	}
+	v := <-c.results
+	return v, c.status
+}
+
+// Close will close the channelRowContainer, preventing any furhter
+// calls to AddRow. It also sets the status to err for the receiver to
+// handle. If the err is non-nil, the consumer will receiver the error
+// instead of any buffered rows.
+func (c *channelRowContainer) Close(err error) {
+	c.status = err
+	close(c.results)
+}
+
+// scrubRunDistSQL runs a distSQLPhysicalPlan plan in distSQL. If
+// RowContainer is returned, the caller must close it. The distSQSL plan
+// is executed asynchronously. If an error is encountered while running
+// the distSQL plan, an error will be returned through the channel. Once
+// the plan execution has completed, regardless of success of failure,
+// the error channel will be closed.
 func scrubRunDistSQL(
-	ctx context.Context,
-	planCtx *planningCtx,
-	p *planner,
-	plan *physicalPlan,
-	columnTypes []sqlbase.ColumnType,
-) (*sqlbase.RowContainer, error) {
-	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
-	rows := sqlbase.NewRowContainer(*p.evalCtx.ActiveMemAcc, ci, 0)
-	rowResultWriter := NewRowResultWriter(tree.Rows, rows)
+	ctx context.Context, planCtx *planningCtx, p *planner, plan *physicalPlan, _ []sqlbase.ColumnType,
+) (*channelRowContainer, error) {
+	// A channelRowContainer is used instead of a RowResultWriter and
+	// RowContainer. The RowContainer needs to accumulate all
+	// results before being able to consume them, causing OOM problems
+	// when the results can instead be streamed. This is a problem
+	// unique to scrub, as other distSQLPlanner.Run() callers:
+	// - Do not produce results (see distBackfill)
+	// - Use a custom rowResultWriter (see callbackResultWriter)
+	// - Use v3Conn, which does streams results (see Executor)
+	rows := newChannelRowContainer()
 	recv, err := makeDistSQLReceiver(
 		ctx,
-		rowResultWriter,
+		rows,
 		p.ExecCfg().RangeDescriptorCache,
 		p.ExecCfg().LeaseHolderCache,
 		p.txn,
@@ -566,17 +633,16 @@ func scrubRunDistSQL(
 		},
 	)
 	if err != nil {
-		return rows, err
+		return nil, err
 	}
 
-	if err := p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, p.evalCtx); err != nil {
-		return rows, err
-	} else if recv.err != nil {
-		return rows, recv.err
-	} else if rows.Len() == 0 {
-		rows.Close(ctx)
-		return nil, nil
-	}
-
+	go func() {
+		if err := p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, p.evalCtx); err != nil {
+			rows.Close(err)
+		} else if recv.err != nil {
+			rows.Close(err)
+		}
+		rows.Close(nil)
+	}()
 	return rows, nil
 }
