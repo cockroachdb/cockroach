@@ -14,18 +14,20 @@
 #include <rocksdb/iterator.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 #include <rocksdb/write_batch.h>
-#include "../protosccl/ccl/baseccl/encryption_options.pb.h"
+#include "ccl/baseccl/encryption_options.pb.h"
 #include "key_manager.h"
 
 const DBStatus kSuccess = {NULL, 0};
 
-rocksdb::Status parse_extra_options(const DBSlice s) {
-  if (s.len == 0) {
+// DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if needed.
+rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts) {
+  DBSlice options = db_opts.extra_options;
+  if (options.len == 0) {
     return rocksdb::Status::OK();
   }
 
   cockroach::ccl::baseccl::EncryptionOptions opts;
-  if (!opts.ParseFromArray(s.data, s.len)) {
+  if (!opts.ParseFromArray(options.data, options.len)) {
     return rocksdb::Status::InvalidArgument("failed to parse extra options");
   }
 
@@ -38,19 +40,32 @@ rocksdb::Status parse_extra_options(const DBSlice s) {
             << "  old key: " << opts.key_files().old_key() << "\n"
             << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
 
-  std::shared_ptr<FileKeyManager> key_manager(
+  // Initialize store key manager.
+  std::shared_ptr<FileKeyManager> store_key_manager(
       new FileKeyManager(rocksdb::Env::Default(), opts.key_files().current_key(), opts.key_files().old_key()));
+  rocksdb::Status status = store_key_manager->LoadKeys();
+  if (!status.ok()) {
+    return status;
+  }
 
-  rocksdb::Status status = key_manager->LoadKeys();
+  // Initialize data key manager.
+  std::shared_ptr<DataKeyManager> data_key_manager(
+      new DataKeyManager(rocksdb::Env::Default(), db_dir, opts.data_key_rotation_period()));
+  status = data_key_manager->LoadKeys();
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Generate a new data key if needed by giving the active store key info to the data key manager.
+  std::unique_ptr<enginepbccl::KeyInfo> store_key = store_key_manager->CurrentKeyInfo();
+  assert(store_key != nullptr);
+  status = data_key_manager->SetActiveStoreKey(std::move(store_key));
   if (!status.ok()) {
     return status;
   }
 
   return rocksdb::Status::InvalidArgument("encryption is not supported");
 }
-
-// DBOpenHook parses the extra_options field of DBOptions.
-rocksdb::Status DBOpenHook(const DBOptions opts) { return parse_extra_options(opts.extra_options); }
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();

@@ -32,20 +32,22 @@ message Registry {
 enum EncryptionType {
   // No encryption applied, not used for the registry.
   Plaintext = 0;
-  // AES in counter mode.
-  AES_CTR = 1;
+  // AES in counter mode with various key lengths.
+  AES128_CTR = 1;
+  AES192_CTR = 2;
+  AES256_CTR = 3;
 }
 
 message FileEntry {
   // File path relative to the DB directory.
-  // TODO(mberhault): figure out if we need an alternate representation for Windows.
+  // TODO(mberhault): figure out if we need anything special for Windows.
   string Filename = 1;
   // The type of encryption applied.
   EncryptionType type = 2;
 
   // Encryption fields.
   // ID (hash) of the key in use, if any.
-  bytes key_id = 3;
+  string key_id = 3;
   // Initialization vector, of size 96 bits (12 bytes) for AES.
   bytes nonce = 4;
   // Counter, allowing 2^32 blocks per file, so 64GiB.
