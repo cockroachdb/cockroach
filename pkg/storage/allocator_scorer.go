@@ -321,7 +321,7 @@ func allocateCandidates(
 		if !maxCapacityCheck(s) {
 			continue
 		}
-		diversityScore := diversityScore(s, existingNodeLocalities)
+		diversityScore := diversityAllocateScore(s, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 		candidates = append(candidates, candidate{
 			store:           s,
@@ -519,7 +519,7 @@ func rebalanceCandidates(
 					s, rangeInfo, balanceScore, sl)
 				continue
 			}
-			diversityScore := rebalanceToDiversityScore(s, existingNodeLocalities)
+			diversityScore := diversityRebalanceScore(s, existingNodeLocalities)
 			candidates = append(candidates, candidate{
 				store:           s,
 				valid:           true,
@@ -697,63 +697,98 @@ func constraintCheck(store roachpb.StoreDescriptor, constraints config.Constrain
 	return true, positive
 }
 
-// diversityScore returns a score between 1 and 0 where higher scores are stores
-// with the fewest locality tiers in common with already existing replicas.
-func diversityScore(
+// diversityAllocateScore returns a value between 0 and 1 based on how
+// desirable it would be to add a replica to store. A higher score means the
+// store is a better fit.
+func diversityAllocateScore(
 	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	minScore := roachpb.MaxDiversityScore
+	var sumScore float64
+	var numSamples int
+	// We don't need to calculate the overall diversityScore for the range, just
+	// how well the new store would fit, because for any store that we might
+	// consider adding the pairwise average diversity of the existing replicas
+	// is the same.
 	for _, locality := range existingNodeLocalities {
-		if newScore := store.Node.Locality.DiversityScore(locality); newScore < minScore {
-			minScore = newScore
-		}
+		newScore := store.Node.Locality.DiversityScore(locality)
+		sumScore += newScore
+		numSamples++
 	}
-	return minScore
+	// If the range has no replicas, any node would be a perfect fit.
+	if numSamples == 0 {
+		return 1.0
+	}
+	return sumScore / float64(numSamples)
 }
 
-// diversityRemovalScore is the same as diversityScore, but for a node that's
-// already present in existingNodeLocalities. It works by calculating the
-// diversityScore for nodeID as if nodeID didn't already have a replica.
-// As with diversityScore, a higher score indicates that the node is a better
-// fit for the range (i.e. keeping it around is good for diversity).
+// diversityRemovalScore returns a value between 0 and 1 based on how desirable
+// it would be to remove a node's replica of a range.  A higher score indicates
+// that the node is a better fit (i.e. keeping it around is good for diversity).
 func diversityRemovalScore(
 	nodeID roachpb.NodeID, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	minScore := roachpb.MaxDiversityScore
+	var sumScore float64
+	var numSamples int
 	locality := existingNodeLocalities[nodeID]
+	// We don't need to calculate the overall diversityScore for the range, because the original overall diversityScore
+	// of this range is always the same.
 	for otherNodeID, otherLocality := range existingNodeLocalities {
 		if otherNodeID == nodeID {
 			continue
 		}
-		if newScore := otherLocality.DiversityScore(locality); newScore < minScore {
-			minScore = newScore
-		}
+		newScore := locality.DiversityScore(otherLocality)
+		sumScore += newScore
+		numSamples++
 	}
-	return minScore
+	if numSamples == 0 {
+		return 1.0
+	}
+	return sumScore / float64(numSamples)
 }
 
-// rebalanceToDiversityScore is like diversityScore, but it returns what
-// the diversity score would be if the given store was added and one of the
-// existing stores was removed. This is equivalent to the second lowest score.
-//
-// This is useful for considering rebalancing a range that already has enough
-// replicas - it's perfectly fine to add a replica in the same locality as an
-// existing replica in such cases.
-func rebalanceToDiversityScore(
+// diversityRebalanceScore returns a value between 0 and 1 based on how
+// desirable it would be to rebalance away from an existing store to the target
+// store. Because the store to be removed isn't specified, this assumes that
+// the worst-fitting store from a diversity perspective will be removed. A
+// higher score indicates that the provided store is a better fit for the
+// range.
+func diversityRebalanceScore(
 	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	minScore := roachpb.MaxDiversityScore
-	nextMinScore := roachpb.MaxDiversityScore
-	for _, locality := range existingNodeLocalities {
-		newScore := store.Node.Locality.DiversityScore(locality)
-		if newScore < minScore {
-			nextMinScore = minScore
-			minScore = newScore
-		} else if newScore < nextMinScore {
-			nextMinScore = newScore
+	var numSamples int
+	var maxSumScore float64
+	// For every existing node, calculate what the diversity score would be if we
+	// remove that node's replica to replace it with one on the provided store.
+	for removedNodeID := range existingNodeLocalities {
+		// Compute the pairwise diversity score of all remaining replicas, including
+		// the store we're considering adding.
+		numSamples = 0
+		var sumScore float64
+		for nodeID, locality := range existingNodeLocalities {
+			if nodeID == removedNodeID {
+				continue
+			}
+			newScore := store.Node.Locality.DiversityScore(locality)
+			sumScore += newScore
+			numSamples++
+			for otherNodeID, otherLocality := range existingNodeLocalities {
+				if otherNodeID == nodeID || otherNodeID == removedNodeID {
+					continue
+				}
+				newScore := locality.DiversityScore(otherLocality)
+				sumScore += newScore
+				numSamples++
+			}
+		}
+		if sumScore > maxSumScore {
+			maxSumScore = sumScore
 		}
 	}
-	return nextMinScore
+	// If the range has zero or one replicas, any node would be a perfect fit.
+	if numSamples == 0 {
+		return 1.0
+	}
+	return maxSumScore / float64(numSamples)
 }
 
 type rangeCountStatus int

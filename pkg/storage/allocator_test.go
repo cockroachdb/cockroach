@@ -180,6 +180,97 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 	},
 }
 
+var multiDiversityDCStores = []*roachpb.StoreDescriptor{
+	{
+		StoreID: 1,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 1,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "a"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 2,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 2,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "a"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 3,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 3,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "b"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 4,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 4,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "b"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 5,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 5,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "c"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 6,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 6,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "c"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 7,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 7,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "d"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 8,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 8,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "d"},
+				},
+			},
+		},
+	},
+}
+
 func testRangeInfo(replicas []roachpb.ReplicaDescriptor, rangeID roachpb.RangeID) RangeInfo {
 	return RangeInfo{
 		Desc: &roachpb.RangeDescriptor{
@@ -1289,6 +1380,284 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 				t.Fatalf("expected %v, but found %v", c.expected, result)
 			}
 		})
+	}
+}
+
+func TestAllocatorRemoveTargetLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(multiDiversityDCStores, t)
+
+	// Given a set of existing replicas for a range, pick out the ones that should
+	// be removed purely on the basis of locality diversity.
+	testCases := []struct {
+		existing []roachpb.StoreID
+		expected []roachpb.StoreID
+	}{
+		{
+			[]roachpb.StoreID{1, 2, 3, 5},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 4, 5},
+			[]roachpb.StoreID{3, 4},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 5, 6},
+			[]roachpb.StoreID{5, 6},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 5},
+			[]roachpb.StoreID{1, 3, 5},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 4, 6, 7, 8},
+			[]roachpb.StoreID{3, 4, 7, 8},
+		},
+	}
+	for _, c := range testCases {
+		existingRepls := make([]roachpb.ReplicaDescriptor, len(c.existing))
+		for i, storeID := range c.existing {
+			existingRepls[i] = roachpb.ReplicaDescriptor{
+				NodeID:  roachpb.NodeID(storeID),
+				StoreID: storeID,
+			}
+		}
+		targetRepl, details, err := a.RemoveTarget(
+			context.Background(),
+			config.Constraints{},
+			existingRepls,
+			testRangeInfo(existingRepls, firstRange),
+			false,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var found bool
+		for _, storeID := range c.expected {
+			if targetRepl.StoreID == storeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected RemoveTarget(%v) in %v, but got %d; details: %s", c.existing, c.expected, targetRepl.StoreID, details)
+		}
+	}
+}
+
+func TestAllocatorAllocateTargetLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(multiDiversityDCStores, t)
+
+	// Given a set of existing replicas for a range, rank which of the remaining
+	// stores from multiDiversityDCStores would be the best addition to the range
+	// purely on the basis of locality diversity.
+	testCases := []struct {
+		existing []roachpb.StoreID
+		expected []roachpb.StoreID
+	}{
+		{
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{5, 6, 7, 8},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 4},
+			[]roachpb.StoreID{5, 6, 7, 8},
+		},
+		{
+			[]roachpb.StoreID{3, 4, 5},
+			[]roachpb.StoreID{1, 2, 7, 8},
+		},
+		{
+			[]roachpb.StoreID{1, 7, 8},
+			[]roachpb.StoreID{3, 4, 5, 6},
+		},
+		{
+			[]roachpb.StoreID{5, 7, 8},
+			[]roachpb.StoreID{1, 2, 3, 4},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 5},
+			[]roachpb.StoreID{7, 8},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 7},
+			[]roachpb.StoreID{5, 6},
+		},
+		{
+			[]roachpb.StoreID{1, 5, 7},
+			[]roachpb.StoreID{3, 4},
+		},
+		{
+			[]roachpb.StoreID{3, 5, 7},
+			[]roachpb.StoreID{1, 2},
+		},
+	}
+
+	for _, c := range testCases {
+		existingRepls := make([]roachpb.ReplicaDescriptor, len(c.existing))
+		for i, storeID := range c.existing {
+			existingRepls[i] = roachpb.ReplicaDescriptor{
+				NodeID:  roachpb.NodeID(storeID),
+				StoreID: storeID,
+			}
+		}
+		targetStore, details, err := a.AllocateTarget(
+			context.Background(),
+			config.Constraints{},
+			existingRepls,
+			testRangeInfo(existingRepls, firstRange),
+			false,
+			false,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var found bool
+		for _, storeID := range c.expected {
+			if targetStore.StoreID == storeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected AllocateTarget(%v) in %v, but got %d; details: %s", c.existing, c.expected, targetStore.StoreID, details)
+		}
+	}
+}
+
+func TestAllocatorRebalanceTargetLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     multiDiversityDCStores[0].Node,
+			Capacity: roachpb.StoreCapacity{RangeCount: 10},
+		},
+		{
+			StoreID:  2,
+			Node:     multiDiversityDCStores[1].Node,
+			Capacity: roachpb.StoreCapacity{RangeCount: 20},
+		},
+		{
+			StoreID:  3,
+			Node:     multiDiversityDCStores[2].Node,
+			Capacity: roachpb.StoreCapacity{RangeCount: 10},
+		},
+		{
+			StoreID:  4,
+			Node:     multiDiversityDCStores[3].Node,
+			Capacity: roachpb.StoreCapacity{RangeCount: 20},
+		},
+		{
+			StoreID:  5,
+			Node:     multiDiversityDCStores[4].Node,
+			Capacity: roachpb.StoreCapacity{RangeCount: 10},
+		},
+		{
+			StoreID:  6,
+			Node:     multiDiversityDCStores[5].Node,
+			Capacity: roachpb.StoreCapacity{RangeCount: 20},
+		},
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		existing []roachpb.StoreID
+		expected []roachpb.StoreID
+	}{
+		{
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{5},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 4},
+			[]roachpb.StoreID{5},
+		},
+		{
+			[]roachpb.StoreID{1, 3, 6},
+			[]roachpb.StoreID{5},
+		},
+		{
+			[]roachpb.StoreID{1, 2, 5},
+			[]roachpb.StoreID{3},
+		},
+		{
+			[]roachpb.StoreID{1, 2, 6},
+			[]roachpb.StoreID{3},
+		},
+		{
+			[]roachpb.StoreID{1, 4, 5},
+			[]roachpb.StoreID{3},
+		},
+		{
+			[]roachpb.StoreID{1, 4, 6},
+			[]roachpb.StoreID{3, 5},
+		},
+		{
+			[]roachpb.StoreID{3, 4, 5},
+			[]roachpb.StoreID{1},
+		},
+		{
+			[]roachpb.StoreID{3, 4, 6},
+			[]roachpb.StoreID{1},
+		},
+		{
+			[]roachpb.StoreID{4, 5, 6},
+			[]roachpb.StoreID{1},
+		},
+		{
+			[]roachpb.StoreID{2, 4, 6},
+			[]roachpb.StoreID{1, 3, 5},
+		},
+	}
+
+	for _, c := range testCases {
+		existingRepls := make([]roachpb.ReplicaDescriptor, len(c.existing))
+		for i, storeID := range c.existing {
+			existingRepls[i] = roachpb.ReplicaDescriptor{
+				NodeID:  roachpb.NodeID(storeID),
+				StoreID: storeID,
+			}
+		}
+		targetStore, details := a.RebalanceTarget(
+			context.Background(),
+			config.Constraints{},
+			nil,
+			testRangeInfo(existingRepls, firstRange),
+			storeFilterThrottled,
+			false,
+		)
+		if targetStore == nil {
+			t.Fatalf("RebalanceTarget(%v) returned no target store; details: %s", c.existing, details)
+		}
+		var found bool
+		for _, storeID := range c.expected {
+			if targetStore.StoreID == storeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected RebalanceTarget(%v) in %v, but got %d; details: %s", c.existing, c.expected, targetStore.StoreID, details)
+		}
 	}
 }
 
