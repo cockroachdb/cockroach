@@ -703,6 +703,13 @@ func TestImportStmt(t *testing.T) {
 		if !testutils.IsError(err, "expected 1 fields, got 2") {
 			t.Fatalf("unexpected: %v", err)
 		}
+
+		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
+		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s) WITH temp = $2, transform_only`, files[0]), schema[0], nodetmp)
+		if !testutils.IsError(err, `file specifies a schema for table "t"`) {
+			t.Fatalf("unexpected: %v", err)
+		}
+
 		// Expect it to succeed with correct columns.
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT, b STRING) CSV DATA (%s) WITH temp = $1, transform_only`, files[0]), nodetmp)
 	})
