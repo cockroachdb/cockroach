@@ -628,6 +628,64 @@ CREATE INDEX y ON test.x(x);
 	mt.runMigration(ctx, t)
 }
 
+func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeIsolatedMigrationTest(ctx, t, "upgrade table descs to interleaved format version")
+	defer mt.close(ctx)
+
+	mt.start(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				// Block schema changes to ensure that our migration sees some table
+				// descriptors in the DROP state. The schema changer might otherwise
+				// erase them before our migration runs.
+				AsyncExecNotification: func() error { return errors.New("schema changes disabled") },
+			},
+		},
+	})
+
+	defer func(prev int64) { upgradeTableDescBatchSize = prev }(upgradeTableDescBatchSize)
+	upgradeTableDescBatchSize = 5
+	n := int(upgradeTableDescBatchSize) * 3
+
+	// Create n tables.
+	mt.sqlDB.Exec(t, `CREATE DATABASE db`)
+	for i := 0; i < n; i++ {
+		mt.sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE db.t%d ()`, i))
+	}
+
+	// Corrupt every second table's format version, and mark every third table as
+	// dropping.
+	for i := 0; i < n; i++ {
+		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
+		if i%2 == 0 {
+			tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
+		}
+		if i%3 == 0 {
+			tableDesc.State = sqlbase.TableDescriptor_DROP
+		}
+		tableKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
+		if err := mt.kvDB.Put(ctx, tableKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Ensure the migration upgrades the format of all tables, even those that
+	// are dropping.
+	mt.runMigration(ctx, t)
+	for i := 0; i < n; i++ {
+		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
+		if e, a := sqlbase.InterleavedFormatVersion, tableDesc.FormatVersion; e != a {
+			t.Errorf("t%d: expected format version %s, but got %s", i, e, a)
+		}
+	}
+
+	// Verify idempotency.
+	mt.runMigration(ctx, t)
+}
+
 func TestExpectedInitialRangeCount(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
