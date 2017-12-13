@@ -143,6 +143,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "make root a member of the admin role",
 		workFn: addRootToAdminRole,
 	},
+	{
+		name:   "upgrade table descs to interleaved format version",
+		workFn: upgradeTableDescsToInterleavedFormatVersion,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -842,4 +846,76 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 		log.Warningf(ctx, "failed to make %s a member of the %s role: %s", security.RootUser, sqlbase.AdminRole, err)
 	}
 	return err
+}
+
+var upgradeTableDescBatchSize int64 = 50
+
+// upgradeTableDescsToInterleavedFormatVersion ensures that the upgrade to
+// InterleavedFormatVersion is persisted to disk for all table descriptors. It
+// must otherwise be performed on-the-fly whenever a table descriptor is loaded.
+// In fact, before this migration, a cluster that was continuously upgraded from
+// before beta-20161013 would retain its old-format table descriptors until a
+// schema-mutating statement was executed against every old-format table.
+//
+// TODO(benesch): Remove this migration in v2.1.
+func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) error {
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	startKey := sqlbase.MakeAllDescsMetadataKey()
+	endKey := startKey.PrefixEnd()
+	for done := false; !done; {
+		// It's safe to use multiple transactions here. Any table descriptor that's
+		// created while this migration is in progress will use the desired
+		// InterleavedFormatVersion, as all possible binary versions in the cluster
+		// (the current release and the previous release) create new table
+		// descriptors using InterleavedFormatVersion. We need only upgrade the
+		// ancient table descriptors written by versions before beta-20161013.
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			kvs, err := txn.Scan(ctx, startKey, endKey, upgradeTableDescBatchSize)
+			if err != nil {
+				return err
+			}
+			if len(kvs) == 0 {
+				done = true
+				return nil
+			}
+			startKey = kvs[len(kvs)-1].Key.Next()
+
+			b := txn.NewBatch()
+			for _, kv := range kvs {
+				var sqlDesc sqlbase.Descriptor
+				if err := kv.ValueProto(&sqlDesc); err != nil {
+					return err
+				}
+				if table := sqlDesc.GetTable(); table != nil {
+					if upgraded := table.MaybeUpgradeFormatVersion(); upgraded {
+						// Though SetUpVersion typically bails out if the table is being
+						// dropped, it's safe to ignore the DROP state here and
+						// unconditionally set UpVersion. For proof, see
+						// TestDropTableWhileUpgradingFormat.
+						//
+						// In fact, it's of the utmost importance that this migration
+						// upgrades every last old-format table descriptor, including those
+						// that are dropping. Otherwise, the user could upgrade to a version
+						// without support for reading the old format before the drop
+						// completes, leaving a broken table descriptor and the table's
+						// remaining data around forever. This isn't just a theoretical
+						// concern: consider that dropping a large table can take several
+						// days, while upgrading to a new version can take as little as a
+						// few minutes.
+						table.UpVersion = true
+						b.Put(kv.Key, sqlbase.WrapDescriptor(table))
+					}
+				}
+			}
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
+			return txn.Run(ctx, b)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
