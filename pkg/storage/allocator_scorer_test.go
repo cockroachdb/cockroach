@@ -502,6 +502,8 @@ func TestConstraintCheck(t *testing.T) {
 func TestAllocateDiversityScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Given a range that's located on stores, rank order which of the testStores
+	// are the best fit for allocating a new replica on.
 	testCases := []struct {
 		name     string
 		stores   map[roachpb.StoreID]struct{}
@@ -550,7 +552,7 @@ func TestAllocateDiversityScore(t *testing.T) {
 			sort.Sort(sort.Reverse(scores))
 			for i := 0; i < len(scores); {
 				if scores[i].storeID != tc.expected[i] {
-					t.Fatalf("expected the result store order is %v, but got %v", tc.expected, scores)
+					t.Fatalf("expected the result store order to be %v, but got %v", tc.expected, scores)
 				}
 				i++
 			}
@@ -561,11 +563,12 @@ func TestAllocateDiversityScore(t *testing.T) {
 func TestRebalanceToDiversityScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Given a range that's located on stores, rank order which of the testStores
+	// are the best fit for rebalancing to.
 	testCases := []struct {
-		name          string
-		stores        map[roachpb.StoreID]struct{}
-		removedTarget roachpb.StoreDescriptor
-		expected      []roachpb.StoreID
+		name     string
+		stores   map[roachpb.StoreID]struct{}
+		expected []roachpb.StoreID
 	}{
 		{
 			name:     "no existing replicas",
@@ -576,8 +579,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 			stores: map[roachpb.StoreID]struct{}{
 				testStoreUSa15: {},
 			},
-			removedTarget: testStores[int(testStoreUSa15)-1],
-			expected:      []roachpb.StoreID{testStoreUSa15Dupe, testStoreUSa1, testStoreUSb, testStoreEurope},
+			expected: []roachpb.StoreID{testStoreUSa15Dupe, testStoreUSa1, testStoreUSb, testStoreEurope},
 		},
 		{
 			name: "two existing replicas",
@@ -585,8 +587,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 				testStoreUSa15: {},
 				testStoreUSa1:  {},
 			},
-			removedTarget: testStores[int(testStoreUSa15)-1],
-			expected:      []roachpb.StoreID{testStoreEurope, testStoreUSb, testStoreUSa15Dupe},
+			expected: []roachpb.StoreID{testStoreEurope, testStoreUSb, testStoreUSa15Dupe},
 		},
 		{
 			name: "three existing replicas",
@@ -595,8 +596,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 				testStoreUSa1:   {},
 				testStoreEurope: {},
 			},
-			removedTarget: testStores[int(testStoreUSa15)-1],
-			expected:      []roachpb.StoreID{testStoreUSb, testStoreUSa15Dupe},
+			expected: []roachpb.StoreID{testStoreUSb, testStoreUSa15Dupe},
 		},
 		{
 			name: "three existing replicas with duplicate",
@@ -605,8 +605,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 				testStoreUSa15Dupe: {},
 				testStoreUSa1:      {},
 			},
-			removedTarget: testStores[int(testStoreUSa15)-1],
-			expected:      []roachpb.StoreID{testStoreEurope, testStoreUSb},
+			expected: []roachpb.StoreID{testStoreEurope, testStoreUSb},
 		},
 		{
 			name: "four existing replicas",
@@ -616,8 +615,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 				testStoreUSb:    {},
 				testStoreEurope: {},
 			},
-			removedTarget: testStores[int(testStoreUSa15)-1],
-			expected:      []roachpb.StoreID{testStoreUSa15Dupe},
+			expected: []roachpb.StoreID{testStoreUSa15Dupe},
 		},
 		{
 			name: "four existing replicas with duplicate",
@@ -627,8 +625,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 				testStoreUSa1:      {},
 				testStoreUSb:       {},
 			},
-			removedTarget: testStores[int(testStoreUSa15)-1],
-			expected:      []roachpb.StoreID{testStoreEurope},
+			expected: []roachpb.StoreID{testStoreEurope},
 		},
 	}
 
@@ -654,7 +651,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 			sort.Sort(sort.Reverse(scores))
 			for i := 0; i < len(scores); {
 				if scores[i].storeID != tc.expected[i] {
-					t.Fatalf("expected the result store order is %v, but got %v", tc.expected, scores)
+					t.Fatalf("expected the result store order to be %v, but got %v", tc.expected, scores)
 				}
 				i++
 			}
@@ -665,6 +662,8 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 func TestRemovalDiversityScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Given a range that's located on stores, rank order which of the replicas
+	// should be removed.
 	testCases := []struct {
 		name     string
 		stores   map[roachpb.StoreID]struct{}
@@ -743,10 +742,6 @@ func TestRemovalDiversityScore(t *testing.T) {
 				}
 				var score storeScore
 				actualScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
-				_, ok := tc.stores[s.StoreID]
-				if !ok {
-					t.Fatalf("no expected score found for storeID %d", s.StoreID)
-				}
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -754,7 +749,7 @@ func TestRemovalDiversityScore(t *testing.T) {
 			sort.Sort(sort.Reverse(scores))
 			for i := 0; i < len(scores); {
 				if scores[i].storeID != tc.expected[i] {
-					t.Fatalf("expected the result store order is %v, but got %v", tc.expected, scores)
+					t.Fatalf("expected the result store order to be %v, but got %v", tc.expected, scores)
 				}
 				i++
 			}
