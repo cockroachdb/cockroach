@@ -179,6 +179,9 @@ func (p *planner) showCreateTable(
 	}
 
 	for _, e := range desc.Checks {
+		if e.Derived {
+			continue
+		}
 		fmt.Fprintf(&buf, ",\n\t")
 		if len(e.Name) > 0 {
 			fmt.Fprintf(&buf, "CONSTRAINT %s ", quoteNames(e.Name))
