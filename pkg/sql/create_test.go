@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -100,12 +99,11 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
-		migrationDescriptors, _, err := sqlmigrations.AdditionalInitialDescriptors(ctx, kvDB)
+		descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(ctx, kvDB)
 		if err != nil {
 			t.Fatal(err)
 		}
-		e := server.GetBootstrapSchema().SystemDescriptorCount() + migrationDescriptors
-		if a := len(kvs); a != e {
+		if e, a := len(descriptorIDs), len(kvs); a != e {
 			t.Fatalf("expected %d keys to have been written, found %d keys", e, a)
 		}
 	}
