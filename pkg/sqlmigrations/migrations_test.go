@@ -29,10 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -355,6 +355,88 @@ func TestLeaseExpiration(t *testing.T) {
 	}
 }
 
+// isolatedMigrationTest assists in testing the effects of one migration in
+// isolation.
+//
+// It boots a test server after removing the migration under test from the list
+// of automatically-run migrations. The migration can be triggered manually by
+// calling the runMigration method; its effects can be verified by inspecting
+// the state before and after via the exposed KV and SQL interfaces.
+type isolatedMigrationTest struct {
+	oldMigrations []migrationDescriptor
+	migration     migrationDescriptor
+	server        serverutils.TestServerInterface
+	sqlDB         *sqlutils.SQLRunner
+	kvDB          *client.DB
+	memMetrics    *sql.MemoryMetrics
+}
+
+// makeIsolatedMigrationTest creates an IsolatedMigrationTest to test the
+// migration whose name starts with namePrefix. It fails the test if the number
+// of migrations that match namePrefix is not exactly one.
+//
+// The caller is responsible for calling the test's close method at the end of
+// the test.
+func makeIsolatedMigrationTest(
+	ctx context.Context, t testing.TB, namePrefix string,
+) isolatedMigrationTest {
+	t.Helper()
+
+	var migration migrationDescriptor
+	oldMigrations := append([]migrationDescriptor(nil), backwardCompatibleMigrations...)
+	backwardCompatibleMigrations = []migrationDescriptor{}
+	for _, m := range oldMigrations {
+		if strings.HasPrefix(m.name, namePrefix) {
+			migration = m
+			continue
+		}
+		backwardCompatibleMigrations = append(backwardCompatibleMigrations, m)
+	}
+	if n := len(oldMigrations) - len(backwardCompatibleMigrations); n != 1 {
+		t.Fatalf("expected prefix %q to match exactly one migration, but matched %d", namePrefix, n)
+	}
+
+	memMetrics := sql.MakeMemMetrics("migration-test-internal", time.Minute)
+
+	return isolatedMigrationTest{
+		migration:     migration,
+		oldMigrations: oldMigrations,
+		memMetrics:    &memMetrics,
+	}
+}
+
+// start starts a test server with the given serverArgs.
+func (mt *isolatedMigrationTest) start(t testing.TB, serverArgs base.TestServerArgs) {
+	server, sqlDB, kvDB := serverutils.StartServer(t, serverArgs)
+	mt.server = server
+	mt.sqlDB = sqlutils.MakeSQLRunner(sqlDB)
+	mt.kvDB = kvDB
+}
+
+// runMigration triggers a manual run of the migration under test. It does not
+// mark the migration as completed, so subsequent calls will cause the migration
+// to be re-executed. This is useful for verifying idempotency.
+//
+// You must call start before calling runMigration.
+func (mt *isolatedMigrationTest) runMigration(ctx context.Context, t testing.TB) {
+	t.Helper()
+	if err := mt.migration.workFn(ctx, runner{
+		db:          mt.kvDB,
+		memMetrics:  mt.memMetrics,
+		sqlExecutor: mt.server.Executor().(*sql.Executor),
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// close stops the test server and restores package-global state.
+func (mt *isolatedMigrationTest) close(ctx context.Context) {
+	if mt.server != nil {
+		mt.server.Stopper().Stop(ctx)
+	}
+	backwardCompatibleMigrations = mt.oldMigrations
+}
+
 func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -368,114 +450,64 @@ func TestCreateSystemTable(t *testing.T) {
 	settingsDescKey := sqlbase.MakeDescMetadataKey(settingsDesc.GetID())
 	settingsDescVal := sqlbase.WrapDescriptor(&settingsDesc)
 
-	// Start up a test server without running the system.jobs migration.
-	newMigrations := []migrationDescriptor{}
-	for _, migration := range backwardCompatibleMigrations {
-		if strings.HasPrefix(migration.name, "create system.jobs") {
-			continue
-		}
-		newMigrations = append(newMigrations, migration)
-	}
-	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
-	backwardCompatibleMigrations = newMigrations
+	mt := makeIsolatedMigrationTest(ctx, t, "create system.jobs table")
+	defer mt.close(ctx)
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	mt.start(t, base.TestServerArgs{})
 
 	// Verify that the system.jobs keys were not written, but the system.settings
 	// keys were. This verifies that the migration system table migrations work.
-	if kv, err := kvDB.Get(ctx, jobsNameKey); err != nil {
+	if kv, err := mt.kvDB.Get(ctx, jobsNameKey); err != nil {
 		t.Error(err)
 	} else if kv.Exists() {
 		t.Errorf("expected %q not to exist, got %v", jobsNameKey, kv)
 	}
-	if kv, err := kvDB.Get(ctx, jobsDescKey); err != nil {
+	if kv, err := mt.kvDB.Get(ctx, jobsDescKey); err != nil {
 		t.Error(err)
 	} else if kv.Exists() {
 		t.Errorf("expected %q not to exist, got %v", jobsDescKey, kv)
 	}
-	if kv, err := kvDB.Get(ctx, settingsNameKey); err != nil {
+	if kv, err := mt.kvDB.Get(ctx, settingsNameKey); err != nil {
 		t.Error(err)
 	} else if !kv.Exists() {
 		t.Errorf("expected %q to exist, got that it doesn't exist", settingsNameKey)
 	}
 	var descriptor sqlbase.Descriptor
-	if err := kvDB.GetProto(ctx, settingsDescKey, &descriptor); err != nil {
+	if err := mt.kvDB.GetProto(ctx, settingsDescKey, &descriptor); err != nil {
 		t.Error(err)
 	} else if !proto.Equal(settingsDescVal, &descriptor) {
 		t.Errorf("expected %v for key %q, got %v", settingsDescVal, settingsDescKey, descriptor)
 	}
 
-	// Run the system.jobs migration outside the context of a migration manager
-	// such that its work gets done but the key indicating it's been completed
-	// doesn't get written.
-	if err := createJobsTable(ctx, runner{db: kvDB}); err != nil {
-		t.Fatal(err)
-	}
+	mt.runMigration(ctx, t)
 
 	// Verify that the appropriate keys were written.
-	if kv, err := kvDB.Get(ctx, jobsNameKey); err != nil {
+	if kv, err := mt.kvDB.Get(ctx, jobsNameKey); err != nil {
 		t.Error(err)
 	} else if !kv.Exists() {
 		t.Errorf("expected %q to exist, got that it doesn't exist", jobsNameKey)
 	}
-	if err := kvDB.GetProto(ctx, jobsDescKey, &descriptor); err != nil {
+	if err := mt.kvDB.GetProto(ctx, jobsDescKey, &descriptor); err != nil {
 		t.Error(err)
 	} else if !proto.Equal(jobsDescVal, &descriptor) {
 		t.Errorf("expected %v for key %q, got %v", jobsDescVal, jobsDescKey, descriptor)
 	}
 
-	// Finally, try running both migrations and make sure they still succeed.
-	// This verifies the idempotency of the migration, since the system.jobs
-	// migration will get rerun here.
-	mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), nil, "clientID")
-	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
-		name:             "create system.jobs table",
-		workFn:           createJobsTable,
-		newDescriptorIDs: sqlbase.IDs{keys.JobsTableID},
-	})
-	if err := mgr.EnsureMigrations(ctx); err != nil {
-		t.Fatal(err)
-	}
+	// Verify the idempotency of the migration.
+	mt.runMigration(ctx, t)
 }
 
 func TestUpdateViewDependenciesMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	// remove the view update migration so we can test its effects.
-	newMigrations := make([]migrationDescriptor, 0, len(backwardCompatibleMigrations))
-	for _, m := range backwardCompatibleMigrations {
-		if strings.HasPrefix(m.name, "establish conservative dependencies for views") {
-			// Remove this migration.
-			// This is safe because it neither adds descriptors nor ranges.
-			continue
-		}
-		newMigrations = append(newMigrations, m)
-	}
+	mt := makeIsolatedMigrationTest(ctx, t, "establish conservative dependencies for views")
+	defer mt.close(ctx)
 
-	// We also hijack the migration process to capture the SQL memory
-	// metric object, needed below.
-	var memMetrics *sql.MemoryMetrics
-	newMigrations = append(newMigrations,
-		migrationDescriptor{
-			name: "capture mem metrics",
-			workFn: func(ctx context.Context, r runner) error {
-				memMetrics = r.memMetrics
-				return nil
-			},
-		})
+	mt.start(t, base.TestServerArgs{})
 
-	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
-	backwardCompatibleMigrations = newMigrations
-
-	t.Log("starting server")
-
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
 	t.Log("create test tables")
-
-	const createStmts = `
+	mt.sqlDB.Exec(t, `
 CREATE DATABASE test;
 CREATE DATABASE test2;
 SET DATABASE=test;
@@ -495,14 +527,11 @@ CREATE VIEW test2.v5 AS SELECT x FROM w;
 CREATE TABLE x(x INT);
 CREATE INDEX y ON x(x);
 CREATE VIEW v6 AS SELECT x FROM x@y;
-`
-	if _, err := sqlDB.Exec(createStmts); err != nil {
-		t.Fatal(err)
-	}
+`)
 
 	testDesc := []struct {
-		dbName tree.Name
-		tname  tree.Name
+		dbName string
+		tname  string
 		desc   *sqlbase.TableDescriptor
 	}{
 		{"test", "t", nil},
@@ -514,27 +543,13 @@ CREATE VIEW v6 AS SELECT x FROM x@y;
 	}
 
 	t.Log("fetch descriptors")
-
-	e := s.Executor().(*sql.Executor)
-	vt := e.GetVirtualTabler()
-
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		for i := range testDesc {
-			desc, err := sql.MustGetTableOrViewDesc(ctx, txn, vt,
-				&tree.TableName{DatabaseName: testDesc[i].dbName, TableName: testDesc[i].tname}, true)
-			if err != nil {
-				return err
-			}
-			testDesc[i].desc = desc
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
+	for i, td := range testDesc {
+		testDesc[i].desc = sqlbase.GetTableDescriptor(mt.kvDB, td.dbName, td.tname)
 	}
 
 	// Now, corrupt the descriptors by breaking their dependency information.
 	t.Log("break descriptors")
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := mt.kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
@@ -558,22 +573,18 @@ CREATE VIEW v6 AS SELECT x FROM x@y;
 	// Break further by deleting the referenced tables. This has become possible
 	// because the dependency links have been broken above.
 	t.Log("delete tables")
-
-	if _, err := sqlDB.Exec(`
+	mt.sqlDB.Exec(t, `
 DROP TABLE test.t;
 DROP VIEW test.v1;
 DROP TABLE test.u;
 DROP TABLE test.w;
-DROP INDEX test.x@y;
-`); err != nil {
-		t.Fatal(err)
-	}
+DROP INDEX test.x@y;`)
 
 	// Check the views are effectively broken.
 	t.Log("check views are broken")
 
 	for _, vname := range []string{"test.v2", "test.v3", "test2.v5", "test.v6"} {
-		_, err := sqlDB.Exec(fmt.Sprintf(`TABLE %s`, vname))
+		_, err := mt.sqlDB.DB.Exec(fmt.Sprintf(`TABLE %s`, vname))
 		if !testutils.IsError(err,
 			`relation ".*" does not exist|index ".*" not found|table is being dropped`) {
 			t.Fatalf("%s: unexpected error: %v", vname, err)
@@ -583,37 +594,28 @@ DROP INDEX test.x@y;
 	// Restore missing dependencies for the rest of the test.
 	t.Log("restore dependencies")
 
-	if _, err := sqlDB.Exec(`
+	mt.sqlDB.Exec(t, `
 CREATE TABLE test.t(x INT, y INT);
 CREATE TABLE test.u(x INT, y INT);
 CREATE TABLE test.w(x INT);
 CREATE VIEW test.v1 AS SELECT x FROM test.t WHERE false;
 CREATE INDEX y ON test.x(x);
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
 
-	// Run the migration outside the context of a migration manager
-	// such that its work gets done but the key indicating it's been completed
-	// doesn't get written.
-	t.Log("fix view deps manually")
-	if err := repopulateViewDeps(ctx, runner{db: kvDB, sqlExecutor: e}); err != nil {
-		t.Fatal(err)
-	}
+	t.Log("run migration")
+	mt.runMigration(ctx, t)
 
 	// Check that the views are fixed now.
 	t.Log("check views working")
 
 	// Check the views can be queried.
 	for _, vname := range []string{"test.v1", "test.v2", "test.v3", "test.v4", "test2.v5", "test.v6"} {
-		if _, err := sqlDB.Exec(fmt.Sprintf("TABLE %s", vname)); err != nil {
-			t.Fatal(err)
-		}
+		mt.sqlDB.Exec(t, fmt.Sprintf("TABLE %s", vname))
 	}
 
 	// Check that the tables cannot be dropped any more.
 	for _, tn := range []string{"TABLE test.t", "TABLE test.u", "TABLE test.w", "INDEX test.x@y"} {
-		_, err := sqlDB.Exec(fmt.Sprintf(`DROP %s`, tn))
+		_, err := mt.sqlDB.DB.Exec(fmt.Sprintf(`DROP %s`, tn))
 		if !testutils.IsError(err,
 			`cannot drop (relation|index) .* because view .* depends on it`) {
 			t.Fatalf("unexpected error: %v", err)
@@ -622,16 +624,8 @@ CREATE INDEX y ON test.x(x);
 
 	// Finally, try running the migration and make sure it still succeeds.
 	// This verifies the idempotency of the migration.
-	t.Log("run migration")
-
-	mgr := NewManager(s.Stopper(), kvDB, e, s.Clock(), memMetrics, "clientID")
-	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
-		name:   "repopulate view dependencies",
-		workFn: repopulateViewDeps,
-	})
-	if err := mgr.EnsureMigrations(ctx); err != nil {
-		t.Fatal(err)
-	}
+	t.Log("run migration again")
+	mt.runMigration(ctx, t)
 }
 
 func TestExpectedInitialRangeCount(t *testing.T) {
