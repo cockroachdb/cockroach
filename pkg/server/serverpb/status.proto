@@ -89,6 +89,14 @@ message DetailsResponse {
   build.Info build_info = 3 [(gogoproto.nullable) = false];
 }
 
+message PeersRequest {
+}
+
+message PeersResponse {
+  gossip.InfoStatus descriptors = 1 [(gogoproto.nullable) = false];
+  gossip.InfoStatus liveness = 2 [(gogoproto.nullable) = false];
+}
+
 message NodesRequest {
 }
 
@@ -522,6 +530,11 @@ service Status {
       additional_bindings {
         get: "/health"
       }
+    };
+  }
+  rpc Peers(PeersRequest) returns (PeersResponse) {
+    option (google.api.http) = {
+      get: "/_status/peers"
     };
   }
   rpc Nodes(NodesRequest) returns (NodesResponse) {

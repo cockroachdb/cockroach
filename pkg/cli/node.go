@@ -23,6 +23,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+
 	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
@@ -31,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -38,6 +42,114 @@ import (
 const (
 	localTimeFormat = "2006-01-02 15:04:05"
 )
+
+var peersNodeCmd = &cobra.Command{
+	Use:   "peers",
+	Short: "prints information about the node's peers",
+	Long: `
+Pretty-prints information about peers from a node's gossip instance.
+`,
+	RunE: MaybeDecorateGRPCError(runNodePeers),
+}
+
+func runNodePeers(cmd *cobra.Command, args []string) error {
+	if len(args) != 0 {
+		return usageAndError(cmd)
+	}
+
+	descriptors, liveness, err := runNodePeersInner()
+	if err != nil {
+		return err
+	}
+
+	if err := printPeersDescriptors(descriptors); err != nil {
+		return err
+	}
+	return printPeersLiveness(liveness)
+}
+
+var peersColumnHeadersForDescriptor = []string{
+	"id",
+	"network",
+	"address",
+	"version",
+}
+
+var peersColumnHeadersForLiveness = []string{
+	"id",
+	"epoch",
+	"expiration",
+	"draining",
+	"decommissioning",
+}
+
+func printPeersDescriptors(descriptors *gossip.InfoStatus) error {
+	var rows [][]string
+
+	for key, info := range descriptors.Infos {
+		bytes, err := info.Value.GetBytes()
+		if err != nil {
+			return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+		}
+		var d roachpb.NodeDescriptor
+		if err := protoutil.Unmarshal(bytes, &d); err != nil {
+			return errors.Wrapf(err, "failed to parse value for key %q", key)
+		}
+		rows = append(rows, []string{
+			strconv.FormatInt(int64(d.NodeID), 10),
+			d.Address.NetworkField,
+			d.Address.AddressField,
+			d.ServerVersion.String(),
+		})
+	}
+
+	return printQueryOutput(os.Stdout, peersColumnHeadersForDescriptor, newRowSliceIter(rows))
+}
+
+func printPeersLiveness(liveness *gossip.InfoStatus) error {
+	var rows [][]string
+
+	for key, info := range liveness.Infos {
+		bytes, err := info.Value.GetBytes()
+		if err != nil {
+			return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+		}
+		var l storage.Liveness
+		if err := protoutil.Unmarshal(bytes, &l); err != nil {
+			return errors.Wrapf(err, "failed to parse value for key %q", key)
+		}
+		rows = append(rows, []string{
+			strconv.FormatInt(int64(l.NodeID), 10),
+			strconv.FormatInt(l.Epoch, 10),
+			l.Expiration.String(),
+			strconv.FormatBool(l.Draining),
+			strconv.FormatBool(l.Decommissioning),
+		})
+	}
+
+	return printQueryOutput(os.Stdout, peersColumnHeadersForLiveness, newRowSliceIter(rows))
+}
+
+func runNodePeersInner() (*gossip.InfoStatus, *gossip.InfoStatus, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	conn, _, finish, err := getClientGRPCConn(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer finish()
+
+	c := serverpb.NewStatusClient(conn)
+
+	peersRequest := &serverpb.PeersRequest{}
+	peersResponse, err := c.Peers(ctx, peersRequest)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &(peersResponse.Descriptors), &(peersResponse.Liveness), nil
+}
 
 var lsNodesColumnHeaders = []string{
 	"id",
@@ -468,6 +580,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 // Sub-commands for node command.
 var nodeCmds = []*cobra.Command{
 	lsNodesCmd,
+	peersNodeCmd,
 	statusNodeCmd,
 	decommissionNodeCmd,
 	recommissionNodeCmd,

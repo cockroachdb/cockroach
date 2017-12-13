@@ -894,7 +894,7 @@ func (g *Gossip) InfoOriginatedHere(key string) bool {
 	return info != nil && info.NodeID == g.NodeID.Get()
 }
 
-// GetInfoStatus returns the a copy of the contents of the infostore.
+// GetInfoStatus returns a copy of the contents of the infostore.
 func (g *Gossip) GetInfoStatus() InfoStatus {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -903,6 +903,22 @@ func (g *Gossip) GetInfoStatus() InfoStatus {
 	}
 	for k, v := range g.mu.is.Infos {
 		is.Infos[k] = *protoutil.Clone(v).(*Info)
+	}
+	return is
+}
+
+// GetInfoStatusByPrefix returns a copy of the infoStore content,
+// filtered by the given key prefix.
+func (g *Gossip) GetInfoStatusByPrefix(prefix string) InfoStatus {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	is := InfoStatus{
+		Infos: make(map[string]Info),
+	}
+	for k, v := range g.mu.is.Infos {
+		if strings.Contains(k, prefix+separator) {
+			is.Infos[k] = *protoutil.Clone(v).(*Info)
+		}
 	}
 	return is
 }

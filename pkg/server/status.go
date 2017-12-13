@@ -704,6 +704,19 @@ func (s *statusServer) Stacks(
 	}
 }
 
+// Peers returns information about node's peers.
+func (s *statusServer) Peers(
+	ctx context.Context, req *serverpb.PeersRequest,
+) (*serverpb.PeersResponse, error) {
+	descriptors := s.gossip.GetInfoStatusByPrefix(gossip.KeyNodeIDPrefix)
+	liveness := s.gossip.GetInfoStatusByPrefix(gossip.KeyNodeLivenessPrefix)
+
+	return &serverpb.PeersResponse{
+		Descriptors: descriptors,
+		Liveness:    liveness,
+	}, nil
+}
+
 // Nodes returns all node statuses.
 func (s *statusServer) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
