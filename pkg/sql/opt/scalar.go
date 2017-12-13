@@ -153,6 +153,18 @@ func initTupleExpr(e *expr, children []*expr) {
 	e.children = children
 }
 
+func isTupleOfConstants(e *expr) bool {
+	if e.op != orderedListOp {
+		return false
+	}
+	for _, c := range e.children {
+		if c.op != constOp {
+			return false
+		}
+	}
+	return true
+}
+
 // Applies a set of normalization rules to a scalar expression.
 //
 // For now, we expect to build exprs from TypedExprs which have gone through a

@@ -18,19 +18,35 @@ package opt
 // is used for optimizer-specific testcases.
 //
 // Each testfile contains testcases of the form
-//   <command>
+//   <command>[,<command>...] [<index-var-types> ...]
 //   <SQL statement or expression>
 //   ----
 //   <expected results>
 //
 // The supported commands are:
 //
-//  - build-scalar [<index-var-types> ...]
+//  - build-scalar
 //
 //    Builds an expression tree from a scalar SQL expression and outputs a
 //    representation of the tree. The expression can refer to external variables
 //    using @1, @2, etc. in which case the types of the variables must be passed
 //    on the command line.
+//
+//  - legacy-normalize
+//
+//    Runs the TypedExpr normalization code and rebuilds the scalar expression.
+//    If present, must follow build-scalar.
+//
+//  - normalize
+//
+//    Normalizes the expression. If present, must follow build-scalar or
+//    legacy-normalize.
+//
+//  - index-constraints
+//
+//    Creates index constraints on the assumption that the index is formed by
+//    the index var columns (as specified by <index-var-types>).
+//    If present, build-scalar must have been an earlier command.
 
 import (
 	"bufio"
@@ -229,7 +245,18 @@ func TestOpt(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
 				var e *expr
 				var types []types.T
+				var typedExpr tree.TypedExpr
 
+				buildScalarFn := func() {
+					defer func() {
+						if r := recover(); r != nil {
+							d.fatalf(t, "buildScalar: %v", r)
+						}
+					}()
+					e = buildScalar(&buildContext{}, typedExpr)
+				}
+
+				evalCtx := tree.MakeTestingEvalContext()
 				for _, cmd := range strings.Split(d.cmd, ",") {
 					switch cmd {
 					case "build-scalar":
@@ -238,19 +265,19 @@ func TestOpt(t *testing.T) {
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
-						typedExpr, err := parseScalarExpr(d.sql, types)
+						typedExpr, err = parseScalarExpr(d.sql, types)
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
 
-						e = func() *expr {
-							defer func() {
-								if r := recover(); r != nil {
-									d.fatalf(t, "buildScalar: %v", r)
-								}
-							}()
-							return buildScalar(&buildContext{}, typedExpr)
-						}()
+						buildScalarFn()
+					case "legacy-normalize":
+						// Apply the TypedExpr normalization and rebuild the expression.
+						typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+						buildScalarFn()
 					case "normalize":
 						normalizeScalar(e)
 					case "index-constraints":
@@ -258,7 +285,6 @@ func TestOpt(t *testing.T) {
 							d.fatalf(t, "no expression for index-constraints")
 						}
 
-						evalCtx := tree.MakeTestingEvalContext()
 						spans := MakeIndexConstraints(e, types, &evalCtx)
 						var buf bytes.Buffer
 						for _, sp := range spans {

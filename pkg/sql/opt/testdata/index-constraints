@@ -113,3 +113,39 @@ build-scalar,normalize,index-constraints decimal decimal
 @1 > 1.5 AND @2 > 2
 ----
 (/1.5 - ]
+
+build-scalar,normalize,index-constraints int
+@1 IN (1, 2, 3)
+----
+[/1 - /1]
+[/2 - /2]
+[/3 - /3]
+
+build-scalar,legacy-normalize,index-constraints int
+@1 IN (1, 5, 1, 4)
+----
+[/1 - /1]
+[/4 - /4]
+[/5 - /5]
+
+build-scalar,normalize,index-constraints int int
+@1 = 1 AND @2 IN (1, 2, 3)
+----
+[/1/1 - /1/1]
+[/1/2 - /1/2]
+[/1/3 - /1/3]
+
+build-scalar,normalize,index-constraints int int
+@1 IN (1, 2) AND @2 IN (1, 2, 3)
+----
+[/1/1 - /1/1]
+[/1/2 - /1/2]
+[/1/3 - /1/3]
+[/2/1 - /2/1]
+[/2/2 - /2/2]
+[/2/3 - /2/3]
+
+build-scalar,normalize,index-constraints int int
+@1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
+----
+[/2/1 - /4/3]
