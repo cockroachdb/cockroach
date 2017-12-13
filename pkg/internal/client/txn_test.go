@@ -301,7 +301,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 		{func(ctx context.Context, txn *Txn) error { return txn.Put(ctx, "a", "b") }, roachpb.Put},
 		{func(ctx context.Context, txn *Txn) error { return txn.CPut(ctx, "a", "b", nil) }, roachpb.ConditionalPut},
 		{func(ctx context.Context, txn *Txn) error {
-			_, err := txn.Inc(ctx, "a", 1)
+			_, err := txn.Inc(ctx, "a", 1, nil)
 			return err
 		}, roachpb.Increment},
 		{func(ctx context.Context, txn *Txn) error { return txn.Del(ctx, "a") }, roachpb.Delete},

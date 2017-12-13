@@ -288,9 +288,20 @@ func (db *DB) InitPut(ctx context.Context, key, value interface{}, failOnTombsto
 // key exists but was set using Put or CPut an error will be returned.
 //
 // key can be either a byte slice or a string.
-func (db *DB) Inc(ctx context.Context, key interface{}, value int64) (KeyValue, error) {
+//
+// BoundsOptions specifies boundaries for the value, and what to do if they are hit.
+// If MaxValue or MinValue is exceeded and Cycle is false, a roachpb.BoundsError is returned.
+// If a bound is exceeded and Cycle is true, the value is set to opts.Start.
+// By default,
+//   MinValue = math.MinInt64
+//   MaxValue = math.MaxInt64
+//   Cycle = false
+//   Start = 0
+func (db *DB) Inc(
+	ctx context.Context, key interface{}, value int64, opts *roachpb.IncrementRequest_BoundsOptions,
+) (KeyValue, error) {
 	b := &Batch{}
-	b.Inc(key, value)
+	b.Inc(key, value, opts)
 	return getOneRow(db.Run(ctx, b), b)
 }
 
@@ -593,11 +604,17 @@ func getOneRow(runErr error, b *Batch) (KeyValue, error) {
 //
 // It performs the increment as a retryable non-transactional increment. The key
 // might be incremented multiple times because of the retries.
-func IncrementValRetryable(ctx context.Context, db *DB, key roachpb.Key, inc int64) (int64, error) {
+func IncrementValRetryable(
+	ctx context.Context,
+	db *DB,
+	key roachpb.Key,
+	inc int64,
+	opts *roachpb.IncrementRequest_BoundsOptions,
+) (int64, error) {
 	var err error
 	var res KeyValue
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-		res, err = db.Inc(ctx, key, inc)
+		res, err = db.Inc(ctx, key, inc, opts)
 		switch err.(type) {
 		case *roachpb.UnhandledRetryableError, *roachpb.AmbiguousResultError:
 			continue

@@ -424,9 +424,20 @@ func (txn *Txn) InitPut(ctx context.Context, key, value interface{}, failOnTombs
 // success or failure.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) Inc(ctx context.Context, key interface{}, value int64) (KeyValue, error) {
+//
+// BoundsOptions specifies boundaries for the value, and what to do if they are hit.
+// If MaxValue or MinValue is exceeded and Cycle is false, a roachpb.BoundsError is returned.
+// If a bound is exceeded and Cycle is true, the value is set to opts.Start.
+// By default,
+//   MinValue = math.MinInt64
+//   MaxValue = math.MaxInt64
+//   Cycle = false
+//   Start = 0
+func (txn *Txn) Inc(
+	ctx context.Context, key interface{}, value int64, opts *roachpb.IncrementRequest_BoundsOptions,
+) (KeyValue, error) {
 	b := txn.NewBatch()
-	b.Inc(key, value)
+	b.Inc(key, value, opts)
 	return getOneRow(txn.Run(ctx, b), b)
 }
 

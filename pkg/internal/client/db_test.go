@@ -185,7 +185,7 @@ func TestDB_Inc(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
-	if _, err := db.Inc(ctx, "aa", 100); err != nil {
+	if _, err := db.Inc(ctx, "aa", 100, nil); err != nil {
 		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")

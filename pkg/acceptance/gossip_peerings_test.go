@@ -176,7 +176,7 @@ func testClusterConnectedAndFunctional(ctx context.Context, t *testing.T, c clus
 		var kv client.KeyValue
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			kv, err = txn.Inc(ctx, "count", 1)
+			kv, err = txn.Inc(ctx, "count", 1, nil)
 			return err
 		}); err != nil {
 			t.Fatal(err)

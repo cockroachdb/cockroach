@@ -1199,32 +1199,74 @@ func MVCCIncrement(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	inc int64,
+	incomingOpts *roachpb.IncrementRequest_BoundsOptions,
 ) (int64, error) {
 	iter := engine.NewIterator(true)
 	defer iter.Close()
 
-	var int64Val int64
+	opts := roachpb.IncrementRequest_BoundsOptions{
+		MinValue: int64(math.MinInt64),
+		MaxValue: int64(math.MaxInt64),
+	}
+
+	// Set defaults for bounds options.
+	if incomingOpts != nil {
+		opts = *incomingOpts
+	}
+
+	var curInt64Val int64
+	var newInt64Val int64
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, func(value *roachpb.Value) ([]byte, error) {
 		if value.IsPresent() {
 			var err error
-			if int64Val, err = value.GetInt(); err != nil {
+			if curInt64Val, err = value.GetInt(); err != nil {
 				return nil, errors.Errorf("key %q does not contain an integer value", key)
 			}
 		}
 
 		// Check for overflow and underflow.
-		if willOverflow(int64Val, inc) {
-			return nil, errors.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
+		if willOverflow(curInt64Val, inc) {
+			if opts.Cycle {
+				newInt64Val = opts.Start
+			} else {
+				// Return the current value, since we failed to update it.
+				newInt64Val = curInt64Val
+				return nil, &roachpb.BoundsExceededError{
+					Key:            key,
+					Overflow:       true,
+					CurrentValue:   curInt64Val,
+					IncrementValue: inc,
+					MinValue:       opts.MinValue,
+					MaxValue:       opts.MaxValue,
+				}
+			}
+		} else {
+			newInt64Val = curInt64Val + inc
+			if newInt64Val > opts.MaxValue || newInt64Val < opts.MinValue {
+				if opts.Cycle {
+					newInt64Val = opts.Start
+				} else {
+					// Return the current value, since we failed to update it.
+					newInt64Val = curInt64Val
+					return nil, &roachpb.BoundsExceededError{
+						Key:            key,
+						Overflow:       false,
+						CurrentValue:   curInt64Val,
+						IncrementValue: inc,
+						MaxValue:       opts.MaxValue,
+						MinValue:       opts.MinValue,
+					}
+				}
+			}
 		}
 
-		int64Val = int64Val + inc
 		newValue := roachpb.Value{}
-		newValue.SetInt(int64Val)
+		newValue.SetInt(newInt64Val)
 		newValue.InitChecksum(key)
 		return newValue.RawBytes, nil
 	})
 
-	return int64Val, err
+	return newInt64Val, err
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the

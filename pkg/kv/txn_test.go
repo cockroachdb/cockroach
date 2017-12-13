@@ -143,7 +143,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 	go func() {
 		<-start
 		done <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			if _, err := txn.Inc(ctx, key, 1); err != nil {
+			if _, err := txn.Inc(ctx, key, 1, nil); err != nil {
 				return err
 			}
 			if _, err := txn.Get(ctx, key2); err != nil {
@@ -186,7 +186,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 		if txn.Proto().Epoch == 0 && !txn.Proto().OrigTimestamp.Less(txn.Proto().Timestamp) {
 			t.Fatalf("expected orig timestamp less than timestamp: %s", txn.Proto())
 		}
-		ir, err := txn.Inc(ctx, key, 1)
+		ir, err := txn.Inc(ctx, key, 1, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

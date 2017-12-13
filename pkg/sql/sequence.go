@@ -34,7 +34,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 	val, err := client.IncrementValRetryable(
-		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
+		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment, nil)
 	if err != nil {
 		return 0, err
 	}
