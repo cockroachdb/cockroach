@@ -8,11 +8,22 @@
 
 #include <rocksdb/env.h>
 #include <vector>
+#include "../fmt.h"
 #include "../testutils.h"
+#include "crypto_utils.h"
 #include "key_manager.h"
 
+// A few fixed keys and their shas, computed using `echo -n <key contents> | sha256sum`.
+const std::string key128 = "1234567890123456";
+const std::string key192 = "123456789012345678901234";
+const std::string key256 = "12345678901234567890123456789012";
+
+// We manually compute the key shas with: `echo -n <key contents> | sha256sum`
+const std::string key128_sha = "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87";
+const std::string key192_sha = "05ae4505ae2b3f1bdc1f54a7e6b2669c3fcd3d89f4d0b55a25cbf2da29b9fcf1";
+const std::string key256_sha = "e1b85b27d6bcb05846c18e6a48f118e89f0c0587140de9fb3359f8370d0dba08";
+
 TEST(FileKeyManager, ReadKeyFiles) {
-  // Use a memenv for testing.
   std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
 
   // Write a few keys.
@@ -22,20 +33,17 @@ TEST(FileKeyManager, ReadKeyFiles) {
   };
 
   std::vector<KeyFiles> keys = {
-      {"empty.key", ""},
-      {"8.key", "12345678"},
-      {"16.key", "1234567890123456"},
-      {"24.key", "123456789012345678901234"},
-      {"32.key", "12345678901234567890123456789012"},
-      {"64.key", "1234567890123456789012345678901234567890123456789012345678901234"},
+      {"empty.key", ""},  {"8.key", "12345678"},
+      {"16.key", key128}, {"24.key", key192},
+      {"32.key", key256}, {"64.key", "1234567890123456789012345678901234567890123456789012345678901234"},
   };
   for (auto k : keys) {
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), k.contents, k.filename));
   }
 
   struct TestCase {
-    std::string new_key;
-    std::string old_key;
+    std::string active_file;
+    std::string old_file;
     std::string error;
   };
 
@@ -54,59 +62,526 @@ TEST(FileKeyManager, ReadKeyFiles) {
       {"16.key", "32.key", ""},
   };
 
+  int test_num = 0;
   for (auto t : test_cases) {
-    FileKeyManager fkm(env.get(), t.new_key, t.old_key);
+    SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
+
+    FileKeyManager fkm(env.get(), t.active_file, t.old_file);
     auto status = fkm.LoadKeys();
     EXPECT_ERR(status, t.error);
   }
 }
 
+struct testKey {
+  std::string id;
+  std::string key;
+  enginepb::EncryptionType type;
+  int64_t approximate_timestamp;  // We check that the creation time is within 5s of this timestamp.
+  std::string source;
+  bool was_exposed;
+  std::string parent_key_id;
+
+  // Constructors with various fields specified.
+  testKey() : testKey("") {}
+  // Copy constructor.
+  testKey(const testKey& k)
+      : testKey(k.id, k.key, k.type, k.approximate_timestamp, k.source, k.was_exposed, k.parent_key_id) {}
+  // Key ID only (to test key existence).
+  testKey(std::string id) : testKey(id, "", enginepb::Plaintext, 0, "") {}
+  testKey(std::string id, std::string key, enginepb::EncryptionType type, int64_t timestamp, std::string source)
+      : testKey(id, key, type, timestamp, source, false, "") {}
+  testKey(std::string id, std::string key, enginepb::EncryptionType type, int64_t timestamp, std::string source,
+          bool exposed, std::string parent)
+      : id(id),
+        key(key),
+        type(type),
+        approximate_timestamp(timestamp),
+        source(source),
+        was_exposed(exposed),
+        parent_key_id(parent) {}
+};
+
+enginepbccl::KeyInfo keyInfoFromTestKey(const testKey& k) {
+  enginepbccl::KeyInfo ki;
+  ki.set_encryption_type(k.type);
+  ki.set_key_id(k.id);
+  ki.set_creation_time(k.approximate_timestamp);
+  ki.set_source(k.source);
+  return ki;
+}
+
+enginepbccl::SecretKey secretKeyFromTestKey(const testKey& k) {
+  enginepbccl::SecretKey sk;
+  sk.set_key(k.key);
+  sk.set_allocated_info(new enginepbccl::KeyInfo(keyInfoFromTestKey(k)));
+  return sk;
+}
+
+rocksdb::Status compareNonRandomKeyInfo(const enginepbccl::KeyInfo& actual, const testKey& expected) {
+  if (actual.encryption_type() != expected.type) {
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("actual type %d does not match expected type %d", actual.encryption_type(), expected.type));
+  }
+
+  auto diff = actual.creation_time() - expected.approximate_timestamp;
+  if (diff > 5 || diff < -5) {
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("actual creation time %lld does not match expected timestamp %lld", actual.creation_time(),
+                          expected.approximate_timestamp));
+  }
+
+  if (actual.source() != expected.source) {
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("actual source \"%s\" does not match expected source \"%s\"", actual.source().c_str(),
+                          expected.source.c_str()));
+  }
+
+  if (actual.was_exposed() != expected.was_exposed) {
+    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
+        "actual was_exposed %d does not match expected was_exposed %d", actual.was_exposed(), expected.was_exposed));
+  }
+  return rocksdb::Status::OK();
+}
+
+rocksdb::Status compareKeyInfo(const enginepbccl::KeyInfo& actual, const testKey& expected) {
+  auto status = compareNonRandomKeyInfo(actual, expected);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (actual.key_id() != expected.id) {
+    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
+        "actual key_id \"%s\" does not match expected key_id \"%s\"", actual.key_id().c_str(), expected.id.c_str()));
+  }
+  return rocksdb::Status::OK();
+}
+
+rocksdb::Status compareKey(const enginepbccl::SecretKey& actual, const testKey& expected) {
+  if (actual.key() != expected.key) {
+    return rocksdb::Status::InvalidArgument(fmt::StringPrintf("actual key \"%s\" does not match expected key \"%s\"",
+                                                              actual.key().c_str(), expected.key.c_str()));
+  }
+  return compareKeyInfo(actual.info(), expected);
+}
+
+void getInfoFromVec(std::vector<testKey> infos, const std::string& id, testKey* out) {
+  for (auto i : infos) {
+    if (i.id == id) {
+      *out = i;
+      return;
+    }
+  }
+  FAIL() << "key id " << id << " not found in info vector";
+}
+
 TEST(FileKeyManager, BuildKeyFromFile) {
-  // Use a memenv for testing.
   std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
 
   // Write a few keys.
-  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), "1234567890123456", "16.key"));
-  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), "12345678901234567890123456789012", "32.key"));
+  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key128, "16.key"));
+  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key192, "24.key"));
+  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key256, "32.key"));
 
-  // We manually compute the key shas with: `echo -n <key contents> | sha256sum`
-  std::string key16_sha = "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87";
-  std::string key32_sha = "e1b85b27d6bcb05846c18e6a48f118e89f0c0587140de9fb3359f8370d0dba08";
+  int64_t now;
+  ASSERT_OK(env->GetCurrentTime(&now));
+  struct TestCase {
+    std::string active_file;
+    std::string old_file;
+    std::string active_id;
+    std::vector<testKey> keys;
+  };
 
-  // Check plain keys.
-  FileKeyManager fkm_plain(env.get(), "plain", "plain");
-  ASSERT_OK(fkm_plain.LoadKeys());
-  auto k = fkm_plain.CurrentKey();
-  ASSERT_NE(k, nullptr);
-  EXPECT_EQ(k->type, PLAIN);
-  EXPECT_EQ(k->id, "");
-  EXPECT_EQ(k->key, "");
-  EXPECT_EQ(k->source, "plain");
+  std::vector<TestCase> test_cases = {
+      {"plain", "plain", "plain", {testKey("plain", "", enginepb::Plaintext, now, "plain")}},
+      {"16.key",
+       "32.key",
+       key128_sha,
+       {testKey(key128_sha, key128, enginepb::AES128_CTR, now, "16.key"),
+        testKey(key256_sha, key256, enginepb::AES256_CTR, now, "32.key")}},
+      {
+          "24.key",
+          "plain",
+          key192_sha,
+          {testKey(key192_sha, key192, enginepb::AES192_CTR, now, "24.key"),
+           testKey("plain", "", enginepb::Plaintext, now, "plain")},
+      },
+  };
 
-  ASSERT_EQ(fkm_plain.GetKey(""), nullptr);
+  int test_num = 0;
+  for (auto t : test_cases) {
+    SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
 
-  FileKeyManager fkm(env.get(), "16.key", "32.key");
-  ASSERT_OK(fkm.LoadKeys());
-  k = fkm.CurrentKey();
-  ASSERT_NE(k, nullptr);
-  EXPECT_EQ(k->type, AES);
-  EXPECT_EQ(k->id, key16_sha);
-  EXPECT_EQ(k->key, "1234567890123456");
-  EXPECT_EQ(k->source, "16.key");
+    FileKeyManager fkm(env.get(), t.active_file, t.old_file);
+    ASSERT_OK(fkm.LoadKeys());
 
-  ASSERT_EQ(fkm.GetKey("something"), nullptr);
+    testKey ki;
+    getInfoFromVec(t.keys, t.active_id, &ki);
 
-  k = fkm.GetKey(key16_sha);
-  ASSERT_NE(k, nullptr);
-  EXPECT_EQ(k->type, AES);
-  EXPECT_EQ(k->id, key16_sha);
-  EXPECT_EQ(k->key, "1234567890123456");
-  EXPECT_EQ(k->source, "16.key");
+    auto secret_key = fkm.CurrentKey();
+    EXPECT_EQ(secret_key->key(), ki.key);
+    EXPECT_OK(compareKeyInfo(secret_key->info(), ki));
 
-  k = fkm.GetKey(key32_sha);
-  ASSERT_NE(k, nullptr);
-  EXPECT_EQ(k->type, AES);
-  EXPECT_EQ(k->id, key32_sha);
-  EXPECT_EQ(k->key, "12345678901234567890123456789012");
-  EXPECT_EQ(k->source, "32.key");
+    auto key_info = fkm.CurrentKeyInfo();
+    EXPECT_OK(compareKeyInfo(*key_info, ki));
+
+    for (auto ki_iter : t.keys) {
+      if (ki_iter.id == "") {
+        continue;
+      }
+      secret_key = fkm.GetKey(ki_iter.id);
+      EXPECT_NE(secret_key, nullptr);
+      EXPECT_EQ(secret_key->key(), ki_iter.key);
+      EXPECT_OK(compareKeyInfo(secret_key->info(), ki_iter));
+
+      key_info = fkm.GetKeyInfo(ki_iter.id);
+      EXPECT_NE(key_info, nullptr);
+      EXPECT_OK(compareKeyInfo(*key_info, ki_iter));
+    }
+  }
+}
+
+TEST(DataKeyManager, LoadKeys) {
+  std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
+  const std::string registry_path = "/" + kKeyRegistryFilename;
+
+  // Test a missing file first.
+  {
+    DataKeyManager dkm(env.get(), "", 0);
+    EXPECT_OK(dkm.LoadKeys());
+    EXPECT_EQ(dkm.CurrentKey(), nullptr);
+  }
+
+  // Now a file with random data.
+  {
+    ASSERT_OK(rocksdb::WriteStringToFile(env.get(), "blah blah", registry_path));
+    DataKeyManager dkm(env.get(), "", 0);
+    EXPECT_ERR(dkm.LoadKeys(), "failed to parse key registry " + registry_path);
+    ASSERT_OK(env->DeleteFile(registry_path));
+  }
+
+  // Empty file.
+  {
+    ASSERT_OK(rocksdb::WriteStringToFile(env.get(), "", registry_path));
+    DataKeyManager dkm(env.get(), "", 0);
+    EXPECT_OK(dkm.LoadKeys());
+    ASSERT_OK(env->DeleteFile(registry_path));
+  }
+
+  // Empty protobuf.
+  {
+    enginepbccl::DataKeysRegistry registry;
+    std::string contents;
+    ASSERT_TRUE(registry.SerializeToString(&contents));
+    ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
+    DataKeyManager dkm(env.get(), "", 0);
+    EXPECT_OK(dkm.LoadKeys());
+    ASSERT_OK(env->DeleteFile(registry_path));
+  }
+
+  // Active store key not found.
+  {
+    enginepbccl::DataKeysRegistry registry;
+    registry.set_active_store_key("foobar");
+
+    std::string contents;
+    ASSERT_TRUE(registry.SerializeToString(&contents));
+    ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
+
+    DataKeyManager dkm(env.get(), "", 0);
+    EXPECT_ERR(dkm.LoadKeys(), "active store key foobar not found");
+    ASSERT_OK(env->DeleteFile(registry_path));
+  }
+
+  // Active data key not found.
+  {
+    enginepbccl::DataKeysRegistry registry;
+    registry.set_active_data_key("foobar");
+
+    std::string contents;
+    ASSERT_TRUE(registry.SerializeToString(&contents));
+    ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
+
+    DataKeyManager dkm(env.get(), "", 0);
+    EXPECT_ERR(dkm.LoadKeys(), "active data key foobar not found");
+    ASSERT_OK(env->DeleteFile(registry_path));
+  }
+
+  // Both active keys exist.
+  {
+    enginepbccl::DataKeysRegistry registry;
+    (*registry.mutable_store_keys())["foo"] = keyInfoFromTestKey(testKey("foo"));
+    (*registry.mutable_store_keys())["bar"] = keyInfoFromTestKey(testKey("bar"));
+    registry.set_active_store_key("foo");
+
+    testKey foo2 = testKey("foo2");
+    (*registry.mutable_data_keys())["foo2"] = secretKeyFromTestKey(foo2);
+    testKey bar2 = testKey("bar2");
+    (*registry.mutable_data_keys())["bar2"] = secretKeyFromTestKey(bar2);
+    registry.set_active_data_key("bar2");
+
+    std::string contents;
+    ASSERT_TRUE(registry.SerializeToString(&contents));
+    ASSERT_OK(rocksdb::WriteStringToFile(env.get(), contents, registry_path));
+    DataKeyManager dkm(env.get(), "", 0);
+    EXPECT_OK(dkm.LoadKeys());
+
+    auto k = dkm.CurrentKey();
+    ASSERT_NE(k, nullptr);
+    EXPECT_OK(compareKeyInfo(k->info(), bar2));
+
+    auto ki = dkm.CurrentKeyInfo();
+    ASSERT_NE(ki, nullptr);
+    EXPECT_OK(compareKeyInfo(*ki, bar2));
+
+    k = dkm.GetKey("foo2");
+    ASSERT_NE(k, nullptr);
+    EXPECT_OK(compareKeyInfo(k->info(), foo2));
+
+    ki = dkm.GetKeyInfo("foo2");
+    ASSERT_NE(ki, nullptr);
+    EXPECT_OK(compareKeyInfo(*ki, foo2));
+
+    ASSERT_OK(env->DeleteFile(registry_path));
+  }
+}
+
+TEST(DataKeyManager, KeyFromKeyInfo) {
+  std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
+
+  int64_t now;
+  ASSERT_OK(env->GetCurrentTime(&now));
+
+  struct TestCase {
+    testKey store_info;
+    std::string error;
+    testKey new_key;
+  };
+
+  std::vector<TestCase> test_cases = {
+      {testKey("bad", "", enginepb::EncryptionType_INT_MIN_SENTINEL_DO_NOT_USE_, 0, ""),
+       "unknown encryption type .* for key ID bad",
+       {}},
+      {testKey("plain", "", enginepb::Plaintext, now, "plain"), "",
+       testKey("plain", "", enginepb::Plaintext, now, "data key manager", true, "plain")},
+      {testKey(key128_sha, "", enginepb::AES128_CTR, now - 86400, "128.key"), "",
+       testKey("someid", "somekey", enginepb::AES128_CTR, now, "data key manager", false, key128_sha)},
+      {testKey(key192_sha, "", enginepb::AES192_CTR, now + 86400, "192.key"), "",
+       testKey("someid", "somekey", enginepb::AES192_CTR, now, "data key manager", false, key192_sha)},
+      {testKey(key256_sha, "", enginepb::AES256_CTR, 0, "256.key"), "",
+       testKey("someid", "somekey", enginepb::AES256_CTR, now, "data key manager", false, key256_sha)},
+  };
+
+  int test_num = 0;
+  for (auto t : test_cases) {
+    SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
+
+    enginepbccl::SecretKey new_key;
+    auto status = KeyManagerUtils::KeyFromKeyInfo(env.get(), keyInfoFromTestKey(t.store_info), &new_key);
+    EXPECT_ERR(status, t.error);
+    if (!status.ok()) {
+      continue;
+    }
+
+    // Check only the non-random bits (everything but key and ID).
+    EXPECT_OK(compareNonRandomKeyInfo(new_key.info(), t.new_key));
+
+    size_t expected_length;
+    switch (t.new_key.type) {
+    case enginepb::Plaintext:
+      expected_length = 0;
+      break;
+    case enginepb::AES128_CTR:
+      expected_length = 16;
+      break;
+    case enginepb::AES192_CTR:
+      expected_length = 24;
+      break;
+    case enginepb::AES256_CTR:
+      expected_length = 32;
+      break;
+    default:
+      FAIL() << "unknown encryption type: " << t.new_key.type;
+    }
+
+    EXPECT_EQ(new_key.key().size(), expected_length);
+    if (t.new_key.type == enginepb::Plaintext) {
+      EXPECT_EQ(new_key.key(), "");
+    } else {
+      EXPECT_EQ(new_key.info().key_id().size(), 64 /* Hex(random 32 bytes) */);
+    }
+  }
+}
+
+TEST(DataKeyManager, SetStoreKey) {
+  std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
+
+  int64_t now;
+  ASSERT_OK(env->GetCurrentTime(&now));
+
+  struct TestCase {
+    testKey store_info;
+    std::string error;
+    testKey active_key;
+  };
+
+  // Test cases are incremental: the key manager is not reset for each key.
+  // If error is empty, the active data key should match the "active key".
+  // The active key is then added to the list of keys.
+  std::vector<testKey> active_keys;
+  std::vector<TestCase> test_cases = {
+      {
+          testKey("plain", "", enginepb::Plaintext, now, "plain"),
+          "",
+          testKey("plain", "", enginepb::Plaintext, now, "data key manager", true, "plain"),
+      },
+      {
+          testKey(key128_sha, "", enginepb::AES128_CTR, now - 86400, "128.key"),
+          "",
+          testKey(key128_sha, "", enginepb::AES128_CTR, now, "data key manager", false, key128_sha),
+      },
+      {
+          // Setting the same store key does nothing.
+          testKey(key128_sha, "", enginepb::AES128_CTR, now - 86400, "128.key"),
+          "",
+          // We add it again because we don't have a "skip" thing. It's find if it's there twice.
+          testKey(key128_sha, "", enginepb::AES128_CTR, now, "data key manager", false, key128_sha),
+      },
+      {
+          testKey(key256_sha, "", enginepb::AES256_CTR, now - 86400, "256.key"),
+          "",
+          testKey(key256_sha, "", enginepb::AES256_CTR, now, "data key manager", false, key256_sha),
+      },
+      {
+          testKey(key128_sha, "", enginepb::AES128_CTR, now - 86400, "128.key"),
+          fmt::StringPrintf("new active store key ID %s already exists as an inactive key. This is really dangerous.",
+                            key128_sha.c_str()),
+          {},
+      },
+      {
+          // Switch to plain: this marks all keys as exposed.
+          testKey("plain", "", enginepb::Plaintext, now, "plain"),
+          "",
+          testKey("plain", "", enginepb::Plaintext, now, "data key manager", true, "plain"),
+      }};
+
+  DataKeyManager dkm(env.get(), "", 0);
+  ASSERT_OK(dkm.LoadKeys());
+
+  int test_num = 0;
+  for (auto t : test_cases) {
+    SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
+
+    // Set new active store key.
+    auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
+    auto status = dkm.SetActiveStoreKey(std::move(store_info));
+    EXPECT_ERR(status, t.error);
+    if (status.ok()) {
+      // New key generated. Check active data key.
+      auto active_info = dkm.CurrentKey();
+      ASSERT_NE(active_info, nullptr);
+      EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), t.active_key));
+
+      if (t.store_info.type == enginepb::Plaintext) {
+        // Plaintext store info: mark all existing keys as exposed.
+        for (auto ki_iter = active_keys.begin(); ki_iter != active_keys.end(); ++ki_iter) {
+          ki_iter->was_exposed = true;
+        }
+      }
+
+      // Insert new key with filled-in ID and key.
+      auto new_key = testKey(t.active_key);
+      new_key.id = active_info->info().key_id();
+      new_key.key = active_info->key();
+      active_keys.push_back(new_key);
+    }
+
+    // Check all expected keys.
+    for (auto ki_iter : active_keys) {
+      auto ki = dkm.GetKey(ki_iter.id);
+      ASSERT_NE(ki, nullptr);
+      EXPECT_OK(compareKey(*ki, ki_iter));
+    }
+
+    // Initialize a new data key manager to load the file.
+    DataKeyManager tmp_dkm(env.get(), "", 0);
+    ASSERT_OK(tmp_dkm.LoadKeys());
+
+    if (status.ok()) {
+      // Check active data key.
+      auto active_info = tmp_dkm.CurrentKey();
+      ASSERT_NE(active_info, nullptr);
+      EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), t.active_key));
+    }
+
+    // Check all expected keys.
+    for (auto ki_iter : active_keys) {
+      auto ki = tmp_dkm.GetKey(ki_iter.id);
+      ASSERT_NE(ki, nullptr);
+      EXPECT_OK(compareKey(*ki, ki_iter));
+    }
+  }
+}
+
+TEST(DataKeyManager, RotateKey) {
+  // MemEnv returns a MockEnv, but use `new mockEnv` to access FakeSleepForMicroseconds.
+  // We need to wrap it around a memenv for memory files.
+  std::unique_ptr<rocksdb::Env> memenv(rocksdb::NewMemEnv(rocksdb::Env::Default()));
+  std::unique_ptr<testutils::FakeTimeEnv> env(new testutils::FakeTimeEnv(memenv.get()));
+
+  struct TestCase {
+    testKey store_info;    // Active store key info.
+    int64_t current_time;  // We update the fake env time before the call to SetActiveStoreKey.
+    testKey active_key;    // We call compareNonRandomKeyInfo against the active data key.
+  };
+
+  // Test cases are incremental: the key manager is not reset for each key.
+  std::vector<TestCase> test_cases = {
+      {
+          testKey("plain", "", enginepb::Plaintext, 0, "plain"),
+          0,
+          testKey("plain", "", enginepb::Plaintext, 0, "data key manager", true, "plain"),
+      },
+      {
+          // Plain keys are not rotated.
+          testKey("plain", "", enginepb::Plaintext, 0, "plain"),
+          20,
+          testKey("plain", "", enginepb::Plaintext, 0, "data key manager", true, "plain"),
+      },
+      {
+          // New key on store key change.
+          testKey(key128_sha, "", enginepb::AES128_CTR, 0, "128.key"),
+          20,
+          testKey("not checked", "not checked", enginepb::AES128_CTR, 20, "data key manager", false, key128_sha),
+      },
+      {
+          // Less than 10 seconds: no change.
+          testKey(key128_sha, "", enginepb::AES128_CTR, 0, "128.key"),
+          29,
+          testKey("not checked", "not checked", enginepb::AES128_CTR, 20, "data key manager", false, key128_sha),
+      },
+      {
+          // Exactly 10 seconds: new key.
+          testKey(key128_sha, "", enginepb::AES128_CTR, 0, "128.key"),
+          30,
+          testKey("not checked", "not checked", enginepb::AES128_CTR, 30, "data key manager", false, key128_sha),
+      },
+  };
+
+  DataKeyManager dkm(env.get(), "", 10 /* 10 second rotation period */);
+  ASSERT_OK(dkm.LoadKeys());
+
+  int test_num = 0;
+  for (auto t : test_cases) {
+    SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
+    env->SetCurrentTime(t.current_time);
+
+    // Set new active store key.
+    auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
+    auto status = dkm.SetActiveStoreKey(std::move(store_info));
+    ASSERT_OK(status);
+
+    auto active_info = dkm.CurrentKey();
+    ASSERT_NE(active_info, nullptr);
+    EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), t.active_key));
+  }
 }

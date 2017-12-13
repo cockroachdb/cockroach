@@ -63,7 +63,7 @@ char* __attribute__((weak)) prettyPrintKey(DBKey) { die_missing_symbol(__func__)
 #endif
 
 // DBOpenHook in OSS mode only verifies that no extra options are specified.
-__attribute__((weak)) rocksdb::Status DBOpenHook(const DBOptions opts) {
+__attribute__((weak)) rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts) {
   if (opts.extra_options.len != 0) {
     return rocksdb::Status::InvalidArgument("DBOptions has extra_options, but OSS code cannot handle them");
   }
@@ -1578,8 +1578,10 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options = DBMakeOptions(db_opts);
 
+  std::string db_dir = ToString(dir);
+
   // Call hooks to handle db_opts.extra_options.
-  auto hook_status = DBOpenHook(db_opts);
+  auto hook_status = DBOpenHook(db_dir, db_opts);
   if (!hook_status.ok()) {
     return ToDBStatus(hook_status);
   }
@@ -1604,7 +1606,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   }
 
   rocksdb::DB* db_ptr;
-  rocksdb::Status status = rocksdb::DB::Open(options, ToString(dir), &db_ptr);
+  rocksdb::Status status = rocksdb::DB::Open(options, db_dir, &db_ptr);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
