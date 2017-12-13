@@ -27,8 +27,6 @@ import (
 )
 
 const (
-	// targetChunkSize is the target number of Datums in a RowContainer chunk.
-	targetChunkSize = 64
 	// SizeOfDatum is the memory size of a Datum reference.
 	SizeOfDatum = int64(unsafe.Sizeof(tree.Datum(nil)))
 	// SizeOfDatums is the memory size of a Datum slice.
@@ -46,8 +44,11 @@ type RowContainer struct {
 	numCols int
 
 	// rowsPerChunk is the number of rows in a chunk; we pack multiple rows in a
-	// single []Datum to reduce the overhead of the slice if we have few columns.
-	rowsPerChunk int
+	// single []Datum to reduce the overhead of the slice if we have few
+	// columns. Must be a power of 2 as determination of the chunk given a row
+	// index is performed using shifting.
+	rowsPerChunk      int
+	rowsPerChunkShift uint
 	// preallocChunks is the number of chunks we allocate upfront (on the first
 	// AddRow call).
 	preallocChunks int
@@ -159,10 +160,17 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity in
 	c.preallocChunks = 1
 
 	if nCols != 0 {
-		c.rowsPerChunk = (targetChunkSize + nCols - 1) / nCols
+		// If the rows have columns, we use 64 rows per chunk.
+		c.rowsPerChunkShift = 6
+		c.rowsPerChunk = 1 << c.rowsPerChunkShift
 		if rowCapacity > 0 {
 			c.preallocChunks = (rowCapacity + c.rowsPerChunk - 1) / c.rowsPerChunk
 		}
+	} else {
+		// If there are no columns, every row gets mapped to the first chunk.
+		c.rowsPerChunkShift = 32
+		c.rowsPerChunk = 1 << c.rowsPerChunkShift
+		c.chunks = [][]tree.Datum{{}}
 	}
 
 	for i := 0; i < nCols; i++ {
@@ -231,10 +239,10 @@ func (c *RowContainer) rowSize(row tree.Datums) int64 {
 // getChunkAndPos returns the chunk index and the position inside the chunk for
 // a given row index.
 func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
-	// This is a potential hot path; use int32 for faster division.
-	row := int32(rowIdx + c.deletedRows)
-	div := int32(c.rowsPerChunk)
-	return int(row / div), int(row % div * int32(c.numCols))
+	// This is a hot path; use shifting to avoid division.
+	row := rowIdx + c.deletedRows
+	chunk = row >> c.rowsPerChunkShift
+	return chunk, (row - (chunk << c.rowsPerChunkShift)) * (c.numCols)
 }
 
 // AddRow attempts to insert a new row in the RowContainer. The row slice is not
@@ -274,15 +282,7 @@ func (c *RowContainer) Len() int {
 
 // At accesses a row at a specific index.
 func (c *RowContainer) At(i int) tree.Datums {
-	if i < 0 || i >= c.numRows {
-		panic(fmt.Sprintf("row index %d out of range", i))
-	}
-	if c.numCols == 0 {
-		// We don't want to return nil, as in some contexts nil is used as a special
-		// value to indicate that there are no more rows. Note that this doesn't
-		// actually allocate anything.
-		return make(tree.Datums, 0)
-	}
+	// This is a hot-path: do not add additional checks here.
 	chunk, pos := c.getChunkAndPos(i)
 	return c.chunks[chunk][pos : pos+c.numCols : pos+c.numCols]
 }
