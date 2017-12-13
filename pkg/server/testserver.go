@@ -366,12 +366,20 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func ExpectedInitialRangeCount(db *client.DB) (int, error) {
-	_, migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
-		context.Background(), db)
+	descriptorIDs, err := migrations.ExpectedDescriptorIDs(context.Background(), db)
 	if err != nil {
-		return 0, errors.Wrap(err, "counting initial migration ranges")
+		return 0, err
 	}
-	return GetBootstrapSchema().InitialRangeCount() + migrationRangeCount, nil
+	maxDescriptorID := descriptorIDs[len(descriptorIDs)-1]
+
+	// System table splits occur at every possible table boundary between the end
+	// of the system config ID space (keys.MaxSystemConfigDescID) and the system
+	// table with the maximum ID (maxDescriptorID), even when an ID within the
+	// span does not have an associated descriptor.
+	systemTableSplits := int(maxDescriptorID - keys.MaxSystemConfigDescID)
+
+	// `n` splits create `n+1` ranges.
+	return len(config.StaticSplits()) + systemTableSplits + 1, nil
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
