@@ -83,7 +83,7 @@ func newCallbackResultWriter(
 
 // StatementType implements the rowResultWriter interface.
 func (callbackResultWriter) StatementType() tree.StatementType {
-	return tree.Ack
+	return tree.Rows
 }
 
 // IncrementRowsAffected implements the rowResultWriter interface.
