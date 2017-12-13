@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -39,44 +40,205 @@ type TableLookup struct {
 	IsAdding bool
 }
 
+// TableLookupFunction is the function type used by TablesNeededForFKs that will
+// perform the actual lookup.
+type TableLookupFunction func(context.Context, ID) (TableLookup, error)
+
+// NoLookup can be used to not perform any lookups during a TablesNeededForFKs
+// function call.
+func NoLookup(_ context.Context, _ ID) (TableLookup, error) {
+	return TableLookup{}, nil
+}
+
+// CheckPrivilegeFunction is the function type used by TablesNeededForFKs that will
+// check the privileges of the current user to access specific tables.
+type CheckPrivilegeFunction func(DescriptorProto, privilege.Kind) error
+
+// NoCheckPrivilege can be used to not perform any privilege checks during a
+// TablesNeededForFKs function call.
+func NoCheckPrivilege(_ DescriptorProto, _ privilege.Kind) error {
+	return nil
+}
+
 // FKCheck indicates a kind of FK check (delete, insert, or both).
 type FKCheck int
 
 const (
 	// CheckDeletes checks if rows reference a changed value.
-	CheckDeletes FKCheck = iota
-	// CheckInserts checks if a new/changed value references an existing row.
+	CheckDeletes = iota
+	// CheckInserts checks if a new value references an existing row.
 	CheckInserts
 	// CheckUpdates checks all references (CheckDeletes+CheckInserts).
 	CheckUpdates
 )
 
-// TablesNeededForFKs calculates the IDs of the additional TableDescriptors that
-// will be needed for FK checking delete and/or insert operations on `table`.
-//
-// NB: the returned map's values are *not* set -- higher level calling code, eg
-// in planner, should fill the map's values by acquiring leases. This function
-// is essentially just returning a slice of IDs, but the empty map can be filled
-// in place and reused, avoiding a second allocation.
-func TablesNeededForFKs(table TableDescriptor, usage FKCheck) TableLookupsByID {
-	var ret TableLookupsByID
-	for _, idx := range table.AllNonDropIndexes() {
-		if usage != CheckDeletes && idx.ForeignKey.IsSet() {
-			if ret == nil {
-				ret = make(TableLookupsByID)
-			}
-			ret[idx.ForeignKey.Table] = TableLookup{}
+type tableLookupQueueElement struct {
+	tableLookup TableLookup
+	usage       FKCheck
+}
+
+type tableLookupQueue struct {
+	queue          []tableLookupQueueElement
+	alreadyChecked map[ID]map[FKCheck]struct{}
+	tableLookups   TableLookupsByID
+	lookup         TableLookupFunction
+	checkPrivilege CheckPrivilegeFunction
+}
+
+func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLookup, error) {
+	if tableLookup, exists := q.tableLookups[tableID]; exists {
+		return tableLookup, nil
+	}
+	tableLookup, err := q.lookup(ctx, tableID)
+	if err != nil {
+		return TableLookup{}, err
+	}
+	if !tableLookup.IsAdding && tableLookup.Table != nil {
+		if err := q.checkPrivilege(tableLookup.Table, privilege.SELECT); err != nil {
+			return TableLookup{}, err
 		}
-		if usage != CheckInserts {
-			for _, ref := range idx.ReferencedBy {
-				if ret == nil {
-					ret = make(TableLookupsByID)
+	}
+	q.tableLookups[tableID] = tableLookup
+	return tableLookup, nil
+}
+
+func (q *tableLookupQueue) enqueue(ctx context.Context, tableID ID, usage FKCheck) error {
+	// Lookup the table.
+	tableLookup, err := q.getTable(ctx, tableID)
+	if err != nil {
+		return err
+	}
+	// Don't enqueue if lookup returns an empty tableLookup. This just means that
+	// there is no need to walk any further.
+	if tableLookup.Table == nil {
+		return nil
+	}
+	// Only enqueue checks that haven't been performed yet.
+	if alreadyCheckByTableID, exists := q.alreadyChecked[tableID]; exists {
+		if _, existsInner := alreadyCheckByTableID[usage]; existsInner {
+			return nil
+		}
+	} else {
+		q.alreadyChecked[tableID] = make(map[FKCheck]struct{})
+	}
+	q.alreadyChecked[tableID][usage] = struct{}{}
+	// If the table is being added, there's no need to check it.
+	if tableLookup.IsAdding {
+		return nil
+	}
+	switch usage {
+	// Insert has already been checked when the table is fetched.
+	case CheckDeletes:
+		if err := q.checkPrivilege(tableLookup.Table, privilege.DELETE); err != nil {
+			return err
+		}
+	case CheckUpdates:
+		if err := q.checkPrivilege(tableLookup.Table, privilege.UPDATE); err != nil {
+			return err
+		}
+	}
+	(*q).queue = append((*q).queue, tableLookupQueueElement{tableLookup: tableLookup, usage: usage})
+	return nil
+}
+
+func (q *tableLookupQueue) dequeue() (TableLookup, FKCheck, bool) {
+	if len((*q).queue) == 0 {
+		return TableLookup{}, 0, false
+	}
+	elem := (*q).queue[0]
+	(*q).queue = (*q).queue[1:]
+	return elem.tableLookup, elem.usage, true
+}
+
+// TablesNeededForFKs populates a map of TableLookupsByID for all the
+// TableDescriptors that might be needed when performing FK checking for delete
+// and/or insert operations. It uses the passed in lookup function to perform
+// the actual lookup.
+func TablesNeededForFKs(
+	ctx context.Context,
+	table TableDescriptor,
+	usage FKCheck,
+	lookup TableLookupFunction,
+	checkPrivilege CheckPrivilegeFunction,
+) (TableLookupsByID, error) {
+	queue := tableLookupQueue{
+		tableLookups:   make(TableLookupsByID),
+		alreadyChecked: make(map[ID]map[FKCheck]struct{}),
+		lookup:         lookup,
+		checkPrivilege: checkPrivilege,
+	}
+	// Add the passed in table descriptor to the table lookup.
+	queue.tableLookups[table.ID] = TableLookup{Table: &table}
+	if err := queue.enqueue(ctx, table.ID, usage); err != nil {
+		return nil, err
+	}
+	for {
+		tableLookup, curUsage, exists := queue.dequeue()
+		if !exists {
+			return queue.tableLookups, nil
+		}
+		// If the table descriptor is nil it means that there was no actual lookup
+		// performed. Meaning there is no need to walk any secondary relationships
+		// and the table descriptor lookup will happen later.
+		if tableLookup.IsAdding || tableLookup.Table == nil {
+			continue
+		}
+		for _, idx := range tableLookup.Table.AllNonDropIndexes() {
+			if curUsage == CheckInserts || curUsage == CheckUpdates {
+				if idx.ForeignKey.IsSet() {
+					if _, err := queue.getTable(ctx, idx.ForeignKey.Table); err != nil {
+						return nil, err
+					}
 				}
-				ret[ref.Table] = TableLookup{}
+			}
+			if curUsage == CheckDeletes || curUsage == CheckUpdates {
+				for _, ref := range idx.ReferencedBy {
+					// The table being referenced is required to know the relationship, so
+					// fetch it here.
+					referencedTableLookup, err := queue.getTable(ctx, ref.Table)
+					if err != nil {
+						return nil, err
+					}
+					// Again here if the table descriptor is nil it means that there was
+					// no actual lookup performed. Meaning there is no need to walk any
+					// secondary relationships.
+					if referencedTableLookup.IsAdding || referencedTableLookup.Table == nil {
+						continue
+					}
+					referencedIdx, err := referencedTableLookup.Table.FindIndexByID(ref.Index)
+					if err != nil {
+						return nil, err
+					}
+					if curUsage == CheckDeletes {
+						var nextUsage FKCheck
+						switch referencedIdx.ForeignKey.OnDelete {
+						case ForeignKeyReference_CASCADE:
+							nextUsage = CheckDeletes
+						case ForeignKeyReference_SET_DEFAULT, ForeignKeyReference_SET_NULL:
+							nextUsage = CheckUpdates
+						default:
+							// There is no need to check any other relationships.
+							continue
+						}
+						if err := queue.enqueue(ctx, referencedTableLookup.Table.ID, nextUsage); err != nil {
+							return nil, err
+						}
+					} else {
+						// curUsage == CheckUpdates
+						if referencedIdx.ForeignKey.OnUpdate == ForeignKeyReference_CASCADE ||
+							referencedIdx.ForeignKey.OnUpdate == ForeignKeyReference_SET_DEFAULT ||
+							referencedIdx.ForeignKey.OnUpdate == ForeignKeyReference_SET_NULL {
+							if err := queue.enqueue(
+								ctx, referencedTableLookup.Table.ID, CheckUpdates,
+							); err != nil {
+								return nil, err
+							}
+						}
+					}
+				}
 			}
 		}
 	}
-	return ret
 }
 
 // spanKVFetcher is an kvFetcher that returns a set slice of kvs.
@@ -151,7 +313,6 @@ func (f *fkBatchChecker) runCheck(
 	fetcher := spanKVFetcher{}
 	for i, resp := range br.Responses {
 		fk := f.batchIdxToFk[i]
-
 		fetcher.kvs = resp.GetInner().(*roachpb.ScanResponse).Rows
 		if err := fk.rf.StartScanFrom(ctx, &fetcher); err != nil {
 			return err
@@ -285,7 +446,9 @@ func checkIdx(
 }
 
 type fkDeleteHelper struct {
-	fks map[IndexID][]baseFKHelper
+	fks         map[IndexID][]baseFKHelper
+	otherTables TableLookupsByID
+	alloc       *DatumAlloc
 
 	checker *fkBatchChecker
 }
@@ -298,6 +461,8 @@ func makeFKDeleteHelper(
 	alloc *DatumAlloc,
 ) (fkDeleteHelper, error) {
 	h := fkDeleteHelper{
+		otherTables: otherTables,
+		alloc:       alloc,
 		checker: &fkBatchChecker{
 			txn: txn,
 		},
@@ -314,7 +479,7 @@ func makeFKDeleteHelper(
 				continue
 			}
 			if err != nil {
-				return h, err
+				return fkDeleteHelper{}, err
 			}
 			if h.fks == nil {
 				h.fks = make(map[IndexID][]baseFKHelper)
