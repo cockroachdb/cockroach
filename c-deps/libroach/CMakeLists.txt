@@ -26,12 +26,13 @@ add_library(roach
   encoding.cc
   env_switching.cc
   eventlistener.cc
+  utils.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
   protos/storage/engine/enginepb/mvcc.pb.cc
   protos/storage/engine/enginepb/mvcc3.pb.cc
-  protos/storage/engine/enginepb/registry.pb.cc
+  protos/storage/engine/enginepb/file_registry.pb.cc
   protos/storage/engine/enginepb/rocksdb.pb.cc
   protos/util/hlc/legacy_timestamp.pb.cc
   protos/util/hlc/timestamp.pb.cc
@@ -45,15 +46,17 @@ target_include_directories(roach
 )
 
 add_library(roachccl
+  ccl/crypto_utils.cc
   ccl/db.cc
-  ccl/key.cc
   ccl/key_manager.cc
   protosccl/ccl/baseccl/encryption_options.pb.cc
+  protosccl/ccl/storageccl/engineccl/enginepbccl/key_registry.pb.cc
 )
 target_include_directories(roachccl
   PRIVATE .. # CryptoPP headers are directly in the directory. Include .. to be able to include <cryptopp/....h>
   PRIVATE ../protobuf/src
   PRIVATE ../rocksdb/include
+  PRIVATE protos
   PRIVATE protosccl
 )
 target_link_libraries(roachccl roach)
@@ -104,6 +107,7 @@ foreach(tsrc ${tests})
     PRIVATE ../googletest/googletest/include
     PRIVATE ../protobuf/src
     PRIVATE ../rocksdb/include
+    PRIVATE protos
   )
 
   # Link `ccl/` tests against roachccl and CryptoPP.
@@ -114,6 +118,7 @@ foreach(tsrc ${tests})
     )
     target_include_directories(${tname}
       PRIVATE ../cryptopp
+      PRIVATE protosccl
     )
   endif()
 
