@@ -5,6 +5,7 @@ metadata:
   labels:
     app: cockroachdb-client
 spec:
+  serviceAccountName: cockroachdb
   initContainers:
   # The init-certs container sends a certificate signing request to the
   # kubernetes cluster.
