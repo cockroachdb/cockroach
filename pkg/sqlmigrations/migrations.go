@@ -47,11 +47,6 @@ var (
 	leaseRefreshInterval = leaseDuration / 5
 )
 
-const (
-	addDefaultMetaAndLivenessZoneConfigsName = "add default .meta and .liveness zone configs"
-	addSystemUsersIsRoleAndCreateAdminRole   = "add system.users isRole column and create admin role"
-)
-
 // MigrationManagerTestingKnobs contains testing knobs.
 type MigrationManagerTestingKnobs struct {
 	// DisableMigrations skips all migrations.
@@ -125,7 +120,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs: []sqlbase.ID{keys.LocationsTableID},
 	},
 	{
-		name:   addDefaultMetaAndLivenessZoneConfigsName,
+		name:   "add default .meta and .liveness zone configs",
 		workFn: addDefaultMetaAndLivenessZoneConfigs,
 	},
 	{
@@ -134,7 +129,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs: []sqlbase.ID{keys.RoleMembersTableID},
 	},
 	{
-		name:         addSystemUsersIsRoleAndCreateAdminRole,
+		name:         "add system.users isRole column and create admin role",
 		workFn:       addRoles,
 		doesBackfill: true,
 	},
