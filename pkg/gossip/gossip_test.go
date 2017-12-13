@@ -25,7 +25,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -349,7 +348,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, local.GetNodeAddr(), makeMetrics())
 
 		testutils.SucceedsSoon(t, func() error {
-			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock()).Connect(ctx)
+			conn, err := peer.rpcContext.GRPCDial(c.addr.String()).Connect(ctx)
 			if err != nil {
 				return err
 			}
