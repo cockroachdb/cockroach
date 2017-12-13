@@ -1286,17 +1286,9 @@ func (e *Executor) execSingleStatement(
 	}
 
 	stmt.queryID = queryID
-	stmt.queryMeta = queryMeta
 
-	// Canceling a query cancels its transaction's context. Copy reference to
-	// txn context and its cancellation function here.
-	//
-	// TODO(itsbilal): Ideally we'd like to fork off a context for each individual
-	// statement. But the heartbeat loop in TxnCoordSender currently assumes that the context of the
-	// first operation in a txn batch lasts at least as long as the transaction itself. Once that
-	// sender is able to distinguish between statement and transaction contexts, queryMeta could
-	// move to per-statement contexts.
-	queryMeta.ctx = txnState.Ctx
+	// Canceling a query cancels its transaction's context so we take a reference to
+	// the cancellation function here.
 	queryMeta.ctxCancel = txnState.cancel
 
 	// Ignore statements that spawn jobs from SHOW QUERIES and from being cancellable
@@ -1799,7 +1791,13 @@ func (e *Executor) execStmtInOpenTxn(
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
-	p.cancelChecker = sqlbase.NewCancelChecker(p.stmt.queryMeta.ctx)
+	// TODO(andrei): Ideally we'd like to fork off a context for each individual
+	// statement. But the heartbeat loop in TxnCoordSender currently assumes that
+	// the context of the first operation in a txn batch lasts at least as long as
+	// the transaction itself. Once that sender is able to distinguish between
+	// statement and transaction contexts, we should move to per-statement
+	// contexts.
+	p.cancelChecker = sqlbase.NewCancelChecker(txnState.Ctx)
 
 	// constantMemAcc accounts for all constant folded values that are computed
 	// prior to any rows being computed.

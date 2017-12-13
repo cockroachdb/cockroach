@@ -28,7 +28,6 @@ type Statement struct {
 	ExpectedTypes sqlbase.ResultColumns
 	AnonymizedStr string
 	queryID       uint128.Uint128
-	queryMeta     *queryMeta
 }
 
 func (s Statement) String() string {

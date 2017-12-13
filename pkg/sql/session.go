@@ -168,11 +168,7 @@ type queryMeta struct {
 	// Current phase of execution of query.
 	phase queryPhase
 
-	// Context associated with this query's transaction.
-	ctx context.Context
-
 	// Cancellation function for the context associated with this query's transaction.
-	// Set to session.txnState.cancel in executor.
 	ctxCancel context.CancelFunc
 }
 
