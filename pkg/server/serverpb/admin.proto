@@ -192,6 +192,9 @@ message TableStatsResponse {
   // stats is the summation of MVCCStats for all replicas of this table
   // across the cluster.
   cockroach.storage.engine.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
+  // approximate_disk_bytes is an approximation of the disk space (in bytes)
+  // used for all replicas of this table across the cluster.
+  uint64 approximate_disk_bytes = 6;
   // MissingNode represents information on a node which should contain data
   // for this table, but could not be contacted during this request.
   message MissingNode {

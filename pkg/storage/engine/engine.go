@@ -231,6 +231,8 @@ type Engine interface {
 	// IngestExternalFile links a file into the RocksDB log-structured
 	// merge-tree.
 	IngestExternalFile(ctx context.Context, path string, move bool) error
+	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
+	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
 }
 
 // Batch is the interface for batch specific operations.

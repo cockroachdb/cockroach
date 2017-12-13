@@ -622,6 +622,7 @@ func (s *adminServer) TableStats(
 			} else {
 				tableStatResponse.Stats.Add(resp.resp.TotalStats)
 				tableStatResponse.ReplicaCount += int64(resp.resp.RangeCount)
+				tableStatResponse.ApproximateDiskBytes += resp.resp.ApproximateDiskBytes
 			}
 		case <-ctx.Done():
 			// Caller gave up, stop doing work.
