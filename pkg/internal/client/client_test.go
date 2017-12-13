@@ -555,7 +555,7 @@ func TestClientEmptyValues(t *testing.T) {
 		t.Errorf("expected non-nil empty byte slice; got %q", bytes)
 	}
 
-	if _, err := db.Inc(context.TODO(), testUser+"/b", 0); err != nil {
+	if _, err := db.Inc(context.TODO(), testUser+"/b", 0, nil); err != nil {
 		t.Error(err)
 	}
 	if gr, err := db.Get(context.TODO(), testUser+"/b"); err != nil {
@@ -582,7 +582,7 @@ func TestClientBatch(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			key := roachpb.Key(fmt.Sprintf("%s/key %02d", testUser, i))
 			keys = append(keys, key)
-			b.Inc(key, int64(i))
+			b.Inc(key, int64(i), nil)
 		}
 
 		if err := db.Run(ctx, b); err != nil {
@@ -786,7 +786,7 @@ func concurrentIncrements(db *client.DB, t *testing.T) {
 					otherValue = gr.ValueInt()
 				}
 
-				_, err = txn.Inc(ctx, writeKey, 1+otherValue)
+				_, err = txn.Inc(ctx, writeKey, 1+otherValue, nil)
 				return err
 			}); err != nil {
 				t.Error(err)

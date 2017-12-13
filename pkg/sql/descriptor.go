@@ -67,7 +67,7 @@ func (d descriptorAlreadyExistsErr) Error() string {
 // incremented multiple times because of retries.
 func GenerateUniqueDescID(ctx context.Context, db *client.DB) (sqlbase.ID, error) {
 	// Increment unique descriptor counter.
-	newVal, err := client.IncrementValRetryable(ctx, db, keys.DescIDGenerator, 1)
+	newVal, err := client.IncrementValRetryable(ctx, db, keys.DescIDGenerator, 1, nil)
 	if err != nil {
 		return 0, err
 	}

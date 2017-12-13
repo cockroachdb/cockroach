@@ -35,8 +35,9 @@ func Increment(
 	args := cArgs.Args.(*roachpb.IncrementRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.IncrementResponse)
-
-	newVal, err := engine.MVCCIncrement(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, h.Txn, args.Increment)
+	newVal, err := engine.MVCCIncrement(
+		ctx, batch, cArgs.Stats, args.Key, h.Timestamp, h.Txn, args.Increment, args.BoundsOptions,
+	)
 	reply.NewValue = newVal
 	return result.Result{}, err
 }

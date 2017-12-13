@@ -88,7 +88,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	// Initialize the sequence value.
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
 	b := &client.Batch{}
-	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
+	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment, nil)
 	if err := params.p.txn.Run(params.ctx, b); err != nil {
 		return err
 	}
