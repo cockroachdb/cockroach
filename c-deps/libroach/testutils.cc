@@ -14,6 +14,7 @@
 
 #include <google/protobuf/stubs/stringprintf.h>
 #include <gtest/gtest.h>
+#include <regex>
 #include <rocksdb/status.h>
 #include <string>
 #include "fmt.h"
@@ -33,7 +34,8 @@ rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg)
   if (status.ok()) {
     return rocksdb::Status::InvalidArgument(fmt::StringPrintf("expected error \"%s\", got success", err_msg));
   }
-  if (strcmp(err_msg, status.getState()) == 0) {
+  std::regex re(err_msg);
+  if (std::regex_match(status.getState(), re)) {
     return rocksdb::Status::OK();
   }
   return rocksdb::Status::InvalidArgument(
