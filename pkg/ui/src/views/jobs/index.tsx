@@ -1,8 +1,3 @@
-// tslint:disable-next-line:no-var-requires
-const spinner = require<string>("assets/spinner.gif");
-// tslint:disable-next-line:no-var-requires
-const noResults = require<string>("assets/noresults.svg");
-
 import _ from "lodash";
 import moment from "moment";
 import { Line } from "rc-progress";
@@ -21,6 +16,9 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+
+import spinner from "assets/spinner.gif";
+import noResults from "assets/noresults.svg";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 

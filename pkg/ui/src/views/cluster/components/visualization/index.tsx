@@ -1,12 +1,10 @@
-// tslint:disable-next-line:no-var-requires
-const spinner = require<string>("assets/spinner.gif");
-
 import React from "react";
 import classNames from "classnames";
 
-import "./visualizations.styl";
-
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+
+import "./visualizations.styl";
+import spinner from "assets/spinner.gif";
 
 interface VisualizationProps {
   title: string;
