@@ -112,7 +112,7 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 func (m *mergeJoiner) outputBatch(
 	ctx context.Context, cancelChecker *sqlbase.CancelChecker,
 ) (bool, error) {
-	leftRows, rightRows, err := m.streamMerger.NextBatch()
+	leftRows, rightRows, err := m.streamMerger.NextBatch(ctx)
 	if err != nil {
 		return false, err
 	}

@@ -121,7 +121,7 @@ func TestOrderedSync(t *testing.T) {
 		}
 		var retRows sqlbase.EncDatumRows
 		for {
-			row, meta := src.Next()
+			row, meta := src.Next(context.Background())
 			if !meta.Empty() {
 				t.Fatalf("unexpected metadata: %v", meta)
 			}
@@ -161,7 +161,7 @@ func TestUnorderedSync(t *testing.T) {
 	}
 	var retRows sqlbase.EncDatumRows
 	for {
-		row, meta := mrc.Next()
+		row, meta := mrc.Next(context.Background())
 		if !meta.Empty() {
 			t.Fatalf("unexpected metadata: %v", meta)
 		}
@@ -213,7 +213,7 @@ func TestUnorderedSync(t *testing.T) {
 	}
 	foundErr := false
 	for {
-		row, meta := mrc.Next()
+		row, meta := mrc.Next(context.Background())
 		if meta.Err != nil {
 			if meta.Err.Error() != "Test error" {
 				t.Error(meta.Err)

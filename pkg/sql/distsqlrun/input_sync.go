@@ -136,12 +136,12 @@ func (s *orderedSynchronizer) Pop() interface{} {
 // from it) unless there are no more rows to read from it.
 // If an error is returned, heap.Init() has not been called, so s.heap is not
 // an actual heap. In this case, all members of the heap need to be drained.
-func (s *orderedSynchronizer) initHeap() error {
+func (s *orderedSynchronizer) initHeap(ctx context.Context) error {
 	// consumeErr is the last error encountered while consuming metadata.
 	var consumeErr error
 	for i := range s.sources {
 		src := &s.sources[i]
-		err := s.consumeMetadata(src, stopOnRowOrError)
+		err := s.consumeMetadata(ctx, src, stopOnRowOrError)
 		if err != nil {
 			consumeErr = err
 		}
@@ -187,9 +187,11 @@ const (
 // not consumed and the error is returned. With the drain mode, metadata records
 // with error are accumulated like all the others and this method doesn't return
 // any errors.
-func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadataOption) error {
+func (s *orderedSynchronizer) consumeMetadata(
+	ctx context.Context, src *srcInfo, mode consumeMetadataOption,
+) error {
 	for {
-		row, meta := src.src.Next()
+		row, meta := src.src.Next(ctx)
 		if meta.Err != nil && mode == stopOnRowOrError {
 			return meta.Err
 		}
@@ -216,7 +218,7 @@ func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadata
 // been set), or one of the sources is borked. In either case, advanceRoot()
 // should not be called again - the caller should update the
 // orderedSynchronizer.state accordingly.
-func (s *orderedSynchronizer) advanceRoot() error {
+func (s *orderedSynchronizer) advanceRoot(ctx context.Context) error {
 	if s.state != returningRows {
 		return errors.Errorf("advanceRoot() called in unsupported state: %d", s.state)
 	}
@@ -229,7 +231,7 @@ func (s *orderedSynchronizer) advanceRoot() error {
 	}
 
 	oldRow := src.row
-	if err := s.consumeMetadata(src, stopOnRowOrError); err != nil {
+	if err := s.consumeMetadata(ctx, src, stopOnRowOrError); err != nil {
 		return err
 	}
 
@@ -252,18 +254,18 @@ func (s *orderedSynchronizer) advanceRoot() error {
 
 // drainSources consumes all the rows from the sources. All the data is
 // discarded, except the metadata records which are accumulated in s.metadata.
-func (s *orderedSynchronizer) drainSources() {
+func (s *orderedSynchronizer) drainSources(ctx context.Context) {
 	for _, srcIdx := range s.heap {
-		if err := s.consumeMetadata(&s.sources[srcIdx], drain); err != nil {
+		if err := s.consumeMetadata(ctx, &s.sources[srcIdx], drain); err != nil {
 			log.Fatalf(context.TODO(), "unexpected draining error: %s", err)
 		}
 	}
 }
 
 // Next is part of the RowSource interface.
-func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (s *orderedSynchronizer) Next(ctx context.Context) (sqlbase.EncDatumRow, ProducerMetadata) {
 	if s.state == notInitialized {
-		if err := s.initHeap(); err != nil {
+		if err := s.initHeap(ctx); err != nil {
 			s.ConsumerDone()
 			return nil, ProducerMetadata{Err: err}
 		}
@@ -271,7 +273,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 	} else if s.state == returningRows && s.needsAdvance {
 		// Last row returned was from the source at the root of the heap; get
 		// the next row for that source.
-		if err := s.advanceRoot(); err != nil {
+		if err := s.advanceRoot(ctx); err != nil {
 			s.ConsumerDone()
 			return nil, ProducerMetadata{Err: err}
 		}
@@ -280,7 +282,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 	if s.state == draining {
 		// ConsumerDone(), or an error, has put us in draining mode. All subsequent
 		// Next() calls will return metadata records.
-		s.drainSources()
+		s.drainSources(ctx)
 		s.state = drainBuffered
 		s.heap = nil
 	}

@@ -257,7 +257,7 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 
 	var scratch []byte
 	for {
-		row, meta := ag.input.Next()
+		row, meta := ag.input.Next(ctx)
 		if !meta.Empty() {
 			if meta.Err != nil {
 				return meta.Err

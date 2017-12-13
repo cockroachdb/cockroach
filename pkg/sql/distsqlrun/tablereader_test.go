@@ -213,7 +213,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	var res sqlbase.EncDatumRows
 	var metas []ProducerMetadata
 	for {
-		row, meta := out.Next()
+		row, meta := out.Next(context.Background())
 		if !meta.Empty() {
 			metas = append(metas, meta)
 			continue
@@ -285,7 +285,7 @@ func BenchmarkTableReader(b *testing.B) {
 		}
 
 		for {
-			row, meta := out.Next()
+			row, meta := out.Next(context.Background())
 			if !meta.Empty() {
 				b.Fatalf("unexpected metadata: %+v", meta)
 			}

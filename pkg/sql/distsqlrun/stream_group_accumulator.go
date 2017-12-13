@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 // streamGroupAccumulator groups input rows coming from src into groups dictated
@@ -47,14 +48,16 @@ func makeStreamGroupAccumulator(
 }
 
 // peekAtCurrentGroup returns the first row of the current group.
-func (s *streamGroupAccumulator) peekAtCurrentGroup() (sqlbase.EncDatumRow, error) {
+func (s *streamGroupAccumulator) peekAtCurrentGroup(
+	ctx context.Context,
+) (sqlbase.EncDatumRow, error) {
 	// On all but the very first call, either there will be (one or all) rows
 	// accumulated already in the current group, or srcConsumed will be set.
 	if s.srcConsumed {
 		return nil, nil
 	}
 	if len(s.curGroup) == 0 {
-		row, err := s.src.NextRow()
+		row, err := s.src.NextRow(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -71,7 +74,7 @@ func (s *streamGroupAccumulator) peekAtCurrentGroup() (sqlbase.EncDatumRow, erro
 // advanceGroup returns all rows of the current group and advances the internal
 // state to the next group, so that a subsequent peekAtCurrentGroup() will
 // return the first row of the next group.
-func (s *streamGroupAccumulator) advanceGroup() ([]sqlbase.EncDatumRow, error) {
+func (s *streamGroupAccumulator) advanceGroup(ctx context.Context) ([]sqlbase.EncDatumRow, error) {
 	if s.srcConsumed {
 		// If src has been exhausted, then we also must have advanced away from the
 		// last group.
@@ -81,7 +84,7 @@ func (s *streamGroupAccumulator) advanceGroup() ([]sqlbase.EncDatumRow, error) {
 	evalCtx := &tree.EvalContext{}
 
 	for {
-		row, err := s.src.NextRow()
+		row, err := s.src.NextRow(ctx)
 		if err != nil {
 			return nil, err
 		}

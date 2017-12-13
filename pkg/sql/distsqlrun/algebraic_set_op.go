@@ -122,11 +122,11 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 		convertToColumnOrdering(e.ordering),
 	)
 
-	leftRows, err := leftGroup.advanceGroup()
+	leftRows, err := leftGroup.advanceGroup(ctx)
 	if err != nil {
 		return err
 	}
-	rightRows, err := rightGroup.advanceGroup()
+	rightRows, err := rightGroup.advanceGroup(ctx)
 	if err != nil {
 		return err
 	}
@@ -195,11 +195,11 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 					}
 				}
 			}
-			leftRows, err = leftGroup.advanceGroup()
+			leftRows, err = leftGroup.advanceGroup(ctx)
 			if err != nil {
 				return err
 			}
-			rightRows, err = rightGroup.advanceGroup()
+			rightRows, err = rightGroup.advanceGroup(ctx)
 			if err != nil {
 				return err
 			}
@@ -214,13 +214,13 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 					return err
 				}
 			}
-			leftRows, err = leftGroup.advanceGroup()
+			leftRows, err = leftGroup.advanceGroup(ctx)
 			if err != nil {
 				return err
 			}
 		}
 		if cmp > 0 {
-			rightRows, err = rightGroup.advanceGroup()
+			rightRows, err = rightGroup.advanceGroup(ctx)
 			if len(rightRows) == 0 {
 				break
 			}
@@ -244,7 +244,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 
 		// Emit all remaining rows.
 		for {
-			leftRows, err = leftGroup.advanceGroup()
+			leftRows, err = leftGroup.advanceGroup(ctx)
 			// Emit all left rows until completion/error.
 			if err != nil || len(leftRows) == 0 {
 				return err
