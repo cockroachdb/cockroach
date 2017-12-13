@@ -92,14 +92,15 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 		return nil, err
 	}
 
-	s.Run(context.Background(), nil)
+	ctx := context.Background()
+	s.Run(ctx, nil)
 	if !out.ProducerClosed {
 		return nil, errors.Errorf("output RowReceiver not closed")
 	}
 
 	var res sqlbase.EncDatumRows
 	for {
-		row, meta := out.Next()
+		row, meta := out.Next(ctx)
 		if !meta.Empty() {
 			return nil, errors.Errorf("unexpected metadata: %v", meta)
 		}

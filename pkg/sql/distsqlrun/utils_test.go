@@ -62,7 +62,7 @@ func (r *RepeatableRowSource) Types() []sqlbase.ColumnType {
 }
 
 // Next is part of the RowSource interface.
-func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (r *RepeatableRowSource) Next(_ context.Context) (sqlbase.EncDatumRow, ProducerMetadata) {
 	// If we've emitted all rows, signal that we have reached the end.
 	if r.nextRowIdx >= len(r.rows) {
 		return nil, ProducerMetadata{}
@@ -100,7 +100,7 @@ func (r *RowDisposer) ProducerDone() {}
 // NextNoMeta is a version of Next which fails the test if
 // it encounters any metadata.
 func (rb *RowBuffer) NextNoMeta(tb testing.TB) sqlbase.EncDatumRow {
-	row, meta := rb.Next()
+	row, meta := rb.Next(context.Background())
 	if !meta.Empty() {
 		tb.Fatalf("unexpected metadata: %v", meta)
 	}

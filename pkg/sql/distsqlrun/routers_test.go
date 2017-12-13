@@ -464,7 +464,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 				if consumerStatus != NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 				}
-				_, meta := chans[0].Next()
+				_, meta := chans[0].Next(context.Background())
 				if meta.Err != err1 {
 					t.Fatalf("unexpected meta.Err %v, expected %s", meta.Err, err1)
 				}
@@ -477,7 +477,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 				if consumerStatus != NeedMoreRows {
 					t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 				}
-				_, meta := chans[0].Next()
+				_, meta := chans[0].Next(context.Background())
 				if meta.Err != err2 {
 					t.Fatalf("unexpected meta.Err %v, expected %s", meta.Err, err2)
 				}
@@ -529,7 +529,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 
 func drainRowChannel(rc *RowChannel) {
 	for {
-		row, meta := rc.Next()
+		row, meta := rc.Next(context.Background())
 		if row == nil && meta.Empty() {
 			return
 		}

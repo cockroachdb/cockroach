@@ -407,7 +407,7 @@ func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	defer tracing.FinishSpan(span)
 
 	for {
-		row, meta := n.input.Next()
+		row, meta := n.input.Next(ctx)
 		if row == nil && meta.Empty() {
 			sendTraceData(ctx, n.out.output)
 			n.out.Close()

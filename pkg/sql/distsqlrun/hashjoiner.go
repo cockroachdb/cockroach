@@ -275,7 +275,7 @@ func (h *hashJoiner) receiveRow(
 	ctx context.Context, src RowSource, side joinSide,
 ) (_ sqlbase.EncDatumRow, earlyExit bool, _ error) {
 	for {
-		row, meta := src.Next()
+		row, meta := src.Next(ctx)
 		if row == nil {
 			if meta.Empty() {
 				// Done.

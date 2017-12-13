@@ -189,7 +189,7 @@ const (
 // any errors.
 func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadataOption) error {
 	for {
-		row, meta := src.src.Next()
+		row, meta := src.src.Next(context.TODO())
 		if meta.Err != nil && mode == stopOnRowOrError {
 			return meta.Err
 		}
@@ -261,7 +261,7 @@ func (s *orderedSynchronizer) drainSources() {
 }
 
 // Next is part of the RowSource interface.
-func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (s *orderedSynchronizer) Next(_ context.Context) (sqlbase.EncDatumRow, ProducerMetadata) {
 	if s.state == notInitialized {
 		if err := s.initHeap(); err != nil {
 			s.ConsumerDone()

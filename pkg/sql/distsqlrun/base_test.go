@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"golang.org/x/net/context"
 )
 
 // Benchmark a pipeline of RowChannels.
@@ -45,7 +46,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 						next = &rc[i+1]
 					}
 					for {
-						row, meta := cur.Next()
+						row, meta := cur.Next(context.Background())
 						if row == nil {
 							if next != nil {
 								next.ProducerDone()

@@ -134,7 +134,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// a soft limit (perhaps send the batch out if we don't get a result
 		// within a certain amount of time).
 		for spans = spans[:0]; len(spans) < joinReaderBatchSize; {
-			row, meta := jr.input.Next()
+			row, meta := jr.input.Next(ctx)
 			if !meta.Empty() {
 				if meta.Err != nil {
 					return meta.Err

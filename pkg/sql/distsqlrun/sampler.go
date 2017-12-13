@@ -149,7 +149,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	var da sqlbase.DatumAlloc
 	var buf []byte
 	for {
-		row, meta := s.input.Next()
+		row, meta := s.input.Next(ctx)
 		if !meta.Empty() {
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
