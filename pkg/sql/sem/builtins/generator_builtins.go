@@ -17,6 +17,7 @@ package builtins
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -66,6 +67,12 @@ var Generators = map[string][]tree.Builtin{
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
+		),
+		makeGeneratorBuiltin(
+			tree.ArgTypes{{"start", types.Timestamp}, {"end", types.Timestamp}, {"step", types.Interval}},
+			seriesTSValueGeneratorType,
+			makeTSSeriesGenerator,
+			"Produces a virtual table containing the timestamp values from `start` to `end`, inclusive, by increment of `step`.",
 		),
 	},
 	"pg_get_keywords": {
@@ -207,7 +214,36 @@ var seriesValueGeneratorType = types.TTable{
 	Labels: []string{"generate_series"},
 }
 
+type seriesTSValueGenerator struct {
+	value, start, stop time.Time
+	step               time.Duration
+	nextOK             bool
+}
+
+var seriesTSValueGeneratorType = types.TTable{
+	Cols:   types.TTuple{types.Timestamp},
+	Labels: []string{"generate_series"},
+}
+
 var errStepCannotBeZero = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
+
+func makeTSSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+	start := args[0].(*tree.DTimestamp).Time
+	stop := args[1].(*tree.DTimestamp).Time
+	step := time.Duration(args[2].(*tree.DInterval).Nanos) * time.Nanosecond
+
+	if step == 0 {
+		return nil, errStepCannotBeZero
+	}
+
+	return &seriesTSValueGenerator{
+		value:  start,
+		start:  start,
+		stop:   stop,
+		step:   step,
+		nextOK: true,
+	}, nil
+}
 
 func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	start := int64(tree.MustBeDInt(args[0]))
@@ -226,6 +262,38 @@ func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGener
 		step:   step,
 		nextOK: true,
 	}, nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (*seriesTSValueGenerator) ResolvedType() types.TTable { return seriesTSValueGeneratorType }
+
+// Start implements the tree.ValueGenerator interface.
+func (s *seriesTSValueGenerator) Start() error { return nil }
+
+// Close implements the tree.ValueGenerator interface.
+func (s *seriesTSValueGenerator) Close() {}
+
+// Next implements the tree.ValueGenerator interface.
+func (s *seriesTSValueGenerator) Next() (bool, error) {
+	if !s.nextOK {
+		return false, nil
+	}
+
+	if s.step < 0 && (s.start.Before(s.stop)) {
+		return false, nil
+	}
+	if s.step > 0 && (s.stop.Before(s.start)) {
+		return false, nil
+	}
+
+	s.value = s.start
+	s.start = s.start.Add(s.step)
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *seriesTSValueGenerator) Values() tree.Datums {
+	return tree.Datums{tree.MakeDTimestamp(s.value, time.Microsecond)}
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
