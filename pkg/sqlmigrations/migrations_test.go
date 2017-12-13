@@ -617,6 +617,47 @@ CREATE INDEX y ON test.x(x);
 	mt.runMigration(ctx, t)
 }
 
+func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeIsolatedMigrationTest(ctx, t, "upgrade table descs to interleaved format version")
+	defer mt.close(ctx)
+
+	defer func(prev int64) { upgradeTableDescBatchSize = prev }(upgradeTableDescBatchSize)
+	upgradeTableDescBatchSize = 5
+	n := int(upgradeTableDescBatchSize) * 3
+
+	// Create n tables.
+	mt.sqlDB.Exec(t, `CREATE DATABASE db`)
+	for i := 0; i < n; i++ {
+		mt.sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE db.t%d ()`, i))
+	}
+
+	// Corrupt half the tables' format versions.
+	for i := 0; i < n; i += 2 {
+		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
+		tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
+		if err := mt.kvDB.Put(
+			ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc),
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Ensure the migration upgrades the table's format version.
+	mt.runMigration(ctx, t)
+	for i := 0; i < n; i++ {
+		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
+		if e, a := sqlbase.InterleavedFormatVersion, tableDesc.FormatVersion; e != a {
+			t.Errorf("t%d: expected format version %s, but got %s", i, e, a)
+		}
+	}
+
+	// Verify idempotency.
+	mt.runMigration(ctx, t)
+}
+
 func TestExpectedInitialRangeCount(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
