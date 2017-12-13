@@ -600,3 +600,12 @@ func (j *jsonEncoded) encode(appendTo []byte) (jEntry uint32, b []byte, err erro
 func (j *jsonEncoded) MaybeDecode() JSON {
 	return j.mustDecode()
 }
+
+// toGoRepr implements the JSON interface.
+func (j *jsonEncoded) toGoRepr() (interface{}, error) {
+	decoded, err := j.shallowDecode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.toGoRepr()
+}
