@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -512,6 +513,11 @@ func (v *indexInfo) makeOrConstraints(evalCtx *tree.EvalContext, orExprs []tree.
 	v.constraints = constraints
 	return nil
 }
+
+// TODO(radu): we will change makeIndexConstraints to use
+// opt.MakeIndexConstraints. For now, just make sure the linter doesn't
+// complain about unused packages.
+var _ = opt.MakeIndexConstraints
 
 // makeIndexConstraints generates constraints for a set of conjunctions (AND
 // expressions). These expressions can be the entire filter, or they can be one

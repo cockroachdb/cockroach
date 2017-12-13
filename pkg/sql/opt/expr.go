@@ -55,15 +55,16 @@ func formatExprs(tp treeprinter.Node, title string, exprs []*expr) {
 	if len(exprs) > 0 {
 		n := tp.Child(title)
 		for _, e := range exprs {
-			if e != nil {
-				e.format(n)
-			}
+			e.format(n)
 		}
 	}
 }
 
 // format is part of the operatorClass interface.
 func (e *expr) format(tp treeprinter.Node) {
+	if e == nil {
+		panic("format on nil expr")
+	}
 	e.opClass().format(e, tp)
 }
 
