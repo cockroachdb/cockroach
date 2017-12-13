@@ -990,9 +990,6 @@ func importPlanHook(
 			return err
 		}
 		defer tempStorage.Close()
-		if err := verifyUsableExportTarget(ctx, tempStorage, temp); err != nil {
-			return err
-		}
 
 		sstSize := config.DefaultZoneConfig().RangeMaxBytes / 2
 		if override, ok := opts[importOptionSSTSize]; ok {
@@ -1029,6 +1026,11 @@ func importPlanHook(
 
 		jobDesc, err := importJobDescription(importStmt, create.Defs, files, opts)
 		if err != nil {
+			return err
+		}
+
+		// Delay writing the BACKUP-CHECKPOINT file until as late as possible.
+		if err := verifyUsableExportTarget(ctx, tempStorage, temp); err != nil {
 			return err
 		}
 
