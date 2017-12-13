@@ -435,11 +435,6 @@ func (e *Executor) Start(
 	startupSession.Finish(e)
 }
 
-// GetVirtualTabler retrieves the VirtualTabler reference for this executor.
-func (e *Executor) GetVirtualTabler() VirtualTabler {
-	return &e.virtualSchemas
-}
-
 // SetDistSQLSpanResolver changes the SpanResolver used for DistSQL. It is the
 // caller's responsibility to make sure no queries are being run with DistSQL at
 // the same time.
