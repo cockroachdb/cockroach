@@ -18,7 +18,6 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -38,18 +37,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// Returns an error if a zone config "exists" for the table id.
-func zoneExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
+// Returns an error if a zone config for the specified table or
+// database ID doesn't match the expected parameter. If expected
+// is nil, then we verify no zone config exists.
+func zoneExists(sqlDB *gosql.DB, expected *config.ZoneConfig, id sqlbase.ID) error {
 	rows, err := sqlDB.Query(`SELECT * FROM system.zones WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-	if exists != rows.Next() {
+	if exists := (expected != nil); exists != rows.Next() {
 		return errors.Errorf("zone config exists = %v", exists)
 	}
-	// Ensure that the zone config is the default one.
-	if exists {
+	if expected != nil {
+		// Ensure that the zone config matches.
 		var storedID sqlbase.ID
 		var val []byte
 		if err := rows.Scan(&storedID, &val); err != nil {
@@ -62,8 +63,8 @@ func zoneExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 		if err := protoutil.Unmarshal(val, &cfg); err != nil {
 			return err
 		}
-		if e := config.DefaultZoneConfig(); !reflect.DeepEqual(e, cfg) {
-			return errors.Errorf("e = %v, v = %v", e, cfg)
+		if !expected.Equal(cfg) {
+			return errors.Errorf("e = %v, v = %v", expected, cfg)
 		}
 	}
 	return nil
@@ -148,10 +149,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, true, tbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := zoneExists(sqlDB, true, dbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -191,7 +192,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err := descExists(sqlDB, false, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := zoneExists(sqlDB, false, dbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, nil, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -201,7 +202,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("database descriptor key still exists after database is dropped")
 	}
 
-	if err := zoneExists(sqlDB, true, tbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -210,12 +211,6 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// Turn on quick garbage collection.
-			AsyncExecQuickly: true,
-		},
-	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
@@ -261,6 +256,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	// Add a zone config for both the table and database.
 	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0 // Set TTL so the data is deleted immediately.
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -272,10 +268,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, true, tbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := zoneExists(sqlDB, true, dbDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -300,7 +296,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 			return err
 		}
 
-		return zoneExists(sqlDB, false, tbDesc.ID)
+		return zoneExists(sqlDB, nil, tbDesc.ID)
 	})
 
 	// Data is deleted.
@@ -540,7 +536,7 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -578,7 +574,7 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -587,12 +583,6 @@ func TestDropTable(t *testing.T) {
 func TestDropTableDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// Turn on quick garbage collection.
-			AsyncExecQuickly: true,
-		},
-	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
@@ -614,6 +604,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 	// Add a zone config for the table.
 	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0 // Set TTL so the data is deleted immediately.
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -622,7 +613,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
+	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -637,7 +628,7 @@ func TestDropTableDeleteData(t *testing.T) {
 			return err
 		}
 
-		return zoneExists(sqlDB, false, tableDesc.ID)
+		return zoneExists(sqlDB, nil, tableDesc.ID)
 	})
 
 	checkKeyCount(t, kvDB, tableSpan, 0)
