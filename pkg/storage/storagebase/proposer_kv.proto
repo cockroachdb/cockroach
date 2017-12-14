@@ -62,6 +62,27 @@ message ChangeReplicas {
     (gogoproto.embed) = true];
 }
 
+// Compaction holds core details about a suggested compaction.
+message Compaction {
+  option (gogoproto.equal) = true;
+
+  // bytes indicates the expected space reclamation from compaction.
+  int64 bytes = 1;
+  // suggested_at is nanoseconds since the epoch.
+  int64 suggested_at_nanos = 2;
+}
+
+// SuggestedCompaction holds start and end keys in conjunction with
+// the compaction details.
+message SuggestedCompaction {
+  option (gogoproto.equal) = true;
+
+  bytes start_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  bytes end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+
+  Compaction compaction = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // ReplicatedEvalResult is the structured information which together with
 // a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
 // KV. For the majority of proposals, we expect ReplicatedEvalResult to be
@@ -115,6 +136,11 @@ message ReplicatedEvalResult {
   }
   reserved 16;
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
+
+  // suggested_compactions are sent to the engine's compactor to
+  // reclaim storage space after garbage collection or cleared /
+  // rebalanced ranges.
+  repeated SuggestedCompaction suggested_compactions = 19 [(gogoproto.nullable) = false];
 
   reserved 10001 to 10013;
 }
