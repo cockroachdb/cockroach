@@ -153,6 +153,20 @@ func buildScalar(buildCtx *buildContext, pexpr tree.TypedExpr) *expr {
 	case *tree.IndexedVar:
 		initVariableExpr(e, t.Idx)
 
+	case *tree.Tuple:
+		children := make([]*expr, len(t.Exprs))
+		for i, e := range t.Exprs {
+			children[i] = buildScalar(buildCtx, e.(tree.TypedExpr))
+		}
+		initTupleExpr(e, children)
+
+	case *tree.DTuple:
+		children := make([]*expr, len(t.D))
+		for i, d := range t.D {
+			children[i] = buildScalar(buildCtx, d)
+		}
+		initTupleExpr(e, children)
+
 	case tree.Datum:
 		initConstExpr(e, t)
 
