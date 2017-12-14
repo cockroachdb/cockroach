@@ -410,16 +410,12 @@ type lineScanner struct {
 	*bufio.Scanner
 	line int
 	skip bool
-
-	// map of variables that we replace in the query.
-	varMap map[string]string
 }
 
-func newLineScanner(r io.Reader, varMap map[string]string) *lineScanner {
+func newLineScanner(r io.Reader) *lineScanner {
 	return &lineScanner{
 		Scanner: bufio.NewScanner(r),
 		line:    0,
-		varMap:  varMap,
 	}
 }
 
@@ -432,18 +428,7 @@ func (l *lineScanner) Scan() bool {
 }
 
 func (l *lineScanner) Text() string {
-	text := l.Scanner.Text()
-	if len(l.varMap) == 0 {
-		return text
-	}
-
-	// See if there are any $vars to replace.
-	return varRE.ReplaceAllStringFunc(text, func(varName string) string {
-		if replace, ok := l.varMap[varName]; ok {
-			return replace
-		}
-		return varName
-	})
+	return l.Scanner.Text()
 }
 
 // logicStatement represents a single statement test in Test-Script.
@@ -458,6 +443,41 @@ type logicStatement struct {
 	// expected pgcode for the error, if any. "" indicates the
 	// test does not check the pgwire error code.
 	expectErrCode string
+}
+
+// readSQL reads the lines of a SQL statement or query until the first blank
+// line or (optionally) a "----" separator, and sets stmt.sql.
+//
+// If a separator is found, returns separator=true. If a separator is found when
+// it is not expected, returns an error.
+func (ls *logicStatement) readSQL(
+	t *logicTest, s *lineScanner, allowSeparator bool,
+) (separator bool, _ error) {
+	var buf bytes.Buffer
+	for s.Scan() {
+		line := s.Text()
+		t.emit(line)
+		line = t.substituteVars(line)
+		if line == "" {
+			break
+		}
+		if line == "----" {
+			separator = true
+			if ls.expectErr != "" {
+				return false, errors.Errorf(
+					"%s: invalid ---- separator after a statement or query expecting an error: %s",
+					ls.pos, ls.expectErr,
+				)
+			}
+			if !allowSeparator {
+				return false, errors.Errorf("%s: unexpected ---- separator", ls.pos)
+			}
+			break
+		}
+		fmt.Fprintln(&buf, line)
+	}
+	ls.sql = strings.TrimSpace(buf.String())
+	return separator, nil
 }
 
 var parallelizableRe = regexp.MustCompile(`^\s*(INSERT|UPSERT|UPDATE|DELETE).*$`)
@@ -611,9 +631,8 @@ func partialSort(numCols int, orderedCols []int, values []string) {
 
 // logicQuery represents a single query test in Test-Script.
 type logicQuery struct {
-	// pos and sql are as in logicStatement.
-	pos string
-	sql string
+	logicStatement
+
 	// colTypes indicates the expected result column types.
 	colTypes string
 	// colNames controls the inclusion of column names in the query result.
@@ -621,8 +640,6 @@ type logicQuery struct {
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
 	// expectedErr and expectedErrCode are as in logicStatement.
-	expectErr     string
-	expectErrCode string
 
 	// if set, the results are cross-checked against previous queries with the
 	// same label.
@@ -699,6 +716,22 @@ type logicTest struct {
 	varMap map[string]string
 
 	rewriteResTestBuf bytes.Buffer
+}
+
+// substituteVars replaces all occurrences of "$abc", where "abc" is a variable
+// previously defined by a let, with the value of that variable.
+func (t *logicTest) substituteVars(line string) string {
+	if len(t.varMap) == 0 {
+		return line
+	}
+
+	// See if there are any $vars to replace.
+	return varRE.ReplaceAllStringFunc(line, func(varName string) string {
+		if replace, ok := t.varMap[varName]; ok {
+			return replace
+		}
+		return line
+	})
 }
 
 // emit is used for the --generate-testfiles mode; it emits a line of testfile.
@@ -914,7 +947,7 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 	}
 	defer file.Close()
 
-	s := newLineScanner(file, nil /* varMap */)
+	s := newLineScanner(file)
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
 		if len(fields) == 0 {
@@ -968,7 +1001,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	repeat := 1
 	subtestName := "base"
 	tooManyErrors := false
-	s := newLineScanner(file, t.varMap)
+	s := newLineScanner(file)
 	for !tooManyErrors && s.Scan() {
 		// Since the subtest also has a for s.Scan, don't double scan which would
 		// amount to skipping this line.
@@ -1067,16 +1100,10 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 						stmt.expectErrCode = m[1]
 						stmt.expectErr = m[2]
 					}
-					var buf bytes.Buffer
-					for s.Scan() {
-						line := s.Text()
-						t.emit(line)
-						if line == "" {
-							break
-						}
-						fmt.Fprintln(&buf, line)
+					if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
+						subtestT.Error(err)
+						return
 					}
-					stmt.sql = strings.TrimSpace(buf.String())
 					if config.parallelStmts {
 						stmt.parallelizeStmts()
 					}
@@ -1095,7 +1122,8 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 					t.success(path)
 
 				case "query":
-					query := logicQuery{pos: fmt.Sprintf("\n%s:%d", path, s.line)}
+					var query logicQuery
+					query.pos = fmt.Sprintf("\n%s:%d", path, s.line)
 					// Parse "query error <regexp>"
 					if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 						query.expectErrCode = m[1]
@@ -1179,29 +1207,11 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 						}
 					}
 
-					var buf bytes.Buffer
-					separator := false
-					for s.Scan() {
-						line := s.Text()
-						t.emit(line)
-						if line == "----" {
-							separator = true
-							if query.expectErr != "" {
-								subtestError = errors.Errorf(
-									"%s: invalid ---- delimiter after a query expecting an error: %s",
-									query.pos, query.expectErr,
-								)
-								subtestT.Error(subtestError)
-								return
-							}
-							break
-						}
-						if strings.TrimSpace(s.Text()) == "" {
-							break
-						}
-						fmt.Fprintln(&buf, line)
+					separator, err := query.readSQL(t, s, true /* allowSeparator */)
+					if err != nil {
+						subtestT.Error(err)
+						return
 					}
-					query.sql = strings.TrimSpace(buf.String())
 
 					query.checkResults = true
 					if separator {
@@ -1268,36 +1278,30 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 						return
 					}
 
-					pos := fmt.Sprintf("\n%s:%d", path, s.line)
-					var buf bytes.Buffer
-					for s.Scan() {
-						line := s.Text()
-						t.emit(line)
-						if line == "" {
-							break
-						}
-						fmt.Fprintln(&buf, line)
+					stmt := logicStatement{pos: fmt.Sprintf("\n%s:%d", path, s.line)}
+					if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
+						subtestT.Error(err)
+						return
 					}
-					sql := strings.TrimSpace(buf.String())
-					rows, err := t.db.Query(sql)
+					rows, err := t.db.Query(stmt.sql)
 					if err != nil {
-						subtestError = errors.Wrapf(err, "%s: error running query %s", pos, sql)
+						subtestError = errors.Wrapf(err, "%s: error running query %s", stmt.pos, stmt.sql)
 						subtestT.Error(subtestError)
 						return
 					}
 					if !rows.Next() {
-						subtestError = errors.Errorf("%s: no rows returned by query %s", pos, sql)
+						subtestError = errors.Errorf("%s: no rows returned by query %s", stmt.pos, stmt.sql)
 						subtestT.Error(subtestError)
 						return
 					}
 					var val string
 					if err := rows.Scan(&val); err != nil {
-						subtestError = errors.Wrapf(err, "%s: error getting result from query %s", pos, sql)
+						subtestError = errors.Wrapf(err, "%s: error getting result from query %s", stmt.pos, stmt.sql)
 						subtestT.Error(subtestError)
 						return
 					}
 					if rows.Next() {
-						subtestError = errors.Errorf("%s: more than one row returned by query  %s", pos, sql)
+						subtestError = errors.Errorf("%s: more than one row returned by query  %s", stmt.pos, stmt.sql)
 						subtestT.Error(subtestError)
 						return
 					}

@@ -36,7 +36,6 @@ ALTER DATABASE test RENAME TO u
 
 statement error relation "kv" does not exist
 SELECT * FROM kv
-----
 
 statement error database "test" does not exist
 SHOW GRANTS ON DATABASE test

@@ -598,7 +598,6 @@ SELECT DISTINCT ON(row_number() OVER()) y FROM xyz ORDER BY row_number() OVER() 
 
 statement error DISTINCT ON position 2 is not in select list
 SELECT DISTINCT ON (2) x FROM xyz
-----
 
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (1) x, y, z FROM xyz

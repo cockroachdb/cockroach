@@ -163,7 +163,6 @@ BEGIN TRANSACTION
 
 statement error current transaction is aborted, commands ignored until end of transaction block
 SELECT * FROM kv
-----
 
 statement ok
 ROLLBACK TRANSACTION
