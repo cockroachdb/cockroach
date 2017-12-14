@@ -163,3 +163,23 @@ build-scalar,normalize,index-constraints int int
 [/1/2 - /1/4]
 [/2/2 - /2/4]
 [/3/2 - /3/4]
+
+build-scalar,normalize,index-constraints int int int
+(@1, @2, @3) = (1, 2, 3)
+----
+[/1/2/3 - /1/2/3]
+
+build-scalar,normalize,index-constraints int int int int int
+(@1, @2, 3, (4, @5)) = (1, 2, @3, (@4, 5))
+----
+[/1/2/3/4/5 - /1/2/3/4/5]
+
+build-scalar,normalize,index-constraints int int int int
+(@1, @2, @3) = (1, 2, 3) AND @4 > 4
+----
+[/1/2/3/5 - /1/2/3]
+
+build-scalar,normalize,index-constraints int int int int
+@1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
+----
+[/6/2/3/4 - /9/2/3/4]

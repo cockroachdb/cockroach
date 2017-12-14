@@ -174,7 +174,8 @@ func normalizeScalar(e *expr) {
 		normalizeScalar(input)
 	}
 
-	if e.op == andOp || e.op == orOp {
+	switch e.op {
+	case andOp, orOp:
 		// Merge in any children that have the same operator. Example:
 		//   a and (b and c)  ->  a and b and c
 		var found bool
@@ -199,6 +200,41 @@ func normalizeScalar(e *expr) {
 					e.children = append(e.children, child)
 				}
 			}
+		}
+
+	case eqOp:
+		lhs, rhs := e.children[0], e.children[1]
+		if lhs.op == orderedListOp && rhs.op == orderedListOp {
+			// Break up expressions like
+			//   (a, b, c) = (x, y, z)
+			// into
+			//   (a = x) AND (b = y) AND (c = z)
+			// This transformation helps reduce the complexity of the index
+			// constraints code which would otherwise have to deal with this case
+			// separately.
+			e.op = andOp
+			if len(lhs.children) != len(rhs.children) {
+				panic(fmt.Sprintf("tuple length mismatch in eqOp: %s", e))
+			}
+			e.children = make([]*expr, len(lhs.children))
+			for i := range lhs.children {
+				e.children[i] = &expr{
+					op:          andOp,
+					scalarProps: &scalarProps{typ: types.Bool},
+				}
+				initBinaryExpr(e.children[i], eqOp, lhs.children[i], rhs.children[i])
+				// Normalize the new child expression. This is for cases like:
+				// ((a, b), (c, d)) = ((x, y), (z, u))
+				normalizeScalar(e.children[i])
+			}
+			// Normalize the new expression (some of the other rules, like coalescing
+			// AND operations might apply now).
+			normalizeScalar(e)
+		} else if e.children[0].op != variableOp && e.children[1].op == variableOp {
+			// Normalize (1 = @1) to (@1 = 1).
+			// Note: this transformation is already performed by the TypedExpr
+			// NormalizeExpr, but we may be creating new such expressions above.
+			e.children[0], e.children[1] = rhs, lhs
 		}
 	}
 }
