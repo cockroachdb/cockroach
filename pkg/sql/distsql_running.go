@@ -297,7 +297,7 @@ func makeDistSQLReceiver(
 	leaseCache *kv.LeaseHolderCache,
 	txn *client.Txn,
 	updateClock func(observedTs hlc.Timestamp),
-) (distSQLReceiver, error) {
+) distSQLReceiver {
 	return distSQLReceiver{
 		ctx:          ctx,
 		resultWriter: resultWriter,
@@ -305,7 +305,7 @@ func makeDistSQLReceiver(
 		leaseCache:   leaseCache,
 		txn:          txn,
 		updateClock:  updateClock,
-	}, nil
+	}
 }
 
 // Push is part of the RowReceiver interface.

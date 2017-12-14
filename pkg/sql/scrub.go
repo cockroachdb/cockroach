@@ -555,7 +555,7 @@ func scrubRunDistSQL(
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	rows := sqlbase.NewRowContainer(*p.evalCtx.ActiveMemAcc, ci, 0)
 	rowResultWriter := NewRowResultWriter(tree.Rows, rows)
-	recv, err := makeDistSQLReceiver(
+	recv := makeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
 		p.ExecCfg().RangeDescriptorCache,
@@ -565,9 +565,6 @@ func scrubRunDistSQL(
 			_ = p.ExecCfg().Clock.Update(ts)
 		},
 	)
-	if err != nil {
-		return rows, err
-	}
 
 	if err := p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, p.evalCtx); err != nil {
 		return rows, err

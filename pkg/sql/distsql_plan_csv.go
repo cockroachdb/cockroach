@@ -230,7 +230,7 @@ func (l *DistLoader) LoadCSV(
 	// of this PlanCtx. https://reviewable.io/reviews/cockroachdb/cockroach/17279#-KqOrLpy9EZwbRKHLYe6:-KqOp00ntQEyzwEthAsl:bd4nzje
 	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
 
-	recv, err := makeDistSQLReceiver(
+	recv := makeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
 		nil, /* rangeCache */
@@ -238,9 +238,6 @@ func (l *DistLoader) LoadCSV(
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
 	)
-	if err != nil {
-		return err
-	}
 	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Record.Description)
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
@@ -363,7 +360,7 @@ func (l *DistLoader) LoadCSV(
 
 	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
 
-	recv, err = makeDistSQLReceiver(
+	recv = makeDistSQLReceiver(
 		ctx,
 		resultRows,
 		nil, /* rangeCache */
@@ -371,9 +368,6 @@ func (l *DistLoader) LoadCSV(
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
 	)
-	if err != nil {
-		return err
-	}
 
 	defer log.VEventf(ctx, 1, "finished job %s", job.Record.Description)
 	// TODO(dan): We really don't need the txn for this flow, so remove it once

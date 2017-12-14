@@ -217,11 +217,8 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	rangeCache := kv.NewRangeDescriptorCache(st, nil /* db */, size)
 	leaseCache := kv.NewLeaseHolderCache(size)
-	r, err := makeDistSQLReceiver(
+	r := makeDistSQLReceiver(
 		context.TODO(), nil /* sink */, rangeCache, leaseCache, nil /* txn */, nil /* updateClock */)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	descs := []roachpb.RangeDescriptor{
 		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
