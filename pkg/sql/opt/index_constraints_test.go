@@ -138,8 +138,8 @@ func TestIntersectSpan(t *testing.T) {
 			sp2 := parseSpan(tc.b)
 			c := indexConstraintCalc{evalCtx: &evalCtx}
 			res := ""
-			if c.intersectSpan(&sp1, &sp2) {
-				res = sp1.String()
+			if sp3, ok := c.intersectSpan(&sp1, &sp2); ok {
+				res = sp3.String()
 			}
 			if res != tc.e {
 				t.Errorf("expected  %s  got  %s", tc.e, res)

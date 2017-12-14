@@ -47,15 +47,16 @@ func (e *expr) opClass() operatorClass {
 	return operatorTab[e.op].class
 }
 
-func (e *expr) inputs() []*expr {
-	return e.children
-}
-
+// formatExprs formats the given expressions as children of the same
+// node. Optionally creates a new parent node (if title is not "", and we have
+// expressions).
 func formatExprs(tp treeprinter.Node, title string, exprs []*expr) {
 	if len(exprs) > 0 {
-		n := tp.Child(title)
+		if title != "" {
+			tp = tp.Child(title)
+		}
 		for _, e := range exprs {
-			e.format(n)
+			e.format(tp)
 		}
 	}
 }
