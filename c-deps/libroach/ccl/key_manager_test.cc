@@ -44,13 +44,13 @@ TEST(FileKeyManager, ReadKeyFiles) {
       {"missing_new.key", "missing_old.key", "missing_new.key: File not found"},
       {"plain", "missing_old.key", "missing_old.key: File not found"},
       {"plain", "plain", ""},
-      {"empty.key", "plain", "key in file empty.key has length 0, want 16, 24, or 32"},
-      {"8.key", "plain", "key in file 8.key has length 8, want 16, 24, or 32"},
+      {"empty.key", "plain", "key in file empty.key is 0 bytes long, AES keys can be 16, 24, or 32 bytes"},
+      {"8.key", "plain", "key in file 8.key is 8 bytes long, AES keys can be 16, 24, or 32 bytes"},
       {"16.key", "plain", ""},
       {"24.key", "plain", ""},
       {"32.key", "plain", ""},
-      {"64.key", "plain", "key in file 64.key has length 64, want 16, 24, or 32"},
-      {"16.key", "8.key", "key in file 8.key has length 8, want 16, 24, or 32"},
+      {"64.key", "plain", "key in file 64.key is 64 bytes long, AES keys can be 16, 24, or 32 bytes"},
+      {"16.key", "8.key", "key in file 8.key is 8 bytes long, AES keys can be 16, 24, or 32 bytes"},
       {"16.key", "32.key", ""},
   };
 

@@ -7,7 +7,6 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "key_manager.h"
-#include <cryptopp/aes.h>
 #include <cryptopp/modes.h>
 #include <google/protobuf/stubs/stringprintf.h>
 
@@ -35,17 +34,8 @@ static rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path, E
   // Check that the length is valid for AES.
   auto key_length = contents.size();
   if (key_length != 16 && key_length != 24 && key_length != 32) {
-    return rocksdb::Status::InvalidArgument(
-        StringPrintf("key in file %s has length %llu, want 16, 24, or 32", path.c_str(), key_length));
-  }
-
-  // Let's make sure CryptoPP::AES is ok with it, this returns a valid key length based on the
-  // passed-in one (eg: 32 for 31).
-  size_t accepted = CryptoPP::AES::Encryption::StaticGetValidKeyLength(key_length);
-  if (accepted != key_length) {
-    return rocksdb::Status::InvalidArgument(
-        StringPrintf("key in file %s has length %llu, but CryptoPP::AES says the nearest acceptable is %llu",
-                     path.c_str(), key_length, accepted));
+    return rocksdb::Status::InvalidArgument(StringPrintf(
+        "key in file %s is %llu bytes long, AES keys can be 16, 24, or 32 bytes", path.c_str(), key_length));
   }
 
   // Fill in the key.
