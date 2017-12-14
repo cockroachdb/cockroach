@@ -6,7 +6,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputePrefixExponent, ComputeByteScale, Count, Duration } from "src/util/format";
+import { ComputePrefixExponent, ComputeByteScale } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -15,7 +15,7 @@ import {
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 // Global set of colors for graph series.
-const seriesPalette = [
+export const seriesPalette = [
   "#5F6C87", "#F2BE2C", "#F16969", "#4E9FD1", "#49D990", "#D77FBF", "#87326D", "#A3415B",
   "#B59153", "#C9DB6D", "#203D9B", "#748BF2", "#91C8F2", "#FF9696", "#EF843C", "#DCCD4B",
 ];
@@ -49,9 +49,6 @@ class AxisDomain {
   label: string = "";
   // tickFormat returns a function used to format the tick values for display.
   tickFormat: (n: number) => string = _.identity;
-  // guideFormat returns a function used to format the axis values in the
-  // chart's interactive guideline.
-  guideFormat: (n: number) => string = _.identity;
 
   // constructs a new AxisDomain with the given minimum and maximum value, with
   // ticks placed at intervals of the given increment in between the min and
@@ -131,8 +128,6 @@ function computeAxisDomain(extent: Extent, factor: number = 1): AxisDomain {
 function ComputeCountAxisDomain(extent: Extent): AxisDomain {
   const axisDomain = computeAxisDomain(extent);
 
-  axisDomain.guideFormat = Count;
-
   axisDomain.label = "count";
 
   return axisDomain;
@@ -147,7 +142,6 @@ function ComputeByteAxisDomain(extent: Extent): AxisDomain {
 
   axisDomain.label = scale.units;
 
-  axisDomain.guideFormat = Bytes;
   return axisDomain;
 }
 
@@ -161,7 +155,6 @@ function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
 
   axisDomain.label = durationLabels[prefixExponent];
 
-  axisDomain.guideFormat = Duration;
   return axisDomain;
 }
 
@@ -211,9 +204,6 @@ function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
     return tickDateFormatter(new Date(n));
   };
 
-  axisDomain.guideFormat = (num) => {
-    return moment(num).utc().format("HH:mm:ss [<span class=\"legend-subtext\">on</span>] MMM Do, YYYY");
-  };
   return axisDomain;
 }
 
@@ -243,6 +233,7 @@ type formattedSeries = {
   key: string,
   area: boolean,
   fillOpacity: number,
+  disableTooltip: true,
 };
 
 function formatMetricData(
@@ -259,6 +250,7 @@ function formatMetricData(
         key: s.props.title || s.props.name,
         area: true,
         fillOpacity: 0.1,
+        disableTooltip: true,
       });
     }
   });
@@ -290,7 +282,7 @@ export function InitLineChart(chart: nvd3.LineChart) {
     chart
       .x((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
       .y((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
-      .useInteractiveGuideline(true)
+      .useInteractiveGuideline(false)
       .showLegend(true)
       .showYAxis(true)
       .color(seriesPalette)
@@ -313,6 +305,7 @@ export function ConfigureLineChart(
   data: TSResponse,
   timeInfo: QueryTimeInfo,
   hoverTime?: moment.Moment,
+  thisChart?: boolean,
 ) {
   chart.showLegend(metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
   let formattedData: formattedSeries[];
@@ -334,9 +327,7 @@ export function ConfigureLineChart(
     chart.xDomain(xAxisDomain.extent);
 
     chart.yAxis.tickFormat(yAxisDomain.tickFormat);
-    chart.interactiveLayer.tooltip.valueFormatter(yAxisDomain.guideFormat);
     chart.xAxis.tickFormat(xAxisDomain.tickFormat);
-    chart.interactiveLayer.tooltip.headerFormatter(xAxisDomain.guideFormat);
 
     // always set the tick values to the lowest axis value, the highest axis
     // value, and one value in between
@@ -352,6 +343,9 @@ export function ConfigureLineChart(
     // Reduce radius of circles in the legend, if present. This is done through
     // d3 because it is not exposed as an option by NVD3.
     d3.select(svgEl).selectAll("circle").attr("r", 3);
+
+    // I really hate NVD3.
+    d3.selectAll(".nv-point.hover").remove();
   } catch (e) {
     console.log("Error rendering graph: ", e);
   }
@@ -359,7 +353,7 @@ export function ConfigureLineChart(
   const xScale = chart.xAxis.scale();
   const yScale = chart.yAxis.scale();
   const yExtent: Extent = data ? [yScale(yAxisDomain.extent[0]), yScale(yAxisDomain.extent[1])] : [0, 1];
-  updateLinkedGuideline(svgEl, xScale, yExtent, hoverTime);
+  updateLinkedGuideline(svgEl, xScale, yExtent, hoverTime, thisChart);
 }
 
 // updateLinkedGuideline is responsible for maintaining "linked" guidelines on
@@ -367,7 +361,7 @@ export function ConfigureLineChart(
 // coordinate on different graphs currently visible on the same page. This
 // allows the user to visually correlate a single X-axis coordinate across
 // multiple visible graphs.
-function updateLinkedGuideline(svgEl: SVGElement, x: d3.scale.Linear<number, number>, yExtent: Extent, hoverTime?: moment.Moment) {
+function updateLinkedGuideline(svgEl: SVGElement, x: d3.scale.Linear<number, number>, yExtent: Extent, hoverTime?: moment.Moment, thisChart?: boolean) {
   // Construct a data array for use by d3; this allows us to use d3's
   // "enter()/exit()" functions to cleanly add and remove the guideline.
   const data = !_.isNil(hoverTime) ? [x(hoverTime.valueOf())] : [];
@@ -399,7 +393,8 @@ function updateLinkedGuideline(svgEl: SVGElement, x: d3.scale.Linear<number, num
     .append("g")
       .attr("class", "linked-guideline__container")
       .append("line")
-        .attr("class", "linked-guideline__line");
+        .attr("class", "linked-guideline__line")
+        .classed("linked-guideline__line--current", !!thisChart);
 
   // Update linked guideline (if present) to match the necessary attributes of
   // the current guideline.
@@ -408,4 +403,7 @@ function updateLinkedGuideline(svgEl: SVGElement, x: d3.scale.Linear<number, num
     .attr("x2", (d) => d)
     .attr("y1", () => yExtent[0])
     .attr("y2", () => yExtent[1]);
+
+  // I really, really hate NVD3.
+  setTimeout(() => d3.selectAll(".nv-point.hover").remove(), 400);
 }

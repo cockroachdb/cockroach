@@ -2,8 +2,101 @@ import React from "react";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import { ChartConfig } from "src/util/charts";
 
 import { GraphDashboardProps } from "./dashboardUtils";
+
+export const charts: ChartConfig = {
+  "nodes.queues.0": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.queue.gc.process.failure", title: "GC" },
+      { name: "cr.store.queue.replicagc.process.failure", title: "Replica GC" },
+      { name: "cr.store.queue.replicate.process.failure", title: "Replication" },
+      { name: "cr.store.queue.split.process.failure", title: "Split" },
+      { name: "cr.store.queue.consistency.process.failure", title: "Consistency" },
+      { name: "cr.store.queue.raftlog.process.failure", title: "Raft Log" },
+      { name: "cr.store.queue.tsmaintenance.process.failure", title: "Time Series Maintenance" },
+    ],
+  },
+  "nodes.queues.1": {
+    type: "metrics",
+    measure: "duration",
+    metrics: [
+      { name: "cr.store.queue.gc.processingnanos", title: "GC" },
+      { name: "cr.store.queue.replicagc.processingnanos", title: "Replica GC" },
+      { name: "cr.store.queue.replicate.processingnanos", title: "Replication" },
+      { name: "cr.store.queue.split.processingnanos", title: "Split" },
+      { name: "cr.store.queue.consistency.processingnanos", title: "Consistency" },
+      { name: "cr.store.queue.raftlog.processingnanos", title: "Raft Log" },
+      { name: "cr.store.queue.tsmaintenance.processingnanos", title: "Time Series Maintenance" },
+    ],
+  },
+  "nodes.queues.2": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.queue.replicagc.process.success", title: "Successful Actions / sec" },
+      { name: "cr.store.queue.replicagc.pending", title: "Pending Actions" },
+      { name: "cr.store.queue.replicagc.removereplica", title: "Replicas Removed / sec" },
+    ],
+  },
+  "nodes.queues.3": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.queue.replicate.process.success", title: "Successful Actions / sec" },
+      { name: "cr.store.queue.replicate.pending", title: "Pending Actions" },
+      { name: "cr.store.queue.replicate.addreplica", title: "Replicas Added / sec" },
+      { name: "cr.store.queue.replicate.removereplica", title: "Replicas Removed / sec" },
+      { name: "cr.store.queue.replicate.removedeadreplica", title: "Dead Replicas Removed / sec" },
+      { name: "cr.store.queue.replicate.rebalancereplica", title: "Replicas Rebalanced / sec" },
+      { name: "cr.store.queue.replicate.transferlease", title: "Leases Transferred / sec" },
+      { name: "cr.store.queue.replicate.purgatory", title: "Replicas in Purgatory" },
+    ],
+  },
+  "nodes.queues.4": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.queue.split.process.success", title: "Successful Actions / sec" },
+      { name: "cr.store.queue.split.pending", title: "Pending Actions" },
+    ],
+  },
+  "nodes.queues.5": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.queue.gc.process.success", title: "Successful Actions / sec" },
+      { name: "cr.store.queue.gc.pending", title: "Pending Actions" },
+    ],
+  },
+  "nodes.queues.6": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.queue.raftlog.process.success", title: "Successful Actions / sec" },
+      { name: "cr.store.queue.raftlog.pending", title: "Pending Actions" },
+    ],
+  },
+  "nodes.queues.7": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.queue.consistency.process.success", title: "Successful Actions / sec" },
+      { name: "cr.store.queue.consistency.pending", title: "Pending Actions" },
+    ],
+  },
+  "nodes.queues.8": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.queue.tsmaintenance.process.success", title: "Successful Actions / sec" },
+      { name: "cr.store.queue.tsmaintenance.pending", title: "Pending Actions" },
+    ],
+  },
+};
 
 export default function (props: GraphDashboardProps) {
   const { storeSources } = props;
