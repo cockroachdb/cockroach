@@ -270,14 +270,14 @@ INSERT INTO g (x, y) VALUES
 }
 
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
-	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName}, "")
+	mds, ts, err := getDumpablesForNames(conn, dbName, []string{tName}, "")
 	if err != nil {
 		return err
 	}
-	if err := dumpCreateTable(w, mds[0]); err != nil {
+	if err := dumpCreateStmt(mds[0], w); err != nil {
 		return err
 	}
-	return dumpTableData(w, conn, ts, mds[0])
+	return mds[0].DumpData(w, conn, ts)
 }
 
 func TestDumpBytes(t *testing.T) {
