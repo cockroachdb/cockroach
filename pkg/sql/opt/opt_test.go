@@ -279,7 +279,7 @@ func TestOpt(t *testing.T) {
 						}
 						buildScalarFn()
 					case "normalize":
-						normalizeScalar(e)
+						normalizeExpr(e)
 					case "index-constraints":
 						if e == nil {
 							d.fatalf(t, "no expression for index-constraints")
