@@ -121,7 +121,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 
 // truncateTable truncates the data of a table in a single transaction. It
 // drops the table and recreates it with a new ID. The dropped table is
-// GC-ed later through an asynchrnous schema change.
+// GC-ed later through an asynchronous schema change.
 func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.

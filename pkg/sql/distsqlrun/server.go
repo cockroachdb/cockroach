@@ -309,7 +309,7 @@ func (ds *ServerImpl) setupFlow(
 	return ctx, f, nil
 }
 
-// SetupSyncFlow sets up a synchoronous flow, connecting the sync response
+// SetupSyncFlow sets up a synchronous flow, connecting the sync response
 // output stream to the given RowReceiver. The flow is not started. The flow
 // will be associated with the given context.
 // Note: the returned context contains a span that must be finished through
