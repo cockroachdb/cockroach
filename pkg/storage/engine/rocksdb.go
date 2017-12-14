@@ -718,9 +718,14 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
-// Compact forces compaction on the database.
+// Compact forces compaction over the entire database.
 func (r *RocksDB) Compact() error {
 	return statusToError(C.DBCompact(r.rdb))
+}
+
+// CompactRange forces compaction over a specified range of keys in the database.
+func (r *RocksDB) CompactRange(start, end MVCCKey) error {
+	return statusToError(C.DBCompactRange(r.rdb, goToCKey(start), goToCKey(end)))
 }
 
 // ApproximateDiskBytes returns the approximate on-disk size of the specified key range.

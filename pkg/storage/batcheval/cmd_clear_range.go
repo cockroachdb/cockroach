@@ -75,27 +75,35 @@ func ClearRange(
 	args := cArgs.Args.(*roachpb.ClearRangeRequest)
 	from := engine.MVCCKey{Key: args.Key}
 	to := engine.MVCCKey{Key: args.EndKey}
+	now := cArgs.EvalCtx.Clock().Now()
+	var pd result.Result
 
 	// Before clearing, compute the delta in MVCCStats.
-	statsDelta, err := computeStatsDelta(ctx, batch, cArgs, from, to)
+	statsDelta, wholeRange, err := computeStatsDelta(ctx, batch, cArgs, from, to)
 	if err != nil {
 		return result.Result{}, err
 	}
 	cArgs.Stats.Subtract(statsDelta)
 
-	// Forward the range's GC threshold to the wall clock's now() in order
-	// to be newer than any previous write, and to disallow reads at earlier
-	// timestamps which will be invalid after deleting all existing keys
-	// in the span.
-	var pd result.Result
-	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
-	gcThreshold.Forward(cArgs.EvalCtx.Clock().Now())
-	pd.Replicated.State = &storagebase.ReplicaState{
-		GCThreshold: &gcThreshold,
-	}
-	stateLoader := MakeStateLoader(cArgs.EvalCtx)
-	if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &gcThreshold); err != nil {
-		return result.Result{}, err
+	// Forward the range's GC threshold to the wall clock's now() in
+	// order to be newer than any previous write, and to disallow reads
+	// at earlier timestamps which will be invalid after deleting all
+	// existing keys in the span. Note that we only do this if we're
+	// clearing the entire range - doing otherwise would cause spurious
+	// errors on historical reads to this range outside this span. Note
+	// that updating the GC threshold is just a civic-minded attempt to
+	// alert upstream callers that something has gone wrong, as NO reads
+	// are supposed to occur to a span subsequent to ClearRange.
+	if wholeRange {
+		gcThreshold := cArgs.EvalCtx.GetGCThreshold()
+		gcThreshold.Forward(now)
+		pd.Replicated.State = &storagebase.ReplicaState{
+			GCThreshold: &gcThreshold,
+		}
+		stateLoader := MakeStateLoader(cArgs.EvalCtx)
+		if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &gcThreshold); err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	// If the total size of data to be cleared is less than
@@ -111,7 +119,18 @@ func ClearRange(
 		)
 	}
 
-	// Otherwise, clear the key span using engine.ClearRange.
+	// Otherwise, suggest a compaction for the cleared range and clear
+	// the key span using engine.ClearRange.
+	pd.Replicated.SuggestedCompactions = []storagebase.SuggestedCompaction{
+		{
+			StartKey: roachpb.RKey(from.Key),
+			EndKey:   roachpb.RKey(to.Key),
+			Compaction: enginepb.Compaction{
+				Bytes:            statsDelta.KeyBytes + statsDelta.ValBytes,
+				SuggestedAtNanos: now.WallTime,
+			},
+		},
+	}
 	if err := batch.ClearRange(from, to); err != nil {
 		return result.Result{}, err
 	}
@@ -121,13 +140,15 @@ func ClearRange(
 // computeStatsDelta determines the change in stats caused by the
 // ClearRange command. If the cleared span is the entire range,
 // computing MVCCStats is easy. We just negate all fields except sys
-// bytes and count. Note that if a race build is enabled, we use
-// the expectation of running in a CI environment to compute stats
-// by iterating over the span to provide extra verification that the
-// fast path of simply subtracting the non-system values is accurate.
+// bytes and count. Note that if a race build is enabled, we use the
+// expectation of running in a CI environment to compute stats by
+// iterating over the span to provide extra verification that the fast
+// path of simply subtracting the non-system values is accurate.
+// Returns the delta stats and whether the whole range is being
+// cleared.
 func computeStatsDelta(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, from, to engine.MVCCKey,
-) (enginepb.MVCCStats, error) {
+) (enginepb.MVCCStats, bool, error) {
 	desc := cArgs.EvalCtx.Desc()
 	var delta enginepb.MVCCStats
 
@@ -151,7 +172,7 @@ func computeStatsDelta(
 		computed, err := iter.ComputeStats(from, to, delta.LastUpdateNanos)
 		iter.Close()
 		if err != nil {
-			return enginepb.MVCCStats{}, err
+			return enginepb.MVCCStats{}, false, err
 		}
 		// If we took the fast path but race is enabled, assert stats were correctly computed.
 		if fast {
@@ -163,5 +184,5 @@ func computeStatsDelta(
 		delta = computed
 	}
 
-	return delta, nil
+	return delta, fast, nil
 }

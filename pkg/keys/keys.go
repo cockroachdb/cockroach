@@ -39,6 +39,22 @@ func MakeStoreKey(suffix, detail roachpb.RKey) roachpb.Key {
 	return key
 }
 
+// DecodeStoreKey returns the suffix and detail portions of a local
+// store key.
+func DecodeStoreKey(key roachpb.Key) (suffix, detail roachpb.RKey, err error) {
+	if !bytes.HasPrefix(key, localStorePrefix) {
+		return nil, nil, errors.Errorf("key %s does not have %s prefix", key, localStorePrefix)
+	}
+	// Cut the prefix, the Range ID, and the infix specifier.
+	key = key[len(localStorePrefix):]
+	if len(key) < localSuffixLength {
+		return nil, nil, errors.Errorf("malformed key does not contain local store suffix")
+	}
+	suffix = roachpb.RKey(key[:localSuffixLength])
+	detail = roachpb.RKey(key[localSuffixLength:])
+	return suffix, detail, nil
+}
+
 // StoreIdentKey returns a store-local key for the store metadata.
 func StoreIdentKey() roachpb.Key {
 	return MakeStoreKey(localStoreIdentSuffix, nil)
@@ -57,6 +73,40 @@ func StoreClusterVersionKey() roachpb.Key {
 // StoreLastUpKey returns the key for the store's "last up" timestamp.
 func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
+}
+
+// StoreSuggestedCompactionKey returns a store-local key for a
+// suggested compaction. It combines the specified start and end keys.
+func StoreSuggestedCompactionKey(start, end roachpb.RKey) roachpb.Key {
+	var detail roachpb.RKey
+	detail = encoding.EncodeBytesAscending(detail, start)
+	detail = encoding.EncodeBytesAscending(detail, end)
+	return MakeStoreKey(localStoreSuggestedCompactionSuffix, detail)
+}
+
+// DecodeStoreSuggestedCompactionKey returns the start and end keys of
+// the suggested compaction's span.
+func DecodeStoreSuggestedCompactionKey(key roachpb.Key) (start, end roachpb.RKey, err error) {
+	var suffix, detail roachpb.RKey
+	suffix, detail, err = DecodeStoreKey(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !suffix.Equal(localStoreSuggestedCompactionSuffix) {
+		return nil, nil, errors.Errorf("key with suffix %q != %q", suffix, localStoreSuggestedCompactionSuffix)
+	}
+	detail, start, err = encoding.DecodeBytesAscending(detail, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	detail, end, err = encoding.DecodeBytesAscending(detail, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(detail) != 0 {
+		return nil, nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	return start, end, nil
 }
 
 // NodeLivenessKey returns the key for the node liveness record.

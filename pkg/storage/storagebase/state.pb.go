@@ -6,7 +6,7 @@ package storagebase
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+import cockroach_storage_engine_enginepb2 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,7 +57,7 @@ type ReplicaState struct {
 	// are garbage collected. Reads and writes at timestamps <= this time will
 	// not be served.
 	GCThreshold *cockroach_util_hlc.Timestamp                 `protobuf:"bytes,6,opt,name=gc_threshold,json=gcThreshold" json:"gc_threshold,omitempty" cockroachdb:"randnullable"`
-	Stats       *cockroach_storage_engine_enginepb1.MVCCStats `protobuf:"bytes,7,opt,name=stats" json:"stats,omitempty"`
+	Stats       *cockroach_storage_engine_enginepb2.MVCCStats `protobuf:"bytes,7,opt,name=stats" json:"stats,omitempty"`
 	// txn_span_gc_threshold is the (maximum) timestamp below which transaction
 	// records may have been garbage collected (as measured by txn.LastActive()).
 	// Transaction at lower timestamps must not be allowed to write their initial
@@ -880,7 +880,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Stats == nil {
-				m.Stats = &cockroach_storage_engine_enginepb1.MVCCStats{}
+				m.Stats = &cockroach_storage_engine_enginepb2.MVCCStats{}
 			}
 			if err := m.Stats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
