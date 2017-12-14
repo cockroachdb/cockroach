@@ -16,6 +16,7 @@ package sql
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -359,6 +360,21 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *distinctNode:
 		return dsp.checkSupportForNode(n.plan)
+
+	case *unionNode:
+		// Only UNION ALL is supported so far.
+		if n.unionType == tree.UnionOp && n.all {
+			recLeft, err := dsp.checkSupportForNode(n.left)
+			if err != nil {
+				return 0, err
+			}
+			recRight, err := dsp.checkSupportForNode(n.right)
+			if err != nil {
+				return 0, err
+			}
+			return recLeft.compose(recRight), nil
+		}
+		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 
 	case *valuesNode:
 		if n.n == nil {
@@ -1784,6 +1800,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *distinctNode:
 		return dsp.createPlanForDistinct(planCtx, n)
 
+	case *unionNode:
+		return dsp.createPlanForUnion(planCtx, n)
+
 	case *valuesNode:
 		return dsp.createPlanForValues(planCtx, n)
 
@@ -1916,6 +1935,46 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
 
 	return plan, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForUnion(
+	planCtx *planningCtx, n *unionNode,
+) (physicalPlan, error) {
+	leftPlan, err := dsp.createPlanForNode(planCtx, n.left)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	rightPlan, err := dsp.createPlanForNode(planCtx, n.right)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	var p physicalPlan
+	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
+	p.PhysicalPlan, leftRouters, rightRouters = distsqlplan.MergePlans(
+		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
+	p.ResultRouters = append(leftRouters, rightRouters...)
+
+	resultTypes, err := distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	p.ResultTypes = resultTypes
+
+	// TODO(solon): Is this a reasonable expectation?
+	if !leftPlan.MergeOrdering.Equal(rightPlan.MergeOrdering) {
+		return physicalPlan{}, errors.Errorf(
+			"MergeOrdering mismatch: %v, %v", leftPlan.MergeOrdering, rightPlan.MergeOrdering)
+	}
+	p.MergeOrdering = leftPlan.MergeOrdering
+
+	if !reflect.DeepEqual(leftPlan.planToStreamColMap, rightPlan.planToStreamColMap) {
+		return physicalPlan{}, errors.Errorf(
+			"planToStreamColMap mismatch: %v, %v", leftPlan.planToStreamColMap,
+			rightPlan.planToStreamColMap)
+	}
+	p.planToStreamColMap = leftPlan.planToStreamColMap
+
+	return p, nil
 }
 
 func (dsp *DistSQLPlanner) newPlanningCtx(

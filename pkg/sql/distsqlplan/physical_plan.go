@@ -746,3 +746,26 @@ func MergePlans(
 
 	return mergedPlan, leftRouters, rightRouters
 }
+
+// MergeResultTypes reconciles the ResultTypes between two plans. It enforces that each pair of
+// ColumnTypes must either match or be null, in which case the non-null type is used.
+func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, error) {
+	if len(left) != len(right) {
+		return nil, errors.Errorf("ResultTypes length mismatch: %d and %d", len(left), len(right))
+	}
+	merged := make([]sqlbase.ColumnType, len(left))
+	for i := range left {
+		leftType, rightType := left[i], right[i]
+		if rightType.SemanticType == sqlbase.ColumnType_NULL {
+			merged[i] = leftType
+		} else if leftType.SemanticType == sqlbase.ColumnType_NULL {
+			merged[i] = rightType
+		} else if !leftType.Equal(rightType) {
+			return nil, errors.Errorf("conflicting ColumnTypes: %v and %v", leftType, rightType)
+		} else {
+			// The types are equivalent.
+			merged[i] = leftType
+		}
+	}
+	return merged, nil
+}
