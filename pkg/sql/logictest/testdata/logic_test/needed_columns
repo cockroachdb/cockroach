@@ -117,7 +117,7 @@ EXPLAIN (METADATA) SELECT 1 FROM kv
 query ITTTTT
 EXPLAIN (METADATA) SELECT DISTINCT v FROM kv
 ----
-0  distinct  ·      ·           (v)              ·
+0  distinct  ·      ·           (v)              weak-key(v)
 1  render    ·      ·           (v)              ·
 2  scan      ·      ·           (k[omitted], v)  k!=NULL; key(k)
 2  ·         table  kv@primary  ·                ·
