@@ -907,11 +907,15 @@ CREATE TABLE crdb_internal.create_statements (
 				var descType tree.Datum
 				var stmt string
 				var err error
-				var typeView = tree.DString("view")
-				var typeTable = tree.DString("table")
+				typeView := tree.DString("view")
+				typeTable := tree.DString("table")
+				typeSequence := tree.DString("sequence")
 				if table.IsView() {
 					descType = &typeView
 					stmt, err = p.showCreateView(ctx, tree.Name(table.Name), table)
+				} else if table.IsSequence() {
+					descType = &typeSequence
+					stmt, err = p.showCreateSequence(ctx, tree.Name(table.Name), table)
 				} else {
 					descType = &typeTable
 					stmt, err = p.showCreateTable(ctx, tree.Name(table.Name), prefix, table)
