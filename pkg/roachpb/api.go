@@ -423,6 +423,9 @@ func (*DeleteRequest) Method() Method { return Delete }
 func (*DeleteRangeRequest) Method() Method { return DeleteRange }
 
 // Method implements the Request interface.
+func (*ClearRangeRequest) Method() Method { return ClearRange }
+
+// Method implements the Request interface.
 func (*ScanRequest) Method() Method { return Scan }
 
 // Method implements the Request interface.
@@ -548,6 +551,12 @@ func (dr *DeleteRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (drr *DeleteRangeRequest) ShallowCopy() Request {
 	shallowCopy := *drr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (crr *ClearRangeRequest) ShallowCopy() Request {
+	shallowCopy := *crr
 	return &shallowCopy
 }
 
@@ -896,6 +905,10 @@ func (drr *DeleteRangeRequest) flags() int {
 	// write-too-old error and avoids the phantom delete anomaly.
 	return isWrite | isTxn | isTxnWrite | isRange | updatesTSCache | consultsTSCache
 }
+
+// Note that ClearRange commands cannot be part of a transaction as
+// they clear all MVCC versions.
+func (*ClearRangeRequest) flags() int       { return isWrite | isRange | isAlone }
 func (*ScanRequest) flags() int             { return isRead | isRange | isTxn | updatesTSCache }
 func (*ReverseScanRequest) flags() int      { return isRead | isRange | isReverse | isTxn | updatesTSCache }
 func (*BeginTransactionRequest) flags() int { return isWrite | isTxn | consultsTSCache }

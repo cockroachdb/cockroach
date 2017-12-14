@@ -38,14 +38,19 @@ import (
 )
 
 type mockEvalCtx struct {
-	abortSpan *abortspan.AbortSpan
+	clusterSettings *cluster.Settings
+	desc            *roachpb.RangeDescriptor
+	clock           *hlc.Clock
+	stats           enginepb.MVCCStats
+	abortSpan       *abortspan.AbortSpan
+	gcThreshold     hlc.Timestamp
 }
 
 func (m *mockEvalCtx) String() string {
 	return "mock"
 }
 func (m *mockEvalCtx) ClusterSettings() *cluster.Settings {
-	panic("unimplemented")
+	return m.clusterSettings
 }
 func (m *mockEvalCtx) EvalKnobs() TestingKnobs {
 	panic("unimplemented")
@@ -55,6 +60,9 @@ func (m *mockEvalCtx) Tracer() opentracing.Tracer {
 }
 func (m *mockEvalCtx) Engine() engine.Engine {
 	panic("unimplemented")
+}
+func (m *mockEvalCtx) Clock() *hlc.Clock {
+	return m.clock
 }
 func (m *mockEvalCtx) DB() *client.DB {
 	panic("unimplemented")
@@ -72,7 +80,7 @@ func (m *mockEvalCtx) StoreID() roachpb.StoreID {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) GetRangeID() roachpb.RangeID {
-	panic("unimplemented")
+	return m.desc.RangeID
 }
 func (m *mockEvalCtx) IsFirstRange() bool {
 	panic("unimplemented")
@@ -84,16 +92,16 @@ func (m *mockEvalCtx) GetTerm(uint64) (uint64, error) {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) Desc() *roachpb.RangeDescriptor {
-	panic("unimplemented")
+	return m.desc
 }
 func (m *mockEvalCtx) ContainsKey(key roachpb.Key) bool {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) GetMVCCStats() enginepb.MVCCStats {
-	panic("unimplemented")
+	return m.stats
 }
 func (m *mockEvalCtx) GetGCThreshold() hlc.Timestamp {
-	panic("unimplemented")
+	return m.gcThreshold
 }
 func (m *mockEvalCtx) GetTxnSpanGCThreshold() hlc.Timestamp {
 	panic("unimplemented")

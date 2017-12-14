@@ -1062,6 +1062,11 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
 							schemaChanger.execAfter = execAfter
+							// If the table is dropped and there's a GCDeadline set, use that
+							// instead of the standard delay.
+							if table.Dropped() && table.GCDeadline != 0 {
+								schemaChanger.execAfter = timeutil.Unix(0, table.GCDeadline)
+							}
 							// Keep track of this schema change.
 							// Remove from oldSchemaChangers map.
 							delete(oldSchemaChangers, table.ID)

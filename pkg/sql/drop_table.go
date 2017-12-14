@@ -16,15 +16,18 @@ package sql
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type dropTableNode struct {
@@ -309,11 +312,43 @@ func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.Tabl
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return err
 	}
+
+	// If the table is not interleaved and the ClearRange feature is
+	// enabled in the cluster, use the GCDeadline mechanism to schedule
+	// usage of the more efficient ClearRange pathway. ClearRange will
+	// only work if the entire hierarchy of interleaved tables are
+	// dropped at once, as with ON DELETE CASCADE where the top-level
+	// "root" table is dropped.
+	//
+	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be
+	// able to use this faster mechanism.
+	if !tableDesc.IsInterleaved() &&
+		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
+		// Get the zone config applying to this table in order to
+		// set the GC deadline.
+		_, zoneCfg, _, err := GetZoneConfigInTxn(
+			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "",
+		)
+		if err != nil {
+			return err
+		}
+		tableDesc.GCDeadline = timeutil.Now().UnixNano() +
+			int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
+	}
+
 	tableDesc.State = sqlbase.TableDescriptor_DROP
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return err
 	}
+
+	// Initiate an immediate schema change. When dropping a table
+	// in a session, the data and the descriptor are not deleted.
+	// Instead, that is taken care of asynchronously by the schema
+	// change manager, which is notified via a system config gossip.
+	// The schema change manager will properly schedule deletion of
+	// the underlying data when the GC deadline expires.
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
+
 	return nil
 }
 
