@@ -41,7 +41,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tooltip={`The 99th %ile latency for commits to the Raft Log.`}
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (nid) => (
             <Metric
@@ -60,7 +60,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tooltip={`The 99th %ile latency for commits of Raft commands.`}
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (nid) => (
             <Metric

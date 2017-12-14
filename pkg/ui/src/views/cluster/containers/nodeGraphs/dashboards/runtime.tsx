@@ -81,7 +81,7 @@ export default function (props: GraphDashboardProps) {
            During garbage collection, application code execution is paused.`
       }
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="pause time">
         <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />
       </Axis>
     </LineGraph>,
@@ -94,7 +94,7 @@ export default function (props: GraphDashboardProps) {
            and system-level operations (Sys) ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="cpu time">
         <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
         <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
         <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />

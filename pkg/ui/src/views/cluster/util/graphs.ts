@@ -6,7 +6,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputePrefixExponent, ComputeByteScale, Duration } from "src/util/format";
+import { Bytes, ComputePrefixExponent, ComputeByteScale, ComputeDurationScale, Duration } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -166,12 +166,12 @@ function ComputeByteAxisDomain(extent: Extent): AxisDomain {
 const durationLabels = ["nanoseconds", "microseconds", "milliseconds", "seconds"];
 
 function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
-  const prefixExponent = ComputePrefixExponent(extent[1], 1000, durationLabels);
-  const prefixFactor = Math.pow(1000, prefixExponent);
+  const scale = ComputeDurationScale(extent[1]);
+  const prefixFactor = scale.value;
 
   const axisDomain = computeAxisDomain(extent, prefixFactor);
 
-  axisDomain.label = durationLabels[prefixExponent];
+  axisDomain.label = scale.units;
 
   axisDomain.guideFormat = Duration;
   return axisDomain;

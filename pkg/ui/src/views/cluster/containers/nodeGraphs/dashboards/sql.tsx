@@ -87,7 +87,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -111,7 +111,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -133,7 +133,7 @@ export default function (props: GraphDashboardProps) {
            10 second periods ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -155,7 +155,7 @@ export default function (props: GraphDashboardProps) {
            10 second periods ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -177,7 +177,7 @@ export default function (props: GraphDashboardProps) {
           1 minute period. Values are displayed individually for each node on each node.`
       }
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -199,7 +199,7 @@ export default function (props: GraphDashboardProps) {
            1 minute period. Values are displayed individually for each node on each node.`
       }
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric

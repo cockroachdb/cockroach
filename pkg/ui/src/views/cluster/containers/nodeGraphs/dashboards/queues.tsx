@@ -22,7 +22,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Queue Processing Times" sources={storeSources}>
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="processing time">
         <Metric name="cr.store.queue.gc.processingnanos" title="GC" nonNegativeRate />
         <Metric name="cr.store.queue.replicagc.processingnanos" title="Replica GC" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.processingnanos" title="Replication" nonNegativeRate />
