@@ -965,10 +965,10 @@ sure they're not writing "under" a read that has already been
 performed.
 
  Now we're reading to actually evaluate the read - control moves to
- [`replica.executeBatch()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L4000)
+ [`replica.evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/7bed6f56e63355d53b2d28c3fc623ab9adac099f/pkg/storage/replica.go#L5225)
  which calls
- [`replica.executeCmd`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L4050)
- for each request in the batch. `executeCmd` switches over the request
+ [`replica.evaluateCommand`](https://github.com/cockroachdb/cockroach/blob/7bed6f56e63355d53b2d28c3fc623ab9adac099f/pkg/storage/replica.go#L67)
+ for each request in the batch. `evaluateCommand` switches over the request
  types using a [helper request to method
  map](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L84)
  and [passes
@@ -1129,12 +1129,12 @@ method. This takes in the `roachpb.BatchRequest` (the KV request we've
 been dealing with all along), [allocates an
 `engine.Batch`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3835)
 and delegates to
-[`executeBatch()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L3850). This
+[`evaluateBatch()`](https://github.com/cockroachdb/cockroach/blob/7bed6f56e63355d53b2d28c3fc623ab9adac099f/pkg/storage/replica.go#L5225). This
 fellow finally
 [iterates](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica.go#L4041)
 over the individual requests in the batch and, for each one, calls
-[`executeCmd`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L115). We've
-seen `executeCmd` before, on the read path. It switches over the
+[`evaluateCommand`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L67). We've
+seen `evaluateCommand` before, on the read path. It switches over the
 different types of requests and [calls a method specific to each
 type](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/replica_command.go#L160). One
 such method would be
