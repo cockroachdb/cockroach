@@ -15,7 +15,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tooltip={`Summary of total and available capacity ${tooltipSelection}.`}
     >
-      <Axis>
+      <Axis units={AxisUnits.Bytes} label="capacity">
         <Metric name="cr.store.capacity" title="Capacity" />
         <Metric name="cr.store.capacity.available" title="Available" />
         <Metric name="cr.store.capacity.used" title="Used" />
