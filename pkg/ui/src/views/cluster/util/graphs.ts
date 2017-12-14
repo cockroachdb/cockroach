@@ -6,7 +6,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputeByteScale, ComputeDurationScale, Duration } from "src/util/format";
+import { Bytes, ComputePrefixExponent, ComputeByteScale, ComputeDurationScale, Count, Duration } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -133,19 +133,7 @@ function computeAxisDomain(extent: Extent, factor: number = 1): AxisDomain {
 function ComputeCountAxisDomain(extent: Extent): AxisDomain {
   const axisDomain = computeAxisDomain(extent);
 
-  // For numbers larger than 1, the tooltip displays fractional values with
-  // metric multiplicative prefixes (e.g. kilo, mega, giga). For numbers smaller
-  // than 1, we simply display the fractional value without converting to a
-  // fractional metric prefix; this is because the use of fractional metric
-  // prefixes (i.e. milli, micro, nano) have proved confusing to users.
-  const metricFormat = d3.format(".4s");
-  const decimalFormat = d3.format(".4f");
-  axisDomain.guideFormat = (n: number) => {
-    if (n < 1) {
-      return decimalFormat(n);
-    }
-    return metricFormat(n);
-  };
+  axisDomain.guideFormat = Count;
 
   return axisDomain;
 }
