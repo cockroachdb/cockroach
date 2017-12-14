@@ -1844,6 +1844,24 @@ func MVCCResolveWriteIntentUsingIter(
 		intent, iterAndBuf.buf)
 }
 
+// unsafePeekNextVersion positions the iterator at the successor to latestKey. If this value
+// exists and is a version of the same key, returns the UnsafeKey() and UnsafeValue() of that
+// key-value pair along with `true`.
+func unsafePeekNextVersion(iter Iterator, latestKey MVCCKey) (MVCCKey, []byte, bool, error) {
+	// Compute the next possible mvcc value for this key.
+	nextKey := latestKey.Next()
+	iter.Seek(nextKey)
+
+	if ok, err := iter.Valid(); err != nil || !ok || !iter.UnsafeKey().Key.Equal(latestKey.Key) {
+		return MVCCKey{}, nil, false /* never ok */, err
+	}
+	unsafeKey := iter.UnsafeKey()
+	if !unsafeKey.IsValue() {
+		return MVCCKey{}, nil, false, errors.Errorf("expected an MVCC value key: %s", unsafeKey)
+	}
+	return unsafeKey, iter.UnsafeValue(), true, nil
+}
+
 func mvccResolveWriteIntent(
 	ctx context.Context,
 	engine ReadWriter,
@@ -2026,14 +2044,14 @@ func mvccResolveWriteIntent(
 		return err
 	}
 
-	// Compute the next possible mvcc value for this key.
-	nextKey := latestKey.Next()
-	iter.Seek(nextKey)
-
-	// If there is no other version, we should just clean up the key entirely.
-	if ok, err := iter.Valid(); err != nil {
+	unsafeNextKey, unsafeNextValue, ok, err := unsafePeekNextVersion(iter, latestKey)
+	if err != nil {
 		return err
-	} else if !ok || !iter.UnsafeKey().Key.Equal(intent.Key) {
+	}
+	iter = nil // prevent accidental use below
+
+	if !ok {
+		// If there is no other version, we should just clean up the key entirely.
 		if err = engine.Clear(metaKey); err != nil {
 			return err
 		}
@@ -2044,12 +2062,8 @@ func mvccResolveWriteIntent(
 		return nil
 	}
 
-	unsafeIterKey := iter.UnsafeKey()
-	if !unsafeIterKey.IsValue() {
-		return errors.Errorf("expected an MVCC value key: %s", unsafeIterKey)
-	}
 	// Get the bytes for the next version so we have size for stat counts.
-	valueSize := int64(len(iter.UnsafeValue()))
+	valueSize := int64(len(unsafeNextValue))
 	// Update the keyMetadata with the next version.
 	buf.newMeta = enginepb.MVCCMetadata{
 		Deleted:  valueSize == 0,
@@ -2065,7 +2079,7 @@ func mvccResolveWriteIntent(
 	// Update stat counters with older version.
 	if ms != nil {
 		ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize,
-			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeIterKey.Timestamp.WallTime,
+			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime,
 			intent.Txn.Timestamp.WallTime))
 	}
 
