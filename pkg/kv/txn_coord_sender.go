@@ -894,6 +894,7 @@ func (tc *TxnCoordSender) updateState(
 	// For successful transactional requests, keep the written intents and
 	// the updated transaction record to be sent along with the reply.
 	// The transaction metadata is created with the first writing operation.
+	//
 	// A tricky edge case is that of a transaction which "fails" on the
 	// first writing request, but actually manages to write some intents
 	// (for example, due to being multi-range). In this case, there will
@@ -903,7 +904,18 @@ func (tc *TxnCoordSender) updateState(
 	// unless it is tracking it (on top of it making sense to track it;
 	// after all, it **has** laid down intents and only the coordinator
 	// can augment a potential EndTransaction call). See #3303.
-	if txnMeta != nil || pErr == nil || newTxn.Writing {
+	//
+	// An extension of this case is that of a transaction which receives an
+	// ambiguous result error on its first writing request. Here, the
+	// transaction will not be marked as Writing, but still could have laid
+	// down intents (we don't know, it's ambiguous!). As with the other case,
+	// we still track the possible writes so they can be cleaned up cleanup
+	// to avoid dangling intents. However, since the Writing flag is not
+	// set in these cases, it may be possible that the request was read-only.
+	// This is ok, since the following block will be a no-op if the batch
+	// contained no transactional write requests.
+	_, ambiguousErr := pErr.GetDetail().(*roachpb.AmbiguousResultError)
+	if txnMeta != nil || pErr == nil || ambiguousErr || newTxn.Writing {
 		// Adding the intents even on error reduces the likelihood of dangling
 		// intents blocking concurrent writers for extended periods of time.
 		// See #3346.
