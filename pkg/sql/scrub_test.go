@@ -15,10 +15,8 @@
 package sql_test
 
 import (
-	gosql "database/sql"
 	"strings"
 	"testing"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -29,47 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-type scrubResult struct {
-	errorType  string
-	database   string
-	table      string
-	primaryKey string
-	timestamp  time.Time
-	repaired   bool
-	details    string
-}
-
-// getResultRows will scan and unmarshal scrubResults from a Rows
-// iterator.
-func getResultRows(rows *gosql.Rows) (results []scrubResult, err error) {
-	var unused *string
-	for rows.Next() {
-		result := scrubResult{}
-		if err := rows.Scan(
-			// TODO(joey): In the future, SCRUB will run as a job during execution.
-			&unused, /* job_uuid */
-			&result.errorType,
-			&result.database,
-			&result.table,
-			&result.primaryKey,
-			&result.timestamp,
-			&result.repaired,
-			&result.details,
-		); err != nil {
-			return nil, err
-		}
-		results = append(results, result)
-	}
-
-	if rows.Err() != nil {
-		return nil, err
-	}
-
-	return results, nil
-}
 
 // TestScrubIndexMissingIndexEntry tests that
 // `SCRUB TABLE ... INDEX ALL`` will find missing index entries. To test
@@ -119,7 +79,7 @@ INSERT INTO t.test VALUES (10, 20);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	defer rows.Close()
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -127,19 +87,19 @@ INSERT INTO t.test VALUES (10, 20);
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
-	if result := results[0]; result.errorType != scrub.MissingIndexEntryError {
+	if result := results[0]; result.ErrorType != scrub.MissingIndexEntryError {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.MissingIndexEntryError, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(10)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details, `"v":"20"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"20"`, result.details)
+			scrub.MissingIndexEntryError, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(10)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details, `"v":"20"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"20"`, result.Details)
 	}
 }
 
@@ -189,7 +149,7 @@ CREATE INDEX secondary ON t.test (v);
 	}
 	defer rows.Close()
 
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -197,19 +157,19 @@ CREATE INDEX secondary ON t.test (v);
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
-	if result := results[0]; result.errorType != scrub.DanglingIndexReferenceError {
+	if result := results[0]; result.ErrorType != scrub.DanglingIndexReferenceError {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.DanglingIndexReferenceError, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(10)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details, `"v":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.details)
+			scrub.DanglingIndexReferenceError, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(10)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details, `"v":"314"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.Details)
 	}
 
 	// Run SCRUB DATABASE to make sure it also catches the problem.
@@ -218,15 +178,15 @@ CREATE INDEX secondary ON t.test (v);
 		t.Fatalf("unexpected error: %+v", err)
 	}
 	defer rows.Close()
-	scrubDatabaseResults, err := getResultRows(rows)
+	scrubDatabaseResults, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	} else if len(scrubDatabaseResults) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(scrubDatabaseResults), scrubDatabaseResults)
-	} else if !(scrubDatabaseResults[0].errorType == results[0].errorType &&
-		scrubDatabaseResults[0].database == results[0].database &&
-		scrubDatabaseResults[0].table == results[0].table &&
-		scrubDatabaseResults[0].details == results[0].details) {
+	} else if !(scrubDatabaseResults[0].ErrorType == results[0].ErrorType &&
+		scrubDatabaseResults[0].Database == results[0].Database &&
+		scrubDatabaseResults[0].Table == results[0].Table &&
+		scrubDatabaseResults[0].Details == results[0].Details) {
 		t.Fatalf("expected results to be equal, SCRUB TABLE got %v. SCRUB DATABASE got %v",
 			results, scrubDatabaseResults)
 	}
@@ -290,7 +250,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	}
 	defer rows.Close()
 
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -301,9 +261,9 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	}
 
 	// Assert the missing index error is correct.
-	var missingIndexError *scrubResult
+	var missingIndexError *sqlutils.ScrubResult
 	for _, result := range results {
-		if result.errorType == scrub.MissingIndexEntryError {
+		if result.ErrorType == scrub.MissingIndexEntryError {
 			missingIndexError = &result
 			break
 		}
@@ -311,22 +271,22 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	if result := missingIndexError; result == nil {
 		t.Fatalf("expected errors to include %q error, but got errors: %#v",
 			scrub.MissingIndexEntryError, results)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(10)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details, `"data":"1337"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"data":"1337"`, result.details)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(10)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details, `"data":"1337"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"data":"1337"`, result.Details)
 	}
 
 	// Assert the dangling index error is correct.
-	var danglingIndexResult *scrubResult
+	var danglingIndexResult *sqlutils.ScrubResult
 	for _, result := range results {
-		if result.errorType == scrub.DanglingIndexReferenceError {
+		if result.ErrorType == scrub.DanglingIndexReferenceError {
 			danglingIndexResult = &result
 			break
 		}
@@ -334,16 +294,16 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	if result := danglingIndexResult; result == nil {
 		t.Fatalf("expected errors to include %q error, but got errors: %#v",
 			scrub.DanglingIndexReferenceError, results)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(10)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details, `"data":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"data":"314"`, result.details)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(10)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details, `"data":"314"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"data":"314"`, result.Details)
 	}
 }
 
@@ -407,7 +367,7 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	defer rows.Close()
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -416,22 +376,22 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(scrub.CheckConstraintViolation) {
+	if result := results[0]; result.ErrorType != string(scrub.CheckConstraintViolation) {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.CheckConstraintViolation, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(10)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details,
+			scrub.CheckConstraintViolation, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(10)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details,
 		`{"constraint_name":"check_v","row_data":{"k":"10","v":"0"}}`) {
 		t.Fatalf("expected erorr details to contain `%s`, got %s",
 			`{"constraint_name":"check_v","row_data":{"k":"10","v":"0"}}`,
-			result.details)
+			result.Details)
 	}
 }
 
@@ -509,7 +469,7 @@ INSERT INTO t.child VALUES (10, 314);
 	}
 	defer rows.Close()
 
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -518,22 +478,22 @@ INSERT INTO t.child VALUES (10, 314);
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(scrub.ForeignKeyConstraintViolation) {
+	if result := results[0]; result.ErrorType != string(scrub.ForeignKeyConstraintViolation) {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.ForeignKeyConstraintViolation, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "child" {
-		t.Fatalf("expected table %q, got %q", "child", result.table)
-	} else if result.primaryKey != "(10)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details,
+			scrub.ForeignKeyConstraintViolation, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "child" {
+		t.Fatalf("expected table %q, got %q", "child", result.Table)
+	} else if result.PrimaryKey != "(10)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details,
 		`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"10","parent_id":"0"}}`) {
 		t.Fatalf("expected erorr details to contain %s, got %s",
 			`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"10","parent_id":"0"}}`,
-			result.details)
+			result.Details)
 	}
 }
 
@@ -613,7 +573,7 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 	}
 	defer rows.Close()
 
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -622,22 +582,22 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(scrub.ForeignKeyConstraintViolation) {
+	if result := results[0]; result.ErrorType != string(scrub.ForeignKeyConstraintViolation) {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.ForeignKeyConstraintViolation, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "child" {
-		t.Fatalf("expected table %q, got %q", "child", result.table)
-	} else if result.primaryKey != "(11)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(11)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details,
+			scrub.ForeignKeyConstraintViolation, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "child" {
+		t.Fatalf("expected table %q, got %q", "child", result.Table)
+	} else if result.PrimaryKey != "(11)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(11)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details,
 		`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"11","parent_id":"1337","parent_id2":"NULL"}}`) {
 		t.Fatalf("expected erorr details to contain %s, got %s",
 			`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"11","parent_id":"1337","parent_id2":"NULL"}}`,
-			result.details)
+			result.Details)
 	}
 }
 
@@ -696,29 +656,28 @@ INSERT INTO t.test VALUES (217, 314);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	defer rows.Close()
-
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	} else if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(scrub.UnexpectedNullValueError) {
+	if result := results[0]; result.ErrorType != string(scrub.UnexpectedNullValueError) {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.UnexpectedNullValueError, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(217)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details, `"k":"217"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.details)
-	} else if !strings.Contains(result.details, `"v":"<unset>"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"<unset>"`, result.details)
+			scrub.UnexpectedNullValueError, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(217)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details, `"k":"217"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v":"<unset>"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"<unset>"`, result.Details)
 	}
 }
 
@@ -787,31 +746,30 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	defer rows.Close()
-
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	} else if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(scrub.UnexpectedNullValueError) {
+	if result := results[0]; result.ErrorType != string(scrub.UnexpectedNullValueError) {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.UnexpectedNullValueError, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(217)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details, `"k":"217"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.details)
-	} else if !strings.Contains(result.details, `"v":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.details)
-	} else if !strings.Contains(result.details, `"b":"<unset>"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.details)
+			scrub.UnexpectedNullValueError, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(217)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details, `"k":"217"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v":"314"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.Details)
+	} else if !strings.Contains(result.Details, `"b":"<unset>"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.Details)
 	}
 }
 
@@ -905,31 +863,30 @@ CREATE TABLE t.test (
 		t.Fatalf("unexpected error: %s", err)
 	}
 	defer rows.Close()
-
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	} else if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(scrub.UnexpectedNullValueError) {
+	if result := results[0]; result.ErrorType != string(scrub.UnexpectedNullValueError) {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.UnexpectedNullValueError, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(217)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details, `"k":"217"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.details)
-	} else if !strings.Contains(result.details, `"v":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.details)
-	} else if !strings.Contains(result.details, `"b":"<unset>"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.details)
+			scrub.UnexpectedNullValueError, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(217)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details, `"k":"217"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v":"314"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.Details)
+	} else if !strings.Contains(result.Details, `"b":"<unset>"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.Details)
 	}
 }
 
@@ -999,29 +956,29 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	}
 	defer rows.Close()
 
-	results, err := getResultRows(rows)
+	results, err := sqlutils.GetScrubResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	} else if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(scrub.UnexpectedNullValueError) {
+	if result := results[0]; result.ErrorType != string(scrub.UnexpectedNullValueError) {
 		t.Fatalf("expected %q error, instead got: %s",
-			scrub.UnexpectedNullValueError, result.errorType)
-	} else if result.database != "t" {
-		t.Fatalf("expected database %q, got %q", "t", result.database)
-	} else if result.table != "test" {
-		t.Fatalf("expected table %q, got %q", "test", result.table)
-	} else if result.primaryKey != "(217)" {
-		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.primaryKey)
-	} else if result.repaired {
-		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
-	} else if !strings.Contains(result.details, `"k":"217"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.details)
-	} else if !strings.Contains(result.details, `"v":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.details)
-	} else if !strings.Contains(result.details, `"b":"<unset>"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.details)
+			scrub.UnexpectedNullValueError, result.ErrorType)
+	} else if result.Database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.Database)
+	} else if result.Table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.Table)
+	} else if result.PrimaryKey != "(217)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
+	} else if result.Repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
+	} else if !strings.Contains(result.Details, `"k":"217"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v":"314"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.Details)
+	} else if !strings.Contains(result.Details, `"b":"<unset>"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.Details)
 	}
 }
