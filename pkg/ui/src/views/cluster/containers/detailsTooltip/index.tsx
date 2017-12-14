@@ -23,11 +23,17 @@ import { charts as storageCharts } from "src/views/cluster/containers/nodeGraphs
 import { nodeDisplayName } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 import { seriesPalette } from "src/views/cluster/util/graphs";
 
-interface DetailsTooltipProps {
+interface DetailsTooltipOwnProps {
   hoverState: HoverState;
   metrics: MetricQuerySet;
   nodesSummary: NodesSummary;
 }
+
+interface DetailsTooltipConnectedProps {
+  nodeSources: string[];
+}
+
+type DetailsTooltipProps = DetailsTooltipOwnProps & DetailsTooltipConnectedProps;
 
 interface DetailsTooltipMetric {
   title: string;
@@ -70,8 +76,7 @@ class DetailsTooltip extends React.Component<DetailsTooltipProps, {}> {
 
     const bisect = d3.bisector((d: any) => NanoToMilli(d.timestamp_nanos.toNumber())).left;
 
-    // TODO(couchand): get real nodeSources value
-    const nodeSources = false;
+    const { nodeSources } = this.props;
     const nodeIDs = nodeSources ? nodeSources : this.props.nodesSummary.nodeIDs;
 
     if (!(hoverChart in charts)) {
@@ -155,7 +160,7 @@ class DetailsTooltip extends React.Component<DetailsTooltipProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
+function mapStateToProps(state: AdminUIState): DetailsTooltipOwnProps {
   return {
     hoverState: hoverStateSelector(state),
     metrics: state.metrics.queries,
@@ -163,4 +168,6 @@ function mapStateToProps(state: AdminUIState) {
   };
 }
 
-export default connect(mapStateToProps)(DetailsTooltip);
+// tslint:disable-next-line:variable-name
+const DetailsTooltipConnected = connect<DetailsTooltipOwnProps, {}, DetailsTooltipConnectedProps>(mapStateToProps)(DetailsTooltip);
+export default DetailsTooltipConnected;
