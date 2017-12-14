@@ -659,6 +659,18 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
+		// older nodes don't know about many new fields, e.g. MVCCAll and may
+		// incorrectly evaluate either an export RPC, or a resumed backup job.
+		// VersionClearRange was introduced after most of these new fields and the
+		// jobs resume refactorings, though we may still wish to bump this to 2.0
+		// when that is defined.
+		if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionClearRange) {
+			return errors.Errorf(
+				"running BACKUP on a 2.x node requires cluster version >= %s (",
+				cluster.VersionByKey(cluster.VersionClearRange).String(),
+			)
+		}
+
 		if err := backupStmt.Targets.NormalizeTablesWithDatabase(
 			p.SessionData().Database,
 		); err != nil {
