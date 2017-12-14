@@ -36,9 +36,15 @@ type storeScore struct {
 
 type storeScores []storeScore
 
-func (s storeScores) Len() int           { return len(s) }
-func (s storeScores) Less(i, j int) bool { return s[i].score < s[j].score }
-func (s storeScores) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s storeScores) Len() int { return len(s) }
+func (s storeScores) Less(i, j int) bool {
+	if s[i].score == s[j].score {
+		// Ensure a deterministic ordering of equivalent scores
+		return s[i].storeID > s[j].storeID
+	}
+	return s[i].score < s[j].score
+}
+func (s storeScores) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 func TestOnlyValid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -336,8 +342,8 @@ var (
 	testStoreUSb       = roachpb.StoreID(4) // us-b
 	testStoreEurope    = roachpb.StoreID(5) // eur-a-1-5
 
-	testStores = []roachpb.StoreDescriptor{
-		{
+	testStores = map[roachpb.StoreID]roachpb.StoreDescriptor{
+		testStoreUSa15: roachpb.StoreDescriptor{
 			StoreID: testStoreUSa15,
 			Attrs: roachpb.Attributes{
 				Attrs: []string{"a"},
@@ -350,7 +356,7 @@ var (
 			},
 			Capacity: testStoreCapacitySetup(1, 99),
 		},
-		{
+		testStoreUSa15Dupe: roachpb.StoreDescriptor{
 			StoreID: testStoreUSa15Dupe,
 			Attrs: roachpb.Attributes{
 				Attrs: []string{"a"},
@@ -363,7 +369,7 @@ var (
 			},
 			Capacity: testStoreCapacitySetup(1, 99),
 		},
-		{
+		testStoreUSa1: roachpb.StoreDescriptor{
 			StoreID: testStoreUSa1,
 			Attrs: roachpb.Attributes{
 				Attrs: []string{"a", "b"},
@@ -376,7 +382,7 @@ var (
 			},
 			Capacity: testStoreCapacitySetup(100, 0),
 		},
-		{
+		testStoreUSb: roachpb.StoreDescriptor{
 			StoreID: testStoreUSb,
 			Attrs: roachpb.Attributes{
 				Attrs: []string{"a", "b", "c"},
@@ -389,7 +395,7 @@ var (
 			},
 			Capacity: testStoreCapacitySetup(50, 50),
 		},
-		{
+		testStoreEurope: roachpb.StoreDescriptor{
 			StoreID: testStoreEurope,
 			Node: roachpb.NodeDescriptor{
 				NodeID: roachpb.NodeID(testStoreEurope),
@@ -506,7 +512,7 @@ func TestAllocateDiversityScore(t *testing.T) {
 	// are the best fit for allocating a new replica on.
 	testCases := []struct {
 		name     string
-		stores   map[roachpb.StoreID]struct{}
+		stores   []roachpb.StoreID
 		expected []roachpb.StoreID
 	}{
 		{
@@ -514,18 +520,13 @@ func TestAllocateDiversityScore(t *testing.T) {
 			expected: []roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreUSb, testStoreEurope},
 		},
 		{
-			name: "one existing replicas",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15: {},
-			},
+			name:     "one existing replicas",
+			stores:   []roachpb.StoreID{testStoreUSa15},
 			expected: []roachpb.StoreID{testStoreEurope, testStoreUSb, testStoreUSa1, testStoreUSa15Dupe},
 		},
 		{
-			name: "two existing replicas",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:  {},
-				testStoreEurope: {},
-			},
+			name:     "two existing replicas",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreEurope},
 			expected: []roachpb.StoreID{testStoreUSb, testStoreUSa1, testStoreUSa15Dupe},
 		},
 	}
@@ -533,14 +534,12 @@ func TestAllocateDiversityScore(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
-			for _, s := range testStores {
-				if _, ok := tc.stores[s.StoreID]; ok {
-					existingNodeLocalities[s.Node.NodeID] = s.Node.Locality
-				}
+			for _, s := range tc.stores {
+				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
 			}
 			var scores storeScores
 			for _, s := range testStores {
-				if _, ok := tc.stores[s.StoreID]; ok {
+				if _, ok := existingNodeLocalities[s.Node.NodeID]; ok {
 					continue
 				}
 				var score storeScore
@@ -567,7 +566,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 	// are the best fit for rebalancing to.
 	testCases := []struct {
 		name     string
-		stores   map[roachpb.StoreID]struct{}
+		stores   []roachpb.StoreID
 		expected []roachpb.StoreID
 	}{
 		{
@@ -575,56 +574,33 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 			expected: []roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreUSb, testStoreEurope},
 		},
 		{
-			name: "one existing replica",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15: {},
-			},
+			name:     "one existing replica",
+			stores:   []roachpb.StoreID{testStoreUSa15},
 			expected: []roachpb.StoreID{testStoreUSa15Dupe, testStoreUSa1, testStoreUSb, testStoreEurope},
 		},
 		{
-			name: "two existing replicas",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15: {},
-				testStoreUSa1:  {},
-			},
+			name:     "two existing replicas",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa1},
 			expected: []roachpb.StoreID{testStoreEurope, testStoreUSb, testStoreUSa15Dupe},
 		},
 		{
-			name: "three existing replicas",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:  {},
-				testStoreUSa1:   {},
-				testStoreEurope: {},
-			},
+			name:     "three existing replicas",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreEurope},
 			expected: []roachpb.StoreID{testStoreUSb, testStoreUSa15Dupe},
 		},
 		{
-			name: "three existing replicas with duplicate",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:     {},
-				testStoreUSa15Dupe: {},
-				testStoreUSa1:      {},
-			},
+			name:     "three existing replicas with duplicate",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1},
 			expected: []roachpb.StoreID{testStoreEurope, testStoreUSb},
 		},
 		{
-			name: "four existing replicas",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:  {},
-				testStoreUSa1:   {},
-				testStoreUSb:    {},
-				testStoreEurope: {},
-			},
+			name:     "four existing replicas",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreUSb, testStoreEurope},
 			expected: []roachpb.StoreID{testStoreUSa15Dupe},
 		},
 		{
-			name: "four existing replicas with duplicate",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:     {},
-				testStoreUSa15Dupe: {},
-				testStoreUSa1:      {},
-				testStoreUSb:       {},
-			},
+			name:     "four existing replicas with duplicate",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSa1, testStoreUSb},
 			expected: []roachpb.StoreID{testStoreEurope},
 		},
 	}
@@ -632,14 +608,12 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
-			for _, s := range testStores {
-				if _, ok := tc.stores[s.StoreID]; ok {
-					existingNodeLocalities[s.Node.NodeID] = s.Node.Locality
-				}
+			for _, s := range tc.stores {
+				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
 			}
 			var scores storeScores
 			for _, s := range testStores {
-				if _, ok := tc.stores[s.StoreID]; ok {
+				if _, ok := existingNodeLocalities[s.Node.NodeID]; ok {
 					continue
 				}
 				var score storeScore
@@ -666,63 +640,37 @@ func TestRemovalDiversityScore(t *testing.T) {
 	// should be removed.
 	testCases := []struct {
 		name     string
-		stores   map[roachpb.StoreID]struct{}
+		stores   []roachpb.StoreID
 		expected []roachpb.StoreID
 	}{
 		{
-			name: "four existing replicas",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:  {},
-				testStoreUSa1:   {},
-				testStoreUSb:    {},
-				testStoreEurope: {},
-			},
+			name:     "four existing replicas",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreUSb, testStoreEurope},
 			expected: []roachpb.StoreID{testStoreEurope, testStoreUSb, testStoreUSa15, testStoreUSa1},
 		},
 		{
-			name: "four existing replicas with duplicate",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:     {},
-				testStoreUSa15Dupe: {},
-				testStoreUSb:       {},
-				testStoreEurope:    {},
-			},
+			name:     "four existing replicas with duplicate",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa15Dupe, testStoreUSb, testStoreEurope},
 			expected: []roachpb.StoreID{testStoreEurope, testStoreUSb, testStoreUSa15, testStoreUSa15Dupe},
 		},
 		{
-			name: "three existing replicas - excluding testStoreUSa15",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa1:   {},
-				testStoreUSb:    {},
-				testStoreEurope: {},
-			},
+			name:     "three existing replicas - excluding testStoreUSa15",
+			stores:   []roachpb.StoreID{testStoreUSa1, testStoreUSb, testStoreEurope},
 			expected: []roachpb.StoreID{testStoreEurope, testStoreUSa1, testStoreUSb},
 		},
 		{
-			name: "three existing replicas - excluding testStoreUSa1",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:  {},
-				testStoreUSb:    {},
-				testStoreEurope: {},
-			},
+			name:     "three existing replicas - excluding testStoreUSa1",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSb, testStoreEurope},
 			expected: []roachpb.StoreID{testStoreEurope, testStoreUSa15, testStoreUSb},
 		},
 		{
-			name: "three existing replicas - excluding testStoreUSb",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15:  {},
-				testStoreUSa1:   {},
-				testStoreEurope: {},
-			},
+			name:     "three existing replicas - excluding testStoreUSb",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreEurope},
 			expected: []roachpb.StoreID{testStoreEurope, testStoreUSa15, testStoreUSa1},
 		},
 		{
-			name: "three existing replicas - excluding testStoreEurope",
-			stores: map[roachpb.StoreID]struct{}{
-				testStoreUSa15: {},
-				testStoreUSa1:  {},
-				testStoreUSb:   {},
-			},
+			name:     "three existing replicas - excluding testStoreEurope",
+			stores:   []roachpb.StoreID{testStoreUSa15, testStoreUSa1, testStoreUSb},
 			expected: []roachpb.StoreID{testStoreUSb, testStoreUSa15, testStoreUSa1},
 		},
 	}
@@ -730,16 +678,12 @@ func TestRemovalDiversityScore(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
-			for _, s := range testStores {
-				if _, ok := tc.stores[s.StoreID]; ok {
-					existingNodeLocalities[s.Node.NodeID] = s.Node.Locality
-				}
+			for _, s := range tc.stores {
+				existingNodeLocalities[testStores[s].Node.NodeID] = testStores[s].Node.Locality
 			}
 			var scores storeScores
-			for _, s := range testStores {
-				if _, ok := tc.stores[s.StoreID]; !ok {
-					continue
-				}
+			for _, storeID := range tc.stores {
+				s := testStores[storeID]
 				var score storeScore
 				actualScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
 				score.storeID = s.StoreID
