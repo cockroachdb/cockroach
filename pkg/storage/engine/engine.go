@@ -233,6 +233,17 @@ type Engine interface {
 	IngestExternalFile(ctx context.Context, path string, move bool) error
 	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
 	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
+	// CompactRange ensures that the specified range of key value pairs is
+	// optimized for space efficiency.
+	CompactRange(start, end MVCCKey) error
+}
+
+// EngineWithSSTables extends the Engine interface with a method to get
+// info on all SSTables in use.
+type EngineWithSSTables interface {
+	Engine
+	// GetSSTables retrieves metadata about this engine's live sstables.
+	GetSSTables() SSTableInfos
 }
 
 // Batch is the interface for batch specific operations.

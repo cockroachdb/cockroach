@@ -52,9 +52,6 @@ func declareKeysClearRange(
 	// negate them in the case of being able to clear the entire user-
 	// space span of keys in the range.
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeStatsKey(header.RangeID)})
-	// Add the GC threshold key, as this is updated as part of clear a
-	// range of data.
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
 // ClearRange wipes all MVCC versions of keys covered by the specified
@@ -75,6 +72,7 @@ func ClearRange(
 	args := cArgs.Args.(*roachpb.ClearRangeRequest)
 	from := engine.MVCCKey{Key: args.Key}
 	to := engine.MVCCKey{Key: args.EndKey}
+	var pd result.Result
 
 	// Before clearing, compute the delta in MVCCStats.
 	statsDelta, err := computeStatsDelta(ctx, batch, cArgs, from, to)
@@ -82,21 +80,6 @@ func ClearRange(
 		return result.Result{}, err
 	}
 	cArgs.Stats.Subtract(statsDelta)
-
-	// Forward the range's GC threshold to the wall clock's now() in order
-	// to be newer than any previous write, and to disallow reads at earlier
-	// timestamps which will be invalid after deleting all existing keys
-	// in the span.
-	var pd result.Result
-	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
-	gcThreshold.Forward(cArgs.EvalCtx.Clock().Now())
-	pd.Replicated.State = &storagebase.ReplicaState{
-		GCThreshold: &gcThreshold,
-	}
-	stateLoader := MakeStateLoader(cArgs.EvalCtx)
-	if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &gcThreshold); err != nil {
-		return result.Result{}, err
-	}
 
 	// If the total size of data to be cleared is less than
 	// clearRangeBytesThreshold, clear the individual values manually,
@@ -114,7 +97,18 @@ func ClearRange(
 		return pd, nil
 	}
 
-	// Otherwise, clear the key span using engine.ClearRange.
+	// Otherwise, suggest a compaction for the cleared range and clear
+	// the key span using engine.ClearRange.
+	pd.Replicated.SuggestedCompactions = []storagebase.SuggestedCompaction{
+		{
+			StartKey: roachpb.RKey(from.Key),
+			EndKey:   roachpb.RKey(to.Key),
+			Compaction: storagebase.Compaction{
+				Bytes:            statsDelta.Total(),
+				SuggestedAtNanos: cArgs.Header.Timestamp.WallTime,
+			},
+		},
+	}
 	if err := batch.ClearRange(from, to); err != nil {
 		return result.Result{}, err
 	}
@@ -124,10 +118,11 @@ func ClearRange(
 // computeStatsDelta determines the change in stats caused by the
 // ClearRange command. If the cleared span is the entire range,
 // computing MVCCStats is easy. We just negate all fields except sys
-// bytes and count. Note that if a race build is enabled, we use
-// the expectation of running in a CI environment to compute stats
-// by iterating over the span to provide extra verification that the
-// fast path of simply subtracting the non-system values is accurate.
+// bytes and count. Note that if a race build is enabled, we use the
+// expectation of running in a CI environment to compute stats by
+// iterating over the span to provide extra verification that the fast
+// path of simply subtracting the non-system values is accurate.
+// Returns the delta stats.
 func computeStatsDelta(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, from, to engine.MVCCKey,
 ) (enginepb.MVCCStats, error) {
