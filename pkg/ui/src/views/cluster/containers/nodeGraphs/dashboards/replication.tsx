@@ -3,8 +3,71 @@ import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import { ChartConfig } from "src/util/charts";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+
+export const charts: ChartConfig = {
+  "nodes.replication.0": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.ranges", title: "Ranges" },
+      { name: "cr.store.replicas.leaders", title: "Leaders" },
+      { name: "cr.store.replicas.leaseholders", title: "Lease Holders" },
+      { name: "cr.store.replicas.leaders_not_leaseholders", title: "Leaders w/o Lease" },
+      { name: "cr.store.ranges.unavailable", title: "Unavailable" },
+      { name: "cr.store.ranges.underreplicated", title: "Under-replicated" },
+    ],
+  },
+  "nodes.replication.1": {
+    type: "nodes",
+    measure: "count",
+    metric: { name: "cr.store.replicas" },
+  },
+  "nodes.replication.2": {
+    type: "nodes",
+    measure: "count",
+    metric: { name: "cr.store.replicas.leaseholders" },
+  },
+  "nodes.replication.3": {
+    type: "nodes",
+    measure: "bytes",
+    metric: { name: "cr.store.totalbytes" },
+  },
+  "nodes.replication.4": {
+    type: "nodes",
+    measure: "count",
+    metric: { name: "cr.store.rebalancing.writespersecond" },
+  },
+  "nodes.replication.5": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.replicas", title: "Replicas" },
+      { name: "cr.store.replicas.quiescent", title: "Quiescent" },
+    ],
+  },
+  "nodes.replication.6": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.range.splits", title: "Splits" },
+      { name: "cr.store.range.adds", title: "Adds" },
+      { name: "cr.store.range.removes", title: "Removes" },
+    ],
+  },
+  "nodes.replication.7": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.range.snapshots.generated", title: "Generated" },
+      { name: "cr.store.range.snapshots.normal-applied", title: "Normal-applied" },
+      { name: "cr.store.range.snapshots.preemptive-applied", title: "Preemptive-applied" },
+      { name: "cr.store.replicas.reserved", title: "Reserved" },
+    ],
+  },
+};
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, storeSources } = props;

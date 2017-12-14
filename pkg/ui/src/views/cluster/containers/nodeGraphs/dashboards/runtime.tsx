@@ -3,8 +3,60 @@ import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import { ChartConfig } from "src/util/charts";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+
+export const charts: ChartConfig = {
+  "nodes.runtime.0": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.liveness.livenodes", title: "Live Nodes" },
+    ],
+  },
+  "nodes.runtime.1": {
+    type: "metrics",
+    measure: "bytes",
+    metrics: [
+      { name: "cr.node.sys.rss", title: "Total memory (RSS)" },
+      { name: "cr.node.sys.go.allocbytes", title: "Go Allocated" },
+      { name: "cr.node.sys.go.totalbytes", title: "Go Total" },
+      { name: "cr.node.sys.cgo.allocbytes", title: "CGo Allocated" },
+      { name: "cr.node.sys.cgo.totalbytes", title: "CGo Total" },
+    ],
+  },
+  "nodes.runtime.2": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.sys.goroutines", title: "Goroutine Count" },
+    ],
+  },
+  "nodes.runtime.3": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.sys.gc.count", title: "GC Runs" },
+    ],
+  },
+  "nodes.runtime.4": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.sys.gc.pause.ns", title: "GC Pause Time" },
+    ],
+  },
+  "nodes.runtime.5": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.sys.cpu.user.ns", title: "User CPU Time" },
+      { name: "cr.node.sys.cpu.sys.ns", title: "Sys CPU Time" },
+      { name: "cr.node.sys.gc.pause.ns", title: "GC Pause Time" },
+    ],
+  },
+};
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;

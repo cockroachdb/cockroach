@@ -80,10 +80,15 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     //   - first series is missing data points
     //   - series are missing data points at different timestamps
     if (!this.props.data.results) {
-        return;
+      return;
     }
 
-    const datapoints = this.props.data.results[0].datapoints;
+    // TODO(couchand): get rid of this ugly hack
+    const datapoints = this.props.data.results[0].datapoints || this.props.data.results[1].datapoints;
+    if (!datapoints) {
+      return;
+    }
+
     const timeScale = this.chart.xAxis.scale();
 
     // To get the x-coordinate within the chart we subtract the left side of the SVG
@@ -159,16 +164,17 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       }
 
       let hoverTime: moment.Moment;
+      let thisChart = false;
       if (this.props.hoverState) {
         const { currentlyHovering, hoverChart } = this.props.hoverState;
-        // Don't draw the linked guideline on the hovered chart, NVD3 does that for us.
-        if (currentlyHovering && hoverChart !== this.props.title) {
+        if (currentlyHovering) {
           hoverTime = this.props.hoverState.hoverTime;
+          thisChart = hoverChart !== this.props.chartKey;
         }
       }
 
       ConfigureLineChart(
-        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, hoverTime,
+        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, hoverTime, thisChart,
       );
     }
   }

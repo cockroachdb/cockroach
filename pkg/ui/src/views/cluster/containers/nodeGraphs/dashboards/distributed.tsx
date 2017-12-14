@@ -3,8 +3,67 @@ import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import { ChartConfig } from "src/util/charts";
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+
+export const charts: ChartConfig = {
+  "nodes.distributed.0": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.distsender.batches", title: "Batches" },
+      { name: "cr.node.distsender.batches.partial", title: "Partial Batches" },
+    ],
+  },
+  "nodes.distributed.1": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.distsender.rpc.sent", title: "RPCs Sent" },
+      { name: "cr.node.distsender.rpc.sent.local", title: "Local Fast-path" },
+    ],
+  },
+  "nodes.distributed.2": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.distsender.rpc.sent.sendnexttimeout", title: "RPC Timeouts" },
+      { name: "cr.node.distsender.rpc.sent.nextreplicaerror", title: "Replica Errors" },
+      { name: "cr.node.distsender.errors.notleaseholder", title: "Not Leaseholder Errors" },
+    ],
+  },
+  "nodes.distributed.3": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.txn.commits", title: "Committed" },
+      { name: "cr.node.txn.commits1PC", title: "Fast-path Committed" },
+      { name: "cr.node.txn.aborts", title: "Aborted" },
+      { name: "cr.node.txn.abandons", title: "Abandoned" },
+    ],
+  },
+  "nodes.distributed.4": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.txn.restarts.writetooold", title: "Write Too Old" },
+      { name: "cr.node.txn.restarts.deleterange", title: "Forwarded Timestamp (delete range)" },
+      { name: "cr.node.txn.restarts.serializable", title: "Forwarded Timestamp (iso=serializable)" },
+      { name: "cr.node.txn.restarts.possiblereplay", title: "Possible Replay" },
+    ],
+  },
+  "nodes.distributed.5": {
+    type: "nodes",
+    measure: "duration",
+    metric: { name: "cr.node.txn.durations-p99" },
+  },
+  "nodes.distributed.6": {
+    type: "nodes",
+    measure: "duration",
+    metric: { name: "cr.node.txn.durations-p90" },
+  },
+};
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources } = props;

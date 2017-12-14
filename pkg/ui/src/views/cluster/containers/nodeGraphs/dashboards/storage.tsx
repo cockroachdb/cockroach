@@ -3,8 +3,61 @@ import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import { ChartConfig } from "src/util/charts";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+
+export const charts: ChartConfig = {
+  "nodes.storage.0": {
+    type: "metrics",
+    measure: "bytes",
+    metrics: [
+      { name: "cr.store.capacity", title: "Capacity" },
+      { name: "cr.store.capacity.available", title: "Available" },
+      { name: "cr.store.capacity.used", title: "Used" },
+    ],
+  },
+  "nodes.storage.1": {
+    type: "metrics",
+    measure: "bytes",
+    metrics: [
+      { name: "cr.store.livebytes", title: "Live" },
+      { name: "cr.store.sysbytes", title: "System" },
+    ],
+  },
+  "nodes.storage.2": {
+    type: "nodes",
+    measure: "duration",
+    metric: { name: "cr.store.raft.process.logcommit.latency-p99" },
+  },
+  "nodes.storage.3": {
+    type: "nodes",
+    measure: "duration",
+    metric: { name: "cr.store.raft.process.commandcommit.latency-p99" },
+  },
+  "nodes.storage.4": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.rocksdb.read-amplification", title: "Read Amplification" },
+    ],
+  },
+  "nodes.storage.5": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.store.rocksdb.num-sstables", title: "SSTables" },
+    ],
+  },
+  "nodes.storage.6": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.sys.fd.open", title: "Open" },
+      { name: "cr.node.sys.fd.softlimit", title: "Limit" },
+    ],
+  },
+};
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;

@@ -20,6 +20,7 @@ import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
 import extend from "src/util/nextState";
+import DetailsTooltip from "src/views/cluster/containers/detailsTooltip";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
@@ -241,6 +242,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
             </div>
           </div>
         </section>
+        <DetailsTooltip />
       </div>
     );
   }

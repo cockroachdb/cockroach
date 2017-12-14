@@ -4,8 +4,42 @@ import _ from "lodash";
 import * as docsURL from "src/util/docs";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
+import { ChartConfig } from "src/util/charts";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+
+export const charts: ChartConfig = {
+  "nodes.overview.0": {
+    type: "metrics",
+    measure: "count",
+    metrics: [
+      { name: "cr.node.sql.select.count", title: "Total Reads" },
+      { name: "cr.node.sql.distsql.select.count", title: "DistSQL Reads" },
+      { name: "cr.node.sql.update.count", title: "Updates" },
+      { name: "cr.node.sql.insert.count", title: "Inserts" },
+      { name: "cr.node.sql.delete.count", title: "Deletes" },
+    ],
+  },
+  "nodes.overview.1": {
+    type: "nodes",
+    measure: "duration",
+    metric: { name: "cr.node.sql.service.latency-p99" },
+  },
+  "nodes.overview.2": {
+    type: "nodes",
+    measure: "count",
+    metric: { name: "cr.store.replicas" },
+  },
+  "nodes.overview.3": {
+    type: "metrics",
+    measure: "bytes",
+    metrics: [
+      { name: "cr.store.capacity", title: "Capacity" },
+      { name: "cr.store.capacity.available", title: "Available" },
+      { name: "cr.store.capacity.used", title: "Used" },
+    ],
+  },
+};
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;

@@ -106,7 +106,7 @@ function metricsQueryReducer(state: MetricsQuery, action: Action) {
  * MetricsQueries is a collection of individual MetricsQuery objects, indexed by
  * component id.
  */
-interface MetricQuerySet {
+export interface MetricQuerySet {
   [id: string]: MetricsQuery;
 }
 
