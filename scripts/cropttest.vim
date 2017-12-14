@@ -1,10 +1,9 @@
 " Vim syntax file
-" Language:         CockroachDB logic tests
+" Language:         CockroachDB opt tests
 " Maintainer:       Radu Berinde <radu@cockroachlabs.com>
 "
-" To use, copy the file to ~/.vim/syntax/
 " Recommended in .vimrc:
-"    autocmd BufNewFile,BufRead */sql/logictest/testdata/* set filetype=crlogictest tw=0
+"    autocmd BufNewFile,BufRead */sql/opt/testdata/* set filetype=cropttest tw=0
 
 if exists("b:current_syntax")
   finish
@@ -12,15 +11,12 @@ endif
 
 syn match Comment display '#.*$' contains=Todo
 
-syn match let     display '^let' skipwhite nextgroup=letVar
-syn match letVar  display '\$[a-zA-Z][a-zA-Z0-9_]*'
-
 syn match stmt     display '^statement' skipwhite nextgroup=stmtOk,stmtErr
 syn match stmtOk   contained display 'ok\|OK'
 syn match stmtErr  contained display 'error' skipwhite nextgroup=errorStr
 syn match errorStr contained display '.*$'
 
-syn match query           display '^query' skipwhite nextgroup=stmtErr,queryCols
+syn match query           display '^build-scalar[^ ]*' skipwhite nextgroup=stmtErr,queryCols
 syn match queryCols       contained display '[A-Z]\+' skipwhite nextgroup=queryKeyword
 syn keyword queryKeyword  contained nosort partialsort rowsort valuesort colnames trimdecimals
 
@@ -45,12 +41,10 @@ hi def link stmt          Special
 hi def link stmtOk        Identifier
 hi def link stmtErr       Identifier
 hi def link errorStr      Constant
-hi def link let           Special
 hi def link query         Special
 hi def link queryCols     Type
 hi def link queryKeyword  Special
 hi def link badWhitespace ErrorMsg
-hi letVar ctermFg=Red
 
 syn keyword Todo TODO XXX
 
@@ -90,4 +84,5 @@ hi def link sqlType	     Type
 hi def link sqlReserved  Keyword
 hi def link sqlKeyword	 Keyword
 
-let b:current_syntax = "crlogictest"
+let b:current_syntax = "cropttest"
+
