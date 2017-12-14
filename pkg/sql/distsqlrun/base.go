@@ -146,6 +146,35 @@ type RowSource interface {
 	ConsumerClosed()
 }
 
+// Run reads records from the source and outputs them to the receiver, properly
+// draining the source of metadata and closing both the source and receiver.
+func Run(ctx context.Context, src RowSource, dst RowReceiver) {
+	for {
+		row, meta := src.Next()
+		// Emit the row; stop if no more rows are needed.
+		if row != nil || !meta.Empty() {
+			switch dst.Push(row, meta) {
+			case NeedMoreRows:
+				continue
+			case DrainRequested:
+				src.ConsumerDone()
+				row = nil
+			case ConsumerClosed:
+				src.ConsumerClosed()
+				dst.ProducerDone()
+				return
+			}
+		}
+		if row == nil {
+			if !meta.Empty() {
+				DrainAndForwardMetadata(ctx, src, dst)
+			}
+			dst.ProducerDone()
+			return
+		}
+	}
+}
+
 // DrainAndForwardMetadata calls src.ConsumerDone() (thus asking src for
 // draining metadata) and then forwards all the metadata to dst.
 //

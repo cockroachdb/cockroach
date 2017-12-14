@@ -131,8 +131,7 @@ func TestTableReader(t *testing.T) {
 						nodeID: s.NodeID(),
 					}
 
-					buf := &RowBuffer{}
-					tr, err := newTableReader(&flowCtx, &ts, &c.post, buf)
+					tr, err := newTableReader(&flowCtx, &ts, &c.post, nil)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -141,7 +140,8 @@ func TestTableReader(t *testing.T) {
 					if rowSource {
 						out = tr
 					} else {
-						tr.Run(context.Background(), nil)
+						buf := &RowBuffer{}
+						Run(context.Background(), tr, buf)
 						if !buf.ProducerClosed {
 							t.Fatalf("output RowReceiver not closed")
 						}
@@ -220,8 +220,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 
 	for _, rowSource := range []bool{false, true} {
 		t.Run(fmt.Sprintf("row-source=%t", rowSource), func(t *testing.T) {
-			buf := &RowBuffer{}
-			tr, err := newTableReader(&flowCtx, &spec, &post, buf)
+			tr, err := newTableReader(&flowCtx, &spec, &post, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -230,7 +229,8 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 			if rowSource {
 				out = tr
 			} else {
-				tr.Run(context.Background(), nil)
+				buf := &RowBuffer{}
+				Run(context.Background(), tr, buf)
 				if !buf.ProducerClosed {
 					t.Fatalf("output RowReceiver not closed")
 				}
