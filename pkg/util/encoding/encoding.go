@@ -57,7 +57,7 @@ const (
 	durationMarker       byte = durationBigNegMarker + 1
 	durationBigPosMarker byte = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
 
-	decimalNaN              = durationBigPosMarker + 1
+	decimalNaN              = durationBigPosMarker + 1 // 24
 	decimalNegativeInfinity = decimalNaN + 1
 	decimalNegLarge         = decimalNegativeInfinity + 1
 	decimalNegMedium        = decimalNegLarge + 11
@@ -1954,18 +1954,23 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 
 // DecomposeKeyTokens breaks apart a key into its individual key-encoded values
 // and returns a slice of byte slices, one for each key-encoded value.
-func DecomposeKeyTokens(b []byte) ([][]byte, error) {
+// It also returns whether the key contains a NULL value.
+func DecomposeKeyTokens(b []byte) (tokens [][]byte, containsNull bool, err error) {
 	var out [][]byte
 
 	for len(b) > 0 {
 		tokenLen, err := PeekLength(b)
 		if err != nil {
-			return nil, err
+			return nil, false, err
+		}
+
+		if PeekType(b) == Null {
+			containsNull = true
 		}
 
 		out = append(out, b[:tokenLen])
 		b = b[tokenLen:]
 	}
 
-	return out, nil
+	return out, containsNull, nil
 }

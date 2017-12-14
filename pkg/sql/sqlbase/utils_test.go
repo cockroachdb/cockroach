@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -39,6 +40,12 @@ var tableNames = map[string]bool{
 // EncodeTestKey takes the short format representation of a key and transforms
 // it into an actual roachpb.Key. Refer to ShortToLongKeyFmt for more info. on
 // the short format.
+// All tokens are interpreted as UVarint (ascending) unless they satisfy:
+//    - '#' - interleaved sentinel
+//    - 's' first byte - string/bytes (ascending)
+//    - 'd' first byte - decimal (ascending)
+//    - NULLASC, NULLDESC, NOTNULLASC, NOTNULLDESC
+//    - PrefixEnd
 func EncodeTestKey(tb testing.TB, kvDB *client.DB, keyStr string) roachpb.Key {
 	var key []byte
 	tokens := strings.Split(keyStr, "/")
@@ -50,10 +57,31 @@ func EncodeTestKey(tb testing.TB, kvDB *client.DB, keyStr string) roachpb.Key {
 	tokens = tokens[1:]
 
 	for _, tok := range tokens {
+		if tok == "PrefixEnd" {
+			key = roachpb.Key(key).PrefixEnd()
+			continue
+		}
+
 		// Encode the table ID if the token is a table name.
 		if tableNames[tok] {
 			desc := GetTableDescriptor(kvDB, sqlutils.TestDB, tok)
 			key = encoding.EncodeUvarintAscending(key, uint64(desc.ID))
+			continue
+		}
+
+		switch tok[0] {
+		case 's':
+			key = encoding.EncodeStringAscending(key, tok[1:])
+			continue
+		case 'd':
+			dec, cond, err := apd.NewFromString(tok[1:])
+			if err != nil {
+				tb.Fatal(err)
+			}
+			if cond.Any() {
+				tb.Fatalf("encountered condition %s when parsing decimal", cond.String())
+			}
+			key = encoding.EncodeDecimalAscending(key, dec)
 			continue
 		}
 

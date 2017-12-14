@@ -1204,9 +1204,9 @@ func spanFromLogicalSpan(
 		}
 	}
 
-	// TightenStartKey is not needed here (unlike TightenEndKey) since
-	// start keys at this point cannot be generated with interleaved
-	// keys.
+	// AdjustStartKeyForInterleave is not needed here (unlike
+	// AdjustEndKeyForInterleave) since start keys at this point cannot be
+	// generated with interleaved keys.
 
 	lastPartInclusive := true
 	// Encode each logical part of the end key as span.EndKey.
@@ -1232,7 +1232,7 @@ func spanFromLogicalSpan(
 	}
 	// We tighten the end key to prevent reading interleaved children
 	// after the last parent key.
-	s.EndKey, err = sqlbase.TightenEndKey(tableDesc, index, s.EndKey, lastPartInclusive)
+	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc, index, s.EndKey, lastPartInclusive)
 
 	return s, err
 }
