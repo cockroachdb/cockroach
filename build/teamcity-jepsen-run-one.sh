@@ -98,7 +98,7 @@ else
     progress Creating archive from controller output
     # Now grab all the artifacts.
     # -h causes tar to follow symlinks; needed by the `latest` symlink.
-    ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log" >"${artifacts_dir}"/failure-logs.tbz || echo "Failed to copy the files." >&2
+    ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/" >"${artifacts_dir}"/failure-logs.tbz || echo "Failed to copy the files." >&2
 
     progress Resetting latest run for next test
     # Reset the link for the next test run.
