@@ -377,7 +377,7 @@ cdec21            DECIMAL(2,1)              true  NULL            {}
 cdecimal          DECIMAL                   true  NULL            {}
 cdecimal1         DECIMAL(1)                true  NULL            {}
 cdecimal21        DECIMAL(2,1)              true  NULL            {}
-cdoubleprecision  FLOAT                     true  NULL            {}
+cdoubleprecision  DOUBLE PRECISION          true  NULL            {}
 cfloat            FLOAT                     true  NULL            {}
 cfloat4           REAL                      true  NULL            {}
 cfloat8           DOUBLE PRECISION          true  NULL            {}

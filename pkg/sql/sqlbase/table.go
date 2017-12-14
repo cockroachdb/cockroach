@@ -39,17 +39,17 @@ import (
 )
 
 var nameToVisibleTypeMap = map[string]ColumnType_VisibleType{
-	"INTEGER":         ColumnType_INTEGER,
-	"INT4":            ColumnType_INTEGER,
-	"INT8":            ColumnType_BIGINT,
-	"INT64":           ColumnType_BIGINT,
-	"BIT":             ColumnType_BIT,
-	"INT2":            ColumnType_SMALLINT,
-	"SMALLINT":        ColumnType_SMALLINT,
-	"FLOAT4":          ColumnType_REAL,
-	"REAL":            ColumnType_REAL,
-	"FLOAT8":          ColumnType_DOUBLE_PRECISON,
-	"DOUBLE PRECISON": ColumnType_DOUBLE_PRECISON,
+	"INTEGER":          ColumnType_INTEGER,
+	"INT4":             ColumnType_INTEGER,
+	"INT8":             ColumnType_BIGINT,
+	"INT64":            ColumnType_BIGINT,
+	"BIT":              ColumnType_BIT,
+	"INT2":             ColumnType_SMALLINT,
+	"SMALLINT":         ColumnType_SMALLINT,
+	"FLOAT4":           ColumnType_REAL,
+	"REAL":             ColumnType_REAL,
+	"FLOAT8":           ColumnType_DOUBLE_PRECISION,
+	"DOUBLE PRECISION": ColumnType_DOUBLE_PRECISION,
 }
 
 func exprContainsVarsError(context string, Expr tree.Expr) error {
@@ -1542,8 +1542,8 @@ func EncodeSecondaryIndex(
 		return IndexEntry{}, err
 	}
 
-	// Add the extra columns - they are encoded ascendingly which is done by
-	// passing nil for the encoding directions.
+	// Add the extra columns - they are encoded in ascending order which is done
+	// by passing nil for the encoding directions.
 	extraKey, _, err := EncodeColumns(secondaryIndex.ExtraColumnIDs, nil,
 		colMap, values, nil)
 	if err != nil {
@@ -2534,7 +2534,7 @@ func TightenStartKey(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, er
 // For example, the parent span composed from the filter PK >= 1 and PK < 3 is
 //    /1 - /3
 // This reads all keys up to the first parent key for PK = 3. If parent had
-// interleaved tables and keys, it would unncessarily scan over interleaved
+// interleaved tables and keys, it would unnecessarily scan over interleaved
 // rows under PK2 (e.g. /2/#/5).
 // We can instead "tighten" the end key from /3 to /2/#.
 // TightenEndKey is idempotent upon successive invocation(s).
