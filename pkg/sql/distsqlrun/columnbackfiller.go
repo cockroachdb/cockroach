@@ -176,8 +176,14 @@ func (cb *columnBackfiller) runChunk(
 		requestedCols = append(requestedCols, tableDesc.Columns...)
 		requestedCols = append(requestedCols, cb.added...)
 		ru, err := sqlbase.MakeRowUpdater(
-			txn, &tableDesc, fkTables, cb.updateCols, requestedCols,
-			sqlbase.RowUpdaterOnlyColumns, &cb.alloc,
+			txn,
+			&tableDesc,
+			fkTables,
+			cb.updateCols,
+			requestedCols,
+			sqlbase.RowUpdaterOnlyColumns,
+			&cb.flowCtx.EvalCtx,
+			&cb.alloc,
 		)
 		if err != nil {
 			return err
@@ -239,7 +245,7 @@ func (cb *columnBackfiller) runChunk(
 				}
 			}
 			if _, err := ru.UpdateRow(
-				ctx, b, oldValues, updateValues, nil /* mon.BytesMonitor */, false, /* traceKV */
+				ctx, b, oldValues, updateValues, nil /* mon.BytesMonitor */, sqlbase.CheckFKs, false, /* traceKV */
 			); err != nil {
 				return err
 			}

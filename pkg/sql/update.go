@@ -121,8 +121,16 @@ func (p *planner) Update(
 	if err != nil {
 		return nil, err
 	}
-	ru, err := sqlbase.MakeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols,
-		requestedCols, sqlbase.RowUpdaterDefault, &p.alloc)
+	ru, err := sqlbase.MakeRowUpdater(
+		p.txn,
+		en.tableDesc,
+		fkTables,
+		updateCols,
+		requestedCols,
+		sqlbase.RowUpdaterDefault,
+		p.EvalContext(),
+		&p.alloc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +274,8 @@ func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(params.p.txn, params.EvalContext().Mon)
+	evalCtx := params.EvalContext()
+	return u.run.tw.init(params.p.txn, evalCtx.Mon, evalCtx)
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {
