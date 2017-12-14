@@ -583,9 +583,18 @@ func convertRecord(
 			if err != nil {
 				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
 			}
-			if err := ri.InsertRow(ctx, inserter(func(kv roachpb.KeyValue) {
-				kvBatch = append(kvBatch, kv)
-			}), row, true /* ignoreConflicts */, false /* traceKV */); err != nil {
+			// TODO(bram): Is the checking of FKs here required? If not, turning them
+			// off may provide a speed boost.
+			if err := ri.InsertRow(
+				ctx,
+				inserter(func(kv roachpb.KeyValue) {
+					kvBatch = append(kvBatch, kv)
+				}),
+				row,
+				true, /* ignoreConflicts */
+				sqlbase.CheckFKs,
+				false, /* traceKV */
+			); err != nil {
 				return errors.Wrapf(err, "insert row: %s: row %d", batch.file, rowNum)
 			}
 			if len(kvBatch) >= kvBatchSize {

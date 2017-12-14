@@ -285,12 +285,16 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 
-				rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false, alloc)
+				rd, err := sqlbase.MakeRowDeleter(
+					txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
+				)
 				if err != nil {
 					return err
 				}
 				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(txn, nil /* *mon.BytesMonitor */); err != nil {
+				if err := td.init(
+					txn, nil /* *mon.BytesMonitor */, nil, /* *tree.EvalContext */
+				); err != nil {
 					return err
 				}
 				resume, err = td.deleteIndex(

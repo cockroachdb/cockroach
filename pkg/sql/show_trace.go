@@ -94,6 +94,7 @@ WHERE message LIKE 'fetched: %'
    OR message LIKE 'output row: %'
    OR message LIKE 'execution failed: %'
    OR message LIKE 'r%: sending batch %'
+   OR message LIKE 'Cascading %'
 `
 	}
 
