@@ -9,8 +9,7 @@
 #include "key_manager.h"
 #include <cryptopp/modes.h>
 #include <google/protobuf/stubs/stringprintf.h>
-
-using google::protobuf::StringPrintf;
+#include "../fmt.h"
 
 static std::string kFilenamePlain = "plain";
 
@@ -34,7 +33,7 @@ static rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path, E
   // Check that the length is valid for AES.
   auto key_length = contents.size();
   if (key_length != 16 && key_length != 24 && key_length != 32) {
-    return rocksdb::Status::InvalidArgument(StringPrintf(
+    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
         "key in file %s is %llu bytes long, AES keys can be 16, 24, or 32 bytes", path.c_str(), key_length));
   }
 

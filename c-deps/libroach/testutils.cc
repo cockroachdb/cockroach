@@ -16,8 +16,7 @@
 #include <gtest/gtest.h>
 #include <rocksdb/status.h>
 #include <string>
-
-using google::protobuf::StringPrintf;
+#include "fmt.h"
 
 namespace testutils {
 
@@ -27,18 +26,18 @@ rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg)
     if (status.ok()) {
       return rocksdb::Status::OK();
     }
-    return rocksdb::Status::InvalidArgument(StringPrintf("expected success, got error \"%s\"", status.getState()));
+    return rocksdb::Status::InvalidArgument(fmt::StringPrintf("expected success, got error \"%s\"", status.getState()));
   }
 
   // Expected failure.
   if (status.ok()) {
-    return rocksdb::Status::InvalidArgument(StringPrintf("expected error \"%s\", got success", err_msg));
+    return rocksdb::Status::InvalidArgument(fmt::StringPrintf("expected error \"%s\", got success", err_msg));
   }
   if (strcmp(err_msg, status.getState()) == 0) {
     return rocksdb::Status::OK();
   }
   return rocksdb::Status::InvalidArgument(
-      StringPrintf("expected error \"%s\", got \"%s\"", err_msg, status.getState()));
+      fmt::StringPrintf("expected error \"%s\", got \"%s\"", err_msg, status.getState()));
 }
 
 rocksdb::Status compareErrorMessage(rocksdb::Status status, std::string err_msg) {
