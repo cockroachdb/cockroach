@@ -19,7 +19,7 @@ syn match   messageGoID         contained display '[0-9a-fA-F]* ' nextgroup=mess
 
 syn match   messageFile         contained display '[_./0-9a-zA-Z]*:\d*  ' nextgroup=messageTags
 
-syn match   messageTags         contained display '\[[^.\]]*\] '
+syn match   messageTags         contained display '\[[^\]]*\] '
 
 syn match   messageNumber       '0x[0-9a-fA-F]*\|\[<[0-9a-f]\+>\]\|\<\d[0-9a-fA-F]*'
 
