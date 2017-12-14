@@ -88,7 +88,8 @@ func (p *planner) Delete(
 		return nil, err
 	}
 	rd, err := sqlbase.MakeRowDeleter(
-		p.txn, en.tableDesc, fkTables, requestedCols, sqlbase.CheckFKs, &p.alloc)
+		p.txn, en.tableDesc, fkTables, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +149,8 @@ func (d *deleteNode) startExec(params runParams) error {
 		return d.fastDelete(params, scan)
 	}
 
-	return d.run.tw.init(d.p.txn, params.EvalContext().Mon)
+	evalCtx := params.EvalContext()
+	return d.run.tw.init(d.p.txn, evalCtx.Mon, evalCtx)
 }
 
 func (d *deleteNode) Next(params runParams) (bool, error) {
@@ -236,7 +238,8 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
 		return err
 	}
 
-	if err := d.tw.init(params.p.txn, params.EvalContext().Mon); err != nil {
+	evalCtx := params.EvalContext()
+	if err := d.tw.init(params.p.txn, evalCtx.Mon, evalCtx); err != nil {
 		return err
 	}
 	if err := params.p.cancelChecker.Check(); err != nil {

@@ -83,8 +83,11 @@ ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE CASCA
 statement ok
 ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
-statement error pq: unsupported: ON UPDATE CASCADE
+statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE CASCADE
+
+statement ok
+ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
 statement error pq: unsupported: ON DELETE SET NULL
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE SET NULL

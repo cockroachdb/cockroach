@@ -65,7 +65,7 @@ type FKCheck int
 
 const (
 	// CheckDeletes checks if rows reference a changed value.
-	CheckDeletes = iota
+	CheckDeletes FKCheck = iota
 	// CheckInserts checks if a new value references an existing row.
 	CheckInserts
 	// CheckUpdates checks all references (CheckDeletes+CheckInserts).
@@ -322,6 +322,7 @@ func (f *fkBatchChecker) runCheck(
 			// If we're inserting, then there's a violation if the scan found nothing.
 			if fk.rf.kvEnd {
 				fkValues := make(tree.Datums, fk.prefixLen)
+
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 					fkValues[valueIdx] = newRow[fk.ids[colID]]
 				}
@@ -349,6 +350,7 @@ func (f *fkBatchChecker) runCheck(
 			log.Fatalf(ctx, "impossible case: baseFKHelper has dir=%v", fk.dir)
 		}
 	}
+
 	return nil
 }
 
