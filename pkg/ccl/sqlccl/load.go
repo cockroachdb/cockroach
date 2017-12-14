@@ -302,7 +302,7 @@ func insertStmtToKVs(
 		if err != nil {
 			return errors.Wrapf(err, "process insert %q", row)
 		}
-		if err := ri.InsertRow(ctx, b, row, true, false /* traceKV */); err != nil {
+		if err := ri.InsertRow(ctx, b, row, true, sqlbase.CheckFKs, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert %q", row)
 		}
 	}

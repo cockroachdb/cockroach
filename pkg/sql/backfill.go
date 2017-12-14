@@ -284,7 +284,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 
-				rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false, alloc)
+				rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, sqlbase.SkipFKs, alloc)
 				if err != nil {
 					return err
 				}

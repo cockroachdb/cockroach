@@ -239,7 +239,7 @@ func (cb *columnBackfiller) runChunk(
 				}
 			}
 			if _, err := ru.UpdateRow(
-				ctx, b, oldValues, updateValues, nil /* mon.BytesMonitor */, false, /* traceKV */
+				ctx, b, oldValues, updateValues, nil /* mon.BytesMonitor */, sqlbase.CheckFKs, false, /* traceKV */
 			); err != nil {
 				return err
 			}

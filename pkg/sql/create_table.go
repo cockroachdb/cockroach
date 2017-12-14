@@ -266,7 +266,7 @@ func (n *createTableNode) FastPathResults() (int, bool) {
 //    CREATE TABLE foo (a INT, b INT, CHECK (a < 1))
 //
 // Note some SQL databases require that a constraint attached to a column to
-// refer only to the column it is attached to. We follow Postgres's behavior,
+// refer only to the column it is attached to. We follow Postgres' behavior,
 // however, in omitting this restriction by blindly hoisting all column
 // constraints. For example, the following table definition is accepted in
 // CockroachDB and Postgres, but not necessarily other SQL databases:
@@ -467,7 +467,8 @@ func resolveFK(
 		return pgerror.Unimplemented(feature, feature)
 	}
 	if d.Actions.Update != tree.NoAction &&
-		d.Actions.Update != tree.Restrict {
+		d.Actions.Update != tree.Restrict &&
+		d.Actions.Update != tree.Cascade {
 		feature := fmt.Sprintf("unsupported: ON UPDATE %s", d.Actions.Update)
 		return pgerror.Unimplemented(feature, feature)
 	}

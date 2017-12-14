@@ -348,7 +348,7 @@ func truncateTableInChunks(
 			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.Name, row, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false, alloc)
+			rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, sqlbase.SkipFKs, alloc)
 			if err != nil {
 				return err
 			}
