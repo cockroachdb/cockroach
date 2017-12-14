@@ -103,12 +103,15 @@ func ClearRange(
 	// instead of using a range tombstone (inefficient for small ranges).
 	if total := statsDelta.Total(); total < clearRangeBytesThreshold {
 		log.VEventf(ctx, 2, "delta=%d < threshold=%d; using non-range clear", total, clearRangeBytesThreshold)
-		return pd, batch.Iterate(
+		if err := batch.Iterate(
 			from, to,
 			func(kv engine.MVCCKeyValue) (bool, error) {
 				return false, batch.Clear(kv.Key)
 			},
-		)
+		); err != nil {
+			return result.Result{}, err
+		}
+		return pd, nil
 	}
 
 	// Otherwise, clear the key span using engine.ClearRange.
