@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -113,6 +114,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas)
 	}
+	fmt.Println("SENT SNAPSHOT", id)
 	err := repl.sendSnapshot(ctx, repDesc, snapTypeRaft, SnapshotRequest_RECOVERY)
 	// Report the snapshot status to Raft, which expects us to do this once
 	// we finish sending the snapshot.

@@ -950,6 +950,7 @@ func TestStoreRangeSplitAfterLargeSnapshot(t *testing.T) {
 	const crashingNode = 2
 
 	// Wait for initial splits.
+	t.Log("waiting for initial splits")
 	forAllLiveStores(func(store *storage.Store) {
 		store.SetRaftSnapshotQueueActive(true)
 		store.SetSplitQueueActive(true)
@@ -959,7 +960,8 @@ func TestStoreRangeSplitAfterLargeSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// First, do a write; we'll use this to determine when the dust has settled.
+	// Then do a write; we'll use this to determine when the dust has settled.
+	t.Log("performing first write")
 	keyPrefix := append(keys.UserTableDataMin, []byte("key")...)
 	repl := store0.LookupReplica(roachpb.RKey(keyPrefix), nil)
 	rangeID := repl.RangeID
@@ -969,25 +971,32 @@ func TestStoreRangeSplitAfterLargeSnapshot(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Replicate to the other nodes.
+	// Replicate the range we'll play with to the other nodes.
+	t.Log("replicating range")
 	mtc.replicateRange(rangeID, behindNode, crashingNode)
 	mtc.waitForValues(keyPrefix, []int64{1, 1, 1})
 
-	// Turn off replica scanner. We'll control queues directly from now on.
+	// Fill the range without allowing splits so that it will try to split once
+	// the splitQueue is re-enabled. Fill it past the snapshot size limit
+	// enforced in Replica.GetSnapshot. We do this before stopping behindNode so
+	// that the quotaPool does not throttle progress.
+	t.Log("filling range")
+	forAllLiveStores(func(store *storage.Store) {
+		store.SetSplitQueueActive(false)
+	})
+	fillRange(t, store0, rangeID, keyPrefix, 2*maxBytes+1)
+
+	// Turn off replica scanner and snapshot queue. We'll control queues
+	// directly from now on.
 	forAllLiveStores(func(store *storage.Store) {
 		store.SetReplicaScannerActive(false)
-		store.SetSplitQueueActive(false)
 		store.SetRaftSnapshotQueueActive(false)
 	})
 
-	// Fill the range so that it will try to split once the splitQueue is
-	// re-enabled. Fill it past the snapshot size limit enforced in
-	// Replica.GetSnapshot. We do this before stopping behindNode so that
-	// the quotaPool does not throttle progress.
-	fillRange(t, store0, rangeID, keyPrefix, 2*maxBytes+1)
-
 	// Stop behindNode so it falls behind and will require a snapshot.
+	t.Log("letting one follower fall behind")
 	mtc.stopStore(behindNode)
+	mtc.advanceClock(context.Background())
 
 	// Let behindNode fall behind.
 	if _, pErr := client.SendWrappedWith(context.Background(), store0, header, incArgs); pErr != nil {
@@ -1003,22 +1012,33 @@ func TestStoreRangeSplitAfterLargeSnapshot(t *testing.T) {
 	}
 	truncArgs := truncateLogArgs(index+1, rangeID)
 	truncArgs.Key = repl.Desc().StartKey.AsRawKey()
-	if _, err := client.SendWrappedWith(context.Background(), store0, header, truncArgs); err != nil {
-		t.Fatal(err)
+	if _, pErr := client.SendWrappedWith(context.Background(), store0, header, truncArgs); pErr != nil {
+		t.Fatal(pErr)
 	}
 
-	// Stop crashingNode so that we lose quorum and can no longer split.
-	// Bring behindNode back up.
-	mtc.stopStore(crashingNode)
-	mtc.restartStore(behindNode)
+	// The range can still make forward progress.
+	if _, pErr := client.SendWrappedWith(context.Background(), store0, header, incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	mtc.waitForValues(keyPrefix, []int64{3, 1, 3})
 
 	// Determine the range count.
 	prevRangeCount := store0.ReplicaCount()
 
-	// Reduce the queues and reduce the split queue timeout so it times out due
+	// Stop crashingNode so that we lose quorum and can no longer split.
+	// Bring behindNode back up.
+	t.Log("killing the other follower")
+	fmt.Println("killing the other follower")
+	// time.Sleep(2 * time.Second)
+	mtc.stopStore(crashingNode)
+	mtc.restartStore(behindNode)
+
+	// Reactivate the split queues and reduce its timeout so it times out due
 	// to a lack of quorum faster. Force a split, which should fail because it
 	// cannot achieve quorum. This in turn should set the permitLargeSnapshot
 	// flag.
+	fmt.Println("attempting a split without quorum; this should fail")
+	t.Log("attempting a split without quorum; this should fail")
 	forAllLiveStores(func(store *storage.Store) {
 		store.SetSplitQueueProcessTimeout(1 * time.Second)
 		store.SetSplitQueueActive(true)
@@ -1033,28 +1053,17 @@ func TestStoreRangeSplitAfterLargeSnapshot(t *testing.T) {
 
 	// Now that the permitLargeSnapshot flag is set, we should see
 	// the range recover after behindNode is sent a snapshot.
+	t.Log("waiting for large snapshot to succeed")
 	forAllLiveStores(func(store *storage.Store) {
 		store.SetRaftSnapshotQueueActive(true)
 		store.ForceRaftSnapshotQueueProcess()
 	})
-	testutils.SucceedsSoon(t, func() error {
-		behindRepl := mtc.stores[behindNode].LookupReplica(roachpb.RKey(keyPrefix), nil)
-		if behindRepl == nil {
-			return errors.Errorf("replica not caught up")
-		}
-		behindIndex, err := behindRepl.GetLastIndex()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if behindIndex < index {
-			return errors.Errorf("replica not caught up")
-		}
-		return nil
-	})
+	mtc.waitForValues(keyPrefix, []int64{3, 3, 3})
 
 	// Once the range has a majority of up-to-date nodes, it should be
 	// able to split. We first increment the manual clock to make sure
 	// any dangling intents left by previous splits expire.
+	t.Log("waiting for split to succeed")
 	mtc.manualClock.Increment(2*base.DefaultHeartbeatInterval.Nanoseconds() + 1)
 	forAllLiveStores(func(store *storage.Store) {
 		store.ForceSplitScanAndProcess()
@@ -1065,6 +1074,10 @@ func TestStoreRangeSplitAfterLargeSnapshot(t *testing.T) {
 		}
 		return nil
 	})
+
+	// Per the contract on multiTestContext.stopStore, we need to restart the
+	// stopped store before calling multiTestContext.Stop.
+	mtc.restartStore(crashingNode)
 }
 
 // TestStoreRangeSystemSplits verifies that splits are based on the contents of
