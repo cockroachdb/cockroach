@@ -7,9 +7,9 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "key_manager.h"
-#include <aes.h>  // CryptoPP
+#include <cryptopp/aes.h>
+#include <cryptopp/modes.h>
 #include <google/protobuf/stubs/stringprintf.h>
-#include <modes.h>  // CryptoPP
 
 using google::protobuf::StringPrintf;
 

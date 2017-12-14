@@ -7,9 +7,9 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "key.h"
-#include <filters.h>  // CryptoPP
-#include <hex.h>      // CryptoPP
-#include <sha.h>      // CryptoPP
+#include <cryptopp/filters.h>
+#include <cryptopp/hex.h>
+#include <cryptopp/sha.h>
 
 std::string KeyHash(const std::string& k) {
   std::string value;
