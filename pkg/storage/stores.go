@@ -447,7 +447,7 @@ func SynthesizeClusterVersionFromEngines(
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
 		for _, v := range []roachpb.Version{cv.MinimumVersion, cv.UseVersion} {
 			if serverVersion.Less(v) {
-				return cluster.ClusterVersion{}, errors.Errorf("engine %s requires at least v%s, but running version is %s",
+				return cluster.ClusterVersion{}, errors.Errorf("store %s requires at least cockroach version v%s, but running version is v%s",
 					eng, v, serverVersion)
 			}
 		}
@@ -484,9 +484,9 @@ func SynthesizeClusterVersionFromEngines(
 		// may not yet have picked up the final versions we're actually planning
 		// to use.
 		if v.Version.Less(minSupportedVersion) {
-			return cluster.ClusterVersion{}, errors.Errorf("engine %s at v%s too old for running version %s "+
-				"(requires at least v%s)", v.origin, v.Version, serverVersion,
-				minSupportedVersion)
+			return cluster.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
+				"is too old for running version v%s (which requires data from v%s or later)",
+				v.origin, v.Version, serverVersion, minSupportedVersion)
 		}
 	}
 	// Write the "actual" version back to all stores. This is almost always a
