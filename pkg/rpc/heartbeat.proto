@@ -67,3 +67,6 @@ message PingResponse {
 service Heartbeat {
   rpc Ping (PingRequest) returns (PingResponse) {}
 }
+service TestingHeartbeatStream {
+  rpc PingStream (stream PingRequest) returns (stream PingResponse) {}
+}
