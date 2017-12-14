@@ -2087,8 +2087,13 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 
 // shouldUseDistSQL determines whether we should use DistSQL for a plan, based
 // on the session settings.
-func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, error) {
-	distSQLMode := planner.session.DistSQLMode
+func shouldUseDistSQL(
+	ctx context.Context,
+	distSQLMode DistSQLExecMode,
+	dp *DistSQLPlanner,
+	planner *planner,
+	plan planNode,
+) (bool, error) {
 	if distSQLMode == DistSQLOff {
 		return false, nil
 	}
@@ -2111,7 +2116,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 	} else {
 		// Trigger limit propagation.
 		planner.setUnlimited(plan)
-		distribute, err = e.distSQLPlanner.CheckSupport(plan)
+		distribute, err = dp.CheckSupport(plan)
 	}
 
 	if err != nil {
@@ -2120,12 +2125,12 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 			return false, err
 		}
 		// Don't use distSQL for this request.
-		log.VEventf(planner.session.Ctx(), 1, "query not supported for distSQL: %s", err)
+		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
 		return false, nil
 	}
 
 	if distSQLMode == DistSQLAuto && !distribute {
-		log.VEventf(planner.session.Ctx(), 1, "not distributing query")
+		log.VEventf(ctx, 1, "not distributing query")
 		return false, nil
 	}
 
@@ -2175,7 +2180,9 @@ func (e *Executor) execStmt(
 		return err
 	}
 
-	useDistSQL, err := e.shouldUseDistSQL(planner, plan)
+	useDistSQL, err := shouldUseDistSQL(
+		session.Ctx(), session.DistSQLMode, e.distSQLPlanner, planner, plan,
+	)
 	if err != nil {
 		return err
 	}
