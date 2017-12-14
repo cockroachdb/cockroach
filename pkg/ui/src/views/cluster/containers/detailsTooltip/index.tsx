@@ -85,13 +85,16 @@ class DetailsTooltip extends React.Component<DetailsTooltipProps, {}> {
     if (isMetricsChart(currentChart)) {
       metrics = currentChart.metrics
         .map(({ title }, i) => ({ title, datapoints: data[i].datapoints }))
-        .filter(({ datapoints} ) => datapoints && datapoints.length)
         .map(({ title, datapoints }, i) => {
-          const index = bisect(datapoints, moment(hoverTime).valueOf());
+          let value = "-";
+          if (datapoints && datapoints.length) {
+            const index = bisect(datapoints, moment(hoverTime).valueOf());
+            value = formatValue(datapoints[index].value);
+          }
           return {
             title,
             color: seriesPalette[i], // TODO(couchand): this seems hacky.
-            value: formatValue(datapoints[index].value),
+            value,
           };
         });
     } else if (isNodesChart(currentChart)) {

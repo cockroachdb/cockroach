@@ -4,6 +4,7 @@ import moment from "moment";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
+import * as protos from  "src/js/protos";
 import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
@@ -16,6 +17,8 @@ import { MetricsDataComponentProps } from "src/views/shared/components/metricQue
 import Visualization from "src/views/cluster/components/visualization";
 import { NanoToMilli } from "src/util/convert";
 
+type TSDatapoint = protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties;
+
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
   subtitle?: string;
@@ -26,6 +29,36 @@ interface LineGraphProps extends MetricsDataComponentProps {
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
   chartKey?: string;
+}
+
+// Find which data point is closest to a specific time.
+function bisectSeries(datapoints: TSDatapoint[], time: number) {
+  if (!datapoints || datapoints.length === 0) {
+    return;
+  }
+
+  const series = datapoints.map((d) => NanoToMilli(d.timestamp_nanos.toNumber()));
+
+  const right = d3.bisectRight(series, time);
+  const left = right - 1;
+
+  let index = 0;
+
+  if (right >= series.length) {
+    // We're hovering over the rightmost point.
+    index = left;
+  } else if (left < 0) {
+    // We're hovering over the leftmost point.
+    index = right;
+  } else {
+    // The general case: we're hovering somewhere over the middle.
+    const leftDistance = time - series[left];
+    const rightDistance = series[right] - time;
+
+    index = leftDistance < rightDistance ? left : right;
+  }
+
+  return moment(new Date(series[index]));
 }
 
 /**
@@ -76,16 +109,8 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   mouseMove = (e: any) => {
-    // TODO(couchand): handle the following cases:
-    //   - first series is missing data points
-    //   - series are missing data points at different timestamps
-    if (!this.props.data.results) {
-      return;
-    }
-
-    // TODO(couchand): get rid of this ugly hack
-    const datapoints = this.props.data.results[0].datapoints || this.props.data.results[1].datapoints;
-    if (!datapoints) {
+    const { results: metrics } = this.props.data;
+    if (!metrics) {
       return;
     }
 
@@ -97,34 +122,15 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     // Find the time value of the coordinate by asking the scale to invert the value.
     const t = Math.floor(timeScale.invert(x));
 
-    // Find which data point is closest to the x-coordinate.
-    let result: moment.Moment;
-    if (datapoints.length) {
-      const series: any = datapoints.map((d: any) => NanoToMilli(d.timestamp_nanos.toNumber()));
-
-      const right = d3.bisectRight(series, t);
-      const left = right - 1;
-
-      let index = 0;
-
-      if (right >= series.length) {
-        // We're hovering over the rightmost point.
-        index = left;
-      } else if (left < 0) {
-        // We're hovering over the leftmost point.
-        index = right;
-      } else {
-        // The general case: we're hovering somewhere over the middle.
-        const leftDistance = t - series[left];
-        const rightDistance = series[right] - t;
-
-        index = leftDistance < rightDistance ? left : right;
-      }
-
-      result = moment(new Date(series[index]));
+    let candidate = 0;
+    let hoverTime;
+    // Find first series with a successful bisect.
+    while (!hoverTime && candidate < metrics.length) {
+      hoverTime = bisectSeries(metrics[candidate].datapoints, t);
+      candidate += 1;
     }
 
-    if (!this.props.hoverState || !result) {
+    if (!this.props.hoverState || !hoverTime) {
       return;
     }
 
@@ -132,10 +138,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     const positionY = e.clientY + window.scrollY;
 
     // Only dispatch if we have something to change to avoid action spamming.
-    if (this.props.hoverState.hoverChart !== this.props.chartKey || !result.isSame(this.props.hoverState.hoverTime) || this.props.hoverState.x !== positionX || this.props.hoverState.y !== positionY) {
+    if (this.props.hoverState.hoverChart !== this.props.chartKey || !hoverTime.isSame(this.props.hoverState.hoverTime) || this.props.hoverState.x !== positionX || this.props.hoverState.y !== positionY) {
       this.props.hoverOn({
         hoverChart: this.props.chartKey,
-        hoverTime: result,
+        hoverTime,
         x: positionX,
         y: positionY,
       });
