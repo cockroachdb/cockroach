@@ -116,6 +116,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		testutils.NewNodeTestBaseContext(),
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		rttc.stopper,
+		&cluster.MakeTestingClusterSettings().Version,
 	)
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
 	rttc.gossip = gossip.NewTest(

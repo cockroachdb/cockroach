@@ -36,6 +36,7 @@ const (
 	VersionMVCCNetworkStats
 	VersionMeta2Splits
 	VersionRPCNetworkStats
+	VersionRPCVersionCheck
 
 	// Add new versions here (step one of two)
 
@@ -96,6 +97,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionRPCNetworkStats is https://github.com/cockroachdb/cockroach/pull/19897.
 		Key:     VersionRPCNetworkStats,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 4},
+	},
+	{
+		// VersionRPCVersionCheck is https://github.com/cockroachdb/cockroach/pull/20587.
+		Key:     VersionRPCVersionCheck,
+		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 5},
 	},
 
 	// Add new versions here (step two of two).

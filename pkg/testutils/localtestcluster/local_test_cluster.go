@@ -97,7 +97,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 
 	ltc.tester = t
 	ltc.Stopper = stop.NewStopper()
-	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper)
+	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper, &cfg.Settings.Version)
 	c := &rpcContext.ClusterID
 	server := rpc.NewServer(rpcContext) // never started
 	ltc.Gossip = gossip.New(ambient, c, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry())
