@@ -32,9 +32,9 @@ export class HoverState {
   // What point in time are we hovering over?
   hoverTime: moment.Moment;
 
-  // The page x-coordinate of the mouse.
+  // The x-coordinate of the mouse relative to the page.
   x: number;
-  // The page y-coordinate of the mouse.
+  // The y-coordinate of the mouse relative to the page.
   y: number;
 }
 
