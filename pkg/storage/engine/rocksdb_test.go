@@ -745,6 +745,10 @@ func TestRocksDBTimeBound(t *testing.T) {
 	}
 }
 
+func key(s string) MVCCKey {
+	return MakeMVCCMetadataKey([]byte(s))
+}
+
 // Regression test for https://github.com/facebook/rocksdb/issues/2752. Range
 // deletion tombstones between different snapshot stripes are not stored in
 // order, so the first tombstone of each snapshot stripe should be checked as a
@@ -766,9 +770,6 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 	}
 	defer db.Close()
 
-	key := func(s string) MVCCKey {
-		return MakeMVCCMetadataKey([]byte(s))
-	}
 	if err := db.Put(key("a"), []byte("a")); err != nil {
 		t.Fatal(err)
 	}
@@ -804,4 +805,112 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 		t.Fatalf("unexpected key: %s", iter.Key())
 	}
 	iter.Close()
+}
+
+func createTestSSTableInfos() SSTableInfos {
+	ssti := SSTableInfos{
+		// Level 0.
+		{Level: 0, Size: 20, Start: key("a"), End: key("z")},
+		{Level: 0, Size: 15, Start: key("a"), End: key("k")},
+		// Level 1.
+		{Level: 1, Size: 200, Start: key("a"), End: key("j")},
+		{Level: 1, Size: 100, Start: key("k"), End: key("o")},
+		{Level: 1, Size: 100, Start: key("r"), End: key("t")},
+		// Level 2.
+		{Level: 2, Size: 201, Start: key("a"), End: key("c")},
+		{Level: 2, Size: 200, Start: key("d"), End: key("f")},
+		{Level: 2, Size: 300, Start: key("h"), End: key("r")},
+		{Level: 2, Size: 405, Start: key("s"), End: key("z")},
+		// Level 3.
+		{Level: 3, Size: 667, Start: key("a"), End: key("c")},
+		{Level: 3, Size: 230, Start: key("d"), End: key("f")},
+		{Level: 3, Size: 332, Start: key("h"), End: key("i")},
+		{Level: 3, Size: 923, Start: key("k"), End: key("n")},
+		{Level: 3, Size: 143, Start: key("n"), End: key("o")},
+		{Level: 3, Size: 621, Start: key("p"), End: key("s")},
+		{Level: 3, Size: 411, Start: key("u"), End: key("x")},
+		// Level 4.
+		{Level: 4, Size: 215, Start: key("a"), End: key("b")},
+		{Level: 4, Size: 211, Start: key("b"), End: key("d")},
+		{Level: 4, Size: 632, Start: key("e"), End: key("f")},
+		{Level: 4, Size: 813, Start: key("f"), End: key("h")},
+		{Level: 4, Size: 346, Start: key("h"), End: key("j")},
+		{Level: 4, Size: 621, Start: key("j"), End: key("l")},
+		{Level: 4, Size: 681, Start: key("m"), End: key("o")},
+		{Level: 4, Size: 521, Start: key("o"), End: key("r")},
+		{Level: 4, Size: 135, Start: key("r"), End: key("t")},
+		{Level: 4, Size: 622, Start: key("t"), End: key("v")},
+		{Level: 4, Size: 672, Start: key("x"), End: key("z")},
+	}
+	sort.Sort(ssti)
+	return ssti
+}
+
+func TestSSTableInfosByLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ssti := NewSSTableInfosByLevel(createTestSSTableInfos())
+
+	// First, verify that each level is sorted by start key, not size.
+	for level, l := range ssti.levels {
+		if level == 0 {
+			continue
+		}
+		lastInfo := l[0]
+		for _, info := range l[1:] {
+			if !lastInfo.Start.Less(info.Start) {
+				t.Errorf("sort failed (%s >= %s) for level %d", lastInfo.Start, info.Start, level)
+			}
+		}
+	}
+	if a, e := ssti.MaxLevel(), 4; a != e {
+		t.Errorf("expected MaxLevel() == %d; got %d", e, a)
+	}
+
+	// Next, verify various contiguous overlap scenarios.
+	testCases := []struct {
+		span        roachpb.Span
+		expMaxLevel int
+	}{
+		// The full a-z span overlaps more than two SSTables at all levels L1-L4
+		{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}, expMaxLevel: 0},
+		// The a-j span overlaps the first three SSTables in L2, so max level is L1.
+		{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("j")}, expMaxLevel: 1},
+		// The k-o span overlaps only two adjacent L4 SSTs: j-l & m-o.
+		{span: roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("o")}, expMaxLevel: 4},
+		// The K0-o0 span hits three SSTs in L4: j-l, m-o, & o-r.
+		{span: roachpb.Span{Key: roachpb.Key("k0"), EndKey: roachpb.Key("o0")}, expMaxLevel: 3},
+		// The k-z span overlaps the last 4 SSTs in L3.
+		{span: roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("z")}, expMaxLevel: 2},
+		// The c-c0 span overlaps only the second L4 SST.
+		{span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("c0")}, expMaxLevel: 4},
+		// The a-f span full overlaps the first three L4 SSTs.
+		{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("f")}, expMaxLevel: 3},
+		// The a-d0 span only overlaps the first two L4 SSTs.
+		{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d0")}, expMaxLevel: 4},
+		// The a-e span only overlaps the first two L4 SSTs. It only is adjacent to the 3rd.
+		{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("e")}, expMaxLevel: 4},
+		// The a-d span overlaps fully the first two L4 SSTs.
+		{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}, expMaxLevel: 4},
+		// The a-a0 span overlaps only the first L4 SST.
+		{span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("a0")}, expMaxLevel: 4},
+		// The 0-1 span doesn't overlap any L4 SSTs.
+		{span: roachpb.Span{Key: roachpb.Key("0"), EndKey: roachpb.Key("1")}, expMaxLevel: 4},
+		// The Z-a span doesn't overlap any L4 SSTs, just touches the start of the first.
+		{span: roachpb.Span{Key: roachpb.Key("Z"), EndKey: roachpb.Key("a")}, expMaxLevel: 4},
+		// The Z-a0 span overlaps only the first L4 SST.
+		{span: roachpb.Span{Key: roachpb.Key("Z"), EndKey: roachpb.Key("a0")}, expMaxLevel: 4},
+		// The z-z0 span doesn't overlap any L4 SSTs, just touches the end of the last.
+		{span: roachpb.Span{Key: roachpb.Key("z"), EndKey: roachpb.Key("z0")}, expMaxLevel: 4},
+		// The y-z0 span overlaps the last L4 SST.
+		{span: roachpb.Span{Key: roachpb.Key("y"), EndKey: roachpb.Key("z0")}, expMaxLevel: 4},
+	}
+
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("%s-%s", test.span.Key, test.span.EndKey), func(t *testing.T) {
+			maxLevel := ssti.MaxLevelSpanOverlapsContiguousSSTables(test.span)
+			if test.expMaxLevel != maxLevel {
+				t.Errorf("expected max level %d; got %d", test.expMaxLevel, maxLevel)
+			}
+		})
+	}
 }
