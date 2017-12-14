@@ -124,6 +124,27 @@ func (p *planner) printForeignKeyConstraint(
 	return nil
 }
 
+// showCreateSequence returns a valid SQL representation of the
+// CREATE SEQUENCE statement used to create the given sequence.
+func (p *planner) showCreateSequence(
+	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
+) (string, error) {
+	var buf bytes.Buffer
+	buf.WriteString("CREATE SEQUENCE ")
+	tn.Format(&buf, tree.FmtSimple)
+	// TODO(vilterp): how to avoid leaving out opts as they're added?
+	// how to test that this parses?
+	opts := desc.SequenceOpts
+	buf.WriteString(fmt.Sprintf(" MINVALUE %d", opts.MinValue))
+	buf.WriteString(fmt.Sprintf(" MAXVALUE %d", opts.MaxValue))
+	buf.WriteString(fmt.Sprintf(" INCREMENT %d", opts.Increment))
+	buf.WriteString(fmt.Sprintf(" START %d", opts.Start))
+	if opts.Cycle {
+		buf.WriteString(" CYCLE")
+	}
+	return buf.String(), nil
+}
+
 // showCreateTable returns a valid SQL representation of the CREATE
 // TABLE statement used to create the given table.
 //
