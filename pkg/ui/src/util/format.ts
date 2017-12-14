@@ -1,3 +1,5 @@
+import d3 from "d3";
+
 export const kibi = 1024;
 const byteUnits: string[] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
 const durationUnits: string[] = ["ns", "µs", "ms", "s"];
@@ -81,4 +83,23 @@ export function Duration(nanoseconds: number): string {
   const scale = ComputePrefixExponent(nanoseconds, 1000, durationUnits);
   const unitVal = nanoseconds / Math.pow(1000, scale);
   return unitVal.toFixed(1) + " " + durationUnits[scale];
+}
+
+const metricFormat = d3.format(".4s");
+const decimalFormat = d3.format(".4f");
+
+/**
+ *  Count creates a string representation for a count.
+ *
+ *  For numbers larger than 1, the tooltip displays fractional values with
+ *  metric multiplicative prefixes (e.g. kilo, mega, giga). For numbers smaller
+ *  than 1, we simply display the fractional value without converting to a
+ *  fractional metric prefix; this is because the use of fractional metric
+ *  prefixes (i.e. milli, micro, nano) have proved confusing to users.
+ */
+export function Count(n: number) {
+  if (n < 1) {
+    return decimalFormat(n);
+  }
+  return metricFormat(n);
 }
