@@ -47,6 +47,22 @@ func (e *expr) opClass() operatorClass {
 	return operatorTab[e.op].class
 }
 
+// Applies normalization rules to an expression.
+func normalizeExpr(e *expr) {
+	for _, input := range e.children {
+		normalizeExpr(input)
+	}
+	normalizeExprNode(e)
+}
+
+// Applies normalization rules to an expression node. This is like
+// normalizeExpr, except that it does not recursively normalize children.
+func normalizeExprNode(e *expr) {
+	if normalizeFn := operatorTab[e.op].normalizeFn; normalizeFn != nil {
+		normalizeFn(e)
+	}
+}
+
 // formatExprs formats the given expressions as children of the same
 // node. Optionally creates a new parent node (if title is not "", and we have
 // expressions).

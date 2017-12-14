@@ -102,6 +102,8 @@ type operatorInfo struct {
 	name string
 	// class of the operator (see operatorClass).
 	class operatorClass
+
+	normalizeFn func(*expr)
 }
 
 // operatorTab stores static information about all operators.
@@ -119,9 +121,8 @@ func (op operator) String() string {
 // registerOperator initializes the operator's entry in operatorTab.
 // There must be a call to registerOperator in an init() function for every
 // operator.
-func registerOperator(op operator, name string, class operatorClass) {
-	operatorTab[op].name = name
-	operatorTab[op].class = class
+func registerOperator(op operator, info operatorInfo) {
+	operatorTab[op] = info
 }
 
 // operatorClass implements functionality that is common for a subset of
