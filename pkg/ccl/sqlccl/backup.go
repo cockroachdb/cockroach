@@ -728,6 +728,16 @@ func backupPlanHook(
 
 		mvccFilter := MVCCFilter_Latest
 		if _, ok := opts[backupOptRevisionHistory]; ok {
+			// older nodes don't know about MVCCAll and would incorrectly do latest.
+			// VersionClearRange was introduced long after this and the fix to how
+			// the params were handled on resume were merged.
+			if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionClearRange) {
+				return errors.Errorf(
+					"%s requires cluster version >= %s",
+					backupOptRevisionHistory, cluster.VersionByKey(cluster.VersionClearRange).String(),
+				)
+			}
+
 			mvccFilter = MVCCFilter_All
 		}
 

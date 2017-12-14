@@ -1041,6 +1041,16 @@ func restorePlanHook(
 		}
 		var endTime hlc.Timestamp
 		if restoreStmt.AsOf.Expr != nil {
+			// older nodes don't know about as-of-time.
+			// VersionClearRange was introduced long after this and the fix to how
+			// the params were handled on resume were merged.
+			if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionClearRange) {
+				return errors.Errorf(
+					"AS OF requires cluster version >= %s",
+					cluster.VersionByKey(cluster.VersionClearRange).String(),
+				)
+			}
+
 			// Use Now() for the max timestamp because Restore does its own
 			// (more restrictive) check.
 			var err error
