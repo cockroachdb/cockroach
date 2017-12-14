@@ -3429,6 +3429,34 @@ func TestMVCCStatsBasic(t *testing.T) {
 
 	ms := &enginepb.MVCCStats{}
 
+	assertEq := func(debug string, ms, expMS *enginepb.MVCCStats) {
+		t.Helper()
+
+		verifyStats(debug, ms, expMS, t)
+
+		it := engine.NewIterator(false)
+		defer it.Close()
+		from, to := MVCCKey{}, MVCCKey{Key: roachpb.KeyMax}
+
+		for _, mvccStatsTest := range mvccStatsTests {
+			compMS, err := mvccStatsTest.fn(it, from, to, ms.LastUpdateNanos)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !compMS.Equal(*ms) {
+				// TODO(tschottdorf): This unfortunately fails. Upgrade this to
+				// t.Errorf when the computation has been fixed.
+				t.Logf("%s: diff(ms, %s) = %s", debug, mvccStatsTest.name, pretty.Diff(*ms, compMS))
+			}
+		}
+
+		if t.Failed() {
+			t.FailNow()
+		}
+	}
+
+	assertEq("initially", ms, &enginepb.MVCCStats{})
+
 	// Verify size of mvccVersionTimestampSize.
 	ts := hlc.Timestamp{WallTime: 1 * 1E9}
 	key := roachpb.Key("a")
@@ -3455,12 +3483,14 @@ func TestMVCCStatsBasic(t *testing.T) {
 		ValCount:        1,
 		LastUpdateNanos: 1E9,
 	}
-	verifyStats("after put", ms, &expMS, t)
+	assertEq("after put", ms, &expMS)
 	if e, a := int64(0), ms.GCBytes(); e != a {
 		t.Fatalf("GCBytes: expected %d, got %d", e, a)
 	}
 
 	// Delete the value using a transaction.
+	// TODO(tschottdorf): this case is interesting: we write at ts2, bt the timestamp is ts1.
+	// Need to check whether that's reasonable, and if so, test it more.
 	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: hlc.Timestamp{WallTime: 1 * 1E9}}}
 	ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
 	if err := MVCCDelete(context.Background(), engine, ms, key, ts2, txn); err != nil {
@@ -3485,7 +3515,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		GCBytesAge:      vValSize + vKeySize, // immediately recognizes GC'able bytes from old value at 1E9
 		LastUpdateNanos: 2E9,
 	}
-	verifyStats("after delete", ms, &expMS2, t)
+	assertEq("after delete", ms, &expMS2)
 	// This is expMS2.KeyBytes + expMS2.ValBytes - expMS2.LiveBytes
 	expGC2 := mKeySize + vKeySize + v2KeySize + m2ValSize + vValSize + v2ValSize
 	if a := ms.GCBytes(); expGC2 != a {
@@ -3500,7 +3530,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	// Stats should equal same as before the deletion after aborting the intent.
 	expMS.LastUpdateNanos = 2E9
-	verifyStats("after abort", ms, &expMS, t)
+	assertEq("after abort", ms, &expMS)
 
 	// Re-delete, but this time, we're going to commit it.
 	txn.Status = roachpb.PENDING
@@ -3512,7 +3542,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	// GCBytesAge will now count the deleted value from ts=1E9 to ts=3E9.
 	expMS2.GCBytesAge = (vValSize + vKeySize) * 2
 	expMS2.LastUpdateNanos = 3E9
-	verifyStats("after 2nd delete", ms, &expMS2, t) // should be same as before.
+	assertEq("after 2nd delete", ms, &expMS2) // should be same as before.
 	if a := ms.GCBytes(); expGC2 != a {
 		t.Fatalf("GCBytes: expected %d, got %d", expGC2, a)
 	}
@@ -3551,7 +3581,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 
 	expGC3 := expGC2 // no change, didn't delete anything
-	verifyStats("after 2nd put", ms, &expMS3, t)
+	assertEq("after 2nd put", ms, &expMS3)
 	if a := ms.GCBytes(); expGC3 != a {
 		t.Fatalf("GCBytes: expected %d, got %d", expGC3, a)
 	}
@@ -3575,12 +3605,17 @@ func TestMVCCStatsBasic(t *testing.T) {
 		// old, plus the implicit meta key contribution (basically the key
 		// prefix) along with the deletion tombstone kv pair.
 		// You could also write this as
-		//	(vValSize+vKeySize)*2 + (expGC3 - m2ValSize)
+		//      (vValSize+vKeySize)*2 + (expGC3 - m2ValSize)
 		// as we do in the second commit.
+		//
+		// TODO(tschottdorf): the computation here is wrong; the result should be:
+		// GCBytesAge:      (vValSize + vKeySize) * 3,
+		// The new deletion tombstone entry is at t=4 and so it contributes nothing to
+		// GCBytesAge just yet.
 		GCBytesAge:      (vValSize+vKeySize)*3 + (mKeySize + v2ValSize + v2KeySize),
 		LastUpdateNanos: 4E9,
 	}
-	verifyStats("after first commit", ms, &expMS4, t)
+	assertEq("after first commit", ms, &expMS4)
 
 	// With commit of the deletion intent, what really happens is that the
 	// explicit meta (carrying the intent) becomes implicit (so its key
@@ -3604,7 +3639,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		GCBytesAge:      (vValSize+vKeySize)*2 + (expGC3 - m2ValSize),
 		LastUpdateNanos: 4E9,
 	}
-	verifyStats("after second commit", ms, &expMS4, t)
+	assertEq("after second commit", ms, &expMS4)
 	if a := ms.GCBytes(); expGC4 != a { // no change here
 		t.Fatalf("GCBytes: expected %d, got %d", expGC4, a)
 	}
@@ -3621,7 +3656,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	// The age increases: 6 seconds for each key2 and key.
 	expMS5.GCBytesAge += (vKey2Size+vVal2Size)*6 + expGC4*6
 	expMS5.LastUpdateNanos = 10E9
-	verifyStats("after overwrite", ms, &expMS5, t)
+	assertEq("after overwrite", ms, &expMS5)
 
 	// Write a transaction record which is a system-local key.
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
@@ -3634,7 +3669,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	expMS6 := expMS5
 	expMS6.SysBytes += txnKeySize + txnValSize
 	expMS6.SysCount++
-	verifyStats("after sys-local key", ms, &expMS6, t)
+	assertEq("after sys-local key", ms, &expMS6)
 }
 
 var mvccStatsTests = []struct {
@@ -3739,6 +3774,7 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 					}
 				}
 				if !isDelete && txn != nil && rng.Int31n(2) == 0 { // resolve txn with 50% prob
+					// TODO(tschottdorf): need to simulate resolving at a pushed timestamp.
 					txn.Status = roachpb.COMMITTED
 					if rng.Int31n(10) == 0 { // abort txn with 10% prob
 						txn.Status = roachpb.ABORTED
