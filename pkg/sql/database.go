@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,12 +56,14 @@ type databaseCache struct {
 	// systemConfig holds a copy of the latest system config since the last
 	// call to resetForBatch.
 	systemConfig config.SystemConfig
+	settings     *cluster.Settings
 }
 
-func newDatabaseCache(cfg config.SystemConfig) *databaseCache {
+func newDatabaseCache(cfg config.SystemConfig, st *cluster.Settings) *databaseCache {
 	return &databaseCache{
 		databases:    map[string]sqlbase.ID{},
 		systemConfig: cfg,
+		settings:     st,
 	}
 }
 
@@ -116,13 +119,13 @@ var _ DatabaseAccessor = &planner{}
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDesc() instead.
 func getDatabaseDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, name string,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, st *cluster.Settings, name string,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	if virtual := vt.getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual, nil
 	}
 	desc := &sqlbase.DatabaseDescriptor{}
-	found, err := getDescriptor(ctx, txn, databaseKey{name}, desc)
+	found, err := getDescriptor(ctx, txn, st, databaseKey{name}, desc)
 	if !found {
 		return nil, err
 	}
@@ -133,10 +136,10 @@ func getDatabaseDesc(
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
 func getDatabaseDescByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+	ctx context.Context, txn *client.Txn, st *cluster.Settings, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	desc := &sqlbase.DatabaseDescriptor{}
-	if err := getDescriptorByID(ctx, txn, id, desc); err != nil {
+	if err := getDescriptorByID(ctx, txn, st, id, desc); err != nil {
 		return nil, err
 	}
 	return desc, nil
@@ -145,9 +148,9 @@ func getDatabaseDescByID(
 // MustGetDatabaseDesc looks up the database descriptor given its name,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, name string,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, st *cluster.Settings, name string,
 ) (*sqlbase.DatabaseDescriptor, error) {
-	desc, err := getDatabaseDesc(ctx, txn, vt, name)
+	desc, err := getDatabaseDesc(ctx, txn, vt, st, name)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +163,9 @@ func MustGetDatabaseDesc(
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+	ctx context.Context, txn *client.Txn, st *cluster.Settings, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
-	desc, err := getDatabaseDescByID(ctx, txn, id)
+	desc, err := getDatabaseDescByID(ctx, txn, st, id)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +258,7 @@ func (dc *databaseCache) getDatabaseDesc(
 	if err != nil {
 		log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
-			desc, err = MustGetDatabaseDesc(ctx, txn, vt, name)
+			desc, err = MustGetDatabaseDesc(ctx, txn, vt, dc.settings, name)
 			return err
 		}); err != nil {
 			return nil, err
@@ -272,7 +275,7 @@ func (dc *databaseCache) getDatabaseDescByID(
 	desc, err := dc.getCachedDatabaseDescByID(id)
 	if err != nil {
 		log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
-		desc, err = MustGetDatabaseDescByID(ctx, txn, id)
+		desc, err = MustGetDatabaseDescByID(ctx, txn, dc.settings, id)
 	}
 	return desc, err
 }

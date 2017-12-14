@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -611,10 +612,11 @@ CREATE VIEW v6 AS SELECT x FROM x@y;
 
 	e := s.Executor().(*sql.Executor)
 	vt := e.GetVirtualTabler()
+	st := cluster.MakeTestingClusterSettings()
 
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := range testDesc {
-			desc, err := sql.MustGetTableOrViewDesc(ctx, txn, vt,
+			desc, err := sql.MustGetTableOrViewDesc(ctx, txn, vt, st,
 				&tree.TableName{DatabaseName: testDesc[i].dbName, TableName: testDesc[i].tname}, true)
 			if err != nil {
 				return err

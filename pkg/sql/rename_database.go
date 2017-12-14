@@ -38,7 +38,8 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), string(n.Name))
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +62,8 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 	for i := range tbNames {
-		tbDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), &tbNames[i])
+		tbDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+			&tbNames[i])
 		if err != nil {
 			return nil, err
 		}

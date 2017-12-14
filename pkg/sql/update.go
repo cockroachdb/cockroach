@@ -355,7 +355,8 @@ type editNodeBase struct {
 func (p *planner) makeEditNode(
 	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
 ) (editNodeBase, error) {
-	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(),
+		p.ExecCfg().Settings, tn)
 	if err != nil {
 		return editNodeBase{}, err
 	}

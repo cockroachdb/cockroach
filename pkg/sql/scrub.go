@@ -111,7 +111,7 @@ func (n *scrubNode) startExec(params runParams) error {
 		// If the tableName provided refers to a view and error will be
 		// returned here.
 		tableDesc, err := MustGetTableDesc(params.ctx, params.p.txn, params.p.getVirtualTabler(),
-			tableName, false /* allowAdding */)
+			params.p.ExecCfg().Settings, tableName, false /* allowAdding */)
 		if err != nil {
 			return err
 		}
@@ -174,7 +174,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), database)
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, database)
 	if err != nil {
 		return err
 	}
@@ -188,8 +188,8 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		if err := tableName.QualifyWithDatabase(database); err != nil {
 			return err
 		}
-		tableDesc, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tableName,
-			false /* allowAdding */)
+		tableDesc, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+			tableName, false /* allowAdding */)
 		if err != nil {
 			return err
 		}

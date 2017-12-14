@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -36,7 +37,8 @@ import (
 )
 
 func makeTestPlanner() *planner {
-	return makeInternalPlanner("test", nil /* txn */, security.RootUser, &MemoryMetrics{})
+	return makeInternalPlanner("test", nil /* txn */, security.RootUser, &MemoryMetrics{},
+		cluster.MakeTestingClusterSettings())
 }
 
 func TestValues(t *testing.T) {

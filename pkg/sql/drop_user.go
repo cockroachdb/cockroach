@@ -38,7 +38,8 @@ type dropUserNode struct {
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.
 func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		&tree.TableName{DatabaseName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err
 	}

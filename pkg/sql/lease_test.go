@@ -200,6 +200,7 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 			log.AmbientContext{Tracer: tracing.NewTracer()},
 			nc, *t.kvDB,
 			t.server.Clock(),
+			t.server.ClusterSettings(),
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
 			&sql.MemoryMetrics{},

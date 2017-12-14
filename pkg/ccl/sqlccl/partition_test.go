@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -117,13 +118,14 @@ func (t *partitioningTest) parse() error {
 		if !ok {
 			return errors.Errorf("expected *tree.CreateTable got %T", stmt)
 		}
+		st := cluster.MakeTestingClusterSettings()
 		const parentID, tableID = keys.MaxReservedDescID + 1, keys.MaxReservedDescID + 2
 		t.parsed.tableDesc, err = makeSimpleTableDescriptor(
-			ctx, createTable, parentID, tableID, hlc.UnixNano())
+			ctx, st, createTable, parentID, tableID, hlc.UnixNano())
 		if err != nil {
 			return err
 		}
-		if err := t.parsed.tableDesc.ValidateTable(); err != nil {
+		if err := t.parsed.tableDesc.ValidateTable(st); err != nil {
 			return err
 		}
 	}

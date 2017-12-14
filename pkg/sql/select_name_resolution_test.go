@@ -53,7 +53,7 @@ func TestRetryResolveNames(t *testing.T) {
 	desc := testTableDesc()
 	p := makeTestPlanner()
 	s := testInitDummySelectNode(p, desc)
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(p.ExecCfg().Settings); err != nil {
 		t.Fatal(err)
 	}
 

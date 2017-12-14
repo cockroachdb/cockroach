@@ -37,7 +37,7 @@ func GetUserHashedPassword(
 	var hashedPassword []byte
 	var exists bool
 	err := executor.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p := makeInternalPlanner("get-pwd", txn, security.RootUser, metrics)
+		p := makeInternalPlanner("get-pwd", txn, security.RootUser, metrics, executor.cfg.Settings)
 		defer finishInternalPlanner(p)
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
 			`WHERE username=$1`
@@ -59,7 +59,8 @@ func GetUserHashedPassword(
 // GetAllUsers returns all the usernames in system.users.
 func GetAllUsers(ctx context.Context, plan *planner) (map[string]bool, error) {
 	query := `SELECT username FROM system.users`
-	p := makeInternalPlanner("get-all-user", plan.txn, security.RootUser, plan.session.memMetrics)
+	p := makeInternalPlanner("get-all-user", plan.txn, security.RootUser,
+		plan.session.memMetrics, plan.session.execCfg.Settings)
 	defer finishInternalPlanner(p)
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {

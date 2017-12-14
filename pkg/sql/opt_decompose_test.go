@@ -62,7 +62,7 @@ func testTableDesc() *sqlbase.TableDescriptor {
 func makeSelectNode(t *testing.T, p *planner) *renderNode {
 	desc := testTableDesc()
 	sel := testInitDummySelectNode(p, desc)
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(p.ExecCfg().Settings); err != nil {
 		t.Fatal(err)
 	}
 	numColumns := len(sel.sourceInfo[0].sourceColumns)

@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -118,7 +119,7 @@ func TestMergeAndSortSpans(t *testing.T) {
 }
 
 func makeTestIndex(
-	t *testing.T, columns []string, dirs []encoding.Direction,
+	t *testing.T, st *cluster.Settings, columns []string, dirs []encoding.Direction,
 ) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
 	desc := testTableDesc()
 	desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
@@ -137,7 +138,7 @@ func makeTestIndex(
 		idx.ColumnDirections = append(idx.ColumnDirections, dir)
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(st); err != nil {
 		t.Fatal(err)
 	}
 	return desc, idx
@@ -147,7 +148,7 @@ func makeTestIndex(
 // columns, separated by commas. Each column has an optional '-' at the end if
 // it is descending.
 func makeTestIndexFromStr(
-	t *testing.T, columnsStr string,
+	t *testing.T, st *cluster.Settings, columnsStr string,
 ) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor) {
 	columns := strings.Split(columnsStr, ",")
 	dirs := make([]encoding.Direction, len(columns))
@@ -159,7 +160,7 @@ func makeTestIndexFromStr(
 			dirs[i] = encoding.Ascending
 		}
 	}
-	return makeTestIndex(t, columns, dirs)
+	return makeTestIndex(t, st, columns, dirs)
 }
 
 func makeConstraints(
@@ -333,7 +334,7 @@ func TestMakeConstraints(t *testing.T) {
 			p.evalCtx = tree.MakeTestingEvalContext()
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
-			desc, index := makeTestIndexFromStr(t, d.columns)
+			desc, index := makeTestIndexFromStr(t, p.ExecCfg().Settings, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
 			if s := constraints.String(); d.expected != s {
 				t.Errorf("%s, columns: %s: expected %s, but found %s", d.expr, d.columns, d.expected, s)
@@ -552,7 +553,7 @@ func TestMakeSpans(t *testing.T) {
 				for range columns {
 					dirs = append(dirs, dir)
 				}
-				desc, index := makeTestIndex(t, columns, dirs)
+				desc, index := makeTestIndex(t, p.ExecCfg().Settings, columns, dirs)
 				constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
 				spans, err := makeSpans(&p.evalCtx, constraints, desc, index)
 				if err != nil {
@@ -599,7 +600,7 @@ func TestMakeSpans(t *testing.T) {
 			p.evalCtx = tree.MakeTestingEvalContext()
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
-			desc, index := makeTestIndexFromStr(t, d.columns)
+			desc, index := makeTestIndexFromStr(t, p.ExecCfg().Settings, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
 			spans, err := makeSpans(&p.evalCtx, constraints, desc, index)
 			if err != nil {
@@ -694,7 +695,7 @@ func TestExactPrefix(t *testing.T) {
 			p.evalCtx = tree.MakeTestingEvalContext()
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
-			desc, index := makeTestIndexFromStr(t, d.columns)
+			desc, index := makeTestIndexFromStr(t, p.ExecCfg().Settings, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
 			prefix := constraints.exactPrefix(&p.evalCtx)
 			if d.expected != prefix {
@@ -775,7 +776,7 @@ func TestApplyConstraints(t *testing.T) {
 			p.evalCtx = tree.MakeTestingEvalContext()
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
-			desc, index := makeTestIndexFromStr(t, d.columns)
+			desc, index := makeTestIndexFromStr(t, p.ExecCfg().Settings, d.columns)
 			constraints, expr := makeConstraints(t, p, d.expr, desc, index, sel)
 			expr2 := applyIndexConstraints(&p.evalCtx, expr, constraints)
 			if s := fmt.Sprint(expr2); d.expected != s {

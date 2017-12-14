@@ -183,6 +183,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		&base.NodeIDContainer{},
 		*kvDB,
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		s.ClusterSettings(),
 		sql.LeaseManagerTestingKnobs{},
 		stopper,
 		&sql.MemoryMetrics{},
@@ -368,7 +369,7 @@ CREATE INDEX foo ON t.test (v)
 	}
 
 	// Ensure that the indexes have been created.
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(t, s, kvDB, sqlDB, tableDesc)
 	indexQuery := `SELECT v FROM t.test@foo`
 	mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 

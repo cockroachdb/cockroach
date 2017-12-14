@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -758,6 +759,7 @@ func BenchmarkImport(b *testing.B) {
 
 func BenchmarkConvertRecord(b *testing.B) {
 	ctx := context.TODO()
+	st := cluster.MakeTestingClusterSettings()
 
 	tpchLineItemDataRows := [][]string{
 		{"1", "155190", "7706", "1", "17", "21168.23", "0.04", "0.02", "N", "O", "1996-03-13", "1996-02-12", "1996-03-22", "DELIVER IN PERSON", "TRUCK", "egular courts above the"},
@@ -805,7 +807,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	}
 	create := stmt.(*tree.CreateTable)
 
-	tableDesc, err := makeSimpleTableDescriptor(ctx, create, sqlbase.ID(100), sqlbase.ID(100), 1)
+	tableDesc, err := makeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), 1)
 	if err != nil {
 		b.Fatal(err)
 	}

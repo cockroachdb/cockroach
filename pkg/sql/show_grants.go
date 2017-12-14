@@ -28,7 +28,9 @@ import (
 
 // checkTableExists checks if the table exists by using the security.RootUser.
 func checkTableExists(ctx context.Context, p *planner, tn *tree.TableName) error {
-	if _, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/); err != nil {
+	if _, err := MustGetTableOrViewDesc(
+		ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, tn, true, /*allowAdding*/
+	); err != nil {
 		return sqlbase.NewUndefinedRelationError(tn)
 	}
 	return nil
@@ -92,7 +94,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 				if err != nil {
 					return nil, err
 				}
-				tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(),
+				tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
 					p.session.Database, tableGlob)
 				if err != nil {
 					return nil, err

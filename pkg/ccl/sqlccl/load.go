@@ -152,7 +152,8 @@ func Load(
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here.
 			var txn *client.Txn
-			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, s, dbDesc.ID, 0 /* table ID */, ts, privs, affected, dbDesc.Name, nil, &evalCtx)
+			st := cluster.MakeTestingClusterSettings()
+			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, st, s, dbDesc.ID, 0 /* table ID */, ts, privs, affected, dbDesc.Name, nil, &evalCtx)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}

@@ -113,7 +113,8 @@ func (p *planner) analyzeViewQuery(
 func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor) error {
 	lm := e.cfg.LeaseManager
 	// We run as NodeUser because we may update system descriptors.
-	p := makeInternalPlanner("recompute-view-dependencies", txn, security.NodeUser, lm.memMetrics)
+	p := makeInternalPlanner("recompute-view-dependencies", txn, security.NodeUser, lm.memMetrics,
+		e.cfg.Settings)
 	defer finishInternalPlanner(p)
 	p.session.tables.leaseMgr = lm
 

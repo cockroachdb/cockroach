@@ -155,7 +155,7 @@ func (*dropTableNode) Close(context.Context)        {}
 func (p *planner) dropTableOrViewPrepare(
 	ctx context.Context, name *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), name)
+	tableDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, name)
 	if err != nil {
 		return nil, err
 	}

@@ -288,12 +288,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&s.nodeIDContainer,
 		*s.db,
 		s.clock,
+		st,
 		lmKnobs,
 		s.stopper,
 		&s.internalMemMetrics,
 		s.cfg.LeaseManagerConfig,
 	)
-	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// We do not set memory monitors or a noteworthy limit because the children of
 	// this monitor will be setting their own noteworthy limits.
@@ -1092,6 +1092,10 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 
 	// Begin recording status summaries.
 	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
+
+	// Start polling for leases. This requires that the cluster version has
+	// been initialized by starting the node above.
+	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.

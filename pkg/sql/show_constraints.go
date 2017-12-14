@@ -35,7 +35,8 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 		return nil, err
 	}
 
-	desc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+	desc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		tn, true /*allowAdding*/)
 	if err != nil {
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}

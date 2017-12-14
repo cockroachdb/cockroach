@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -138,7 +139,7 @@ var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NO
 
 // makePlanner creates a new planner instance, referencing a dummy session.
 func makeInternalPlanner(
-	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, st *cluster.Settings,
 ) *planner {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
@@ -149,7 +150,12 @@ func makeInternalPlanner(
 		User:     user,
 		TxnState: txnState{Ctx: ctx},
 		context:  ctx,
-		tables:   TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
+		tables: TableCollection{
+			databaseCache: newDatabaseCache(config.SystemConfig{}, cluster.NoSettings),
+		},
+		execCfg: &ExecutorConfig{
+			Settings: st,
+		},
 	}
 	s.mon = mon.MakeUnlimitedMonitor(ctx,
 		"internal-root",

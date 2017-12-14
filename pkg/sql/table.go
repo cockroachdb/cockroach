@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -119,7 +120,7 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 // getTableOrViewDesc returns a table descriptor for either a table or view,
 // or nil if the descriptor is not found.
 func getTableOrViewDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, st *cluster.Settings, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	virtual, err := vt.getVirtualTableDesc(tn)
 	if err != nil || virtual != nil {
@@ -129,13 +130,13 @@ func getTableOrViewDesc(
 		return virtual, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, tn.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, st, tn.Database())
 	if err != nil {
 		return nil, err
 	}
 
 	desc := sqlbase.TableDescriptor{}
-	found, err := getDescriptor(ctx, txn, tableKey{parentID: dbDesc.ID, name: tn.Table()}, &desc)
+	found, err := getDescriptor(ctx, txn, st, tableKey{parentID: dbDesc.ID, name: tn.Table()}, &desc)
 	if err != nil {
 		return nil, err
 	}
@@ -152,9 +153,9 @@ func getTableOrViewDesc(
 // Returns an error if the underlying table descriptor actually
 // represents a view rather than a table.
 func getTableDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, st *cluster.Settings, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
-	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
+	desc, err := getTableOrViewDesc(ctx, txn, vt, st, tn)
 	if err != nil {
 		return desc, err
 	}
@@ -170,9 +171,9 @@ func getTableDesc(
 // Returns an error if the underlying table descriptor actually
 // represents a table rather than a view.
 func getViewDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, st *cluster.Settings, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
-	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
+	desc, err := getTableOrViewDesc(ctx, txn, vt, st, tn)
 	if err != nil {
 		return desc, err
 	}
@@ -183,9 +184,9 @@ func getViewDesc(
 }
 
 func getSequenceDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, st *cluster.Settings, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
-	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
+	desc, err := getTableOrViewDesc(ctx, txn, vt, st, tn)
 	if err != nil {
 		return desc, err
 	}
@@ -199,9 +200,14 @@ func getSequenceDesc(
 // view, or an error if the descriptor is not found. allowAdding when set allows
 // a table descriptor in the ADD state to also be returned.
 func MustGetTableOrViewDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName, allowAdding bool,
+	ctx context.Context,
+	txn *client.Txn,
+	vt VirtualTabler,
+	st *cluster.Settings,
+	tn *tree.TableName,
+	allowAdding bool,
 ) (*sqlbase.TableDescriptor, error) {
-	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
+	desc, err := getTableOrViewDesc(ctx, txn, vt, st, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -220,9 +226,14 @@ func MustGetTableOrViewDesc(
 // the descriptor is not found. allowAdding when set allows a table descriptor
 // in the ADD state to also be returned.
 func MustGetTableDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName, allowAdding bool,
+	ctx context.Context,
+	txn *client.Txn,
+	vt VirtualTabler,
+	st *cluster.Settings,
+	tn *tree.TableName,
+	allowAdding bool,
 ) (*sqlbase.TableDescriptor, error) {
-	desc, err := getTableDesc(ctx, txn, vt, tn)
+	desc, err := getTableDesc(ctx, txn, vt, st, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +331,7 @@ func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn
 //
 // TODO(vivek): Allow cached descriptors for AS OF SYSTEM TIME queries.
 func (tc *TableCollection) getTableVersion(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, st *cluster.Settings, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
@@ -337,7 +348,7 @@ func (tc *TableCollection) getTableVersion(
 		//   so they cannot be leased. Instead, we simply return the static
 		//   descriptor and rely on the immutability privileges set on the
 		//   descriptors to cause upper layers to reject mutations statements.
-		tbl, err := MustGetTableDesc(ctx, txn, vt, tn, false /*allowAdding*/)
+		tbl, err := MustGetTableDesc(ctx, txn, vt, st, tn, false /*allowAdding*/)
 		if err != nil {
 			return nil, err
 		}
@@ -667,6 +678,7 @@ func expandTableGlob(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
+	st *cluster.Settings,
 	database string,
 	pattern tree.TablePattern,
 ) (tree.TableNames, error) {
@@ -683,7 +695,7 @@ func expandTableGlob(
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, string(glob.Database))
+	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, st, string(glob.Database))
 	if err != nil {
 		return nil, err
 	}
@@ -711,7 +723,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableNa
 
 	if p.session.Database != "" {
 		t.DatabaseName = tree.Name(p.session.Database)
-		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
+		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
 		}
@@ -727,7 +739,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableNa
 	iter := p.session.SearchPath.Iter()
 	for database, ok := iter(); ok; database, ok = iter() {
 		t.DatabaseName = tree.Name(database)
-		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
+		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
 		}
@@ -770,7 +782,7 @@ func (p *planner) findTableContainingIndex(
 	idxName tree.UnrestrictedName,
 	requireTable bool,
 ) (result *tree.TableName, err error) {
-	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, string(dbName))
+	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, p.ExecCfg().Settings, string(dbName))
 	if err != nil {
 		return nil, err
 	}
@@ -784,7 +796,7 @@ func (p *planner) findTableContainingIndex(
 	for i := range tns {
 		tn := &tns[i]
 		tableDesc, err := MustGetTableDesc(
-			ctx, p.txn, p.getVirtualTabler(), tn, true, /*allowAdding*/
+			ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, tn, true, /*allowAdding*/
 		)
 		if err != nil {
 			return nil, err
@@ -871,7 +883,7 @@ func (p *planner) getTableAndIndex(
 	if err != nil {
 		return nil, nil, err
 	}
-	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, tn)
 	if err != nil {
 		return nil, nil, err
 	}

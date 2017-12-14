@@ -43,7 +43,8 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 		return nil, err
 	}
 
-	desc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
+	desc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		tn, true /* allowAdding */)
 	if err != nil {
 		return nil, err
 	}

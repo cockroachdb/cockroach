@@ -710,6 +710,7 @@ func splitAndScatter(
 func restoreTableDescs(
 	ctx context.Context,
 	txn *client.Txn,
+	st *cluster.Settings,
 	databases []*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
 	user string,
@@ -750,7 +751,7 @@ func restoreTableDescs(
 		}
 
 		for _, table := range tables {
-			if err := table.Validate(ctx, txn); err != nil {
+			if err := table.Validate(ctx, txn, st); err != nil {
 				return errors.Wrapf(err, "validate table %d", table.ID)
 			}
 		}
@@ -1200,7 +1201,9 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := restoreTableDescs(ctx, txn, r.databases, r.tables, job.Record.Username); err != nil {
+	if err := restoreTableDescs(
+		ctx, txn, r.settings, r.databases, r.tables, job.Record.Username,
+	); err != nil {
 		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
 	}
 

@@ -50,7 +50,8 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		name.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +145,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err = desc.ValidateTable(); err != nil {
+	if err = desc.ValidateTable(params.p.ExecCfg().Settings); err != nil {
 		return err
 	}
 
@@ -177,7 +178,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	if desc.Adding() {
 		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
-	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn, params.p.ExecCfg().Settings); err != nil {
 		return err
 	}
 
@@ -235,5 +236,5 @@ func (n *createViewNode) makeViewTableDesc(
 		desc.AddColumn(*col)
 	}
 
-	return desc, desc.AllocateIDs()
+	return desc, desc.AllocateIDs(params.p.ExecCfg().Settings)
 }

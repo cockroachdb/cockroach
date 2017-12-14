@@ -410,7 +410,7 @@ func (e *Executor) Start(
 	ctx = e.AnnotateCtx(ctx)
 	e.distSQLPlanner = dsp
 
-	e.databaseCache.Store(newDatabaseCache(e.systemConfig))
+	e.databaseCache.Store(newDatabaseCache(e.systemConfig, e.cfg.Settings))
 	e.systemConfigCond = sync.NewCond(&e.systemConfigMu)
 
 	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
@@ -458,7 +458,7 @@ func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
 	defer e.systemConfigMu.Unlock()
 	e.systemConfig = cfg
 	// The database cache gets reset whenever the system config changes.
-	e.databaseCache.Store(newDatabaseCache(cfg))
+	e.databaseCache.Store(newDatabaseCache(cfg, e.cfg.Settings))
 	e.systemConfigCond.Broadcast()
 }
 

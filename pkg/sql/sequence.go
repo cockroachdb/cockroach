@@ -33,7 +33,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	if p.session.TxnState.readOnly {
 		return 0, readOnlyError("nextval()")
 	}
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, seqName)
 	if err != nil {
 		return 0, err
 	}
@@ -71,7 +71,7 @@ func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, seqName)
 	if err != nil {
 		return 0, err
 	}
@@ -96,7 +96,7 @@ func (p *planner) SetSequenceValue(
 	if p.session.TxnState.readOnly {
 		return readOnlyError("setval()")
 	}
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, seqName)
 	if err != nil {
 		return err
 	}

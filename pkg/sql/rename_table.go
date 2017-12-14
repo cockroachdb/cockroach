@@ -43,7 +43,8 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), oldTn.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		oldTn.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -55,17 +56,17 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// made more lenient down the road if needed.
 	var tableDesc *sqlbase.TableDescriptor
 	if n.IsView {
-		tableDesc, err = getViewDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
+		tableDesc, err = getViewDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, oldTn)
 		if err != nil {
 			return nil, err
 		}
 	} else if n.IsSequence {
-		tableDesc, err = getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
+		tableDesc, err = getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, oldTn)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		tableDesc, err = getTableDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
+		tableDesc, err = getTableDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, oldTn)
 		if err != nil {
 			return nil, err
 		}
@@ -97,7 +98,8 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	// Check if target database exists.
-	targetDbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), newTn.Database())
+	targetDbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		newTn.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +120,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	newTbKey := tableKey{targetDbDesc.ID, newTn.Table()}.Key()
 
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Settings); err != nil {
 		return nil, err
 	}
 

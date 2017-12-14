@@ -53,7 +53,8 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 			return nil, fmt.Errorf("index %q not found", index.Index)
 		}
 
-		tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+		tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+			tn, true /*allowAdding*/)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +75,8 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, err := getTableDesc(ctx, params.p.txn, params.p.getVirtualTabler(), index.tn)
+		tableDesc, err := getTableDesc(ctx, params.p.txn, params.p.getVirtualTabler(),
+			params.p.ExecCfg().Settings, index.tn)
 		if err != nil || tableDesc == nil {
 			// newPlan() and Start() ultimately run within the same
 			// transaction. If we got a descriptor during newPlan(), we
@@ -204,7 +206,7 @@ func (p *planner) dropIndexByName(
 		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.ExecCfg().Settings); err != nil {
 		return err
 	}
 	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, jobDesc)

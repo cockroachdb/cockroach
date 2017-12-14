@@ -136,7 +136,9 @@ var varGen = map[string]sessionVar{
 				// Verify database descriptor exists.
 				session.TxnState.mu.RLock()
 				defer session.TxnState.mu.RUnlock()
-				if _, err := MustGetDatabaseDesc(ctx, session.TxnState.mu.txn, &session.virtualSchemas, dbName); err != nil {
+				if _, err := MustGetDatabaseDesc(
+					ctx, session.TxnState.mu.txn, &session.virtualSchemas, session.execCfg.Settings, dbName,
+				); err != nil {
 					return err
 				}
 			}

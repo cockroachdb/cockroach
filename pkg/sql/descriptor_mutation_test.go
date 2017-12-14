@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,16 +40,22 @@ type mutationTest struct {
 	// SQLRunner embeds testing.TB
 	testing.TB
 	*sqlutils.SQLRunner
+	settings  *cluster.Settings
 	kvDB      *client.DB
 	tableDesc *sqlbase.TableDescriptor
 }
 
 func makeMutationTest(
-	t *testing.T, kvDB *client.DB, db *gosql.DB, tableDesc *sqlbase.TableDescriptor,
+	t *testing.T,
+	server serverutils.TestServerInterface,
+	kvDB *client.DB,
+	db *gosql.DB,
+	tableDesc *sqlbase.TableDescriptor,
 ) mutationTest {
 	return mutationTest{
 		TB:        t,
 		SQLRunner: sqlutils.MakeSQLRunner(db),
+		settings:  server.ClusterSettings(),
 		kvDB:      kvDB,
 		tableDesc: tableDesc,
 	}
@@ -85,7 +92,7 @@ func (mt mutationTest) makeMutationsActive() {
 		}
 	}
 	mt.tableDesc.Mutations = nil
-	if err := mt.tableDesc.ValidateTable(); err != nil {
+	if err := mt.tableDesc.ValidateTable(mt.settings); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -140,7 +147,7 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 		}
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
-	if err := mt.tableDesc.ValidateTable(); err != nil {
+	if err := mt.tableDesc.ValidateTable(mt.settings); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -181,7 +188,7 @@ CREATE INDEX allidx ON t.test (k, v);
 	// read table descriptor
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(t, server, kvDB, sqlDB, tableDesc)
 
 	starQuery := `SELECT * FROM t.test`
 	for _, useUpsert := range []bool{true, false} {
@@ -347,21 +354,29 @@ CREATE INDEX allidx ON t.test (k, v);
 	// Check that a mutation can only be inserted with an explicit mutation state, and direction.
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{}}
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
+	if err := tableDesc.ValidateTable(server.ClusterSettings()); !testutils.IsError(
+		err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor",
+	) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{Descriptor_: &sqlbase.DescriptorMutation_Column{Column: &tableDesc.Columns[len(tableDesc.Columns)-1]}}}
 	tableDesc.Columns = tableDesc.Columns[:len(tableDesc.Columns)-1]
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(server.ClusterSettings()); !testutils.IsError(
+		err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`,
+	) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = sqlbase.DescriptorMutation_DELETE_ONLY
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(server.ClusterSettings()); !testutils.IsError(
+		err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`,
+	) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = sqlbase.DescriptorMutation_UNKNOWN
 	tableDesc.Mutations[0].Direction = sqlbase.DescriptorMutation_DROP
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(server.ClusterSettings()); !testutils.IsError(
+		err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`,
+	) {
 		t.Fatal(err)
 	}
 }
@@ -409,7 +424,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	// read table descriptor
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(t, server, kvDB, sqlDB, tableDesc)
 
 	starQuery := `SELECT * FROM t.test`
 	indexQuery := `SELECT v FROM t.test@foo`
@@ -524,7 +539,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{Descriptor_: &sqlbase.DescriptorMutation_Index{Index: &tableDesc.Indexes[len(tableDesc.Indexes)-1]}}}
 	tableDesc.Indexes = tableDesc.Indexes[:len(tableDesc.Indexes)-1]
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
+	if err := tableDesc.ValidateTable(server.ClusterSettings()); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}
 }
@@ -559,7 +574,7 @@ CREATE INDEX allidx ON t.test (k, v);
 	// read table descriptor
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(t, server, kvDB, sqlDB, tableDesc)
 
 	starQuery := `SELECT * FROM t.test`
 	indexQuery := `SELECT i FROM t.test@foo`
@@ -718,7 +733,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Read table descriptor
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	mt := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mt := makeMutationTest(t, server, kvDB, sqlDB, tableDesc)
 
 	// Test CREATE INDEX in the presence of mutations.
 

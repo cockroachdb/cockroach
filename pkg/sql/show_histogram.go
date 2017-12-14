@@ -77,7 +77,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			}
 			tableID := sqlbase.ID(*row[tableColIdx].(*tree.DInt))
 			var desc sqlbase.TableDescriptor
-			if err := getDescriptorByID(ctx, p.txn, tableID, &desc); err != nil {
+			if err := getDescriptorByID(ctx, p.txn, p.ExecCfg().Settings, tableID, &desc); err != nil {
 				return nil, errors.Wrap(err, "unknown table for histogram")
 			}
 			colIDs := row[colIDsColIdx].(*tree.DArray).Array

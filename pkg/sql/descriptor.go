@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -166,6 +167,7 @@ func (p *planner) createDescriptorWithID(
 func getDescriptor(
 	ctx context.Context,
 	txn *client.Txn,
+	st *cluster.Settings,
 	plainKey sqlbase.DescriptorKey,
 	descriptor sqlbase.DescriptorProto,
 ) (bool, error) {
@@ -177,7 +179,7 @@ func getDescriptor(
 		return false, nil
 	}
 
-	if err := getDescriptorByID(ctx, txn, sqlbase.ID(gr.ValueInt()), descriptor); err != nil {
+	if err := getDescriptorByID(ctx, txn, st, sqlbase.ID(gr.ValueInt()), descriptor); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -189,7 +191,11 @@ func getDescriptor(
 // In most cases you'll want to use wrappers: `getDatabaseDescByID` or
 // `getTableDescByID`.
 func getDescriptorByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
+	ctx context.Context,
+	txn *client.Txn,
+	st *cluster.Settings,
+	id sqlbase.ID,
+	descriptor sqlbase.DescriptorProto,
 ) error {
 	descKey := sqlbase.MakeDescMetadataKey(id)
 	desc := &sqlbase.Descriptor{}
@@ -209,7 +215,7 @@ func getDescriptorByID(
 		// but it's worth it to avoid having to do the upgrade every time the
 		// descriptor is fetched. Our current test for this enforces compatibility
 		// backward and forward, so that'll have to be extended before this is done.
-		if err := table.Validate(ctx, txn); err != nil {
+		if err := table.Validate(ctx, txn, st); err != nil {
 			return err
 		}
 		*t = *table
@@ -254,7 +260,12 @@ func getAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 
 // getDescriptorsFromTargetList fetches the descriptors for the targets.
 func getDescriptorsFromTargetList(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, db string, targets tree.TargetList,
+	ctx context.Context,
+	txn *client.Txn,
+	vt VirtualTabler,
+	st *cluster.Settings,
+	db string,
+	targets tree.TargetList,
 ) ([]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
@@ -262,7 +273,7 @@ func getDescriptorsFromTargetList(
 		}
 		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := MustGetDatabaseDesc(ctx, txn, vt, string(database))
+			descriptor, err := MustGetDatabaseDesc(ctx, txn, vt, st, string(database))
 			if err != nil {
 				return nil, err
 			}
@@ -280,13 +291,13 @@ func getDescriptorsFromTargetList(
 		if err != nil {
 			return nil, err
 		}
-		tables, err := expandTableGlob(ctx, txn, vt, db, tableGlob)
+		tables, err := expandTableGlob(ctx, txn, vt, st, db, tableGlob)
 		if err != nil {
 			return nil, err
 		}
 		for i := range tables {
 			descriptor, err := MustGetTableOrViewDesc(
-				ctx, txn, vt, &tables[i], true /*allowAdding*/)
+				ctx, txn, vt, st, &tables[i], true /*allowAdding*/)
 			if err != nil {
 				return nil, err
 			}

@@ -384,7 +384,7 @@ CREATE TABLE crdb_internal.jobs (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		p = makeInternalPlanner("jobs", p.txn, p.evalCtx.User, p.session.memMetrics)
+		p = makeInternalPlanner("jobs", p.txn, p.evalCtx.User, p.session.memMetrics, p.ExecCfg().Settings)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, status, created, payload FROM system.jobs`)
 		if err != nil {
@@ -1456,7 +1456,7 @@ CREATE TABLE crdb_internal.zones (
 			return 0, "", fmt.Errorf("object with ID %d does not exist", id)
 		}
 
-		p = makeInternalPlanner("zones", p.txn, p.evalCtx.User, p.session.memMetrics)
+		p = makeInternalPlanner("zones", p.txn, p.evalCtx.User, p.session.memMetrics, p.ExecCfg().Settings)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, config FROM system.zones`)
 		if err != nil {

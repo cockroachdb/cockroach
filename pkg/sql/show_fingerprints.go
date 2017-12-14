@@ -61,7 +61,7 @@ func (p *planner) ShowFingerprints(
 	}
 
 	tableDesc, err := MustGetTableDesc(
-		ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+		ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, tn, true /*allowAdding*/)
 	if err != nil {
 		return nil, err
 	}

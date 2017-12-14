@@ -43,7 +43,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return nil, err
 	}
 
-	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -493,7 +493,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if err := n.tableDesc.AllocateIDs(); err != nil {
+	if err := n.tableDesc.AllocateIDs(params.p.ExecCfg().Settings); err != nil {
 		return err
 	}
 

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -106,9 +107,10 @@ func (s *tableVersionState) leaseExpiration() tree.DTimestamp {
 // LeaseStore implements the operations for acquiring and releasing leases and
 // publishing a new version of a descriptor. Exported only for testing.
 type LeaseStore struct {
-	db     client.DB
-	clock  *hlc.Clock
-	nodeID *base.NodeIDContainer
+	db       client.DB
+	clock    *hlc.Clock
+	nodeID   *base.NodeIDContainer
+	settings *cluster.Settings
 
 	// leaseDuration is the mean duration a lease will be acquired for. The
 	// actual duration is jittered using leaseJitterFraction. Jittering is done to
@@ -167,7 +169,7 @@ func (s LeaseStore) acquire(
 
 		// ValidateTable instead of Validate, even though we have a txn available,
 		// so we don't block reads waiting for this table version.
-		if err := table.ValidateTable(); err != nil {
+		if err := table.ValidateTable(s.settings); err != nil {
 			return err
 		}
 
@@ -175,7 +177,7 @@ func (s LeaseStore) acquire(
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		p := makeInternalPlanner("lease-insert", txn, security.RootUser, s.memMetrics)
+		p := makeInternalPlanner("lease-insert", txn, security.RootUser, s.memMetrics, s.settings)
 		defer finishInternalPlanner(p)
 		const insertLease = `INSERT INTO system.lease ("descID", version, "nodeID", expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
@@ -210,7 +212,7 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 			if nodeID == 0 {
 				panic("zero nodeID")
 			}
-			p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics)
+			p := makeInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics, s.settings)
 			defer finishInternalPlanner(p)
 			const deleteLease = `DELETE FROM system.lease ` +
 				`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
@@ -347,7 +349,7 @@ func (s LeaseStore) Publish(
 			tableDesc.ModificationTime = modTime
 			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
 				tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
-			if err := tableDesc.ValidateTable(); err != nil {
+			if err := tableDesc.ValidateTable(s.settings); err != nil {
 				return err
 			}
 
@@ -396,7 +398,7 @@ func (s LeaseStore) countLeases(
 ) (int, error) {
 	var count int
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics)
+		p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics, s.settings)
 		defer finishInternalPlanner(p)
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
@@ -1190,6 +1192,7 @@ func NewLeaseManager(
 	nodeID *base.NodeIDContainer,
 	db client.DB,
 	clock *hlc.Clock,
+	st *cluster.Settings,
 	testingKnobs LeaseManagerTestingKnobs,
 	stopper *stop.Stopper,
 	memMetrics *MemoryMetrics,
@@ -1200,6 +1203,7 @@ func NewLeaseManager(
 			db:                  db,
 			clock:               clock,
 			nodeID:              nodeID,
+			settings:            st,
 			leaseDuration:       cfg.TableDescriptorLeaseDuration,
 			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
 			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
@@ -1491,7 +1495,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
-						if err := table.ValidateTable(); err != nil {
+						if err := table.ValidateTable(m.settings); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
 							continue
 						}

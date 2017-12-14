@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -51,6 +52,8 @@ func makeIndexDescriptor(name string, columnNames []string) IndexDescriptor {
 func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	st := cluster.MakeTestingClusterSettings()
+
 	desc := TableDescriptor{
 		ID:       keys.MaxReservedDescID + 2,
 		ParentID: keys.MaxReservedDescID + 1,
@@ -68,7 +71,7 @@ func TestAllocateIDs(t *testing.T) {
 		Privileges:    NewDefaultPrivilegeDescriptor(),
 		FormatVersion: FamilyFormatVersion,
 	}
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(st); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,7 +119,7 @@ func TestAllocateIDs(t *testing.T) {
 		t.Fatalf("expected %s, but found %s", a, b)
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(st); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expected, desc) {
@@ -614,8 +617,9 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:  3,
 			}},
 	}
+	st := cluster.MakeTestingClusterSettings()
 	for i, d := range testData {
-		if err := d.desc.ValidateTable(); err == nil {
+		if err := d.desc.ValidateTable(st); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 		} else if d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)
@@ -1276,7 +1280,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 		Index:    IndexID(1),
 		Validity: ConstraintValidity_Validated,
 	}
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(cluster.MakeTestingClusterSettings()); err != nil {
 		t.Fatal(err)
 	}
 	lookup := func(_ ID) (*TableDescriptor, error) {

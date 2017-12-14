@@ -70,7 +70,8 @@ func (p *planner) changePrivileges(
 		}
 	}
 
-	descriptors, err := getDescriptorsFromTargetList(ctx, p.txn, p.getVirtualTabler(), p.session.Database, targets)
+	descriptors, err := getDescriptorsFromTargetList(ctx, p.txn, p.getVirtualTabler(),
+		p.ExecCfg().Settings, p.session.Database, targets)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func (p *planner) changePrivileges(
 				return nil, err
 			}
 		case *sqlbase.TableDescriptor:
-			if err := d.Validate(ctx, p.txn); err != nil {
+			if err := d.Validate(ctx, p.txn, p.ExecCfg().Settings); err != nil {
 				return nil, err
 			}
 			if err := d.SetUpVersion(); err != nil {

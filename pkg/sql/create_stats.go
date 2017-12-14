@@ -34,7 +34,8 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 		return nil, err
 	}
 
-	tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, false /* allowAdding */)
+	tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		tn, false /* allowAdding */)
 	if err != nil {
 		return nil, err
 	}

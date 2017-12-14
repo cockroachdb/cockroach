@@ -582,9 +582,9 @@ func (p *planner) getTableDesc(
 ) (*sqlbase.TableDescriptor, error) {
 	if p.avoidCachedDescriptors {
 		return MustGetTableOrViewDesc(
-			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
+			ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, tn, false /*allowAdding*/)
 	}
-	return p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+	return p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, tn)
 }
 
 func (p *planner) getPlanForDesc(

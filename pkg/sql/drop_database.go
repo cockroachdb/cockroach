@@ -48,7 +48,8 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), string(n.Name))
+	dbDesc, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		string(n.Name))
 	if err != nil {
 		return nil, err
 	}

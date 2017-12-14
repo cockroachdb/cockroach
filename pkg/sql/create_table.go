@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -53,7 +54,8 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), tn.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings,
+		tn.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +132,8 @@ func (n *createTableNode) startExec(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	creationTime := params.p.txn.OrigTimestamp()
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx, params.evalCtx)
+		desc, err = makeTableDescIfAs(params.p.ExecCfg().Settings, n.n, n.dbDesc.ID, id, creationTime,
+			planColumns(n.sourcePlan), privs, &params.p.semaCtx, params.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
@@ -142,7 +145,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
 	// Everything is validated below.
-	err = desc.ValidateTable()
+	err = desc.ValidateTable(params.p.ExecCfg().Settings)
 	if err != nil {
 		return err
 	}
@@ -168,7 +171,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn, params.p.ExecCfg().Settings); err != nil {
 		return err
 	}
 
@@ -315,7 +318,7 @@ func (p *planner) resolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
-	return resolveFK(ctx, p.txn, &p.session.virtualSchemas, tbl, d, backrefs, mode)
+	return resolveFK(ctx, p.txn, &p.session.virtualSchemas, p.ExecCfg().Settings, tbl, d, backrefs, mode)
 }
 
 // resolveFK looks up the tables and columns mentioned in a `REFERENCES`
@@ -330,13 +333,14 @@ func resolveFK(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
+	st *cluster.Settings,
 	tbl *sqlbase.TableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
 	targetTable := d.Table.TableName()
-	target, err := getTableDesc(ctx, txn, vt, targetTable)
+	target, err := getTableDesc(ctx, txn, vt, st, targetTable)
 	if err != nil {
 		return err
 	}
@@ -492,7 +496,7 @@ func resolveFK(
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"foreign key requires an existing index on columns %s", colNames(srcCols))
 			}
-			added, err := addIndexForFK(tbl, srcCols, constraintName, ref)
+			added, err := addIndexForFK(st, tbl, srcCols, constraintName, ref)
 			if err != nil {
 				return err
 			}
@@ -510,6 +514,7 @@ func resolveFK(
 // Adds an index to a table descriptor (that is in the process of being created)
 // that will support using `srcCols` as the referencing (src) side of an FK.
 func addIndexForFK(
+	st *cluster.Settings,
 	tbl *sqlbase.TableDescriptor,
 	srcCols []sqlbase.ColumnDescriptor,
 	constraintName string,
@@ -529,7 +534,7 @@ func addIndexForFK(
 	if err := tbl.AddIndex(idx, false); err != nil {
 		return 0, err
 	}
-	if err := tbl.AllocateIDs(); err != nil {
+	if err := tbl.AllocateIDs(st); err != nil {
 		return 0, err
 	}
 
@@ -563,7 +568,7 @@ func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.Tabl
 	if err := td.SetUpVersion(); err != nil {
 		return err
 	}
-	if err := td.ValidateTable(); err != nil {
+	if err := td.ValidateTable(p.ExecCfg().Settings); err != nil {
 		return err
 	}
 	if err := p.writeTableDesc(ctx, td); err != nil {
@@ -579,7 +584,8 @@ func (p *planner) addInterleave(
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
-	return addInterleave(ctx, p.txn, &p.session.virtualSchemas, desc, index, interleave, p.session.Database)
+	return addInterleave(ctx, p.txn, &p.session.virtualSchemas, p.ExecCfg().Settings, desc, index,
+		interleave, p.session.Database)
 }
 
 // addInterleave marks an index as one that is interleaved in some parent data
@@ -588,6 +594,7 @@ func addInterleave(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
+	st *cluster.Settings,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
@@ -603,7 +610,7 @@ func addInterleave(
 		return err
 	}
 
-	parentTable, err := MustGetTableDesc(ctx, txn, vt, tn, true /*allowAdding*/)
+	parentTable, err := MustGetTableDesc(ctx, txn, vt, st, tn, true /*allowAdding*/)
 	if err != nil {
 		return err
 	}
@@ -991,6 +998,7 @@ func initTableDescriptor(
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table
 // that is created with the CREATE AS format.
 func makeTableDescIfAs(
+	st *cluster.Settings,
 	p *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
@@ -1021,7 +1029,7 @@ func makeTableDescIfAs(
 		desc.AddColumn(*col)
 	}
 
-	return desc, desc.AllocateIDs()
+	return desc, desc.AllocateIDs(st)
 }
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
@@ -1029,6 +1037,7 @@ func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
+	st *cluster.Settings,
 	n *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
@@ -1167,12 +1176,14 @@ func MakeTableDesc(
 		}
 	}
 
-	if err := desc.AllocateIDs(); err != nil {
+	if err := desc.AllocateIDs(st); err != nil {
 		return desc, err
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave, sessionDB); err != nil {
+		if err := addInterleave(
+			ctx, txn, vt, st, &desc, &desc.PrimaryIndex, n.Interleave, sessionDB,
+		); err != nil {
 			return desc, err
 		}
 	}
@@ -1209,7 +1220,7 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
-			if err := resolveFK(ctx, txn, vt, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
+			if err := resolveFK(ctx, txn, vt, st, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
 				return desc, err
 			}
 		default:
@@ -1236,7 +1247,7 @@ func MakeTableDesc(
 		}
 	}
 
-	return desc, desc.AllocateIDs()
+	return desc, desc.AllocateIDs(st)
 }
 
 // makeTableDesc creates a table descriptor from a CreateTable statement.
@@ -1252,6 +1263,7 @@ func (p *planner) makeTableDesc(
 		ctx,
 		p.txn,
 		&p.session.virtualSchemas,
+		p.ExecCfg().Settings,
 		n,
 		parentID,
 		id,

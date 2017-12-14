@@ -664,7 +664,7 @@ CREATE TABLE pg_catalog.pg_depend (
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		db, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), pgCatalogName)
+		db, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, pgCatalogName)
 		if err != nil {
 			return errors.New("could not find pg_catalog")
 		}
@@ -672,6 +672,7 @@ CREATE TABLE pg_catalog.pg_depend (
 			ctx,
 			p.txn,
 			p.getVirtualTabler(),
+			p.ExecCfg().Settings,
 			&tree.TableName{
 				DatabaseName: pgCatalogName,
 				TableName:    "pg_constraint"},
@@ -685,6 +686,7 @@ CREATE TABLE pg_catalog.pg_depend (
 			ctx,
 			p.txn,
 			p.getVirtualTabler(),
+			p.ExecCfg().Settings,
 			&tree.TableName{
 				DatabaseName: pgCatalogName,
 				TableName:    "pg_class"},
@@ -1078,7 +1080,7 @@ CREATE TABLE pg_catalog.pg_proc (
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		dbDesc, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), pgCatalogName)
+		dbDesc, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, pgCatalogName)
 		if err != nil {
 			return err
 		}

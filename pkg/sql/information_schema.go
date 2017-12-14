@@ -888,7 +888,8 @@ func forEachColumnInIndex(
 
 func forEachUser(ctx context.Context, origPlanner *planner, fn func(username string) error) error {
 	query := `SELECT username FROM system.users`
-	p := makeInternalPlanner("for-each-user", origPlanner.txn, security.RootUser, origPlanner.session.memMetrics)
+	p := makeInternalPlanner("for-each-user", origPlanner.txn, security.RootUser,
+		origPlanner.session.memMetrics, origPlanner.ExecCfg().Settings)
 	defer finishInternalPlanner(p)
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {

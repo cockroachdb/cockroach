@@ -37,7 +37,7 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 		return nil, err
 	}
 
-	seqDesc, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	seqDesc, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), p.ExecCfg().Settings, tn)
 	if err != nil {
 		return nil, err
 	}
