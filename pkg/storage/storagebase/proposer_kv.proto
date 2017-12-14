@@ -19,6 +19,7 @@ option go_package = "storagebase";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
+import "storage/engine/enginepb/compact.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "storage/storagebase/state.proto";
@@ -60,6 +61,16 @@ message ChangeReplicas {
 
   roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
     (gogoproto.embed) = true];
+}
+
+// SuggestedCompaction holds start and end keys in conjunction with
+// the suggested compaction.
+message SuggestedCompaction {
+  option (gogoproto.equal) = true;
+
+  bytes start_key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  bytes end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  storage.engine.enginepb.Compaction compaction = 3 [(gogoproto.nullable) = false];
 }
 
 // ReplicatedEvalResult is the structured information which together with
@@ -115,6 +126,11 @@ message ReplicatedEvalResult {
   }
   reserved 16;
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
+
+  // suggested_compactions are sent to the engine's compactor to
+  // reclaim storage space after garbage collection or cleared /
+  // rebalanced ranges.
+  repeated SuggestedCompaction suggested_compactions = 19 [(gogoproto.nullable) = false];
 
   reserved 10001 to 10013;
 }
