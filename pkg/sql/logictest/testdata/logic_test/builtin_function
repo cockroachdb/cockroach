@@ -62,7 +62,6 @@ RoacH
 
 statement error unknown signature: concat\(string, bool, decimal, bool\)
 SELECT CONCAT('RoacH', false, 64.532, TRUE)
-----
 
 query T
 SELECT SUBSTR('RoacH', 2, 3)
@@ -178,7 +177,6 @@ abcde,2
 
 statement error unknown signature: concat_ws\(string, string, int, NULL, int\)
 SELECT CONCAT_WS(',', 'abcde', 2, NULL, 22)
-----
 
 query T
 SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
