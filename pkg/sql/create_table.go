@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -911,11 +912,17 @@ func createPartitionedByImpl(
 // belong to any partition from being inserted into the index's table.
 func createPartitionedBy(
 	ctx context.Context,
+	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (sqlbase.PartitioningDescriptor, *sqlbase.TableDescriptor_CheckConstraint, error) {
+	if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
+		return sqlbase.PartitioningDescriptor{}, nil,
+			errors.New("cluster version does not support partitioning")
+	}
+
 	partitioning, checkExpr, err := createPartitionedByImpl(
 		ctx, evalCtx, tableDesc, indexDesc, partBy, 0 /* colOffset */)
 	if err != nil {
@@ -1029,6 +1036,7 @@ func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
+	st *cluster.Settings,
 	n *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
@@ -1092,7 +1100,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PartitionBy != nil {
-				partitioning, _, err := createPartitionedBy(ctx, evalCtx, &desc, &idx, d.PartitionBy)
+				partitioning, _, err := createPartitionedBy(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
 				if err != nil {
 					return desc, err
 				}
@@ -1116,7 +1124,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PartitionBy != nil {
-				partitioning, _, err := createPartitionedBy(ctx, evalCtx, &desc, &idx, d.PartitionBy)
+				partitioning, _, err := createPartitionedBy(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
 				if err != nil {
 					return desc, err
 				}
@@ -1179,7 +1187,7 @@ func MakeTableDesc(
 
 	if n.PartitionBy != nil {
 		partitioning, check, err := createPartitionedBy(
-			ctx, evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy)
+			ctx, st, evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy)
 		if err != nil {
 			return desc, err
 		}
@@ -1252,6 +1260,7 @@ func (p *planner) makeTableDesc(
 		ctx,
 		p.txn,
 		&p.session.virtualSchemas,
+		p.ExecCfg().Settings,
 		n,
 		parentID,
 		id,

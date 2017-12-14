@@ -17,12 +17,14 @@ package sql
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -149,6 +151,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	if len(zone.Subzones) > 0 {
+		if !params.p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionPartitioning) {
+			return errors.New("cluster version does not support zone configs on indexes or partitions")
+		}
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(table, zone.Subzones)
 		if err != nil {
 			return err

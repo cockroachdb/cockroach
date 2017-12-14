@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -804,8 +805,9 @@ func BenchmarkConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	create := stmt.(*tree.CreateTable)
+	st := cluster.MakeTestingClusterSettings()
 
-	tableDesc, err := makeSimpleTableDescriptor(ctx, create, sqlbase.ID(100), sqlbase.ID(100), 1)
+	tableDesc, err := makeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), 1)
 	if err != nil {
 		b.Fatal(err)
 	}

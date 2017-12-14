@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,6 +63,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	for _, tc := range tests {
 		t.Run(tc.stmt, func(t *testing.T) {
 			stmt, err := parser.ParseOne(tc.stmt)
@@ -72,7 +74,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}
-			_, err = makeSimpleTableDescriptor(ctx, create, defaultCSVParentID, defaultCSVTableID, 0)
+			_, err = makeSimpleTableDescriptor(ctx, st, create, defaultCSVParentID, defaultCSVTableID, 0)
 			if !testutils.IsError(err, tc.error) {
 				t.Fatalf("expected %v, got %+v", tc.error, err)
 			}
