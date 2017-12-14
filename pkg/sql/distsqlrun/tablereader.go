@@ -212,35 +212,10 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if ctx != tr.flowCtx.ctx {
 		panic("unexpected context")
 	}
-
+	Run(ctx, tr, tr.out.output)
 	if wg != nil {
-		defer wg.Done()
+		wg.Done()
 	}
-
-	for {
-		row, meta := tr.Next()
-		// Emit the row; stop if no more rows are needed.
-		if row != nil || !meta.Empty() {
-			status := tr.out.output.Push(row, meta)
-			if status != NeedMoreRows {
-				if status == ConsumerClosed {
-					tr.close()
-				}
-				break
-			}
-		}
-		if row == nil {
-			break
-		}
-	}
-
-	if tr.consumerStatus != ConsumerClosed {
-		if meta := tr.producerMeta(nil); !meta.Empty() {
-			tr.out.output.Push(nil, meta)
-		}
-	}
-	tr.out.Close()
-	tr.close()
 }
 
 // generateScrubErrorRow will create an EncDatumRow describing a
