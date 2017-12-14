@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -269,7 +270,7 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		Insecure: true,
 	}
 	rpcCtx := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, baseCtx,
-		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
+		hlc.NewClock(hlc.UnixNano, 0), c.stopper, &cluster.MakeTestingClusterSettings().Version)
 
 	n := &Node{
 		Cfg:    cfg,
@@ -514,7 +515,7 @@ func (n *Node) Client() *client.DB {
 		return existingClient
 	}
 
-	conn, err := n.rpcCtx.GRPCDial(n.RPCAddr()).Connect(context.Background())
+	conn, err := n.rpcCtx.GRPCDialRaw(n.RPCAddr())
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
@@ -531,7 +532,7 @@ func (n *Node) StatusClient() serverpb.StatusClient {
 		return existingClient
 	}
 
-	conn, err := n.rpcCtx.GRPCDial(n.RPCAddr()).Connect(context.Background())
+	conn, err := n.rpcCtx.GRPCDialRaw(n.RPCAddr())
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}

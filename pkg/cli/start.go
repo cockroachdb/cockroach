@@ -938,6 +938,7 @@ func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(
 		serverCfg.Config,
 		clock,
 		stopper,
+		&serverCfg.Settings.Version,
 	)
 	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {

@@ -115,7 +115,8 @@ func createTestStoreWithEngine(
 	ac := log.AmbientContext{Tracer: tracer}
 	storeCfg.AmbientCtx = ac
 
-	rpcContext := rpc.NewContext(ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper)
+	rpcContext := rpc.NewContext(
+		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, &storeCfg.Settings.Version)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
 	storeCfg.Gossip = gossip.NewTest(
@@ -280,7 +281,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
-			m.transportStopper)
+			m.transportStopper, &st.Version)
 		// Create a breaker which never trips and never backs off to avoid
 		// introducing timing-based flakes.
 		m.rpcContext.BreakerFactory = func() *circuit.Breaker {

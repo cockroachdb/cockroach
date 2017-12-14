@@ -23,6 +23,9 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -46,14 +49,17 @@ func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	version := &cluster.MakeTestingClusterSettings().Version
 	heartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
+		version:            version,
 	}
 
 	request := &PingRequest{
-		Ping: "testPing",
+		Ping:          "testPing",
+		ServerVersion: version.ServerVersion,
 	}
 	response, err := heartbeat.Ping(context.Background(), request)
 	if err != nil {
@@ -73,6 +79,7 @@ func TestHeartbeatReply(t *testing.T) {
 type ManualHeartbeatService struct {
 	clock              *hlc.Clock
 	remoteClockMonitor *RemoteClockMonitor
+	version            *cluster.ExposedClusterVersion
 	// Heartbeats are processed when a value is sent here.
 	ready   chan error
 	stopper *stop.Stopper
@@ -95,6 +102,7 @@ func (mhs *ManualHeartbeatService) Ping(
 		clock:              mhs.clock,
 		remoteClockMonitor: mhs.remoteClockMonitor,
 		clusterID:          &base.ClusterIDContainer{},
+		version:            mhs.version,
 	}
 	return hs.Ping(ctx, args)
 }
@@ -103,19 +111,23 @@ func TestManualHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	version := &cluster.MakeTestingClusterSettings().Version
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		ready:              make(chan error, 1),
+		version:            version,
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
+		version:            version,
 	}
 
 	request := &PingRequest{
-		Ping: "testManual",
+		Ping:          "testManual",
+		ServerVersion: version.ServerVersion,
 	}
 	manualHeartbeat.ready <- nil
 	ctx := context.Background()
@@ -154,6 +166,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 	hs := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		version:            &cluster.MakeTestingClusterSettings().Version,
 	}
 
 	request := &PingRequest{
@@ -183,6 +196,66 @@ func TestClusterIDCompare(t *testing.T) {
 
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	version := &cluster.MakeTestingClusterSettings().Version
+	heartbeat := &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		clusterID:          &base.ClusterIDContainer{},
+		version:            version,
+	}
+
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			heartbeat.clusterID.Reset(td.serverClusterID)
+			request := &PingRequest{
+				Ping:          "testPing",
+				ClusterID:     &td.clientClusterID,
+				ServerVersion: version.ServerVersion,
+			}
+			_, err := heartbeat.Ping(context.Background(), request)
+			if td.expectError && err == nil {
+				t.Error("expected cluster ID mismatch error")
+			}
+			if !td.expectError && err != nil {
+				t.Errorf("unexpected error: %s", err)
+			}
+		})
+	}
+}
+
+// Test version compatibility check in Ping handler. Note that version
+// compatibility is also checked on the ping request side. This is tested in
+// context_test.TestVersionCheckBidirectional.
+func TestVersionCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	empty := roachpb.Version{}
+
+	// Version before the version check was implemented
+	v0 := cluster.VersionByKey(cluster.VersionRPCNetworkStats)
+
+	// Version where the check was implemented
+	v1 := cluster.VersionByKey(cluster.VersionRPCVersionCheck)
+
+	// Next version after
+	v2 := cluster.VersionByKey(cluster.VersionRPCVersionCheck)
+	v2.Unstable++
+
+	testData := []struct {
+		name           string
+		clusterVersion roachpb.Version
+		clientVersion  roachpb.Version
+		expectError    bool
+	}{
+		{"clientVersion == clusterVersion", v1, v1, false},
+		{"clientVersion > clusterVersion", v1, v2, false},
+		{"clientVersion < clusterVersion", v2, v1, true},
+		{"clusterVersion missing success", v0, empty, false},
+		{"clientVersion missing fail", v1, empty, true},
+	}
+
+	manual := hlc.NewManualClock(5)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
@@ -191,14 +264,26 @@ func TestClusterIDCompare(t *testing.T) {
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			heartbeat.clusterID.Reset(td.serverClusterID)
+			settings := cluster.MakeClusterSettings(td.clusterVersion, td.clusterVersion)
+			cv := cluster.ClusterVersion{
+				MinimumVersion: td.clusterVersion,
+				UseVersion:     td.clusterVersion,
+			}
+			if err := settings.InitializeVersion(cv); err != nil {
+				t.Fatal(err)
+			}
+			heartbeat.version = &settings.Version
+
 			request := &PingRequest{
-				Ping:      "testPing",
-				ClusterID: &td.clientClusterID,
+				Ping:          "testPing",
+				ServerVersion: td.clientVersion,
 			}
 			_, err := heartbeat.Ping(context.Background(), request)
-			if td.expectError && err == nil {
-				t.Error("expected cluster ID mismatch error")
+			if td.expectError {
+				expected := "version compatibility check failed"
+				if !testutils.IsError(err, expected) {
+					t.Errorf("expected %s error, got %v", expected, err)
+				}
 			}
 			if !td.expectError && err != nil {
 				t.Errorf("unexpected error: %s", err)
