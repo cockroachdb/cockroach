@@ -274,26 +274,6 @@ function formatMetricData(
   return formattedData;
 }
 
-function filterInvalidDatapoints(
-  formattedData: formattedSeries[],
-  timeInfo: QueryTimeInfo,
-): formattedSeries[] {
-  return _.map(formattedData, (datum) => {
-    // Drop any returned points at the beginning that have a lower timestamp
-    // than the explicitly queried domain. This works around a bug in NVD3
-    // which causes the interactive guideline to highlight the wrong points.
-    // https://github.com/novus/nvd3/issues/1913
-    const filteredValues = _.dropWhile(datum.values, (dp) => {
-      return dp.timestamp_nanos.toNumber() < timeInfo.start.toNumber();
-    });
-
-    return {
-      ...datum,
-      values: filteredValues,
-    };
-  });
-}
-
 export function InitLineChart(chart: nvd3.LineChart) {
     chart
       .x((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
@@ -328,8 +308,7 @@ export function ConfigureLineChart(
   let xAxisDomain, yAxisDomain: AxisDomain;
 
   if (data) {
-    const formattedRaw = formatMetricData(metrics, data);
-    formattedData = filterInvalidDatapoints(formattedRaw, timeInfo);
+    formattedData = formatMetricData(metrics, data);
 
     xAxisDomain = calculateXAxisDomain(timeInfo);
     yAxisDomain = calculateYAxisDomain(axis.props.units, data);
