@@ -67,11 +67,10 @@ class DetailsTooltip extends React.Component<DetailsTooltipProps, {}> {
   render() {
     const { hoverChart, hoverTime, x, y } = this.props.hoverState;
 
-    if (!hoverChart) {
+    if (!hoverChart || !(hoverChart in this.props.metrics)) {
       return null;
     }
 
-    // TODO(couchand): make this safer
     const data = this.props.metrics[hoverChart].data.results;
 
     const bisect = d3.bisector((d: any) => NanoToMilli(d.timestamp_nanos.toNumber())).left;
