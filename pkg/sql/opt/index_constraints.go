@@ -359,20 +359,32 @@ func (c *indexConstraintCalc) intersectSpanSet(a *LogicalSpan, spanSet LogicalSp
 	return res
 }
 
-// makeSpansForExpr creates spans for index columns starting at <depth>
-// from the given expression.
-func (c *indexConstraintCalc) makeSpansForExpr(depth int, e *expr) (LogicalSpans, bool) {
-	// Check if the operator is supported.
-	switch e.op {
-	case eqOp, ltOp, gtOp, leOp, geOp, neOp:
-		// We support comparisons when the left-hand side is an indexed var for the
-		// current column and the right-hand side is a constant.
-		if !isIndexedVar(e.children[0], depth) || e.children[1].op != constOp {
-			return nil, false
+// makeSpansForSingleColumn creates spans for a single index column from a
+// simple comparison expression. The arguments are the operator and right
+// operand.
+func (c *indexConstraintCalc) makeSpansForSingleColumn(
+	op operator, val *expr,
+) (LogicalSpans, bool) {
+	if op == inOp && isTupleOfConstants(val) {
+		// We assume that the values of the tuple are already ordered and distinct.
+		spans := make(LogicalSpans, len(val.children))
+		for i, v := range val.children {
+			datum := v.private.(tree.Datum)
+			spans[i].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
+			spans[i].End = spans[i].Start
 		}
-		datum := e.children[1].private.(tree.Datum)
+		return spans, true
+	}
+	// The rest of the supported expressions must have a constant scalar on the
+	// right-hand side.
+	if val.op != constOp {
+		return nil, false
+	}
+	datum := val.private.(tree.Datum)
+	switch op {
+	case eqOp, ltOp, gtOp, leOp, geOp:
 		sp := MakeFullSpan()
-		switch e.op {
+		switch op {
 		case eqOp:
 			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
@@ -386,17 +398,29 @@ func (c *indexConstraintCalc) makeSpansForExpr(depth int, e *expr) (LogicalSpans
 			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 		case geOp:
 			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
-		case neOp:
-			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
-			sp2 := MakeFullSpan()
-			sp2.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
-			return LogicalSpans{sp, sp2}, true
 		}
 		return LogicalSpans{sp}, true
+
+	case neOp:
+		spans := LogicalSpans{MakeFullSpan(), MakeFullSpan()}
+		spans[0].End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
+		spans[1].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
+		return spans, true
 
 	default:
 		return nil, false
 	}
+}
+
+// makeSpansForExpr creates spans for index columns starting at <depth>
+// from the given expression.
+func (c *indexConstraintCalc) makeSpansForExpr(depth int, e *expr) (LogicalSpans, bool) {
+	// Check for an operation where the left-hand side is an
+	// indexed var for this column.
+	if isIndexedVar(e.children[0], depth) {
+		return c.makeSpansForSingleColumn(e.op, e.children[1])
+	}
+	return nil, false
 }
 
 // calcDepth calculates constraints for the sequence of index columns starting
