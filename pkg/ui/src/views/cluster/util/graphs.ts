@@ -145,7 +145,7 @@ function ComputeCountAxisDomain(extent: Extent): AxisDomain {
     return metricFormat(n);
   };
 
-  axisDomain.label = "count";
+  axisDomain.label = "";
 
   return axisDomain;
 }
@@ -338,8 +338,10 @@ export function ConfigureLineChart(
     yAxisDomain = calculateYAxisDomain(axis.props.units, data);
 
     chart.yDomain(yAxisDomain.extent);
-    if (axis.props.label) {
+    if (axis.props.label && yAxisDomain.label) {
       chart.yAxis.axisLabel(`${axis.props.label} (${yAxisDomain.label})`);
+    } else if (axis.props.label) {
+      chart.yAxis.axisLabel(axis.props.label);
     } else {
       chart.yAxis.axisLabel(yAxisDomain.label);
     }

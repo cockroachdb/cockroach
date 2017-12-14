@@ -19,7 +19,7 @@ export default function (props: GraphDashboardProps) {
         started per second ${tooltipSelection}.`
       }
     >
-      <Axis>
+      <Axis label="queries">
         <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
         <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
         <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
@@ -61,7 +61,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis>
+      <Axis label="replicas">
         {
           _.map(nodeIDs, (nid) => (
             <Metric

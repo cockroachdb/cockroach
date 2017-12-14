@@ -82,7 +82,7 @@ export default function (props: GraphDashboardProps) {
            executed per logical read operation ${tooltipSelection}.`
       }
     >
-      <Axis>
+      <Axis label="factor">
         <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" aggregateAvg />
       </Axis>
     </LineGraph>,
@@ -92,7 +92,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tooltip={`The number of RocksDB SSTables in use ${tooltipSelection}.`}
     >
-      <Axis>
+      <Axis label="sstables">
         <Metric name="cr.store.rocksdb.num-sstables" title="SSTables" />
       </Axis>
     </LineGraph>,
@@ -105,7 +105,7 @@ export default function (props: GraphDashboardProps) {
           file descriptor limit.`
       }
     >
-      <Axis>
+      <Axis label="descriptors">
         <Metric name="cr.node.sys.fd.open" title="Open" />
         <Metric name="cr.node.sys.fd.softlimit" title="Limit" />
       </Axis>
