@@ -538,7 +538,7 @@ func (sc *SchemaChanger) distBackfill(
 					otherTableDescs = append(otherTableDescs, *table)
 				}
 			}
-			recv, err := makeDistSQLReceiver(
+			recv := makeDistSQLReceiver(
 				ctx,
 				nil, /* resultWriter */
 				sc.rangeDescriptorCache,
@@ -548,9 +548,6 @@ func (sc *SchemaChanger) distBackfill(
 					_ = sc.clock.Update(ts)
 				},
 			)
-			if err != nil {
-				return err
-			}
 			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, &evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
 				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,

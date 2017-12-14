@@ -1983,7 +1983,7 @@ func (e *Executor) execDistSQL(
 	planner *planner, tree planNode, rowResultWriter StatementResult,
 ) error {
 	ctx := planner.session.Ctx()
-	recv, err := makeDistSQLReceiver(
+	recv := makeDistSQLReceiver(
 		ctx, rowResultWriter,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
 		planner.txn,
@@ -1991,11 +1991,9 @@ func (e *Executor) execDistSQL(
 			_ = e.cfg.Clock.Update(ts)
 		},
 	)
-	if err != nil {
-		return err
-	}
-	err = e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv, planner.evalCtx)
-	if err != nil {
+	if err := e.distSQLPlanner.PlanAndRun(
+		ctx, planner.txn, tree, &recv, planner.evalCtx,
+	); err != nil {
 		return err
 	}
 	if recv.err != nil {
