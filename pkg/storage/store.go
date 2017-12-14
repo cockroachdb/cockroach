@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -352,6 +353,7 @@ type Store struct {
 	cfg                StoreConfig
 	db                 *client.DB
 	engine             engine.Engine               // The underlying key-value store
+	compactor          *compactor.Compactor        // Schedules compaction of the engine
 	tsCache            tscache.Cache               // Most recent timestamps for keys / key ranges
 	allocator          Allocator                   // Makes allocation decisions
 	rangeIDAlloc       *idAllocator                // Range ID allocator
@@ -862,6 +864,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
 	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
 
+	s.compactor = compactor.NewCompactor(s.engine, s.Capacity)
+	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
+
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
 	if s.cfg.Gossip != nil {
@@ -1203,6 +1208,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 		log.Event(ctx, "computed initial metrics")
+	}
+
+	// Start the storage engine compactor.
+	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
+		s.compactor.Start(s.AnnotateCtx(context.Background()), s.Tracer(), s.stopper)
 	}
 
 	// Set the started flag (for unittests).

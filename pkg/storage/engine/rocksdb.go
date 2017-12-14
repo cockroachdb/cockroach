@@ -261,6 +261,60 @@ func (s SSTableInfos) ReadAmplification() int {
 	return readAmp
 }
 
+// SSTableInfosByLevel maintains slices of SSTableInfo objects, one
+// per level, sorted first by level and second by start key. This is
+// different from the default sort order, which is by level, then
+// size, then start key..
+type SSTableInfosByLevel struct {
+	// Each level is a slice of SSTableInfos
+	levels [][]SSTableInfo
+}
+
+// NewSSTableInfosByLevel returns a new SSTableInfosByLevel object
+// based on the supplied SSTableInfos slice.
+func NewSSTableInfosByLevel(s SSTableInfos) SSTableInfosByLevel {
+	var result SSTableInfosByLevel
+	for _, t := range s {
+		for i := len(result.levels); i <= t.Level; i++ {
+			result.levels = append(result.levels, []SSTableInfo{})
+		}
+		result.levels[t.Level] = append(result.levels[t.Level], t)
+	}
+	// Sort each level by start key.
+	for _, l := range result.levels {
+		sort.Slice(l, func(i, j int) bool { return l[i].Start.Less(l[j].Start) })
+	}
+	return result
+}
+
+// MaxLevel returns the maximum level for which there are SSTables.
+func (s *SSTableInfosByLevel) MaxLevel() int {
+	return len(s.levels) - 1
+}
+
+// MaxLevelSpanOverlapsContiguousSSTables returns the maximum level at
+// which the specified key span overlaps either none, one, or at most
+// two contiguous SSTables. Level 0 is returned if no level qualifies.
+func (s *SSTableInfosByLevel) MaxLevelSpanOverlapsContiguousSSTables(span roachpb.Span) int {
+	overlapsMoreThanTwo := func(tables []SSTableInfo) bool {
+		// Search to find the first sstable which might overlap the span.
+		i := sort.Search(len(tables), func(i int) bool { return span.Key.Compare(tables[i].End.Key) < 0 })
+		// If no SSTable is overlapped, return false.
+		if i == -1 || i == len(tables) || span.EndKey.Compare(tables[i].Start.Key) < 0 {
+			return false
+		}
+		// Return true if the span is not subsumed by the combination of
+		// this sstable and the next.
+		return i < len(tables)-1 && span.EndKey.Compare(tables[i+1].End.Key) > 0
+	}
+	for i := len(s.levels) - 1; i > 0; i-- {
+		if !overlapsMoreThanTwo(s.levels[i]) {
+			return i
+		}
+	}
+	return 0
+}
+
 // RocksDBCache is a wrapper around C.DBCache
 type RocksDBCache struct {
 	cache *C.DBCache
@@ -718,9 +772,14 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
-// Compact forces compaction on the database.
+// Compact forces compaction over the entire database.
 func (r *RocksDB) Compact() error {
 	return statusToError(C.DBCompact(r.rdb))
+}
+
+// CompactRange forces compaction over a specified range of keys in the database.
+func (r *RocksDB) CompactRange(start, end MVCCKey) error {
+	return statusToError(C.DBCompactRange(r.rdb, goToCKey(start), goToCKey(end)))
 }
 
 // ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
