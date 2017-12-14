@@ -67,7 +67,7 @@ message ColumnType {
     BIGINT = 3;
     BIT = 4;
     REAL = 5;
-    DOUBLE_PRECISON = 6;
+    DOUBLE_PRECISION = 6;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
@@ -146,9 +146,9 @@ message ColumnFamilyDescriptor {
 
   // If nonzero, the column involved in the single column optimization.
   //
-  // Families store colums in a ValueType_TUPLE as repeated <colid><data>
+  // Families store columns in a ValueType_TUPLE as repeated <columnID><data>
   // entries. As a space optimization and for backward compatibility, a single
-  // column is written without the columnid prefix. Because more columns could
+  // column is written without the column id prefix. Because more columns could
   // be added, it would be ambiguous which column was stored when read back in,
   // so this field supplies it.
   optional uint32 default_column_id = 5 [(gogoproto.nullable) = false,
@@ -218,7 +218,7 @@ message PartitioningDescriptor {
   }
 
   // NumColumns is how large of a prefix of the columns in an index are used in
-  // the function mapping column values to partitiong. If this is a
+  // the function mapping column values to partitions. If this is a
   // subpartition, this is offset to start from the end of the parent
   // partition's columns. If NumColumns is 0, then there is no partitioning.
   optional uint32 num_columns = 1 [(gogoproto.nullable) = false];
@@ -554,7 +554,7 @@ message TableDescriptor {
   }
 
   // This array is populated if the descriptor was renamed. If the descriptor is
-  // renamed multiple times before the schema chage is processed, there will be
+  // renamed multiple times before the schema change is processed, there will be
   // one element for each rename.
   // When this is detected in a schema change, the records for the old names are
   // deleted and this field is cleared.
@@ -583,7 +583,7 @@ message TableDescriptor {
     // The ID of the relation that depends on this one.
     optional uint32 id = 1 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
-    // If applicable, the ID of this table's index that is refenced by the
+    // If applicable, the ID of this table's index that is referenced by the
     // dependent relation.
     optional uint32 index_id = 2 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];

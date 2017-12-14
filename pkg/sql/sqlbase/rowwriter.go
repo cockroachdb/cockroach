@@ -282,7 +282,7 @@ func (ri *RowInserter) InsertRow(
 	// Add the new values.
 	// TODO(dan): This has gotten very similar to the loop in UpdateRow, see if
 	// they can be DRY'd. Ideally, this would also work for
-	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
+	// truncateAndBackfillColumnsChunk, which is currently abusing rowUpdater.
 	for i, family := range ri.Helper.TableDesc.Families {
 		if i > 0 {
 			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration

@@ -267,7 +267,7 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
 	columnIDs = append(columnIDs, desc.ExtraColumnIDs...)
 	for range desc.ExtraColumnIDs {
-		// Extra columns are encoded ascendingly.
+		// Extra columns are encoded in ascending order.
 		dirs = append(dirs, encoding.Ascending)
 	}
 	return columnIDs, dirs
@@ -1727,7 +1727,7 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 // adds it unless "strict" create (`true` for create but `false` for
 // ifNotExists) is specified.
 //
-// AllocateIDs must be called before the TableDesciptor will be valid.
+// AllocateIDs must be called before the TableDescriptor will be valid.
 func (desc *TableDescriptor) AddColumnToFamilyMaybeCreate(
 	col string, family string, create bool, ifNotExists bool,
 ) error {
@@ -2170,7 +2170,7 @@ func (c *ColumnType) SQLString() string {
 		if c.Precision > 0 {
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
-		if c.VisibleType == ColumnType_DOUBLE_PRECISON {
+		if c.VisibleType == ColumnType_DOUBLE_PRECISION {
 			return "DOUBLE PRECISION"
 		}
 	case ColumnType_DECIMAL:
