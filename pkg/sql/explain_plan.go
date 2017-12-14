@@ -166,7 +166,9 @@ func (p *planner) populateExplain(
 		if e.showMetadata {
 			if plan != nil {
 				cols := planColumns(plan)
+				// Columns metadata.
 				row = append(row, tree.NewDString(formatColumns(cols, e.showTypes)))
+				// Ordering metadata.
 				row = append(row, tree.NewDString(planPhysicalProps(plan).AsString(cols)))
 			} else {
 				row = append(row, emptyString, emptyString)

@@ -50,11 +50,11 @@ func newDistinct(
 		distinctCols: make(map[uint32]struct{}),
 		memAcc:       flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
-	for _, col := range spec.OrderedColumns {
-		d.orderedCols[col] = struct{}{}
-	}
 	for _, col := range spec.DistinctColumns {
 		d.distinctCols[col] = struct{}{}
+	}
+	for _, col := range spec.OrderedColumns {
+		d.orderedCols[col] = struct{}{}
 	}
 
 	d.types = input.Types()
