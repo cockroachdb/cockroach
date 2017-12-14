@@ -716,7 +716,7 @@ func diversityAllocateScore(
 	}
 	// If the range has no replicas, any node would be a perfect fit.
 	if numSamples == 0 {
-		return 1.0
+		return roachpb.MaxDiversityScore
 	}
 	return sumScore / float64(numSamples)
 }
@@ -741,7 +741,7 @@ func diversityRemovalScore(
 		numSamples++
 	}
 	if numSamples == 0 {
-		return 1.0
+		return roachpb.MaxDiversityScore
 	}
 	return sumScore / float64(numSamples)
 }
@@ -786,7 +786,7 @@ func diversityRebalanceScore(
 	}
 	// If the range has zero or one replicas, any node would be a perfect fit.
 	if numSamples == 0 {
-		return 1.0
+		return roachpb.MaxDiversityScore
 	}
 	return maxSumScore / float64(numSamples)
 }
