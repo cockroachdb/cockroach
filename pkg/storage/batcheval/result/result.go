@@ -246,6 +246,15 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.AddSSTable = nil
 
+	if q.Replicated.SuggestedCompactions != nil {
+		if p.Replicated.SuggestedCompactions == nil {
+			p.Replicated.SuggestedCompactions = q.Replicated.SuggestedCompactions
+		} else {
+			p.Replicated.SuggestedCompactions = append(p.Replicated.SuggestedCompactions, q.Replicated.SuggestedCompactions...)
+		}
+	}
+	q.Replicated.SuggestedCompactions = nil
+
 	if q.Local.IntentsAlways != nil {
 		if p.Local.IntentsAlways == nil {
 			p.Local.IntentsAlways = q.Local.IntentsAlways
