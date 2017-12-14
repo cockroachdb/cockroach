@@ -1109,13 +1109,30 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		if err := desc.validateTableIndexes(columnNames, colIDToFamilyID); err != nil {
 			return err
 		}
-		if err := desc.validatePartitioning(); err != nil {
+		if err := desc.validatePartitioning(st); err != nil {
 			return err
 		}
 	}
 
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
+	if err := desc.Privileges.Validate(desc.GetID()); err != nil {
+		return err
+	}
+
+	if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
+		for _, check := range desc.Checks {
+			if check.Derived {
+				// Panic to enforce that features using derived constraints return an
+				// error earlier. We don't want to expose a generic "derived constraints
+				// unsupported" error message, as a "derived constraint" is an internal
+				// concept that users shouldn't need to understand. Partitioning, for
+				// example, will have already aborted with a "partitioning not
+				// supported" error.
+				panic("cluster version does not support derived CHECK constraints")
+			}
+		}
+	}
+	return nil
 }
 
 func (desc *TableDescriptor) validateColumnFamilies(
@@ -1570,7 +1587,11 @@ func (desc *TableDescriptor) FindNonDropPartitionByName(
 
 // validatePartitioning validates that any PartitioningDescriptors contained in
 // table indexes are well-formed. See validatePartitioningDesc for details.
-func (desc *TableDescriptor) validatePartitioning() error {
+func (desc *TableDescriptor) validatePartitioning(st *cluster.Settings) error {
+	if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
+		return errors.New("cluster version does not support partitioning")
+	}
+
 	partitionNames := make(map[string]string)
 
 	a := &DatumAlloc{}

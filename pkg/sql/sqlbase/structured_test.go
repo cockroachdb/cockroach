@@ -1060,8 +1060,9 @@ func TestValidatePartitioning(t *testing.T) {
 			},
 		},
 	}
+	st := cluster.MakeTestingClusterSettings()
 	for i, test := range tests {
-		err := test.desc.validatePartitioning()
+		err := test.desc.validatePartitioning(st)
 		if !testutils.IsError(err, test.err) {
 			t.Errorf(`%d: got "%v" expected "%v"`, i, err, test.err)
 		}
