@@ -101,14 +101,13 @@ type buf struct {
 }
 
 func makeBuf(name string, capacity int, mu *syncutil.Mutex) buf {
-	b := buf{
-		Mutex:    mu,
-		name:     name,
-		capacity: capacity,
+	return buf{
+		Mutex:        mu,
+		name:         name,
+		capacity:     capacity,
+		readerWait:   sync.NewCond(mu),
+		capacityWait: sync.NewCond(mu),
 	}
-	b.readerWait = sync.NewCond(b.Mutex)
-	b.capacityWait = sync.NewCond(b.Mutex)
-	return b
 }
 
 // Write adds data to the buffer. If there's zero free capacity, it will block
