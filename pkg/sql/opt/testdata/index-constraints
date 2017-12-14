@@ -9,6 +9,12 @@ build-scalar,normalize,index-constraints int
 [/2 - ]
 
 build-scalar,normalize,index-constraints int
+@1 != 2
+----
+[ - /2)
+(/2 - ]
+
+build-scalar,normalize,index-constraints int
 @1 < 2
 ----
 [ - /1]
@@ -32,6 +38,12 @@ build-scalar,normalize,index-constraints int int
 @1 > 2 AND @2 > 5
 ----
 [/3/6 - ]
+
+build-scalar,normalize,index-constraints int
+@1 >= 1 AND @1 <= 5 AND @1 != 3
+----
+[/1 - /3)
+(/3 - /5]
 
 build-scalar,normalize,index-constraints int int
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
@@ -61,6 +73,17 @@ build-scalar,normalize,index-constraints int int
 build-scalar,normalize,index-constraints int
 @1 > 2 AND @1 < 1
 ----
+
+build-scalar,normalize,index-constraints int int
+@1 = 1 AND @2 != 2
+----
+[/1 - /1/2)
+(/1/2 - /1]
+
+build-scalar,normalize,index-constraints int int
+@1 >= 1 AND @1 <= 5 AND @2 != 2
+----
+[/1 - /5]
 
 # Tests with a type that doesn't support Prev.
 build-scalar,normalize,index-constraints string
