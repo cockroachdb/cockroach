@@ -556,12 +556,14 @@ func (a Allocator) RebalanceTarget(
 		if removeReplica.StoreID != target.store.StoreID {
 			break
 		}
-		newTargets := candidates.removeCandidate(*target)
-		newTarget := newTargets.selectGood(a.randGen)
-		if newTarget == nil {
+		// Remove the considered target from our modified RangeDescriptor and from
+		// the candidates list, then try again if there are any other candidates.
+		rangeInfo.Desc.Replicas = rangeInfo.Desc.Replicas[:len(rangeInfo.Desc.Replicas)-1]
+		candidates = candidates.removeCandidate(*target)
+		target = candidates.selectGood(a.randGen)
+		if target == nil {
 			return nil, ""
 		}
-		target = newTarget
 	}
 	details, err := json.Marshal(decisionDetails{
 		Target:               target.String(),
