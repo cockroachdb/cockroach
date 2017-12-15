@@ -24,60 +24,64 @@ import (
 )
 
 func init() {
-	scalarOpNames := map[operator]string{
-		variableOp:          "variable",
-		constOp:             "const",
-		listOp:              "list",
-		orderedListOp:       "ordered-list",
-		andOp:               "and",
-		orOp:                "or",
-		notOp:               "not",
-		eqOp:                "eq",
-		ltOp:                "lt",
-		gtOp:                "gt",
-		leOp:                "le",
-		geOp:                "ge",
-		neOp:                "ne",
-		inOp:                "in",
-		notInOp:             "not-in",
-		likeOp:              "like",
-		notLikeOp:           "not-like",
-		iLikeOp:             "ilike",
-		notILikeOp:          "not-ilike",
-		similarToOp:         "similar-to",
-		notSimilarToOp:      "not-similar-to",
-		regMatchOp:          "regmatch",
-		notRegMatchOp:       "not-regmatch",
-		regIMatchOp:         "regimatch",
-		notRegIMatchOp:      "not-regimatch",
-		isDistinctFromOp:    "is-distinct-from",
-		isNotDistinctFromOp: "is-not-distinct-from",
-		isOp:                "is",
-		isNotOp:             "is-not",
-		anyOp:               "any",
-		someOp:              "some",
-		allOp:               "all",
-		bitandOp:            "bitand",
-		bitorOp:             "bitor",
-		bitxorOp:            "bitxor",
-		plusOp:              "plus",
-		minusOp:             "minus",
-		multOp:              "mult",
-		divOp:               "div",
-		floorDivOp:          "floor-div",
-		modOp:               "mod",
-		powOp:               "pow",
-		concatOp:            "concat",
-		lShiftOp:            "lshift",
-		rShiftOp:            "rshift",
-		unaryPlusOp:         "unary-plus",
-		unaryMinusOp:        "unary-minus",
-		unaryComplementOp:   "complement",
-		functionCallOp:      "func",
+	// A note on normalization functions for scalar expressions, for now we expect
+	// to build exprs from TypedExprs which have gone through a normalization
+	// process; we implement only additional rules.
+	scalarOpInfos := map[operator]operatorInfo{
+		variableOp:          {name: "variable"},
+		constOp:             {name: "const"},
+		listOp:              {name: "list"},
+		orderedListOp:       {name: "ordered-list"},
+		andOp:               {name: "and", normalizeFn: normalizeAndOrOp},
+		orOp:                {name: "or", normalizeFn: normalizeAndOrOp},
+		notOp:               {name: "not"},
+		eqOp:                {name: "eq", normalizeFn: normalizeEqOp},
+		ltOp:                {name: "lt"},
+		gtOp:                {name: "gt"},
+		leOp:                {name: "le"},
+		geOp:                {name: "ge"},
+		neOp:                {name: "ne"},
+		inOp:                {name: "in"},
+		notInOp:             {name: "not-in"},
+		likeOp:              {name: "like"},
+		notLikeOp:           {name: "not-like"},
+		iLikeOp:             {name: "ilike"},
+		notILikeOp:          {name: "not-ilike"},
+		similarToOp:         {name: "similar-to"},
+		notSimilarToOp:      {name: "not-similar-to"},
+		regMatchOp:          {name: "regmatch"},
+		notRegMatchOp:       {name: "not-regmatch"},
+		regIMatchOp:         {name: "regimatch"},
+		notRegIMatchOp:      {name: "not-regimatch"},
+		isDistinctFromOp:    {name: "is-distinct-from"},
+		isNotDistinctFromOp: {name: "is-not-distinct-from"},
+		isOp:                {name: "is"},
+		isNotOp:             {name: "is-not"},
+		anyOp:               {name: "any"},
+		someOp:              {name: "some"},
+		allOp:               {name: "all"},
+		bitandOp:            {name: "bitand"},
+		bitorOp:             {name: "bitor"},
+		bitxorOp:            {name: "bitxor"},
+		plusOp:              {name: "plus"},
+		minusOp:             {name: "minus"},
+		multOp:              {name: "mult"},
+		divOp:               {name: "div"},
+		floorDivOp:          {name: "floor-div"},
+		modOp:               {name: "mod"},
+		powOp:               {name: "pow"},
+		concatOp:            {name: "concat"},
+		lShiftOp:            {name: "lshift"},
+		rShiftOp:            {name: "rshift"},
+		unaryPlusOp:         {name: "unary-plus"},
+		unaryMinusOp:        {name: "unary-minus"},
+		unaryComplementOp:   {name: "complement"},
+		functionCallOp:      {name: "func"},
 	}
 
-	for op, name := range scalarOpNames {
-		registerOperator(op, name, scalarClass{})
+	for op, info := range scalarOpInfos {
+		info.class = scalarClass{}
+		registerOperator(op, info)
 	}
 }
 
@@ -165,40 +169,74 @@ func isTupleOfConstants(e *expr) bool {
 	return true
 }
 
-// Applies a set of normalization rules to a scalar expression.
-//
-// For now, we expect to build exprs from TypedExprs which have gone through a
-// normalization process; we include additional rules.
-func normalizeScalar(e *expr) {
-	for _, input := range e.children {
-		normalizeScalar(input)
+// Normalization rules for andOp and orOp: merge in any children that have the
+// same operator.
+// Example: a and (b and c)  ->  a and b and c
+func normalizeAndOrOp(e *expr) {
+	if e.op != andOp && e.op != orOp {
+		panic(fmt.Sprintf("invalid call on %s", e))
 	}
-
-	if e.op == andOp || e.op == orOp {
-		// Merge in any children that have the same operator. Example:
-		//   a and (b and c)  ->  a and b and c
-		var found bool
-		newNumChildren := len(e.children)
-		for _, child := range e.children {
-			if child.op == e.op {
-				found = true
-				// We will add the grandchildren as direct children of this node (and
-				// remove the child). The child has been normalized already, so we don't
-				// need to look deeper.
-				newNumChildren += len(child.children) - 1
-			}
+	var found bool
+	newNumChildren := len(e.children)
+	for _, child := range e.children {
+		if child.op == e.op {
+			found = true
+			// We will add the grandchildren as direct children of this node (and
+			// remove the child). The child has been normalized already, so we don't
+			// need to look deeper.
+			newNumChildren += len(child.children) - 1
 		}
-		if found {
-			saved := e.children
-			e.children = make([]*expr, 0, newNumChildren)
+	}
+	if !found {
+		return
+	}
+	saved := e.children
+	e.children = make([]*expr, 0, newNumChildren)
 
-			for _, child := range saved {
-				if child.op == e.op {
-					e.children = append(e.children, child.children...)
-				} else {
-					e.children = append(e.children, child)
-				}
-			}
+	for _, child := range saved {
+		if child.op == e.op {
+			e.children = append(e.children, child.children...)
+		} else {
+			e.children = append(e.children, child)
 		}
+	}
+}
+
+func normalizeEqOp(e *expr) {
+	if e.op != eqOp {
+		panic(fmt.Sprintf("invalid call on %s", e))
+	}
+	lhs, rhs := e.children[0], e.children[1]
+	if lhs.op == orderedListOp && rhs.op == orderedListOp {
+		// Break up expressions like
+		//   (a, b, c) = (x, y, z)
+		// into
+		//   (a = x) AND (b = y) AND (c = z)
+		// This transformation helps reduce the complexity of the index
+		// constraints code which would otherwise have to deal with this case
+		// separately.
+		e.op = andOp
+		if len(lhs.children) != len(rhs.children) {
+			panic(fmt.Sprintf("tuple length mismatch in eqOp: %s", e))
+		}
+		e.children = make([]*expr, len(lhs.children))
+		for i := range lhs.children {
+			e.children[i] = &expr{
+				op:          andOp,
+				scalarProps: &scalarProps{typ: types.Bool},
+			}
+			initBinaryExpr(e.children[i], eqOp, lhs.children[i], rhs.children[i])
+			// Normalize the new child node. This is for cases like:
+			// ((a, b), (c, d)) = ((x, y), (z, u))
+			normalizeExprNode(e.children[i])
+		}
+		// Normalize the new expression (some of the other rules, like coalescing
+		// AND operations might apply now).
+		normalizeExprNode(e)
+	} else if e.children[0].op != variableOp && e.children[1].op == variableOp {
+		// Normalize (1 = @1) to (@1 = 1).
+		// Note: this transformation is already performed by the TypedExpr
+		// NormalizeExpr, but we may be creating new such expressions above.
+		e.children[0], e.children[1] = rhs, lhs
 	}
 }
