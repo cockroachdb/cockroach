@@ -169,3 +169,47 @@ func TestDistinct(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkDistinct(b *testing.B) {
+	const numCols = 1
+	const numRows = 1000
+
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
+	spec := &DistinctSpec{
+		DistinctColumns: []uint32{0},
+	}
+	post := &PostProcessSpec{}
+
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	types := make([]sqlbase.ColumnType, numCols)
+	for i := 0; i < numCols; i++ {
+		types[i] = columnTypeInt
+	}
+	makeInputTable := func(numRows, numCols int) sqlbase.EncDatumRows {
+		input := make(sqlbase.EncDatumRows, numRows)
+		for i := range input {
+			input[i] = make(sqlbase.EncDatumRow, numCols)
+			for j := 0; j < numCols; j++ {
+				input[i][j] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i+j)))
+			}
+		}
+		return input
+	}
+	input := NewRepeatableRowSource(types, makeInputTable(numRows, numCols))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		d, err := newDistinct(flowCtx, spec, input, post, &RowDisposer{})
+		if err != nil {
+			b.Fatal(err)
+		}
+		d.Run(ctx, nil)
+		input.Reset()
+	}
+}
