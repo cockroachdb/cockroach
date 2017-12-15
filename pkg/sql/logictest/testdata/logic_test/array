@@ -56,6 +56,13 @@ SELECT NULL::INT[]
 ----
 NULL
 
+# #19821
+
+query T
+SELECT ARRAY['one', 'two', 'fünf']
+----
+{"one","two","fünf"}
+
 query T
 SELECT ARRAY[e'\n', e'g\x10h']
 ----

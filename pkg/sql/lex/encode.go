@@ -25,6 +25,7 @@ package lex
 
 import (
 	"bytes"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
@@ -124,9 +125,9 @@ func EncodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
 	// Loop through each unicode code point.
 	for i, r := range in {
 		ch := byte(r)
-		if r >= 0x20 && r < 0x7F && !stringencoding.NeedEscape(ch) && ch != '"' {
+		if unicode.IsPrint(r) && !stringencoding.NeedEscape(ch) && ch != '"' {
 			// Character is printable doesn't need escaping - just print it out.
-			buf.WriteByte(ch)
+			buf.WriteRune(r)
 		} else {
 			stringencoding.EncodeEscapedChar(buf, in, r, ch, i, '"')
 		}
