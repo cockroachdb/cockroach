@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -549,6 +550,50 @@ func TestConsumerClosed(t *testing.T) {
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
+			}
+		})
+	}
+}
+
+func BenchmarkMergeJoiner(b *testing.B) {
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+	flowCtx := &FlowCtx{
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
+
+	spec := &MergeJoinerSpec{
+		LeftOrdering: convertToSpecOrdering(
+			sqlbase.ColumnOrdering{
+				{ColIdx: 0, Direction: encoding.Ascending},
+			}),
+		RightOrdering: convertToSpecOrdering(
+			sqlbase.ColumnOrdering{
+				{ColIdx: 0, Direction: encoding.Ascending},
+			}),
+		Type: JoinType_INNER,
+		// Implicit @1 = @2 constraint.
+	}
+	post := &PostProcessSpec{}
+
+	const numCols = 1
+	for _, numRows := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			rows := makeIntRows(numRows, numCols)
+			leftInput := NewRepeatableRowSource(oneIntCol, rows)
+			rightInput := NewRepeatableRowSource(oneIntCol, rows)
+			b.SetBytes(int64(8 * numRows * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				h, err := newMergeJoiner(flowCtx, spec, leftInput, rightInput, post, &RowDisposer{})
+				if err != nil {
+					b.Fatal(err)
+				}
+				h.Run(ctx, nil)
+				leftInput.Reset()
+				rightInput.Reset()
 			}
 		})
 	}
