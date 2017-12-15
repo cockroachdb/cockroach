@@ -71,14 +71,14 @@ func (s *streamGroupAccumulator) peekAtCurrentGroup() (sqlbase.EncDatumRow, erro
 // advanceGroup returns all rows of the current group and advances the internal
 // state to the next group, so that a subsequent peekAtCurrentGroup() will
 // return the first row of the next group.
-func (s *streamGroupAccumulator) advanceGroup() ([]sqlbase.EncDatumRow, error) {
+func (s *streamGroupAccumulator) advanceGroup(
+	evalCtx *tree.EvalContext,
+) ([]sqlbase.EncDatumRow, error) {
 	if s.srcConsumed {
 		// If src has been exhausted, then we also must have advanced away from the
 		// last group.
 		return nil, nil
 	}
-	// TODO(radu): plumb EvalContext
-	evalCtx := &tree.EvalContext{}
 
 	for {
 		row, err := s.src.NextRow()
@@ -91,6 +91,9 @@ func (s *streamGroupAccumulator) advanceGroup() ([]sqlbase.EncDatumRow, error) {
 		}
 
 		if len(s.curGroup) == 0 {
+			if s.curGroup == nil {
+				s.curGroup = make([]sqlbase.EncDatumRow, 0, 64)
+			}
 			s.curGroup = append(s.curGroup, row)
 			continue
 		}
@@ -107,8 +110,15 @@ func (s *streamGroupAccumulator) advanceGroup() ([]sqlbase.EncDatumRow, error) {
 				s.curGroup[0].String(s.types), row.String(s.types),
 			)
 		} else {
-			ret := s.curGroup
-			s.curGroup = []sqlbase.EncDatumRow{row}
+			n := len(s.curGroup)
+			ret := s.curGroup[:n:n]
+			// The curGroup slice possibly has additional space at the end of it. Use
+			// it if possible to avoid an allocation.
+			s.curGroup = s.curGroup[n:]
+			if cap(s.curGroup) == 0 {
+				s.curGroup = make([]sqlbase.EncDatumRow, 0, 64)
+			}
+			s.curGroup = append(s.curGroup, row)
 			return ret, nil
 		}
 	}
