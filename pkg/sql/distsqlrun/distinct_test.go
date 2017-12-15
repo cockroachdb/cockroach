@@ -186,12 +186,9 @@ func BenchmarkDistinct(b *testing.B) {
 		DistinctColumns: []uint32{0},
 	}
 	post := &PostProcessSpec{}
+	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
 
-	types := make([]sqlbase.ColumnType, numCols)
-	for i := 0; i < numCols; i++ {
-		types[i] = intType
-	}
-	input := NewRepeatableRowSource(types, makeIntRows(numRows, numCols))
+	b.SetBytes(8 * numRows * numCols)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		d, err := newDistinct(flowCtx, spec, input, post, &RowDisposer{})
@@ -201,4 +198,5 @@ func BenchmarkDistinct(b *testing.B) {
 		d.Run(ctx, nil)
 		input.Reset()
 	}
+	b.StopTimer()
 }
