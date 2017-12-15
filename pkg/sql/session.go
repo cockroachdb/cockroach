@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -680,10 +681,15 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 // evalCtx creates a tree.EvalContext from the Session's current configuration.
 func (s *Session) evalCtx() tree.EvalContext {
 	var evalContextTestingKnobs tree.EvalContextTestingKnobs
+	var st *cluster.Settings
 	if s.execCfg != nil {
 		evalContextTestingKnobs = s.execCfg.EvalContextTestingKnobs
+		// TODO(tschottdorf): it looks like this should always be provided.
+		// Perhaps `*Settings` should live somewhere else.
+		st = s.execCfg.Settings
 	}
 	return tree.EvalContext{
+		Settings:     st,
 		Location:     &s.Location,
 		Database:     s.Database,
 		User:         s.User,
