@@ -1602,6 +1602,21 @@ CockroachDB supports the following flags:
 
 	"jsonb_extract_path": {jsonExtractPathImpl},
 
+	"jsonb_pretty": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.JSON}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, err := json.Pretty(tree.MustBeDJSON(args[0]).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info: "Returns the given JSON value as a STRING indented and with newlines.",
+		},
+	},
+
 	"json_typeof": {jsonTypeOfImpl},
 
 	"jsonb_typeof": {jsonTypeOfImpl},

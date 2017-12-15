@@ -106,6 +106,10 @@ type JSON interface {
 
 	// MaybeDecode returns an equivalent JSON which is not a jsonEncoded.
 	MaybeDecode() JSON
+
+	// toGoRepr returns the Go-style representation of this JSON value
+	// (map[string]interface{} for objects, etc.).
+	toGoRepr() (interface{}, error)
 }
 
 type jsonTrue struct{}
@@ -851,3 +855,43 @@ func (jsonNumber) isScalar() bool { return true }
 func (jsonString) isScalar() bool { return true }
 func (jsonArray) isScalar() bool  { return false }
 func (jsonObject) isScalar() bool { return false }
+
+func (jsonNull) toGoRepr() (interface{}, error)     { return nil, nil }
+func (jsonTrue) toGoRepr() (interface{}, error)     { return true, nil }
+func (jsonFalse) toGoRepr() (interface{}, error)    { return false, nil }
+func (j jsonString) toGoRepr() (interface{}, error) { return string(j), nil }
+func (j jsonNumber) toGoRepr() (interface{}, error) { return json.Number(j.String()), nil }
+func (j jsonArray) toGoRepr() (interface{}, error) {
+	result := make([]interface{}, len(j))
+	for i, e := range j {
+		next, err := e.toGoRepr()
+		if err != nil {
+			return nil, err
+		}
+		result[i] = next
+	}
+	return result, nil
+}
+func (j jsonObject) toGoRepr() (interface{}, error) {
+	result := make(map[string]interface{})
+	for _, e := range j {
+		next, err := e.v.toGoRepr()
+		if err != nil {
+			return nil, err
+		}
+		result[string(e.k)] = next
+	}
+	return result, nil
+}
+
+// Pretty pretty-prints the given JSON document as required by jsonb_pretty.
+func Pretty(j JSON) (string, error) {
+	asGo, err := j.toGoRepr()
+	if err != nil {
+		return "", err
+	}
+	// Luckily for us, despite Go's random map ordering, MarshalIndent sorts the
+	// keys of objects.
+	res, err := json.MarshalIndent(asGo, "", "    ")
+	return string(res), err
+}

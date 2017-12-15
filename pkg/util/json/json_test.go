@@ -1092,6 +1092,64 @@ func TestNegativeRandomJSONContains(t *testing.T) {
 	}
 }
 
+func TestPretty(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{`true`, `true`},
+		{`1`, `1`},
+		{`1.0`, `1.0`},
+		{`1.00`, `1.00`},
+		{`"hello"`, `"hello"`},
+		{`["hello"]`,
+			`[
+    "hello"
+]`},
+		{`["hello", "world"]`,
+			`[
+    "hello",
+    "world"
+]`},
+		{`["hello", ["world"]]`,
+			`[
+    "hello",
+    [
+        "world"
+    ]
+]`},
+		{`{"a": 1}`,
+			`{
+    "a": 1
+}`},
+		{`{"a": 1, "b": 2}`,
+			`{
+    "a": 1,
+    "b": 2
+}`},
+		{`{"a": 1, "b": {"c": 3}}`,
+			`{
+    "a": 1,
+    "b": {
+        "c": 3
+    }
+}`},
+	}
+
+	for _, tc := range cases {
+		j := jsonTestShorthand(tc.input)
+		runDecodedAndEncoded(t, tc.input, j, func(t *testing.T, j JSON) {
+			pretty, err := Pretty(j)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if pretty != tc.expected {
+				t.Fatalf("expected:\n%s\ngot:\n%s\n", tc.expected, pretty)
+			}
+		})
+	}
+}
+
 func BenchmarkFetchKey(b *testing.B) {
 	for _, objectSize := range []int{1, 10, 100, 1000} {
 		b.Run(fmt.Sprintf("object size %d", objectSize), func(b *testing.B) {

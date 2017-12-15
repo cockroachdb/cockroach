@@ -404,3 +404,10 @@ query T
 SELECT json_extract_path('{"a": {"b": 2}}', 'a', 'b', 'c')
 ----
 NULL
+
+query T
+SELECT jsonb_pretty('{"a": 1}')
+----
+{
+    "a": 1
+}
