@@ -144,6 +144,10 @@ type txnState2 struct {
 
 	// When inside a txn, this specifies the type of txn.
 	txnType txnType
+	// When inside a txn, autoRetryCounter keeps track of the number of the
+	// current attempt. This field is set to 0 whenever a transaction ends, and is
+	// incremented by 1 whenever a rewind happens.
+	autoRetryCounter int
 
 	// Mutable fields accessed from goroutines not synchronized by this txn's session,
 	// such as when a SHOW SESSIONS statement is executed on another session.
@@ -759,7 +763,15 @@ func (ts *txnState2) performStateTransition(
 	rew rewindInterface,
 	curPos cursorPosition,
 	tranCtx transitionCtx,
-) (advanceInfo, error) {
+) (retVal advanceInfo, retErr error) {
+
+	defer func() {
+		if ts.sts.topLevelState != StateOpen {
+			ts.autoRetryCounter = 0
+		} else if retVal.code == rewind {
+			ts.autoRetryCounter++
+		}
+	}()
 
 	if ev.typ == noTopLevelTransition {
 		if ev.noTopLevelTransitionDetails.retryIntent != retryIntentUnknown {
