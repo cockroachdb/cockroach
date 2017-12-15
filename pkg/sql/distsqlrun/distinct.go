@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -32,8 +33,8 @@ type distinct struct {
 	types        []sqlbase.ColumnType
 	lastGroupKey sqlbase.EncDatumRow
 	seen         map[string]struct{}
-	orderedCols  map[uint32]struct{}
-	distinctCols map[uint32]struct{}
+	orderedCols  []uint32
+	distinctCols util.FastIntSet
 	memAcc       mon.BoundAccount
 	datumAlloc   sqlbase.DatumAlloc
 }
@@ -44,17 +45,13 @@ func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*distinct, error) {
 	d := &distinct{
-		flowCtx:      flowCtx,
-		input:        input,
-		orderedCols:  make(map[uint32]struct{}),
-		distinctCols: make(map[uint32]struct{}),
-		memAcc:       flowCtx.EvalCtx.Mon.MakeBoundAccount(),
+		flowCtx:     flowCtx,
+		input:       input,
+		orderedCols: spec.OrderedColumns,
+		memAcc:      flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
 	for _, col := range spec.DistinctColumns {
-		d.distinctCols[col] = struct{}{}
-	}
-	for _, col := range spec.OrderedColumns {
-		d.orderedCols[col] = struct{}{}
+		d.distinctCols.Add(int(col))
 	}
 
 	d.types = input.Types()
@@ -153,7 +150,7 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 		return false, nil
 	}
 	evalCtx := d.flowCtx.NewEvalCtx()
-	for colIdx := range d.orderedCols {
+	for _, colIdx := range d.orderedCols {
 		res, err := d.lastGroupKey[colIdx].Compare(
 			&d.types[colIdx], &d.datumAlloc, evalCtx, &row[colIdx],
 		)
@@ -173,7 +170,7 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 		// post-processing to strip out column Y, we cannot include it as
 		// (X1, Y1) and (X1, Y2) will appear as distinct rows, but if we are
 		// stripping out Y, we do not want (X1) and (X1) to be in the results.
-		if _, distinct := d.distinctCols[uint32(i)]; !distinct {
+		if !d.distinctCols.Contains(i) {
 			continue
 		}
 
