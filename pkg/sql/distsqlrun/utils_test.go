@@ -267,3 +267,15 @@ func createDummyStream() (
 	}
 	return serverStream, clientStream, cleanup, nil
 }
+
+// mintIntRows constructs a numRows x numCols table where rows[i][j] = i + j.
+func makeIntRows(numRows, numCols int) sqlbase.EncDatumRows {
+	rows := make(sqlbase.EncDatumRows, numRows)
+	for i := range rows {
+		rows[i] = make(sqlbase.EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i+j)))
+		}
+	}
+	return rows
+}
