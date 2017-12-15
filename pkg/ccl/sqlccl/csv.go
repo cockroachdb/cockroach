@@ -230,11 +230,6 @@ func doLocalCSVTransform(
 	group.Go(func() error {
 		var err error
 		kvCount, err = writeRocksDB(gCtx, kvCh, store.NewBatchWriter())
-		if job != nil {
-			if err := job.Progressed(ctx, 2.0/3.0, jobs.Noop); err != nil {
-				log.Warningf(ctx, "failed to update job progress: %s", err)
-			}
-		}
 		return err
 	})
 	if err := group.Wait(); err != nil {
