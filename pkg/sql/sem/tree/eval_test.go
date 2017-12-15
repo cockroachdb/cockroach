@@ -516,9 +516,15 @@ func TestEval(t *testing.T) {
 		{`1 IS NOT OF (STRING)`, `true`},
 		{`1 IS NOT OF (BOOL, INT)`, `false`},
 		// Range conditions.
+		{`0 BETWEEN 1 AND 3`, `false`},
+		{`1 BETWEEN 1 AND 3`, `true`},
 		{`2 BETWEEN 1 AND 3`, `true`},
+		{`3 BETWEEN 1 AND 3`, `true`},
+		{`4 BETWEEN 1 AND 3`, `false`},
 		{`1 NOT BETWEEN 2 AND 3`, `true`},
 		{`'foo' BETWEEN 'a' AND 'z'`, `true`},
+		{`2 BETWEEN 3 AND 1`, `false`},
+		{`2 BETWEEN SYMMETRIC 3 AND 1`, `true`},
 		// Case operator.
 		{`CASE WHEN true THEN 1 END`, `1`},
 		{`CASE WHEN false THEN 1 END`, `NULL`},
