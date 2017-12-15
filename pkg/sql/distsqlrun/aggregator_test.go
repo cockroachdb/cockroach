@@ -388,3 +388,90 @@ func TestAggregator(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkAggregation(b *testing.B) {
+	const numCols = 1
+	const numRows = 1000
+
+	aggFuncs := []AggregatorSpec_Func{
+		AggregatorSpec_IDENT,
+		AggregatorSpec_AVG,
+		AggregatorSpec_COUNT,
+		AggregatorSpec_MAX,
+		AggregatorSpec_MIN,
+		AggregatorSpec_STDDEV,
+		AggregatorSpec_SUM,
+		AggregatorSpec_SUM_INT,
+		AggregatorSpec_VARIANCE,
+		AggregatorSpec_XOR_AGG,
+	}
+
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
+
+	for _, aggFunc := range aggFuncs {
+		b.Run(aggFunc.String(), func(b *testing.B) {
+			spec := &AggregatorSpec{
+				Aggregations: []AggregatorSpec_Aggregation{
+					{
+						Func:   aggFunc,
+						ColIdx: []uint32{0},
+					},
+				},
+			}
+			post := &PostProcessSpec{}
+			disposer := &RowDisposer{}
+			input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+
+			b.SetBytes(int64(8 * numRows * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				d, err := newAggregator(flowCtx, spec, input, post, disposer)
+				if err != nil {
+					b.Fatal(err)
+				}
+				d.Run(ctx, nil)
+				input.Reset()
+			}
+			b.StopTimer()
+		})
+	}
+}
+
+func BenchmarkGrouping(b *testing.B) {
+	const numCols = 1
+	const numRows = 1000
+
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
+	spec := &AggregatorSpec{
+		GroupCols: []uint32{0},
+	}
+	post := &PostProcessSpec{}
+	disposer := &RowDisposer{}
+	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+
+	b.SetBytes(int64(8 * numRows * numCols))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		d, err := newAggregator(flowCtx, spec, input, post, disposer)
+		if err != nil {
+			b.Fatal(err)
+		}
+		d.Run(ctx, nil)
+		input.Reset()
+	}
+	b.StopTimer()
+}
