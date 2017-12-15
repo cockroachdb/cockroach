@@ -2927,6 +2927,10 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return MakeDBool(!DBool(left == DNull && right == DNull)), nil
 		case IsNotDistinctFrom:
 			return MakeDBool(left == DNull && right == DNull), nil
+		case Is:
+			return nil, errors.Errorf("IS NULL should never be compared: use IS NOT DISTINCT FROM")
+		case IsNot:
+			return nil, errors.Errorf("IS NOT NULL should never be compared: use IS DISTINCT FROM")
 		default:
 			return DNull, nil
 		}
