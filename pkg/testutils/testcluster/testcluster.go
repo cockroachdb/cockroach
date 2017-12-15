@@ -517,7 +517,9 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	}
 
 	notReplicated := true
-	for r := retry.Start(opts); r.Next() && notReplicated; {
+	var _ = opts
+	//for r := retry.Start(opts); r.Next() && notReplicated; {
+	for notReplicated {
 		notReplicated = false
 		for _, s := range tc.Servers {
 			err := s.Stores().VisitStores(func(s *storage.Store) error {
