@@ -343,10 +343,10 @@ func makeGCQueueScoreImpl(
 	// undergone a reality check yet.
 	r.IntentScore = ms.AvgIntentAge(now.WallTime) / float64(intentAgeNormalization.Nanoseconds()/1E9)
 
-	// Random factor in [0.75, 1.25] to cause decoherence of replicas with
-	// similar load. This isn't 100% symmetric due to rounding issues near zero,
-	// but not an issue in practice.
-	r.FuzzFactor = 0.75 + rand.New(rand.NewSource(fuzzSeed)).Float64()/2.0
+	// Randomly skew the score down a bit to cause decoherence of replicas with
+	// similar load. Note that we'll only ever reduce the score, never increase
+	// it (for increasing it could lead to a fruitless run).
+	r.FuzzFactor = 0.95 + 0.05*rand.New(rand.NewSource(fuzzSeed)).Float64()
 
 	// Compute priority.
 	valScore := r.DeadFraction * r.ValuesScalableScore
