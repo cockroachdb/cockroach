@@ -582,11 +582,25 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		return DNull
 	}
 
-	leftCmp := GE
-	rightCmp := LE
+	var leftCmp, rightCmp ComparisonOperator
 	if expr.Not {
 		leftCmp = LT
+		if expr.FromExclusive {
+			leftCmp = LE
+		}
 		rightCmp = GT
+		if expr.ToExclusive {
+			rightCmp = GE
+		}
+	} else {
+		leftCmp = GE
+		if expr.FromExclusive {
+			leftCmp = GT
+		}
+		rightCmp = LE
+		if expr.ToExclusive {
+			rightCmp = LT
+		}
 	}
 
 	// "a BETWEEN b AND c" -> "a >= b AND a <= c"

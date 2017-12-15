@@ -518,9 +518,11 @@ func TestEval(t *testing.T) {
 		// Range conditions.
 		{`0 BETWEEN 1 AND 3`, `false`},
 		{`1 BETWEEN 1 AND 3`, `true`},
+		{`1 BETWEEN EXCL 1 AND 3`, `false`},
 		{`2 BETWEEN 1 AND 3`, `true`},
 		{`2 BETWEEN 3 AND 1`, `false`},
 		{`3 BETWEEN 1 AND 3`, `true`},
+		{`3 BETWEEN 1 AND EXCL 3`, `false`},
 		{`4 BETWEEN 1 AND 3`, `false`},
 		{`0 BETWEEN ASYMMETRIC 1 AND 3`, `false`},
 		{`2 BETWEEN ASYMMETRIC 1 AND 3`, `true`},

@@ -469,10 +469,11 @@ func sameTypeOrNull(left, right types.T) bool {
 // RangeCond represents a BETWEEN [SYMMETRIC] or a NOT BETWEEN [SYMMETRIC]
 // expression.
 type RangeCond struct {
-	Not       bool
-	Symmetric bool
-	Left      Expr
-	From, To  Expr
+	Not                        bool
+	Symmetric                  bool
+	Left                       Expr
+	From, To                   Expr
+	FromExclusive, ToExclusive bool
 
 	typeAnnotation
 }
@@ -490,7 +491,15 @@ func (node *RangeCond) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Symmetric {
 		buf.WriteString("SYMMETRIC ")
 	}
-	binExprFmtWithParen(buf, f, node.From, "AND", node.To, true)
+	if node.FromExclusive {
+		buf.WriteString("EXCL ")
+	}
+	exprFmtWithParen(buf, f, node.From)
+	buf.WriteString(" AND ")
+	if node.ToExclusive {
+		buf.WriteString("EXCL ")
+	}
+	exprFmtWithParen(buf, f, node.To)
 }
 
 // TypedLeft returns the RangeCond's left expression as a TypedExpr.

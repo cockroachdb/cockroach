@@ -447,7 +447,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   DISCARD DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL
+%token <str>   EXISTS EXECUTE EXCL EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL
 %token <str>   EXPLAIN EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
@@ -831,7 +831,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
-%type <bool> opt_symmetric
+%type <bool> opt_symmetric opt_excl
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list
@@ -5790,13 +5790,24 @@ a_expr:
   {
     $$.val = &tree.IsOfTypeExpr{Not: true, Expr: $1.expr(), Types: $6.colTypes()}
   }
-| a_expr BETWEEN opt_symmetric b_expr AND a_expr %prec BETWEEN
+| a_expr BETWEEN opt_symmetric opt_excl b_expr AND opt_excl a_expr %prec BETWEEN
   {
-    $$.val = &tree.RangeCond{Symmetric: $3.bool(), Left: $1.expr(), From: $4.expr(), To: $6.expr()}
+    $$.val = &tree.RangeCond{
+      Left: $1.expr(),
+      Symmetric: $3.bool(),
+      FromExclusive: $4.bool(), From: $5.expr(),
+      ToExclusive: $7.bool(), To: $8.expr(),
+    }
   }
-| a_expr NOT_LA BETWEEN opt_symmetric b_expr AND a_expr %prec NOT_LA
+| a_expr NOT_LA BETWEEN opt_symmetric opt_excl b_expr AND opt_excl a_expr %prec NOT_LA
   {
-    $$.val = &tree.RangeCond{Not: true, Symmetric: $4.bool(), Left: $1.expr(), From: $5.expr(), To: $7.expr()}
+    $$.val = &tree.RangeCond{
+      Not: true,
+      Left: $1.expr(),
+      Symmetric: $4.bool(),
+      FromExclusive: $5.bool(), From: $6.expr(),
+      ToExclusive: $8.bool(), To: $9.expr(),
+    }
   }
 | a_expr IN in_expr
   {
@@ -6680,6 +6691,10 @@ opt_symmetric:
 | ASYMMETRIC  { $$.val = false }
 | /* EMPTY */ { $$.val = false }
 
+opt_excl:
+  EXCL        { $$.val = true }
+| /* EMPTY */ { $$.val = false}
+
 target_list:
   target_elem
   {
@@ -7300,6 +7315,7 @@ reserved_keyword:
 | ELSE
 | END
 | EXCEPT
+| EXCL
 | FALSE
 | FETCH
 | FOR
