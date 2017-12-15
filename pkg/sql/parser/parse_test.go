@@ -634,7 +634,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a ~* c`},
 		{`SELECT a FROM t WHERE a !~* c`},
 		{`SELECT a FROM t WHERE a BETWEEN b AND c`},
+		{`SELECT a FROM t WHERE a BETWEEN SYMMETRIC b AND c`},
 		{`SELECT a FROM t WHERE a NOT BETWEEN b AND c`},
+		{`SELECT a FROM t WHERE a NOT BETWEEN SYMMETRIC b AND c`},
 		{`SELECT a FROM t WHERE a IS NULL`},
 		{`SELECT a FROM t WHERE a IS NOT NULL`},
 		{`SELECT a FROM t WHERE a IS true`},
@@ -1011,6 +1013,9 @@ func TestParse2(t *testing.T) {
 		// Alternate not-equal operator.
 		{`SELECT a FROM t WHERE a <> b`,
 			`SELECT a FROM t WHERE a != b`},
+		// BETWEEN ASYMMETRIC is noise for BETWEEN.
+		{`SELECT a FROM t WHERE a BETWEEN ASYMMETRIC b AND c`,
+			`SELECT a FROM t WHERE a BETWEEN b AND c`},
 		// OUTER is syntactic sugar.
 		{`SELECT a FROM t1 LEFT OUTER JOIN t2 ON a = b`,
 			`SELECT a FROM t1 LEFT JOIN t2 ON a = b`},
