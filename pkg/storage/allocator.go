@@ -523,7 +523,9 @@ func (a Allocator) RebalanceTarget(
 	if target == nil {
 		return nil, ""
 	}
-	// We could make a simulation here to verify whether we'll remove the target we'll rebalance to.
+
+	// Determine whether we'll just remove the target immediately after adding it.
+	// If we would, we don't want to actually do the rebalance.
 	for len(candidates) > 0 {
 		newReplica := roachpb.ReplicaDescriptor{
 			NodeID:    target.store.Node.NodeID,
@@ -542,7 +544,7 @@ func (a Allocator) RebalanceTarget(
 				raftStatus, desc.Replicas, newReplica.ReplicaID)
 		}
 
-		removeReplica, _, err := a.simulateRemoveTarget(
+		removeReplica, details, err := a.simulateRemoveTarget(
 			ctx,
 			target.store.StoreID,
 			constraints,
@@ -553,7 +555,7 @@ func (a Allocator) RebalanceTarget(
 			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
 			return nil, ""
 		}
-		if removeReplica.StoreID != target.store.StoreID {
+		if shouldRebalanceToFrom(ctx, *target, removeReplica, existingCandidates, details, options) {
 			break
 		}
 		// Remove the considered target from our modified RangeDescriptor and from
@@ -575,6 +577,40 @@ func (a Allocator) RebalanceTarget(
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
 	}
 	return &target.store, string(details)
+}
+
+func shouldRebalanceToFrom(
+	ctx context.Context,
+	to candidate,
+	from roachpb.ReplicaDescriptor,
+	existingCandidates candidateList,
+	removeDetails string,
+	options scorerOptions,
+) bool {
+	if from.StoreID == to.store.StoreID {
+		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
+			to.store.StoreID, removeDetails)
+		return false
+	}
+
+	// It's possible that we initially decided to rebalance based on comparing
+	// rebalance candidates in one locality to an existing replica in another
+	// locality (e.g. if one locality has many more nodes than another). This can
+	// make for unnecessary rebalances and even thrashing, so do a more direct
+	// comparison here of the replicas we'll actually be adding and removing.
+	for _, removeCandidate := range existingCandidates {
+		if removeCandidate.store.StoreID == from.StoreID {
+			if removeCandidate.worthRebalancingTo(to, options) {
+				return true
+			}
+			log.VEventf(ctx, 2, "not rebalancing to %s because it isn't an improvement over "+
+				"what we'd remove after adding it: %s", to, removeCandidate)
+			return false
+		}
+	}
+	// If the code reaches this point, from must be a non-live store, so let the
+	// rebalance happen.
+	return true
 }
 
 func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptions {

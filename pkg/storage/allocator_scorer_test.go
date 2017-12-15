@@ -343,7 +343,7 @@ var (
 	testStoreEurope    = roachpb.StoreID(5) // eur-a-1-5
 
 	testStores = map[roachpb.StoreID]roachpb.StoreDescriptor{
-		testStoreUSa15: roachpb.StoreDescriptor{
+		testStoreUSa15: {
 			StoreID: testStoreUSa15,
 			Attrs: roachpb.Attributes{
 				Attrs: []string{"a"},
@@ -356,7 +356,7 @@ var (
 			},
 			Capacity: testStoreCapacitySetup(1, 99),
 		},
-		testStoreUSa15Dupe: roachpb.StoreDescriptor{
+		testStoreUSa15Dupe: {
 			StoreID: testStoreUSa15Dupe,
 			Attrs: roachpb.Attributes{
 				Attrs: []string{"a"},
@@ -369,7 +369,7 @@ var (
 			},
 			Capacity: testStoreCapacitySetup(1, 99),
 		},
-		testStoreUSa1: roachpb.StoreDescriptor{
+		testStoreUSa1: {
 			StoreID: testStoreUSa1,
 			Attrs: roachpb.Attributes{
 				Attrs: []string{"a", "b"},
@@ -382,7 +382,7 @@ var (
 			},
 			Capacity: testStoreCapacitySetup(100, 0),
 		},
-		testStoreUSb: roachpb.StoreDescriptor{
+		testStoreUSb: {
 			StoreID: testStoreUSb,
 			Attrs: roachpb.Attributes{
 				Attrs: []string{"a", "b", "c"},
@@ -395,7 +395,7 @@ var (
 			},
 			Capacity: testStoreCapacitySetup(50, 50),
 		},
-		testStoreEurope: roachpb.StoreDescriptor{
+		testStoreEurope: {
 			StoreID: testStoreEurope,
 			Node: roachpb.NodeDescriptor{
 				NodeID: roachpb.NodeID(testStoreEurope),

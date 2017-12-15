@@ -136,6 +136,38 @@ func (c candidate) less(o candidate) bool {
 	return c.rangeCount > o.rangeCount
 }
 
+// worthRebalancingTo returns true if o is enough of a better fit for some
+// range than c is that it's worth rebalancing from c to o.
+func (c candidate) worthRebalancingTo(o candidate, options scorerOptions) bool {
+	if !o.valid {
+		return false
+	}
+	if !c.valid {
+		return true
+	}
+	if c.constraintScore != o.constraintScore {
+		return c.constraintScore < o.constraintScore
+	}
+	if c.convergesScore != o.convergesScore {
+		return c.convergesScore < o.convergesScore
+	}
+	// You might intuitively think that we should require o's balanceScore to
+	// be considerably higher than c's balanceScore, but that will effectively
+	// rule out rebalancing in clusters where one locality is much larger or
+	// smaller than the others, since all the stores in that locality will tend
+	// to have either a maximal or minimal balanceScore.
+	if c.balanceScore.totalScore() != o.balanceScore.totalScore() {
+		return c.balanceScore.totalScore() < o.balanceScore.totalScore()
+	}
+	// Instead, just require a gap between their number of ranges. This isn't
+	// great, particularly for stats-based rebalancing, but it only breaks
+	// balanceScore ties and it's a workable stop-gap on the way to something
+	// like #20751.
+	avgRangeCount := float64(c.rangeCount+o.rangeCount) / 2.0
+	overfullThreshold := math.Max(overfullRangeThreshold(options, avgRangeCount), avgRangeCount+1.5)
+	return float64(c.rangeCount) > overfullThreshold
+}
+
 type candidateList []candidate
 
 func (cl candidateList) String() string {
