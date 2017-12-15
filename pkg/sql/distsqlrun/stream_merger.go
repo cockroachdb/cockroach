@@ -38,7 +38,9 @@ type streamMerger struct {
 // NextBatch returns a set of rows from the left stream and a set of rows from
 // the right stream, all matching on the equality columns. One of the sets can
 // be empty.
-func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, error) {
+func (sm *streamMerger) NextBatch(
+	evalCtx *tree.EvalContext,
+) ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, error) {
 	lrow, err := sm.left.peekAtCurrentGroup()
 	if err != nil {
 		return nil, nil, err
@@ -52,20 +54,21 @@ func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRo
 	}
 
 	cmp, err := CompareEncDatumRowForMerge(
-		sm.left.types, lrow, rrow, sm.left.ordering, sm.right.ordering, sm.nullEquality, &sm.datumAlloc,
+		sm.left.types, lrow, rrow, sm.left.ordering, sm.right.ordering,
+		sm.nullEquality, &sm.datumAlloc, evalCtx,
 	)
 	if err != nil {
 		return nil, nil, err
 	}
 	var leftGroup, rightGroup []sqlbase.EncDatumRow
 	if cmp <= 0 {
-		leftGroup, err = sm.left.advanceGroup()
+		leftGroup, err = sm.left.advanceGroup(evalCtx)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 	if cmp >= 0 {
-		rightGroup, err = sm.right.advanceGroup()
+		rightGroup, err = sm.right.advanceGroup(evalCtx)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -89,6 +92,7 @@ func CompareEncDatumRowForMerge(
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	nullEquality bool,
 	da *sqlbase.DatumAlloc,
+	evalCtx *tree.EvalContext,
 ) (int, error) {
 	if lhs == nil && rhs == nil {
 		return 0, nil
@@ -104,9 +108,6 @@ func CompareEncDatumRowForMerge(
 			"cannot compare two EncDatumRow types that have different length ColumnOrderings",
 		)
 	}
-
-	// TODO(radu): plumb EvalContext
-	evalCtx := &tree.EvalContext{}
 
 	for i, ord := range leftOrdering {
 		lIdx := ord.ColIdx
