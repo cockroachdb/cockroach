@@ -169,3 +169,36 @@ func TestDistinct(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkDistinct(b *testing.B) {
+	const numCols = 1
+	const numRows = 1000
+
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
+	spec := &DistinctSpec{
+		DistinctColumns: []uint32{0},
+	}
+	post := &PostProcessSpec{}
+
+	types := make([]sqlbase.ColumnType, numCols)
+	for i := 0; i < numCols; i++ {
+		types[i] = intType
+	}
+	input := NewRepeatableRowSource(types, makeIntRows(numRows, numCols))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		d, err := newDistinct(flowCtx, spec, input, post, &RowDisposer{})
+		if err != nil {
+			b.Fatal(err)
+		}
+		d.Run(ctx, nil)
+		input.Reset()
+	}
+}

@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,6 +30,7 @@ type distinct struct {
 	processorBase
 
 	flowCtx      *FlowCtx
+	evalCtx      *tree.EvalContext
 	input        RowSource
 	types        []sqlbase.ColumnType
 	lastGroupKey sqlbase.EncDatumRow
@@ -89,7 +91,9 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (d *distinct) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
+	d.evalCtx = d.flowCtx.NewEvalCtx()
 	var scratch []byte
+
 	for {
 		row, meta := d.input.Next()
 		if !meta.Empty() {
@@ -106,16 +110,16 @@ func (d *distinct) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
 			return false, nil
 		}
 
-		encoding := scratch
 		// If we are processing DISTINCT(x, y) and the input stream is ordered
 		// by x, we define x to be our group key. Our seen set at any given time
 		// is only the set of all rows with the same group key. The encoding of
 		// the row is the key we use in our 'seen' set.
-		var err error
-		encoding, err = d.encode(scratch, row)
+		encoding, err := d.encode(scratch, row)
 		if err != nil {
 			return false, err
 		}
+		scratch = encoding[:0]
+
 		// The 'seen' set is reset whenever we find consecutive rows differing on the
 		// group key thus avoiding the need to store encodings of all rows.
 		matched, err := d.matchLastGroupKey(row)
@@ -140,7 +144,6 @@ func (d *distinct) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}
-			scratch = encoding[:0]
 		}
 	}
 }
@@ -149,10 +152,9 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 	if d.lastGroupKey == nil {
 		return false, nil
 	}
-	evalCtx := d.flowCtx.NewEvalCtx()
 	for _, colIdx := range d.orderedCols {
 		res, err := d.lastGroupKey[colIdx].Compare(
-			&d.types[colIdx], &d.datumAlloc, evalCtx, &row[colIdx],
+			&d.types[colIdx], &d.datumAlloc, d.evalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err
