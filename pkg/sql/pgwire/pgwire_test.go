@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -697,7 +698,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results(""),
 		},
 		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1": {
-			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12\x16\n\x06system\x10\x01\x1a\n\n\b\n\x04root\x100")),
+			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12!\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100")),
 		},
 		"SHOW COLUMNS FROM system.users": {
 			baseTest.
@@ -709,7 +710,12 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("crdb_internal").Results("d").Results("information_schema").Results("pg_catalog").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
-			baseTest.Results("system", "users", security.RootUser, "DELETE").
+			baseTest.Results("system", "users", sqlbase.AdminRole, "DELETE").
+				Results("system", "users", sqlbase.AdminRole, "GRANT").
+				Results("system", "users", sqlbase.AdminRole, "INSERT").
+				Results("system", "users", sqlbase.AdminRole, "SELECT").
+				Results("system", "users", sqlbase.AdminRole, "UPDATE").
+				Results("system", "users", security.RootUser, "DELETE").
 				Results("system", "users", security.RootUser, "GRANT").
 				Results("system", "users", security.RootUser, "INSERT").
 				Results("system", "users", security.RootUser, "SELECT").

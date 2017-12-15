@@ -765,9 +765,13 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema  privilege_type  is_grantable
+admin    def            other_db      ALL             NULL
 root     def            other_db      ALL             NULL
+admin    def            system        GRANT           NULL
+admin    def            system        SELECT          NULL
 root     def            system        GRANT           NULL
 root     def            system        SELECT          NULL
+admin    def            test          ALL             NULL
 root     def            test          ALL             NULL
 
 statement ok
@@ -777,10 +781,14 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee   table_catalog  table_schema  privilege_type  is_grantable
+admin     def            other_db      ALL             NULL
 root      def            other_db      ALL             NULL
 testuser  def            other_db      SELECT          NULL
+admin     def            system        GRANT           NULL
+admin     def            system        SELECT          NULL
 root      def            system        GRANT           NULL
 root      def            system        SELECT          NULL
+admin     def            test          ALL             NULL
 root      def            test          ALL             NULL
 
 ## information_schema.table_privileges
@@ -790,60 +798,119 @@ query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges
 ----
 grantor  grantee  table_catalog  table_schema  table_name        privilege_type  is_grantable  with_hierarchy
+NULL     admin    def            system        descriptor        GRANT           NULL          NULL
+NULL     admin    def            system        descriptor        SELECT          NULL          NULL
 NULL     root     def            system        descriptor        GRANT           NULL          NULL
 NULL     root     def            system        descriptor        SELECT          NULL          NULL
+NULL     admin    def            system        eventlog          DELETE          NULL          NULL
+NULL     admin    def            system        eventlog          GRANT           NULL          NULL
+NULL     admin    def            system        eventlog          INSERT          NULL          NULL
+NULL     admin    def            system        eventlog          SELECT          NULL          NULL
+NULL     admin    def            system        eventlog          UPDATE          NULL          NULL
 NULL     root     def            system        eventlog          DELETE          NULL          NULL
 NULL     root     def            system        eventlog          GRANT           NULL          NULL
 NULL     root     def            system        eventlog          INSERT          NULL          NULL
 NULL     root     def            system        eventlog          SELECT          NULL          NULL
 NULL     root     def            system        eventlog          UPDATE          NULL          NULL
+NULL     admin    def            system        jobs              DELETE          NULL          NULL
+NULL     admin    def            system        jobs              GRANT           NULL          NULL
+NULL     admin    def            system        jobs              INSERT          NULL          NULL
+NULL     admin    def            system        jobs              SELECT          NULL          NULL
+NULL     admin    def            system        jobs              UPDATE          NULL          NULL
 NULL     root     def            system        jobs              DELETE          NULL          NULL
 NULL     root     def            system        jobs              GRANT           NULL          NULL
 NULL     root     def            system        jobs              INSERT          NULL          NULL
 NULL     root     def            system        jobs              SELECT          NULL          NULL
 NULL     root     def            system        jobs              UPDATE          NULL          NULL
+NULL     admin    def            system        lease             DELETE          NULL          NULL
+NULL     admin    def            system        lease             GRANT           NULL          NULL
+NULL     admin    def            system        lease             INSERT          NULL          NULL
+NULL     admin    def            system        lease             SELECT          NULL          NULL
+NULL     admin    def            system        lease             UPDATE          NULL          NULL
 NULL     root     def            system        lease             DELETE          NULL          NULL
 NULL     root     def            system        lease             GRANT           NULL          NULL
 NULL     root     def            system        lease             INSERT          NULL          NULL
 NULL     root     def            system        lease             SELECT          NULL          NULL
 NULL     root     def            system        lease             UPDATE          NULL          NULL
+NULL     admin    def            system        locations         DELETE          NULL          NULL
+NULL     admin    def            system        locations         GRANT           NULL          NULL
+NULL     admin    def            system        locations         INSERT          NULL          NULL
+NULL     admin    def            system        locations         SELECT          NULL          NULL
+NULL     admin    def            system        locations         UPDATE          NULL          NULL
 NULL     root     def            system        locations         DELETE          NULL          NULL
 NULL     root     def            system        locations         GRANT           NULL          NULL
 NULL     root     def            system        locations         INSERT          NULL          NULL
 NULL     root     def            system        locations         SELECT          NULL          NULL
 NULL     root     def            system        locations         UPDATE          NULL          NULL
+NULL     admin    def            system        namespace         GRANT           NULL          NULL
+NULL     admin    def            system        namespace         SELECT          NULL          NULL
 NULL     root     def            system        namespace         GRANT           NULL          NULL
 NULL     root     def            system        namespace         SELECT          NULL          NULL
+NULL     admin    def            system        rangelog          DELETE          NULL          NULL
+NULL     admin    def            system        rangelog          GRANT           NULL          NULL
+NULL     admin    def            system        rangelog          INSERT          NULL          NULL
+NULL     admin    def            system        rangelog          SELECT          NULL          NULL
+NULL     admin    def            system        rangelog          UPDATE          NULL          NULL
 NULL     root     def            system        rangelog          DELETE          NULL          NULL
 NULL     root     def            system        rangelog          GRANT           NULL          NULL
 NULL     root     def            system        rangelog          INSERT          NULL          NULL
 NULL     root     def            system        rangelog          SELECT          NULL          NULL
 NULL     root     def            system        rangelog          UPDATE          NULL          NULL
+NULL     admin    def            system        settings          DELETE          NULL          NULL
+NULL     admin    def            system        settings          GRANT           NULL          NULL
+NULL     admin    def            system        settings          INSERT          NULL          NULL
+NULL     admin    def            system        settings          SELECT          NULL          NULL
+NULL     admin    def            system        settings          UPDATE          NULL          NULL
 NULL     root     def            system        settings          DELETE          NULL          NULL
 NULL     root     def            system        settings          GRANT           NULL          NULL
 NULL     root     def            system        settings          INSERT          NULL          NULL
 NULL     root     def            system        settings          SELECT          NULL          NULL
 NULL     root     def            system        settings          UPDATE          NULL          NULL
+NULL     admin    def            system        table_statistics  DELETE          NULL          NULL
+NULL     admin    def            system        table_statistics  GRANT           NULL          NULL
+NULL     admin    def            system        table_statistics  INSERT          NULL          NULL
+NULL     admin    def            system        table_statistics  SELECT          NULL          NULL
+NULL     admin    def            system        table_statistics  UPDATE          NULL          NULL
 NULL     root     def            system        table_statistics  DELETE          NULL          NULL
 NULL     root     def            system        table_statistics  GRANT           NULL          NULL
 NULL     root     def            system        table_statistics  INSERT          NULL          NULL
 NULL     root     def            system        table_statistics  SELECT          NULL          NULL
 NULL     root     def            system        table_statistics  UPDATE          NULL          NULL
+NULL     admin    def            system        ui                DELETE          NULL          NULL
+NULL     admin    def            system        ui                GRANT           NULL          NULL
+NULL     admin    def            system        ui                INSERT          NULL          NULL
+NULL     admin    def            system        ui                SELECT          NULL          NULL
+NULL     admin    def            system        ui                UPDATE          NULL          NULL
 NULL     root     def            system        ui                DELETE          NULL          NULL
 NULL     root     def            system        ui                GRANT           NULL          NULL
 NULL     root     def            system        ui                INSERT          NULL          NULL
 NULL     root     def            system        ui                SELECT          NULL          NULL
 NULL     root     def            system        ui                UPDATE          NULL          NULL
+NULL     admin    def            system        users             DELETE          NULL          NULL
+NULL     admin    def            system        users             GRANT           NULL          NULL
+NULL     admin    def            system        users             INSERT          NULL          NULL
+NULL     admin    def            system        users             SELECT          NULL          NULL
+NULL     admin    def            system        users             UPDATE          NULL          NULL
 NULL     root     def            system        users             DELETE          NULL          NULL
 NULL     root     def            system        users             GRANT           NULL          NULL
 NULL     root     def            system        users             INSERT          NULL          NULL
 NULL     root     def            system        users             SELECT          NULL          NULL
 NULL     root     def            system        users             UPDATE          NULL          NULL
+NULL     admin    def            system        web_sessions      DELETE          NULL          NULL
+NULL     admin    def            system        web_sessions      GRANT           NULL          NULL
+NULL     admin    def            system        web_sessions      INSERT          NULL          NULL
+NULL     admin    def            system        web_sessions      SELECT          NULL          NULL
+NULL     admin    def            system        web_sessions      UPDATE          NULL          NULL
 NULL     root     def            system        web_sessions      DELETE          NULL          NULL
 NULL     root     def            system        web_sessions      GRANT           NULL          NULL
 NULL     root     def            system        web_sessions      INSERT          NULL          NULL
 NULL     root     def            system        web_sessions      SELECT          NULL          NULL
 NULL     root     def            system        web_sessions      UPDATE          NULL          NULL
+NULL     admin    def            system        zones             DELETE          NULL          NULL
+NULL     admin    def            system        zones             GRANT           NULL          NULL
+NULL     admin    def            system        zones             INSERT          NULL          NULL
+NULL     admin    def            system        zones             SELECT          NULL          NULL
+NULL     admin    def            system        zones             UPDATE          NULL          NULL
 NULL     root     def            system        zones             DELETE          NULL          NULL
 NULL     root     def            system        zones             GRANT           NULL          NULL
 NULL     root     def            system        zones             INSERT          NULL          NULL
@@ -860,8 +927,10 @@ query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
+NULL     admin     def            other_db      abc         ALL             NULL          NULL
 NULL     root      def            other_db      abc         ALL             NULL          NULL
 NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     admin     def            other_db      xyz         ALL             NULL          NULL
 NULL     root      def            other_db      xyz         ALL             NULL          NULL
 NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
 
@@ -872,8 +941,10 @@ query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
+NULL     admin     def            other_db      abc         ALL             NULL          NULL
 NULL     root      def            other_db      abc         ALL             NULL          NULL
 NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     admin     def            other_db      xyz         ALL             NULL          NULL
 NULL     root      def            other_db      xyz         ALL             NULL          NULL
 NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
 NULL     testuser  def            other_db      xyz         UPDATE          NULL          NULL
@@ -888,8 +959,10 @@ query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
+NULL     admin     def            other_db      abc         ALL             NULL          NULL
 NULL     root      def            other_db      abc         ALL             NULL          NULL
 NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     admin     def            other_db      xyz         ALL             NULL          NULL
 NULL     root      def            other_db      xyz         ALL             NULL          NULL
 NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
 NULL     testuser  def            other_db      xyz         UPDATE          NULL          NULL

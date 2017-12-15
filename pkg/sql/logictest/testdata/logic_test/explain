@@ -209,7 +209,7 @@ EXPLAIN SHOW GRANTS ON foo
 1  render  ·      ·
 2  filter  ·      ·
 3  values  ·      ·
-3  ·       size   8 columns, 60 rows
+3  ·       size   8 columns, 120 rows
 
 
 query ITTT

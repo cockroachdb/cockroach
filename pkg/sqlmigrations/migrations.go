@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -134,6 +135,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:         "add system.users isRole column and create admin role",
 		workFn:       addRoles,
 		doesBackfill: true,
+	},
+	{
+		// We keep this a separate migration as we don't want to re-run addRoles
+		// if this part fails.
+		name:   "grant superuser privileges on all objects to the admin role",
+		workFn: grantAdminPrivileges,
 	},
 }
 
@@ -721,5 +728,64 @@ func addRoles(ctx context.Context, r runner) error {
 		}
 		log.Warningf(ctx, "failed to insert %s role into the system.users table: %s", sqlbase.AdminRole, err)
 	}
+	return err
+}
+
+func grantAdminPrivileges(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Give the admin role permissions on all databases and tables.
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		descriptors, descErr := sql.GetAllDescriptors(ctx, txn)
+		if descErr != nil {
+			return descErr
+		}
+
+		for _, desc := range descriptors {
+			// Lookup desired privileges:
+			var desiredPrivs privilege.List
+
+			descID := desc.GetID()
+			if sqlbase.IsReservedID(descID) {
+				// System databases and tables have custom maximum allowed privileges.
+				systemPrivs, ok := sqlbase.SystemAllowedPrivileges[descID]
+				if !ok || len(systemPrivs) == 0 {
+					return fmt.Errorf("no allowed privileges found for system object with ID=%d", descID)
+				}
+				desiredPrivs = systemPrivs[0]
+			} else {
+				// Non-system object: fall back on default superuser privileges.
+				desiredPrivs = sqlbase.DefaultSuperuserPrivileges
+			}
+
+			// Grant privileges to the admin role.
+			desc.GetPrivileges().Grant(sqlbase.AdminRole, desiredPrivs)
+
+			// Validate descriptors.
+			switch d := desc.(type) {
+			case *sqlbase.DatabaseDescriptor:
+				if err := d.Validate(); err != nil {
+					return err
+				}
+			case *sqlbase.TableDescriptor:
+				if err := d.Validate(ctx, txn); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Now update the descriptors transactionally.
+		b := txn.NewBatch()
+		for _, descriptor := range descriptors {
+			descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
+			b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
+		}
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	})
 	return err
 }

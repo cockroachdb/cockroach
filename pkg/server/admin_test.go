@@ -291,14 +291,14 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if a, e := len(details.Grants), 3; a != e {
+	if a, e := len(details.Grants), 4; a != e {
 		t.Fatalf("# of grants %d != expected %d", a, e)
 	}
 
 	userGrants := make(map[string][]string)
 	for _, grant := range details.Grants {
 		switch grant.User {
-		case security.RootUser, testuser:
+		case sqlbase.AdminRole, security.RootUser, testuser:
 			userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
 		default:
 			t.Fatalf("unknown grant to user %s", grant.User)
@@ -306,6 +306,10 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 	for u, p := range userGrants {
 		switch u {
+		case sqlbase.AdminRole:
+			if !reflect.DeepEqual(p, []string{"ALL"}) {
+				t.Fatalf("privileges %v != expected %v", p, privileges)
+			}
 		case security.RootUser:
 			if !reflect.DeepEqual(p, []string{"ALL"}) {
 				t.Fatalf("privileges %v != expected %v", p, privileges)
@@ -487,6 +491,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Verify grants.
 			expGrants := []serverpb.TableDetailsResponse_Grant{
+				{User: sqlbase.AdminRole, Privileges: []string{"ALL"}},
 				{User: security.RootUser, Privileges: []string{"ALL"}},
 				{User: "app", Privileges: []string{"DELETE"}},
 				{User: "app", Privileges: []string{"SELECT"}},

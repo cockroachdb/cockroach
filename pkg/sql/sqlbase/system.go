@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
@@ -707,7 +706,7 @@ var (
 	LocationsTable = TableDescriptor{
 		Name:     "locations",
 		ID:       keys.LocationsTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "localityKey", ID: 1, Type: colTypeString},
@@ -734,11 +733,18 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.LocationsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.LocationsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 )
+
+//***************************************************************************
+// WARNING: any tables added after LocationsTable must use:
+//   Privileges: NewCustomSuperuserPrivilegeDescriptor(...)
+// instead of
+//   Privileges: NewCustomRootPrivilegeDescriptor(...)
+//***************************************************************************
 
 // Create the key/value pair for the default zone config entry.
 func createDefaultZoneConfig() roachpb.KeyValue {

@@ -748,7 +748,7 @@ func forEachTableDescWithTableLookupInternal(
 	databases := make(map[string]dbDescTables)
 
 	// Handle real schemas.
-	descs, err := getAllDescriptors(ctx, p.txn)
+	descs, err := GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
