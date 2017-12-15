@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1972,6 +1973,7 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 // distsqlrun.EvalContext. Make sure to keep the two in sync.
 // TODO(andrei): remove or limit the duplication.
 type EvalContext struct {
+	Settings  *cluster.Settings
 	ClusterID uuid.UUID
 	NodeID    roachpb.NodeID
 	// The statement timestamp. May be different for every statement.

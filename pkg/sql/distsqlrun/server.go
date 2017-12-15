@@ -259,6 +259,7 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	evalCtx := tree.EvalContext{
+		Settings:     ds.ServerConfig.Settings,
 		Location:     &location,
 		Database:     req.EvalContext.Database,
 		User:         req.EvalContext.User,
