@@ -516,7 +516,9 @@ func (a Allocator) RebalanceTarget(
 	if target == nil {
 		return nil, ""
 	}
-	// We could make a simulation here to verify whether we'll remove the target we'll rebalance to.
+
+	// Determine whether we'll just remove the target immediately after adding it.
+	// If we would, we don't want to actually do the rebalance.
 	for len(candidates) > 0 {
 		newReplica := roachpb.ReplicaDescriptor{
 			NodeID:    target.store.Node.NodeID,
@@ -539,12 +541,17 @@ func (a Allocator) RebalanceTarget(
 				raftStatus, desc.Replicas, newReplica.ReplicaID)
 		}
 
-		removeReplica, _, err := a.simulateRemoveTarget(ctx, target.store.StoreID, constraints, replicaCandidates, rangeInfo)
+		removeReplica, details, err := a.simulateRemoveTarget(
+			ctx,
+			target.store.StoreID,
+			constraints,
+			replicaCandidates,
+			rangeInfo)
 		if err != nil {
 			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
 			return nil, ""
 		}
-		if removeReplica.StoreID != target.store.StoreID {
+		if shouldRebalanceBetween(ctx, a.storePool.st, *target, removeReplica, existingCandidates, details) {
 			break
 		}
 		// Remove the considered target from our modified RangeDescriptor and from
@@ -566,6 +573,44 @@ func (a Allocator) RebalanceTarget(
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
 	}
 	return &target.store, string(details)
+}
+
+// shouldRebalanceBetween returns whether it's a good idea to rebalance to the
+// given `add` candidate if the replica that will be removed after adding it is
+// `remove`. This is a last failsafe to ensure that we don't take unnecessary
+// rebalance actions that cause thrashing.
+func shouldRebalanceBetween(
+	ctx context.Context,
+	st *cluster.Settings,
+	add candidate,
+	remove roachpb.ReplicaDescriptor,
+	existingCandidates candidateList,
+	removeDetails string,
+) bool {
+	if remove.StoreID == add.store.StoreID {
+		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
+			add.store.StoreID, removeDetails)
+		return false
+	}
+
+	// It's possible that we initially decided to rebalance based on comparing
+	// rebalance candidates in one locality to an existing replica in another
+	// locality (e.g. if one locality has many more nodes than another). This can
+	// make for unnecessary rebalances and even thrashing, so do a more direct
+	// comparison here of the replicas we'll actually be adding and removing.
+	for _, removeCandidate := range existingCandidates {
+		if removeCandidate.store.StoreID == remove.StoreID {
+			if removeCandidate.worthRebalancingTo(st, add) {
+				return true
+			}
+			log.VEventf(ctx, 2, "not rebalancing to %s because it isn't an improvement over "+
+				"what we'd remove after adding it: %s", add, removeCandidate)
+			return false
+		}
+	}
+	// If the code reaches this point, remove must be a non-live store, so let the
+	// rebalance happen.
+	return true
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
