@@ -1458,6 +1458,10 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			if err != nil {
 				return err
 			}
+			// Empty span.
+			if data == nil {
+				continue
+			}
 
 			checksum, err := storageccl.SHA512ChecksumData(data)
 			if err != nil {
@@ -1527,6 +1531,7 @@ func extractSSTSpan(
 	defer sst.Close()
 	var kv engine.MVCCKeyValue
 	kv.Key.Timestamp.WallTime = walltimeNanos
+	any := false
 	for {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, nil, nil, err
@@ -1545,12 +1550,16 @@ func extractSSTSpan(
 		if firstKey == nil {
 			firstKey = iter.Key()
 		}
+		any = true
 		if err := sst.Add(kv); err != nil {
 			return nil, nil, nil, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 		}
 		lastKey = append(lastKey[:0], kv.Key.Key.Next()...)
 
 		iter.Next()
+	}
+	if !any {
+		return nil, nil, nil, nil
 	}
 	data, err = sst.Finish()
 	return data, firstKey, lastKey, err
