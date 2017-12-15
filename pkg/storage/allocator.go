@@ -525,9 +525,6 @@ func (a Allocator) RebalanceTarget(
 	}
 	// We could make a simulation here to verify whether we'll remove the target we'll rebalance to.
 	for len(candidates) > 0 {
-		if raftStatus == nil || raftStatus.Progress == nil {
-			break
-		}
 		newReplica := roachpb.ReplicaDescriptor{
 			NodeID:    target.store.Node.NodeID,
 			StoreID:   target.store.StoreID,
@@ -539,8 +536,15 @@ func (a Allocator) RebalanceTarget(
 		desc.Replicas = append(desc.Replicas[:len(desc.Replicas):len(desc.Replicas)], newReplica)
 		rangeInfo.Desc = &desc
 
-		replicaCandidates := simulateFilterUnremovableReplicas(
-			raftStatus, desc.Replicas, newReplica.ReplicaID)
+		// If we can, filter replicas as we would if we were actually removing one.
+		// If we can't (e.g. because we're the leaseholder but not the raft leader),
+		// it's better to simulate the removal with the info that we do have than to
+		// assume that the rebalance is ok (#20241).
+		replicaCandidates := desc.Replicas
+		if raftStatus != nil && raftStatus.Progress != nil {
+			replicaCandidates = simulateFilterUnremovableReplicas(
+				raftStatus, desc.Replicas, newReplica.ReplicaID)
+		}
 
 		removeReplica, _, err := a.simulateRemoveTarget(
 			ctx,
