@@ -248,11 +248,32 @@ func (n *createTableNode) FastPathResults() (int, bool) {
 	return 0, false
 }
 
-// HoistConstraints finds column constraints defined inline with the columns
-// and moves them into n.Defs as constraints. For example, the foreign key
-// constraint in `CREATE TABLE foo (a INT REFERENCES bar(a))` gets pulled into
-// a top level fk constraint like
-// `CREATE TABLE foo (a int CONSTRAINT .. FOREIGN KEY(a) REFERENCES bar(a)`.
+// HoistConstraints finds column constraints defined inline with their columns
+// and makes them table-level constraints, stored in n.Defs. For example, the
+// foreign key constraint in
+//
+//     CREATE TABLE foo (a INT REFERENCES bar(a))
+//
+// gets pulled into a top-level constraint like:
+//
+//     CREATE TABLE foo (a INT, FOREIGN KEY (a) REFERENCES bar(a))
+//
+// Similarly, the CHECK constraint in
+//
+//    CREATE TABLE foo (a INT CHECK (a < 1), b INT)
+//
+// gets pulled into a top-level constraint like:
+//
+//    CREATE TABLE foo (a INT, b INT, CHECK (a < 1))
+//
+// Note some SQL databases require that a constraint attached to a column to
+// refer only to the column it is attached to. We follow Postgres's behavior,
+// however, in omitting this restriction by blindly hoisting all column
+// constraints. For example, the following table definition is accepted in
+// CockroachDB and Postgres, but not necessarily other SQL databases:
+//
+//    CREATE TABLE foo (a INT CHECK (a < b), b INT)
+//
 func HoistConstraints(n *tree.CreateTable) {
 	for _, d := range n.Defs {
 		if col, ok := d.(*tree.ColumnTableDef); ok {
@@ -1307,14 +1328,6 @@ func makeCheckConstraint(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
-	// CHECK expressions seem to vary across databases. Wikipedia's entry on
-	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
-	// that if the constraint refers to a single column only, it is possible to
-	// specify the constraint as part of the column definition. Postgres allows
-	// specifying them anywhere about any columns, but it moves all constraints to
-	// the table level (i.e., columns never have a check constraint themselves). We
-	// will adhere to the stricter definition.
-
 	var nameBuf bytes.Buffer
 	name := string(d.Name)
 
