@@ -985,6 +985,9 @@ message ExportRequest {
   ExportStorage storage = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
+
+  // Return the exported SST data in the response.
+  bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
 }
 
 message BulkOpSummary {
@@ -1006,6 +1009,8 @@ message ExportResponse {
     bytes sha512 = 5;
 
     BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
+
+    bytes sst = 7 [(gogoproto.customname) = "SST"];
   }
 
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
