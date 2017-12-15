@@ -283,11 +283,38 @@ type clientComm interface {
 	// flush tells the implementation that all the results produced so far can be
 	// delivered to the SQL client. In other words, this is promising that
 	// the corresponding stmtBuf will not be rewind()ed to positions <= the
-	// last pos passed to createStatementResult().
+	// last position passed to createStatementResult().
+	// flush() is generally called once a transaction ends, as the connExecutor no
+	// longer needs to be able to rewind past the txn's last statement.
 	//
 	// An error is returned if the client connection is broken. In this case, no
 	// further calls can be made on this clientComm. The caller should interrupt
 	// any statements running on the respective connection.
+	//
+	// The connExecutor's expectation is that, after flush() is called, results
+	// that are part of future StatementResult's will be buffered (in the now
+	// empty buffer*) by the implementer until one of the following happens:
+	// - the buffer overflows
+	// - flush() is called again
+	// - the last StatementResult is Close()d and there are no more statements in
+	// 	 stmtBuf at the moment.
+	// If the implementer respects this, then it will be guaranteed that, as long
+	// as a transaction prefix's results fit in said buffer, the connExecutor will
+	// be able to automatically retry the prefix in case of retriable errors so
+	// that the client doesn't need to worry about them. As an important special
+	// case, this means that implicit transactions (i.e. statements executed
+	// outside of a transaction) are always automatically retried as long as their
+	// results fit in the implementer's buffer.
+	//
+	// TODO(andrei): In the future we might want to add a time component to this
+	// policy (or make it user configurable), and restrict the guarantees about
+	// automatic retries to queries that are fast enough.
+	//
+	// (*) The implication is that, if the implementer wishes to flush the
+	// contents of the buffer concurrently with accepting new results after the
+	// flush() call, it needs to behave as if the buffer's capacity was just
+	// expanded: the size of the buffer's contents at the moment of the flush()
+	// call cannot impact the capacity available for future results.
 	flush() error
 }
 
