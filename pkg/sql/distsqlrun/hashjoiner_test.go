@@ -872,28 +872,16 @@ func BenchmarkHashJoiner(b *testing.B) {
 	}
 	post := PostProcessSpec{Projection: true, OutputColumns: []uint32{0}}
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-	numCols := 4
+	const numCols = 4
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
 			types := make([]sqlbase.ColumnType, numCols)
 			for i := 0; i < numCols; i++ {
-				types[i] = columnTypeInt
+				types[i] = intType
 			}
-			// makeInputTable constructs an inputSize x numCols table where
-			// input[i][j] = i + j.
-			makeInputTable := func() sqlbase.EncDatumRows {
-				input := make(sqlbase.EncDatumRows, inputSize)
-				for i := range input {
-					input[i] = make(sqlbase.EncDatumRow, numCols)
-					for j := 0; j < numCols; j++ {
-						input[i][j] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i+j)))
-					}
-				}
-				return input
-			}
-			leftInput := NewRepeatableRowSource(types, makeInputTable())
-			rightInput := NewRepeatableRowSource(types, makeInputTable())
+			rows := makeIntRows(inputSize, numCols)
+			leftInput := NewRepeatableRowSource(types, rows)
+			rightInput := NewRepeatableRowSource(types, rows)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				// TODO(asubiotto): Get rid of uncleared state between
