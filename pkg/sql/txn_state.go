@@ -35,7 +35,7 @@ import (
 // txnState contains state associated with an ongoing SQL txn; it constitutes
 // the ExtendedState of a connExecutor's state machine (defined in conn_fsm.go).
 // It contains fields that are mutated as side-effects of state transitions;
-// notably the KV client.Txn.  All mutations to txnState are performed through
+// notably the KV client.Txn. All mutations to txnState are performed through
 // calling fsm.Machine.Apply(event); see conn_fsm.go for the definition of the
 // state machine.
 type txnState2 struct {
@@ -80,6 +80,13 @@ type txnState2 struct {
 
 	// The schema change closures to run when this txn is done.
 	schemaChangers schemaChangerCollection
+
+	// When inside a txn, autoRetryCounter keeps track of the number of the
+	// current attempt. This field is set to 0 whenever a transaction ends, and is
+	// incremented by 1 whenever a rewind happens.
+	// This field is not mutated by the transitions; instead it is maintained by
+	// the txnStateTransitionsApplyWrapper() function.
+	autoRetryCounter int
 
 	// adv is overwritten after every transition. It represents instructions for
 	// for moving the cursor over the stream of input statements to the next

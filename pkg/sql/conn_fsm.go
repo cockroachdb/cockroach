@@ -128,6 +128,10 @@ func (eventTxnReleased) Event()     {}
 // TxnStateTransitions describe the transitions used by a connExecutor's
 // fsm.Machine. Args.Extended is a txnState, which is muted by the Actions.
 //
+// NOTE: State machines built on these transitions should not be used directly;
+// instead they should be used through the txnStateTransitionsApplyWrapper()
+// function below.
+//
 // NOTE: The Args.Ctx passed to the actions is the connExecutor's context. While
 // we are inside a SQL txn, the txn's ctx should be used for used for operations
 // (i.e txnState.Ctx).
@@ -359,6 +363,28 @@ var TxnStateTransitions = Compile(Pattern{
 		},
 	},
 })
+
+// txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the
+// TxnStateTransitions above. Its point is to maintain the
+// txnState.autoRetryCounter field.
+//
+// ts needs to be the txnState that had been used to initialize machine.
+func txnStateTransitionsApplyWrapper(
+	ctx context.Context, machine *Machine, ts *txnState2, ev Event, baggage EventBaggage,
+) error {
+	err := machine.ApplyWithBaggage(ctx, ev, baggage)
+	if err != nil {
+		return err
+	}
+	if _, ok := machine.GetCurState().(stateOpen); !ok {
+		ts.autoRetryCounter = 0
+	} else {
+		if ts.adv.code == rewind {
+			ts.autoRetryCounter++
+		}
+	}
+	return nil
+}
 
 // cleanupAndFinish rolls back the KV txn and finishes the SQL txn.
 func cleanupAndFinish(args Args) error {

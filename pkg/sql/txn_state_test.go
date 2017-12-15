@@ -746,7 +746,7 @@ func TestTransitions(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			machine := MakeMachine(txnStateTransitions, s, ts)
+			machine := MakeMachine(TxnStateTransitions, s, ts)
 
 			// Perform the test's transition.
 			ev := tc.ev
@@ -754,7 +754,9 @@ func TestTransitions(t *testing.T) {
 			if tc.evFun != nil {
 				ev, baggage = tc.evFun(ts)
 			}
-			if err := machine.ApplyWithBaggage(ctx, ev, baggage); err != nil {
+			if err := txnStateTransitionsApplyWrapper(
+				ctx, &machine, ts, ev, baggage,
+			); err != nil {
 				t.Fatal(err)
 			}
 
@@ -784,5 +786,134 @@ func TestTransitions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Test that ts.autoRetryCounter is maintained properly.
+func TestAutoRetryCounter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	firstStmtPos := cursorPosition{
+		queryStrPos: 10,
+		stmtIdx:     20,
+	}
+	testCon := makeTestContext()
+	tranCtx := transitionCtx{
+		db:                    testCon.mockDB,
+		nodeID:                roachpb.NodeID(5),
+		clock:                 testCon.clock,
+		tracer:                tracing.NewTracer(),
+		defaultIsolationLevel: enginepb.SERIALIZABLE,
+		connMon:               &testCon.mon,
+	}
+
+	type expAdvance struct {
+		expCode advanceCode
+		// Use noFlush/flushSet.
+		expFlush bool
+		// Use noRewind if a rewind is not expected.
+		expRewPos cursorPosition
+	}
+
+	// We're going to start in state NoTxn and then perform a couple of automatic
+	// retries and check that the counter is incremented.
+
+	s, ts := testCon.createNoTxnState()
+	machine := MakeMachine(TxnStateTransitions, s, ts)
+
+	if ts.autoRetryCounter != 0 {
+		t.Fatalf("expected counter at 0, got: %d", ts.autoRetryCounter)
+	}
+	expAdv := expAdvance{
+		// We expect to stayInPlace; upon starting a txn the statement is
+		// executed again, this time in state Open.
+		expCode:   stayInPlace,
+		expRewPos: noRewind,
+		expFlush:  flushSet,
+	}
+
+	// Perform the test's transition.
+	if err := txnStateTransitionsApplyWrapper(
+		ctx, &machine, ts,
+		eventTxnStart{ImplicitTxn: False}, baggageEventTxnStart{tranCtx: tranCtx},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check the resulting advanceInfo.
+	if err := checkAdv(
+		ts.adv, expAdv.expCode, expAdv.expFlush, expAdv.expRewPos,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if ts.autoRetryCounter != 0 {
+		t.Fatalf("expected counter at 0, got: %d", ts.autoRetryCounter)
+	}
+
+	// Simulate an auto-retry and check that the counter is incremented.
+	dummyRewCap := rewindCapability{rewindPos: firstStmtPos}
+	baggage := baggageEventRetriableErr{
+		err: roachpb.NewHandledRetryableTxnError(
+			"test retriable err",
+			ts.mu.txn.ID(),
+			*ts.mu.txn.Proto(),
+		),
+		rewCap: dummyRewCap,
+	}
+	ev := eventRetriableErr{CanAutoRetry: True, IsCommit: False}
+	expAdv = expAdvance{
+		expCode:   rewind,
+		expRewPos: firstStmtPos,
+		expFlush:  noFlush,
+	}
+	if err := txnStateTransitionsApplyWrapper(ctx, &machine, ts, ev, baggage); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkAdv(
+		ts.adv, expAdv.expCode, expAdv.expFlush, expAdv.expRewPos,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if ts.autoRetryCounter != 1 {
+		t.Fatalf("expected counter at 1, got: %d", ts.autoRetryCounter)
+	}
+
+	// Simulate another auto-retry and check that the counter is incremented
+	// again.
+	if err := txnStateTransitionsApplyWrapper(ctx, &machine, ts, ev, baggage); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkAdv(
+		ts.adv, expAdv.expCode, expAdv.expFlush, expAdv.expRewPos,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if ts.autoRetryCounter != 2 {
+		t.Fatalf("expected counter at 2, got: %d", ts.autoRetryCounter)
+	}
+
+	// Check that finishing the txn resets the counter.
+	expAdv = expAdvance{
+		expCode:   advanceOne,
+		expRewPos: noRewind,
+		expFlush:  flushSet,
+	}
+	// Commit the txn so we can perform the transition.
+	if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := txnStateTransitionsApplyWrapper(
+		ctx, &machine, ts, eventTxnFinish{}, nil, /* baggage */
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkAdv(
+		ts.adv, expAdv.expCode, expAdv.expFlush, expAdv.expRewPos,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if ts.autoRetryCounter != 0 {
+		t.Fatalf("expected counter at 0, got: %d", ts.autoRetryCounter)
 	}
 }
