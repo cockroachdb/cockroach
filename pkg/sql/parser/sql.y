@@ -831,6 +831,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
+%type <bool> opt_symmetric
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list
@@ -5789,21 +5790,13 @@ a_expr:
   {
     $$.val = &tree.IsOfTypeExpr{Not: true, Expr: $1.expr(), Types: $6.colTypes()}
   }
-| a_expr BETWEEN opt_asymmetric b_expr AND a_expr %prec BETWEEN
+| a_expr BETWEEN opt_symmetric b_expr AND a_expr %prec BETWEEN
   {
-    $$.val = &tree.RangeCond{Left: $1.expr(), From: $4.expr(), To: $6.expr()}
+    $$.val = &tree.RangeCond{Symmetric: $3.bool(), Left: $1.expr(), From: $4.expr(), To: $6.expr()}
   }
-| a_expr NOT_LA BETWEEN opt_asymmetric b_expr AND a_expr %prec NOT_LA
+| a_expr NOT_LA BETWEEN opt_symmetric b_expr AND a_expr %prec NOT_LA
   {
-    $$.val = &tree.RangeCond{Not: true, Left: $1.expr(), From: $5.expr(), To: $7.expr()}
-  }
-| a_expr BETWEEN SYMMETRIC b_expr AND a_expr %prec BETWEEN
-  {
-    $$.val = &tree.RangeCond{Symmetric: true, Left: $1.expr(), From: $4.expr(), To: $6.expr()}
-  }
-| a_expr NOT_LA BETWEEN SYMMETRIC b_expr AND a_expr %prec NOT_LA
-  {
-    $$.val = &tree.RangeCond{Not: true, Symmetric: true, Left: $1.expr(), From: $5.expr(), To: $7.expr()}
+    $$.val = &tree.RangeCond{Not: true, Symmetric: $4.bool(), Left: $1.expr(), From: $5.expr(), To: $7.expr()}
   }
 | a_expr IN in_expr
   {
@@ -6682,9 +6675,10 @@ array_subscripts:
     $$.val = append($1.arraySubscripts(), $2.arraySubscript())
   }
 
-opt_asymmetric:
-  ASYMMETRIC {}
-| /* EMPTY */ {}
+opt_symmetric:
+  SYMMETRIC   { $$.val = true }
+| ASYMMETRIC  { $$.val = false }
+| /* EMPTY */ { $$.val = false }
 
 target_list:
   target_elem
