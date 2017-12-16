@@ -391,6 +391,7 @@ build/variables.mk: Makefile build/archive/contents/Makefile $(UI_ROOT)/Makefile
 # common because both the root Makefile and protobuf.mk have C dependencies.
 
 C_DEPS_DIR := $(abspath c-deps)
+CRYPTOPP_SRC_DIR := $(C_DEPS_DIR)/cryptopp
 JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
 PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
@@ -459,6 +460,7 @@ ifdef MINGW
 BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
+CRYPTOPP_DIR := $(BUILD_DIR)/cryptopp
 JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf
 ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(STDMALLOC_SUFFIX)$(if $(ENABLE_ROCKSDB_ASSERTIONS),_assert)
@@ -469,7 +471,7 @@ PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
 C_LIBS_OSS = $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb libroach
-C_LIBS_CCL = $(C_LIBS_OSS) libroachccl
+C_LIBS_CCL = $(C_LIBS_OSS) libcryptopp libroachccl
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
 NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
@@ -510,7 +512,7 @@ $(CGO_FLAGS_FILES): Makefile
 	@echo 'package $(notdir $(@D))' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: -I$(JEMALLOC_DIR)/include' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR) $(LIBROACH_DIR))' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR) $(LIBROACH_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
 # BUILD ARTIFACT CACHING
@@ -532,6 +534,12 @@ $(CGO_FLAGS_FILES): Makefile
 # only rebuild the affected objects, but in practice dependencies on configure
 # flags are not tracked correctly, and these stale artifacts can cause
 # particularly hard-to-debug errors.
+$(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild $(BOOTSTRAP_TARGET)
+	rm -rf $(CRYPTOPP_DIR)
+	mkdir -p $(CRYPTOPP_DIR)
+	@# NOTE: If you change the CMake flags below, bump the version in
+	@# $(C_DEPS_DIR)/cryptopp-rebuild. See above for rationale.
+	cd $(CRYPTOPP_DIR) && cmake $(CMAKE_FLAGS) $(CRYPTOPP_SRC_DIR)
 
 $(JEMALLOC_SRC_DIR)/configure.ac: $(BOOTSTRAP_TARGET)
 
@@ -591,7 +599,8 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
 	@# $(C_DEPS_DIR)/libroach-rebuild. See above for rationale.
 	cd $(LIBROACH_DIR) && cmake $(CMAKE_FLAGS) $(LIBROACH_SRC_DIR) -DCMAKE_BUILD_TYPE=Release \
 		-DPROTOBUF_LIB=$(PROTOBUF_DIR)/libprotobuf.a -DROCKSDB_LIB=$(ROCKSDB_DIR)/librocksdb.a \
-		-DJEMALLOC_LIB=$(JEMALLOC_DIR)/lib/libjemalloc.a -DSNAPPY_LIB=$(SNAPPY_DIR)/libsnappy.a
+		-DJEMALLOC_LIB=$(JEMALLOC_DIR)/lib/libjemalloc.a -DSNAPPY_LIB=$(SNAPPY_DIR)/libsnappy.a \
+		-DCRYPTOPP_LIB=$(CRYPTOPP_DIR)/libcryptopp.a
 
 # We mark C and C++ dependencies as .PHONY (or .ALWAYS_REBUILD) to avoid
 # having to name the artifact (for .PHONY), which can vary by platform, and so
@@ -601,6 +610,10 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
 
 $(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD | libprotobuf
 	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
+
+.PHONY: libcryptopp
+libcryptopp: $(CRYPTOPP_DIR)/Makefile
+	@$(MAKE) --no-print-directory -C $(CRYPTOPP_DIR) static
 
 .PHONY: libjemalloc
 libjemalloc: $(JEMALLOC_DIR)/Makefile
@@ -627,7 +640,7 @@ libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET) libroach
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
-check-libroach: $(LIBROACH_DIR)/Makefile libjemalloc libprotobuf libsnappy librocksdb
+check-libroach: $(LIBROACH_DIR)/Makefile libjemalloc libprotobuf libsnappy librocksdb libcryptopp
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) check
 
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
@@ -1143,6 +1156,7 @@ c-deps-fmt: $(shell find $(LIBROACH_SRC_DIR) \( -name '*.cc' -o -name '*.h' \) -
 
 .PHONY: clean-c-deps
 clean-c-deps:
+	rm -rf $(CRYPTOPP_DIR)
 	rm -rf $(JEMALLOC_DIR)
 	rm -rf $(PROTOBUF_DIR)
 	rm -rf $(ROCKSDB_DIR)
@@ -1150,6 +1164,7 @@ clean-c-deps:
 
 .PHONY: unsafe-clean-c-deps
 unsafe-clean-c-deps:
+	git -C $(CRYPTOPP_SRC_DIR) clean -dxf
 	git -C $(JEMALLOC_SRC_DIR) clean -dxf
 	git -C $(PROTOBUF_SRC_DIR) clean -dxf
 	git -C $(ROCKSDB_SRC_DIR)  clean -dxf
