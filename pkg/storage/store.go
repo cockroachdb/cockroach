@@ -28,7 +28,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
@@ -1798,6 +1798,21 @@ func (s *Store) NewRangeDescriptor(
 	return desc, nil
 }
 
+// splitPreApply is called when the raft command is applied. Any
+// changes to the given ReadWriter will be written atomically with the
+// split commit.
+func splitPreApply(
+	ctx context.Context, st *cluster.Settings, eng engine.ReadWriter, split roachpb.SplitTrigger,
+) {
+	// Update the raft HardState with the new Commit value now that the
+	// replica is initialized (combining it with existing or default
+	// Term and Vote).
+	rsl := stateloader.Make(st, split.RightDesc.RangeID)
+	if err := rsl.SynthesizeRaftState(ctx, eng); err != nil {
+		log.Fatal(ctx, err)
+	}
+}
+
 // splitPostApply is the part of the split trigger which coordinates the actual
 // split with the Store. Requires that Replica.raftMu is held.
 //
@@ -1822,19 +1837,7 @@ func splitPostApply(
 		}
 	}
 
-	{
-		// Finish up the initialization of the RHS' RaftState now that we have
-		// committed the split Batch (which included the initialization of the
-		// ReplicaState). This will synthesize and persist the correct lastIndex and
-		// HardState.
-		rsl := stateloader.Make(r.store.cfg.Settings, split.RightDesc.RangeID)
-		if err := rsl.SynthesizeRaftState(ctx, r.store.Engine()); err != nil {
-			log.Fatal(ctx, err)
-		}
-	}
-
 	// Finish initialization of the RHS.
-
 	r.mu.Lock()
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
