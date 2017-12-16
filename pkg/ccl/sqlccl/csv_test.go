@@ -563,6 +563,22 @@ func TestImportStmt(t *testing.T) {
 			`WITH temp = %s, transform_only`,
 			"",
 		},
+		{
+			"empty-file-dist",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
+			schema,
+			empty,
+			`WITH distributed, temp = %s, transform_only`,
+			"",
+		},
+		{
+			"empty-with-files-dist",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
+			schema,
+			append(empty, files...),
+			`WITH distributed, temp = %s, transform_only`,
+			"",
+		},
 		// NB: successes above, failures below, because we check the i-th job.
 		{
 			"missing-temp",
