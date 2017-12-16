@@ -247,6 +247,7 @@ func (cws *cachedWriteSimulator) singleKeySteady(
 func (cws *cachedWriteSimulator) shouldQueue(
 	b bool, prio float64, after time.Duration, ttl time.Duration, ms enginepb.MVCCStats,
 ) {
+	cws.t.Helper()
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
 	r := makeGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, int32(ttl.Seconds()))
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
@@ -285,32 +286,32 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 		//
 		// Since at the time of this check the data is already 30s old on
 		// average (i.e. ~30x the TTL), we expect to *really* want GC.
-		cws.shouldQueue(true, 36.68, time.Duration(0), 0, ms)
-		cws.shouldQueue(true, 36.68, time.Duration(0), 0, ms)
+		cws.shouldQueue(true, 29.92, time.Duration(0), 0, ms)
+		cws.shouldQueue(true, 29.92, time.Duration(0), 0, ms)
 
 		// Right after we finished writing, we don't want to GC yet with a one-minute TTL.
-		cws.shouldQueue(false, 0.61, time.Duration(0), minuteTTL, ms)
+		cws.shouldQueue(false, 0.50, time.Duration(0), minuteTTL, ms)
 
 		// Neither after a minute. The first values are about to become GC'able, though.
-		cws.shouldQueue(false, 1.81, time.Minute, minuteTTL, ms)
+		cws.shouldQueue(false, 1.48, time.Minute, minuteTTL, ms)
 		// 90 seconds in it's really close, but still just shy of GC. Half of the
 		// values could be deleted now (remember that we wrote them over a one
 		// minute period).
-		cws.shouldQueue(true, 2.42, 3*time.Minute/2, minuteTTL, ms)
+		cws.shouldQueue(false, 1.97, 3*time.Minute/2, minuteTTL, ms)
 		// Advancing another 1/4 minute does the trick.
-		cws.shouldQueue(true, 2.72, 7*time.Minute/4, minuteTTL, ms)
+		cws.shouldQueue(true, 2.22, 7*time.Minute/4, minuteTTL, ms)
 		// After an hour, that's (of course) still true with a very high priority.
-		cws.shouldQueue(true, 72.76, time.Hour, minuteTTL, ms)
+		cws.shouldQueue(true, 59.35, time.Hour, minuteTTL, ms)
 
 		// Let's see what the same would look like with a 1h TTL.
 		// Can't delete anything until 59min have passed, and indeed the score is low.
 		cws.shouldQueue(false, 0.01, time.Duration(0), hourTTL, ms)
-		cws.shouldQueue(false, 0.03, time.Minute, hourTTL, ms)
-		cws.shouldQueue(false, 1.21, time.Hour, hourTTL, ms)
-		// After 90 minutes, we're getting closer. After two hours, definitely ripe for
-		// GC (and this would delete all the values).
-		cws.shouldQueue(false, 1.81, 3*time.Hour/2, hourTTL, ms)
-		cws.shouldQueue(true, 2.42, 2*time.Hour, hourTTL, ms)
+		cws.shouldQueue(false, 0.02, time.Minute, hourTTL, ms)
+		cws.shouldQueue(false, 0.99, time.Hour, hourTTL, ms)
+		// After 90 minutes, we're getting closer. After just over two hours,
+		// definitely ripe for GC (and this would delete all the values).
+		cws.shouldQueue(false, 1.48, 90*time.Minute, hourTTL, ms)
+		cws.shouldQueue(true, 2.05, 125*time.Minute, hourTTL, ms)
 	}
 
 	{
@@ -331,16 +332,16 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 
 		// If the fact that 99.9% of the replica is live were not taken into
 		// account, this would get us at least close to GC.
-		cws.shouldQueue(false, 0.01, 5*time.Minute, minuteTTL, ms)
+		cws.shouldQueue(false, 0.00, 5*time.Minute, minuteTTL, ms)
 
 		// 12 hours in the score becomes relevant, but not yet large enough.
 		// The key is of course GC'able and has been for a long time, but
 		// to find it we'd have to scan all the other kv pairs as well.
-		cws.shouldQueue(false, 0.87, 12*time.Hour, minuteTTL, ms)
+		cws.shouldQueue(false, 0.71, 12*time.Hour, minuteTTL, ms)
 
 		// Two days in we're more than ready to go, would queue for GC, and
 		// delete.
-		cws.shouldQueue(true, 3.49, 48*time.Hour, minuteTTL, ms)
+		cws.shouldQueue(true, 2.85, 48*time.Hour, minuteTTL, ms)
 	}
 
 	{
@@ -356,11 +357,11 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 		// doesn't matter. In reality, the value-based GC score will often strike first.
 		cws.multiKey(100, valSize, txn, &ms)
 
-		cws.shouldQueue(false, 1.22, 24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 2.45, 2*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 4.89, 4*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(false, 8.56, 7*24*time.Hour, irrelevantTTL, ms)
-		cws.shouldQueue(true, 11, 9*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 1.00, 24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 1.99, 2*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 3.99, 4*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(false, 6.98, 7*24*time.Hour, irrelevantTTL, ms)
+		cws.shouldQueue(true, 11.97, 12*24*time.Hour, irrelevantTTL, ms)
 	}
 }
 
