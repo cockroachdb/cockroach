@@ -2129,6 +2129,25 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"crdb_internal.node_executable_version": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Category:   categorySystemInfo,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				v := "unknown"
+				// TODO(tschottdorf): we should always have a Settings, but there
+				// are many random places that create an ad-hoc EvalContext that
+				// they only partially populate.
+				if st := ctx.Settings; st != nil {
+					v = st.Version.ServerVersion.String()
+				}
+				return tree.NewDString(v), nil
+			},
+			Info: "Returns the version of CockroachDB this node is running.",
+		},
+	},
+
 	"crdb_internal.cluster_id": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{},
