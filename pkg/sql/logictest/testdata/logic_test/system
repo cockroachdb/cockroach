@@ -19,6 +19,7 @@ lease
 locations
 namespace
 rangelog
+role_members
 settings
 table_statistics
 ui
@@ -48,6 +49,8 @@ fetched: /namespace/primary/1/'namespace'/id -> 2
 output row: [1 'namespace' 2]
 fetched: /namespace/primary/1/'rangelog'/id -> 13
 output row: [1 'rangelog' 13]
+fetched: /namespace/primary/1/'role_members'/id -> 23
+output row: [1 'role_members' 23]
 fetched: /namespace/primary/1/'settings'/id -> 6
 output row: [1 'settings' 6]
 fetched: /namespace/primary/1/'table_statistics'/id -> 20
@@ -64,21 +67,22 @@ output row: [1 'zones' 5]
 query ITI rowsort
 SELECT * FROM system.namespace
 ----
-0 system            1
-0 test              50
-1 descriptor        3
-1 eventlog          12
-1 jobs              15
-1 lease             11
-1 locations         21
-1 namespace         2
-1 rangelog          13
-1 settings          6
-1 table_statistics  20
-1 ui                14
-1 users             4
-1 web_sessions      19
-1 zones             5
+0  system            1
+0  test              50
+1  descriptor        3
+1  eventlog          12
+1  jobs              15
+1  lease             11
+1  locations         21
+1  namespace         2
+1  rangelog          13
+1  role_members      23
+1  settings          6
+1  table_statistics  20
+1  ui                14
+1  users             4
+1  web_sessions      19
+1  zones             5
 
 query I rowsort
 SELECT id FROM system.descriptor
@@ -97,6 +101,7 @@ SELECT id FROM system.descriptor
 19
 20
 21
+23
 50
 
 # Verify we can read "protobuf" columns.
@@ -184,6 +189,14 @@ value        STRING     false  NULL   {}
 lastUpdated  TIMESTAMP  false  now()  {}
 valueType    STRING     true   NULL   {}
 
+query TTBTT
+SHOW COLUMNS FROM system.role_members
+----
+role     STRING  false  NULL  {"primary","role_members_role_idx","role_members_member_idx"}
+member   STRING  false  NULL  {"primary","role_members_role_idx","role_members_member_idx"}
+isAdmin  BOOL    false  NULL  {}
+
+
 # Verify default privileges on system tables.
 query TTT
 SHOW GRANTS ON DATABASE system
@@ -254,6 +267,16 @@ system  rangelog          root   GRANT
 system  rangelog          root   INSERT
 system  rangelog          root   SELECT
 system  rangelog          root   UPDATE
+system  role_members      admin  DELETE
+system  role_members      admin  GRANT
+system  role_members      admin  INSERT
+system  role_members      admin  SELECT
+system  role_members      admin  UPDATE
+system  role_members      root   DELETE
+system  role_members      root   GRANT
+system  role_members      root   INSERT
+system  role_members      root   SELECT
+system  role_members      root   UPDATE
 system  settings          admin  DELETE
 system  settings          admin  GRANT
 system  settings          admin  INSERT

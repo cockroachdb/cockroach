@@ -272,6 +272,7 @@ system              lease
 system              locations
 system              namespace
 system              rangelog
+system              role_members
 system              settings
 system              table_statistics
 system              ui
@@ -436,6 +437,7 @@ def            system              lease                      BASE TABLE   1
 def            system              locations                  BASE TABLE   1
 def            system              namespace                  BASE TABLE   1
 def            system              rangelog                   BASE TABLE   1
+def            system              role_members               BASE TABLE   1
 def            system              settings                   BASE TABLE   1
 def            system              table_statistics           BASE TABLE   1
 def            system              ui                         BASE TABLE   1
@@ -502,6 +504,7 @@ def                 system             primary          def            system   
 def                 system             primary          def            system        locations         PRIMARY KEY      NO             NO
 def                 system             primary          def            system        namespace         PRIMARY KEY      NO             NO
 def                 system             primary          def            system        rangelog          PRIMARY KEY      NO             NO
+def                 system             primary          def            system        role_members      PRIMARY KEY      NO             NO
 def                 system             primary          def            system        settings          PRIMARY KEY      NO             NO
 def                 system             primary          def            system        table_statistics  PRIMARY KEY      NO             NO
 def                 system             primary          def            system        ui                PRIMARY KEY      NO             NO
@@ -583,6 +586,9 @@ def            system        rangelog          eventType       4
 def            system        rangelog          otherRangeID    5
 def            system        rangelog          info            6
 def            system        rangelog          uniqueID        7
+def            system        role_members      role            1
+def            system        role_members      member          2
+def            system        role_members      isAdmin         3
 def            system        settings          name            1
 def            system        settings          value           2
 def            system        settings          lastUpdated     3
@@ -856,6 +862,16 @@ NULL     root     def            system        rangelog          GRANT          
 NULL     root     def            system        rangelog          INSERT          NULL          NULL
 NULL     root     def            system        rangelog          SELECT          NULL          NULL
 NULL     root     def            system        rangelog          UPDATE          NULL          NULL
+NULL     admin    def            system        role_members      DELETE          NULL          NULL
+NULL     admin    def            system        role_members      GRANT           NULL          NULL
+NULL     admin    def            system        role_members      INSERT          NULL          NULL
+NULL     admin    def            system        role_members      SELECT          NULL          NULL
+NULL     admin    def            system        role_members      UPDATE          NULL          NULL
+NULL     root     def            system        role_members      DELETE          NULL          NULL
+NULL     root     def            system        role_members      GRANT           NULL          NULL
+NULL     root     def            system        role_members      INSERT          NULL          NULL
+NULL     root     def            system        role_members      SELECT          NULL          NULL
+NULL     root     def            system        role_members      UPDATE          NULL          NULL
 NULL     admin    def            system        settings          DELETE          NULL          NULL
 NULL     admin    def            system        settings          GRANT           NULL          NULL
 NULL     admin    def            system        settings          INSERT          NULL          NULL

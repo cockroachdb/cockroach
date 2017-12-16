@@ -128,8 +128,15 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newRanges:      1,
 	},
 	{
-		name:   addDefaultMetaAndLivenessZoneConfigsName,
-		workFn: addDefaultMetaAndLivenessZoneConfigs,
+		name:      addDefaultMetaAndLivenessZoneConfigsName,
+		workFn:    addDefaultMetaAndLivenessZoneConfigs,
+		newRanges: 1,
+	},
+	{
+		name:           "create system.role_members table",
+		workFn:         createRoleMembersTable,
+		newDescriptors: 1,
+		newRanges:      1,
 	},
 	{
 		name:         "add system.users isRole column and create admin role",
@@ -141,6 +148,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// if this part fails.
 		name:   "grant superuser privileges on all objects to the admin role",
 		workFn: grantAdminPrivileges,
+	},
+	{
+		name:   "make root a member of the admin rol",
+		workFn: addRootToAdminRole,
 	},
 }
 
@@ -446,6 +457,10 @@ func createTableStatisticsTable(ctx context.Context, r runner) error {
 
 func createLocationsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.LocationsTable)
+}
+
+func createRoleMembersTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.RoleMembersTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
@@ -787,5 +802,31 @@ func grantAdminPrivileges(ctx context.Context, r runner) error {
 		}
 		return txn.Run(ctx, b)
 	})
+	return err
+}
+
+func addRootToAdminRole(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// We just created the table, so we can use insert.
+	const upsertAdminStmt = `
+					INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+					`
+
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
+	pl.SetValue("2", tree.NewDString(security.RootUser))
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, upsertAdminStmt, &pl, 1)
+		if err == nil {
+			res.Close(ctx)
+			break
+		}
+		log.Warningf(ctx, "failed to make %s a member of the %s role: %s", security.RootUser, sqlbase.AdminRole, err)
+	}
 	return err
 }

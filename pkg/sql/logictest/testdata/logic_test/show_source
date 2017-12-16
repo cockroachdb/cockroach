@@ -160,6 +160,7 @@ lease
 locations
 namespace
 rangelog
+role_members
 settings
 table_statistics
 ui

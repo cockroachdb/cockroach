@@ -460,7 +460,7 @@ func TestCreateSystemTable(t *testing.T) {
 			// Disable system.jobs migration, we'll do it manually.
 			disable = true
 		}
-		if strings.HasPrefix(newMigrations[i].name, "add system.users isRole column") {
+		if newMigrations[i].doesBackfill {
 			// Disable all migrations after (and including) a backfill, the backfill
 			// needs the jobs table and following migrations may depend on these.
 			seenBackfill = true
@@ -753,6 +753,8 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 		}
 		newMigrations = append(newMigrations, m)
 	}
+	// The deleted migration has a +1 counter for number of ranges. Set it on a random other one.
+	newMigrations[0].newRanges++
 
 	defer func(prev []migrationDescriptor) {
 		backwardCompatibleMigrations = prev

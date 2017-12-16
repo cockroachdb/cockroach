@@ -172,6 +172,17 @@ CREATE TABLE system.locations (
   PRIMARY KEY ("localityKey", "localityValue"),
   FAMILY ("localityKey", "localityValue", latitude, longitude)
 );`
+
+	// role_members stores relationships between roles (role->role and role->user).
+	RoleMembersTableSchema = `
+CREATE TABLE system.role_members (
+  "role"   STRING NOT NULL,
+  "member" STRING NOT NULL,
+  "isAdmin"  BOOL NOT NULL,
+  PRIMARY KEY  ("role", "member"),
+  INDEX ("role"),
+  INDEX ("member")
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -227,6 +238,7 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	keys.WebSessionsTableID:     {privilege.ReadWriteData},
 	keys.TableStatisticsTableID: {privilege.ReadWriteData},
 	keys.LocationsTableID:       {privilege.ReadWriteData},
+	keys.RoleMembersTableID:     {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -240,6 +252,7 @@ func SystemDesiredPrivileges(id ID) privilege.List {
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
+	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
 	colTypeInt       = ColumnType{SemanticType: ColumnType_INT}
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
@@ -737,7 +750,69 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
-)
+
+	// RoleMembersTable is the descriptor for the role_members table.
+	RoleMembersTable = TableDescriptor{
+		Name:     "role_members",
+		ID:       keys.RoleMembersTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "role", ID: 1, Type: colTypeString},
+			{Name: "member", ID: 2, Type: colTypeString},
+			{Name: "isAdmin", ID: 3, Type: colTypeBool},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"role", "member"},
+				ColumnIDs:   []ColumnID{1, 2},
+			},
+			{
+				Name:            "fam_3_isAdmin",
+				ID:              3,
+				ColumnNames:     []string{"isAdmin"},
+				ColumnIDs:       []ColumnID{3},
+				DefaultColumnID: 3,
+			},
+		},
+		NextFamilyID: 4,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"role", "member"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+		},
+		Indexes: []IndexDescriptor{
+			{
+				Name:             "role_members_role_idx",
+				ID:               2,
+				Unique:           false,
+				ColumnNames:      []string{"role"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{1},
+
+				ExtraColumnIDs: []ColumnID{2},
+			},
+			{
+				Name:             "role_members_member_idx",
+				ID:               3,
+				Unique:           false,
+				ColumnNames:      []string{"member"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{2},
+				ExtraColumnIDs:   []ColumnID{1},
+			},
+		},
+		NextIndexID:    4,
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemDesiredPrivileges(keys.RoleMembersTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
 
 //***************************************************************************
 // WARNING: any tables added after LocationsTable must use:
@@ -745,6 +820,7 @@ var (
 // instead of
 //   Privileges: NewCustomRootPrivilegeDescriptor(...)
 //***************************************************************************
+)
 
 // Create the key/value pair for the default zone config entry.
 func createDefaultZoneConfig() roachpb.KeyValue {

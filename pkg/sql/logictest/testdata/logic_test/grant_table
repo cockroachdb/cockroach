@@ -86,6 +86,16 @@ system    rangelog          root       GRANT
 system    rangelog          root       INSERT
 system    rangelog          root       SELECT
 system    rangelog          root       UPDATE
+system    role_members      admin      DELETE
+system    role_members      admin      GRANT
+system    role_members      admin      INSERT
+system    role_members      admin      SELECT
+system    role_members      admin      UPDATE
+system    role_members      root       DELETE
+system    role_members      root       GRANT
+system    role_members      root       INSERT
+system    role_members      root       SELECT
+system    role_members      root       UPDATE
 system    settings          admin      DELETE
 system    settings          admin      GRANT
 system    settings          admin      INSERT
