@@ -50,7 +50,8 @@ func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 // incrementing function.
 func (node *TInt) IsSerial() bool {
 	return node.Name == Serial.Name || node.Name == SmallSerial.Name ||
-		node.Name == BigSerial.Name
+		node.Name == BigSerial.Name || node.Name == Serial2.Name ||
+		node.Name == Serial4.Name || node.Name == Serial8.Name
 }
 
 // TFloat represents a REAL, DOUBLE or FLOAT type.
