@@ -1500,20 +1500,14 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	planCtx *planningCtx, n *joinNode,
 ) (physicalPlan, error) {
 	// See if we can create an interleave join plan.
-	if planInterleavedJoins.Get(&dsp.st.SV) && n.joinType == joinTypeInner {
-		// TODO(richardwu): We currently only do an interleave join on
-		// all equality columns. This can be relaxed once a hybrid
-		// hash-merge join is implemented (see comment below for merge
-		// joins).
-		if len(n.mergeJoinOrdering) == len(n.pred.leftEqualityIndices) {
-			plan, ok, err := dsp.tryCreatePlanForInterleavedJoin(planCtx, n)
-			if err != nil {
-				return physicalPlan{}, err
-			}
-			// An interleave join plan could be used. Return it.
-			if ok {
-				return plan, nil
-			}
+	if planInterleavedJoins.Get(&dsp.st.SV) {
+		plan, ok, err := dsp.tryCreatePlanForInterleavedJoin(planCtx, n)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		// An interleave join plan could be used. Return it.
+		if ok {
+			return plan, nil
 		}
 	}
 
@@ -1556,22 +1550,9 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 
 	// We initialize these properties of the joiner. They will then be used to
 	// fill in the processor spec. See descriptions for HashJoinerSpec.
-	var joinType distsqlrun.JoinType
 	var leftEqCols, rightEqCols []uint32
 	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
-
-	switch n.joinType {
-	case joinTypeInner:
-		joinType = distsqlrun.JoinType_INNER
-	case joinTypeFullOuter:
-		joinType = distsqlrun.JoinType_FULL_OUTER
-	case joinTypeRightOuter:
-		joinType = distsqlrun.JoinType_RIGHT_OUTER
-	case joinTypeLeftOuter:
-		joinType = distsqlrun.JoinType_LEFT_OUTER
-	default:
-		panic(fmt.Sprintf("invalid join type %d", n.joinType))
-	}
+	joinType := distsqlJoinType(n.joinType)
 
 	// Figure out the left and right types.
 	leftTypes := leftPlan.ResultTypes

@@ -242,7 +242,7 @@ func TestUseInterleavedJoin(t *testing.T) {
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 
 	// Only test cases on the full interleave prefix between the two
-	// tables should return false.
+	// tables should return true.
 	for _, tc := range []struct {
 		table1   string
 		table2   string
@@ -255,20 +255,20 @@ func TestUseInterleavedJoin(t *testing.T) {
 		// Simple parent-child case.
 		// parent1-child1 share interleave prefix (pid1).
 		{"parent1", "child1", "pid1", true},
-		{"parent1", "child1", "pid1,v", true},
+		{"parent1", "child1", "pid1,v", false},
 		{"parent1", "child1", "", false},
 		{"parent1", "child1", "v", false},
 		// Parent-grandchild case.
 		// parent1-grandchild1 share interleave prefix (pid1).
 		{"parent1", "grandchild1", "pid1", true},
-		{"parent1", "grandchild1", "pid1,v", true},
+		{"parent1", "grandchild1", "pid1,v", false},
 		{"parent1", "grandchild1", "", false},
 		{"parent1", "grandchild1", "v", false},
 		// Multiple-column interleave prefix.
 		// child1-grandchild1 share interleave prefix (pid1, cid1,
 		// cid2).
 		{"child1", "grandchild1", "pid1,cid1,cid2", true},
-		{"child1", "grandchild1", "pid1,cid1,cid2,v", true},
+		{"child1", "grandchild1", "pid1,cid1,cid2,v", false},
 		{"child1", "grandchild1", "", false},
 		{"child1", "grandchild1", "v", false},
 		// TODO(richardwu): update these once prefix/subset of
@@ -304,9 +304,17 @@ func TestUseInterleavedJoin(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					join.joinType = joinTypeInner
+
 					if err := setTestEqCols(join, colNames); err != nil {
 						t.Fatal(err)
 					}
+					join.mergeJoinOrdering = computeMergeJoinOrdering(
+						planPhysicalProps(join.left.plan),
+						planPhysicalProps(join.right.plan),
+						join.pred.leftEqualityIndices,
+						join.pred.rightEqualityIndices,
+					)
 
 					actual := useInterleavedJoin(join)
 

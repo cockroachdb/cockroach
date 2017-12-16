@@ -57,6 +57,11 @@ type interleavedReaderJoiner struct {
 	// arbitrary number of ancestor and child rows.
 	// We can use streamMerger here for simplicity.
 	ancestorRow sqlbase.EncDatumRow
+	// These are required for OUTER joins where the ancestor need to be
+	// emitted regardless.
+	ancestorJoined     bool
+	ancestorJoinSide   joinSide
+	descendantJoinSide joinSide
 	// ancestorTablePos is the corresponding index of theancestor table in
 	// tablePosts and tableIDs.
 	ancestorTablePos int
@@ -76,15 +81,6 @@ func newInterleavedReaderJoiner(
 	// This will require modifying joinerBase init logic.
 	if len(spec.Tables) != 2 {
 		return nil, errors.Errorf("interleavedReaderJoiner only reads from two tables in an interleaved hierarchy")
-	}
-
-	// TODO(richardwu): Support all types of joins by re-using
-	// streamMerger.
-	// We give up streaming joined rows for full interleave prefix joins
-	// unless we refactor streamMerger to stream rows if either batch (i.e. the ancestor's batch)
-	// only has one row.
-	if spec.Type != JoinType_INNER {
-		return nil, errors.Errorf("interleavedReaderJoiner only supports inner joins")
 	}
 
 	// Ensure the column orderings of all tables being merged are in the
@@ -108,6 +104,7 @@ func newInterleavedReaderJoiner(
 
 	// We need to figure out which table is the ancestor.
 	var ancestorTablePos int
+	var numAncestorPKCols int
 	minAncestors := -1
 	for i, table := range spec.Tables {
 		index, _, err := table.Desc.FindIndexByIndexIdx(int(table.IndexIdx))
@@ -121,6 +118,7 @@ func newInterleavedReaderJoiner(
 		if minAncestors == -1 || len(index.Interleave.Ancestors) < minAncestors {
 			minAncestors = len(index.Interleave.Ancestors)
 			ancestorTablePos = i
+			numAncestorPKCols = len(index.ColumnIDs)
 		}
 
 		if err := tablePosts[i].post.Init(
@@ -137,14 +135,27 @@ func newInterleavedReaderJoiner(
 		}
 	}
 
+	if len(spec.Tables[0].Ordering.Columns) != numAncestorPKCols {
+		return nil, errors.Errorf("interleavedReaderJoiner only supports joins on the entire interleaved prefix")
+	}
+
 	allSpans, _ = roachpb.MergeSpans(allSpans)
 
+	ancestorJoinSide := leftSide
+	descendantJoinSide := rightSide
+	if ancestorTablePos == 1 {
+		ancestorJoinSide = rightSide
+		descendantJoinSide = leftSide
+	}
+
 	irj := &interleavedReaderJoiner{
-		flowCtx:          flowCtx,
-		tableIDs:         tableIDs,
-		tablePosts:       tablePosts,
-		allSpans:         allSpans,
-		ancestorTablePos: ancestorTablePos,
+		flowCtx:            flowCtx,
+		tableIDs:           tableIDs,
+		tablePosts:         tablePosts,
+		allSpans:           allSpans,
+		ancestorTablePos:   ancestorTablePos,
+		ancestorJoinSide:   ancestorJoinSide,
+		descendantJoinSide: descendantJoinSide,
 	}
 
 	if err := irj.initMultiRowFetcher(
@@ -255,6 +266,13 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 			if err != nil {
 				err = scrub.UnwrapScrubError(err)
 				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			} else if irj.ancestorRow != nil && !irj.ancestorJoined {
+				// If the last row read is a parent, we may need to
+				// emit it unmatched for OUTER joins.
+				_, err := irj.maybeEmitUnmatchedRow(ctx, irj.ancestorRow, irj.ancestorJoinSide)
+				if err != nil {
+					irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+				}
 			}
 			break
 		}
@@ -288,39 +306,64 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 		}
 
 		if isAncestorRow {
+			// We first try to emit the previous ancestor row if it
+			// was never joined with a child row.
+			if irj.ancestorRow != nil && !irj.ancestorJoined {
+				needMoreRows, err := irj.maybeEmitUnmatchedRow(ctx, irj.ancestorRow, irj.ancestorJoinSide)
+				if !needMoreRows || err != nil {
+					if err != nil {
+						irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+					}
+					break
+				}
+			}
+
 			// A new ancestor row is fetched. We re-assign our reference
 			// to the most recent ancestor row.
 			// This is safe because tableRow is a newly alloc'd
 			// row.
 			irj.ancestorRow = tableRow
+			irj.ancestorJoined = false
 			continue
 		}
 
 		// A child row (tableRow) is fetched.
 
-		if irj.ancestorRow == nil {
-			// A child row was fetched before any ancestor rows. This
-			// is fine and shouldn't affect the desired outcome.
-			continue
-		}
-
-		// TODO(richardwu): Generalize this to 2+ tables and sibling
-		// tables.
 		var renderedRow sqlbase.EncDatumRow
-		if irj.ancestorTablePos == 0 {
-			renderedRow, err = irj.render(irj.ancestorRow, tableRow)
-		} else {
-			renderedRow, err = irj.render(tableRow, irj.ancestorRow)
+		if irj.ancestorRow != nil {
+			// TODO(richardwu): Generalize this to 2+ tables and sibling
+			// tables.
+			if irj.ancestorTablePos == 0 {
+				renderedRow, err = irj.render(irj.ancestorRow, tableRow)
+			} else {
+				renderedRow, err = irj.render(tableRow, irj.ancestorRow)
+			}
+			if err != nil {
+				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+				break
+			}
+
+			if renderedRow != nil {
+				irj.ancestorJoined = true
+				consumerStatus, err = irj.out.EmitRow(ctx, renderedRow)
+				if err != nil || consumerStatus != NeedMoreRows {
+					if err != nil {
+						irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+					}
+					break
+				}
+			}
 		}
 
-		if err != nil {
-			irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-			break
-		}
-
-		if renderedRow != nil {
-			consumerStatus, err = irj.out.EmitRow(ctx, renderedRow)
-			if err != nil || consumerStatus != NeedMoreRows {
+		// Either a child row is read before an ancestor row is read
+		// (which is possible at the beginning of a span partition)
+		// or a subsequent child row with a different join key (with
+		// no corresponding parent row).
+		// We will need to try to emit the unmatched row if we have an
+		// OUTER join.
+		if irj.ancestorRow == nil || renderedRow == nil {
+			needMoreRows, err := irj.maybeEmitUnmatchedRow(ctx, tableRow, irj.descendantJoinSide)
+			if !needMoreRows || err != nil {
 				if err != nil {
 					irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 				}
@@ -328,6 +371,7 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 			}
 		}
 	}
+
 	irj.sendMisplannedRangesMetadata(ctx)
 	sendTraceData(ctx, irj.out.output)
 	irj.out.Close()
