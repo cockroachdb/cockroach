@@ -59,7 +59,15 @@ message MVCCMetadata {
 // don't change last_update_nanos until an update at a timestamp which,
 // truncated to the second, is ahead of last_update_nanos/1e9. Then, that
 // difference in seconds times the base quantity (excluding the currently
-// running update) is added to the age. It gets more complicated when data is
+// running update) is added to the age.
+//
+// To give an example, if an intent is around from `t=2.5s` to `t=4.1s` (the
+// current time), then it contributes an intent age of two seconds (one second
+// picked up when crossing `t=3s`, another one at `t=4s`). Similarly, if a
+// GC'able kv pair is around for this amount of time, it contributes two seconds
+// times its size in bytes.
+//
+// It gets more complicated when data is
 // accounted for with a timestamp behind last_update_nanos. In this case, if
 // more than a second has passed (computed via truncation above), the ages have
 // to be adjusted to account for this late addition. This isn't hard: add the

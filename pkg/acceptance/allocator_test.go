@@ -198,7 +198,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				t.Error(err)
 			}
 
-			if err := at.runScrubChecks(ctx, t, "tpcc", "customer"); err != nil {
+			if err := at.runScrubChecks(ctx, t, "tpch", "customer"); err != nil {
 				t.Error(err)
 			}
 		}
