@@ -3261,15 +3261,15 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 		}
 		return json.FromArrayOfJSON(jsons), nil
 	case *tree.DTuple:
-		m := map[string]interface{}{}
+		pairs := make([]json.Pair, len(t.D))
 		for i, e := range t.D {
 			j, err := asJSON(e)
 			if err != nil {
 				return nil, err
 			}
-			m[fmt.Sprintf("f%d", i+1)] = j
+			pairs[i] = json.MakePair(fmt.Sprintf("f%d", i+1), j)
 		}
-		return json.FromMap(m)
+		return json.FromPairs(pairs), nil
 	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime:
 		return json.FromString(tree.AsStringWithFlags(t, tree.FmtBareStrings)), nil
 	default:

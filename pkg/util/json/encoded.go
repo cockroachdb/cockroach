@@ -373,7 +373,7 @@ func (j *jsonEncoded) shallowDecode() (JSON, error) {
 			if err != nil {
 				return nil, err
 			}
-			result[i] = jsonKeyValuePair{
+			result[i] = Pair{
 				k: jsonString(nextKey),
 				v: v,
 			}

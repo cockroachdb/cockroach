@@ -15,6 +15,7 @@
 package json
 
 import (
+	"container/heap"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -156,7 +157,7 @@ func TestJSONRoundTrip(t *testing.T) {
 		`true`,
 		` true `,
 		`
-        
+
         true
         `,
 		`false`,
@@ -340,6 +341,55 @@ func TestMakeJSON(t *testing.T) {
 			}
 			if c != 0 {
 				t.Fatalf("expected %v to equal %v", result, expectedResult)
+			}
+		})
+	}
+}
+
+func TestBuildJSONObject(t *testing.T) {
+	testCases := []struct {
+		input []string
+	}{
+		{[]string{}},
+		{[]string{"a"}},
+		{[]string{"a", "c", "a", "b", "a"}},
+		{[]string{"2", "1", "10", "3", "10", "1"}},
+	}
+	// Test whether JSONs built by sorting, heap and map are same
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("keys %v", tc.input), func(t *testing.T) {
+			m := map[string]interface{}{}
+			ps := make([]Pair, len(tc.input))
+			h := newPairHeapSorter()
+			for i, k := range tc.input {
+				j := FromString(fmt.Sprintf("%d", i))
+				m[k] = j
+				ps[i] = MakePair(k, j)
+				heap.Push(h, MakePair(k, j))
+			}
+			mapResult, err := MakeJSON(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sortResult := FromPairs(ps)
+			c, err := sortResult.Compare(mapResult)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
+				t.Fatalf("expected %v to equal %v for sorting", sortResult, mapResult)
+			}
+			for i := 0; i < len(tc.input); i++ {
+				_ = heap.Pop(h)
+			}
+			h.unique()
+			heapResult := jsonObject(h.pairs)
+			c, err = heapResult.Compare(mapResult)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
+				t.Fatalf("expected %v to equal %v for heap", heapResult, mapResult)
 			}
 		})
 	}
@@ -1089,6 +1139,93 @@ func TestNegativeRandomJSONContains(t *testing.T) {
 			fmt.Println("realResult=", realResult)
 			t.Fatal("mismatch for document " + j1.String() + " @> " + j2.String())
 		}
+	}
+}
+
+// Only used for benchmarking the performance of JSON object construction
+type pairHeapSorter struct {
+	pairSorter
+	len int
+}
+
+func newPairHeapSorter() *pairHeapSorter {
+	return &pairHeapSorter{
+		pairSorter: pairSorter{
+			pairs:        []Pair{},
+			orders:       []int{},
+			hasNonUnique: false,
+		},
+		len: 0,
+	}
+}
+
+func (s *pairHeapSorter) Push(x interface{}) {
+	// Assume no push after starting to pop
+	s.pairs = append(s.pairs, x.(Pair))
+	s.orders = append(s.orders, len(s.orders))
+	s.len++
+}
+
+func (s *pairHeapSorter) Pop() interface{} {
+	// Only used for sorting elements, return nothing
+	s.len--
+	return nil
+}
+
+func (s *pairHeapSorter) Len() int {
+	return s.len
+}
+
+func (s *pairHeapSorter) Less(i, j int) bool {
+	return s.pairSorter.Less(j, i)
+}
+
+func BenchmarkBuildJSONObject(b *testing.B) {
+	for _, objectSize := range []int{1, 10, 100, 1000, 10000, 100000} {
+		keys := make([]string, objectSize)
+		for i := 0; i < objectSize; i++ {
+			keys[i] = fmt.Sprintf("key%d", i)
+		}
+		for i := 0; i < objectSize; i++ {
+			p := rand.Intn(objectSize-i) + i
+			keys[i], keys[p] = keys[p], keys[i]
+		}
+		b.Run(fmt.Sprintf("object size %d", objectSize), func(b *testing.B) {
+			b.Run("from json pairs", func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					pairs := []Pair{}
+					for i, k := range keys {
+						pairs = append(pairs, MakePair(k, FromInt(i)))
+					}
+					_ = FromPairs(pairs)
+				}
+			})
+
+			b.Run("from go map", func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					m := map[string]interface{}{}
+					for i, k := range keys {
+						m[k] = FromInt(i)
+					}
+					if _, err := FromMap(m); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+
+			b.Run("from heap", func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					s := newPairHeapSorter()
+					for i, k := range keys {
+						heap.Push(s, MakePair(k, FromInt(i)))
+					}
+					for i := 0; i < len(keys); i++ {
+						_ = heap.Pop(s)
+					}
+					s.unique()
+				}
+			})
+		})
 	}
 }
 

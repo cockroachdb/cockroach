@@ -128,14 +128,77 @@ type jsonString string
 
 type jsonArray []JSON
 
-type jsonKeyValuePair struct {
+// Pair is the basic elements of JSON object
+type Pair struct {
 	k jsonString
 	v JSON
 }
 
+// MakePair returns a Pair given a string key and JSON value.
+func MakePair(k string, v JSON) Pair {
+	return Pair{
+		k: jsonString(k),
+		v: v,
+	}
+}
+
+// pairSorter is used to sort and uniqueify JSON pairs. Inorder to keep
+// the last one for pairs with the same key while sort.Sort is
+// not stable, pairSorter uses []int orders to maintain order and
+// bool hasNonUnique to skip unnecessary uniquifing.
+type pairSorter struct {
+	pairs        []Pair
+	orders       []int
+	hasNonUnique bool
+}
+
+func newPairSorter(pairs []Pair) *pairSorter {
+	orders := make([]int, len(pairs))
+	for i := range orders {
+		orders[i] = i
+	}
+	return &pairSorter{
+		pairs:        pairs,
+		orders:       orders,
+		hasNonUnique: false}
+}
+
+func (s *pairSorter) Len() int {
+	return len(s.pairs)
+}
+
+func (s *pairSorter) Less(i, j int) bool {
+	cmp := strings.Compare(string(s.pairs[i].k), string(s.pairs[j].k))
+	if cmp != 0 {
+		return cmp == -1
+	}
+	s.hasNonUnique = true
+	return s.orders[i] > s.orders[j]
+}
+
+func (s *pairSorter) Swap(i, j int) {
+	s.pairs[i], s.orders[i], s.pairs[j], s.orders[j] = s.pairs[j], s.orders[j], s.pairs[i], s.orders[i]
+}
+
+func (s *pairSorter) unique() {
+	if !s.hasNonUnique {
+		return
+	}
+	top := 0
+	for i := 1; i < len(s.pairs); i++ {
+		if s.pairs[top].k != s.pairs[i].k {
+			top++
+			if top != i {
+				s.pairs[top] = s.pairs[i]
+			}
+		}
+	}
+	s.pairs = s.pairs[:top+1]
+}
+
 // jsonObject represents a JSON object as a sorted-by-key list of key-value
 // pairs, which are unique by key.
-type jsonObject []jsonKeyValuePair
+type jsonObject []Pair
 
 func (jsonNull) Type() Type   { return NullJSONType }
 func (jsonFalse) Type() Type  { return FalseJSONType }
@@ -501,6 +564,16 @@ func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	return outKeys, nil
 }
 
+// FromPairs returns a JSON value given an array of key value pair.
+// The argument pairs will be sorted based on key, uniqueified and used for
+// constructing JSON object.
+func FromPairs(pairs []Pair) JSON {
+	s := newPairSorter(pairs)
+	sort.Sort(s)
+	s.unique()
+	return jsonObject(s.pairs)
+}
+
 // FromDecimal returns a JSON value given a apd.Decimal.
 func FromDecimal(v apd.Decimal) JSON {
 	return jsonNumber(v)
@@ -555,13 +628,13 @@ func FromMap(v map[string]interface{}) (JSON, error) {
 		i++
 	}
 	sort.Strings(keys)
-	result := make([]jsonKeyValuePair, len(v))
+	result := make([]Pair, len(v))
 	for i := range keys {
 		v, err := MakeJSON(v[keys[i]])
 		if err != nil {
 			return nil, err
 		}
-		result[i] = jsonKeyValuePair{
+		result[i] = Pair{
 			k: jsonString(keys[i]),
 			v: v,
 		}
@@ -727,7 +800,7 @@ func (j jsonArray) RemoveKey(key string) (JSON, error) {
 }
 
 func (j jsonObject) RemoveKey(key string) (JSON, error) {
-	newVal := make([]jsonKeyValuePair, 0, len(j))
+	newVal := make([]Pair, 0, len(j))
 	for i := range j {
 		if string(j[i].k) != key {
 			newVal = append(newVal, j[i])

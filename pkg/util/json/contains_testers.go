@@ -134,7 +134,7 @@ func (j jsonObject) subdocument(_ bool, rng *rand.Rand) JSON {
 	result := make(jsonObject, 0)
 	for _, e := range j {
 		if rng.Intn(2) == 0 {
-			result = append(result, jsonKeyValuePair{
+			result = append(result, Pair{
 				k: e.k,
 				v: e.v.(containsTester).subdocument(false /* isRoot */, rng),
 			})
