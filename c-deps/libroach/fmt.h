@@ -12,18 +12,8 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include "db.h"
-#include "include/libroach.h"
-#include "testutils.h"
+#pragma once
 
-TEST(Libroach, DBOpenHook) {
-  DBOptions db_opts;
+#include <google/protobuf/stubs/stringprintf.h>
 
-  // Try an empty extra_options.
-  db_opts.extra_options = ToDBSlice("");
-  EXPECT_OK(DBOpenHook(db_opts));
-
-  // Try extra_options with anything at all.
-  db_opts.extra_options = ToDBSlice("blah");
-  EXPECT_ERR(DBOpenHook(db_opts), "DBOptions has extra_options, but OSS code cannot handle them");
-}
+namespace fmt = google::protobuf;
