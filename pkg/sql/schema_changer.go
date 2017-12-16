@@ -287,6 +287,12 @@ func (sc *SchemaChanger) maybeAddDropRename(
 			return false, nil
 		}
 
+		// This can happen if a change other than the drop originally
+		// scheduled the changer for this table. If that's the case,
+		// we still need to wait for the deadline to expire.
+		if d := table.GCDeadline; d != 0 && timeutil.Since(timeutil.Unix(0, d)) < 0 {
+			return false, nil
+		}
 		// Do all the hard work of deleting the table data and the table ID.
 		if err := truncateTableInChunks(ctx, table, &sc.db, false /* traceKV */); err != nil {
 			return false, err
@@ -1035,7 +1041,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
 						if err := table.ValidateTable(); err != nil {
-							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
+							log.Errorf(ctx, "%s: received invalid table descriptor: %v: %s", kv.Key, table, err)
 							continue
 						}
 
