@@ -137,6 +137,85 @@ type jsonKeyValuePair struct {
 	v JSON
 }
 
+// Builder builds JSON Object by a key value pair sequence.
+type Builder struct {
+	pairs []jsonKeyValuePair
+}
+
+// NewBuilder returns a Builder with empty state
+func NewBuilder() *Builder {
+	return &Builder{
+		pairs: []jsonKeyValuePair{},
+	}
+}
+
+// Add appends key value pair to the sequence
+func (b *Builder) Add(k string, v JSON) {
+	b.pairs = append(b.pairs, jsonKeyValuePair{k: jsonString(k), v: v})
+}
+
+// Build returns a JSON object built from a key value pair sequence
+func (b *Builder) Build() JSON {
+	s := newPairSorter(b.pairs)
+	sort.Sort(s)
+	s.unique()
+	return jsonObject(s.pairs)
+}
+
+// pairSorter sorts and uniqueifies JSON pairs. In order to keep
+// the last one for pairs with the same key while sort.Sort is
+// not stable, pairSorter uses []int orders to maintain order and
+// bool hasNonUnique to skip unnecessary uniqueifying.
+type pairSorter struct {
+	pairs        []jsonKeyValuePair
+	orders       []int
+	hasNonUnique bool
+}
+
+func newPairSorter(pairs []jsonKeyValuePair) *pairSorter {
+	orders := make([]int, len(pairs))
+	for i := range orders {
+		orders[i] = i
+	}
+	return &pairSorter{
+		pairs:        pairs,
+		orders:       orders,
+		hasNonUnique: false}
+}
+
+func (s *pairSorter) Len() int {
+	return len(s.pairs)
+}
+
+func (s *pairSorter) Less(i, j int) bool {
+	cmp := strings.Compare(string(s.pairs[i].k), string(s.pairs[j].k))
+	if cmp != 0 {
+		return cmp == -1
+	}
+	s.hasNonUnique = true
+	return s.orders[i] > s.orders[j]
+}
+
+func (s *pairSorter) Swap(i, j int) {
+	s.pairs[i], s.orders[i], s.pairs[j], s.orders[j] = s.pairs[j], s.orders[j], s.pairs[i], s.orders[i]
+}
+
+func (s *pairSorter) unique() {
+	if !s.hasNonUnique {
+		return
+	}
+	top := 0
+	for i := 1; i < len(s.pairs); i++ {
+		if s.pairs[top].k != s.pairs[i].k {
+			top++
+			if top != i {
+				s.pairs[top] = s.pairs[i]
+			}
+		}
+	}
+	s.pairs = s.pairs[:top+1]
+}
+
 // jsonObject represents a JSON object as a sorted-by-key list of key-value
 // pairs, which are unique by key.
 type jsonObject []jsonKeyValuePair

@@ -156,7 +156,7 @@ func TestJSONRoundTrip(t *testing.T) {
 		`true`,
 		` true `,
 		`
-        
+
         true
         `,
 		`false`,
@@ -334,6 +334,41 @@ func TestMakeJSON(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			c, err := result.Compare(expectedResult)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
+				t.Fatalf("expected %v to equal %v", result, expectedResult)
+			}
+		})
+	}
+}
+
+func TestBuildJSONObject(t *testing.T) {
+	testCases := []struct {
+		input []string
+	}{
+		{[]string{}},
+		{[]string{"a"}},
+		{[]string{"a", "c", "a", "b", "a"}},
+		{[]string{"2", "1", "10", "3", "10", "1"}},
+	}
+	// Test whether JSONs built by sorting, heap and map are same
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("keys %v", tc.input), func(t *testing.T) {
+			m := map[string]interface{}{}
+			b := NewBuilder()
+			for i, k := range tc.input {
+				j := FromString(fmt.Sprintf("%d", i))
+				m[k] = j
+				b.Add(k, j)
+			}
+			expectedResult, err := MakeJSON(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := b.Build()
 			c, err := result.Compare(expectedResult)
 			if err != nil {
 				t.Fatal(err)
@@ -1146,6 +1181,42 @@ func TestPretty(t *testing.T) {
 			if pretty != tc.expected {
 				t.Fatalf("expected:\n%s\ngot:\n%s\n", tc.expected, pretty)
 			}
+		})
+	}
+}
+
+func BenchmarkBuildJSONObject(b *testing.B) {
+	for _, objectSize := range []int{1, 10, 100, 1000, 10000, 100000} {
+		keys := make([]string, objectSize)
+		for i := 0; i < objectSize; i++ {
+			keys[i] = fmt.Sprintf("key%d", i)
+		}
+		for i := 0; i < objectSize; i++ {
+			p := rand.Intn(objectSize-i) + i
+			keys[i], keys[p] = keys[p], keys[i]
+		}
+		b.Run(fmt.Sprintf("object size %d", objectSize), func(b *testing.B) {
+			b.Run("from builder", func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					builder := NewBuilder()
+					for i, k := range keys {
+						builder.Add(k, FromInt(i))
+					}
+					_ = builder.Build()
+				}
+			})
+
+			b.Run("from go map", func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					m := map[string]interface{}{}
+					for i, k := range keys {
+						m[k] = FromInt(i)
+					}
+					if _, err := FromMap(m); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
 		})
 	}
 }
