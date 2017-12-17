@@ -1004,7 +1004,8 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if repl == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
-	desc, err := store.NewRangeDescriptor(splitKey, repl.Desc().EndKey, repl.Desc().Replicas)
+	desc, err := store.NewRangeDescriptor(
+		context.Background(), splitKey, repl.Desc().EndKey, repl.Desc().Replicas)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1065,7 +1066,8 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	// to rangeIDAllocCount * 3 + 1.
 	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
-		desc, err := store.NewRangeDescriptor(roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)), replicas)
+		desc, err := store.NewRangeDescriptor(context.Background(),
+			roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)), replicas)
 		if err != nil {
 			t.Fatal(err)
 		}
