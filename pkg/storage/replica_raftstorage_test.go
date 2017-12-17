@@ -83,6 +83,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Snapshot should succeed.
 	if snap, err := rep.GetSnapshot(context.Background(), "test"); err != nil {
 		t.Fatal(err)
 	} else {
@@ -93,6 +94,7 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Snapshot should fail.
 	const expected = "not generating test snapshot because replica is too large"
 	if _, err := rep.GetSnapshot(context.Background(), "test"); !testutils.IsError(err, expected) {
 		rep.mu.Lock()
@@ -103,5 +105,17 @@ func TestSkipLargeReplicaSnapshot(t *testing.T) {
 			after, rep.GetMaxBytes(),
 			rep.needsSplitBySize(), rep.exceedsDoubleSplitSizeRLocked(), err,
 		)
+	}
+
+	// Set the permitLargeSnapshots flag, which bypasses the snapshot size check.
+	rep.mu.Lock()
+	rep.mu.permitLargeSnapshots = true
+	rep.mu.Unlock()
+
+	// Snapshot should succeed.
+	if snap, err := rep.GetSnapshot(context.Background(), "test"); err != nil {
+		t.Fatal(err)
+	} else {
+		snap.Close()
 	}
 }
