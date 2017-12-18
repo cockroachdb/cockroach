@@ -82,6 +82,10 @@ GRANT CREATE ON TABLE users TO testuser
 
 user testuser
 
+# Test drop index respects RESTRICT and will not drop an index when a unique constraint depends on it.
+statement error index "bar" is in use by unique constraint "bar"
+DROP INDEX users@bar RESTRICT
+
 statement ok
 DROP INDEX users@bar
 

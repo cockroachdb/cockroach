@@ -19,6 +19,8 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -135,6 +137,16 @@ func (p *planner) dropIndexByName(
 	if dropped {
 		return nil
 	}
+	if behavior == tree.DropRestrict {
+		name, constraint, err := findIndexUniqueConstraint(ctx, p.txn, tableDesc, &idx)
+		if err != nil {
+			return err
+		}
+		if constraint != nil {
+			return pgerror.NewErrorf(pgerror.CodeInvalidObjectDefinitionError,
+				"index %q is in use by unique constraint %q", idx.Name, name)
+		}
+	}
 	// Queue the mutation.
 	var droppedViews []string
 	if idx.ForeignKey.IsSet() {
@@ -238,4 +250,26 @@ func (p *planner) dropIndexByName(
 	p.notifySchemaChange(tableDesc, mutationID)
 
 	return nil
+}
+
+// findIndexUniqueConstraint will find a unique constraint that the
+// index is used by, if one exists.
+func findIndexUniqueConstraint(
+	ctx context.Context,
+	txn *client.Txn,
+	tableDesc *sqlbase.TableDescriptor,
+	idx *sqlbase.IndexDescriptor,
+) (string, *sqlbase.ConstraintDetail, error) {
+	details, err := tableDesc.GetConstraintInfo(ctx, txn)
+	if err != nil {
+		return "", nil, err
+	}
+	for name := range details {
+		if details[name].Kind == sqlbase.ConstraintTypeUnique &&
+			details[name].Index.ID == idx.ID {
+			constraint := details[name]
+			return name, &constraint, nil
+		}
+	}
+	return "", nil, nil
 }
