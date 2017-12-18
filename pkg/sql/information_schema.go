@@ -113,7 +113,10 @@ CREATE TABLE information_schema.columns (
 	CHARACTER_OCTET_LENGTH INT,
 	NUMERIC_PRECISION INT,
 	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT
+	DATETIME_PRECISION INT,
+	CHARACTER_SET_CATALOG STRING,
+	CHARACTER_SET_SCHEMA STRING,
+	CHARACTER_SET_NAME STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -136,6 +139,9 @@ CREATE TABLE information_schema.columns (
 					numericPrecision(column.Type),            // numeric_precision
 					numericScale(column.Type),                // numeric_scale
 					datetimePrecision(column.Type),           // datetime_precision
+					tree.DNull,                               // character_set_catalog
+					tree.DNull,                               // character_set_schema
+					tree.DNull,                               // character_set_name
 				)
 			})
 		})
