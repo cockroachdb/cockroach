@@ -1,0 +1,1928 @@
+stmt_block ::=
+	stmt_list
+
+stmt_list ::=
+	( stmt ) ( ( ';' stmt ) )*
+
+stmt ::=
+	'HELPTOKEN'
+	| alter_stmt
+	| backup_stmt
+	| cancel_stmt
+	| scrub_stmt
+	| copy_from_stmt
+	| create_stmt
+	| deallocate_stmt
+	| delete_stmt
+	| discard_stmt
+	| drop_stmt
+	| execute_stmt
+	| explain_stmt
+	| grant_stmt
+	| insert_stmt
+	| import_stmt
+	| pause_stmt
+	| prepare_stmt
+	| restore_stmt
+	| resume_stmt
+	| revoke_stmt
+	| savepoint_stmt
+	| select_stmt
+	| release_stmt
+	| reset_stmt
+	| set_stmt
+	| show_stmt
+	| transaction_stmt
+	| truncate_stmt
+	| update_stmt
+	| upsert_stmt
+	| 
+
+alter_stmt ::=
+	alter_ddl_stmt
+	| alter_user_stmt
+
+backup_stmt ::=
+	'BACKUP' targets 'TO' string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
+
+cancel_stmt ::=
+	cancel_job_stmt
+	| cancel_query_stmt
+
+scrub_stmt ::=
+	scrub_table_stmt
+	| scrub_database_stmt
+
+copy_from_stmt ::=
+	'COPY' qualified_name 'FROM' 'STDIN'
+	| 'COPY' qualified_name '(' ')' 'FROM' 'STDIN'
+	| 'COPY' qualified_name '(' qualified_name_list ')' 'FROM' 'STDIN'
+
+create_stmt ::=
+	create_user_stmt
+	| create_ddl_stmt
+	| create_stats_stmt
+
+deallocate_stmt ::=
+	'DEALLOCATE' name
+	| 'DEALLOCATE' 'PREPARE' name
+	| 'DEALLOCATE' 'ALL'
+	| 'DEALLOCATE' 'PREPARE' 'ALL'
+
+delete_stmt ::=
+	'DELETE' 'FROM' relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
+
+discard_stmt ::=
+	'DISCARD' 'ALL'
+
+drop_stmt ::=
+	drop_ddl_stmt
+	| drop_user_stmt
+
+execute_stmt ::=
+	'EXECUTE' name execute_param_clause
+
+explain_stmt ::=
+	'EXPLAIN' explainable_stmt
+	| 'EXPLAIN' '(' explain_option_list ')' explainable_stmt
+
+grant_stmt ::=
+	'GRANT' privileges 'ON' targets 'TO' grantee_list
+
+insert_stmt ::=
+	'INSERT' 'INTO' insert_target insert_rest returning_clause
+	| 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
+
+import_stmt ::=
+	'IMPORT' 'TABLE' any_name 'CREATE' 'USING' string_or_placeholder import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+	| 'IMPORT' 'TABLE' any_name '(' table_elem_list ')' import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+
+pause_stmt ::=
+	'PAUSE' 'JOB' a_expr
+
+prepare_stmt ::=
+	'PREPARE' name prep_type_clause 'AS' preparable_stmt
+
+restore_stmt ::=
+	'RESTORE' targets 'FROM' string_or_placeholder_list opt_with_options
+	| 'RESTORE' targets 'FROM' string_or_placeholder_list 'EXPERIMENTAL' as_of_clause opt_with_options
+
+resume_stmt ::=
+	'RESUME' 'JOB' a_expr
+
+revoke_stmt ::=
+	'REVOKE' privileges 'ON' targets 'FROM' grantee_list
+
+savepoint_stmt ::=
+	'SAVEPOINT' name
+
+select_stmt ::=
+	select_no_parens
+	| select_with_parens
+
+release_stmt ::=
+	'RELEASE' savepoint_name
+
+reset_stmt ::=
+	reset_session_stmt
+	| reset_csetting_stmt
+
+set_stmt ::=
+	set_session_stmt
+	| set_csetting_stmt
+	| set_transaction_stmt
+
+show_stmt ::=
+	show_backup_stmt
+	| show_columns_stmt
+	| show_constraints_stmt
+	| show_create_table_stmt
+	| show_create_view_stmt
+	| show_csettings_stmt
+	| show_databases_stmt
+	| show_grants_stmt
+	| show_histogram_stmt
+	| show_indexes_stmt
+	| show_jobs_stmt
+	| show_queries_stmt
+	| show_session_stmt
+	| show_sessions_stmt
+	| show_stats_stmt
+	| show_tables_stmt
+	| show_trace_stmt
+	| show_users_stmt
+
+transaction_stmt ::=
+	begin_stmt
+	| commit_stmt
+	| rollback_stmt
+	| abort_stmt
+
+truncate_stmt ::=
+	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
+
+update_stmt ::=
+	'UPDATE' relation_expr_opt_alias 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
+
+upsert_stmt ::=
+	'UPSERT' 'INTO' insert_target insert_rest returning_clause
+
+alter_ddl_stmt ::=
+	alter_table_stmt
+	| alter_index_stmt
+	| alter_view_stmt
+	| alter_sequence_stmt
+	| alter_database_stmt
+
+alter_user_stmt ::=
+	alter_user_password_stmt
+
+targets ::=
+	table_pattern_list
+	| 'TABLE' table_pattern_list
+	| 'DATABASE' name_list
+
+string_or_placeholder ::=
+	non_reserved_word_or_sconst
+	| 'PLACEHOLDER'
+
+opt_as_of_clause ::=
+	as_of_clause
+	| 
+
+opt_incremental ::=
+	'INCREMENTAL' 'FROM' string_or_placeholder_list
+	| 
+
+opt_with_options ::=
+	'WITH' kv_option_list
+	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
+	| 
+
+cancel_job_stmt ::=
+	'CANCEL' 'JOB' a_expr
+
+cancel_query_stmt ::=
+	'CANCEL' 'QUERY' a_expr
+
+scrub_table_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'TABLE' qualified_name opt_as_of_clause opt_scrub_options_clause
+
+scrub_database_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'DATABASE' name opt_as_of_clause
+
+qualified_name ::=
+	name
+	| name qname_indirection
+
+qualified_name_list ::=
+	( qualified_name ) ( ( ',' qualified_name ) )*
+
+create_user_stmt ::=
+	'CREATE' 'USER' string_or_placeholder opt_password
+	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_password
+
+create_ddl_stmt ::=
+	create_database_stmt
+	| create_index_stmt
+	| create_table_stmt
+	| create_table_as_stmt
+	| create_view_stmt
+	| create_sequence_stmt
+
+create_stats_stmt ::=
+	'CREATE' 'STATISTICS' name 'ON' name_list 'FROM' qualified_name
+
+name ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+
+relation_expr_opt_alias ::=
+	relation_expr
+	| relation_expr name
+	| relation_expr 'AS' name
+
+where_clause ::=
+	'WHERE' a_expr
+	| 
+
+opt_sort_clause ::=
+	sort_clause
+	| 
+
+opt_limit_clause ::=
+	limit_clause
+	| 
+
+returning_clause ::=
+	'RETURNING' target_list
+	| 'RETURNING' 'NOTHING'
+	| 
+
+drop_ddl_stmt ::=
+	drop_database_stmt
+	| drop_index_stmt
+	| drop_table_stmt
+	| drop_view_stmt
+	| drop_sequence_stmt
+
+drop_user_stmt ::=
+	'DROP' 'USER' string_or_placeholder_list
+	| 'DROP' 'USER' 'IF' 'EXISTS' string_or_placeholder_list
+
+execute_param_clause ::=
+	'(' expr_list ')'
+	| 
+
+explainable_stmt ::=
+	preparable_stmt
+	| alter_ddl_stmt
+	| create_ddl_stmt
+	| create_stats_stmt
+	| drop_ddl_stmt
+	| execute_stmt
+
+explain_option_list ::=
+	( explain_option_name ) ( ( ',' explain_option_name ) )*
+
+privileges ::=
+	'ALL'
+	| privilege_list
+
+grantee_list ::=
+	( name ) ( ( ',' name ) )*
+
+insert_target ::=
+	qualified_name
+	| qualified_name 'AS' name
+
+insert_rest ::=
+	select_stmt
+	| '(' qualified_name_list ')' select_stmt
+	| 'DEFAULT' 'VALUES'
+
+on_conflict ::=
+	'ON' 'CONFLICT' opt_conf_expr 'DO' 'UPDATE' 'SET' set_clause_list where_clause
+	| 'ON' 'CONFLICT' opt_conf_expr 'DO' 'NOTHING'
+
+any_name ::=
+	name
+	| name attrs
+
+import_data_format ::=
+	'CSV'
+
+string_or_placeholder_list ::=
+	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
+
+table_elem_list ::=
+	( table_elem ) ( ( ',' table_elem ) )*
+
+a_expr ::=
+	( c_expr | '+' a_expr | '-' a_expr | '~' a_expr | 'NOT' a_expr | 'NOT' a_expr | 'DEFAULT' | 'MAXVALUE' ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | 'COLLATE' unrestricted_name | '+' a_expr | '-' a_expr | '*' a_expr | '/' a_expr | 'FLOORDIV' a_expr | '%' a_expr | '^' a_expr | '#' a_expr | '&' a_expr | '|' a_expr | '<' a_expr | '>' a_expr | '?' a_expr | 'SOME_EXISTENCE' a_expr | 'ALL_EXISTENCE' a_expr | 'CONTAINS' a_expr | 'CONTAINED_BY' a_expr | '=' a_expr | 'CONCAT' a_expr | 'LSHIFT' a_expr | 'RSHIFT' a_expr | 'FETCHVAL' a_expr | 'FETCHTEXT' a_expr | 'FETCHVAL_PATH' a_expr | 'FETCHTEXT_PATH' a_expr | 'REMOVE_PATH' a_expr | 'LESS_EQUALS' a_expr | 'GREATER_EQUALS' a_expr | 'NOT_EQUALS' a_expr | 'AND' a_expr | 'OR' a_expr | 'LIKE' a_expr | 'NOT' 'LIKE' a_expr | 'ILIKE' a_expr | 'NOT' 'ILIKE' a_expr | 'SIMILAR' 'TO' a_expr | 'NOT' 'SIMILAR' 'TO' a_expr | '~' a_expr | 'NOT_REGMATCH' a_expr | 'REGIMATCH' a_expr | 'NOT_REGIMATCH' a_expr | 'IS' 'NAN' | 'IS' 'NOT' 'NAN' | 'IS' 'NULL' | 'IS' 'NOT' 'NULL' | 'IS' 'TRUE' | 'IS' 'NOT' 'TRUE' | 'IS' 'FALSE' | 'IS' 'NOT' 'FALSE' | 'IS' 'UNKNOWN' | 'IS' 'NOT' 'UNKNOWN' | 'IS' 'DISTINCT' 'FROM' a_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' a_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' | 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'NOT' 'BETWEEN' opt_asymmetric b_expr 'AND' a_expr | 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'NOT' 'BETWEEN' 'SYMMETRIC' b_expr 'AND' a_expr | 'IN' in_expr | 'NOT' 'IN' in_expr | subquery_op sub_type a_expr ) )*
+
+prep_type_clause ::=
+	'(' type_list ')'
+	| 
+
+preparable_stmt ::=
+	alter_user_stmt
+	| backup_stmt
+	| cancel_stmt
+	| create_user_stmt
+	| delete_stmt
+	| drop_user_stmt
+	| import_stmt
+	| insert_stmt
+	| pause_stmt
+	| reset_stmt
+	| restore_stmt
+	| resume_stmt
+	| select_stmt
+	| set_session_stmt
+	| set_csetting_stmt
+	| show_stmt
+	| update_stmt
+	| upsert_stmt
+
+as_of_clause ::=
+	'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const
+
+select_no_parens ::=
+	simple_select
+	| select_clause sort_clause
+	| select_clause opt_sort_clause select_limit
+
+select_with_parens ::=
+	'(' select_no_parens ')'
+	| '(' select_with_parens ')'
+
+savepoint_name ::=
+	'SAVEPOINT' name
+	| name
+
+reset_session_stmt ::=
+	'RESET' session_var
+	| 'RESET' 'SESSION' session_var
+
+reset_csetting_stmt ::=
+	'RESET' 'CLUSTER' 'SETTING' var_name
+
+set_session_stmt ::=
+	'SET' 'SESSION' set_rest_more
+	| 'SET' set_rest_more
+	| 'SET' 'SESSION' 'CHARACTERISTICS' 'AS' 'TRANSACTION' transaction_mode_list
+
+set_csetting_stmt ::=
+	'SET' 'CLUSTER' 'SETTING' var_name '=' var_value
+	| 'SET' 'CLUSTER' 'SETTING' var_name 'TO' var_value
+
+set_transaction_stmt ::=
+	'SET' 'TRANSACTION' transaction_mode_list
+	| 'SET' 'SESSION' 'TRANSACTION' transaction_mode_list
+
+show_backup_stmt ::=
+	'SHOW' 'BACKUP' string_or_placeholder
+
+show_columns_stmt ::=
+	'SHOW' 'COLUMNS' 'FROM' var_name
+
+show_constraints_stmt ::=
+	'SHOW' 'CONSTRAINT' 'FROM' var_name
+	| 'SHOW' 'CONSTRAINTS' 'FROM' var_name
+
+show_create_table_stmt ::=
+	'SHOW' 'CREATE' 'TABLE' var_name
+
+show_create_view_stmt ::=
+	'SHOW' 'CREATE' 'VIEW' var_name
+
+show_csettings_stmt ::=
+	'SHOW' 'CLUSTER' 'SETTING' any_name
+	| 'SHOW' 'CLUSTER' 'SETTING' 'ALL'
+	| 'SHOW' 'ALL' 'CLUSTER' 'SETTINGS'
+
+show_databases_stmt ::=
+	'SHOW' 'DATABASES'
+
+show_grants_stmt ::=
+	'SHOW' 'GRANTS' on_privilege_target_clause for_grantee_clause
+
+show_histogram_stmt ::=
+	'SHOW' 'HISTOGRAM' 'ICONST'
+
+show_indexes_stmt ::=
+	'SHOW' 'INDEX' 'FROM' var_name
+	| 'SHOW' 'INDEXES' 'FROM' var_name
+	| 'SHOW' 'KEYS' 'FROM' var_name
+
+show_jobs_stmt ::=
+	'SHOW' 'JOBS'
+
+show_queries_stmt ::=
+	'SHOW' 'QUERIES'
+	| 'SHOW' 'CLUSTER' 'QUERIES'
+	| 'SHOW' 'LOCAL' 'QUERIES'
+
+show_session_stmt ::=
+	'SHOW' session_var
+	| 'SHOW' 'SESSION' session_var
+
+show_sessions_stmt ::=
+	'SHOW' 'SESSIONS'
+	| 'SHOW' 'CLUSTER' 'SESSIONS'
+	| 'SHOW' 'LOCAL' 'SESSIONS'
+
+show_stats_stmt ::=
+	'SHOW' 'STATISTICS' 'FOR' 'TABLE' qualified_name
+
+show_tables_stmt ::=
+	'SHOW' 'TABLES' 'FROM' name
+	| 'SHOW' 'TABLES'
+
+show_trace_stmt ::=
+	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
+	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' 'SESSION'
+	| 'SHOW' opt_compact 'TRACE' 'FOR' explainable_stmt
+	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' explainable_stmt
+
+show_users_stmt ::=
+	'SHOW' 'USERS'
+
+begin_stmt ::=
+	'BEGIN' opt_transaction begin_transaction
+	| 'START' 'TRANSACTION' begin_transaction
+
+commit_stmt ::=
+	'COMMIT' opt_transaction
+	| 'END' opt_transaction
+
+rollback_stmt ::=
+	'ROLLBACK' opt_to_savepoint
+
+abort_stmt ::=
+	'ABORT' opt_abort_mod
+
+opt_table ::=
+	'TABLE'
+	| 
+
+relation_expr_list ::=
+	( relation_expr ) ( ( ',' relation_expr ) )*
+
+opt_drop_behavior ::=
+	'CASCADE'
+	| 'RESTRICT'
+	| 
+
+set_clause_list ::=
+	( set_clause ) ( ( ',' set_clause ) )*
+
+alter_table_stmt ::=
+	alter_onetable_stmt
+	| alter_split_stmt
+	| alter_scatter_stmt
+	| alter_rename_table_stmt
+
+alter_index_stmt ::=
+	alter_split_index_stmt
+	| alter_scatter_index_stmt
+	| alter_rename_index_stmt
+
+alter_view_stmt ::=
+	alter_rename_view_stmt
+
+alter_sequence_stmt ::=
+	alter_rename_sequence_stmt
+	| alter_sequence_options_stmt
+
+alter_database_stmt ::=
+	alter_rename_database_stmt
+
+alter_user_password_stmt ::=
+	'ALTER' 'USER' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
+	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
+
+table_pattern_list ::=
+	( table_pattern ) ( ( ',' table_pattern ) )*
+
+name_list ::=
+	( name ) ( ( ',' name ) )*
+
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
+
+kv_option_list ::=
+	( kv_option ) ( ( ',' kv_option ) )*
+
+opt_scrub_options_clause ::=
+	'WITH' 'OPTIONS' scrub_option_list
+	| 
+
+qname_indirection ::=
+	( name_indirection_elem ) ( ( name_indirection_elem ) )*
+
+opt_password ::=
+	opt_with 'PASSWORD' string_or_placeholder
+	| 
+
+create_database_stmt ::=
+	'CREATE' 'DATABASE' name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+
+create_index_stmt ::=
+	'CREATE' opt_unique 'INDEX' opt_name 'ON' qualified_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_using_gin
+	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' name 'ON' qualified_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_using_gin
+	| 'CREATE' 'INVERTED' 'INDEX' opt_name 'ON' qualified_name '(' index_params ')'
+	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' name 'ON' qualified_name '(' index_params ')'
+
+create_table_stmt ::=
+	'CREATE' 'TABLE' any_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' any_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+
+create_table_as_stmt ::=
+	'CREATE' 'TABLE' any_name opt_column_list 'AS' select_stmt
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' any_name opt_column_list 'AS' select_stmt
+
+create_view_stmt ::=
+	'CREATE' 'VIEW' any_name opt_column_list 'AS' select_stmt
+
+create_sequence_stmt ::=
+	'CREATE' 'SEQUENCE' any_name opt_sequence_option_list
+	| 'CREATE' 'SEQUENCE' 'IF' 'NOT' 'EXISTS' any_name opt_sequence_option_list
+
+unreserved_keyword ::=
+	'ABORT'
+	| 'ACTION'
+	| 'ADD'
+	| 'ALTER'
+	| 'AT'
+	| 'BACKUP'
+	| 'BEGIN'
+	| 'BLOB'
+	| 'BY'
+	| 'CACHE'
+	| 'CANCEL'
+	| 'CASCADE'
+	| 'CLUSTER'
+	| 'COLUMNS'
+	| 'COMMIT'
+	| 'COMMITTED'
+	| 'COMPACT'
+	| 'CONFLICT'
+	| 'CONFIGURATION'
+	| 'CONFIGURATIONS'
+	| 'CONFIGURE'
+	| 'CONSTRAINTS'
+	| 'COPY'
+	| 'COVERING'
+	| 'CSV'
+	| 'CUBE'
+	| 'CURRENT'
+	| 'CYCLE'
+	| 'DATA'
+	| 'DATABASE'
+	| 'DATABASES'
+	| 'DAY'
+	| 'DEALLOCATE'
+	| 'DELETE'
+	| 'DISCARD'
+	| 'DOUBLE'
+	| 'DROP'
+	| 'ENCODING'
+	| 'EXECUTE'
+	| 'EXPERIMENTAL'
+	| 'EXPERIMENTAL_FINGERPRINTS'
+	| 'EXPLAIN'
+	| 'FILTER'
+	| 'FIRST'
+	| 'FOLLOWING'
+	| 'FORCE_INDEX'
+	| 'GIN'
+	| 'GRANTS'
+	| 'HIGH'
+	| 'HISTOGRAM'
+	| 'HOUR'
+	| 'IMPORT'
+	| 'INCREMENT'
+	| 'INCREMENTAL'
+	| 'INDEXES'
+	| 'INSERT'
+	| 'INT2VECTOR'
+	| 'INTERLEAVE'
+	| 'INVERTED'
+	| 'ISOLATION'
+	| 'JOB'
+	| 'JOBS'
+	| 'KEY'
+	| 'KEYS'
+	| 'KV'
+	| 'LC_COLLATE'
+	| 'LC_CTYPE'
+	| 'LESS'
+	| 'LEVEL'
+	| 'LIST'
+	| 'LOCAL'
+	| 'LOW'
+	| 'MATCH'
+	| 'MINUTE'
+	| 'MINVALUE'
+	| 'MONTH'
+	| 'NAMES'
+	| 'NAN'
+	| 'NEXT'
+	| 'NO'
+	| 'NORMAL'
+	| 'NO_INDEX_JOIN'
+	| 'NULLS'
+	| 'OF'
+	| 'OFF'
+	| 'OID'
+	| 'OPTIONS'
+	| 'ORDINALITY'
+	| 'OVER'
+	| 'OWNED'
+	| 'PARENT'
+	| 'PARTIAL'
+	| 'PARTITION'
+	| 'PASSWORD'
+	| 'PAUSE'
+	| 'PHYSICAL'
+	| 'PLANS'
+	| 'PRECEDING'
+	| 'PREPARE'
+	| 'PRIORITY'
+	| 'QUERIES'
+	| 'QUERY'
+	| 'RANGE'
+	| 'READ'
+	| 'RECURSIVE'
+	| 'REF'
+	| 'REGCLASS'
+	| 'REGPROC'
+	| 'REGPROCEDURE'
+	| 'REGNAMESPACE'
+	| 'REGTYPE'
+	| 'RELEASE'
+	| 'RENAME'
+	| 'REPEATABLE'
+	| 'RESET'
+	| 'RESTORE'
+	| 'RESTRICT'
+	| 'RESUME'
+	| 'REVOKE'
+	| 'ROLLBACK'
+	| 'ROLLUP'
+	| 'ROWS'
+	| 'SETTING'
+	| 'SETTINGS'
+	| 'STATUS'
+	| 'SAVEPOINT'
+	| 'SCATTER'
+	| 'SCRUB'
+	| 'SEARCH'
+	| 'SECOND'
+	| 'SERIALIZABLE'
+	| 'SEQUENCE'
+	| 'SEQUENCES'
+	| 'SESSION'
+	| 'SESSIONS'
+	| 'SET'
+	| 'SHOW'
+	| 'SIMPLE'
+	| 'SNAPSHOT'
+	| 'SQL'
+	| 'START'
+	| 'STATISTICS'
+	| 'STDIN'
+	| 'STORE'
+	| 'STORING'
+	| 'STRICT'
+	| 'SPLIT'
+	| 'SYSTEM'
+	| 'TABLES'
+	| 'TEMP'
+	| 'TEMPLATE'
+	| 'TEMPORARY'
+	| 'TESTING_RANGES'
+	| 'TESTING_RELOCATE'
+	| 'TEXT'
+	| 'THAN'
+	| 'TRACE'
+	| 'TRANSACTION'
+	| 'TRUNCATE'
+	| 'TYPE'
+	| 'UNBOUNDED'
+	| 'UNCOMMITTED'
+	| 'UNKNOWN'
+	| 'UPDATE'
+	| 'UPSERT'
+	| 'USE'
+	| 'USERS'
+	| 'VALID'
+	| 'VALIDATE'
+	| 'VALUE'
+	| 'VARYING'
+	| 'WITHIN'
+	| 'WITHOUT'
+	| 'WRITE'
+	| 'YEAR'
+	| 'ZONE'
+
+col_name_keyword ::=
+	'ANNOTATE_TYPE'
+	| 'BETWEEN'
+	| 'BIGINT'
+	| 'BIGSERIAL'
+	| 'BIT'
+	| 'BOOL'
+	| 'BOOLEAN'
+	| 'BYTEA'
+	| 'BYTES'
+	| 'CHAR'
+	| 'CHARACTER'
+	| 'CHARACTERISTICS'
+	| 'COALESCE'
+	| 'DATE'
+	| 'DEC'
+	| 'DECIMAL'
+	| 'EXISTS'
+	| 'EXTRACT'
+	| 'EXTRACT_DURATION'
+	| 'FLOAT'
+	| 'FLOAT4'
+	| 'FLOAT8'
+	| 'GREATEST'
+	| 'GROUPING'
+	| 'IF'
+	| 'IFNULL'
+	| 'INET'
+	| 'INT'
+	| 'INT2'
+	| 'INT4'
+	| 'INT8'
+	| 'INT64'
+	| 'INTEGER'
+	| 'INTERVAL'
+	| 'JSON'
+	| 'JSONB'
+	| 'LEAST'
+	| 'NAME'
+	| 'NULLIF'
+	| 'NUMERIC'
+	| 'OUT'
+	| 'OVERLAY'
+	| 'POSITION'
+	| 'PRECISION'
+	| 'REAL'
+	| 'ROW'
+	| 'SERIAL'
+	| 'SERIAL2'
+	| 'SERIAL4'
+	| 'SERIAL8'
+	| 'SMALLINT'
+	| 'SMALLSERIAL'
+	| 'STRING'
+	| 'SUBSTRING'
+	| 'TIME'
+	| 'TIMESTAMP'
+	| 'TIMESTAMPTZ'
+	| 'TREAT'
+	| 'TRIM'
+	| 'UUID'
+	| 'VALUES'
+	| 'VARCHAR'
+
+relation_expr ::=
+	qualified_name
+	| qualified_name '*'
+	| 'ONLY' qualified_name
+	| 'ONLY' '(' qualified_name ')'
+
+sort_clause ::=
+	'ORDER' 'BY' sortby_list
+
+limit_clause ::=
+	'LIMIT' select_limit_value
+	| 'FETCH' first_or_next opt_select_fetch_first_value row_or_rows 'ONLY'
+
+target_list ::=
+	( target_elem ) ( ( ',' target_elem ) )*
+
+drop_database_stmt ::=
+	'DROP' 'DATABASE' name opt_drop_behavior
+	| 'DROP' 'DATABASE' 'IF' 'EXISTS' name opt_drop_behavior
+
+drop_index_stmt ::=
+	'DROP' 'INDEX' table_name_with_index_list opt_drop_behavior
+	| 'DROP' 'INDEX' 'IF' 'EXISTS' table_name_with_index_list opt_drop_behavior
+
+drop_table_stmt ::=
+	'DROP' 'TABLE' table_name_list opt_drop_behavior
+	| 'DROP' 'TABLE' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+
+drop_view_stmt ::=
+	'DROP' 'VIEW' table_name_list opt_drop_behavior
+	| 'DROP' 'VIEW' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+
+drop_sequence_stmt ::=
+	'DROP' 'SEQUENCE' table_name_list opt_drop_behavior
+	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+
+expr_list ::=
+	( a_expr ) ( ( ',' a_expr ) )*
+
+explain_option_name ::=
+	non_reserved_word
+
+privilege_list ::=
+	( privilege ) ( ( ',' privilege ) )*
+
+opt_conf_expr ::=
+	'(' name_list ')' where_clause
+	| 
+
+attrs ::=
+	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
+
+table_elem ::=
+	column_def
+	| index_def
+	| family_def
+	| table_constraint
+
+c_expr ::=
+	d_expr
+	| d_expr array_subscripts
+	| case_expr
+	| 'EXISTS' select_with_parens
+
+cast_target ::=
+	typename
+	| postgres_oid
+
+typename ::=
+	simple_typename opt_array_bounds
+	| simple_typename 'ARRAY'
+
+unrestricted_name ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
+	| reserved_keyword
+
+type_list ::=
+	( typename ) ( ( ',' typename ) )*
+
+opt_asymmetric ::=
+	'ASYMMETRIC'
+	| 
+
+b_expr ::=
+	( c_expr | '+' b_expr | '-' b_expr | '~' b_expr ) ( ( 'TYPECAST' cast_target | 'TYPEANNOTATE' typename | '+' b_expr | '-' b_expr | '*' b_expr | '/' b_expr | 'FLOORDIV' b_expr | '%' b_expr | '^' b_expr | '#' b_expr | '&' b_expr | '|' b_expr | '<' b_expr | '>' b_expr | '=' b_expr | 'CONCAT' b_expr | 'LSHIFT' b_expr | 'RSHIFT' b_expr | 'LESS_EQUALS' b_expr | 'GREATER_EQUALS' b_expr | 'NOT_EQUALS' b_expr | 'IS' 'DISTINCT' 'FROM' b_expr | 'IS' 'NOT' 'DISTINCT' 'FROM' b_expr | 'IS' 'OF' '(' type_list ')' | 'IS' 'NOT' 'OF' '(' type_list ')' ) )*
+
+in_expr ::=
+	select_with_parens
+	| '(' expr_list ')'
+
+subquery_op ::=
+	math_op
+	| 'LIKE'
+	| 'NOT' 'LIKE'
+	| 'ILIKE'
+	| 'NOT' 'ILIKE'
+
+sub_type ::=
+	'ANY'
+	| 'SOME'
+	| 'ALL'
+
+a_expr_const ::=
+	'ICONST'
+	| 'FCONST'
+	| 'SCONST'
+	| 'BCONST'
+	| const_typename 'SCONST'
+	| interval
+	| 'TRUE'
+	| 'FALSE'
+	| 'NULL'
+
+simple_select ::=
+	simple_select_clause
+	| values_clause
+	| table_clause
+	| set_operation
+
+select_clause ::=
+	simple_select
+	| select_with_parens
+
+select_limit ::=
+	limit_clause offset_clause
+	| offset_clause limit_clause
+	| limit_clause
+	| offset_clause
+
+session_var ::=
+	'identifier'
+	| 'ALL'
+	| 'DATABASE'
+	| 'NAMES'
+	| 'SESSION_USER'
+	| 'TIME' 'ZONE'
+
+var_name ::=
+	any_name
+
+set_rest_more ::=
+	generic_set
+
+transaction_mode_list ::=
+	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
+
+var_value ::=
+	a_expr
+	| 'ON'
+
+on_privilege_target_clause ::=
+	'ON' targets
+	| 
+
+for_grantee_clause ::=
+	'FOR' grantee_list
+	| 
+
+opt_compact ::=
+	'COMPACT'
+	| 
+
+opt_transaction ::=
+	'TRANSACTION'
+	| 
+
+begin_transaction ::=
+	transaction_mode_list
+	| 
+
+opt_to_savepoint ::=
+	'TRANSACTION'
+	| 'TRANSACTION' 'TO' savepoint_name
+	| 'TO' savepoint_name
+	| 
+
+opt_abort_mod ::=
+	'TRANSACTION'
+	| 'WORK'
+	| 
+
+set_clause ::=
+	single_set_clause
+	| multiple_set_clause
+
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' relation_expr alter_table_cmds
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr alter_table_cmds
+
+alter_split_stmt ::=
+	'ALTER' 'TABLE' qualified_name 'SPLIT' 'AT' select_stmt
+
+alter_scatter_stmt ::=
+	'ALTER' 'TABLE' qualified_name 'SCATTER'
+	| 'ALTER' 'TABLE' qualified_name 'SCATTER' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')'
+
+alter_rename_table_stmt ::=
+	'ALTER' 'TABLE' relation_expr 'RENAME' 'TO' qualified_name
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' qualified_name
+	| 'ALTER' 'TABLE' relation_expr 'RENAME' opt_column name 'TO' name
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' opt_column name 'TO' name
+
+alter_split_index_stmt ::=
+	'ALTER' 'INDEX' table_name_with_index 'SPLIT' 'AT' select_stmt
+
+alter_scatter_index_stmt ::=
+	'ALTER' 'INDEX' table_name_with_index 'SCATTER'
+	| 'ALTER' 'INDEX' table_name_with_index 'SCATTER' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')'
+
+alter_rename_index_stmt ::=
+	'ALTER' 'INDEX' table_name_with_index 'RENAME' 'TO' unrestricted_name
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name_with_index 'RENAME' 'TO' unrestricted_name
+
+alter_rename_view_stmt ::=
+	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' qualified_name
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' qualified_name
+
+alter_rename_sequence_stmt ::=
+	'ALTER' 'SEQUENCE' relation_expr 'RENAME' 'TO' qualified_name
+	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' qualified_name
+
+alter_sequence_options_stmt ::=
+	'ALTER' 'SEQUENCE' relation_expr sequence_option_list
+	| 'ALTER' 'SEQUENCE' 'IF' 'EXISTS' relation_expr sequence_option_list
+
+alter_rename_database_stmt ::=
+	'ALTER' 'DATABASE' name 'RENAME' 'TO' name
+
+table_pattern ::=
+	name
+	| '*'
+	| name name_indirection
+	| name glob_indirection
+
+non_reserved_word ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
+
+kv_option ::=
+	name '=' string_or_placeholder
+	| name
+	| 'SCONST' '=' string_or_placeholder
+	| 'SCONST'
+
+scrub_option_list ::=
+	( scrub_option ) ( ( ',' scrub_option ) )*
+
+name_indirection_elem ::=
+	glob_indirection
+	| name_indirection
+
+opt_with ::=
+	'WITH'
+	| 
+
+opt_template_clause ::=
+	'TEMPLATE' opt_equal non_reserved_word_or_sconst
+	| 
+
+opt_encoding_clause ::=
+	'ENCODING' opt_equal non_reserved_word_or_sconst
+	| 
+
+opt_lc_collate_clause ::=
+	'LC_COLLATE' opt_equal non_reserved_word_or_sconst
+	| 
+
+opt_lc_ctype_clause ::=
+	'LC_CTYPE' opt_equal non_reserved_word_or_sconst
+	| 
+
+opt_unique ::=
+	'UNIQUE'
+	| 
+
+opt_name ::=
+	name
+	| 
+
+index_params ::=
+	( index_elem ) ( ( ',' index_elem ) )*
+
+opt_storing ::=
+	storing '(' name_list ')'
+	| 
+
+opt_interleave ::=
+	'INTERLEAVE' 'IN' 'PARENT' qualified_name '(' name_list ')'
+	| 
+
+opt_partition_by ::=
+	partition_by
+	| 
+
+opt_using_gin ::=
+	'USING' 'GIN'
+	| 
+
+opt_table_elem_list ::=
+	table_elem_list
+	| 
+
+opt_column_list ::=
+	'(' name_list ')'
+	| 
+
+opt_sequence_option_list ::=
+	sequence_option_list
+	| 
+
+sortby_list ::=
+	( sortby ) ( ( ',' sortby ) )*
+
+select_limit_value ::=
+	a_expr
+	| 'ALL'
+
+first_or_next ::=
+	'FIRST'
+	| 'NEXT'
+
+opt_select_fetch_first_value ::=
+	signed_iconst
+	| '(' a_expr ')'
+	| 
+
+row_or_rows ::=
+	'ROW'
+	| 'ROWS'
+
+target_elem ::=
+	a_expr 'AS' unrestricted_name
+	| a_expr 'identifier'
+	| a_expr
+	| '*'
+
+table_name_with_index_list ::=
+	( table_name_with_index ) ( ( ',' table_name_with_index ) )*
+
+table_name_list ::=
+	( any_name ) ( ( ',' any_name ) )*
+
+privilege ::=
+	'CREATE'
+	| 'DROP'
+	| 'GRANT'
+	| 'SELECT'
+	| 'INSERT'
+	| 'DELETE'
+	| 'UPDATE'
+
+column_def ::=
+	name typename col_qual_list
+
+index_def ::=
+	'INDEX' opt_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'UNIQUE' 'INDEX' opt_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+
+family_def ::=
+	'FAMILY' opt_name '(' name_list ')'
+
+table_constraint ::=
+	'CONSTRAINT' name constraint_elem
+	| constraint_elem
+
+d_expr ::=
+	qualified_name
+	| a_expr_const
+	| '@' iconst64
+	| 'PLACEHOLDER'
+	| '(' a_expr ')'
+	| func_expr
+	| select_with_parens
+	| 'ARRAY' select_with_parens
+	| 'ARRAY' array_expr
+	| explicit_row
+	| implicit_row
+
+array_subscripts ::=
+	( array_subscript ) ( ( array_subscript ) )*
+
+case_expr ::=
+	'CASE' case_arg when_clause_list case_default 'END'
+
+postgres_oid ::=
+	'REGPROC'
+	| 'REGPROCEDURE'
+	| 'REGCLASS'
+	| 'REGTYPE'
+	| 'REGNAMESPACE'
+
+simple_typename ::=
+	numeric
+	| bit
+	| character
+	| const_datetime
+	| const_interval opt_interval
+	| const_json
+	| 'BLOB'
+	| 'BYTES'
+	| 'BYTEA'
+	| 'TEXT'
+	| 'NAME'
+	| 'SERIAL'
+	| 'SERIAL2'
+	| 'SERIAL4'
+	| 'SERIAL8'
+	| 'SMALLSERIAL'
+	| 'UUID'
+	| 'INET'
+	| 'BIGSERIAL'
+	| 'OID'
+	| 'INT2VECTOR'
+	| 'identifier'
+
+opt_array_bounds ::=
+	'[' ']'
+	| 
+
+type_func_name_keyword ::=
+	'COLLATION'
+	| 'CROSS'
+	| 'FAMILY'
+	| 'FULL'
+	| 'INNER'
+	| 'ILIKE'
+	| 'IS'
+	| 'JOIN'
+	| 'LEFT'
+	| 'LIKE'
+	| 'MAXVALUE'
+	| 'NATURAL'
+	| 'OUTER'
+	| 'OVERLAPS'
+	| 'RIGHT'
+	| 'SIMILAR'
+
+reserved_keyword ::=
+	'ALL'
+	| 'ANALYSE'
+	| 'ANALYZE'
+	| 'AND'
+	| 'ANY'
+	| 'ARRAY'
+	| 'AS'
+	| 'ASC'
+	| 'ASYMMETRIC'
+	| 'BOTH'
+	| 'CASE'
+	| 'CAST'
+	| 'CHECK'
+	| 'COLLATE'
+	| 'COLUMN'
+	| 'CONSTRAINT'
+	| 'CREATE'
+	| 'CURRENT_CATALOG'
+	| 'CURRENT_DATE'
+	| 'CURRENT_ROLE'
+	| 'CURRENT_SCHEMA'
+	| 'CURRENT_TIME'
+	| 'CURRENT_TIMESTAMP'
+	| 'CURRENT_USER'
+	| 'DEFAULT'
+	| 'DEFERRABLE'
+	| 'DESC'
+	| 'DISTINCT'
+	| 'DO'
+	| 'ELSE'
+	| 'END'
+	| 'EXCEPT'
+	| 'FALSE'
+	| 'FETCH'
+	| 'FOR'
+	| 'FOREIGN'
+	| 'FROM'
+	| 'GRANT'
+	| 'GROUP'
+	| 'HAVING'
+	| 'IN'
+	| 'INDEX'
+	| 'INITIALLY'
+	| 'INTERSECT'
+	| 'INTO'
+	| 'LATERAL'
+	| 'LEADING'
+	| 'LIMIT'
+	| 'LOCALTIME'
+	| 'LOCALTIMESTAMP'
+	| 'NOT'
+	| 'NOTHING'
+	| 'NULL'
+	| 'OFFSET'
+	| 'ON'
+	| 'ONLY'
+	| 'OR'
+	| 'ORDER'
+	| 'PLACING'
+	| 'PRIMARY'
+	| 'REFERENCES'
+	| 'RETURNING'
+	| 'SELECT'
+	| 'SESSION_USER'
+	| 'SOME'
+	| 'SYMMETRIC'
+	| 'TABLE'
+	| 'THEN'
+	| 'TO'
+	| 'TRAILING'
+	| 'TRUE'
+	| 'UNION'
+	| 'UNIQUE'
+	| 'USER'
+	| 'USING'
+	| 'VARIADIC'
+	| 'VIEW'
+	| 'WHEN'
+	| 'WHERE'
+	| 'WINDOW'
+	| 'WITH'
+	| 'WORK'
+
+math_op ::=
+	'+'
+	| '-'
+	| '*'
+	| '/'
+	| 'FLOORDIV'
+	| '%'
+	| '&'
+	| '|'
+	| '^'
+	| '#'
+	| '<'
+	| '>'
+	| '='
+	| 'LESS_EQUALS'
+	| 'GREATER_EQUALS'
+	| 'NOT_EQUALS'
+
+const_typename ::=
+	numeric
+	| const_bit
+	| const_character
+	| const_datetime
+	| const_json
+
+interval ::=
+	const_interval 'SCONST' opt_interval
+
+simple_select_clause ::=
+	'SELECT' opt_all_clause target_list from_clause where_clause group_clause having_clause window_clause
+	| 'SELECT' distinct_clause target_list from_clause where_clause group_clause having_clause window_clause
+	| 'SELECT' distinct_on_clause target_list from_clause where_clause group_clause having_clause window_clause
+
+values_clause ::=
+	( 'VALUES' '(' expr_list ')' ) ( ( ',' '(' expr_list ')' ) )*
+
+table_clause ::=
+	'TABLE' table_ref
+
+set_operation ::=
+	select_clause 'UNION' all_or_distinct select_clause
+	| select_clause 'INTERSECT' all_or_distinct select_clause
+	| select_clause 'EXCEPT' all_or_distinct select_clause
+
+offset_clause ::=
+	'OFFSET' a_expr
+	| 'OFFSET' c_expr row_or_rows
+
+generic_set ::=
+	var_name 'TO' var_list
+	| var_name '=' var_list
+
+transaction_mode ::=
+	transaction_iso_level
+	| transaction_user_priority
+	| transaction_read_mode
+
+opt_comma ::=
+	','
+	| 
+
+single_set_clause ::=
+	qualified_name '=' a_expr
+
+multiple_set_clause ::=
+	'(' qualified_name_list ')' '=' in_expr
+
+alter_table_cmds ::=
+	( alter_table_cmd ) ( ( ',' alter_table_cmd ) )*
+
+opt_column ::=
+	'COLUMN'
+	| 
+
+table_name_with_index ::=
+	qualified_name '@' unrestricted_name
+	| qualified_name
+
+sequence_option_list ::=
+	( sequence_option_elem ) ( ( sequence_option_elem ) )*
+
+name_indirection ::=
+	'.' unrestricted_name
+
+glob_indirection ::=
+	'.' '*'
+
+scrub_option ::=
+	'INDEX' 'ALL'
+	| 'INDEX' '(' name_list ')'
+	| 'CONSTRAINT' 'ALL'
+	| 'CONSTRAINT' '(' name_list ')'
+	| 'PHYSICAL'
+
+opt_equal ::=
+	'='
+	| 
+
+index_elem ::=
+	name opt_asc_desc
+
+storing ::=
+	'COVERING'
+	| 'STORING'
+
+partition_by ::=
+	'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'
+	| 'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')'
+	| 'PARTITION' 'BY' 'NOTHING'
+
+sortby ::=
+	a_expr opt_asc_desc
+	| 'PRIMARY' 'KEY' qualified_name opt_asc_desc
+	| 'INDEX' qualified_name '@' unrestricted_name opt_asc_desc
+
+signed_iconst ::=
+	'ICONST'
+	| '+' 'ICONST'
+	| '-' 'ICONST'
+
+col_qual_list ::=
+	(  ) ( ( col_qualification ) )*
+
+constraint_elem ::=
+	'CHECK' '(' a_expr ')'
+	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'PRIMARY' 'KEY' '(' index_params ')'
+	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' qualified_name opt_column_list reference_actions
+
+iconst64 ::=
+	'ICONST'
+
+func_expr ::=
+	func_application filter_clause over_clause
+	| func_expr_common_subexpr
+
+array_expr ::=
+	'[' opt_expr_list ']'
+	| '[' array_expr_list ']'
+
+explicit_row ::=
+	'ROW' '(' opt_expr_list ')'
+
+implicit_row ::=
+	'(' expr_list ',' a_expr ')'
+
+array_subscript ::=
+	'[' a_expr ']'
+	| '[' opt_slice_bound ':' opt_slice_bound ']'
+
+case_arg ::=
+	a_expr
+	| 
+
+when_clause_list ::=
+	( when_clause ) ( ( when_clause ) )*
+
+case_default ::=
+	'ELSE' a_expr
+	| 
+
+numeric ::=
+	'INT'
+	| 'INT2'
+	| 'INT4'
+	| 'INT8'
+	| 'INT64'
+	| 'INTEGER'
+	| 'SMALLINT'
+	| 'BIGINT'
+	| 'REAL'
+	| 'FLOAT4'
+	| 'FLOAT8'
+	| 'FLOAT' opt_float
+	| 'DOUBLE' 'PRECISION'
+	| 'DECIMAL' opt_numeric_modifiers
+	| 'DEC' opt_numeric_modifiers
+	| 'NUMERIC' opt_numeric_modifiers
+	| 'BOOLEAN'
+	| 'BOOL'
+
+bit ::=
+	bit_with_length
+	| bit_without_length
+
+character ::=
+	character_with_length
+	| character_without_length
+
+const_datetime ::=
+	'DATE'
+	| 'TIME'
+	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMESTAMP'
+	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMESTAMPTZ'
+	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
+
+const_interval ::=
+	'INTERVAL'
+
+opt_interval ::=
+	'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| interval_second
+	| 'YEAR' 'TO' 'MONTH'
+	| 'DAY' 'TO' 'HOUR'
+	| 'DAY' 'TO' 'MINUTE'
+	| 'DAY' 'TO' interval_second
+	| 'HOUR' 'TO' 'MINUTE'
+	| 'HOUR' 'TO' interval_second
+	| 'MINUTE' 'TO' interval_second
+	| 
+
+const_json ::=
+	'JSON'
+	| 'JSONB'
+
+const_bit ::=
+	bit_with_length
+	| bit_without_length
+
+const_character ::=
+	character_with_length
+	| character_without_length
+
+opt_all_clause ::=
+	'ALL'
+	| 
+
+from_clause ::=
+	'FROM' from_list opt_as_of_clause
+	| 
+
+group_clause ::=
+	'GROUP' 'BY' expr_list
+	| 
+
+having_clause ::=
+	'HAVING' a_expr
+	| 
+
+window_clause ::=
+	'WINDOW' window_definition_list
+	| 
+
+distinct_clause ::=
+	'DISTINCT'
+
+distinct_on_clause ::=
+	'DISTINCT' 'ON' '(' expr_list ')'
+
+table_ref ::=
+	relation_expr opt_index_hints opt_ordinality opt_alias_clause
+	| qualified_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause
+	| select_with_parens opt_ordinality opt_alias_clause
+	| joined_table
+	| '(' joined_table ')' opt_ordinality alias_clause
+	| '[' explainable_stmt ']' opt_ordinality opt_alias_clause
+
+all_or_distinct ::=
+	'ALL'
+	| 'DISTINCT'
+	| 
+
+var_list ::=
+	( var_value ) ( ( ',' var_value ) )*
+
+transaction_iso_level ::=
+	'ISOLATION' 'LEVEL' iso_level
+
+transaction_user_priority ::=
+	'PRIORITY' user_priority
+
+transaction_read_mode ::=
+	'READ' 'ONLY'
+	| 'READ' 'WRITE'
+
+alter_table_cmd ::=
+	'ADD' column_def
+	| 'ADD' 'IF' 'NOT' 'EXISTS' column_def
+	| 'ADD' 'COLUMN' column_def
+	| 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def
+	| 'ALTER' opt_column name alter_column_default
+	| 'ALTER' opt_column name 'DROP' 'NOT' 'NULL'
+	| 'DROP' opt_column 'IF' 'EXISTS' name opt_drop_behavior
+	| 'DROP' opt_column name opt_drop_behavior
+	| 'ADD' table_constraint opt_validate_behavior
+	| 'VALIDATE' 'CONSTRAINT' name
+	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' name opt_drop_behavior
+	| 'DROP' 'CONSTRAINT' name opt_drop_behavior
+	| partition_by
+
+sequence_option_elem ::=
+	'INCREMENT' signed_iconst64
+	| 'INCREMENT' 'BY' signed_iconst64
+	| 'MINVALUE' signed_iconst64
+	| 'NO' 'MINVALUE'
+	| 'MAXVALUE' signed_iconst64
+	| 'NO' 'MAXVALUE'
+	| 'START' signed_iconst64
+	| 'START' 'WITH' signed_iconst64
+	| 'CYCLE'
+	| 'NO' 'CYCLE'
+
+opt_asc_desc ::=
+	'ASC'
+	| 'DESC'
+	| 
+
+list_partitions ::=
+	( list_partition ) ( ( ',' list_partition ) )*
+
+range_partitions ::=
+	( range_partition ) ( ( ',' range_partition ) )*
+
+col_qualification ::=
+	'CONSTRAINT' name col_qualification_elem
+	| col_qualification_elem
+	| 'COLLATE' unrestricted_name
+	| 'FAMILY' name
+	| 'CREATE' 'FAMILY' opt_name
+	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' name
+
+reference_actions ::=
+	reference_on_update
+	| reference_on_delete
+	| reference_on_update reference_on_delete
+	| reference_on_delete reference_on_update
+	| 
+
+func_application ::=
+	func_name '(' ')'
+	| func_name '(' expr_list opt_sort_clause ')'
+	| func_name '(' 'ALL' expr_list opt_sort_clause ')'
+	| func_name '(' 'DISTINCT' expr_list opt_sort_clause ')'
+	| func_name '(' '*' ')'
+
+filter_clause ::=
+	'FILTER' '(' 'WHERE' a_expr ')'
+	| 
+
+over_clause ::=
+	'OVER' window_specification
+	| 'OVER' name
+	| 
+
+func_expr_common_subexpr ::=
+	'CURRENT_DATE'
+	| 'CURRENT_DATE' '(' ')'
+	| 'CURRENT_SCHEMA'
+	| 'CURRENT_SCHEMA' '(' ')'
+	| 'CURRENT_TIMESTAMP'
+	| 'CURRENT_TIMESTAMP' '(' ')'
+	| 'CURRENT_USER'
+	| 'CURRENT_USER' '(' ')'
+	| 'SESSION_USER'
+	| 'USER'
+	| 'CAST' '(' a_expr 'AS' cast_target ')'
+	| 'ANNOTATE_TYPE' '(' a_expr ',' typename ')'
+	| 'EXTRACT' '(' extract_list ')'
+	| 'EXTRACT_DURATION' '(' extract_list ')'
+	| 'OVERLAY' '(' overlay_list ')'
+	| 'POSITION' '(' position_list ')'
+	| 'SUBSTRING' '(' substr_list ')'
+	| 'TRIM' '(' 'BOTH' trim_list ')'
+	| 'TRIM' '(' 'LEADING' trim_list ')'
+	| 'TRIM' '(' 'TRAILING' trim_list ')'
+	| 'TRIM' '(' trim_list ')'
+	| 'IF' '(' a_expr ',' a_expr ',' a_expr ')'
+	| 'NULLIF' '(' a_expr ',' a_expr ')'
+	| 'IFNULL' '(' a_expr ',' a_expr ')'
+	| 'COALESCE' '(' expr_list ')'
+	| 'GREATEST' '(' expr_list ')'
+	| 'LEAST' '(' expr_list ')'
+
+opt_expr_list ::=
+	expr_list
+	| 
+
+array_expr_list ::=
+	( array_expr ) ( ( ',' array_expr ) )*
+
+opt_slice_bound ::=
+	a_expr
+	| 
+
+when_clause ::=
+	'WHEN' a_expr 'THEN' a_expr
+
+opt_float ::=
+	'(' 'ICONST' ')'
+	| 
+
+opt_numeric_modifiers ::=
+	'(' iconst64 ')'
+	| '(' iconst64 ',' iconst64 ')'
+	| 
+
+bit_with_length ::=
+	'BIT' opt_varying '(' iconst64 ')'
+
+bit_without_length ::=
+	'BIT' opt_varying
+
+character_with_length ::=
+	character_base '(' iconst64 ')'
+
+character_without_length ::=
+	character_base
+
+interval_second ::=
+	'SECOND'
+
+from_list ::=
+	( table_ref ) ( ( ',' table_ref ) )*
+
+window_definition_list ::=
+	( window_definition ) ( ( ',' window_definition ) )*
+
+opt_index_hints ::=
+	'@' unrestricted_name
+	| '@' '[' iconst64 ']'
+	| '@' '{' index_hints_param_list '}'
+	| 
+
+opt_ordinality ::=
+	'WITH' 'ORDINALITY'
+	| 
+
+opt_alias_clause ::=
+	alias_clause
+	| 
+
+joined_table ::=
+	'(' joined_table ')'
+	| table_ref 'CROSS' 'JOIN' table_ref
+	| table_ref join_type 'JOIN' table_ref join_qual
+	| table_ref 'JOIN' table_ref join_qual
+	| table_ref 'NATURAL' join_type 'JOIN' table_ref
+	| table_ref 'NATURAL' 'JOIN' table_ref
+
+alias_clause ::=
+	'AS' name '(' name_list ')'
+	| 'AS' name
+	| name '(' name_list ')'
+	| name
+
+iso_level ::=
+	'READ' 'UNCOMMITTED'
+	| 'READ' 'COMMITTED'
+	| 'SNAPSHOT'
+	| 'REPEATABLE' 'READ'
+	| 'SERIALIZABLE'
+
+user_priority ::=
+	'LOW'
+	| 'NORMAL'
+	| 'HIGH'
+
+alter_column_default ::=
+	'SET' 'DEFAULT' a_expr
+	| 'DROP' 'DEFAULT'
+
+opt_validate_behavior ::=
+	'NOT' 'VALID'
+	| 
+
+signed_iconst64 ::=
+	signed_iconst
+
+list_partition ::=
+	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by
+
+range_partition ::=
+	partition 'VALUES' '<' a_expr opt_partition_by
+
+col_qualification_elem ::=
+	'NOT' 'NULL'
+	| 'NULL'
+	| 'UNIQUE'
+	| 'PRIMARY' 'KEY'
+	| 'CHECK' '(' a_expr ')'
+	| 'DEFAULT' b_expr
+	| 'REFERENCES' qualified_name opt_name_parens reference_actions
+
+reference_on_update ::=
+	'ON' 'UPDATE' reference_action
+
+reference_on_delete ::=
+	'ON' 'DELETE' reference_action
+
+func_name ::=
+	type_function_name
+	| name qname_indirection
+
+window_specification ::=
+	'(' opt_existing_window_name opt_partition_clause opt_sort_clause ')'
+
+extract_list ::=
+	extract_arg 'FROM' a_expr
+	| expr_list
+
+overlay_list ::=
+	a_expr overlay_placing substr_from substr_for
+	| a_expr overlay_placing substr_from
+	| expr_list
+
+position_list ::=
+	b_expr 'IN' b_expr
+	| 
+
+substr_list ::=
+	a_expr substr_from substr_for
+	| a_expr substr_for substr_from
+	| a_expr substr_from
+	| a_expr substr_for
+	| opt_expr_list
+
+trim_list ::=
+	a_expr 'FROM' expr_list
+	| 'FROM' expr_list
+	| expr_list
+
+opt_varying ::=
+	'VARYING'
+	| 
+
+character_base ::=
+	'CHARACTER' opt_varying
+	| 'CHAR' opt_varying
+	| 'VARCHAR'
+	| 'STRING'
+
+window_definition ::=
+	name 'AS' window_specification
+
+index_hints_param_list ::=
+	( index_hints_param ) ( ( ',' index_hints_param ) )*
+
+join_type ::=
+	'FULL' join_outer
+	| 'LEFT' join_outer
+	| 'RIGHT' join_outer
+	| 'INNER'
+
+join_qual ::=
+	'USING' '(' name_list ')'
+	| 'ON' a_expr
+
+partition ::=
+	'PARTITION' unrestricted_name
+
+opt_name_parens ::=
+	'(' name ')'
+	| 
+
+reference_action ::=
+	'NO' 'ACTION'
+	| 'RESTRICT'
+	| 'CASCADE'
+	| 'SET' 'NULL'
+	| 'SET' 'DEFAULT'
+
+type_function_name ::=
+	'identifier'
+	| unreserved_keyword
+	| type_func_name_keyword
+
+opt_existing_window_name ::=
+	name
+	| 
+
+opt_partition_clause ::=
+	'PARTITION' 'BY' expr_list
+	| 
+
+extract_arg ::=
+	'identifier'
+	| 'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| 'SECOND'
+
+overlay_placing ::=
+	'PLACING' a_expr
+
+substr_from ::=
+	'FROM' a_expr
+
+substr_for ::=
+	'FOR' a_expr
+
+index_hints_param ::=
+	'FORCE_INDEX' '=' unrestricted_name
+	| 'NO_INDEX_JOIN'
+
+join_outer ::=
+	'OUTER'
+	| 

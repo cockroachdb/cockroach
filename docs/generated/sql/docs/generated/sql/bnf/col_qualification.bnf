@@ -1,0 +1,19 @@
+col_qualification ::=
+	'CONSTRAINT' name 'NOT' 'NULL'
+	| 'CONSTRAINT' name 'NULL'
+	| 'CONSTRAINT' name 'UNIQUE'
+	| 'CONSTRAINT' name 'PRIMARY' 'KEY'
+	| 'CONSTRAINT' name 'CHECK' '(' a_expr ')'
+	| 'CONSTRAINT' name 'DEFAULT' b_expr
+	| 'CONSTRAINT' name 'REFERENCES' qualified_name opt_name_parens reference_actions
+	| 'NOT' 'NULL'
+	| 'NULL'
+	| 'UNIQUE'
+	| 'PRIMARY' 'KEY'
+	| 'CHECK' '(' a_expr ')'
+	| 'DEFAULT' b_expr
+	| 'REFERENCES' qualified_name opt_name_parens reference_actions
+	| 'COLLATE' unrestricted_name
+	| 'FAMILY' name
+	| 'CREATE' 'FAMILY' opt_name
+	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' name

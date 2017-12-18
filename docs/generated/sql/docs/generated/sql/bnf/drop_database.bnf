@@ -1,0 +1,7 @@
+drop_database_stmt ::=
+	'DROP' 'DATABASE' name 'CASCADE'
+	| 'DROP' 'DATABASE' name 'RESTRICT'
+	| 'DROP' 'DATABASE' name 
+	| 'DROP' 'DATABASE' 'IF' 'EXISTS' name 'CASCADE'
+	| 'DROP' 'DATABASE' 'IF' 'EXISTS' name 'RESTRICT'
+	| 'DROP' 'DATABASE' 'IF' 'EXISTS' name 

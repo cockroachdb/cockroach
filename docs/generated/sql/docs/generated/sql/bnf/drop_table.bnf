@@ -1,0 +1,7 @@
+drop_table_stmt ::=
+	'DROP' 'TABLE' table_name ( ( ',' table_name ) )* 'CASCADE'
+	| 'DROP' 'TABLE' table_name ( ( ',' table_name ) )* 'RESTRICT'
+	| 'DROP' 'TABLE' table_name ( ( ',' table_name ) )* 
+	| 'DROP' 'TABLE' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 'CASCADE'
+	| 'DROP' 'TABLE' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 'RESTRICT'
+	| 'DROP' 'TABLE' 'IF' 'EXISTS' table_name ( ( ',' table_name ) )* 

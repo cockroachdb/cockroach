@@ -22,7 +22,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -297,7 +296,6 @@ func (g Grammar) ExtractProduction(
 // Inline inlines names.
 func (g Grammar) Inline(names ...string) error {
 	for _, name := range names {
-		fmt.Fprintf(os.Stderr, "replacing %q...\n", name)
 		p, ok := g[name]
 		if !ok {
 			return fmt.Errorf("unknown name: %s", name)

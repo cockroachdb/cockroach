@@ -21,7 +21,7 @@ build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
 # Generation of docs requires Railroad.jar to avoid excessive API requests.
 curl https://edge-binaries.cockroachdb.com/tools/Railroad.jar.enc | openssl aes-256-cbc -d -out build/Railroad.jar -k "$RAILROAD_JAR_KEY"
 
-build/builder.sh env COCKROACH_REQUIRE_RAILROAD=true make generate PKG="./pkg/... ./docs/..."
+build/builder.sh make generate PKG="./pkg/... ./docs/..."
 
 # The workspace is clean iff `git status --porcelain` produces no output. Any
 # output is either an error message or a listing of an untracked/dirty file.

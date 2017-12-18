@@ -1,0 +1,37 @@
+backup_stmt ::=
+	'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause  'WITH' kv_option_list
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause  
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause  
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder   'WITH' kv_option_list
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder   
+	| 'BACKUP' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder   
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause  'WITH' kv_option_list
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause  
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder as_of_clause  
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder   'WITH' kv_option_list
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder   
+	| 'BACKUP' 'TABLE' table_pattern ( ( ',' table_pattern ) )* 'TO' string_or_placeholder   
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder as_of_clause 'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder as_of_clause  'WITH' kv_option_list
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder as_of_clause  
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder as_of_clause  
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 'WITH' kv_option_list
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder  'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* ) 
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder   'WITH' kv_option_list
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder   
+	| 'BACKUP' 'DATABASE' name ( ( ',' name ) )* 'TO' string_or_placeholder   
