@@ -44,7 +44,7 @@ export default class extends React.Component<VisualizationProps, {}> {
         <div className="visualization__tooltip">
           <ToolTipWrapper text={tooltip}>
             <div className="visualization__tooltip-hover-area">
-              <div className="visualization__info-icon">!</div>
+              <div className="visualization__info-icon">i</div>
             </div>
           </ToolTipWrapper>
         </div>
