@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mitchellh/reflectwalk"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -164,6 +166,8 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time
 	q.Set("nodeid", s.NodeID().String())
 	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
 	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
+	q.Set("internal",
+		strconv.FormatBool(strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs")))
 
 	licenseType, err := LicenseTypeFn(s.st)
 	if err == nil {
