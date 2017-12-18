@@ -631,13 +631,6 @@ func getRenderColName(
 		return "", err
 	}
 
-	// If target.Expr is a funcExpr, resolving the function within will normalize
-	// target.Expr's string representation. We want the output column name to be
-	// unnormalized, so we compute target.Expr's string representation now, even
-	// though we may choose to return something other than exprStr in the switch
-	// below.
-	exprStr := target.Expr.String()
-
 	switch t := target.Expr.(type) {
 	case *tree.ColumnItem:
 		// We only shorten the name of the result column to become the
@@ -647,19 +640,17 @@ func getRenderColName(
 			return t.Column(), nil
 		}
 
-	// For compatibility with Postgres, a render expression rooted by a
-	// set-returning function is named after that SRF.
 	case *tree.FuncExpr:
+		// Special case for rendering builtin functions: the column name for an
+		// otherwise un-named builtin output column is just the name of the builtin.
 		fd, err := t.Func.Resolve(searchPath)
 		if err != nil {
 			return "", err
 		}
-		if _, ok := builtins.Generators[fd.Name]; ok {
-			return fd.Name, nil
-		}
+		return fd.Name, nil
 	}
 
-	return exprStr, nil
+	return target.Expr.String(), nil
 }
 
 // appendRenderColumn adds a new render expression at the end of the current list.

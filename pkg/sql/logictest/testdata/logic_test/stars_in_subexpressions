@@ -28,7 +28,7 @@ SELECT COUNT(DISTINCT x.*) FROM a x, a y
 query ITTTTT
 EXPLAIN(VERBOSE) SELECT COUNT(DISTINCT x.*) FROM a x, a y
 ----
-0  group   ·            ·                           ("count(DISTINCT x.*)")                                                       ·
+0  group   ·            ·                           (count)                                                                       ·
 0  ·       aggregate 0  count(DISTINCT (x.x, x.y))  ·                                                                             ·
 1  render  ·            ·                           ("(x, y)")                                                                    ·
 1  ·       render 0     (x.x, x.y)                  ·                                                                             ·
