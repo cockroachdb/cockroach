@@ -446,11 +446,11 @@ SELECT DISTINCT ON(MAX(x), z) MIN(y) FROM xyz
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (MAX(y)) MAX(x) FROM xyz
 ----
-0  render    ·            ·                ("max(x)")                                      ·
-0  ·         render 0     "max(x)"         ·                                               ·
-1  distinct  ·            ·                ("max(x)", "max(y)")                            weak-key("max(y)")
-1  ·         distinct on  max(y)           ·                                               ·
-2  group     ·            ·                ("max(x)", "max(y)")                            ·
+0  render    ·            ·                (max)                                           ·
+0  ·         render 0     max              ·                                               ·
+1  distinct  ·            ·                (max, max)                                      weak-key(max)
+1  ·         distinct on  max              ·                                               ·
+2  group     ·            ·                (max, max)                                      ·
 2  ·         aggregate 0  max(test.xyz.x)  ·                                               ·
 2  ·         aggregate 1  max(test.xyz.y)  ·                                               ·
 3  render    ·            ·                (x, y)                                          ·
@@ -473,18 +473,18 @@ SELECT DISTINCT ON (MIN(x)) MAX(y) FROM xyz
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(MIN(a), MAX(b), MIN(c)) MAX(a) FROM abc
 ----
-0  render    ·            ·                       ("max(a)")                                ·
-0  ·         render 0     "max(a)"                ·                                         ·
-1  distinct  ·            ·                       ("max(a)", "min(a)", "max(b)", "min(c)")  weak-key("min(a)","max(b)","min(c)")
-1  ·         distinct on  min(a), max(b), min(c)  ·                                         ·
-2  group     ·            ·                       ("max(a)", "min(a)", "max(b)", "min(c)")  ·
-2  ·         aggregate 0  max(test.abc.a)         ·                                         ·
-2  ·         aggregate 1  min(test.abc.a)         ·                                         ·
-2  ·         aggregate 2  max(test.abc.b)         ·                                         ·
-2  ·         aggregate 3  min(test.abc.c)         ·                                         ·
-3  scan      ·            ·                       (a, b, c)                                 a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-3  ·         table        abc@primary             ·                                         ·
-3  ·         spans        ALL                     ·                                         ·
+0  render    ·            ·                (max)                 ·
+0  ·         render 0     max              ·                     ·
+1  distinct  ·            ·                (max, min, max, min)  weak-key(min,max,min)
+1  ·         distinct on  min, max, min    ·                     ·
+2  group     ·            ·                (max, min, max, min)  ·
+2  ·         aggregate 0  max(test.abc.a)  ·                     ·
+2  ·         aggregate 1  min(test.abc.a)  ·                     ·
+2  ·         aggregate 2  max(test.abc.b)  ·                     ·
+2  ·         aggregate 3  min(test.abc.c)  ·                     ·
+3  scan      ·            ·                (a, b, c)             a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+3  ·         table        abc@primary      ·                     ·
+3  ·         spans        ALL              ·                     ·
 
 query T
 SELECT DISTINCT ON(MIN(a), MAX(b), MIN(c)) MAX(c) FROM abc
@@ -503,11 +503,11 @@ SELECT DISTINCT ON (x) MIN(x) FROM xyz GROUP BY y
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) MIN(x) FROM xyz GROUP BY y
 ----
-0  render    ·            ·                ("min(x)")                                      ·
-0  ·         render 0     "min(x)"         ·                                               ·
-1  distinct  ·            ·                ("min(x)", y)                                   weak-key(y)
+0  render    ·            ·                (min)                                           ·
+0  ·         render 0     min              ·                                               ·
+1  distinct  ·            ·                (min, y)                                        weak-key(y)
 1  ·         distinct on  y                ·                                               ·
-2  group     ·            ·                ("min(x)", y)                                   ·
+2  group     ·            ·                (min, y)                                        ·
 2  ·         aggregate 0  min(test.xyz.x)  ·                                               ·
 2  ·         aggregate 1  test.xyz.y       ·                                               ·
 2  ·         group by     @1-@1            ·                                               ·
@@ -528,13 +528,13 @@ SELECT DISTINCT ON(y) MIN(x) FROM xyz GROUP BY y
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(MIN(x)) MIN(x) FROM xyz GROUP BY y HAVING MIN(x) = 1
 ----
-0  distinct  ·            ·                ("min(x)")                                      weak-key("min(x)")
-0  ·         distinct on  min(x)           ·                                               ·
-1  render    ·            ·                ("min(x)")                                      ·
-1  ·         render 0     "min(x)"         ·                                               ·
-2  filter    ·            ·                ("min(x)", "min(x)")                            "min(x)"=CONST
-2  ·         filter       "min(x)" = 1     ·                                               ·
-3  group     ·            ·                ("min(x)", "min(x)")                            ·
+0  distinct  ·            ·                (min)                                           weak-key(min)
+0  ·         distinct on  min              ·                                               ·
+1  render    ·            ·                (min)                                           ·
+1  ·         render 0     min              ·                                               ·
+2  filter    ·            ·                (min, min)                                      min=CONST
+2  ·         filter       min = 1          ·                                               ·
+3  group     ·            ·                (min, min)                                      ·
 3  ·         aggregate 0  min(test.xyz.x)  ·                                               ·
 3  ·         aggregate 1  min(test.xyz.x)  ·                                               ·
 3  ·         group by     @1-@1            ·                                               ·
@@ -559,9 +559,9 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
 0  render    ·            ·                     (y)                                                      ·
 0  ·         render 0     y                     ·                                                        ·
-1  distinct  ·            ·                     (y, "row_number() OVER ()")                              weak-key("row_number() OVER ()")
-1  ·         distinct on  row_number() OVER ()  ·                                                        ·
-2  window    ·            ·                     (y, "row_number() OVER ()")                              ·
+1  distinct  ·            ·                     (y, row_number)                                          weak-key(row_number)
+1  ·         distinct on  row_number            ·                                                        ·
+2  window    ·            ·                     (y, row_number)                                          ·
 2  ·         window 0     row_number() OVER ()  ·                                                        ·
 2  ·         render 1     row_number() OVER ()  ·                                                        ·
 3  render    ·            ·                     (y)                                                      ·

@@ -775,7 +775,7 @@ func Example_sql() {
 	// sql -e create table t.g2 as select * from generate_series(1,10)
 	// SELECT 10
 	// sql -d nonexistent -e select count(*) from pg_class limit 0
-	// count(*)
+	// count
 	// # 0 rows
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// x
