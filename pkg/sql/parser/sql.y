@@ -491,7 +491,8 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   ROLLBACK ROLLUP ROW ROWS RSHIFT
 
 %token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
+%token <str>   SERIAL SERIAL2 SERIAL4 SERIAL8
+%token <str>   SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SOME_EXISTENCE SPLIT SQL
 %token <str>   START STATISTICS STATUS STDIN STRICT STRING STORE STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
@@ -5127,6 +5128,18 @@ simple_typename:
   {
     $$.val = coltypes.Serial
   }
+| SERIAL2
+  {
+    $$.val = coltypes.Serial2
+  }
+| SERIAL4
+  {
+    $$.val = coltypes.Serial4
+  }
+| SERIAL8
+  {
+    $$.val = coltypes.Serial8
+  }
 | SMALLSERIAL
   {
     $$.val = coltypes.SmallSerial
@@ -7227,6 +7240,9 @@ col_name_keyword:
 | REAL
 | ROW
 | SERIAL
+| SERIAL2
+| SERIAL4
+| SERIAL8
 | SMALLINT
 | SMALLSERIAL
 | STRING

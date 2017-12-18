@@ -41,6 +41,12 @@ var (
 	BigInt = &TInt{Name: "BIGINT"}
 	// Serial is an immutable T instance.
 	Serial = &TInt{Name: "SERIAL"}
+	// Serial2 is an immutable T instance.
+	Serial2 = &TInt{Name: "SERIAL2"}
+	// Serial4 is an immutable T instance.
+	Serial4 = &TInt{Name: "SERIAL4"}
+	// Serial8 is an immutable T instance.
+	Serial8 = &TInt{Name: "SERIAL8"}
 	// SmallSerial is an immutable T instance.
 	SmallSerial = &TInt{Name: "SMALLSERIAL"}
 	// BigSerial is an immutable T instance.
