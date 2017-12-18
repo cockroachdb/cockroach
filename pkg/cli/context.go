@@ -67,6 +67,9 @@ type cliContext struct {
 	// tableDisplayFormat indicates how to format result tables.
 	tableDisplayFormat tableDisplayFormat
 
+	// displayRowCounts indicates whether to print final row counts.
+	displayRowCounts bool
+
 	// showTimes indicates whether to display query times after each result line.
 	showTimes bool
 }

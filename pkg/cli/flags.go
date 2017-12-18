@@ -361,10 +361,12 @@ func init() {
 	cliCtx.showTimes = false
 	if cliCtx.terminalOutput {
 		cliCtx.tableDisplayFormat = tableDisplayPretty
+		cliCtx.displayRowCounts = true
 	}
 	for _, cmd := range tableOutputCommands {
 		f := cmd.Flags()
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
+		BoolFlag(f, &cliCtx.displayRowCounts, cliflags.DisplayRowCounts, cliCtx.displayRowCounts)
 	}
 
 	// Max results flag for range list.

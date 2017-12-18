@@ -441,27 +441,21 @@ func Example_logging() {
 	// sql --logtostderr=false -e select 1
 	// 1
 	// 1
-	// # 1 row
 	// sql --log-backtrace-at=foo.go:1 -e select 1
 	// 1
 	// 1
-	// # 1 row
 	// sql --log-dir= -e select 1
 	// 1
 	// 1
-	// # 1 row
 	// sql --logtostderr=true -e select 1
 	// 1
 	// 1
-	// # 1 row
 	// sql --verbosity=0 -e select 1
 	// 1
 	// 1
-	// # 1 row
 	// sql --vmodule=foo=1 -e select 1
 	// 1
 	// 1
-	// # 1 row
 }
 
 func Example_max_results() {
@@ -729,26 +723,21 @@ func Example_sql() {
 	// sql -e show application_name
 	// application_name
 	// cockroach
-	// # 1 row
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
 	// sql -e select 3 -e select * from t.f
 	// 3
 	// 3
-	// # 1 row
 	// x	y
 	// 42	69
-	// # 1 row
 	// sql -e begin -e select 3 -e commit
 	// BEGIN
 	// 3
 	// 3
-	// # 1 row
 	// COMMIT
 	// sql -e select * from t.f
 	// x	y
 	// 42	69
-	// # 1 row
 	// sql --execute=show databases
 	// Database
 	// crdb_internal
@@ -756,37 +745,29 @@ func Example_sql() {
 	// pg_catalog
 	// system
 	// t
-	// # 5 rows
 	// sql -e select 1; select 2
 	// 1
 	// 1
-	// # 1 row
 	// 2
 	// 2
-	// # 1 row
 	// sql -e select 1; select 2 where false
 	// 1
 	// 1
-	// # 1 row
 	// 2
-	// # 0 rows
 	// sql -e create table t.g1 (x int)
 	// CREATE TABLE
 	// sql -e create table t.g2 as select * from generate_series(1,10)
 	// SELECT 10
 	// sql -d nonexistent -e select count(*) from pg_class limit 0
 	// count(*)
-	// # 0 rows
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// x
-	// # 0 rows
 	// sql -e copy t.f from stdin
 	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// user ls --echo-sql
 	// > SHOW USERS
 	// username
 	// root
-	// # 1 row
 }
 
 func Example_sql_format() {
@@ -805,7 +786,6 @@ func Example_sql_format() {
 	// sql -e select * from t.times
 	// bare	withtz
 	// 2016-01-25 10:10:10+00:00	2016-01-25 15:10:10+00:00
-	// # 1 row
 }
 
 func Example_sql_column_labels() {
@@ -839,11 +819,9 @@ func Example_sql_column_labels() {
 	// κόσμε	INT	true	NULL	{}
 	// a|b	INT	true	NULL	{}
 	// ܈85	INT	true	NULL	{}
-	// # 6 rows
 	// sql -e select * from t.u
 	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0
-	// # 1 row
 	// sql --format=pretty -e show columns from t.u
 	// +---------+------+------+---------+---------+
 	// |  Field  | Type | Null | Default | Indices |
@@ -856,22 +834,18 @@ func Example_sql_column_labels() {
 	// | a|b     | INT  | true | NULL    | {}      |
 	// | ܈85     | INT  | true | NULL    | {}      |
 	// +---------+------+------+---------+---------+
-	// (6 rows)
 	// sql --format=pretty -e select * from t.u
 	// +------+------+------------+-------+-----+-----+
 	// | "foo | \foo | "foo\nbar" | κόσμε | a|b | ܈85 |
 	// +------+------+------------+-------+-----+-----+
 	// |    0 |    0 |          0 |     0 |   0 |   0 |
 	// +------+------+------------+-------+-----+-----+
-	// (1 row)
 	// sql --format=tsv -e select * from t.u
 	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0
-	// # 1 row
 	// sql --format=csv -e select * from t.u
 	// """foo",\foo,"""foo\nbar""",κόσμε,a|b,܈85
 	// 0,0,0,0,0,0
-	// # 1 row
 	// sql --format=sql -e select * from t.u
 	// CREATE TABLE results (
 	//   """foo" STRING,
@@ -883,14 +857,13 @@ func Example_sql_column_labels() {
 	// );
 	//
 	// INSERT INTO results VALUES ('0', '0', '0', '0', '0', '0');
-	// -- 1 row
 	// sql --format=html -e select * from t.u
 	// <table>
 	// <thead><tr><th>row</th><th>&#34;foo</th><th>\foo</th><th>&#34;foo\nbar&#34;</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
 	// <tbody>
 	// <tr><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
 	// </tbody>
-	// <tfoot><tr><td colspan=7>1 row</td></tr></tfoot></table>
+	// </table>
 	// sql --format=records -e select * from t.u
 	// -[ RECORD 1 ]
 	// "foo       | 0
@@ -923,43 +896,36 @@ func Example_sql_empty_table() {
 	// | x |
 	// +---+
 	// +---+
-	// (0 rows)
 	// sql --format=tsv -e select * from t.norows
 	// x
-	// # 0 rows
 	// sql --format=csv -e select * from t.norows
 	// x
-	// # 0 rows
 	// sql --format=sql -e select * from t.norows
 	// CREATE TABLE results (
 	//   x STRING
 	// );
 	//
-	// -- 0 rows
 	// sql --format=html -e select * from t.norows
 	// <table>
 	// <thead><tr><th>row</th><th>x</th></tr></head>
 	// </tbody>
-	// <tfoot><tr><td colspan=2>0 rows</td></tr></tfoot></table>
+	// </table>
 	// sql --format=raw -e select * from t.norows
 	// # 1 column
-	// # 0 rows
+	// # --
 	// sql --format=records -e select * from t.norows
 	// sql --format=pretty -e select * from t.nocols
 	// --
-	// (3 rows)
 	// sql --format=tsv -e select * from t.nocols
 	// # no columns
 	// # empty
 	// # empty
 	// # empty
-	// # 3 rows
 	// sql --format=csv -e select * from t.nocols
 	// # no columns
 	// # empty
 	// # empty
 	// # empty
-	// # 3 rows
 	// sql --format=sql -e select * from t.nocols
 	// CREATE TABLE results (
 	// );
@@ -967,7 +933,6 @@ func Example_sql_empty_table() {
 	// INSERT INTO results(rowid) VALUES (DEFAULT);
 	// INSERT INTO results(rowid) VALUES (DEFAULT);
 	// INSERT INTO results(rowid) VALUES (DEFAULT);
-	// -- 3 rows
 	// sql --format=html -e select * from t.nocols
 	// <table>
 	// <thead><tr><th>row</th></tr></head>
@@ -976,39 +941,33 @@ func Example_sql_empty_table() {
 	// <tr><td>2</td></tr>
 	// <tr><td>3</td></tr>
 	// </tbody>
-	// <tfoot><tr><td colspan=1>3 rows</td></tr></tfoot></table>
+	// </table>
 	// sql --format=raw -e select * from t.nocols
 	// # 0 columns
 	// # row 1
 	// # row 2
 	// # row 3
-	// # 3 rows
+	// # --
 	// sql --format=records -e select * from t.nocols
-	// (3 rows)
 	// sql --format=pretty -e select * from t.nocolsnorows
 	// --
-	// (0 rows)
 	// sql --format=tsv -e select * from t.nocolsnorows
 	// # no columns
-	// # 0 rows
 	// sql --format=csv -e select * from t.nocolsnorows
 	// # no columns
-	// # 0 rows
 	// sql --format=sql -e select * from t.nocolsnorows
 	// CREATE TABLE results (
 	// );
 	//
-	// -- 0 rows
 	// sql --format=html -e select * from t.nocolsnorows
 	// <table>
 	// <thead><tr><th>row</th></tr></head>
 	// </tbody>
-	// <tfoot><tr><td colspan=1>0 rows</td></tr></tfoot></table>
+	// </table>
 	// sql --format=raw -e select * from t.nocolsnorows
 	// # 0 columns
-	// # 0 rows
+	// # --
 	// sql --format=records -e select * from t.nocolsnorows
-	// (0 rows)
 }
 
 func Example_sql_table() {
@@ -1016,6 +975,14 @@ func Example_sql_table() {
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
+	c.RunWithArgs([]string{"sql", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=tsv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=csv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=sql", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=html", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=raw", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'foo', 'printable ASCII')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\"foo', 'printable ASCII with quotes')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\\\foo', 'printable ASCII with backslash')"})
@@ -1026,18 +993,44 @@ func Example_sql_table() {
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xdc\\x88\\x38\\x35', 'UTF8 string with RTL char')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'\\xc3\\x28', 'non-UTF8 string')"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'a\\tb\\tc\\n12\\t123123213\\t12313', 'tabs')"})
-	c.RunWithArgs([]string{"sql", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--format=tsv", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--format=csv", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--format=sql", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--format=html", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--format=raw", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--display-row-counts", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--display-row-counts", "--format=pretty", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--display-row-counts", "--format=tsv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--display-row-counts", "--format=csv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--display-row-counts", "--format=sql", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--display-row-counts", "--format=html", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--display-row-counts", "--format=raw", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--display-row-counts", "--format=records", "-e", "select * from t.t"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
 	// CREATE TABLE
+	// sql -e select * from t.t
+	// s	d
+	// sql --format=pretty -e select * from t.t
+	// +---+---+
+	// | s | d |
+	// +---+---+
+	// +---+---+
+	// sql --format=tsv -e select * from t.t
+	// s	d
+	// sql --format=csv -e select * from t.t
+	// s,d
+	// sql --format=sql -e select * from t.t
+	// CREATE TABLE results (
+	//   s STRING,
+	//   d STRING
+	// );
+	//
+	// sql --format=html -e select * from t.t
+	// <table>
+	// <thead><tr><th>row</th><th>s</th><th>d</th></tr></head>
+	// </tbody>
+	// </table>
+	// sql --format=raw -e select * from t.t
+	// # 2 columns
+	// # --
+	// sql --format=records -e select * from t.t
 	// sql -e insert into t.t values (e'foo', 'printable ASCII')
 	// INSERT 1
 	// sql -e insert into t.t values (e'"foo', 'printable ASCII with quotes')
@@ -1062,7 +1055,7 @@ func Example_sql_table() {
 	// HINT: try \h VALUES
 	// sql -e insert into t.t values (e'a\tb\tc\n12\t123123213\t12313', 'tabs')
 	// INSERT 1
-	// sql -e select * from t.t
+	// sql --display-row-counts -e select * from t.t
 	// s	d
 	// foo	printable ASCII
 	// """foo"	printable ASCII with quotes
@@ -1076,7 +1069,7 @@ func Example_sql_table() {
 	// "a	b	c
 	// 12	123123213	12313"	tabs
 	// # 9 rows
-	// sql --format=pretty -e select * from t.t
+	// sql --display-row-counts --format=pretty -e select * from t.t
 	// +--------------------------------+--------------------------------+
 	// |               s                |               d                |
 	// +--------------------------------+--------------------------------+
@@ -1093,7 +1086,7 @@ func Example_sql_table() {
 	// | 12  123123213 12313            |                                |
 	// +--------------------------------+--------------------------------+
 	// (9 rows)
-	// sql --format=tsv -e select * from t.t
+	// sql --display-row-counts --format=tsv -e select * from t.t
 	// s	d
 	// foo	printable ASCII
 	// """foo"	printable ASCII with quotes
@@ -1107,7 +1100,7 @@ func Example_sql_table() {
 	// "a	b	c
 	// 12	123123213	12313"	tabs
 	// # 9 rows
-	// sql --format=csv -e select * from t.t
+	// sql --display-row-counts --format=csv -e select * from t.t
 	// s,d
 	// foo,printable ASCII
 	// """foo",printable ASCII with quotes
@@ -1121,7 +1114,7 @@ func Example_sql_table() {
 	// "a	b	c
 	// 12	123123213	12313",tabs
 	// # 9 rows
-	// sql --format=sql -e select * from t.t
+	// sql --display-row-counts --format=sql -e select * from t.t
 	// CREATE TABLE results (
 	//   s STRING,
 	//   d STRING
@@ -1137,7 +1130,7 @@ func Example_sql_table() {
 	// INSERT INTO results VALUES (e'\u070885', 'UTF8 string with RTL char');
 	// INSERT INTO results VALUES (e'a\tb\tc\n12\t123123213\t12313', 'tabs');
 	// -- 9 rows
-	// sql --format=html -e select * from t.t
+	// sql --display-row-counts --format=html -e select * from t.t
 	// <table>
 	// <thead><tr><th>row</th><th>s</th><th>d</th></tr></head>
 	// <tbody>
@@ -1151,8 +1144,9 @@ func Example_sql_table() {
 	// <tr><td>8</td><td>܈85</td><td>UTF8 string with RTL char</td></tr>
 	// <tr><td>9</td><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
 	// </tbody>
-	// <tfoot><tr><td colspan=3>9 rows</td></tr></tfoot></table>
-	// sql --format=raw -e select * from t.t
+	// <tfoot><tr><td colspan=3>9 rows</td></tr></tfoot>
+	// </table>
+	// sql --display-row-counts --format=raw -e select * from t.t
 	// # 2 columns
 	// # row 1
 	// ## 3
@@ -1201,8 +1195,9 @@ func Example_sql_table() {
 	// 12	123123213	12313
 	// ## 4
 	// tabs
+	// # --
 	// # 9 rows
-	// sql --format=records -e select * from t.t
+	// sql --display-row-counts --format=records -e select * from t.t
 	// -[ RECORD 1 ]
 	// s | foo
 	// d | printable ASCII
@@ -1232,6 +1227,8 @@ func Example_sql_table() {
 	// s | a	b	c
 	//   | 12	123123213	12313
 	// d | tabs
+	// --
+	// (9 rows)
 }
 
 func Example_whitespace_in_pretty_values() {
@@ -1303,18 +1300,15 @@ func Example_user() {
 	// user ls
 	// username
 	// root
-	// # 1 row
 	// user ls --format=pretty
 	// +----------+
 	// | username |
 	// +----------+
 	// | root     |
 	// +----------+
-	// (1 row)
 	// user ls --format=tsv
 	// username
 	// root
-	// # 1 row
 	// user set FOO
 	// CREATE USER 1
 	// sql -e create user if not exists 'FOO'
@@ -1371,7 +1365,6 @@ func Example_user() {
 	// | table                                                           |
 	// | ομηρος                                                          |
 	// +-----------------------------------------------------------------+
-	// (11 rows)
 	// user rm foo
 	// DROP USER 1
 	// user ls --format=pretty
@@ -1389,7 +1382,6 @@ func Example_user() {
 	// | table                                                           |
 	// | ομηρος                                                          |
 	// +-----------------------------------------------------------------+
-	// (10 rows)
 }
 
 func Example_cert() {
@@ -1520,14 +1512,12 @@ func Example_node() {
 	// node ls
 	// id
 	// 1
-	// # 1 row
 	// node ls --format=pretty
 	// +----+
 	// | id |
 	// +----+
 	// |  1 |
 	// +----+
-	// (1 row)
 	// node status 10000
 	// Error: node 10000 doesn't exist
 }
@@ -1945,5 +1935,4 @@ func Example_in_memory() {
 	// node ls
 	// id
 	// 1
-	// # 1 row
 }

@@ -270,6 +270,12 @@ var options = map[string]struct {
 		func(c *cliState, _ []string) error { c.checkSyntax = true; return nil },
 		func(c *cliState) error { c.checkSyntax = false; return nil },
 	},
+	`display_row_counts`: {
+		1,
+		true,
+		func(c *cliState, _ []string) error { cliCtx.displayRowCounts = true; return nil },
+		func(c *cliState) error { cliCtx.displayRowCounts = false; return nil },
+	},
 	`show_times`: {
 		0,
 		true,
@@ -291,6 +297,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 			[]string{"Option", "Value"},
 			newRowSliceIter([][]string{
 				{"display_format", cliCtx.tableDisplayFormat.String()},
+				{"display_row_counts", strconv.FormatBool(cliCtx.displayRowCounts)},
 				{"errexit", strconv.FormatBool(c.errExit)},
 				{"echo", strconv.FormatBool(sqlCtx.echo)},
 				{"check_syntax", strconv.FormatBool(c.checkSyntax)},

@@ -199,7 +199,9 @@ func (p *prettyReporter) doneRows(w io.Writer, seenRows int) error {
 		fmt.Fprintln(w, "--")
 	}
 
-	fmt.Fprintf(w, "(%d row%s)\n", seenRows, util.Pluralize(int64(seenRows)))
+	if cliCtx.displayRowCounts {
+		fmt.Fprintf(w, "(%d row%s)\n", seenRows, util.Pluralize(int64(seenRows)))
+	}
 	return nil
 }
 
@@ -236,7 +238,9 @@ func (p *csvReporter) doneNoRows(_ io.Writer) error     { return nil }
 
 func (p *csvReporter) doneRows(w io.Writer, seenRows int) error {
 	p.csvWriter.Flush()
-	fmt.Fprintf(w, "# %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
+	if cliCtx.displayRowCounts {
+		fmt.Fprintf(w, "# %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
+	}
 	return nil
 }
 
@@ -260,7 +264,10 @@ func (p *rawReporter) beforeFirstRow(_ io.Writer) error { return nil }
 func (p *rawReporter) doneNoRows(_ io.Writer) error     { return nil }
 
 func (p *rawReporter) doneRows(w io.Writer, nRows int) error {
-	fmt.Fprintf(w, "# %d row%s\n", nRows, util.Pluralize(int64(nRows)))
+	fmt.Fprintln(w, "# --")
+	if cliCtx.displayRowCounts {
+		fmt.Fprintf(w, "# %d row%s\n", nRows, util.Pluralize(int64(nRows)))
+	}
 	return nil
 }
 
@@ -300,8 +307,11 @@ func (p *htmlReporter) doneNoRows(w io.Writer) error {
 
 func (p *htmlReporter) doneRows(w io.Writer, nRows int) error {
 	fmt.Fprintln(w, "</tbody>")
-	fmt.Fprintf(w, "<tfoot><tr><td colspan=%d>%d row%s</td></tr></tfoot></table>\n",
-		p.nCols+1, nRows, util.Pluralize(int64(nRows)))
+	if cliCtx.displayRowCounts {
+		fmt.Fprintf(w, "<tfoot><tr><td colspan=%d>%d row%s</td></tr></tfoot>\n",
+			p.nCols+1, nRows, util.Pluralize(int64(nRows)))
+	}
+	fmt.Fprintln(w, "</table>")
 	return nil
 }
 
@@ -344,8 +354,8 @@ func (p *recordReporter) iter(w io.Writer, rowIdx int, row []string) error {
 }
 
 func (p *recordReporter) doneRows(w io.Writer, seenRows int) error {
-	if len(p.cols) == 0 {
-		fmt.Fprintf(w, "(%d row%s)\n", seenRows, util.Pluralize(int64(seenRows)))
+	if cliCtx.displayRowCounts {
+		fmt.Fprintf(w, "--\n(%d row%s)\n", seenRows, util.Pluralize(int64(seenRows)))
 	}
 	return nil
 }
@@ -393,7 +403,9 @@ func (p *sqlReporter) iter(w io.Writer, _ int, row []string) error {
 func (p *sqlReporter) beforeFirstRow(_ io.Writer) error { return nil }
 func (p *sqlReporter) doneNoRows(_ io.Writer) error     { return nil }
 func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
-	fmt.Fprintf(w, "-- %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
+	if cliCtx.displayRowCounts {
+		fmt.Fprintf(w, "-- %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
+	}
 	return nil
 }
 

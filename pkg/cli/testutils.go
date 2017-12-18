@@ -23,6 +23,7 @@ func TestingReset() {
 	baseCfg.InitDefaults()
 	cliCtx.isInteractive = false
 	cliCtx.tableDisplayFormat = tableDisplayTSV
+	cliCtx.displayRowCounts = false
 	cliCtx.showTimes = false
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""

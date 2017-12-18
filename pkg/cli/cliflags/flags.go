@@ -267,6 +267,13 @@ tsv for non-interactive sessions and pretty for interactive
 sessions.`,
 	}
 
+	DisplayRowCounts = FlagInfo{
+		Name: "display-row-counts",
+		Description: `
+Determine whether a final row count should be printed in tabular results.
+Defaults to true for terminal output, false otherwise.`,
+	}
+
 	Join = FlagInfo{
 		Name:      "join",
 		Shorthand: "j",
