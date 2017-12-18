@@ -74,7 +74,12 @@ type tableWriter interface {
 	// The traceKV parameter determines whether the individual K/V operations
 	// should be logged to the context. See the comment above for why
 	// this a separate parameter as opposed to a Value field on the context.
-	finalize(ctx context.Context, traceKV bool) (*sqlbase.RowContainer, error)
+	//
+	// autoCommit specifies whether the tableWriter is free to commit the txn in
+	// which it was operating once all writes are performed.
+	finalize(
+		ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
+	) (*sqlbase.RowContainer, error)
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.
@@ -87,6 +92,13 @@ type tableWriter interface {
 	close(ctx context.Context)
 }
 
+type autoCommitOpt int
+
+const (
+	noAutoCommit autoCommitOpt = iota
+	autoCommitEnabled
+)
+
 var _ tableWriter = (*tableInserter)(nil)
 var _ tableWriter = (*tableUpdater)(nil)
 var _ tableWriter = (*tableUpserter)(nil)
@@ -94,8 +106,7 @@ var _ tableWriter = (*tableDeleter)(nil)
 
 // tableInserter handles writing kvs and forming table rows for inserts.
 type tableInserter struct {
-	ri         sqlbase.RowInserter
-	autoCommit bool
+	ri sqlbase.RowInserter
 
 	// Set by init.
 	txn *client.Txn
@@ -116,9 +127,11 @@ func (ti *tableInserter) row(
 	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, traceKV)
 }
 
-func (ti *tableInserter) finalize(ctx context.Context, _ bool) (*sqlbase.RowContainer, error) {
+func (ti *tableInserter) finalize(
+	ctx context.Context, autoCommit autoCommitOpt, _ bool,
+) (*sqlbase.RowContainer, error) {
 	var err error
-	if ti.autoCommit {
+	if autoCommit == autoCommitEnabled {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
@@ -143,8 +156,7 @@ func (ti *tableInserter) fkSpanCollector() sqlbase.FkSpanCollector {
 
 // tableUpdater handles writing kvs and forming table rows for updates.
 type tableUpdater struct {
-	ru         sqlbase.RowUpdater
-	autoCommit bool
+	ru sqlbase.RowUpdater
 
 	// Set by init.
 	txn *client.Txn
@@ -169,9 +181,11 @@ func (tu *tableUpdater) row(
 	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, traceKV)
 }
 
-func (tu *tableUpdater) finalize(ctx context.Context, _ bool) (*sqlbase.RowContainer, error) {
+func (tu *tableUpdater) finalize(
+	ctx context.Context, autoCommit autoCommitOpt, _ bool,
+) (*sqlbase.RowContainer, error) {
 	var err error
-	if tu.autoCommit {
+	if autoCommit == autoCommitEnabled {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
@@ -232,7 +246,6 @@ type tableUpsertEvaler interface {
 // as the other `tableFoo`s, which are more simple than upsert.
 type tableUpserter struct {
 	ri            sqlbase.RowInserter
-	autoCommit    bool
 	conflictIndex sqlbase.IndexDescriptor
 	isUpsertAlias bool
 	alloc         *sqlbase.DatumAlloc
@@ -387,7 +400,9 @@ func (tu *tableUpserter) row(
 }
 
 // flush commits to tu.txn any rows batched up in tu.insertRows.
-func (tu *tableUpserter) flush(ctx context.Context, traceKV bool) (*sqlbase.RowContainer, error) {
+func (tu *tableUpserter) flush(
+	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
+) (*sqlbase.RowContainer, error) {
 	tableDesc := tu.tableDesc()
 	existingRows, err := tu.fetchExisting(ctx, traceKV)
 	if err != nil {
@@ -475,7 +490,7 @@ func (tu *tableUpserter) flush(ctx context.Context, traceKV bool) (*sqlbase.RowC
 		}
 	}
 
-	if tu.autoCommit {
+	if autoCommit == autoCommitEnabled {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
@@ -611,11 +626,12 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]tre
 	return rows, nil
 }
 
+// finalize is part of the tableWriter interface.
 func (tu *tableUpserter) finalize(
-	ctx context.Context, traceKV bool,
+	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
 ) (*sqlbase.RowContainer, error) {
 	if tu.fastPathBatch != nil {
-		if tu.autoCommit {
+		if autoCommit == autoCommitEnabled {
 			// An auto-txn can commit the transaction with the batch. This is an
 			// optimization to avoid an extra round-trip to the transaction
 			// coordinator.
@@ -637,7 +653,7 @@ func (tu *tableUpserter) finalize(
 		}
 		return nil, nil
 	}
-	return tu.flush(ctx, traceKV)
+	return tu.flush(ctx, autoCommit, traceKV)
 }
 
 func (tu *tableUpserter) tableDesc() *sqlbase.TableDescriptor {
@@ -657,9 +673,8 @@ func (tu *tableUpserter) close(ctx context.Context) {
 
 // tableDeleter handles writing kvs and forming table rows for deletes.
 type tableDeleter struct {
-	rd         sqlbase.RowDeleter
-	autoCommit bool
-	alloc      *sqlbase.DatumAlloc
+	rd    sqlbase.RowDeleter
+	alloc *sqlbase.DatumAlloc
 
 	// Set by init.
 	txn *client.Txn
@@ -681,8 +696,10 @@ func (td *tableDeleter) row(
 }
 
 // finalize is part of the tableWriter interface.
-func (td *tableDeleter) finalize(ctx context.Context, _ bool) (*sqlbase.RowContainer, error) {
-	if td.autoCommit {
+func (td *tableDeleter) finalize(
+	ctx context.Context, autoCommit autoCommitOpt, _ bool,
+) (*sqlbase.RowContainer, error) {
+	if autoCommit == autoCommitEnabled {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
@@ -718,7 +735,7 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 // without knowing the values that are currently present. fastDelete calls
 // finalize, so it should not be called after.
 func (td *tableDeleter) fastDelete(
-	ctx context.Context, scan *scanNode, traceKV bool,
+	ctx context.Context, scan *scanNode, autoCommit autoCommitOpt, traceKV bool,
 ) (rowCount int, err error) {
 
 	for _, span := range scan.spans {
@@ -726,10 +743,10 @@ func (td *tableDeleter) fastDelete(
 		if traceKV {
 			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 		}
-		td.b.DelRange(span.Key, span.EndKey, true)
+		td.b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 	}
 
-	_, err = td.finalize(ctx, traceKV)
+	_, err = td.finalize(ctx, autoCommit, traceKV)
 	if err != nil {
 		return 0, err
 	}
@@ -771,13 +788,13 @@ func (td *tableDeleter) fastDelete(
 // limit is a limit on either the number of keys or table-rows (for
 // interleaved tables) deleted in the operation.
 func (td *tableDeleter) deleteAllRows(
-	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
 ) (roachpb.Span, error) {
 	if td.rd.Helper.TableDesc.IsInterleaved() {
 		log.VEvent(ctx, 2, "delete forced to scan: table is interleaved")
-		return td.deleteAllRowsScan(ctx, resume, limit, traceKV)
+		return td.deleteAllRowsScan(ctx, resume, limit, autoCommit, traceKV)
 	}
-	return td.deleteAllRowsFast(ctx, resume, limit, traceKV)
+	return td.deleteAllRowsFast(ctx, resume, limit, autoCommit, traceKV)
 }
 
 // deleteAllRowsFast employs a ClearRange KV API call to delete the
@@ -786,7 +803,7 @@ func (td *tableDeleter) deleteAllRows(
 // efficient ranged tombstone, preventing unnecessary write
 // amplification.
 func (td *tableDeleter) deleteAllRowsFast(
-	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		tablePrefix := roachpb.Key(
@@ -801,7 +818,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	// If GCDeadline isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
 	if td.tableDesc().GCDeadline == 0 {
-		return td.legacyDeleteAllRowsFast(ctx, resume, limit, traceKV)
+		return td.legacyDeleteAllRowsFast(ctx, resume, limit, autoCommit, traceKV)
 	}
 
 	// Assert that GC deadline is in the past.
@@ -821,7 +838,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	if err := td.txn.DB().Run(ctx, b); err != nil {
 		return resume, err
 	}
-	if _, err := td.finalize(ctx, traceKV); err != nil {
+	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
 		return resume, err
 	}
 	return roachpb.Span{}, nil
@@ -831,12 +848,12 @@ func (td *tableDeleter) deleteAllRowsFast(
 // and so deletion must fall back to relying on DeleteRange and the
 // eventual range GC cycle.
 func (td *tableDeleter) legacyDeleteAllRowsFast(
-	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
 ) (roachpb.Span, error) {
 	log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
-	if _, err := td.finalize(ctx, traceKV); err != nil {
+	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
@@ -846,7 +863,7 @@ func (td *tableDeleter) legacyDeleteAllRowsFast(
 }
 
 func (td *tableDeleter) deleteAllRowsScan(
-	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context, resume roachpb.Span, limit int64, autoCommit autoCommitOpt, traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
@@ -893,7 +910,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	_, err := td.finalize(ctx, traceKV)
+	_, err := td.finalize(ctx, autoCommit, traceKV)
 	return resume, err
 }
 
@@ -907,19 +924,29 @@ func (td *tableDeleter) deleteAllRowsScan(
 //
 // limit is a limit on the number of index entries deleted in the operation.
 func (td *tableDeleter) deleteIndex(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context,
+	idx *sqlbase.IndexDescriptor,
+	resume roachpb.Span,
+	limit int64,
+	autoCommit autoCommitOpt,
+	traceKV bool,
 ) (roachpb.Span, error) {
 	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
-		return td.deleteIndexScan(ctx, idx, resume, limit, traceKV)
+		return td.deleteIndexScan(ctx, idx, resume, limit, autoCommit, traceKV)
 	}
-	return td.deleteIndexFast(ctx, idx, resume, limit, traceKV)
+	return td.deleteIndexFast(ctx, idx, resume, limit, autoCommit, traceKV)
 }
 
 func (td *tableDeleter) deleteIndexFast(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context,
+	idx *sqlbase.IndexDescriptor,
+	resume roachpb.Span,
+	limit int64,
+	autoCommit autoCommitOpt,
+	traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.IndexSpan(idx.ID)
@@ -932,7 +959,7 @@ func (td *tableDeleter) deleteIndexFast(
 	// deadline / ClearRange fast path that table deletion uses.
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
-	if _, err := td.finalize(ctx, traceKV); err != nil {
+	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
 		return resume, err
 	}
 	if l := len(td.b.Results); l != 1 {
@@ -942,7 +969,12 @@ func (td *tableDeleter) deleteIndexFast(
 }
 
 func (td *tableDeleter) deleteIndexScan(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context,
+	idx *sqlbase.IndexDescriptor,
+	resume roachpb.Span,
+	limit int64,
+	autoCommit autoCommitOpt,
+	traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
@@ -988,7 +1020,7 @@ func (td *tableDeleter) deleteIndexScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	_, err := td.finalize(ctx, traceKV)
+	_, err := td.finalize(ctx, autoCommit, traceKV)
 	return resume, err
 }
 

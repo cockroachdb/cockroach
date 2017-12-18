@@ -57,7 +57,12 @@ type insertNode struct {
 	tw         tableWriter
 
 	run insertRun
+
+	autoCommit autoCommitOpt
 }
+
+// insertNode implements the autoCommitNode interface.
+var _ autoCommitNode = &insertNode{}
 
 // Insert inserts rows into the database.
 // Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
@@ -170,7 +175,7 @@ func (p *planner) Insert(
 	var tw tableWriter
 	if n.OnConflict == nil {
 		ti := tableInserterPool.Get().(*tableInserter)
-		*ti = tableInserter{ri: ri, autoCommit: p.autoCommit}
+		*ti = tableInserter{ri: ri}
 		tw = ti
 	} else {
 		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
@@ -185,7 +190,6 @@ func (p *planner) Insert(
 			tu := tableUpserterPool.Get().(*tableUpserter)
 			*tu = tableUpserter{
 				ri:            ri,
-				autoCommit:    p.autoCommit,
 				conflictIndex: *conflictIndex,
 				alloc:         &p.alloc,
 				mon:           &p.session.TxnState.mon,
@@ -229,7 +233,6 @@ func (p *planner) Insert(
 			tu := tableUpserterPool.Get().(*tableUpserter)
 			*tu = tableUpserter{
 				ri:            ri,
-				autoCommit:    p.autoCommit,
 				alloc:         &p.alloc,
 				mon:           &p.session.TxnState.mon,
 				collectRows:   isUpsertReturning,
@@ -374,7 +377,8 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			rows, err := n.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			rows, err := n.tw.finalize(
+				params.ctx, n.autoCommit, params.p.session.Tracing.KVTracingEnabled())
 			if err != nil {
 				return false, err
 			}
@@ -663,4 +667,9 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 
 func (n *insertNode) isUpsert() bool {
 	return n.n.OnConflict != nil
+}
+
+// enableAutoCommit is part of the autoCommitNode interface.
+func (n *insertNode) enableAutoCommit() {
+	n.autoCommit = autoCommitEnabled
 }

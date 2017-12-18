@@ -35,6 +35,13 @@ func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, erro
 		return plan, err
 	}
 	plan = p.simplifyOrderings(plan, nil)
+
+	if p.autoCommit {
+		if ac, ok := plan.(autoCommitNode); ok {
+			ac.enableAutoCommit()
+		}
+	}
+
 	return plan, nil
 }
 

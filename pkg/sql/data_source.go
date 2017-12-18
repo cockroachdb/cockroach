@@ -403,7 +403,7 @@ func (p *planner) getDataSource(
 		return p.makeJoin(ctx, t.Join, left, right, t.Cond)
 
 	case *tree.StatementSource:
-		plan, err := p.newPlan(ctx, t.Statement, nil)
+		plan, err := p.newPlan(ctx, t.Statement, nil /* desiredTypes */)
 		if err != nil {
 			return planDataSource{}, err
 		}

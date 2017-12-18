@@ -102,6 +102,10 @@ type runParams struct {
 // - planOrdering()                (plan_ordering.go)
 // - planColumns()                 (plan_columns.go)
 //
+// Also, there are optional interfaces that new nodes may want to implement:
+// - execStartable
+// - autoCommitNode
+//
 type planNode interface {
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
@@ -236,6 +240,22 @@ func startPlan(params runParams, plan planNode) error {
 // execution step.
 type execStartable interface {
 	startExec(params runParams) error
+}
+
+// autoCommitNode is implemented by planNodes that might be able to commit the
+// KV txn in which they operate. Some nodes might want to do this to take
+// advantage of the 1PC optimization in case they're running as an implicit
+// transaction.
+// Only the top-level node in a plan is allowed to auto-commit. A node that
+// choses to do so has to be cognizant of all its children: it needs to only
+// auto-commit after all the children have finished performing KV operations
+// and, more generally, after the plan is guaranteed to not produce any
+// execution errors (in case of an error anywhere in the query, we do not want
+// to commit the txn).
+type autoCommitNode interface {
+	// enableAutoCommit is called on the root planNode (if it implements this
+	// interface).
+	enableAutoCommit()
 }
 
 // startExec calls startExec() on each planNode that supports

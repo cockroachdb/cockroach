@@ -86,6 +86,9 @@ type planner struct {
 	// If autoCommit is true, the plan is allowed (but not required) to commit the
 	// transaction along with other KV operations. Committing the txn might be
 	// beneficial because it may enable the 1PC optimization.
+	//
+	// NOTE: This member is for internal use of the planner only. PlanNodes that
+	// want to do 1PC transactions have to implement the autoCommitNode interface.
 	autoCommit bool
 
 	// phaseTimes helps measure the time spent in each phase of SQL execution.

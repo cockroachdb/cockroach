@@ -39,8 +39,12 @@ type deleteNode struct {
 
 	tw tableDeleter
 
-	run deleteRun
+	run        deleteRun
+	autoCommit autoCommitOpt
 }
+
+// deleteNode implements the autoCommitNode interface.
+var _ autoCommitNode = &deleteNode{}
 
 // Delete removes rows from a table.
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
@@ -81,7 +85,7 @@ func (p *planner) Delete(
 	if err != nil {
 		return nil, err
 	}
-	tw := tableDeleter{rd: rd, autoCommit: p.autoCommit, alloc: &p.alloc}
+	tw := tableDeleter{rd: rd, alloc: &p.alloc}
 
 	// TODO(knz): Until we split the creation of the node from Start()
 	// for the SelectClause too, we cannot cache this. This is because
@@ -154,7 +158,7 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			_, err = d.tw.finalize(params.ctx, traceKV)
+			_, err = d.tw.finalize(params.ctx, d.autoCommit, traceKV)
 		}
 		return false, err
 	}
@@ -231,10 +235,16 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return err
 	}
-	rowCount, err := d.tw.fastDelete(params.ctx, scan, params.p.session.Tracing.KVTracingEnabled())
+	rowCount, err := d.tw.fastDelete(
+		params.ctx, scan, d.autoCommit, params.p.session.Tracing.KVTracingEnabled())
 	if err != nil {
 		return err
 	}
 	d.rh.rowCount += rowCount
 	return nil
+}
+
+// enableAutoCommit is part of the autoCommitNode interface.
+func (d *deleteNode) enableAutoCommit() {
+	d.autoCommit = autoCommitEnabled
 }

@@ -355,7 +355,7 @@ func truncateTableInChunks(
 			if err := td.init(txn); err != nil {
 				return err
 			}
-			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, traceKV)
+			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, noAutoCommit, traceKV)
 			return err
 		}); err != nil {
 			return err
