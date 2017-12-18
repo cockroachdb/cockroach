@@ -358,7 +358,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ScanInterval:            s.cfg.ScanInterval,
 		ScanMaxIdleTime:         s.cfg.ScanMaxIdleTime,
 		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
-		MetricsSampleInterval:   s.cfg.MetricsSampleInterval,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		StorePool:               s.storePool,
 		SQLExecutor:             sqlExecutor,
@@ -1083,15 +1082,15 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
 
 	// Begin recording runtime statistics.
-	s.startSampleEnvironment(s.cfg.MetricsSampleInterval)
+	s.startSampleEnvironment(DefaultMetricsSampleInterval)
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
 	// Begin recording status summaries.
-	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
+	s.node.startWriteSummaries(DefaultMetricsSampleInterval)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
