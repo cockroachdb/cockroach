@@ -363,6 +363,23 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 	return result
 }
 
+// TestIsInitialized verifies that IsInitialized can be called on a completely
+// un-initialized replica without triggering a nil pointer exception.
+func TestIsInitialized(t *testing.T) {
+	var r Replica
+	if r.IsInitialized() {
+		t.Fatalf("r.IsInitialized() got true, want false")
+	}
+	r.mu.state.Desc = &roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
+	}
+	if !r.IsInitialized() {
+		t.Fatalf("r.IsInitialized() got false, want true")
+	}
+}
+
 // TestIsOnePhaseCommit verifies the circumstances where a
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {

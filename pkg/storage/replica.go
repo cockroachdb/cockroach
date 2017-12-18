@@ -1553,7 +1553,7 @@ func (r *Replica) IsInitialized() bool {
 // to an incoming message but we are waiting for our initial snapshot.
 // isInitializedLocked requires that the replica lock is held.
 func (r *Replica) isInitializedRLocked() bool {
-	return r.mu.state.Desc.IsInitialized()
+	return r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized()
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
