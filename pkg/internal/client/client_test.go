@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -902,7 +903,7 @@ func TestInconsistentReads(t *testing.T) {
 		}
 		return ba.CreateReply(), nil
 	}
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := client.NewDB(senderFn, clock)
 	ctx := context.TODO()
 
