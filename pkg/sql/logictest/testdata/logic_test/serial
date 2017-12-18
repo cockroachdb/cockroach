@@ -32,3 +32,14 @@ query III
 SELECT COUNT(DISTINCT a), COUNT(DISTINCT b), COUNT(DISTINCT c) FROM smallbig
 ----
 2 2 1
+
+statement ok
+CREATE TABLE serials (a SERIAL2, b SERIAL4, c SERIAL8, d INT)
+
+statement ok
+INSERT INTO serials (d) VALUES (9), (9)
+
+query III
+SELECT COUNT(DISTINCT a), COUNT(DISTINCT b), COUNT(DISTINCT c) FROM serials
+----
+2 2 2
