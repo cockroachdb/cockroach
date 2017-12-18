@@ -97,7 +97,6 @@ export default function (props: GraphDashboardProps) {
       <Axis units={AxisUnits.Duration}>
         <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
         <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
-        <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />
       </Axis>
     </LineGraph>,
   ];
