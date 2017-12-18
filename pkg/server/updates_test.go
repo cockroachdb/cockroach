@@ -81,6 +81,10 @@ func TestCheckVersion(t *testing.T) {
 	if expected, actual := "OSS", r.last.licenseType; expected != actual {
 		t.Errorf("expected license type %v, got %v", expected, actual)
 	}
+
+	if expected, actual := "false", r.last.internal; expected != actual {
+		t.Errorf("expected internal to be %v, got %v", expected, actual)
+	}
 }
 
 func TestReportUsage(t *testing.T) {
@@ -157,6 +161,11 @@ func TestReportUsage(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		// Set cluster to an internal testing cluster
+		q := `SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'`
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
 		if _, err := db.Exec(`RESET application_name`); err != nil {
 			t.Fatal(err)
 		}
@@ -224,6 +233,9 @@ func TestReportUsage(t *testing.T) {
 		if minExpected, actual := len(params.StoreSpecs), len(r.last.Stores); minExpected > actual {
 			return errors.Errorf("expected at least %v stores got %v", minExpected, actual)
 		}
+		if expected, actual := "true", r.last.internal; expected != actual {
+			t.Errorf("expected internal to be %v, got %v", expected, actual)
+		}
 
 		for _, store := range r.last.Stores {
 			if minExpected, actual := keyCounts[store.StoreID], store.KeyCount; minExpected > actual {
@@ -271,7 +283,7 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 9, len(r.last.SqlStats); expected != actual {
+	if expected, actual := 10, len(r.last.SqlStats); expected != actual {
 		t.Fatalf("expected %d queries in stats report, got %d", expected, actual)
 	}
 
@@ -297,6 +309,7 @@ func TestReportUsage(t *testing.T) {
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
 			`UPDATE _ SET _ = _ + _`,
+			`SET CLUSTER SETTING _._ = _`,
 		},
 	} {
 		if app, ok := bucketByApp[sql.HashAppName(appName)]; !ok {
@@ -330,6 +343,7 @@ type mockRecorder struct {
 		uuid        string
 		version     string
 		licenseType string
+		internal    string
 		diagnosticspb.DiagnosticReport
 		rawReportBody string
 	}
@@ -348,6 +362,7 @@ func makeMockRecorder(t *testing.T) *mockRecorder {
 		rec.last.uuid = r.URL.Query().Get("uuid")
 		rec.last.version = r.URL.Query().Get("version")
 		rec.last.licenseType = r.URL.Query().Get("licensetype")
+		rec.last.internal = r.URL.Query().Get("internal")
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			panic(err)
