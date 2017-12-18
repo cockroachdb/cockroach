@@ -387,9 +387,7 @@ func (tu *tableUpserter) row(
 }
 
 // flush commits to tu.txn any rows batched up in tu.insertRows.
-func (tu *tableUpserter) flush(
-	ctx context.Context, finalize, traceKV bool,
-) (*sqlbase.RowContainer, error) {
+func (tu *tableUpserter) flush(ctx context.Context, traceKV bool) (*sqlbase.RowContainer, error) {
 	tableDesc := tu.tableDesc()
 	existingRows, err := tu.fetchExisting(ctx, traceKV)
 	if err != nil {
@@ -477,7 +475,7 @@ func (tu *tableUpserter) flush(
 		}
 	}
 
-	if finalize && tu.autoCommit {
+	if tu.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
 		// optimization to avoid an extra round-trip to the transaction
 		// coordinator.
@@ -639,7 +637,7 @@ func (tu *tableUpserter) finalize(
 		}
 		return nil, nil
 	}
-	return tu.flush(ctx, true /* finalize */, traceKV)
+	return tu.flush(ctx, traceKV)
 }
 
 func (tu *tableUpserter) tableDesc() *sqlbase.TableDescriptor {
