@@ -1063,7 +1063,6 @@ func (txn *Txn) Send(
 // verifies that if an EndTransactionRequest is included, then it is the last
 // request in the batch.
 func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
-	firstWriteIdx := -1
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
 		if i < len(ba.Requests)-1 /* if not last*/ {
@@ -1072,12 +1071,10 @@ func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
 			}
 		}
 		if roachpb.IsTransactionWrite(args) {
-			if firstWriteIdx == -1 {
-				firstWriteIdx = i
-			}
+			return i, nil
 		}
 	}
-	return firstWriteIdx, nil
+	return -1, nil
 }
 
 // UpdateStateOnRemoteRetryableErr updates the Txn, and the Transaction proto

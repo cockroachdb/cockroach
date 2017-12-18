@@ -1212,6 +1212,13 @@ func (rs RSpan) ContainsKey(key RKey) bool {
 	return bytes.Compare(key, rs.Key) >= 0 && bytes.Compare(key, rs.EndKey) < 0
 }
 
+// ContainsKeyInverted returns whether this span contains the specified key. The
+// receiver span is considered inverted, meaning that instead of containing the
+// range ["key","endKey"), it contains the range ("key","endKey"].
+func (rs RSpan) ContainsKeyInverted(key RKey) bool {
+	return bytes.Compare(key, rs.Key) > 0 && bytes.Compare(key, rs.EndKey) <= 0
+}
+
 // ContainsExclusiveEndKey returns whether this span contains the specified key.
 // A span is considered to include its EndKey (e.g., span ["a", b") contains
 // "b" according to this function, but does not contain "a").
