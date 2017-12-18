@@ -365,7 +365,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) {
+	if types.IsStringType(t) || t == types.Null {
 		expr.Expr = subExpr
 		expr.typ = types.TCollatedString{Locale: expr.Locale}
 		return expr, nil
