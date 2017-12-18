@@ -241,6 +241,7 @@ func (p *csvReporter) doneRows(w io.Writer, seenRows int) error {
 	if cliCtx.displayRowCounts {
 		fmt.Fprintf(w, "# %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
 	}
+	fmt.Fprintln(w)
 	return nil
 }
 
