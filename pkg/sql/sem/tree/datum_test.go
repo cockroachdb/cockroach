@@ -412,6 +412,67 @@ func TestParseDDate(t *testing.T) {
 	}
 }
 
+func TestParseDBool(t *testing.T) {
+	testData := []struct {
+		str      string
+		expected *tree.DBool
+		err      bool
+	}{
+		{str: "t", expected: tree.DBoolTrue},
+		{str: "tr", expected: tree.DBoolTrue},
+		{str: "tru", expected: tree.DBoolTrue},
+		{str: "true", expected: tree.DBoolTrue},
+		{str: "tr", expected: tree.DBoolTrue},
+		{str: "TRUE", expected: tree.DBoolTrue},
+		{str: "tRUe", expected: tree.DBoolTrue},
+		{str: "  tRUe    ", expected: tree.DBoolTrue},
+		{str: "  tR    ", expected: tree.DBoolTrue},
+		{str: "on", expected: tree.DBoolTrue},
+		{str: "On", expected: tree.DBoolTrue},
+		{str: "oN", expected: tree.DBoolTrue},
+		{str: "ON", expected: tree.DBoolTrue},
+		{str: "1", expected: tree.DBoolTrue},
+		{str: "yes", expected: tree.DBoolTrue},
+		{str: "ye", expected: tree.DBoolTrue},
+		{str: "y", expected: tree.DBoolTrue},
+
+		{str: "false", expected: tree.DBoolFalse},
+		{str: "FALSE", expected: tree.DBoolFalse},
+		{str: "fALse", expected: tree.DBoolFalse},
+		{str: "f", expected: tree.DBoolFalse},
+		{str: "off", expected: tree.DBoolFalse},
+		{str: "Off", expected: tree.DBoolFalse},
+		{str: "oFF", expected: tree.DBoolFalse},
+		{str: "OFF", expected: tree.DBoolFalse},
+		{str: "0", expected: tree.DBoolFalse},
+
+		{str: "foo", err: true},
+		{str: "tr ue", err: true},
+		{str: "o", err: true},
+		{str: "", err: true},
+		{str: " ", err: true},
+		{str: "  ", err: true},
+	}
+
+	for _, td := range testData {
+		t.Run(td.str, func(t *testing.T) {
+			result, err := tree.ParseDBool(td.str)
+			if td.err {
+				if err == nil {
+					t.Fatalf("expected parsing %v to error, got %v", td.str, result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected parsing %v to be %s, got error: %s", td.str, td.expected, err)
+			}
+			if *td.expected != *result {
+				t.Fatalf("expected parsing %v to be %s, got %s", td.str, td.expected, result)
+			}
+		})
+	}
+}
+
 func TestParseDTime(t *testing.T) {
 	// Since ParseDTime mostly delegates parsing logic to ParseDTimestamp, we only test a subset of
 	// the timestamp test cases.
