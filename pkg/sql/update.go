@@ -61,7 +61,7 @@ func (p *planner) Update(
 
 	tracing.AnnotateTrace()
 
-	tn, err := p.getAliasedTableName(n.Table)
+	tn, alias, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (p *planner) Update(
 		return nil, err
 	}
 	if err := un.run.initEditNode(
-		ctx, &un.editNodeBase, rows, &un.tw, tn, n.Returning, desiredTypes); err != nil {
+		ctx, &un.editNodeBase, rows, &un.tw, alias, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 	return un, nil

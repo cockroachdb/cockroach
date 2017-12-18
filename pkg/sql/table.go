@@ -575,15 +575,30 @@ func getTableNames(
 	return tableNames, nil
 }
 
-func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, error) {
+// getAliasedTableName returns the underlying table name for a TableExpr that
+// could be either an alias or a normal table name. It also returns the original
+// table name, which will be equal to the alias name if the input is an alias,
+// or identical to the table name if the input is a normal table name.
+func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName, error) {
+	var alias *tree.TableName
 	if ate, ok := n.(*tree.AliasedTableExpr); ok {
 		n = ate.Expr
+		// It's okay to ignore the As columns here, as they're not permitted in
+		// DML aliases where this function is used.
+		alias = &tree.TableName{TableName: ate.As.Alias}
 	}
 	table, ok := n.(*tree.NormalizableTableName)
 	if !ok {
-		return nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	return table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := table.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, nil, err
+	}
+	if alias == nil {
+		alias = tn
+	}
+	return tn, alias, nil
 }
 
 // createSchemaChangeJob finalizes the current mutations in the table
