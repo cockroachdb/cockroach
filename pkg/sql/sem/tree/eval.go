@@ -2886,7 +2886,11 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	switch d := UnwrapDatum(ctx, d).(type) {
+	unwrapped := UnwrapDatum(ctx, d)
+	if unwrapped == DNull {
+		return DNull, nil
+	}
+	switch d := unwrapped.(type) {
 	case *DString:
 		return NewDCollatedString(string(*d), expr.Locale, &ctx.collationEnv), nil
 	case *DCollatedString:

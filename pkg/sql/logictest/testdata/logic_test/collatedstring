@@ -21,6 +21,11 @@ SELECT 'A' COLLATE en
 ----
 A
 
+query T
+SELECT NULL COLLATE en
+----
+NULL
+
 query B
 SELECT 'a' COLLATE en < ('B' COLLATE de) COLLATE en
 ----
@@ -283,7 +288,14 @@ statement ok
 CREATE TABLE foo(a STRING COLLATE en_u_ks_level2)
 
 statement ok
-PREPARE x AS INSERT INTO foo VALUES ($1 COLLATE en_u_ks_level2)
+PREPARE x AS INSERT INTO foo VALUES ($1 COLLATE en_u_ks_level2) RETURNING a
 
-query error incompatible type for COLLATE: NULL
+query T
 EXECUTE x(NULL)
+----
+NULL
+
+query T
+SELECT a FROM foo
+----
+NULL
