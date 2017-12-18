@@ -16,6 +16,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	isatty "github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -51,6 +53,17 @@ type cliContext struct {
 	// Embed the base context.
 	*base.Config
 
+	// isInteractive indicates whether the session is interactive, that
+	// is, the commands executed are extremely likely to be *input* from
+	// a human user: the standard input is a terminal and `-e` was not
+	// used (the shell has a prompt).
+	isInteractive bool
+
+	// terminalOutput indicates whether output is going to a terminal,
+	// that is, it is not going to a file, another program for automated
+	// processing, etc.: the standard output is a terminal.
+	terminalOutput bool
+
 	// tableDisplayFormat indicates how to format result tables.
 	tableDisplayFormat tableDisplayFormat
 
@@ -74,7 +87,15 @@ func GetServerCfgStores() base.StoreSpecList {
 }
 
 var baseCfg = serverCfg.Config
-var cliCtx = cliContext{Config: baseCfg}
+var cliCtx = cliContext{
+	Config: baseCfg,
+
+	terminalOutput: isatty.IsTerminal(os.Stdout.Fd()),
+	// isInteractive is only set to `true` by `cockroach sql` -- all
+	// other client commands are non-interactive, regardless of whether
+	// the standard input is a terminal.
+	isInteractive: false,
+}
 
 type tableDisplayFormat int
 
