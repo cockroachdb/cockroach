@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/rand"
 	"time"
 
 	"github.com/pkg/errors"
@@ -50,6 +51,23 @@ var (
 	// remaining upon acquisition. Exported for testing purposes only.
 	MinSchemaChangeLeaseDuration = time.Minute
 )
+
+// This is a delay [0.1 * asyncSchemaChangeDelay, 1.1 * asyncSchemaChangeDelay)
+// added to an attempt to run a schema change via the asynchronous path.
+// This delay allows the synchronous path to execute the schema change
+// in all likelihood. We'd like the synchronous path to execute
+// the schema change so that it doesn't have to poll and wait for
+// another node to execute the schema change. Polling can add a polling
+// delay to the normal execution of a schema change. This interval is also
+// used to reattempt execution of a schema change. We don't want this to
+// be too low because once a node has started executing a schema change
+// the other nodes should not cause a storm by rapidly try to grab the
+// schema change lease.
+//
+// TODO(mjibson): Refine the job coordinator to elect a new job coordinator
+// on coordinator failure without causing a storm of polling requests
+// attempting to become the job coordinator.
+const asyncSchemaChangeDelay = 30 * time.Second
 
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
@@ -983,18 +1001,13 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
-		// TODO(tschottdorf): it is not clear that inserting this delay is
-		// useful.
-		//
-		// Vivek wrote: I believe the only reason to pace these is to allow
-		// different schema changes to execute on different nodes and distribute
-		// the load. But that was a thought a long time ago. You can safely move
-		// the break inside the if statement.
-		delay := 360 * time.Second
-		if s.testingKnobs.AsyncExecQuickly {
-			delay = 20 * time.Millisecond
-		}
 		for {
+			// A jitter is added to reduce contention between nodes
+			// attempting to run the schema change.
+			delay := time.Duration(float64(asyncSchemaChangeDelay) * (0.1 + rand.Float64()))
+			if s.testingKnobs.AsyncExecQuickly {
+				delay = 20 * time.Millisecond
+			}
 			select {
 			case <-gossipUpdateC:
 				cfg, _ := s.gossip.GetSystemConfig()
@@ -1103,6 +1116,11 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						err := sc.exec(execCtx, false /* inSession */, evalCtx)
 						cleanup()
 
+						// Advance the execAfter time so that this schema
+						// changer doesn't get called again for a while.
+						sc.execAfter = timeutil.Now().Add(delay)
+						s.schemaChangers[tableID] = sc
+
 						if err != nil {
 							if shouldLogSchemaChangeError(err) {
 								log.Warningf(ctx, "Error executing schema change: %s", err)
@@ -1117,9 +1135,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							// We successfully executed the schema change. Delete it.
 							delete(s.schemaChangers, tableID)
 						}
-						// Advance the execAfter time so that this schema
-						// changer doesn't get called again for a while.
-						sc.execAfter = timeutil.Now().Add(delay)
 
 						// Only attempt to run one schema changer.
 						break
