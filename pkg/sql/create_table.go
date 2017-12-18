@@ -131,10 +131,13 @@ func (n *createTableNode) startExec(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	creationTime := params.p.txn.OrigTimestamp()
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx, params.evalCtx)
+		desc, err = makeTableDescIfAs(
+			n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx,
+			params.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
+		desc, err = params.p.makeTableDesc(
+			params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
 	}
 	if err != nil {
 		return err
@@ -817,7 +820,6 @@ func valueEncodePartitionTuple(
 }
 
 func createPartitionedByImpl(
-	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
@@ -897,7 +899,7 @@ func createPartitionedByImpl(
 		if l.Subpartition != nil {
 			newColOffset := colOffset + int(partDesc.NumColumns)
 			subpartitioning, subCheckExpr, err := createPartitionedByImpl(
-				ctx, evalCtx, tableDesc, indexDesc, l.Subpartition, newColOffset)
+				evalCtx, tableDesc, indexDesc, l.Subpartition, newColOffset)
 			if err != nil {
 				return partDesc, nil, err
 			}
@@ -932,20 +934,18 @@ func createPartitionedByImpl(
 // returns a CHECK constraint that can be used to prevent rows that do not
 // belong to any partition from being inserted into the index's table.
 func createPartitionedBy(
-	ctx context.Context,
-	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (sqlbase.PartitioningDescriptor, *sqlbase.TableDescriptor_CheckConstraint, error) {
-	if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
+	if !evalCtx.Settings.Version.IsMinSupported(cluster.VersionPartitioning) {
 		return sqlbase.PartitioningDescriptor{}, nil,
 			errors.New("cluster version does not support partitioning")
 	}
 
 	partitioning, checkExpr, err := createPartitionedByImpl(
-		ctx, evalCtx, tableDesc, indexDesc, partBy, 0 /* colOffset */)
+		evalCtx, tableDesc, indexDesc, partBy, 0 /* colOffset */)
 	if err != nil {
 		return partitioning, nil, err
 	}
@@ -1049,6 +1049,15 @@ func makeTableDescIfAs(
 		desc.AddColumn(*col)
 	}
 
+	if p.Interleave != nil {
+		return desc, pgerror.UnimplementedWithIssueError(20940,
+			"INTERLEAVE IN PARENT is currently unsupported with CREATE TABLE AS")
+	}
+	if p.PartitionBy != nil {
+		return desc, pgerror.UnimplementedWithIssueError(20940,
+			"PARTITION BY is currently unsupported with CREATE TABLE AS")
+	}
+
 	return desc, desc.AllocateIDs()
 }
 
@@ -1121,7 +1130,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PartitionBy != nil {
-				partitioning, _, err := createPartitionedBy(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
+				partitioning, _, err := createPartitionedBy(evalCtx, &desc, &idx, d.PartitionBy)
 				if err != nil {
 					return desc, err
 				}
@@ -1145,7 +1154,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PartitionBy != nil {
-				partitioning, _, err := createPartitionedBy(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
+				partitioning, _, err := createPartitionedBy(evalCtx, &desc, &idx, d.PartitionBy)
 				if err != nil {
 					return desc, err
 				}
@@ -1208,7 +1217,7 @@ func MakeTableDesc(
 
 	if n.PartitionBy != nil {
 		partitioning, check, err := createPartitionedBy(
-			ctx, st, evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy)
+			evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy)
 		if err != nil {
 			return desc, err
 		}

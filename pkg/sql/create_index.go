@@ -72,7 +72,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 	if n.n.PartitionBy != nil {
-		partitioning, _, err := createPartitionedBy(params.ctx, params.p.ExecCfg().Settings,
+		partitioning, _, err := createPartitionedBy(
 			params.evalCtx, n.tableDesc, &indexDesc, n.n.PartitionBy)
 		if err != nil {
 			return err

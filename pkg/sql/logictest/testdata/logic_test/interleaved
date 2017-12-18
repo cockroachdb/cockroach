@@ -377,3 +377,9 @@ END
 
 statement error duplicate key value \(p_id,c_id\)=\(1,1\) violates unique constraint "primary"
 INSERT INTO c20067 VALUES (1, 1, 'John Doe')
+
+# Placeholder error so CREATE TABLE AS parses with INTERLEAVE IN PARENT but
+# fails with a friendly error
+
+statement error unimplemented: INTERLEAVE IN PARENT is currently unsupported with CREATE TABLE AS
+CREATE TABLE err (a) INTERLEAVE IN PARENT p1_1 (i) AS VALUES (1)

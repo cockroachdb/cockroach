@@ -833,6 +833,12 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 			FormatNode(buf, f, node.AsColumnNames)
 			buf.WriteByte(')')
 		}
+		if node.Interleave != nil {
+			FormatNode(buf, f, node.Interleave)
+		}
+		if node.PartitionBy != nil {
+			FormatNode(buf, f, node.PartitionBy)
+		}
 		buf.WriteString(" AS ")
 		FormatNode(buf, f, node.AsSource)
 	} else {
