@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -2242,4 +2243,151 @@ func TestGatewayNodeID(t *testing.T) {
 	if observedNodeID != expNodeID {
 		t.Errorf("got GatewayNodeID=%d, want %d", observedNodeID, expNodeID)
 	}
+}
+
+// Regression test for #20067.
+// If a batch is partitioned into multiple partial batches, the
+// roachpb.Error.Index of each batch should correspond to its original index in
+// the overall batch.
+func TestErrorIndexAlignment(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	nd := &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(1),
+		Address: util.MakeUnresolvedAddr(testAddress.Network(), testAddress.String()),
+	}
+	if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(1)), nd, time.Hour); err != nil {
+		t.Fatal(err)
+
+	}
+
+	// Fill MockRangeDescriptorDB with two descriptors.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: testMetaEndKey,
+		EndKey:   roachpb.RKey("b"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	var descriptor3 = roachpb.RangeDescriptor{
+		RangeID:  4,
+		StartKey: roachpb.RKey("c"),
+		EndKey:   roachpb.RKeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+
+	// The 1st partial batch has 1 request.
+	// The 2nd partial batch has 2 requests.
+	// The 3rd partial batch has 1 request.
+	// Each test case returns an error for the first request of the nth
+	// partial batch.
+	testCases := []struct {
+		// The nth request to return an error.
+		nthPartialBatch  int
+		expectedFinalIdx int32
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 3},
+	}
+
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor1,
+		descriptor2,
+		descriptor3,
+	)
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			nthRequest := 0
+
+			var testFn rpcSendFn = func(
+				_ context.Context,
+				_ SendOptions,
+				_ ReplicaSlice,
+				ba roachpb.BatchRequest,
+				_ *rpc.Context,
+			) (*roachpb.BatchResponse, error) {
+				reply := ba.CreateReply()
+				if nthRequest == tc.nthPartialBatch {
+					reply.Error = &roachpb.Error{
+						// The relative index is always 0 since
+						// we return an error for the first
+						// request of the nthPartialBatch.
+						Index: &roachpb.ErrPosition{Index: 0},
+					}
+				}
+				nthRequest++
+				return reply, nil
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+				Clock:      clock,
+				TestingKnobs: DistSenderTestingKnobs{
+					TransportFactory: adaptLegacyTransport(testFn),
+				},
+				RangeDescriptorDB: descDB,
+			}
+			ds := NewDistSender(cfg, g)
+
+			var ba roachpb.BatchRequest
+			ba.Txn = &roachpb.Transaction{Name: "test"}
+			// First batch has 1 request.
+			val := roachpb.MakeValueFromString("val")
+			ba.Add(roachpb.NewPut(roachpb.Key("a"), val))
+
+			// Second batch has 2 requests.
+			val = roachpb.MakeValueFromString("val")
+			ba.Add(roachpb.NewPut(roachpb.Key("b"), val))
+			val = roachpb.MakeValueFromString("val")
+			ba.Add(roachpb.NewPut(roachpb.Key("bb"), val))
+
+			// Third batch has 1 request.
+			val = roachpb.MakeValueFromString("val")
+			ba.Add(roachpb.NewPut(roachpb.Key("c"), val))
+
+			_, pErr := ds.Send(context.Background(), ba)
+			if pErr == nil {
+				t.Fatalf("expected an error to be returned from distSender")
+			}
+
+			if pErr.Index == nil {
+				t.Fatalf("expected error index to be set")
+			}
+
+			if pErr.Index.Index != tc.expectedFinalIdx {
+				t.Errorf("expected error index to be %d, instead got %d", tc.expectedFinalIdx, pErr.Index.Index)
+			}
+		})
+	}
+
 }
