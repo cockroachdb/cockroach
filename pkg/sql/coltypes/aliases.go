@@ -21,6 +21,7 @@ var (
 	Bool = &TBool{Name: "BOOL"}
 	// Boolean is an immutable T instance.
 	Boolean = &TBool{Name: "BOOLEAN"}
+
 	// Bit is an immutable T instance.
 	Bit = &TInt{Name: "BIT", Width: 1, ImplicitWidth: true}
 	// Int is an immutable T instance.
