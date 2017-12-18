@@ -11,21 +11,21 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph title="Batches" sources={nodeSources}>
-      <Axis>
+      <Axis units={AxisUnits.Count} label="batches">
         <Metric name="cr.node.distsender.batches" title="Batches" nonNegativeRate />
         <Metric name="cr.node.distsender.batches.partial" title="Partial Batches" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="RPCs" sources={nodeSources}>
-      <Axis>
+      <Axis units={AxisUnits.Count} label="rpcs">
         <Metric name="cr.node.distsender.rpc.sent" title="RPCs Sent" nonNegativeRate />
         <Metric name="cr.node.distsender.rpc.sent.local" title="Local Fast-path" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="RPC Errors" sources={nodeSources}>
-      <Axis>
+      <Axis units={AxisUnits.Count} label="rpc error type">
         <Metric name="cr.node.distsender.rpc.sent.sendnexttimeout" title="RPC Timeouts" nonNegativeRate />
         <Metric name="cr.node.distsender.rpc.sent.nextreplicaerror" title="Replica Errors" nonNegativeRate />
         <Metric name="cr.node.distsender.errors.notleaseholder" title="Not Leaseholder Errors" nonNegativeRate />
@@ -33,7 +33,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="KV Transactions" sources={nodeSources}>
-      <Axis>
+      <Axis units={AxisUnits.Count} label="kv transaction type">
         <Metric name="cr.node.txn.commits" title="Committed" nonNegativeRate />
         <Metric name="cr.node.txn.commits1PC" title="Fast-path Committed" nonNegativeRate />
         <Metric name="cr.node.txn.aborts" title="Aborted" nonNegativeRate />
@@ -42,7 +42,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="KV Transaction Restarts" sources={nodeSources}>
-      <Axis>
+      <Axis units={AxisUnits.Count} label="restart type">
         <Metric name="cr.node.txn.restarts.writetooold" title="Write Too Old" nonNegativeRate />
         <Metric name="cr.node.txn.restarts.deleterange" title="Forwarded Timestamp (delete range)" nonNegativeRate />
         <Metric name="cr.node.txn.restarts.serializable" title="Forwarded Timestamp (iso=serializable)" nonNegativeRate />
@@ -53,7 +53,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph title="KV Transaction Durations: 99th percentile"
       tooltip={`The 99th percentile of transaction durations over a 1 minute period.
                               Values are displayed individually for each node on each node.`}>
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="transaction duration">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -71,7 +71,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph title="KV Transaction Durations: 90th percentile"
       tooltip={`The 90th percentile of transaction durations over a 1 minute period.
                               Values are displayed individually for each node on each node.`}>
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="transaction duration">
         {
           _.map(nodeIDs, (node) => (
             <Metric
