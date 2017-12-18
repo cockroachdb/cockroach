@@ -54,8 +54,38 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
+			"INT2",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 16, VisibleType: sqlbase.ColumnType_SMALLINT},
+			true,
+		},
+		{
+			"INT4",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 32, VisibleType: sqlbase.ColumnType_INTEGER},
+			true,
+		},
+		{
+			"INT8",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT},
+			true,
+		},
+		{
+			"INT64",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT},
+			true,
+		},
+		{
+			"BIGINT",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT},
+			true,
+		},
+		{
 			"FLOAT(3)",
 			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT, Precision: 3},
+			true,
+		},
+		{
+			"DOUBLE PRECISION",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT, VisibleType: sqlbase.ColumnType_DOUBLE_PRECISION},
 			true,
 		},
 		{
