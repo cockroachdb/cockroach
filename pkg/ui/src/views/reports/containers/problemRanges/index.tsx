@@ -159,9 +159,10 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 }
 
 export default connect(
-  (state: AdminUIState) => {
+  (state: AdminUIState, props: ProblemRangesProps) => {
+    const nodeID = props.params[nodeIDAttr];
     return {
-      problemRanges: state.cachedData.problemRanges.data,
+      problemRanges: state.cachedData.problemRanges[nodeID] && state.cachedData.problemRanges[nodeID].data,
     };
   },
   {
