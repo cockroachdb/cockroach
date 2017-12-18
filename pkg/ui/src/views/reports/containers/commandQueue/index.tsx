@@ -5,7 +5,6 @@ import React from "react";
 import { connect } from "react-redux";
 
 import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { refreshCommandQueue } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
@@ -13,8 +12,7 @@ import Print from "src/views/reports/containers/range/print";
 import CommandQueueViz from "src/views/reports/containers/commandQueue/commandQueueViz";
 
 interface CommandQueueOwnProps {
-  commandQueueReducerState:
-    CachedDataReducerState<protos.cockroach.server.serverpb.CommandQueueResponse>;
+  commandQueueReducerState: protos.cockroach.server.serverpb.CommandQueueResponse;
   refreshCommandQueue: typeof refreshCommandQueue;
 }
 
@@ -36,11 +34,11 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
   }
 
   renderReportBody() {
-    if (_.isNil(this.props.commandQueueReducerState.data)) {
+    if (_.isNil(this.props.commandQueueReducerState)) {
       return (<p>Loading...</p>);
     }
 
-    const snapshot = this.props.commandQueueReducerState.data.snapshot;
+    const snapshot = this.props.commandQueueReducerState.snapshot;
 
     return (
       <div>
@@ -85,9 +83,10 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
+function mapStateToProps(state: AdminUIState, props: CommandQueueProps) {
+  const rangeID = props.params[rangeIDAttr];
   return {
-    commandQueueReducerState: state.cachedData.commandQueue,
+    commandQueueReducerState: state.cachedData.commandQueue[rangeID] && state.cachedData.commandQueue[rangeID].data,
   };
 }
 
