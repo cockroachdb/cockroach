@@ -21,16 +21,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rootCmd = func() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "docgen",
-		Short: "docgen generates documentation for cockroachdb's SQL functions and grammar",
-	}
-	cmd.AddCommand(functionsCmd, diagramCmd)
-	return cmd
-}()
+var cmds []*cobra.Command
 
 func main() {
+	rootCmd := func() *cobra.Command {
+		cmd := &cobra.Command{
+			Use:   "docgen",
+			Short: "docgen generates documentation for cockroachdb's SQL functions and grammar",
+		}
+		cmd.AddCommand(cmds...)
+		return cmd
+	}()
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

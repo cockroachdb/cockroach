@@ -1,0 +1,2 @@
+show_jobs_stmt ::=
+	'SHOW' 'JOBS'

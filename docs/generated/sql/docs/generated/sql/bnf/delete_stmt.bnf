@@ -1,0 +1,37 @@
+delete_stmt ::=
+	'DELETE' 'FROM' relation_expr 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'AS' unrestricted_name ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'identifier' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' '*' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' 'NOTHING'
+	| 'DELETE' 'FROM' relation_expr 'WHERE' a_expr opt_sort_clause opt_limit_clause 
+	| 'DELETE' 'FROM' relation_expr  opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'AS' unrestricted_name ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr  opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'identifier' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr  opt_sort_clause opt_limit_clause 'RETURNING' a_expr ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr  opt_sort_clause opt_limit_clause 'RETURNING' '*' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr  opt_sort_clause opt_limit_clause 'RETURNING' 'NOTHING'
+	| 'DELETE' 'FROM' relation_expr  opt_sort_clause opt_limit_clause 
+	| 'DELETE' 'FROM' relation_expr name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'AS' unrestricted_name ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'identifier' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' '*' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' 'NOTHING'
+	| 'DELETE' 'FROM' relation_expr name 'WHERE' a_expr opt_sort_clause opt_limit_clause 
+	| 'DELETE' 'FROM' relation_expr name  opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'AS' unrestricted_name ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr name  opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'identifier' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr name  opt_sort_clause opt_limit_clause 'RETURNING' a_expr ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr name  opt_sort_clause opt_limit_clause 'RETURNING' '*' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr name  opt_sort_clause opt_limit_clause 'RETURNING' 'NOTHING'
+	| 'DELETE' 'FROM' relation_expr name  opt_sort_clause opt_limit_clause 
+	| 'DELETE' 'FROM' relation_expr 'AS' name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'AS' unrestricted_name ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'AS' name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'identifier' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'AS' name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' a_expr ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'AS' name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' '*' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'AS' name 'WHERE' a_expr opt_sort_clause opt_limit_clause 'RETURNING' 'NOTHING'
+	| 'DELETE' 'FROM' relation_expr 'AS' name 'WHERE' a_expr opt_sort_clause opt_limit_clause 
+	| 'DELETE' 'FROM' relation_expr 'AS' name  opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'AS' unrestricted_name ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'AS' name  opt_sort_clause opt_limit_clause 'RETURNING' a_expr 'identifier' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'AS' name  opt_sort_clause opt_limit_clause 'RETURNING' a_expr ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'AS' name  opt_sort_clause opt_limit_clause 'RETURNING' '*' ( ( ',' ( a_expr 'AS' unrestricted_name | a_expr 'identifier' | a_expr | '*' ) ) )*
+	| 'DELETE' 'FROM' relation_expr 'AS' name  opt_sort_clause opt_limit_clause 'RETURNING' 'NOTHING'
+	| 'DELETE' 'FROM' relation_expr 'AS' name  opt_sort_clause opt_limit_clause 
