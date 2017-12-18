@@ -38,6 +38,15 @@ type TInt struct {
 	ImplicitWidth bool
 }
 
+var serialIntTypes = map[string]struct{}{
+	SmallSerial.Name: {},
+	Serial.Name:      {},
+	BigSerial.Name:   {},
+	Serial2.Name:     {},
+	Serial4.Name:     {},
+	Serial8.Name:     {},
+}
+
 // Format implements the ColTypeFormatter interface.
 func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
@@ -49,9 +58,8 @@ func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 // IsSerial returns true when this column should be given a DEFAULT of a unique,
 // incrementing function.
 func (node *TInt) IsSerial() bool {
-	return node.Name == Serial.Name || node.Name == SmallSerial.Name ||
-		node.Name == BigSerial.Name || node.Name == Serial2.Name ||
-		node.Name == Serial4.Name || node.Name == Serial8.Name
+	_, ok := serialIntTypes[node.Name]
+	return ok
 }
 
 // TFloat represents a REAL, DOUBLE or FLOAT type.
