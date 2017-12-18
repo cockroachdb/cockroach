@@ -335,20 +335,20 @@ var statusReportParams = map[string]string{
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
 func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error {
+	// Check that the requested user exists and retrieve the hashed
+	// password in case password authentication is needed.
+	exists, hashedPassword, err := sql.GetUserHashedPassword(
+		ctx, c.executor, c.metrics.internalMemMetrics, c.sessionArgs.User,
+	)
+	if err != nil {
+		return c.sendError(err)
+	}
+	if !exists {
+		return c.sendError(errors.Errorf("user %s does not exist", c.sessionArgs.User))
+	}
+
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
 		var authenticationHook security.UserAuthHook
-
-		// Check that the requested user exists and retrieve the hashed
-		// password in case password authentication is needed.
-		exists, hashedPassword, err := sql.GetUserHashedPassword(
-			ctx, c.executor, c.metrics.internalMemMetrics, c.sessionArgs.User,
-		)
-		if err != nil {
-			return c.sendError(err)
-		}
-		if !exists {
-			return c.sendError(errors.Errorf("user %s does not exist", c.sessionArgs.User))
-		}
 
 		tlsState := tlsConn.ConnectionState()
 		// If no certificates are provided, default to password

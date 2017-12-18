@@ -173,6 +173,33 @@ func TestPGWire(t *testing.T) {
 	}
 }
 
+func TestPGWireNonexistentUser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
+		params := base.TestServerArgs{Insecure: insecure}
+		s, _, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(context.TODO())
+
+		var pgURL url.URL
+		if insecure {
+			pgURL = url.URL{
+				Scheme:   "postgres",
+				User:     url.User(server.TestUser),
+				Host:     s.ServingAddr(),
+				RawQuery: "sslmode=disable",
+			}
+		} else {
+			pgURL, _ = sqlutils.PGUrl(t, s.ServingAddr(), "StartServer", url.User(server.TestUser))
+		}
+
+		err := trivialQuery(pgURL)
+		if !testutils.IsError(err, fmt.Sprintf("pq: user %s does not exist", server.TestUser)) {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
 // TestPGWireDrainClient makes sure that in draining mode, the server refuses
 // new connections and allows sessions with ongoing transactions to finish.
 func TestPGWireDrainClient(t *testing.T) {
@@ -189,6 +216,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
+		User:     url.User(security.RootUser),
 		RawQuery: "sslmode=disable",
 	}
 
@@ -260,6 +288,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
+		User:     url.User(security.RootUser),
 		RawQuery: "sslmode=disable",
 	}
 
