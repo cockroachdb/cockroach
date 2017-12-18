@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 )
 
 // This file contains builtin functions that we implement primarily for
@@ -415,6 +416,46 @@ var pgBuiltins = map[string][]tree.Builtin{
 					return nil, err
 				}
 				return tree.MakeDBool(tree.DBool(t != nil)), nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+	"inet_client_addr": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.INet),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+	"inet_client_port": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DZero, nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+	"inet_server_addr": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.INet),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+	"inet_server_port": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DZero, nil
 			},
 			Info: notUsableInfo,
 		},
