@@ -33,8 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+var nodeLivenessLogLimiter = log.EveryN{N: 5 * time.Second}
 
 // nodeLiveness is the subset of storage.NodeLiveness's interface needed
 // by Registry.
@@ -216,7 +219,9 @@ func (r *Registry) Start(
 func (r *Registry) maybeCancelJobs(ctx context.Context, nl nodeLiveness) {
 	liveness, err := nl.Self()
 	if err != nil {
-		log.Warningf(ctx, "unable to get node liveness: %s", err)
+		if nodeLivenessLogLimiter.ShouldLog(timeutil.Now()) {
+			log.Warningf(ctx, "unable to get node liveness: %s", err)
+		}
 		// Conservatively assume our lease has expired. Abort all jobs.
 		r.mu.Lock()
 		defer r.mu.Unlock()
