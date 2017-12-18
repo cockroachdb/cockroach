@@ -1064,7 +1064,7 @@ func MakeTableDesc(
 		return sqlbase.TableDescriptor{}, err
 	}
 	desc := initTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
-
+	nullability := make(map[string]tree.Nullability, len(n.Defs))
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
@@ -1075,6 +1075,7 @@ func MakeTableDesc(
 					)
 				}
 			}
+			nullability[string(d.Name)] = d.Nullable.Nullability
 			col, idx, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
@@ -1170,6 +1171,12 @@ func MakeTableDesc(
 		// Primary index columns are not nullable.
 		for i := range desc.Columns {
 			if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
+				if nullability[desc.Columns[i].Name] == tree.Null {
+					return desc, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+						"column %q cannot be nullable and in the primary key", desc.Columns[i].Name)
+				}
+				// Implicit nullability behavior does not happen if the column
+				// is in the primary key.
 				desc.Columns[i].Nullable = false
 			}
 		}

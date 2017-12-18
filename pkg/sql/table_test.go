@@ -133,11 +133,6 @@ func TestMakeTableDescColumns(t *testing.T) {
 			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
 			false,
 		},
-		{
-			"INT NULL",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-			true,
-		},
 	}
 	for i, d := range testData {
 		s := "CREATE TABLE foo.test (a " + d.sqlType + " PRIMARY KEY, b " + d.sqlType + ")"

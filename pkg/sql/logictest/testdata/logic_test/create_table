@@ -1,0 +1,10 @@
+# LogicTest: default parallel-stmts distsql
+
+statement error column "id" cannot be nullable and in the primary key
+CREATE TABLE test1 (id INT NULL PRIMARY KEY)
+
+statement error column "id" cannot be nullable and in the primary key
+CREATE TABLE test2 (id INT NULL, PRIMARY KEY (id))
+
+statement error column "id" cannot be nullable and in the primary key
+CREATE TABLE test3 (id INT NULL, data INT, PRIMARY KEY (id, data))
