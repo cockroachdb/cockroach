@@ -1916,9 +1916,9 @@ type EvalPlanner interface {
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] table_name [ @ index_name ]`.
-	// If the table name is not given, it uses the search path to find it, and sets it
-	// on the returned TableName.
-	// It returns an error if the table deson't exist.
+	// If the database name is not given, it uses the search path to find it, and
+	// sets it on the returned TableName.
+	// It returns an error if the table doesn't exist.
 	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
 
 	// ParseType parses a column type.
@@ -2780,9 +2780,8 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			// Trim whitespace and unwrap outer quotes if necessary.
 			// This is required to mimic postgres.
 			s = strings.TrimSpace(s)
-			var hadQuotes bool
+			origS := s
 			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
-				hadQuotes = true
 				s = s[1 : len(s)-1]
 			}
 
@@ -2824,19 +2823,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				return queryOid(ctx, typ, NewDString(s))
 
 			case coltypes.RegClass:
-				// Resolving a table name requires looking at the search path to
-				// determine the database that owns it.
-				// If the table wasn't quoted, normalize it. This matches the behavior
-				// when creating tables - table names are normalized (downcased) unless
-				// they're double quoted.
-				if !hadQuotes {
-					s = Name(s).Normalize()
-				}
-				t := &NormalizableTableName{
-					TableNameReference: UnresolvedName{
-						Name(s),
-					}}
-				tn, err := ctx.Planner.QualifyWithDatabase(ctx.Ctx(), t)
+				tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), origS)
 				if err != nil {
 					return nil, err
 				}
