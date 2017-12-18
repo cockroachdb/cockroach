@@ -40,6 +40,8 @@ var (
 	oidZero   = tree.NewDOid(0)
 	zeroVal   = tree.DZero
 	negOneVal = tree.NewDInt(-1)
+
+	passwdStarString = tree.NewDString("********")
 )
 
 const (
@@ -75,6 +77,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogRolesTable,
 		pgCatalogSequencesTable,
 		pgCatalogSettingsTable,
+		pgCatalogUserTable,
 		pgCatalogTablesTable,
 		pgCatalogTablespaceTable,
 		pgCatalogTypeTable,
@@ -1247,18 +1250,18 @@ CREATE TABLE pg_catalog.pg_roles (
 			func(username string) error {
 				isRoot := tree.DBool(username == security.RootUser)
 				return addRow(
-					h.UserOid(username),         // oid
-					tree.NewDName(username),     // rolname
-					tree.MakeDBool(isRoot),      // rolsuper
-					tree.MakeDBool(false),       // rolinherit
-					tree.MakeDBool(isRoot),      // rolcreaterole
-					tree.MakeDBool(isRoot),      // rolcreatedb
-					tree.MakeDBool(false),       // rolcatupdate
-					tree.MakeDBool(true),        // rolcanlogin
-					negOneVal,                   // rolconnlimit
-					tree.NewDString("********"), // rolpassword
-					tree.DNull,                  // rolvaliduntil
-					tree.NewDString("{}"),       // rolconfig
+					h.UserOid(username),     // oid
+					tree.NewDName(username), // rolname
+					tree.MakeDBool(isRoot),  // rolsuper
+					tree.MakeDBool(false),   // rolinherit
+					tree.MakeDBool(isRoot),  // rolcreaterole
+					tree.MakeDBool(isRoot),  // rolcreatedb
+					tree.MakeDBool(false),   // rolcatupdate
+					tree.MakeDBool(true),    // rolcanlogin
+					negOneVal,               // rolconnlimit
+					passwdStarString,        // rolpassword
+					tree.DNull,              // rolvaliduntil
+					tree.NewDString("{}"),   // rolconfig
 				)
 			})
 	},
@@ -1563,6 +1566,41 @@ CREATE TABLE pg_catalog.pg_type (
 			}
 		}
 		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/view-pg-user.html
+var pgCatalogUserTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_user (
+  usename NAME,
+  usesysid OID,
+  usecreatedb BOOL,
+  usesuper BOOL,
+  userepl  BOOL,
+  usebypassrls BOOL,
+  passwd TEXT,
+  valuntil TIMESTAMP,
+  useconfig TEXT[]
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachUser(ctx, p,
+			func(username string) error {
+				isRoot := tree.DBool(username == security.RootUser)
+				return addRow(
+					tree.NewDName(username), // usename
+					h.UserOid(username),     // usesysid
+					tree.MakeDBool(isRoot),  // usecreatedb
+					tree.MakeDBool(isRoot),  // usesuper
+					tree.DBoolFalse,         // userepl
+					tree.DBoolFalse,         // usebypassrls
+					passwdStarString,        // passwd
+					tree.DNull,              // valuntil
+					tree.DNull,              // useconfig
+				)
+			})
 	},
 }
 
