@@ -64,7 +64,7 @@ export default function (props: GraphDashboardProps) {
       title="Active Flows for Distributed SQL Queries"
       tooltip="The number of flows on each node contributing to currently running distributed SQL queries."
     >
-      <Axis units={AxisUnits.Count} label="active flows">
+      <Axis units={AxisUnits.Count} label="flows">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -87,7 +87,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Duration} label="service latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -111,7 +111,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Duration} label="service latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -133,7 +133,7 @@ export default function (props: GraphDashboardProps) {
            10 second periods ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Duration} label="service latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -155,7 +155,7 @@ export default function (props: GraphDashboardProps) {
            10 second periods ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Duration} label="service latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -177,7 +177,7 @@ export default function (props: GraphDashboardProps) {
           1 minute period. Values are displayed individually for each node on each node.`
       }
     >
-      <Axis units={AxisUnits.Duration} label="execution latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -199,7 +199,7 @@ export default function (props: GraphDashboardProps) {
            1 minute period. Values are displayed individually for each node on each node.`
       }
     >
-      <Axis units={AxisUnits.Duration} label="execution latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -235,7 +235,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tooltip={`The total number of DDL statements per second ${tooltipSelection}.`}
     >
-      <Axis units={AxisUnits.Count} label="schema changes">
+      <Axis units={AxisUnits.Count} label="statements">
         <Metric name="cr.node.sql.ddl.count" title="DDL Statements" nonNegativeRate />
       </Axis>
     </LineGraph>,

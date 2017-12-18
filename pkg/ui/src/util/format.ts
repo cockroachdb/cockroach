@@ -73,12 +73,24 @@ export function Percentage(numerator: number, denominator: number): string {
 }
 
 /**
+ * ComputeDurationScale calculates an appropriate scale factor and unit to use
+ * to display a given duration value, without actually converting the value.
+ */
+export function ComputeDurationScale(nanoseconds: number): UnitValue {
+ const scale = ComputePrefixExponent(nanoseconds, 1000, durationUnits);
+ return {
+   value: Math.pow(1000, scale),
+   units: durationUnits[scale],
+ };
+}
+
+/**
  * Duration creates a string representation for a duration. The expectation is
  * that units are passed in nanoseconds; for larger durations, the value will
  * be converted into larger units.
  */
 export function Duration(nanoseconds: number): string {
-  const scale = ComputePrefixExponent(nanoseconds, 1000, durationUnits);
-  const unitVal = nanoseconds / Math.pow(1000, scale);
-  return unitVal.toFixed(1) + " " + durationUnits[scale];
+  const scale = ComputeDurationScale(nanoseconds);
+  const unitVal = nanoseconds / scale.value;
+  return unitVal.toFixed(1) + " " + scale.units;
 }

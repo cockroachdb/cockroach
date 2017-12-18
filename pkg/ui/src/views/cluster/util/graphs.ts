@@ -6,7 +6,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputePrefixExponent, ComputeByteScale, Duration } from "src/util/format";
+import { Bytes, ComputeByteScale, ComputeDurationScale, Duration } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -163,15 +163,13 @@ function ComputeByteAxisDomain(extent: Extent): AxisDomain {
   return axisDomain;
 }
 
-const durationLabels = ["nanoseconds", "microseconds", "milliseconds", "seconds"];
-
 function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
-  const prefixExponent = ComputePrefixExponent(extent[1], 1000, durationLabels);
-  const prefixFactor = Math.pow(1000, prefixExponent);
+  const scale = ComputeDurationScale(extent[1]);
+  const prefixFactor = scale.value;
 
   const axisDomain = computeAxisDomain(extent, prefixFactor);
 
-  axisDomain.label = durationLabels[prefixExponent];
+  axisDomain.label = scale.units;
 
   axisDomain.guideFormat = Duration;
   return axisDomain;
@@ -338,9 +336,9 @@ export function ConfigureLineChart(
     yAxisDomain = calculateYAxisDomain(axis.props.units, data);
 
     chart.yDomain(yAxisDomain.extent);
-    if (axis.props.label) {
+    if (axis.props.label && yAxisDomain.label) {
       chart.yAxis.axisLabel(`${axis.props.label} (${yAxisDomain.label})`);
-    } else {
+    } else if (axis.props.label) {
       chart.yAxis.axisLabel(yAxisDomain.label);
     }
     chart.xDomain(xAxisDomain.extent);

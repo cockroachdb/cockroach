@@ -67,7 +67,7 @@ export default function (props: GraphDashboardProps) {
         `The number of times that Go’s garbage collector was invoked per second ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Count} label="gc runs">
+      <Axis units={AxisUnits.Count} label="runs">
         <Metric name="cr.node.sys.gc.count" title="GC Runs" nonNegativeRate />
       </Axis>
     </LineGraph>,

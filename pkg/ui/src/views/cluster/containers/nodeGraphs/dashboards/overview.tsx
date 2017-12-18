@@ -37,7 +37,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Duration} label="service latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
