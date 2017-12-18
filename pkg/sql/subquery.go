@@ -309,7 +309,7 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 	// Calling newPlan() might recursively invoke expandSubqueries, so we need to preserve
 	// the state of the visitor across the call to newPlan().
 	visitorCopy := v.planner.subqueryVisitor
-	plan, err := v.planner.newPlan(v.ctx, sq.Select, nil)
+	plan, err := v.planner.newPlan(v.ctx, sq.Select, nil /* desiredTypes */)
 	v.planner.subqueryVisitor = visitorCopy
 	if err != nil {
 		v.err = err

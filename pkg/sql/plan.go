@@ -193,7 +193,7 @@ var _ planNodeFastPath = &setZoneConfigNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
-	plan, err := p.newPlan(ctx, stmt.AST, nil)
+	plan, err := p.newPlan(ctx, stmt.AST, nil /* desiredTypes */)
 	if err != nil {
 		return nil, err
 	}
