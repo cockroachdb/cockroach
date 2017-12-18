@@ -86,6 +86,45 @@ func (p *planner) showCreateView(
 	return buf.String(), nil
 }
 
+func (p *planner) printForeignKeyConstraint(
+	ctx context.Context, buf *bytes.Buffer, dbPrefix string, idx sqlbase.IndexDescriptor,
+) error {
+	fk := idx.ForeignKey
+	if !fk.IsSet() {
+		return nil
+	}
+	fkTable, err := p.session.tables.getTableVersionByID(ctx, p.txn, fk.Table)
+	if err != nil {
+		return err
+	}
+	fkDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, fkTable.ParentID)
+	if err != nil {
+		return err
+	}
+	fkIdx, err := fkTable.FindIndexByID(fk.Index)
+	if err != nil {
+		return err
+	}
+	fkTableName := tree.TableName{
+		DatabaseName:            tree.Name(fkDb.Name),
+		TableName:               tree.Name(fkTable.Name),
+		DBNameOriginallyOmitted: fkDb.Name == dbPrefix,
+	}
+	fmt.Fprintf(buf, "FOREIGN KEY (%s) REFERENCES %s (%s)",
+		quoteNames(idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...),
+		&fkTableName,
+		quoteNames(fkIdx.ColumnNames...),
+	)
+	idx.ColNamesString()
+	if fk.OnDelete != sqlbase.ForeignKeyReference_NO_ACTION {
+		fmt.Fprintf(buf, " ON DELETE %s", fk.OnDelete.String())
+	}
+	if fk.OnUpdate != sqlbase.ForeignKeyReference_NO_ACTION {
+		fmt.Fprintf(buf, " ON UPDATE %s", fk.OnUpdate.String())
+	}
+	return nil
+}
+
 // showCreateTable returns a valid SQL representation of the CREATE
 // TABLE statement used to create the given table.
 //
@@ -110,43 +149,18 @@ func (p *planner) showCreateTable(
 		buf.WriteString(col.SQLString())
 		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primary if the primary key is on a visible column (not rowid).
-			primary = fmt.Sprintf(",\n\tCONSTRAINT %s PRIMARY KEY (%s)",
+			primary = fmt.Sprintf(",\n\tCONSTRAINT %s %s",
 				quoteNames(desc.PrimaryIndex.Name),
-				desc.PrimaryIndex.ColNamesString(),
+				desc.PrimaryKeyString(),
 			)
 		}
 	}
 	buf.WriteString(primary)
 	for _, idx := range append(desc.Indexes, desc.PrimaryIndex) {
 		if fk := idx.ForeignKey; fk.IsSet() {
-			fkTable, err := p.session.tables.getTableVersionByID(ctx, p.txn, fk.Table)
-			if err != nil {
+			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s ", tree.Name(fk.Name))
+			if err := p.printForeignKeyConstraint(ctx, &buf, dbPrefix, idx); err != nil {
 				return "", err
-			}
-			fkDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, fkTable.ParentID)
-			if err != nil {
-				return "", err
-			}
-			fkIdx, err := fkTable.FindIndexByID(fk.Index)
-			if err != nil {
-				return "", err
-			}
-			fkTableName := tree.TableName{
-				DatabaseName:            tree.Name(fkDb.Name),
-				TableName:               tree.Name(fkTable.Name),
-				DBNameOriginallyOmitted: fkDb.Name == dbPrefix,
-			}
-			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-				tree.Name(fk.Name),
-				quoteNames(idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...),
-				&fkTableName,
-				quoteNames(fkIdx.ColumnNames...),
-			)
-			if fk.OnDelete != sqlbase.ForeignKeyReference_NO_ACTION {
-				fmt.Fprintf(&buf, " ON DELETE %s", fk.OnDelete.String())
-			}
-			if fk.OnUpdate != sqlbase.ForeignKeyReference_NO_ACTION {
-				fmt.Fprintf(&buf, " ON UPDATE %s", fk.OnUpdate.String())
 			}
 		}
 		if idx.ID != desc.PrimaryIndex.ID {

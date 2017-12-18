@@ -1399,6 +1399,14 @@ func PrintPartitioningTuple(buf *bytes.Buffer, datums []tree.Datum, numColumns i
 	}
 }
 
+// PrimaryKeyString returns the pretty-printed primary key declaration for a
+// table descriptor.
+func (desc *TableDescriptor) PrimaryKeyString() string {
+	return fmt.Sprintf("PRIMARY KEY (%s)",
+		desc.PrimaryIndex.ColNamesString(),
+	)
+}
+
 // validatePartitioningDescriptor validates that a PartitioningDescriptor, which
 // may represent a subpartition, is well-formed. Checks include validating the
 // table-level uniqueness of all partition names, validating that the encoded
