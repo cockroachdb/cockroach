@@ -14,7 +14,7 @@ CREATE TABLE t (a INT PRIMARY KEY DEFAULT b)
 
 # Issue #14308: support tables with DEFAULT NULL columns.
 statement ok
-CREATE TABLE null_default (ts TIMESTAMP PRIMARY KEY NULL DEFAULT NULL)
+CREATE TABLE null_default (ts TIMESTAMP NULL DEFAULT NULL)
 
 # Aggregate function calls in CHECK are not ok.
 statement error aggregate functions are not allowed in DEFAULT expressions

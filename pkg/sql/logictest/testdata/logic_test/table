@@ -76,27 +76,15 @@ c      c_bar_key      true    2    id      ASC        false    true
 
 # primary keys can never be null
 
-statement ok
+statement error column "id" cannot be nullable and in the primary key
 CREATE TABLE d (
   id    INT PRIMARY KEY NULL
 )
 
-query TTBTT colnames
-SHOW COLUMNS FROM d
-----
-Field Type   Null  Default Indices
-id    INT    false NULL    {"primary"}
-
-statement ok
+statement error column "id" cannot be nullable and in the primary key
 CREATE TABLE e (
   id    INT NULL PRIMARY KEY
 )
-
-query TTBTT colnames
-SHOW COLUMNS FROM e
-----
-Field Type   Null   Default Indices
-id    INT    false  NULL    {"primary"}
 
 statement ok
 CREATE TABLE f (
@@ -120,8 +108,6 @@ SHOW TABLES FROM test
 a
 b
 c
-d
-e
 f
 
 statement ok

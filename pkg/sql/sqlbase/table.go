@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -196,6 +197,10 @@ func MakeColumnDefDescs(
 	if d.HasFKConstraint() {
 		// Should never happen since `HoistConstraints` moves these to table level
 		return nil, nil, errors.New("unexpected column REFERENCED constraint")
+	}
+	if d.PrimaryKey && d.Nullable.Nullability == tree.Null {
+		return nil, nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+			"column %q cannot be nullable and in the primary key", d.Name)
 	}
 
 	if d.HasDefaultExpr() {
