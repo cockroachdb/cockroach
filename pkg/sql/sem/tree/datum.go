@@ -200,16 +200,57 @@ func makeUnsupportedComparisonMessage(d1, d2 Datum) string {
 	return fmt.Sprintf("unsupported comparison: %s to %s", d1.ResolvedType(), d2.ResolvedType())
 }
 
+func isCaseInsensitivePrefix(prefix, s string) bool {
+	if len(prefix) > len(s) {
+		return false
+	}
+	return strings.EqualFold(prefix, s[:len(prefix)])
+}
+
 // ParseDBool parses and returns the *DBool Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
+// See https://github.com/postgres/postgres/blob/90627cf98a8e7d0531789391fd798c9bfcc3bc1a/src/backend/utils/adt/bool.c#L36
 func ParseDBool(s string) (*DBool, error) {
-	// TODO(pmattis): strconv.ParseBool is more permissive than the SQL
-	// spec. Is that ok?
-	b, err := strconv.ParseBool(s)
-	if err != nil {
-		return nil, makeParseError(s, types.Bool, err)
+	s = strings.TrimSpace(s)
+	if len(s) >= 1 {
+		switch s[0] {
+		case 't', 'T':
+			if isCaseInsensitivePrefix(s, "true") {
+				return DBoolTrue, nil
+			}
+		case 'f', 'F':
+			if isCaseInsensitivePrefix(s, "false") {
+				return DBoolFalse, nil
+			}
+		case 'y', 'Y':
+			if isCaseInsensitivePrefix(s, "yes") {
+				return DBoolTrue, nil
+			}
+		case 'n', 'N':
+			if isCaseInsensitivePrefix(s, "no") {
+				return DBoolFalse, nil
+			}
+		case '1':
+			if s == "1" {
+				return DBoolTrue, nil
+			}
+		case '0':
+			if s == "0" {
+				return DBoolFalse, nil
+			}
+		case 'o', 'O':
+			// Just 'o' is ambiguous between 'on' and 'off'.
+			if len(s) > 1 {
+				if isCaseInsensitivePrefix(s, "on") {
+					return DBoolTrue, nil
+				}
+				if isCaseInsensitivePrefix(s, "off") {
+					return DBoolFalse, nil
+				}
+			}
+		}
 	}
-	return MakeDBool(DBool(b)), nil
+	return nil, makeParseError(s, types.Bool, pgerror.NewError(pgerror.CodeInvalidTextRepresentationError, "invalid bool value"))
 }
 
 // ParseDByte parses a string representation of hex encoded binary data.
