@@ -10,7 +10,7 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph title="Live Node Count" tooltip="The number of live nodes in the cluster.">
-      <Axis>
+      <Axis label="nodes">
         <Metric name="cr.node.liveness.livenodes" title="Live Nodes" aggregateMax />
       </Axis>
     </LineGraph>,
@@ -53,7 +53,7 @@ export default function (props: GraphDashboardProps) {
            This count should rise and fall based on load.`
       }
     >
-      <Axis>
+      <Axis label="goroutines">
         <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
       </Axis>
     </LineGraph>,
@@ -67,7 +67,7 @@ export default function (props: GraphDashboardProps) {
         `The number of times that Go’s garbage collector was invoked per second ${tooltipSelection}.`
       }
     >
-      <Axis>
+      <Axis label="runs">
         <Metric name="cr.node.sys.gc.count" title="GC Runs" nonNegativeRate />
       </Axis>
     </LineGraph>,
@@ -81,7 +81,7 @@ export default function (props: GraphDashboardProps) {
            During garbage collection, application code execution is paused.`
       }
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="pause time">
         <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />
       </Axis>
     </LineGraph>,
@@ -94,7 +94,7 @@ export default function (props: GraphDashboardProps) {
            and system-level operations (Sys) ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="cpu time">
         <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
         <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
         <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />

@@ -10,7 +10,7 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph title="Queue Processing Failures" sources={storeSources}>
-      <Axis>
+      <Axis label="failures">
         <Metric name="cr.store.queue.gc.process.failure" title="GC" nonNegativeRate />
         <Metric name="cr.store.queue.replicagc.process.failure" title="Replica GC" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.process.failure" title="Replication" nonNegativeRate />
@@ -22,7 +22,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Queue Processing Times" sources={storeSources}>
-      <Axis units={AxisUnits.Duration}>
+      <Axis units={AxisUnits.Duration} label="processing time">
         <Metric name="cr.store.queue.gc.processingnanos" title="GC" nonNegativeRate />
         <Metric name="cr.store.queue.replicagc.processingnanos" title="Replica GC" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.processingnanos" title="Replication" nonNegativeRate />
@@ -37,7 +37,7 @@ export default function (props: GraphDashboardProps) {
     // nanos" on the graph, but that has a time unit instead of a count
     // unit, and thus we need support for multi-axis graphs.
     <LineGraph title="Replica GC Queue" sources={storeSources}>
-      <Axis>
+      <Axis label="actions">
         <Metric name="cr.store.queue.replicagc.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicagc.pending" title="Pending Actions" downsampleMax />
         <Metric name="cr.store.queue.replicagc.removereplica" title="Replicas Removed / sec" nonNegativeRate />
@@ -45,7 +45,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Replication Queue" sources={storeSources}>
-      <Axis>
+      <Axis label="actions">
         <Metric name="cr.store.queue.replicate.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.replicate.pending" title="Pending Actions" />
         <Metric name="cr.store.queue.replicate.addreplica" title="Replicas Added / sec" nonNegativeRate />
@@ -58,35 +58,35 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Split Queue" sources={storeSources}>
-      <Axis>
+      <Axis label="actions">
         <Metric name="cr.store.queue.split.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.split.pending" title="Pending Actions" downsampleMax />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="GC Queue" sources={storeSources}>
-      <Axis>
+      <Axis label="actions">
         <Metric name="cr.store.queue.gc.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.gc.pending" title="Pending Actions" downsampleMax />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Raft Log Queue" sources={storeSources}>
-      <Axis>
+      <Axis label="actions">
         <Metric name="cr.store.queue.raftlog.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.raftlog.pending" title="Pending Actions" downsampleMax />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Consistency Checker Queue" sources={storeSources}>
-      <Axis>
+      <Axis label="actions">
         <Metric name="cr.store.queue.consistency.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.consistency.pending" title="Pending Actions" downsampleMax />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Time Series Maintenance Queue" sources={storeSources}>
-      <Axis>
+      <Axis label="actions">
         <Metric name="cr.store.queue.tsmaintenance.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.tsmaintenance.pending" title="Pending Actions" downsampleMax />
       </Axis>
