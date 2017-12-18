@@ -95,9 +95,13 @@ eexpect root@
 end_test
 
 start_test "Check that \\set can change the display of query times"
-# by default, times are not displayed because we started with --display=tsv.
+# check the override
+send "\\unset show_times\r\\set\r"
+eexpect "show_times\tfalse"
+eexpect root@
 send "select 1;\r"
 eexpect "1 row"
+# by default, times are not displayed because we started with --display=tsv.
 expect {
     "Time:" {
 	report "unexpected Time"
@@ -105,16 +109,9 @@ expect {
     }
     root@ {}
 }
-# check the override
-send "\\set show_times\r\\set\r"
-eexpect "show_times\ttrue"
-eexpect root@
-send "select 1;\r"
-eexpect "1 row"
-eexpect "Time:"
 eexpect root@
 # restore
-send "\\unset show_times\r"
+send "\\set show_times\r"
 end_test
 
 start_test "Check that \\h with invalid commands print a reminder."

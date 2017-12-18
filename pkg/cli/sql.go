@@ -1021,9 +1021,9 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		}
 		switch state {
 		case cliStart:
-			// If results are shown on a terminal and the table display
-			// format is "pretty", also enable printing of times.
-			if cliCtx.terminalOutput && cliCtx.tableDisplayFormat == tableDisplayPretty {
+			if cliCtx.terminalOutput {
+				// If results are shown on a terminal also enable printing of
+				// times by default.
 				cliCtx.showTimes = true
 			}
 
