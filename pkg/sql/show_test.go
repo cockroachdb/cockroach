@@ -312,11 +312,11 @@ func TestShowCreateView(t *testing.T) {
 		},
 		{
 			`CREATE VIEW %s AS SELECT count(*) FROM t`,
-			`CREATE VIEW %s ("count(*)") AS SELECT count(*) FROM d.t`,
+			`CREATE VIEW %s (count) AS SELECT count(*) FROM d.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT`,
-			`CREATE VIEW %s (s, "count(*)") AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
+			`CREATE VIEW %s (s, count) AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
 		},
 		{
 			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
