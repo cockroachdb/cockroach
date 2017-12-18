@@ -109,9 +109,57 @@ func (st SafeType) SafeMessage() string {
 	return fmt.Sprintf("%v", st.V)
 }
 
+// Error implements error as a convenience.
+func (st SafeType) Error() string {
+	return st.SafeMessage()
+}
+
+// SafeType implements fmt.Stringer as a convenience.
+func (st SafeType) String() string {
+	return st.SafeMessage()
+}
+
 // Safe constructs a SafeType.
 func Safe(v interface{}) SafeType {
 	return SafeType{V: v}
+}
+
+type causer interface {
+	Cause() error
+}
+
+type chainErr struct {
+	err   error
+	cause interface{}
+}
+
+var _ causer = &chainErr{}
+
+// Error implements error.
+func (ce *chainErr) Error() string {
+	return fmt.Sprintf("%s; caused by %v", ce.err, ce.cause)
+}
+
+// Cause returns the cause of this error. If the cause did not implement
+// `error`, it will be returned as a string error.
+func (ce *chainErr) Cause() error {
+	if err, ok := ce.cause.(error); ok {
+		return err
+	}
+	return errors.Errorf("%v", ce.cause)
+}
+
+// Chain links an error and a casuse together in a way that allows error
+// reporting to redact and report them both (something that is not possible with
+// `errors.Wrap{,f}`).
+//
+// TODO(tschottdorf): we should improve `pkg/errors` and remedy that (or fork it
+// if they're opposed to that change).
+func Chain(parent error, child interface{}) error {
+	return &chainErr{
+		err:   parent,
+		cause: child,
+	}
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
@@ -279,10 +327,6 @@ func redact(r interface{}) string {
 		}
 		// Whitelisted sentinel error.
 		return typAnd(r, r.(error).Error())
-	}
-
-	type causer interface {
-		Cause() error
 	}
 
 	reportable := handle(r)

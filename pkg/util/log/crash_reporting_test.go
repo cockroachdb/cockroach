@@ -156,3 +156,19 @@ func TestUptimeTag(t *testing.T) {
 		}
 	}
 }
+
+func TestChain(t *testing.T) {
+	cause := string("banana")
+	parentErr := errors.New("yellow")
+	err := Chain(parentErr, cause)
+
+	causeErr := err.(causer).Cause()
+
+	if a, e := causeErr.Error(), cause; a != e {
+		t.Fatalf("expected %s, got %s", e, a)
+	}
+
+	if e, a := "yellow; caused by banana", err.Error(); a != e {
+		t.Fatalf("expected %s, got %s", e, a)
+	}
+}

@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"regexp"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -1383,15 +1385,41 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 
 // maybeRecover catches SQL panics and does some log reporting before
 // propagating the panic further.
+//
 // TODO(knz): this is where we can place code to recover from
 // recoverable panics.
 func (s *Session) maybeRecover(action, stmt string) {
 	if r := recover(); r != nil {
-		err := errors.Errorf("panic while %s %q: %s", action, stmt, r)
+		var anonymized []string
+		{
+			stmts, err := parser.Parse(stmt)
+			if err == nil {
+				var buf bytes.Buffer
+				for _, stmt := range NewStatementList(stmts) {
+					buf.Reset()
+					tree.FormatNode(&buf, tree.FmtHideConstants, stmt.AST)
+					anonymized = append(anonymized, buf.String())
+				}
+			}
+		}
+		anonStmtsStr := strings.Join(anonymized, "; ")
+		const cutoff = 500
+		if len(anonStmtsStr) > cutoff {
+			anonStmtsStr = anonStmtsStr[:cutoff] + " [...]"
+		}
+		if len(stmt) > cutoff {
+			stmt = stmt[:500] + " [...]"
+		}
 
-		// A short warning header guaranteed to go to stderr.
+		safeErr := log.Chain(
+			log.Safe(fmt.Sprintf("panic while %s %d statements: %s", action, len(anonymized), anonStmtsStr)),
+			r,
+		)
+
+		// A warning header guaranteed to go to stderr. This is unanonymized.
 		log.Shout(s.Ctx(), log.Severity_ERROR,
-			"a SQL panic has occurred!")
+			fmt.Sprintf("a SQL panic has occurred while %s %q: %s",
+				action, stmt, r))
 		// TODO(knz): log panic details to logs once panics
 		// are not propagated to the top-level and printed out by the Go runtime.
 
@@ -1402,7 +1430,7 @@ func (s *Session) maybeRecover(action, stmt string) {
 		s.EmergencyClose()
 
 		// Propagate the panic further.
-		panic(err)
+		panic(safeErr)
 	}
 }
 
