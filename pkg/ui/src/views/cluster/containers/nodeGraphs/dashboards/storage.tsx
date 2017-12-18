@@ -15,7 +15,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tooltip={`Summary of total and available capacity ${tooltipSelection}.`}
     >
-      <Axis units={AxisUnits.Bytes} label="storage capacity">
+      <Axis units={AxisUnits.Bytes} label="capacity">
         <Metric name="cr.store.capacity" title="Capacity" />
         <Metric name="cr.store.capacity.available" title="Available" />
         <Metric name="cr.store.capacity.used" title="Used" />
@@ -41,7 +41,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tooltip={`The 99th %ile latency for commits to the Raft Log.`}
     >
-      <Axis units={AxisUnits.Duration} label="commit latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (nid) => (
             <Metric
@@ -60,7 +60,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tooltip={`The 99th %ile latency for commits of Raft commands.`}
     >
-      <Axis units={AxisUnits.Duration} label="commit latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (nid) => (
             <Metric
@@ -82,7 +82,7 @@ export default function (props: GraphDashboardProps) {
            executed per logical read operation ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Count} label="read amplification">
+      <Axis label="factor">
         <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" aggregateAvg />
       </Axis>
     </LineGraph>,
@@ -92,7 +92,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tooltip={`The number of RocksDB SSTables in use ${tooltipSelection}.`}
     >
-      <Axis units={AxisUnits.Count} label="sstables">
+      <Axis label="sstables">
         <Metric name="cr.store.rocksdb.num-sstables" title="SSTables" />
       </Axis>
     </LineGraph>,
@@ -105,7 +105,7 @@ export default function (props: GraphDashboardProps) {
           file descriptor limit.`
       }
     >
-      <Axis units={AxisUnits.Count} label="file descriptors">
+      <Axis label="descriptors">
         <Metric name="cr.node.sys.fd.open" title="Open" />
         <Metric name="cr.node.sys.fd.softlimit" title="Limit" />
       </Axis>

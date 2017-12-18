@@ -19,7 +19,7 @@ export default function (props: GraphDashboardProps) {
         started per second ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Count} label="queries">
+      <Axis label="queries">
         <Metric name="cr.node.sql.select.count" title="Total Reads" nonNegativeRate />
         <Metric name="cr.node.sql.distsql.select.count" title="DistSQL Reads" nonNegativeRate />
         <Metric name="cr.node.sql.update.count" title="Updates" nonNegativeRate />
@@ -37,7 +37,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Duration} label="service latency">
+      <Axis units={AxisUnits.Duration} label="latency">
         {
           _.map(nodeIDs, (node) => (
             <Metric
@@ -61,7 +61,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Count} label="replicas">
+      <Axis label="replicas">
         {
           _.map(nodeIDs, (nid) => (
             <Metric
