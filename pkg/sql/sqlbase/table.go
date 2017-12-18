@@ -1874,9 +1874,12 @@ func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Decimal, nil
 	case types.Bytes, types.String, types.Name:
 		return encoding.Bytes, nil
-	case types.Timestamp, types.TimestampTZ, types.Date:
+	case types.Timestamp, types.TimestampTZ:
 		return encoding.Time, nil
-	case types.Time:
+	// Note: types.Date was incorrectly mapped to encoding.Time when arrays were
+	// first introduced. If any 1.1 users used date arrays, they would have been
+	// persisted with incorrect elementType values.
+	case types.Date, types.Time:
 		return encoding.Int, nil
 	case types.Interval:
 		return encoding.Duration, nil
