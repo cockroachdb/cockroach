@@ -143,8 +143,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				if d.PartitionBy != nil {
-					partitioning, _, err := createPartitionedBy(
-						params.ctx, params.evalCtx, n.tableDesc, &idx, d.PartitionBy)
+					partitioning, _, err := createPartitionedBy(params.ctx, params.p.ExecCfg().Settings,
+						params.evalCtx, n.tableDesc, &idx, d.PartitionBy)
 					if err != nil {
 						return err
 					}
@@ -444,8 +444,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTablePartitionBy:
 			previousTableDesc := *n.tableDesc
-			partitioning, _, err := createPartitionedBy(params.ctx, &params.p.evalCtx, n.tableDesc,
-				&n.tableDesc.PrimaryIndex, t.PartitionBy)
+			partitioning, _, err := createPartitionedBy(params.ctx, params.p.ExecCfg().Settings,
+				&params.p.evalCtx, n.tableDesc, &n.tableDesc.PrimaryIndex, t.PartitionBy)
 			if err != nil {
 				return err
 			}

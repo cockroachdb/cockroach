@@ -105,7 +105,16 @@ func LoadCSV(
 	var parentID = defaultCSVParentID
 	walltime := timeutil.Now().UnixNano()
 
-	tableDesc, err := makeSimpleTableDescriptor(ctx, createTable, parentID, defaultCSVTableID, walltime)
+	// Using test cluster settings means that we'll generate a backup using
+	// the latest cluster version available in this binary. This will be safe
+	// once we verify the cluster version during restore.
+	//
+	// TODO(benesch): ensure backups from too-old or too-new nodes are
+	// rejected during restore.
+	st := cluster.MakeTestingClusterSettings()
+
+	tableDesc, err := makeSimpleTableDescriptor(
+		ctx, st, createTable, parentID, defaultCSVTableID, walltime)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -298,7 +307,12 @@ func readCreateTableFromStore(
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
 // but this is enough for our csv IMPORT and for some unit tests.
 func makeSimpleTableDescriptor(
-	ctx context.Context, create *tree.CreateTable, parentID, tableID sqlbase.ID, walltime int64,
+	ctx context.Context,
+	st *cluster.Settings,
+	create *tree.CreateTable,
+	parentID,
+	tableID sqlbase.ID,
+	walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
 	sql.HoistConstraints(create)
 	if create.IfNotExists {
@@ -333,6 +347,7 @@ func makeSimpleTableDescriptor(
 		ctx,
 		nil, /* txn */
 		sql.NilVirtualTabler,
+		st,
 		create,
 		parentID,
 		tableID,
@@ -1014,7 +1029,8 @@ func importPlanHook(
 		}
 
 		parentID := defaultCSVParentID
-		tableDesc, err := makeSimpleTableDescriptor(ctx, create, parentID, defaultCSVTableID, walltime)
+		tableDesc, err := makeSimpleTableDescriptor(
+			ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
 		if err != nil {
 			return err
 		}
