@@ -159,7 +159,7 @@ func TestLint(t *testing.T) {
 					":!testutils/lint",
 					":!util/envutil/env.go",
 					":!util/log/clog.go",
-					":!util/log/color.go",
+					":!util/color/color.go",
 					":!util/sdnotify/sdnotify_unix.go",
 				},
 			},
