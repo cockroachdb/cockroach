@@ -201,7 +201,7 @@ b  false
 c  false
 
 statement ok
-DROP INDEX i14601a
+DROP INDEX i14601a CASCADE
 
 query TB
 SELECT a, b FROM t14601a ORDER BY a

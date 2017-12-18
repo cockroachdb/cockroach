@@ -82,8 +82,15 @@ GRANT CREATE ON TABLE users TO testuser
 
 user testuser
 
-statement ok
+# Test drop index will not drop an index when a unique constraint depends on it if not using CASCADE
+statement error index "bar" is in use by unique constraint "bar"
+DROP INDEX users@bar RESTRICT
+
+statement error index "bar" is in use by unique constraint "bar"
 DROP INDEX users@bar
+
+statement ok
+DROP INDEX users@bar CASCADE
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users

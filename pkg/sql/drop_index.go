@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -69,6 +70,8 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 
 func (n *dropIndexNode) startExec(params runParams) error {
 	ctx := params.ctx
+	constraints := make(map[sqlbase.ID]map[string]sqlbase.ConstraintDetail)
+
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
 		// the list: when two or more index names refer to the same table,
@@ -82,8 +85,23 @@ func (n *dropIndexNode) startExec(params runParams) error {
 			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.tn))
 		}
 
+		if _, ok := constraints[tableDesc.ID]; !ok {
+			details, err := tableDesc.GetConstraintInfo(ctx, params.p.txn)
+			if err != nil {
+				return err
+			}
+			constraints[tableDesc.ID] = details
+		}
+
 		if err := params.p.dropIndexByName(
-			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkOutboundFK,
+			ctx,
+			index.idxName,
+			tableDesc,
+			n.n.IfExists,
+			constraints[tableDesc.ID],
+			false, /* droppingColumn */
+			n.n.DropBehavior,
+			checkOutboundFK,
 			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
 		); err != nil {
 			return err
@@ -112,11 +130,17 @@ const (
 	ignoreOutboundFK dropIdxFKCheck = false
 )
 
+// dropIndexByName will drop an index. If the behavior is DropRestrict
+// and droppingColumns is false an error will be returned if there are
+// any unique constraints that depend on the index. The constraints to
+// check are provided by the caller, for caching purposes.
 func (p *planner) dropIndexByName(
 	ctx context.Context,
 	idxName tree.UnrestrictedName,
 	tableDesc *sqlbase.TableDescriptor,
 	ifExists bool,
+	constraints map[string]sqlbase.ConstraintDetail,
+	droppingColumn bool,
 	behavior tree.DropBehavior,
 	outboundFKCheck dropIdxFKCheck,
 	jobDesc string,
@@ -134,6 +158,18 @@ func (p *planner) dropIndexByName(
 	}
 	if dropped {
 		return nil
+	}
+	// Check if a unique constraint depends on this index and raise an
+	// error if DropBehavior is DropCascade and the column is not being
+	// dropped.
+	if !droppingColumn && behavior != tree.DropCascade {
+		for name := range constraints {
+			if constraints[name].Kind == sqlbase.ConstraintTypeUnique &&
+				constraints[name].Index.ID == idx.ID {
+				return pgerror.NewErrorf(pgerror.CodeInvalidObjectDefinitionError,
+					"index %q is in use by unique constraint %q", idx.Name, name)
+			}
+		}
 	}
 	// Queue the mutation.
 	var droppedViews []string

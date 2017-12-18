@@ -297,7 +297,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == tree.DropCascade {
 						if err := params.p.dropIndexByName(
-							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false, t.DropBehavior, ignoreOutboundFK,
+							params.ctx,
+							tree.UnrestrictedName(idx.Name),
+							n.tableDesc,
+							false, /* ifExists */
+							nil,   /* constraints */
+							true,  /* droppingColumn */
+							t.DropBehavior,
+							ignoreOutboundFK,
 							tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
 						); err != nil {
 							return err
