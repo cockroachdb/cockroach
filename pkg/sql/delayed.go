@@ -31,6 +31,9 @@ type delayedNode struct {
 	plan        planNode
 }
 
+// delayedNode implements the autoCommitNode interface.
+var _ autoCommitNode = &delayedNode{}
+
 type nodeConstructor func(context.Context, *planner) (planNode, error)
 
 func (d *delayedNode) Next(params runParams) (bool, error) { return d.plan.Next(params) }
@@ -40,5 +43,12 @@ func (d *delayedNode) Close(ctx context.Context) {
 	if d.plan != nil {
 		d.plan.Close(ctx)
 		d.plan = nil
+	}
+}
+
+// enableAutoCommit is part of the autoCommitNode interface.
+func (d *delayedNode) enableAutoCommit() {
+	if ac, ok := d.plan.(autoCommitNode); ok {
+		ac.enableAutoCommit()
 	}
 }
