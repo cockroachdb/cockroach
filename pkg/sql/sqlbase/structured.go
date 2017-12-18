@@ -273,16 +273,24 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	return columnIDs, dirs
 }
 
-// ColNamesString returns a string describing the column names and directions
-// in this index.
-func (desc *IndexDescriptor) ColNamesString() string {
-	var buf bytes.Buffer
+// ColNamesFormat writes a string describing the column names and directions
+// in this index to the given buffer.
+func (desc *IndexDescriptor) ColNamesFormat(buf *bytes.Buffer) {
 	for i, name := range desc.ColumnNames {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%s %s", tree.Name(name), desc.ColumnDirections[i])
+		tree.Name(name).Format(buf, tree.FmtSimple)
+		buf.WriteByte(' ')
+		buf.WriteString(desc.ColumnDirections[i].String())
 	}
+}
+
+// ColNamesString returns a string describing the column names and directions
+// in this index.
+func (desc *IndexDescriptor) ColNamesString() string {
+	var buf bytes.Buffer
+	desc.ColNamesFormat(&buf)
 	return buf.String()
 }
 
@@ -1397,6 +1405,14 @@ func PrintPartitioningTuple(buf *bytes.Buffer, datums []tree.Datum, numColumns i
 			buf.WriteString(s)
 		}
 	}
+}
+
+// PrimaryKeyString returns the pretty-printed primary key declaration for a
+// table descriptor.
+func (desc *TableDescriptor) PrimaryKeyString() string {
+	return fmt.Sprintf("PRIMARY KEY (%s)",
+		desc.PrimaryIndex.ColNamesString(),
+	)
 }
 
 // validatePartitioningDescriptor validates that a PartitioningDescriptor, which
