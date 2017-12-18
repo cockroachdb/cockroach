@@ -156,7 +156,6 @@ func testDecommissionInner(
 		exp := [][]string{
 			decommissionHeader,
 			{strconv.Itoa(int(idMap[0])), "true", "0", "true", "true"},
-			{"# 1 row"},
 			decommissionFooterLive,
 		}
 		log.Infof(ctx, o)
@@ -180,7 +179,6 @@ func testDecommissionInner(
 			{"2"},
 			{"3"},
 			{"4"},
-			{"# 4 rows"},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
@@ -198,7 +196,6 @@ func testDecommissionInner(
 			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`},
 			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`},
 			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{"# 4 rows"},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
@@ -231,7 +228,6 @@ func testDecommissionInner(
 		exp := [][]string{
 			decommissionHeader,
 			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
-			{"# 1 row"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -289,7 +285,6 @@ func testDecommissionInner(
 		exp := [][]string{
 			decommissionHeader,
 			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
-			{"# 1 row"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -337,7 +332,6 @@ func testDecommissionInner(
 		exp := [][]string{
 			decommissionHeader,
 			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
-			{"# 1 row"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -379,7 +373,6 @@ func testDecommissionInner(
 		exp := [][]string{
 			decommissionHeader,
 			{strconv.Itoa(int(target)), `true|false`, `\d+`, `true`, `true|false`},
-			{"# 1 row"},
 			decommissionFooterLive,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -402,7 +395,6 @@ func testDecommissionInner(
 			{"2"},
 			{"3"},
 			{"4"},
-			{"# 3 rows"},
 		}
 
 		if err := matchCSV(o, exp); err != nil {
@@ -424,7 +416,6 @@ func testDecommissionInner(
 			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`},
 			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`},
 			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{"# 3 rows"},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			time.Sleep(time.Second)

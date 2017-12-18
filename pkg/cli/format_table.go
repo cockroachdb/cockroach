@@ -316,7 +316,6 @@ func (p *csvReporter) doneNoRows(_ io.Writer) error                   { return n
 
 func (p *csvReporter) doneRows(w io.Writer, seenRows int) error {
 	p.csvWriter.Flush()
-	fmt.Fprintf(w, "# %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
 	return nil
 }
 
