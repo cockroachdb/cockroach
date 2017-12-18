@@ -361,7 +361,7 @@ func (v *subqueryVisitor) replaceSubquery(
 	// Calling newPlan() might recursively invoke replaceSubqueries, so we need
 	// to preserve the state of the visitor across the call to newPlan().
 	visitorCopy := v.planner.subqueryVisitor
-	plan, err := v.planner.newPlan(v.ctx, sub.Select, nil)
+	plan, err := v.planner.newPlan(v.ctx, sub.Select, nil /* desiredTypes */)
 	v.planner.subqueryVisitor = visitorCopy
 	if err != nil {
 		return nil, err
