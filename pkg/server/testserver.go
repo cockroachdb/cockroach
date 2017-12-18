@@ -91,7 +91,6 @@ func makeTestConfig(st *cluster.Settings) Config {
 	// Set standard user for intra-cluster traffic.
 	cfg.User = security.NodeUser
 	cfg.TimestampCachePageSize = tscache.TestSklPageSize
-	cfg.MetricsSampleInterval = metric.TestSampleInterval
 
 	// Enable web session authentication.
 	cfg.EnableWebSessionAuthentication = true
@@ -121,9 +120,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Insecure = params.Insecure
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
-	if params.MetricsSampleInterval != 0 {
-		cfg.MetricsSampleInterval = params.MetricsSampleInterval
-	}
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)

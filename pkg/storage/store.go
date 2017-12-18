@@ -137,7 +137,6 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
 		TimestampCachePageSize:      tscache.TestSklPageSize,
-		MetricsSampleInterval:       metric.TestSampleInterval,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 	}
@@ -622,9 +621,6 @@ type StoreConfig struct {
 
 	// TimestampCachePageSize is (server.Config).TimestampCachePageSize
 	TimestampCachePageSize uint32
-
-	// MetricsSampleInterval is (server.Config).MetricsSampleInterval
-	MetricsSampleInterval time.Duration
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration

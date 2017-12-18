@@ -374,12 +374,12 @@ func TestMetricsRecording(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		MetricsSampleInterval: 5 * time.Millisecond})
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	// Verify that metrics for the current timestamp are recorded. This should
-	// be true very quickly.
+	// be true very quickly even though DefaultMetricsSampleInterval is large,
+	// because the server writes an entry eagerly on startup.
 	testutils.SucceedsSoon(t, func() error {
 		now := s.Clock().PhysicalNow()
 

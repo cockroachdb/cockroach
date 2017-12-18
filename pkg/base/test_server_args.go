@@ -75,7 +75,6 @@ type TestServerArgs struct {
 	// Fields copied to the server.Config.
 	Insecure                 bool
 	RetryOptions             retry.Options
-	MetricsSampleInterval    time.Duration
 	SocketFile               string
 	ScanInterval             time.Duration
 	ScanMaxIdleTime          time.Duration
