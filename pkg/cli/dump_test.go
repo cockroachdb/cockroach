@@ -542,9 +542,9 @@ func TestDumpAsOf(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Last line is the row count, last-before-last is the timestamp.
+	// Last line is the timestamp.
 	fs := strings.Split(strings.TrimSpace(out), "\n")
-	ts := fs[len(fs)-2]
+	ts := fs[len(fs)-1]
 
 	dump1, err := c.RunWithCaptureArgs([]string{"dump", "d", "t"})
 	if err != nil {
@@ -818,10 +818,10 @@ SELECT * FROM c;
 
 i
 1
-# 1 row
+
 i
 1
-# 1 row
+
 `
 
 	if out != expect {

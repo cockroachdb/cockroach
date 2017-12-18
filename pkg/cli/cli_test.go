@@ -403,27 +403,27 @@ func Example_logging() {
 	// sql --logtostderr=false -e select 1
 	// 1
 	// 1
-	// # 1 row
+	//
 	// sql --log-backtrace-at=foo.go:1 -e select 1
 	// 1
 	// 1
-	// # 1 row
+	//
 	// sql --log-dir= -e select 1
 	// 1
 	// 1
-	// # 1 row
+	//
 	// sql --logtostderr=true -e select 1
 	// 1
 	// 1
-	// # 1 row
+	//
 	// sql --verbosity=0 -e select 1
 	// 1
 	// 1
-	// # 1 row
+	//
 	// sql --vmodule=foo=1 -e select 1
 	// 1
 	// 1
-	// # 1 row
+	//
 }
 
 func Example_zone() {
@@ -672,26 +672,26 @@ func Example_sql() {
 	// sql -e show application_name
 	// application_name
 	// cockroach
-	// # 1 row
+	//
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
 	// sql -e select 3 -e select * from t.f
 	// 3
 	// 3
-	// # 1 row
+	//
 	// x	y
 	// 42	69
-	// # 1 row
+	//
 	// sql -e begin -e select 3 -e commit
 	// BEGIN
 	// 3
 	// 3
-	// # 1 row
+	//
 	// COMMIT
 	// sql -e select * from t.f
 	// x	y
 	// 42	69
-	// # 1 row
+	//
 	// sql --execute=show databases
 	// Database
 	// crdb_internal
@@ -699,37 +699,37 @@ func Example_sql() {
 	// pg_catalog
 	// system
 	// t
-	// # 5 rows
+	//
 	// sql -e select 1; select 2
 	// 1
 	// 1
-	// # 1 row
+	//
 	// 2
 	// 2
-	// # 1 row
+	//
 	// sql -e select 1; select 2 where false
 	// 1
 	// 1
-	// # 1 row
+	//
 	// 2
-	// # 0 rows
+	//
 	// sql -e create table t.g1 (x int)
 	// CREATE TABLE
 	// sql -e create table t.g2 as select * from generate_series(1,10)
 	// SELECT 10
 	// sql -d nonexistent -e select count(*) from pg_class limit 0
 	// count
-	// # 0 rows
+	//
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// x
-	// # 0 rows
+	//
 	// sql -e copy t.f from stdin
 	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// user ls --echo-sql
 	// > SHOW USERS
 	// username
 	// root
-	// # 1 row
+	//
 }
 
 func Example_sql_format() {
@@ -748,7 +748,7 @@ func Example_sql_format() {
 	// sql -e select * from t.times
 	// bare	withtz
 	// 2016-01-25 10:10:10+00:00	2016-01-25 15:10:10+00:00
-	// # 1 row
+	//
 }
 
 func Example_sql_column_labels() {
@@ -809,14 +809,14 @@ thenshort`,
 	// κόσμε	INT	true	NULL	{}
 	// a|b	INT	true	NULL	{}
 	// ܈85	INT	true	NULL	{}
-	// # 8 rows
+	//
 	// sql -e select * from t.u
 	// "f""oo"	f'oo	f\oo	"short
 	// very very long
 	// not much"	"very very long
 	// thenshort"	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0	0	0
-	// # 1 row
+	//
 	// sql --format=pretty -e show columns from t.u
 	// +-----------------+------+------+---------+---------+
 	// |      Field      | Type | Null | Default | Indices |
@@ -849,14 +849,14 @@ thenshort`,
 	// not much"	"very very long
 	// thenshort"	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0	0	0
-	// # 1 row
+	//
 	// sql --format=csv -e select * from t.u
 	// "f""oo",f'oo,f\oo,"short
 	// very very long
 	// not much","very very long
 	// thenshort",κόσμε,a|b,܈85
 	// 0,0,0,0,0,0,0,0
-	// # 1 row
+	//
 	// sql --format=pretty -e select * from t.u
 	// +------+------+------+----------------+----------------+-------+-----+-----+
 	// | f"oo | f'oo | f\oo |     short      | very very long | κόσμε | a|b | ܈85 |
@@ -944,10 +944,10 @@ func Example_sql_empty_table() {
 	// INSERT 3
 	// sql --format=tsv -e select * from t.norows
 	// x
-	// # 0 rows
+	//
 	// sql --format=csv -e select * from t.norows
 	// x
-	// # 0 rows
+	//
 	// sql --format=pretty -e select * from t.norows
 	// +---+
 	// | x |
@@ -974,13 +974,13 @@ func Example_sql_empty_table() {
 	// # empty
 	// # empty
 	// # empty
-	// # 3 rows
+	//
 	// sql --format=csv -e select * from t.nocols
 	// # no columns
 	// # empty
 	// # empty
 	// # empty
-	// # 3 rows
+	//
 	// sql --format=pretty -e select * from t.nocols
 	// --
 	// (3 rows)
@@ -1011,10 +1011,10 @@ func Example_sql_empty_table() {
 	// # 3 rows
 	// sql --format=tsv -e select * from t.nocolsnorows
 	// # no columns
-	// # 0 rows
+	//
 	// sql --format=csv -e select * from t.nocolsnorows
 	// # no columns
-	// # 0 rows
+	//
 	// sql --format=pretty -e select * from t.nocolsnorows
 	// --
 	// (0 rows)
@@ -1071,19 +1071,19 @@ def`,
 	// sql --format=csv -e select 'ab' as s, 'ab' as t
 	// s,t
 	// ab,ab
-	// # 1 row
+	//
 	// sql --format=tsv -e select 'ab' as s, 'ab' as t
 	// s	t
 	// ab	ab
-	// # 1 row
+	//
 	// sql --format=csv -e select 'a b' as s, 'a b' as t
 	// s,t
 	// a b,a b
-	// # 1 row
+	//
 	// sql --format=tsv -e select 'a b' as s, 'a b' as t
 	// s	t
 	// a b	a b
-	// # 1 row
+	//
 	// sql --format=csv -e select e'a\nbc\ndef' as s, e'a\nbc\ndef' as t
 	// s,t
 	// "a
@@ -1091,7 +1091,7 @@ def`,
 	// def","a
 	// bc
 	// def"
-	// # 1 row
+	//
 	// sql --format=tsv -e select e'a\nbc\ndef' as s, e'a\nbc\ndef' as t
 	// s	t
 	// "a
@@ -1099,63 +1099,63 @@ def`,
 	// def"	"a
 	// bc
 	// def"
-	// # 1 row
+	//
 	// sql --format=csv -e select 'a, b' as s, 'a, b' as t
 	// s,t
 	// "a, b","a, b"
-	// # 1 row
+	//
 	// sql --format=tsv -e select 'a, b' as s, 'a, b' as t
 	// s	t
 	// a, b	a, b
-	// # 1 row
+	//
 	// sql --format=csv -e select '"a", "b"' as s, '"a", "b"' as t
 	// s,t
 	// """a"", ""b""","""a"", ""b"""
-	// # 1 row
+	//
 	// sql --format=tsv -e select '"a", "b"' as s, '"a", "b"' as t
 	// s	t
 	// """a"", ""b"""	"""a"", ""b"""
-	// # 1 row
+	//
 	// sql --format=csv -e select e'\'a\', \'b\'' as s, e'\'a\', \'b\'' as t
 	// s,t
 	// "'a', 'b'","'a', 'b'"
-	// # 1 row
+	//
 	// sql --format=tsv -e select e'\'a\', \'b\'' as s, e'\'a\', \'b\'' as t
 	// s	t
 	// 'a', 'b'	'a', 'b'
-	// # 1 row
+	//
 	// sql --format=csv -e select e'a\\,b' as s, e'a\\,b' as t
 	// s,t
 	// "a\,b","a\,b"
-	// # 1 row
+	//
 	// sql --format=tsv -e select e'a\\,b' as s, e'a\\,b' as t
 	// s	t
 	// a\,b	a\,b
-	// # 1 row
+	//
 	// sql --format=csv -e select e'a\tb' as s, e'a\tb' as t
 	// s,t
 	// a	b,a	b
-	// # 1 row
+	//
 	// sql --format=tsv -e select e'a\tb' as s, e'a\tb' as t
 	// s	t
 	// "a	b"	"a	b"
-	// # 1 row
+	//
 	// sql --format=csv -e select 1 as ab1, 2 as ab2
 	// ab1,ab2
 	// 1,2
-	// # 1 row
+	//
 	// sql --format=tsv -e select 1 as ab1, 2 as ab2
 	// ab1	ab2
 	// 1	2
-	// # 1 row
+	//
 	// sql --format=csv -e select 1 as "a b1", 2 as "a b2"
 	// a b1,a b2
 	// 1,2
-	// # 1 row
+	//
 	// sql --format=tsv -e select 1 as "a b1", 2 as "a b2"
 	// a b1	a b2
 	// 1	2
-	// # 1 row
+	//
 	// sql --format=csv -e select 1 as "a
 	// bc
 	// def1", 2 as "a
@@ -1167,7 +1167,7 @@ def`,
 	// bc
 	// def2"
 	// 1,2
-	// # 1 row
+	//
 	// sql --format=tsv -e select 1 as "a
 	// bc
 	// def1", 2 as "a
@@ -1179,47 +1179,47 @@ def`,
 	// bc
 	// def2"
 	// 1	2
-	// # 1 row
+	//
 	// sql --format=csv -e select 1 as "a, b1", 2 as "a, b2"
 	// "a, b1","a, b2"
 	// 1,2
-	// # 1 row
+	//
 	// sql --format=tsv -e select 1 as "a, b1", 2 as "a, b2"
 	// a, b1	a, b2
 	// 1	2
-	// # 1 row
+	//
 	// sql --format=csv -e select 1 as """a"", ""b""1", 2 as """a"", ""b""2"
 	// """a"", ""b""1","""a"", ""b""2"
 	// 1,2
-	// # 1 row
+	//
 	// sql --format=tsv -e select 1 as """a"", ""b""1", 2 as """a"", ""b""2"
 	// """a"", ""b""1"	"""a"", ""b""2"
 	// 1	2
-	// # 1 row
+	//
 	// sql --format=csv -e select 1 as "'a', 'b'1", 2 as "'a', 'b'2"
 	// "'a', 'b'1","'a', 'b'2"
 	// 1,2
-	// # 1 row
+	//
 	// sql --format=tsv -e select 1 as "'a', 'b'1", 2 as "'a', 'b'2"
 	// 'a', 'b'1	'a', 'b'2
 	// 1	2
-	// # 1 row
+	//
 	// sql --format=csv -e select 1 as "a\,b1", 2 as "a\,b2"
 	// "a\,b1","a\,b2"
 	// 1,2
-	// # 1 row
+	//
 	// sql --format=tsv -e select 1 as "a\,b1", 2 as "a\,b2"
 	// a\,b1	a\,b2
 	// 1	2
-	// # 1 row
+	//
 	// sql --format=csv -e select 1 as "a	b1", 2 as "a	b2"
 	// a	b1,a	b2
 	// 1,2
-	// # 1 row
+	//
 	// sql --format=tsv -e select 1 as "a	b1", 2 as "a	b2"
 	// "a	b1"	"a	b2"
 	// 1	2
-	// # 1 row
+	//
 }
 
 func Example_sql_table() {
@@ -1290,7 +1290,7 @@ func Example_sql_table() {
 	// ܈85	UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313"	tabs
-	// # 9 rows
+	//
 	// sql --format=tsv -e select * from t.t
 	// s	d
 	// foo	printable ASCII
@@ -1304,7 +1304,7 @@ func Example_sql_table() {
 	// ܈85	UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313"	tabs
-	// # 9 rows
+	//
 	// sql --format=csv -e select * from t.t
 	// s,d
 	// foo,printable ASCII
@@ -1318,7 +1318,7 @@ func Example_sql_table() {
 	// ܈85,UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313",tabs
-	// # 9 rows
+	//
 	// sql --format=pretty -e select * from t.t
 	// +---------------------+--------------------------------+
 	// |          s          |               d                |
@@ -1522,7 +1522,7 @@ func Example_user() {
 	// user ls
 	// username
 	// root
-	// # 1 row
+	//
 	// user ls --format=pretty
 	// +----------+
 	// | username |
@@ -1533,7 +1533,7 @@ func Example_user() {
 	// user ls --format=tsv
 	// username
 	// root
-	// # 1 row
+	//
 	// user set FOO
 	// CREATE USER 1
 	// sql -e create user if not exists 'FOO'
@@ -1739,7 +1739,7 @@ func Example_node() {
 	// node ls
 	// id
 	// 1
-	// # 1 row
+	//
 	// node ls --format=pretty
 	// +----+
 	// | id |
@@ -2167,7 +2167,7 @@ func Example_in_memory() {
 	// node ls
 	// id
 	// 1
-	// # 1 row
+	//
 }
 
 func Example_pretty_print_numerical_strings() {

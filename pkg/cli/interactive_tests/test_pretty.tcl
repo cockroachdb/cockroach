@@ -24,7 +24,7 @@ end_test
 
 start_test "Check that tables are not pretty-printed when output is not a terminal and --format=pretty is not specified"
 send "echo begin; echo 'select 1;' | $argv sql | cat\r"
-eexpect "begin\r\n1\r\n1\r\n# 1 row\r\n"
+eexpect "begin\r\n1\r\n1\r\n\r\n"
 eexpect ":/# "
 end_test
 
@@ -50,8 +50,8 @@ eexpect ":/# "
 send "$argv sql --format=tsv\r"
 eexpect root@
 send "select 42; select 1;\r"
-eexpect "42\r\n# 1 row\r\n"
-eexpect "1\r\n1\r\n# 1 row\r\n"
+eexpect "42\r\n42\r\n\r\n"
+eexpect "1\r\n1\r\n\r\n"
 eexpect root@
 send "\\q\r"
 end_test

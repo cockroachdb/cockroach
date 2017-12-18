@@ -286,7 +286,9 @@ func (p *csvReporter) doneNoRows(_ io.Writer) error                   { return n
 
 func (p *csvReporter) doneRows(w io.Writer, seenRows int) error {
 	p.csvWriter.Flush()
-	fmt.Fprintf(w, "# %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
+	// Ensure that there is a separator, in case multiple csv/tsv tables
+	// are printed after each other.
+	fmt.Fprintln(w)
 	return nil
 }
 
