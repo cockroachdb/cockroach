@@ -1034,8 +1034,6 @@ func Example_sql_table() {
 	c.RunWithArgs([]string{"sql", "--format=html", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=raw", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
@@ -1234,6 +1232,15 @@ func Example_sql_table() {
 	// s | a	b	c
 	//   | 12	123123213	12313
 	// d | tabs
+}
+
+func Example_whitespace_in_pretty_values() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
+
 	// sql --format=pretty -e select '  hai' as x
 	// +-------+
 	// |   x   |
