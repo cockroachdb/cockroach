@@ -92,6 +92,10 @@ func TestReportUsage(t *testing.T) {
 
 	ctx := context.TODO()
 
+	r := makeMockRecorder(t)
+	defer stubURL(&reportingURL, r.url)()
+	defer r.Close()
+
 	params := base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
 			base.DefaultTestStoreSpec,
@@ -106,10 +110,6 @@ func TestReportUsage(t *testing.T) {
 	}
 
 	ts.sqlExecutor.ResetStatementStats(ctx)
-
-	r := makeMockRecorder(t)
-	defer stubURL(&reportingURL, r.url)()
-	defer r.Close()
 
 	const elemName = "somestring"
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
