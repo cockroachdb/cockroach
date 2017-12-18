@@ -2,27 +2,30 @@ import _ from "lodash";
 import React from "react";
 
 import * as protos from "src/js/protos";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import Print from "src/views/reports/containers/range/print";
+import Loading from "src/views/shared/components/loading";
+
+import spinner from "assets/spinner.gif";
 
 interface AllocatorOutputProps {
-  allocatorRangeResponse: protos.cockroach.server.serverpb.AllocatorRangeResponse;
-  lastError: Error;
+  allocatorRangeResponse: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
 }
 
 export default class AllocatorOutput extends React.Component<AllocatorOutputProps, {}> {
   render() {
-    const { allocatorRangeResponse, lastError } = this.props;
+    const { allocatorRangeResponse } = this.props;
 
-    if (!_.isNil(lastError)) {
+    if (allocatorRangeResponse && !_.isNil(allocatorRangeResponse.lastError)) {
       return (
         <div>
           <h2>Simulated Allocator Output</h2>
-          {lastError.toString()}
+          {allocatorRangeResponse.lastError.toString()}
         </div>
       );
     }
 
-    if (_.isEmpty(allocatorRangeResponse) || _.isEmpty(allocatorRangeResponse.dry_run)) {
+    if (allocatorRangeResponse && (_.isEmpty(allocatorRangeResponse.data) || _.isEmpty(allocatorRangeResponse.data.dry_run))) {
       return (
         <div>
           <h2>Simulated Allocator Output</h2>
@@ -31,25 +34,36 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
       );
     }
 
+    let fromNodeID = "";
+    if (allocatorRangeResponse && !_.isEmpty(allocatorRangeResponse.data)) {
+      fromNodeID = ` (from n${allocatorRangeResponse.data.node_id.toString()})`;
+    }
+
     return (
       <div>
-        <h2>Simulated Allocator Output (from n{allocatorRangeResponse.node_id.toString()})</h2>
-        <table className="allocator-table">
-          <tbody>
-            <tr className="allocator-table__row allocator-table__row--header">
-              <th className="allocator-table__cell allocator-table__cell--header">Timestamp</th>
-              <th className="allocator-table__cell allocator-table__cell--header">Message</th>
-            </tr>
-            {
-              _.map(allocatorRangeResponse.dry_run.events, (event, key) => (
-                <tr key={key} className="allocator-table__row">
-                  <td className="allocator-table__cell allocator-table__cell--date">{Print.Timestamp(event.time)}</td>
-                  <td className="allocator-table__cell">{event.message}</td>
-                </tr>
-              ))
-            }
-          </tbody>
-        </table>
+        <h2>Simulated Allocator Output {fromNodeID}</h2>
+        <Loading
+          loading={allocatorRangeResponse && allocatorRangeResponse.inFlight}
+          className="loading-image loading-image__spinner-left"
+          image={spinner}
+        >
+          <table className="allocator-table">
+            <tbody>
+              <tr className="allocator-table__row allocator-table__row--header">
+                <th className="allocator-table__cell allocator-table__cell--header">Timestamp</th>
+                <th className="allocator-table__cell allocator-table__cell--header">Message</th>
+              </tr>
+              {
+                _.map(allocatorRangeResponse.data.dry_run.events, (event, key) => (
+                  <tr key={key} className="allocator-table__row">
+                    <td className="allocator-table__cell allocator-table__cell--date">{Print.Timestamp(event.time)}</td>
+                    <td className="allocator-table__cell">{event.message}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </Loading>
       </div>
     );
   }
