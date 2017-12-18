@@ -53,7 +53,7 @@ func (p *planner) Delete(
 		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
 	}
 
-	tn, err := p.getAliasedTableName(n.Table)
+	tn, alias, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (p *planner) Delete(
 	}
 
 	if err := dn.run.initEditNode(
-		ctx, &dn.editNodeBase, rows, &dn.tw, tn, n.Returning, desiredTypes); err != nil {
+		ctx, &dn.editNodeBase, rows, &dn.tw, alias, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 
