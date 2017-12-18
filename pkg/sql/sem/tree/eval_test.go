@@ -1163,7 +1163,7 @@ func TestEvalError(t *testing.T) {
 		{`'11h2m'::interval / 0`, `division by zero`},
 		{`'11h2m'::interval / 0.0::float`, `division by zero`},
 		{`'???'::bool`,
-			`could not parse "???" as type bool: strconv.ParseBool: parsing "???": invalid syntax`},
+			`could not parse "???" as type bool`},
 		{`'foo'::int`,
 			`could not parse "foo" as type int: strconv.ParseInt: parsing "foo": invalid syntax`},
 		{`'3\r2'::int`,
