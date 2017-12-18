@@ -138,7 +138,7 @@ EXPLAIN SHOW TABLES
 1  render  ·      ·
 2  filter  ·      ·
 3  values  ·      ·
-3  ·       size   5 columns, 75 rows
+3  ·       size   5 columns, 76 rows
 
 query ITTT
 EXPLAIN SHOW DATABASE
@@ -195,7 +195,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·
-7  ·       size      13 columns, 628 rows
+7  ·       size      16 columns, 641 rows
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·

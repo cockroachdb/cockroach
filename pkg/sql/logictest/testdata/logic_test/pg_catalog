@@ -71,6 +71,7 @@ pg_settings
 pg_tables
 pg_tablespace
 pg_type
+pg_user
 pg_views
 
 query TT colnames
@@ -1073,6 +1074,17 @@ oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  ro
 823966177   admin     -1            ********     NULL           false         {}
 2901009604  root      -1            ********     NULL           false         {}
 2499926009  testuser  -1            ********     NULL           false         {}
+
+## pg_catalog.pg_user
+
+query TOBBBBTTA colnames
+SELECT usename, usesysid, usecreatedb, usesuper, userepl, usebypassrls, passwd, valuntil, useconfig
+FROM pg_catalog.pg_user
+ORDER BY usename
+----
+usename   usesysid    usecreatedb  usesuper  userepl  usebypassrls  passwd    valuntil  useconfig
+root      2901009604  true         true      false    false         ********  NULL      NULL
+testuser  2499926009  false        false     false    false         ********  NULL      NULL
 
 ## pg_catalog.pg_description
 
