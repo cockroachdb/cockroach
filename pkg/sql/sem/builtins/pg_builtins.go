@@ -151,6 +151,27 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Builtin {
 	}
 }
 
+// Make a pg_get_constraintdef function with the given arguments.
+func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Builtin {
+	return tree.Builtin{
+		Types:            argTypes,
+		DistsqlBlacklist: true,
+		ReturnType:       tree.FixedReturnType(types.String),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			r, err := ctx.Planner.QueryRow(
+				ctx.Ctx(), "SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1", args[0])
+			if err != nil {
+				return nil, err
+			}
+			if len(r) == 0 {
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown constraint (OID=%s)", args[0])
+			}
+			return r[0], nil
+		},
+		Info: notUsableInfo,
+	}
+}
+
 var pgBuiltins = map[string][]tree.Builtin{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": {
@@ -211,6 +232,14 @@ var pgBuiltins = map[string][]tree.Builtin{
 			},
 			Info: notUsableInfo,
 		},
+	},
+
+	// pg_get_constraintdef functions like SHOW CREATE CONSTRAINT would if we
+	// supported that statement.
+	"pg_get_constraintdef": {
+		makePGGetConstraintDef(tree.ArgTypes{
+			{"constraint_oid", types.Oid}, {"pretty_bool", types.Bool}}),
+		makePGGetConstraintDef(tree.ArgTypes{{"constraint_oid", types.Oid}}),
 	},
 
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that

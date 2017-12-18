@@ -1525,12 +1525,12 @@ query error unknown index \(OID=0\)
 SELECT pg_catalog.pg_get_indexdef(0)
 
 statement ok
-CREATE TABLE test.pg_indexdef_test (a INT, INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
+CREATE TABLE test.pg_indexdef_test (a INT, UNIQUE INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
 ----
-CREATE INDEX pg_indexdef_idx ON test.pg_indexdef_test (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON test.pg_indexdef_test (a ASC)
 
 query error pq: unknown signature: pg_get_indexdef\(int, int, bool\)
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -1570,6 +1570,23 @@ query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, false)
 ----
 SELECT a, b FROM test.pg_viewdef_test
+
+statement ok
+CREATE TABLE test.pg_constraintdef_test (
+  a int,
+  b int unique,
+  c int check (c > a),
+  FOREIGN KEY(a) REFERENCES test.pg_indexdef_test(a) ON DELETE CASCADE
+)
+
+query T rowsort
+SELECT pg_catalog.pg_get_constraintdef(oid)
+FROM pg_catalog.pg_constraint
+WHERE conrelid='pg_constraintdef_test'::regclass
+----
+FOREIGN KEY (a) REFERENCES pg_indexdef_test (a) ON DELETE CASCADE
+CHECK (c > a)
+UNIQUE (b ASC)
 
 # These functions always return NULL since we don't support comments.
 query TTTT

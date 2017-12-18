@@ -29,6 +29,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
 
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -440,7 +442,10 @@ CREATE TABLE pg_catalog.pg_constraint (
 	conffeqop OID[],
 	conexclop OID[],
 	conbin STRING,
-	consrc STRING
+	consrc STRING,
+	-- condef is a CockroachDB extension that provides a SHOW CREATE CONSTRAINT
+	-- style string, for use by pg_get_constraintdef().
+	condef STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -466,6 +471,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 				conkey := tree.DNull
 				confkey := tree.DNull
 				consrc := tree.DNull
+				conbin := tree.DNull
+				condef := tree.DNull
 
 				// Determine constraint kind-specific fields.
 				switch c.Kind {
@@ -479,6 +486,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					condef = tree.NewDString(table.PrimaryKeyString())
 
 				case sqlbase.ConstraintTypeFK:
 					referencedDB, _ := tableLookup(c.ReferencedTable.ID)
@@ -502,6 +510,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					var buf bytes.Buffer
+					if err := p.printForeignKeyConstraint(ctx, &buf, db.Name, *c.Index); err != nil {
+						return err
+					}
+					condef = tree.NewDString(buf.String())
 
 				case sqlbase.ConstraintTypeUnique:
 					oid = h.UniqueConstraintOid(db, table, c.Index)
@@ -512,6 +525,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					var buf bytes.Buffer
+					buf.WriteString("UNIQUE (")
+					c.Index.ColNamesFormat(&buf)
+					buf.WriteByte(')')
+					condef = tree.NewDString(buf.String())
 
 				case sqlbase.ConstraintTypeCheck:
 					oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
@@ -520,6 +538,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 					// constraint. We should add an array of column indexes to
 					// sqlbase.TableDescriptor_CheckConstraint and use that here.
 					consrc = tree.NewDString(c.Details)
+					conbin = consrc
+					condef = tree.NewDString(fmt.Sprintf("CHECK (%s)", c.Details))
 				}
 
 				if err := addRow(
@@ -546,8 +566,9 @@ CREATE TABLE pg_catalog.pg_constraint (
 					tree.DNull,                                 // conppeqop
 					tree.DNull,                                 // conffeqop
 					tree.DNull,                                 // conexclop
-					consrc,                                     // conbin
+					conbin,                                     // conbin
 					consrc,                                     // consrc
+					condef,                                     // condef
 				); err != nil {
 					return err
 				}
