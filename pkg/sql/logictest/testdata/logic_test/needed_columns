@@ -173,7 +173,7 @@ CREATE TABLE a ("name" string, age int);
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT "name", age FROM a);
 ----
-0  group   ·            ·             ("count(*)")                                            ·
+0  group   ·            ·             (count)                                                 ·
 0  ·       aggregate 0  count_rows()  ·                                                       ·
 1  render  ·            ·             ()                                                      ·
 2  render  ·            ·             ("name"[omitted], age[omitted])                         ·
@@ -192,7 +192,7 @@ CREATE TABLE ab (a INT, b INT, PRIMARY KEY (a, b));
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM ab WHERE a=1
 ----
-0  group   ·            ·             ("count(*)")              ·
+0  group   ·            ·             (count)                   ·
 0  ·       aggregate 0  count_rows()  ·                         ·
 1  render  ·            ·             ()                        ·
 2  scan    ·            ·             (a[omitted], b[omitted])  a=CONST; b!=NULL; key(b)
