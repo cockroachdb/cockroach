@@ -73,7 +73,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Keys Written per Second per Store" tooltip={`The average number of KV keys written (i.e. applied by raft) per second on each store.`}>
-      <Axis units={AxisUnits.Count} label="keys written">
+      <Axis units={AxisUnits.Count} label="writes per second">
         {
           _.map(nodeIDs, (nid) => (
             <Metric
@@ -88,14 +88,14 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Replica Quiescence" sources={storeSources}>
-      <Axis units={AxisUnits.Count} label="replica type">
+      <Axis units={AxisUnits.Count} label="replicas">
         <Metric name="cr.store.replicas" title="Replicas" />
         <Metric name="cr.store.replicas.quiescent" title="Quiescent" />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Range Operations" sources={storeSources}>
-      <Axis units={AxisUnits.Count} label="range operation type">
+      <Axis units={AxisUnits.Count} label="ranges">
         <Metric name="cr.store.range.splits" title="Splits" nonNegativeRate />
         <Metric name="cr.store.range.adds" title="Adds" nonNegativeRate />
         <Metric name="cr.store.range.removes" title="Removes" nonNegativeRate />
@@ -103,7 +103,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Snapshots" sources={storeSources}>
-      <Axis units={AxisUnits.Count} label="snapshot type">
+      <Axis units={AxisUnits.Count} label="snapshots">
         <Metric name="cr.store.range.snapshots.generated" title="Generated" nonNegativeRate />
         <Metric name="cr.store.range.snapshots.normal-applied" title="Normal-applied" nonNegativeRate />
         <Metric name="cr.store.range.snapshots.preemptive-applied" title="Preemptive-applied" nonNegativeRate />

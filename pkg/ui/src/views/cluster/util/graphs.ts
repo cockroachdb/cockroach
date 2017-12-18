@@ -6,7 +6,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputePrefixExponent, ComputeByteScale, ComputeDurationScale, Duration } from "src/util/format";
+import { Bytes, ComputeByteScale, ComputeDurationScale, Duration } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -145,7 +145,7 @@ function ComputeCountAxisDomain(extent: Extent): AxisDomain {
     return metricFormat(n);
   };
 
-  axisDomain.label = "";
+  axisDomain.label = "count";
 
   return axisDomain;
 }
@@ -162,8 +162,6 @@ function ComputeByteAxisDomain(extent: Extent): AxisDomain {
   axisDomain.guideFormat = Bytes;
   return axisDomain;
 }
-
-const durationLabels = ["nanoseconds", "microseconds", "milliseconds", "seconds"];
 
 function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
   const scale = ComputeDurationScale(extent[1]);
