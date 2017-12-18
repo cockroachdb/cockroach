@@ -67,7 +67,7 @@ type sqlConn struct {
 
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
-		if c.reconnecting && isInteractive {
+		if c.reconnecting && cliCtx.isInteractive {
 			fmt.Fprintf(stderr, "connection lost; opening new connection: all session settings will be lost\n")
 		}
 		conn, err := pq.Open(c.url)
@@ -97,8 +97,9 @@ func (c *sqlConn) ensureConn() error {
 // the last connection, based on the last known values in the sqlConn
 // struct.
 func (c *sqlConn) checkServerMetadata() error {
-	if !isInteractive {
-		// Version reporting is just noise in non-interactive sessions.
+	if !cliCtx.isInteractive {
+		// Version reporting is just noise if the user is not present to
+		// change their mind upon seeing the information.
 		return nil
 	}
 
