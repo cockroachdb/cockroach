@@ -38,18 +38,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var nameToVisibleTypeMap = map[string]ColumnType_VisibleType{
-	"INTEGER":          ColumnType_INTEGER,
-	"INT4":             ColumnType_INTEGER,
-	"INT8":             ColumnType_BIGINT,
-	"INT64":            ColumnType_BIGINT,
-	"BIT":              ColumnType_BIT,
-	"INT2":             ColumnType_SMALLINT,
-	"SMALLINT":         ColumnType_SMALLINT,
-	"FLOAT4":           ColumnType_REAL,
-	"REAL":             ColumnType_REAL,
-	"FLOAT8":           ColumnType_DOUBLE_PRECISION,
-	"DOUBLE PRECISION": ColumnType_DOUBLE_PRECISION,
+// aliasToVisibleTypeMap maps type aliases to ColumnType_VisibleType variants
+// so that the alias is persisted. When adding new column type aliases or new
+// VisibleType variants, consider adding to this mapping as well.
+var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
+	coltypes.Bit.Name:      ColumnType_BIT,
+	coltypes.Int2.Name:     ColumnType_SMALLINT,
+	coltypes.Int4.Name:     ColumnType_INTEGER,
+	coltypes.Int8.Name:     ColumnType_BIGINT,
+	coltypes.Int64.Name:    ColumnType_BIGINT,
+	coltypes.Integer.Name:  ColumnType_INTEGER,
+	coltypes.SmallInt.Name: ColumnType_SMALLINT,
+	coltypes.BigInt.Name:   ColumnType_BIGINT,
+
+	coltypes.Real.Name:   ColumnType_REAL,
+	coltypes.Float4.Name: ColumnType_REAL,
+	coltypes.Float8.Name: ColumnType_DOUBLE_PRECISION,
+	coltypes.Double.Name: ColumnType_DOUBLE_PRECISION,
 }
 
 func exprContainsVarsError(context string, Expr tree.Expr) error {
@@ -95,7 +100,7 @@ func populateTypeAttrs(
 	case *coltypes.TBool:
 	case *coltypes.TInt:
 		base.Width = int32(t.Width)
-		if val, present := nameToVisibleTypeMap[t.Name]; present {
+		if val, present := aliasToVisibleTypeMap[t.Name]; present {
 			base.VisibleType = val
 		}
 	case *coltypes.TFloat:
@@ -104,7 +109,7 @@ func populateTypeAttrs(
 			return ColumnType{}, errors.New("precision for type float must be at least 1 bit")
 		}
 		base.Precision = int32(t.Prec)
-		if val, present := nameToVisibleTypeMap[t.Name]; present {
+		if val, present := aliasToVisibleTypeMap[t.Name]; present {
 			base.VisibleType = val
 		}
 	case *coltypes.TDecimal:
