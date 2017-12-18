@@ -705,7 +705,6 @@ func Example_sql() {
 
 	c.RunWithArgs([]string{"sql", "-e", "show application_name"})
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
-	c.RunWithArgs([]string{"sql", "-e", "delete from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "begin", "-e", "select 3", "-e", "commit"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
@@ -733,8 +732,6 @@ func Example_sql() {
 	// # 1 row
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
-	// sql -e delete from t.f
-	// pq: rejected: DELETE without WHERE clause (sql_safe_updates = true)
 	// sql -e select 3 -e select * from t.f
 	// 3
 	// 3

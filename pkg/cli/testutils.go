@@ -21,6 +21,7 @@ func TestingReset() {
 	// pointers (because they are tied into the flags), but instead
 	// overwrite the existing structs' values.
 	baseCfg.InitDefaults()
+	cliCtx.isInteractive = false
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	cliCtx.showTimes = false
 	dumpCtx.dumpMode = dumpBoth

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	readline "github.com/knz/go-libedit"
 	"github.com/lib/pq"
+	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -192,10 +193,16 @@ More documentation about our SQL dialect and the CLI shell is available online:
 	fmt.Println()
 }
 
+const noLineEditor readline.EditLine = -1
+
+func (c *cliState) hasEditor() bool {
+	return c.ins != noLineEditor
+}
+
 // addHistory persists a line of input to the readline history
 // file.
 func (c *cliState) addHistory(line string) {
-	if !isInteractive || len(line) == 0 {
+	if !c.hasEditor() || len(line) == 0 {
 		return
 	}
 
@@ -238,7 +245,7 @@ var options = map[string]struct {
 		},
 		func(_ *cliState) error {
 			displayFormat := tableDisplayTSV
-			if isInteractive {
+			if cliCtx.terminalOutput {
 				displayFormat = tableDisplayPretty
 			}
 			cliCtx.tableDisplayFormat = displayFormat
@@ -448,7 +455,7 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
 func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
-	if !isInteractive {
+	if !c.hasEditor() {
 		return nextState
 	}
 
@@ -601,19 +608,35 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	// Common initialization.
 	c.partialLines = []string{}
 
-	if isInteractive {
-		c.checkSyntax = true
-		c.errExit = false
-		c.smartPrompt = true
+	if cliCtx.isInteractive {
+		// If a human user is providing the input, we want to help them with
+		// what they are entering:
+		c.checkSyntax = true // client-side error checking to help with large txns
+		c.errExit = false    // let the user retry failing commands
+
+		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
+	} else {
+		// When running non-interactive, by default we want errors to stop
+		// further processing and we can just let syntax checking to be
+		// done server-side to avoid client-side churn.
+		c.errExit = true
+		c.checkSyntax = false
+		// We also don't need (smart) prompts at all.
+	}
+
+	if c.hasEditor() {
+		// We only enable prompt and history management when the
+		// interactive input prompter is enabled. This saves on churn and
+		// memory when e.g. piping a large SQL script through the
+		// command-line client.
+
+		c.smartPrompt = true // enquire the db in between statements
 		c.promptPrefix, c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url)
 
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
 			log.Warningf(context.TODO(), "cannot enable history: %v", err)
 		} else {
-			// We only enable history management when the terminal is actually
-			// interactive. This saves on memory when e.g. piping a large SQL
-			// script through the command-line client.
 			homeDir, err := envutil.HomeDir()
 			if err != nil {
 				log.Warningf(context.TODO(), "cannot retrieve user information: %v", err)
@@ -628,14 +651,6 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 				c.ins.SetAutoSaveHistory(histFile, true)
 			}
 		}
-
-		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
-	} else {
-		// When running non-interactive, by default we want errors to stop
-		// further processing and all syntax checking to be done
-		// server-side.
-		c.errExit = true
-		c.checkSyntax = false
 	}
 
 	return nextState
@@ -647,7 +662,7 @@ func (c *cliState) doStartLine(nextState cliStateEnum) cliStateEnum {
 	c.partialLines = c.partialLines[:0]
 	c.partialStmtsLen = 0
 
-	if isInteractive {
+	if c.hasEditor() {
 		c.currentPrompt = c.fullPrompt
 		c.ins.SetLeftPrompt(c.currentPrompt)
 	}
@@ -658,7 +673,7 @@ func (c *cliState) doStartLine(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) doContinueLine(nextState cliStateEnum) cliStateEnum {
 	c.atEOF = false
 
-	if isInteractive {
+	if c.hasEditor() {
 		c.currentPrompt = c.continuePrompt
 		c.ins.SetLeftPrompt(c.currentPrompt)
 	}
@@ -705,7 +720,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		// Good to go.
 
 	case readline.ErrInterrupted:
-		if !isInteractive {
+		if !cliCtx.isInteractive {
 			// Ctrl+C terminates non-interactive shells in all cases.
 			c.exitErr = err
 			return cliStop
@@ -730,7 +745,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 	case io.EOF:
 		c.atEOF = true
 
-		if isInteractive {
+		if cliCtx.isInteractive {
 			// In interactive mode, EOF terminates.
 			// exitErr is left to be whatever has set it previously.
 			return cliStop
@@ -916,7 +931,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 		return contState
 	}
 
-	if !isInteractive {
+	if !cliCtx.isInteractive {
 		return execState
 	}
 
@@ -985,7 +1000,7 @@ func maybeShowErrorDetails(w io.Writer, err error, printNewline bool) {
 func (c *cliState) doDecidePath() cliStateEnum {
 	if len(c.partialLines) == 0 {
 		return cliProcessFirstLine
-	} else if isInteractive {
+	} else if cliCtx.isInteractive {
 		// In interactive mode, we allow client-side commands to be
 		// issued on intermediate lines.
 		return cliHandleCliCmd
@@ -1006,15 +1021,16 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 		}
 		switch state {
 		case cliStart:
-			// chzyer/readline is exceptionally slow at reading long lines, so we
-			// only use it in interactive mode.
-			if isInteractive {
-				// If interactive and the table display format is "pretty", also
-				// enable printing of times.
-				if cliCtx.tableDisplayFormat == tableDisplayPretty {
-					cliCtx.showTimes = true
-				}
+			// If results are shown on a terminal and the table display
+			// format is "pretty", also enable printing of times.
+			if cliCtx.terminalOutput && cliCtx.tableDisplayFormat == tableDisplayPretty {
+				cliCtx.showTimes = true
+			}
 
+			// An interactive readline prompter is comparatively slow at
+			// reading input, so we only use it in interactive mode and when
+			// there is also a terminal on stdout.
+			if cliCtx.isInteractive && cliCtx.terminalOutput {
 				// The readline initialization is not placed in
 				// the doStart() method because of the defer.
 				c.ins, c.exitErr = readline.InitFiles("cockroach",
@@ -1036,6 +1052,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 				c.ins.RebindControlKeys()
 				defer c.ins.Close()
 			} else {
+				c.ins = noLineEditor
 				c.buf = bufio.NewReader(stdin)
 			}
 
@@ -1101,7 +1118,15 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	if isInteractive && len(sqlCtx.execStmts) == 0 {
+	// We don't consider sessions interactives unless we have a
+	// serious hunch they are. For now, only `cockroach sql` *without*
+	// `-e` has the ability to input from a (presumably) human user,
+	// and we'll also assume that there is no human if the standard
+	// input is not terminal-like -- likely redirected from a file,
+	// etc.
+	cliCtx.isInteractive = len(sqlCtx.execStmts) == 0 && isatty.IsTerminal(os.Stdin.Fd())
+
+	if cliCtx.isInteractive {
 		// The user only gets to see the info screen on interactive sessions.
 		fmt.Print(infoMessage)
 	}
@@ -1118,7 +1143,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if !sqlCtx.unsafeUpdates {
+	if cliCtx.isInteractive && !sqlCtx.unsafeUpdates {
 		if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
 			return err
 		}
