@@ -55,11 +55,13 @@ const (
 	// system we're running on (development or production or some shared
 	// environment). Production users should almost certainly override these
 	// settings and we'll warn in the logs about doing so.
-	DefaultCacheSize             = 128 << 20 // 128 MB
-	defaultSQLMemoryPoolSize     = 128 << 20 // 128 MB
-	defaultScanInterval          = 10 * time.Minute
-	defaultScanMaxIdleTime       = 200 * time.Millisecond
-	defaultMetricsSampleInterval = 10 * time.Second
+	DefaultCacheSize         = 128 << 20 // 128 MB
+	defaultSQLMemoryPoolSize = 128 << 20 // 128 MB
+	defaultScanInterval      = 10 * time.Minute
+	defaultScanMaxIdleTime   = 200 * time.Millisecond
+	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
+	// See https://github.com/cockroachdb/cockroach/issues/20310.
+	DefaultMetricsSampleInterval = 10 * time.Second
 	defaultStorePath             = "cockroach-data"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
 	// created.
@@ -191,11 +193,6 @@ type Config struct {
 	// timestamp cache held by each store.
 	TimestampCachePageSize uint32
 
-	// MetricsSampleInterval determines the time between records of
-	// server internal metrics.
-	// Environment Variable: COCKROACH_METRICS_SAMPLE_INTERVAL
-	MetricsSampleInterval time.Duration
-
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner. Set to 0 to disable.
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
@@ -252,14 +249,14 @@ type Config struct {
 // metrics. For more information on the issues underlying our histogram system
 // and the proposed fixes, please see issue #7896.
 func (cfg Config) HistogramWindowInterval() time.Duration {
-	hwi := cfg.MetricsSampleInterval * 6
+	hwi := DefaultMetricsSampleInterval * 6
 
-	// Rudimentary overflow detection; this can result if MetricsSampleInterval
-	// is set to an extremely large number, likely in the context of a test or
-	// an intentional attempt to disable metrics collection. Just return
-	// cfg.MetricsSampleInterval in this case.
-	if hwi < cfg.MetricsSampleInterval {
-		return cfg.MetricsSampleInterval
+	// Rudimentary overflow detection; this can result if
+	// DefaultMetricsSampleInterval is set to an extremely large number, likely
+	// in the context of a test or an intentional attempt to disable metrics
+	// collection. Just return the default in this case.
+	if hwi < DefaultMetricsSampleInterval {
+		return DefaultMetricsSampleInterval
 	}
 	return hwi
 }
@@ -364,7 +361,6 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
 		ScanInterval:                   defaultScanInterval,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
-		MetricsSampleInterval:          defaultMetricsSampleInterval,
 		EventLogEnabled:                defaultEventLogEnabled,
 		EnableWebSessionAuthentication: defaultEnableWebSessionAuthentication,
 		Stores: base.StoreSpecList{
@@ -391,7 +387,6 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.SQLMemoryPoolSize))
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)
-	fmt.Fprintln(w, "metrics sample interval\t", cfg.MetricsSampleInterval)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
 	if cfg.ListeningURLFile != "" {
@@ -587,7 +582,6 @@ func (cfg *Config) RequireWebSession() bool {
 func (cfg *Config) readEnvironmentVariables() {
 	// cockroach-linearizable
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", cfg.Linearizable)
-	cfg.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", cfg.MetricsSampleInterval)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 }
