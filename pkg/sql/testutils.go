@@ -17,6 +17,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,8 +26,7 @@ import (
 
 // CreateTestTableDescriptor converts a SQL string to a table for test purposes.
 // Will fail on complex tables where that operation requires e.g. looking up
-// other tables or otherwise utilizing a planner, since the planner used here is
-// just a zero value placeholder.
+// other tables.
 func CreateTestTableDescriptor(
 	ctx context.Context,
 	parentID, id sqlbase.ID,
@@ -37,7 +37,20 @@ func CreateTestTableDescriptor(
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
-	p := planner{session: new(Session)}
-	p.evalCtx = tree.MakeTestingEvalContext()
-	return p.makeTableDesc(ctx, stmt.(*tree.CreateTable), parentID, id, hlc.Timestamp{}, privileges, nil)
+	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	evalCtx := tree.MakeTestingEvalContext()
+	return MakeTableDesc(
+		ctx,
+		nil, /* txn */
+		nil, /* vt */
+		cluster.MakeTestingClusterSettings(),
+		stmt.(*tree.CreateTable),
+		parentID, id,
+		hlc.Timestamp{}, /* creationTime */
+		privileges,
+		nil, /* affected */
+		"",  /* sessionDB */
+		&semaCtx,
+		&evalCtx,
+	)
 }
