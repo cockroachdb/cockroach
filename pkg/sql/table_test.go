@@ -54,6 +54,11 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
+			"BIGINT",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT},
+			true,
+		},
+		{
 			"FLOAT(3)",
 			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT, Precision: 3},
 			true,
