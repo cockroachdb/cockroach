@@ -895,6 +895,7 @@ thenshort`,
 	// );
 	//
 	// INSERT INTO results VALUES ('0', '0', '0', '0', '0', '0', '0', '0');
+	// -- 1 row
 	// sql --format=html -e select * from t.u
 	// <table>
 	// <thead><tr><th>row</th><th>f&#34;oo</th><th>f&#39;oo</th><th>f\oo</th><th>short<br/>very very long<br/>not much</th><th>very very long<br/>thenshort</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
@@ -959,6 +960,7 @@ func Example_sql_empty_table() {
 	//   x STRING
 	// );
 	//
+	// -- 0 rows
 	// sql --format=html -e select * from t.norows
 	// <table>
 	// <thead><tr><th>row</th><th>x</th></tr></head>
@@ -991,6 +993,7 @@ func Example_sql_empty_table() {
 	// INSERT INTO results(rowid) VALUES (DEFAULT);
 	// INSERT INTO results(rowid) VALUES (DEFAULT);
 	// INSERT INTO results(rowid) VALUES (DEFAULT);
+	// -- 3 rows
 	// sql --format=html -e select * from t.nocols
 	// <table>
 	// <thead><tr><th>row</th></tr></head>
@@ -1021,6 +1024,7 @@ func Example_sql_empty_table() {
 	// CREATE TABLE results (
 	// );
 	//
+	// -- 0 rows
 	// sql --format=html -e select * from t.nocolsnorows
 	// <table>
 	// <thead><tr><th>row</th></tr></head>
@@ -1377,6 +1381,7 @@ func Example_sql_table() {
 	// INSERT INTO results VALUES (e'\\x01', 'non-printable UTF8 string');
 	// INSERT INTO results VALUES (e'\u070885', 'UTF8 string with RTL char');
 	// INSERT INTO results VALUES (e'a\tb\tc\n12\t123123213\t12313', 'tabs');
+	// -- 9 rows
 	// sql --format=html -e select * from t.t
 	// <table>
 	// <thead><tr><th>row</th><th>s</th><th>d</th></tr></head>
