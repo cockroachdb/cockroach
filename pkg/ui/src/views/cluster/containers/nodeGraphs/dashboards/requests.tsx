@@ -16,19 +16,19 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Slow Raft Proposals" sources={storeSources}>
-      <Axis units={AxisUnits.Count} label="proposals">
+      <Axis units={AxisUnits.Count} label="requests">
         <Metric name="cr.store.requests.slow.raft" title="Slow Raft Proposals" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Slow Lease Acquisitions" sources={storeSources}>
-      <Axis units={AxisUnits.Count} label="acquisitions">
+      <Axis units={AxisUnits.Count} label="requests">
         <Metric name="cr.store.requests.slow.lease" title="Slow Lease Acquisitions" nonNegativeRate />
       </Axis>
     </LineGraph>,
 
     <LineGraph title="Slow Command Queue Entries" sources={storeSources}>
-      <Axis units={AxisUnits.Count} label="entries">
+      <Axis units={AxisUnits.Count} label="requests">
         <Metric name="cr.store.requests.slow.commandqueue" title="Slow Command Queue Entries" nonNegativeRate />
       </Axis>
     </LineGraph>,
