@@ -3,23 +3,24 @@ import _ from "lodash";
 import React from "react";
 
 import * as protos from "src/js/protos";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface ConnectionsTableProps {
-  rangeResponse: protos.cockroach.server.serverpb.RangeResponse$Properties;
+  range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
 }
 
 export default function ConnectionsTable(props: ConnectionsTableProps) {
-  const { rangeResponse } = props;
-  if (_.isNil(rangeResponse)) {
+  const { range } = props;
+  if (!range || _.isNil(range.data)) {
     return null;
   }
-  const ids = _.chain(_.keys(rangeResponse.responses_by_node_id))
+  const ids = _.chain(_.keys(range.data.responses_by_node_id))
     .map(id => parseInt(id, 10))
     .sortBy(id => id)
     .value();
   return (
     <div>
-      <h2>Connections (via Node {rangeResponse.node_id})</h2>
+      <h2>Connections (via Node {range.data.node_id})</h2>
       <table className="connections-table">
         <tbody>
           <tr className="connections-table__row connections-table__row--header">
@@ -30,7 +31,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
           </tr>
           {
             _.map(ids, id => {
-              const resp = rangeResponse.responses_by_node_id[id];
+              const resp = range.data.responses_by_node_id[id];
               const rowClassName = classNames(
                 "connections-table__row",
                 { "connections-table__row--warning": !resp.response || !_.isEmpty(resp.error_message) },
