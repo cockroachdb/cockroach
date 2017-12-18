@@ -188,7 +188,7 @@ statement error UNIQUE constraint depends on index "foo", use DROP INDEX if you 
 ALTER TABLE t DROP CONSTRAINT foo
 
 statement ok
-DROP INDEX foo
+DROP INDEX foo CASCADE
 
 query TTTTRT
 SELECT type, description, username, status, fraction_completed, error
@@ -196,7 +196,7 @@ FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.t@foo  root  succeeded  1  ·
+SCHEMA CHANGE  DROP INDEX test.t@foo CASCADE  root  succeeded  1  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -314,8 +314,11 @@ a   d     x     y     z
 31  32    NULL  1.3   1.4
 33  34    2.0   2.1   2.2
 
-statement ok
+statement error index "t_d_key" is in use by unique constraint "t_d_key"
 ALTER TABLE t DROP COLUMN d
+
+statement ok
+ALTER TABLE t DROP COLUMN d CASCADE
 
 statement ok
 ALTER TABLE t ADD COLUMN e INT; ALTER TABLE t ADD COLUMN d INT
@@ -364,7 +367,7 @@ ALTER TABLE t ADD COLUMN g INT UNIQUE
 statement ok
 CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX ii (i) STORING(h))
 
-statement error "t_g_key" is referenced by foreign key from table "o"
+statement error index "t_g_key" is in use by unique constraint "t_g_key"
 ALTER TABLE t DROP COLUMN g
 
 statement ok
