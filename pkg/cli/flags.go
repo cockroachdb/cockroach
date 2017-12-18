@@ -359,7 +359,7 @@ func init() {
 	// in the CLI shell.
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	cliCtx.showTimes = false
-	if isInteractive {
+	if cliCtx.terminalOutput {
 		cliCtx.tableDisplayFormat = tableDisplayPretty
 	}
 	for _, cmd := range tableOutputCommands {
