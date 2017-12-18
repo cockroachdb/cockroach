@@ -4521,20 +4521,23 @@ func (r *Replica) processRaftCommand(
 
 	leaseIndex, proposalRetry, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
 
-	// TODO(nvanbenschoten): remove when the following assertion goes away.
-	desc := r.mu.state.Desc
-	threshold := r.mu.state.GCThreshold
-
 	r.mu.Unlock()
 
 	if forcedErr == nil {
-		if err := r.requestCanProceed(rSpan, ts); err != nil {
+		// Verify that the batch timestamp is after the GC threshold. This is
+		// necessary because not all commands declare read access on the GC
+		// threshold key, even though they implicitly depend on it. This means
+		// that access to this state will not be serialized by the command queue,
+		// so we must perform this check upstream and downstream of raft.
+		// See #14833.
+		forcedErr = roachpb.NewError(r.requestCanProceed(rSpan, ts))
+		if _, ok := forcedErr.GetDetail().(*roachpb.RangeKeyMismatchError); ok {
 			// TODO(nvanbenschoten): either remove this entire assertion (#20647)
 			// or return it to an expected error case. Either way, this assertion
 			// should be addressed before 2.0 is released.
 			log.Fatalf(ctx, "@nvanbenschoten, no performance for you! If this is seen, please "+
-				"update github.com/cockroachdb/cockroach/pull/20647; (desc=%+v, gcThresh=%+v, cmd=%+v): %v",
-				desc, threshold, raftCmd, err)
+				"update github.com/cockroachdb/cockroach/pull/20647; (desc=%+v, cmd=%+v): %v",
+				r.Desc(), raftCmd, forcedErr)
 		}
 	}
 
