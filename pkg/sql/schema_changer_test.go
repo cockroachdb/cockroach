@@ -672,7 +672,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		sqlDB,
 		kvDB,
 		jobRegistry,
-		"DROP INDEX t.test@vidx",
+		"DROP INDEX t.test@vidx CASCADE",
 		maxValue,
 		2,
 		initBackfillNotification())
@@ -1046,7 +1046,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 1},
 		{"ALTER TABLE t.test DROP x", 1},
 		{"CREATE UNIQUE INDEX foo ON t.test (v)", 2},
-		{"DROP INDEX t.test@foo", 1},
+		{"DROP INDEX t.test@foo CASCADE", 1},
 	}
 
 	for _, testCase := range testCases {
@@ -2042,7 +2042,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 		{sql: "ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", numKeysPerRow: 2},
 		{sql: "ALTER TABLE t.test DROP pi", numKeysPerRow: 2},
 		{sql: "CREATE UNIQUE INDEX foo ON t.test (v)", numKeysPerRow: 3},
-		{sql: "DROP INDEX t.test@vidx", numKeysPerRow: 2},
+		{sql: "DROP INDEX t.test@vidx CASCADE", numKeysPerRow: 2},
 	}
 
 	for _, tc := range testCases {
