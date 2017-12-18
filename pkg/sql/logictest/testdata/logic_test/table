@@ -458,3 +458,10 @@ test.null_default CREATE TABLE null_default
   ts  TIMESTAMP NULL DEFAULT NULL,
   FAMILY "primary" (ts, rowid)
 )
+
+# Issue #13873: don't permit invalid default columns
+statement error could not parse "blah" as type decimal
+CREATE TABLE test.t1 (a DECIMAL DEFAULT (DECIMAL 'blah'));
+
+statement error could not parse "blah" as type decimal
+create table test.t1 (c decimal default if(false, 1, 'blah'::decimal));
