@@ -317,7 +317,7 @@ SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv]
 
 query TTT
 SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
-  FROM [SHOW KV TRACE FOR DROP INDEX t.kv@woo] WHERE message NOT LIKE '%Z/%'
+  FROM [SHOW KV TRACE FOR DROP INDEX t.kv@woo CASCADE] WHERE message NOT LIKE '%Z/%'
 ----
 (0,1)  starting plan  querying next range at /Table/2/1/0/"t"/3/1
 (0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
