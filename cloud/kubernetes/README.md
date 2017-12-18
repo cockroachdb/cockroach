@@ -46,7 +46,7 @@ W0628 12:38:23.473106       1 controllermanager.go:434] Skipping "certificatesig
 # This shows that the certificate controller is not running, approved CSRs will not trigger a certificate.
 
 # On minikube:
-$ minikube logs|grep certificate
+$ minikube logs | grep certificate
 Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.224903    3440 controllermanager.go:437] Started "certificatesigningrequests"
 Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.231134    3440 certificate_controller.go:120] Starting certificate controller manager
 # This shows that the certificate controller is running, approved CSRs will get a certificate.
@@ -136,7 +136,13 @@ kubectl create -f cluster-init.yaml
 
 **REQUIRED**: the kubernetes cluster must run with the certificate controller enabled.
 This is done by passing the `--cluster-signing-cert-file` and `--cluster-signing-key-file` flags.
-On minikube, you can tell it to use the minikube-generated CA by specifying:
+If you are using minikube v0.23.0 or newer (run `minikube version` if you aren't sure), you can
+tell it to use the minikube-generated CA by specifying:
+```shell
+minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/certs/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/certs/ca.key"
+```
+
+If you're running on an older version of minikube, you can similarly run:
 ```shell
 minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/ca.key"
 ```
