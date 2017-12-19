@@ -99,19 +99,74 @@ type SafeMessager interface {
 // A SafeType panic can be reported verbatim, i.e. does not leak information.
 // A nil `*SafeType` is not valid for use and may cause panics.
 type SafeType struct {
-	V interface{}
+	V      interface{}
+	causes []interface{} // unsafe
 }
 
 var _ SafeMessager = SafeType{}
+var _ interfaceCauser = SafeType{}
 
-// SafeMessage implements SafeMessager.
+type interfaceCauser interface {
+	Cause() interface{}
+}
+
+// SafeMessage implements SafeMessager. It does not recurse into
+// the SafeType's Cause()s.
 func (st SafeType) SafeMessage() string {
 	return fmt.Sprintf("%v", st.V)
 }
 
-// Safe constructs a SafeType.
+// Error implements error as a convenience.
+func (st SafeType) Error() string {
+	msg := st.SafeMessage()
+	for _, cause := range st.causes {
+		msg += fmt.Sprintf("; caused by %v", cause)
+	}
+	return msg
+}
+
+// SafeType implements fmt.Stringer as a convenience.
+func (st SafeType) String() string {
+	return st.SafeMessage()
+}
+
+// Cause returns the value passed to Chain() when this SafeType
+// was created (or nil).
+func (st SafeType) Cause() interface{} {
+	if len(st.causes) == 0 {
+		return nil
+	}
+	v := "<redacted>"
+	if messager, ok := st.causes[0].(SafeMessager); ok {
+		v = messager.SafeMessage()
+	}
+	return SafeType{
+		V:      v,
+		causes: st.causes[1:],
+	}
+}
+
+// Safe constructs a SafeType. It is equivalent to `Chain(v, nil)`.
 func Safe(v interface{}) SafeType {
 	return SafeType{V: v}
+}
+
+// WithCause links a safe message and a child about which nothing is assumed,
+// but for which the hope is that some anonymized parts can be obtained from it.
+func (st SafeType) WithCause(cause interface{}) SafeType {
+	causes := st.causes
+	for cause != nil {
+		causes = append(causes, cause)
+		causer, ok := cause.(interfaceCauser)
+		if !ok {
+			break
+		}
+		cause = causer.Cause()
+	}
+	return SafeType{
+		V:      st.V,
+		causes: causes,
+	}
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
@@ -286,18 +341,27 @@ func redact(r interface{}) string {
 		return typAnd(r, r.(error).Error())
 	}
 
-	type causer interface {
-		Cause() error
-	}
-
 	reportable := handle(r)
-	if c, ok := r.(causer); ok {
+
+	switch c := r.(type) {
+	case interfaceCauser:
+		cause := c.Cause()
+		if cause != nil {
+			reportable += ": caused by " + redact(c.Cause())
+		}
+	case (interface {
+		Cause() error
+	}):
 		reportable += ": caused by " + redact(c.Cause())
 	}
 	return reportable
 }
 
-func reportablesToSafeError(depth int, format string, reportables []interface{}) error {
+// ReportablesToSafeError inspects the given format string (taken as not needing
+// redaction) and reportables, redacts them appropriately and returns an error
+// that is safe to pass to anonymized reporting. The given depth is used to
+// insert a callsite when positive.
+func ReportablesToSafeError(depth int, format string, reportables []interface{}) error {
 	if len(reportables) == 0 {
 		reportables = []interface{}{"nothing reported"}
 	}
@@ -351,7 +415,7 @@ func SendCrashReport(
 		return // disabled via empty URL env var.
 	}
 
-	err := reportablesToSafeError(depth+1, format, reportables)
+	err := ReportablesToSafeError(depth+1, format, reportables)
 
 	// This is close to inlining raven.CaptureErrorAndWait(), except it lets us
 	// control the stack depth of the collected trace.

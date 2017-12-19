@@ -37,8 +37,50 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+func TestAnonymizeStatementsForReporting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const stmt = `
+INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see');
+
+select * from crdb_internal.node_runtime_info;
+`
+
+	rUnsafe := "i'm not safe"
+	rSafe := log.Safe("something safe")
+
+	safeErr := sql.AnonymizeStatementsForReporting("testing", stmt, rUnsafe)
+
+	const (
+		expMessage = "panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
+			"(_, _, _, _); SELECT * FROM _._; caused by i'm not safe"
+		expSafeRedactedMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
+			"(_, _, _, _); SELECT * FROM _._: caused by <redacted>"
+		expSafeSafeMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
+			"(_, _, _, _); SELECT * FROM _._: caused by something safe"
+	)
+
+	actMessage := safeErr.Error()
+	if actMessage != expMessage {
+		t.Fatalf("wanted: %s\ngot: %s", expMessage, actMessage)
+	}
+
+	actSafeRedactedMessage := log.ReportablesToSafeError(0, "", []interface{}{safeErr}).Error()
+	if actSafeRedactedMessage != expSafeRedactedMessage {
+		t.Fatalf("wanted: %s\ngot: %s", expSafeRedactedMessage, actSafeRedactedMessage)
+	}
+
+	safeErr = sql.AnonymizeStatementsForReporting("testing", stmt, rSafe)
+
+	actSafeSafeMessage := log.ReportablesToSafeError(0, "", []interface{}{safeErr}).Error()
+	if actSafeSafeMessage != expSafeSafeMessage {
+		t.Fatalf("wanted: %s\ngot: %s", expSafeSafeMessage, actSafeSafeMessage)
+	}
+}
 
 // Test that a connection closed abruptly while a SQL txn is in progress results
 // in that txn being rolled back.

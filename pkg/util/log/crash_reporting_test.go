@@ -103,7 +103,7 @@ func TestCrashReportingSafeError(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
-			err := reportablesToSafeError(0, test.format, test.rs)
+			err := ReportablesToSafeError(0, test.format, test.rs)
 			if err == nil {
 				t.Fatal(err)
 			}
@@ -154,5 +154,28 @@ func TestUptimeTag(t *testing.T) {
 		if a, e := uptimeTag(tc.crashTime), tc.expected; a != e {
 			t.Errorf("uptimeTag(%v) got %v, want %v)", tc.crashTime, a, e)
 		}
+	}
+}
+
+func TestWithCause(t *testing.T) {
+	parent := Safe("roses are safe").
+		WithCause(
+			Safe("violets").
+				WithCause("are").
+				WithCause(Safe("too")),
+		).WithCause("bugs sure do suck").
+		WithCause("and so do you").
+		WithCause(Safe("j/k ❤"))
+
+	if a, e := parent.SafeMessage(), "roses are safe"; a != e {
+		t.Fatalf("expected %s, got %s", e, a)
+	}
+
+	act := ReportablesToSafeError(0, "", []interface{}{parent}).Error()
+	const exp = "?:0: roses are safe: caused by violets: caused by <redacted>: " +
+		"caused by too: caused by <redacted>: caused by <redacted>: caused by j/k ❤"
+
+	if act != exp {
+		t.Fatalf("wanted %s, got %s", exp, act)
 	}
 }
