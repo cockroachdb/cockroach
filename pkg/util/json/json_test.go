@@ -881,6 +881,106 @@ func TestEncodeDecodeJSONInvertedIndex(t *testing.T) {
 	}
 }
 
+const expectError = "<<error>>"
+
+func TestConcat(t *testing.T) {
+	cases := map[string][]struct {
+		concatWith string
+		expected   string
+	}{
+		`null`: {
+			{`null`, `[null, null]`},
+			{`[]`, `[null]`},
+			{`[1]`, `[null, 1]`},
+			{`{}`, expectError},
+		},
+		`true`: {
+			{`null`, `[true, null]`},
+			{`[]`, `[true]`},
+			{`[1]`, `[true, 1]`},
+			{`{}`, expectError},
+		},
+		`false`: {
+			{`null`, `[false, null]`},
+			{`[]`, `[false]`},
+			{`[1]`, `[false, 1]`},
+			{`{}`, expectError},
+		},
+		`123`: {
+			{`null`, `[123, null]`},
+			{`[]`, `[123]`},
+			{`[1]`, `[123, 1]`},
+			{`{}`, expectError},
+		},
+		`"hello"`: {
+			{`null`, `["hello", null]`},
+			{`[]`, `["hello"]`},
+			{`[1]`, `["hello", 1]`},
+			{`{}`, expectError},
+		},
+		`[1]`: {
+			{`null`, `[1, null]`},
+			{`1`, `[1, 1]`},
+			{`"foo"`, `[1, "foo"]`},
+			{`[2]`, `[1, 2]`},
+			{`[2, 3]`, `[1, 2, 3]`},
+			{`{"a": 1}`, `[1, {"a": 1}]`},
+		},
+		`[1, 2]`: {
+			{`[3]`, `[1, 2, 3]`},
+			{`[3, 4]`, `[1, 2, 3, 4]`},
+		},
+		`{"a": 1}`: {
+			{`null`, expectError},
+			{`1`, expectError},
+			{`"foo"`, expectError},
+			{`[2]`, `[{"a": 1}, 2]`},
+			{`[2, 3]`, `[{"a": 1}, 2, 3]`},
+			{`{"b": 2}`, `{"a": 1, "b": 2}`},
+			{`{"a": 2}`, `{"a": 2}`},
+		},
+		`{"b": 2}`: {
+			{`{"a": 1}`, `{"a": 1, "b": 2}`},
+		},
+		`{"a": 1, "b": 2}`: {
+			{`{"b": 3, "c": 4}`, `{"a": 1, "b": 3, "c": 4}`},
+		},
+	}
+
+	for k, tcs := range cases {
+		left := jsonTestShorthand(k)
+		runDecodedAndEncoded(t, k, left, func(t *testing.T, left JSON) {
+			for _, tc := range tcs {
+				right := jsonTestShorthand(tc.concatWith)
+				runDecodedAndEncoded(t, tc.concatWith, right, func(t *testing.T, right JSON) {
+					if tc.expected == expectError {
+						result, err := left.Concat(right)
+						if err == nil {
+							t.Fatalf("expected %s || %s to error, but got %s", left, right, result)
+						}
+					} else {
+						result, err := left.Concat(right)
+						if err != nil {
+							t.Fatal(err)
+						}
+
+						expectedResult := jsonTestShorthand(tc.expected)
+
+						cmp, err := result.Compare(expectedResult)
+						if err != nil {
+							t.Fatal(err)
+						}
+
+						if cmp != 0 {
+							t.Fatalf("expected %v || %v = %v, got %v", left, right, expectedResult, result)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestJSONRandomRoundTrip(t *testing.T) {
 	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 	for i := 0; i < 1000; i++ {

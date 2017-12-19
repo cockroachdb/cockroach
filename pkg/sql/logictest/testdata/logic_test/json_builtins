@@ -411,3 +411,16 @@ SELECT jsonb_pretty('{"a": 1}')
 {
     "a": 1
 }
+
+query T
+SELECT '[1,2,3]'::JSON || '[4,5,6]'::JSON
+----
+[1,2,3,4,5,6]
+
+query T
+SELECT '{"a": 1, "b": 2}'::JSON || '{"b": 3, "c": 4}'
+----
+{"a":1,"b":3,"c":4}
+
+query error pgcode 22023 invalid concatenation of jsonb objects
+SELECT '{"a": 1, "b": 2}'::JSON || '"c"'
