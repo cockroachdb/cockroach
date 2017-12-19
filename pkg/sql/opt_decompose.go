@@ -70,9 +70,9 @@ func splitOrExpr(
 	return append(exprs, e)
 }
 
-// splitAndExpr flattens a tree of AND expressions returning all of the child
-// expressions as a list. Any non-AND expression is returned as a single
-// element in the list.
+// splitAndExpr flattens a tree of AND expressions, appending all of the child
+// expressions as a list. Any non-AND expression is appended as a single element
+// in the list.
 //
 //   a AND b AND c AND d -> [a, b, c, d]
 func splitAndExpr(
