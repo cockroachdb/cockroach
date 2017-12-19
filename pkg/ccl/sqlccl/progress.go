@@ -34,7 +34,7 @@ type jobProgressLogger struct {
 	job           *jobs.Job
 	startFraction float32
 	totalChunks   int
-	progressedFn  jobs.ProgressedFn
+	progressedFn  func(context.Context, interface{})
 
 	// The remaining fields are for internal use only.
 	completedChunks      int
@@ -64,7 +64,10 @@ func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 	}
 	jpl.lastReportedAt = timeutil.Now()
 	jpl.lastReportedFraction = fraction
-	return jpl.job.Progressed(ctx, fraction, jpl.progressedFn)
+	return jpl.job.Progressed(ctx, func(ctx context.Context, details interface{}) float32 {
+		jpl.progressedFn(ctx, details)
+		return fraction
+	})
 }
 
 // loop calls chunkFinished for every message received over chunkCh. It exits
