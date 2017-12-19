@@ -2152,8 +2152,13 @@ func MVCCResolveWriteIntentRangeUsingIter(
 			num++
 		}
 
-		// nextKey is already a metadata key.
+		// nextKey is already a metadata key...
 		nextKey.Key = key.Key.Next()
+		if !nextKey.Less(encEndKey) {
+			// ... but we don't want to Seek to a key outside of the range as we validate
+			// those span accesses (see TestSpanSetMVCCResolveWriteIntentRangeUsingIter).
+			break
+		}
 	}
 
 	return num, nil
