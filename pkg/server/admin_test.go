@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -92,14 +93,14 @@ func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error
 	}
 	var jI interface{}
 	if err := json.Unmarshal(body, &jI); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "body is:\n%s", body)
 	}
 	return jI, nil
 }
 
 // debugURL returns the root debug URL.
 func debugURL(s serverutils.TestServerInterface) string {
-	return s.AdminURL() + debugEndpoint
+	return s.AdminURL() + debug.Endpoint
 }
 
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
@@ -108,10 +109,6 @@ func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-
-	// This test accesses the debug pages, which currently use the TODO singleton.
-	st := cluster.MakeTestingClusterSettings()
-	settings.SetCanonicalValuesContainer(&st.SV)
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
