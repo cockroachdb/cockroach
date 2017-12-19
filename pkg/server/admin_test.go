@@ -92,7 +92,7 @@ func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error
 	}
 	var jI interface{}
 	if err := json.Unmarshal(body, &jI); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "body is:\n%s", body)
 	}
 	return jI, nil
 }
@@ -108,10 +108,6 @@ func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-
-	// This test accesses the debug pages, which currently use the TODO singleton.
-	st := cluster.MakeTestingClusterSettings()
-	settings.SetCanonicalValuesContainer(&st.SV)
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
