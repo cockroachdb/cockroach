@@ -215,7 +215,7 @@ func TestRegistryLifecycle(t *testing.T) {
 				case err := <-resumeCh:
 					return err
 				case <-progressCh:
-					err := job.Progressed(ctx, 0, jobs.Noop)
+					err := job.Progressed(ctx, jobs.Noop(0))
 					if err != nil {
 						return err
 					}
@@ -302,7 +302,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		check(t)
 		sqlDB.Exec(t, "CANCEL JOB $1", *job.ID())
 		// Test for a canceled error message.
-		if err := job.Progressed(ctx, 0, jobs.Noop); !testutils.IsError(err, "cannot update progress on canceled job") {
+		if err := job.Progressed(ctx, jobs.Noop(0)); !testutils.IsError(err, "cannot update progress on canceled job") {
 			t.Fatalf("unexpected %v", err)
 		}
 		resumeCheckCh <- struct{}{}
@@ -373,7 +373,7 @@ func TestRegistryLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Test for a paused error message.
-			if err := job.Progressed(ctx, 0, jobs.Noop); !testutils.IsError(err, "cannot update progress on paused job") {
+			if err := job.Progressed(ctx, jobs.Noop(0)); !testutils.IsError(err, "cannot update progress on paused job") {
 				t.Fatalf("unexpected %v", err)
 			}
 		}
@@ -609,15 +609,15 @@ func TestJobLifecycle(t *testing.T) {
 
 		// This fraction completed progression tests that calling Progressed with a
 		// fractionCompleted that is less than the last-recorded fractionCompleted
-		// is silently ignored.
+		// is observed.
 		progresses := []struct {
 			actual   float32
 			expected float32
 		}{
-			{0.0, 0.0}, {0.5, 0.5}, {0.5, 0.5}, {0.4, 0.5}, {0.8, 0.8}, {1.0, 1.0},
+			{0.0, 0.0}, {0.5, 0.5}, {0.5, 0.5}, {0.4, 0.4}, {0.8, 0.8}, {1.0, 1.0},
 		}
 		for _, f := range progresses {
-			if err := woodyJob.Progressed(ctx, f.actual, jobs.Noop); err != nil {
+			if err := woodyJob.Progressed(ctx, jobs.Noop(f.actual)); err != nil {
 				t.Fatal(err)
 			}
 			woodyExp.FractionCompleted = f.expected
@@ -627,8 +627,9 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// Test Progressed callbacks.
-		if err := woodyJob.Progressed(ctx, 1.0, func(_ context.Context, details interface{}) {
+		if err := woodyJob.Progressed(ctx, func(_ context.Context, details interface{}) float32 {
 			details.(*jobs.Payload_Restore).Restore.LowWaterMark = roachpb.Key("mariana")
+			return 1.0
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -676,7 +677,7 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := buzzJob.Progressed(ctx, .42, jobs.Noop); err != nil {
+		if err := buzzJob.Progressed(ctx, jobs.Noop(.42)); err != nil {
 			t.Fatal(err)
 		}
 		buzzExp.FractionCompleted = .42
@@ -933,17 +934,17 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Progressed(ctx, -0.1, jobs.Noop); !testutils.IsError(err, "outside allowable range") {
+		if err := job.Progressed(ctx, jobs.Noop(-0.1)); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
-		if err := job.Progressed(ctx, 1.1, jobs.Noop); !testutils.IsError(err, "outside allowable range") {
+		if err := job.Progressed(ctx, jobs.Noop(1.1)); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
 	})
 
 	t.Run("progress on non-started job fails", func(t *testing.T) {
 		job, _ := createDefaultJob()
-		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
+		if err := job.Progressed(ctx, jobs.Noop(0.5)); !testutils.IsError(
 			err, `cannot update progress on pending job \(id \d+\)`,
 		) {
 			t.Fatalf("expected 'cannot update progress' error, but got %v", err)
@@ -958,7 +959,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
+		if err := job.Progressed(ctx, jobs.Noop(0.5)); !testutils.IsError(
 			err, `cannot update progress on succeeded job \(id \d+\)`,
 		) {
 			t.Fatalf("expected 'cannot update progress' error, but got %v", err)
@@ -970,7 +971,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := registry.Pause(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
+		if err := job.Progressed(ctx, jobs.Noop(0.5)); !testutils.IsError(
 			err, `cannot update progress on paused job \(id \d+\)`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
@@ -982,7 +983,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := registry.Cancel(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
+		if err := job.Progressed(ctx, jobs.Noop(0.5)); !testutils.IsError(
 			err, `cannot update progress on canceled job \(id \d+\)`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
@@ -994,7 +995,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Progressed(ctx, 0.2, jobs.Noop); err != nil {
+		if err := job.Progressed(ctx, jobs.Noop(0.2)); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
