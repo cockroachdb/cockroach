@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"regexp"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -1381,17 +1383,58 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	return firstError
 }
 
+const panicLogOutputCutoffChars = 500
+
+// AnonymizeStatementsForReporting transforms an action, SQL statements, and a value
+// (usually a recovered panic) into an error that will be useful when passed to
+// our error reporting as it exposes a scrubbed version of the statements.
+func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) error {
+	var anonymized []string
+	{
+		stmts, err := parser.Parse(sqlStmts)
+		if err == nil {
+			var buf bytes.Buffer
+			for _, stmt := range NewStatementList(stmts) {
+				tree.FormatNode(&buf, tree.FmtAnonymize, stmt.AST)
+				stmt.AST, err = parser.ParseOne(buf.String())
+				buf.Reset()
+				if err != nil {
+					buf.WriteString("[unknown]")
+				} else {
+					tree.FormatNode(&buf, tree.FmtHideConstants, stmt.AST)
+				}
+
+				anonymized = append(anonymized, buf.String())
+				buf.Reset()
+			}
+		}
+	}
+	anonStmtsStr := strings.Join(anonymized, "; ")
+	if len(anonStmtsStr) > panicLogOutputCutoffChars {
+		anonStmtsStr = anonStmtsStr[:panicLogOutputCutoffChars] + " [...]"
+	}
+
+	return log.Safe(
+		fmt.Sprintf("panic while %s %d statements: %s", action, len(anonymized), anonStmtsStr),
+	).WithCause(r)
+}
+
 // maybeRecover catches SQL panics and does some log reporting before
 // propagating the panic further.
+//
 // TODO(knz): this is where we can place code to recover from
 // recoverable panics.
-func (s *Session) maybeRecover(action, stmt string) {
+func (s *Session) maybeRecover(action, stmts string) {
 	if r := recover(); r != nil {
-		err := errors.Errorf("panic while %s %q: %s", action, stmt, r)
+		// A warning header guaranteed to go to stderr. This is unanonymized.
+		cutStmts := stmts
+		if len(cutStmts) > panicLogOutputCutoffChars {
+			cutStmts = stmts[:panicLogOutputCutoffChars] + " [...]"
+		}
 
-		// A short warning header guaranteed to go to stderr.
 		log.Shout(s.Ctx(), log.Severity_ERROR,
-			"a SQL panic has occurred!")
+			fmt.Sprintf("a SQL panic has occurred while %s %q: %s",
+				action, cutStmts, r))
 		// TODO(knz): log panic details to logs once panics
 		// are not propagated to the top-level and printed out by the Go runtime.
 
@@ -1401,8 +1444,10 @@ func (s *Session) maybeRecover(action, stmt string) {
 		// tracing / kv subsystem is broken and we can't resume from that.
 		s.EmergencyClose()
 
-		// Propagate the panic further.
-		panic(err)
+		safeErr := AnonymizeStatementsForReporting(action, stmts, r)
+
+		// Propagate the (sanitized) panic further.
+		panic(safeErr)
 	}
 }
 
