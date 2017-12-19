@@ -138,6 +138,7 @@ type planNodeFastPath interface {
 	FastPathResults() (int, bool)
 }
 
+var _ planNode = &alterIndexNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &copyNode{}
@@ -388,6 +389,8 @@ func (p *planner) newPlan(
 	}
 
 	switch n := stmt.(type) {
+	case *tree.AlterIndex:
+		return p.AlterIndex(ctx, n)
 	case *tree.AlterTable:
 		return p.AlterTable(ctx, n)
 	case *tree.AlterSequence:

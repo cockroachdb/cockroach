@@ -187,6 +187,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *testingRelocateNode:
 		setNeededColumns(n.rows, allColumns(n.rows))
 
+	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
