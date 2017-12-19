@@ -68,14 +68,16 @@ func (k *LogicalKey) extend(l LogicalKey) {
 	k.Inclusive = l.Inclusive
 }
 
-// LogicalSpan is a high-level representation of a span.
-// The Vals in Start and End map to a contiguous prefix of index columns.
+// LogicalSpan is a high-level representation of a span. The Vals in Start and
+// End are values for contiguous prefixes of index columns.
 //
-// Note: internally, we also use LogicalKeys that map to a contiguous sequence
-// of index columns (starting at a given "depth"). See calcDepth for more
-// information.
+// Note: internally, we also use LogicalKeys with values for a non-prefix
+// sequence of index columns (index columns starting at a given offset). Such
+// a LogicalSpan is only meaningful in the context of a certain offset.
 type LogicalSpan struct {
 	// boundaries for the span.
+	// If a column i is ascending, start.Vals[i] <= end.Vals[i].
+	// If a column i is descending, start.Vals[i] >= end.Vals[i].
 	Start, End LogicalKey
 }
 
@@ -128,7 +130,7 @@ func (sp LogicalSpan) String() string {
 //  - a contradiction: empty list.
 //
 // Note: internally, we also use LogicalSpans that correspond to a
-// contiguous sequence of index columns, starting at a given "depth".
+// contiguous sequence of index columns, starting at a given offset.
 type LogicalSpans []LogicalSpan
 
 type indexConstraintCalc struct {
@@ -140,7 +142,7 @@ type indexConstraintCalc struct {
 
 	evalCtx *tree.EvalContext
 
-	// constraints[] is used as the memoization data structure for calcDepth.
+	// constraints[] is used as the memoization data structure for calcOffset.
 	constraints []LogicalSpans
 }
 
@@ -155,12 +157,17 @@ func makeIndexConstraintCalc(
 	}
 }
 
-// compareKeyVals compares two lists of Datums that map to the same
-// sequence of index columns. Returns 0 if the lists are equal, or one is a
-// prefix of the other.
-func (c *indexConstraintCalc) compareKeyVals(a, b tree.Datums) int {
+// compareKeyVals compares two lists of values for a sequence of index columns
+// (namely <offset>, <offset+1>, ...). The directions of the index columns are
+// taken into account.
+//
+// Returns 0 if the lists are equal, or one is a prefix of the other.
+func (c *indexConstraintCalc) compareKeyVals(offset int, a, b tree.Datums) int {
 	for i := 0; i < len(a) && i < len(b); i++ {
 		if cmp := a[i].Compare(c.evalCtx, b[i]); cmp != 0 {
+			if c.colInfos[offset+i].direction == encoding.Descending {
+				return -cmp
+			}
 			return cmp
 		}
 	}
@@ -195,8 +202,10 @@ const (
 //
 // If we are comparing start keys, direction must be compareStartKeys (+1).
 // If we are comparing end keys, direction must be compareEndKeys (-1).
-func (c *indexConstraintCalc) compare(a, b LogicalKey, direction comparisonDirection) int {
-	if cmp := c.compareKeyVals(a.Vals, b.Vals); cmp != 0 {
+func (c *indexConstraintCalc) compare(
+	offset int, a, b LogicalKey, direction comparisonDirection,
+) int {
+	if cmp := c.compareKeyVals(offset, a.Vals, b.Vals); cmp != 0 {
 		return cmp
 	}
 	dirVal := int(direction)
@@ -236,9 +245,9 @@ func (c *indexConstraintCalc) compare(a, b LogicalKey, direction comparisonDirec
 	return 0
 }
 
-func (c *indexConstraintCalc) isSpanValid(sp *LogicalSpan) bool {
+func (c *indexConstraintCalc) isSpanValid(offset int, sp *LogicalSpan) bool {
 	a, b := sp.Start, sp.End
-	if cmp := c.compareKeyVals(a.Vals, b.Vals); cmp != 0 {
+	if cmp := c.compareKeyVals(offset, a.Vals, b.Vals); cmp != 0 {
 		return cmp < 0
 	}
 	if len(a.Vals) < len(b.Vals) {
@@ -253,13 +262,13 @@ func (c *indexConstraintCalc) isSpanValid(sp *LogicalSpan) bool {
 }
 
 // checkSpans asserts that the given spans are ordered and non-overlapping.
-func (c *indexConstraintCalc) checkSpans(ls LogicalSpans) {
+func (c *indexConstraintCalc) checkSpans(offset int, ls LogicalSpans) {
 	for i := range ls {
-		if !c.isSpanValid(&ls[i]) {
+		if !c.isSpanValid(offset, &ls[i]) {
 			panic(fmt.Sprintf("invalid span %s", ls[i]))
 		}
 		if i > 0 {
-			cmp := c.compareKeyVals(ls[i-1].End.Vals, ls[i].Start.Vals)
+			cmp := c.compareKeyVals(offset, ls[i-1].End.Vals, ls[i].Start.Vals)
 			if cmp > 0 {
 				panic(fmt.Sprintf("spans not ordered and disjoint: %s, %s\n", ls[i-1], ls[i]))
 			}
@@ -292,6 +301,16 @@ func (c *indexConstraintCalc) checkSpans(ls LogicalSpans) {
 	}
 }
 
+// nextDatum returns the datum that follows d, in the given direction.
+func (c *indexConstraintCalc) nextDatum(
+	d tree.Datum, direction encoding.Direction,
+) (tree.Datum, bool) {
+	if direction == encoding.Descending {
+		return d.Prev(c.evalCtx)
+	}
+	return d.Next(c.evalCtx)
+}
+
 // preferInclusive tries to convert exclusive keys to inclusive keys. This is
 // only possible if the type supports Next/Prev.
 //
@@ -300,14 +319,17 @@ func (c *indexConstraintCalc) checkSpans(ls LogicalSpans) {
 //
 // Examples:
 //  - for an integer column (/1 - /5)  =>  [/2 - /4].
+//  - for a descending integer column (/5 - /1) => (/4 - /2).
 //  - for a string column, we don't have Prev so
 //      (/foo - /qux)  =>  [/foo\x00 - /qux).
 //  - for a decimal column, we don't have either Next or Prev so we can't
-//    convert anything.
-func (c *indexConstraintCalc) preferInclusive(sp *LogicalSpan) {
+//    change anything.
+func (c *indexConstraintCalc) preferInclusive(offset int, sp *LogicalSpan) {
 	if !sp.Start.Inclusive {
 		col := len(sp.Start.Vals) - 1
-		if nextVal, hasNext := sp.Start.Vals[col].Next(c.evalCtx); hasNext {
+		if nextVal, hasNext := c.nextDatum(
+			sp.Start.Vals[col], c.colInfos[offset+col].direction,
+		); hasNext {
 			sp.Start.Vals[col] = nextVal
 			sp.Start.Inclusive = true
 		}
@@ -315,7 +337,9 @@ func (c *indexConstraintCalc) preferInclusive(sp *LogicalSpan) {
 
 	if !sp.End.Inclusive {
 		col := len(sp.End.Vals) - 1
-		if prevVal, hasPrev := sp.End.Vals[col].Prev(c.evalCtx); hasPrev {
+		if prevVal, hasPrev := c.nextDatum(
+			sp.End.Vals[col], c.colInfos[offset+col].direction.Reverse(),
+		); hasPrev {
 			sp.End.Vals[col] = prevVal
 			sp.End.Inclusive = true
 		}
@@ -325,20 +349,20 @@ func (c *indexConstraintCalc) preferInclusive(sp *LogicalSpan) {
 // intersectSpan intersects two LogicalSpans and returns
 // a new LogicalSpan. If there is no intersection, returns ok=false.
 func (c *indexConstraintCalc) intersectSpan(
-	a *LogicalSpan, b *LogicalSpan,
+	offset int, a *LogicalSpan, b *LogicalSpan,
 ) (_ LogicalSpan, ok bool) {
 	res := *a
 	changed := 0
-	if c.compare(a.Start, b.Start, compareStartKeys) < 0 {
+	if c.compare(offset, a.Start, b.Start, compareStartKeys) < 0 {
 		res.Start = b.Start
 		changed++
 	}
-	if c.compare(a.End, b.End, compareEndKeys) > 0 {
+	if c.compare(offset, a.End, b.End, compareEndKeys) > 0 {
 		res.End = b.End
 		changed++
 	}
 	// If changed is 0 or 2, the result is identical to one of the input spans.
-	if changed == 1 && !c.isSpanValid(&res) {
+	if changed == 1 && !c.isSpanValid(offset, &res) {
 		return LogicalSpan{}, false
 	}
 	return LogicalSpan{Start: res.Start.clone(), End: res.End.clone()}, true
@@ -347,16 +371,16 @@ func (c *indexConstraintCalc) intersectSpan(
 // intersectSpanSet intersects a span with (the union of) a set of spans. The
 // spans in spanSet must be ordered and non-overlapping. The resulting spans are
 // guaranteed to be ordered and non-overlapping.
-func (c *indexConstraintCalc) intersectSpanSet(a *LogicalSpan, spanSet LogicalSpans) LogicalSpans {
-	c.checkSpans(spanSet)
-
+func (c *indexConstraintCalc) intersectSpanSet(
+	offset int, a *LogicalSpan, spanSet LogicalSpans,
+) LogicalSpans {
 	res := make(LogicalSpans, 0, len(spanSet))
 	for i := range spanSet {
-		if sp, ok := c.intersectSpan(a, &spanSet[i]); ok {
+		if sp, ok := c.intersectSpan(offset, a, &spanSet[i]); ok {
 			res = append(res, sp)
 		}
 	}
-	c.checkSpans(res)
+	c.checkSpans(offset, res)
 	return res
 }
 
@@ -364,7 +388,7 @@ func (c *indexConstraintCalc) intersectSpanSet(a *LogicalSpan, spanSet LogicalSp
 // simple comparison expression. The arguments are the operator and right
 // operand.
 func (c *indexConstraintCalc) makeSpansForSingleColumn(
-	op operator, val *expr,
+	offset int, op operator, val *expr,
 ) (LogicalSpans, bool) {
 	if op == inOp && isTupleOfConstants(val) {
 		// We assume that the values of the tuple are already ordered and distinct.
@@ -373,6 +397,12 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 			datum := v.private.(tree.Datum)
 			spans[i].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 			spans[i].End = spans[i].Start
+		}
+		if c.colInfos[offset].direction == encoding.Descending {
+			// Reverse the order of the spans.
+			for i, j := 0, len(spans)-1; i < j; i, j = i+1, j-1 {
+				spans[i], spans[j] = spans[j], spans[i]
+			}
 		}
 		return spans, true
 	}
@@ -391,15 +421,17 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 		case ltOp:
 			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
-			c.preferInclusive(&sp)
 		case gtOp:
 			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
-			c.preferInclusive(&sp)
 		case leOp:
 			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 		case geOp:
 			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 		}
+		if c.colInfos[offset].direction == encoding.Descending {
+			sp.Start, sp.End = sp.End, sp.Start
+		}
+		c.preferInclusive(offset, &sp)
 		return LogicalSpans{sp}, true
 
 	case neOp:
@@ -413,44 +445,44 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 	}
 }
 
-// makeSpansForExpr creates spans for index columns starting at <depth>
+// makeSpansForExpr creates spans for index columns starting at <offset>
 // from the given expression.
-func (c *indexConstraintCalc) makeSpansForExpr(depth int, e *expr) (LogicalSpans, bool) {
+func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpans, bool) {
 	// Check for an operation where the left-hand side is an
 	// indexed var for this column.
-	if isIndexedVar(e.children[0], depth) {
-		return c.makeSpansForSingleColumn(e.op, e.children[1])
+	if isIndexedVar(e.children[0], offset) {
+		return c.makeSpansForSingleColumn(offset, e.op, e.children[1])
 	}
 	return nil, false
 }
 
-// calcDepth calculates constraints for the sequence of index columns starting
-// at <depth> (i.e. the <depth>-th index column, <depth+1>-th index column, etc.).
+// calcOffset calculates constraints for the sequence of index columns starting
+// at <offset>.
 //
-// It works as follows: we look at expressions which constrain column <depth>
-// and generate spans from those expressions. Then, we try to extend those span
-// keys with more columns by recursively calculating the constraints for a
-// higher <depth>. The results are memoized so each depth is calculated at most
-// once.
+// It works as follows: we look at expressions which constrain column <offset>
+// (or a sequence of columns starting at <offset>) and generate spans from those
+// expressions. Then, we try to extend those span keys with more columns by
+// recursively calculating the constraints for a higher <offset>. The results
+// are memoized so each offset is calculated at most once.
 //
 // For example:
 //   @1 >= 5 AND @1 <= 10 AND @2 = 2 AND @3 > 1
 //
-// - calcDepth(depth = 0):          // calculate constraints for @1, @2, @3
+// - calcOffset(offset = 0):          // calculate constraints for @1, @2, @3
 //   - process expressions, generating span [/5 - /10]
-//   - call calcDepth(depth = 1):   // calculate constraints for @2, @3
+//   - call calcOffset(offset = 1):   // calculate constraints for @2, @3
 //     - process expressions, generating span [/2 - /2]
-//     - call calcDepth(depth = 2): // calculate constraints for @3
+//     - call calcOffset(offset = 2): // calculate constraints for @3
 //       - process expressions, return span (/1 - ]
 //     - extend the keys in the span [/2 - /2] with (/1 - ], return (/2/1 - /2].
 //   - extend the keys in the span [/5 - /10] with (/2/1 - /2], return
 //     (/5/2/1 - /10/2].
 //
 // TODO(radu): add an example with tuple constraints once they are supported.
-func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
-	if c.constraints[depth] != nil {
+func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
+	if c.constraints[offset] != nil {
 		// The results of this function are memoized.
-		return c.constraints[depth]
+		return c.constraints[offset]
 	}
 
 	// Start with a span with no boundaries.
@@ -459,7 +491,7 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 	// TODO(radu): sorting the expressions by the variable index, or pre-building
 	// a map could help here.
 	for _, e := range c.andExprs {
-		exprSpans, ok := c.makeSpansForExpr(depth, e)
+		exprSpans, ok := c.makeSpansForExpr(offset, e)
 		if !ok {
 			continue
 		}
@@ -467,7 +499,7 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 		if len(exprSpans) == 1 {
 			// More efficient path for the common case of a single expression span.
 			for i := 0; i < len(spans); i++ {
-				if spans[i], ok = c.intersectSpan(&spans[i], &exprSpans[0]); !ok {
+				if spans[i], ok = c.intersectSpan(offset, &spans[i], &exprSpans[0]); !ok {
 					// Remove this span.
 					copy(spans[i:], spans[i+1:])
 					spans = spans[:len(spans)-1]
@@ -476,7 +508,7 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 		} else {
 			var newSpans LogicalSpans
 			for i := range spans {
-				newSpans = append(newSpans, c.intersectSpanSet(&spans[i], exprSpans)...)
+				newSpans = append(newSpans, c.intersectSpanSet(offset, &spans[i], exprSpans)...)
 			}
 			spans = newSpans
 		}
@@ -495,17 +527,17 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 		// Currently startLen, endLen can be at most 1; but this will change
 		// when we will support tuple expressions.
 
-		if startLen == endLen && startLen > 0 && depth+startLen < len(c.colInfos) &&
-			c.compareKeyVals(start.Vals, end.Vals) == 0 {
+		if startLen == endLen && startLen > 0 && offset+startLen < len(c.colInfos) &&
+			c.compareKeyVals(offset, start.Vals, end.Vals) == 0 {
 			// Special case when the start and end keys are equal (i.e. an exact value
 			// on this column). This is the only case where we can break up a single
 			// span into multiple spans.
 			//
 			// For example:
 			//  @1 = 1 AND @2 IN (3, 4, 5)
-			//  At depth 0 so far we have:
+			//  At offset 0 so far we have:
 			//    [/1 - /1]
-			//  At depth 1 we have:
+			//  At offset 1 we have:
 			//    [/3 - /3]
 			//    [/4 - /4]
 			//    [/5 - /5]
@@ -513,7 +545,7 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 			//    [/1/3 - /1/3]
 			//    [/1/4 - /1/4]
 			//    [/1/5 - /1/5]
-			s := c.calcDepth(depth + startLen)
+			s := c.calcOffset(offset + startLen)
 			switch len(s) {
 			case 0:
 			case 1:
@@ -537,18 +569,18 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 			continue
 		}
 
-		if startLen > 0 && depth+startLen < len(c.colInfos) && spans[i].Start.Inclusive {
+		if startLen > 0 && offset+startLen < len(c.colInfos) && spans[i].Start.Inclusive {
 			// We can advance the starting boundary. Calculate constraints for the
 			// column that follows.
-			s := c.calcDepth(depth + startLen)
+			s := c.calcOffset(offset + startLen)
 			if len(s) > 0 {
 				// If we have multiple constraints, we can only use the start of the
 				// first one to tighten the span.
 				// For example:
 				//   @1 >= 2 AND @2 IN (1, 2, 3).
-				//   At depth 0 so far we have:
+				//   At offset 0 so far we have:
 				//     [/2 - ]
-				//   At depth 1 we have:
+				//   At offset 1 we have:
 				//     [/1 - /1]
 				//     [/2 - /2]
 				//     [/3 - /3]
@@ -558,10 +590,10 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 			}
 		}
 
-		if endLen > 0 && depth+endLen < len(c.colInfos) && spans[i].End.Inclusive {
+		if endLen > 0 && offset+endLen < len(c.colInfos) && spans[i].End.Inclusive {
 			// We can restrict the ending boundary. Calculate constraints for the
 			// column that follows.
-			s := c.calcDepth(depth + endLen)
+			s := c.calcOffset(offset + endLen)
 			if len(s) > 0 {
 				// If we have multiple constraints, we can only use the end of the
 				// last one to tighten the span.
@@ -575,8 +607,8 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 	if newSpans != nil {
 		spans = newSpans
 	}
-	c.checkSpans(spans)
-	c.constraints[depth] = spans
+	c.checkSpans(offset, spans)
+	c.constraints[offset] = spans
 	return spans
 }
 
@@ -604,5 +636,5 @@ func MakeIndexConstraints(
 		andExprs = []*expr{filter}
 	}
 	c := makeIndexConstraintCalc(colInfos, andExprs, evalCtx)
-	return c.calcDepth(0)
+	return c.calcOffset(0)
 }

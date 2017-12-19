@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // parses a span with integer column values in the format of LogicalSpan.String.
@@ -136,9 +137,16 @@ func TestIntersectSpan(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			sp1 := parseSpan(tc.a)
 			sp2 := parseSpan(tc.b)
-			c := indexConstraintCalc{evalCtx: &evalCtx}
+			c := indexConstraintCalc{
+				// Only the directions from colInfos are used by intersectSpan
+				colInfos: []IndexColumnInfo{
+					{direction: encoding.Ascending},
+					{direction: encoding.Ascending},
+				},
+				evalCtx: &evalCtx,
+			}
 			res := ""
-			if sp3, ok := c.intersectSpan(&sp1, &sp2); ok {
+			if sp3, ok := c.intersectSpan(0 /* depth */, &sp1, &sp2); ok {
 				res = sp3.String()
 			}
 			if res != tc.e {
