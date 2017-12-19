@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -838,7 +839,8 @@ func (s *Server) Start(ctx context.Context) error {
 	//
 	// TODO(marc): when cookie-based authentication exists, apply it to all web
 	// endpoints.
-	s.mux.Handle(debugEndpoint, authorizedHandler(http.HandlerFunc(handleDebug)))
+	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
+
 	// Also throw the landing page in there. It won't work well, but it's better than a 404.
 	// The remaining endpoints will be opened late, when we're sure that the subsystems they
 	// talk to are functional.
