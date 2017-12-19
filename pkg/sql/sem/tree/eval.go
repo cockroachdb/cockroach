@@ -1112,6 +1112,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDBytes(*left.(*DBytes) + *right.(*DBytes)), nil
 			},
 		},
+		BinOp{
+			LeftType:   types.JSON,
+			RightType:  types.JSON,
+			ReturnType: types.JSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				j, err := MustBeDJSON(left).JSON.Concat(MustBeDJSON(right).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return &DJSON{j}, nil
+			},
+		},
 	},
 
 	// TODO(pmattis): Check that the shift is valid.
