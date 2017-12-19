@@ -1,141 +1,141 @@
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 > 2
 ----
 [/3 - ]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 >= 2
 ----
 [/2 - ]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 != 2
 ----
 [ - /2)
 (/2 - ]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 < 2
 ----
 [ - /1]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 = 2
 ----
 [/2 - /2]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 > 2 AND @1 < 4
 ----
 [/3 - /3]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 >= 2 AND @1 <= 4
 ----
 [/2 - /4]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 > 2 AND @2 > 5
 ----
 [/3/6 - ]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 >= 1 AND @1 <= 5 AND @1 != 3
 ----
 [/1 - /3)
 (/3 - /5]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/8 - /2/9]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 > 1 AND @1 < 4 AND @2 > 5 AND @2 < 8
 ----
 [/2/6 - /3/7]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 > 1 AND @1 < 4 AND @2 = 5
 ----
 [/2/5 - /3/5]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 = 1 AND @2 > 3 AND @2 < 5
 ----
 [/1/4 - /1/4]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 = 1 AND @2 > 3 AND @2 < 8
 ----
 [/1/4 - /1/7]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 > 2 AND @1 < 1
 ----
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 = 1 AND @2 != 2
 ----
 [/1 - /1/2)
 (/1/2 - /1]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 >= 1 AND @1 <= 5 AND @2 != 2
 ----
 [/1 - /5]
 
-# Tests with a type that doesn't support Prev.
-build-scalar,normalize,index-constraints string
+# Tests with a type that doesn't support columns=(Prev.
+build-scalar,normalize,index-constraints columns=(string)
 @1 > 'a' AND @1 < 'z'
 ----
 [/e'a\x00' - /'z')
 
-build-scalar,normalize,index-constraints string int
+build-scalar,normalize,index-constraints columns=(string, int)
 @1 > 'a' AND @1 < 'z' AND @2 = 5
 ----
 [/e'a\x00'/5 - /'z')
 
-# Tests with a type that doesn't support Next or Prev.
-build-scalar,normalize,index-constraints decimal
+# Tests with a type that doesn't support columns=(Next or Prev.
+build-scalar,normalize,index-constraints columns=(decimal)
 @1 > 1.5
 ----
 (/1.5 - ]
 
-build-scalar,normalize,index-constraints decimal
+build-scalar,normalize,index-constraints columns=(decimal)
 @1 > 1.5 AND @1 < 2
 ----
 (/1.5 - /2)
 
-# Note the difference here between decimal and int: we
+# Note the difference here between decimacolumns=(l and int: we
 # can't extend the exclusive start key.
-build-scalar,normalize,index-constraints decimal decimal
+build-scalar,normalize,index-constraints columns=(decimal, decimal)
 @1 > 1.5 AND @2 > 2
 ----
 (/1.5 - ]
 
-build-scalar,normalize,index-constraints int
+build-scalar,normalize,index-constraints columns=(int)
 @1 IN (1, 2, 3)
 ----
 [/1 - /1]
 [/2 - /2]
 [/3 - /3]
 
-build-scalar,legacy-normalize,index-constraints int
+build-scalar,legacy-normalize,index-constraints columns=(int)
 @1 IN (1, 5, 1, 4)
 ----
 [/1 - /1]
 [/4 - /4]
 [/5 - /5]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 = 1 AND @2 IN (1, 2, 3)
 ----
 [/1/1 - /1/1]
 [/1/2 - /1/2]
 [/1/3 - /1/3]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 IN (1, 2) AND @2 IN (1, 2, 3)
 ----
 [/1/1 - /1/1]
@@ -145,41 +145,41 @@ build-scalar,normalize,index-constraints int int
 [/2/2 - /2/2]
 [/2/3 - /2/3]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
 ----
 [/2/1 - /4/3]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 IN (1, 2, 3) AND @2 = 4
 ----
 [/1/4 - /1/4]
 [/2/4 - /2/4]
 [/3/4 - /3/4]
 
-build-scalar,normalize,index-constraints int int
+build-scalar,normalize,index-constraints columns=(int, int)
 @1 IN (1, 2, 3) AND @2 >= 2 AND @2 <= 4
 ----
 [/1/2 - /1/4]
 [/2/2 - /2/4]
 [/3/2 - /3/4]
 
-build-scalar,normalize,index-constraints int int int
+build-scalar,normalize,index-constraints columns=(int, int, int)
 (@1, @2, @3) = (1, 2, 3)
 ----
 [/1/2/3 - /1/2/3]
 
-build-scalar,normalize,index-constraints int int int int int
+build-scalar,normalize,index-constraints columns=(int, int, int, int, int)
 (@1, @2, 3, (4, @5)) = (1, 2, @3, (@4, 5))
 ----
 [/1/2/3/4/5 - /1/2/3/4/5]
 
-build-scalar,normalize,index-constraints int int int int
+build-scalar,normalize,index-constraints columns=(int, int, int, int)
 (@1, @2, @3) = (1, 2, 3) AND @4 > 4
 ----
 [/1/2/3/5 - /1/2/3]
 
-build-scalar,normalize,index-constraints int int int int
+build-scalar,normalize,index-constraints columns=(int, int, int, int)
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/6/2/3/4 - /9/2/3/4]

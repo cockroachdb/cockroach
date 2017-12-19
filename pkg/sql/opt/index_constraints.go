@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // LogicalKey is a high-level representation of a span boundary.
@@ -132,7 +133,7 @@ type LogicalSpans []LogicalSpan
 
 type indexConstraintCalc struct {
 	// types of the columns of the index we are generating constraints for.
-	colTypes []types.T
+	colInfos []IndexColumnInfo
 
 	// andExprs is a set of conjuncts that make up the filter.
 	andExprs []*expr
@@ -144,13 +145,13 @@ type indexConstraintCalc struct {
 }
 
 func makeIndexConstraintCalc(
-	colTypes []types.T, andExprs []*expr, evalCtx *tree.EvalContext,
+	colInfos []IndexColumnInfo, andExprs []*expr, evalCtx *tree.EvalContext,
 ) indexConstraintCalc {
 	return indexConstraintCalc{
-		colTypes:    colTypes,
+		colInfos:    colInfos,
 		andExprs:    andExprs,
 		evalCtx:     evalCtx,
-		constraints: make([]LogicalSpans, len(colTypes)),
+		constraints: make([]LogicalSpans, len(colInfos)),
 	}
 }
 
@@ -494,7 +495,7 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 		// Currently startLen, endLen can be at most 1; but this will change
 		// when we will support tuple expressions.
 
-		if startLen == endLen && startLen > 0 && depth+startLen < len(c.colTypes) &&
+		if startLen == endLen && startLen > 0 && depth+startLen < len(c.colInfos) &&
 			c.compareKeyVals(start.Vals, end.Vals) == 0 {
 			// Special case when the start and end keys are equal (i.e. an exact value
 			// on this column). This is the only case where we can break up a single
@@ -536,7 +537,7 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 			continue
 		}
 
-		if startLen > 0 && depth+startLen < len(c.colTypes) && spans[i].Start.Inclusive {
+		if startLen > 0 && depth+startLen < len(c.colInfos) && spans[i].Start.Inclusive {
 			// We can advance the starting boundary. Calculate constraints for the
 			// column that follows.
 			s := c.calcDepth(depth + startLen)
@@ -557,7 +558,7 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 			}
 		}
 
-		if endLen > 0 && depth+endLen < len(c.colTypes) && spans[i].End.Inclusive {
+		if endLen > 0 && depth+endLen < len(c.colInfos) && spans[i].End.Inclusive {
 			// We can restrict the ending boundary. Calculate constraints for the
 			// column that follows.
 			s := c.calcDepth(depth + endLen)
@@ -579,6 +580,13 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 	return spans
 }
 
+// IndexColumnInfo encompasses the information for index columns, needed for
+// index constraints.
+type IndexColumnInfo struct {
+	typ       types.T
+	direction encoding.Direction
+}
+
 // MakeIndexConstraints generates constraints from a scalar boolean filter
 // expression. See LogicalSpans for more information on how constraints are
 // represented.
@@ -587,7 +595,7 @@ func (c *indexConstraintCalc) calcDepth(depth int) LogicalSpans {
 // @1, @2, @3, etc. Eventually we will need to pass in a list of column
 // indices.
 func MakeIndexConstraints(
-	filter *expr, colTypes []types.T, evalCtx *tree.EvalContext,
+	filter *expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
 ) LogicalSpans {
 	var andExprs []*expr
 	if filter.op == andOp {
@@ -595,6 +603,6 @@ func MakeIndexConstraints(
 	} else {
 		andExprs = []*expr{filter}
 	}
-	c := makeIndexConstraintCalc(colTypes, andExprs, evalCtx)
+	c := makeIndexConstraintCalc(colInfos, andExprs, evalCtx)
 	return c.calcDepth(0)
 }
