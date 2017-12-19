@@ -396,7 +396,7 @@ statement ok
 ALTER TABLE delivery DROP COLUMN "item"
 
 statement ok
-DROP INDEX products@products_upc_key
+DROP INDEX products@products_upc_key CASCADE
 
 statement error index "orders_product_idx" is in use as a foreign key constraint
 DROP INDEX orders@orders_product_idx
