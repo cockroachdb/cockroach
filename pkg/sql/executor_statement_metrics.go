@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // SQL execution is separated in 3+ phases:
@@ -60,21 +61,37 @@ const (
 // phaseTimes is the type of the session.phaseTimes array.
 type phaseTimes [sessionNumPhases]time.Time
 
+type sqlEngineMetrics struct {
+	// The subset of SELECTs that are processed through DistSQL.
+	DistSQLSelectCount    *metric.Counter
+	DistSQLExecLatency    *metric.Histogram
+	SQLExecLatency        *metric.Histogram
+	DistSQLServiceLatency *metric.Histogram
+	SQLServiceLatency     *metric.Histogram
+}
+
+// sqlEngineMetrics implements the metric.Struct interface
+var _ metric.Struct = sqlEngineMetrics{}
+
+// MetricStruct is part of the metric.Struct interface.
+func (sqlEngineMetrics) MetricStruct() {}
+
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
-// accounting.
+// accounting in the passed-in sqlEngineMetrics.
 // - distSQLUsed reports whether the query was distributed.
 // - automaticRetryCount is the count of implicit txn retries
 //   so far.
 // - result is the result set computed by the query/statement.
 // - err is the error encountered, if any.
-func (e *Executor) recordStatementSummary(
+func recordStatementSummary(
 	planner *planner,
 	stmt Statement,
 	distSQLUsed bool,
 	automaticRetryCount int,
 	resultWriter StatementResult,
 	err error,
+	m *sqlEngineMetrics,
 ) {
 	phaseTimes := &planner.phaseTimes
 
@@ -103,13 +120,13 @@ func (e *Executor) recordStatementSummary(
 	if automaticRetryCount == 0 {
 		if distSQLUsed {
 			if _, ok := stmt.AST.(*tree.Select); ok {
-				e.DistSQLSelectCount.Inc(1)
+				m.DistSQLSelectCount.Inc(1)
 			}
-			e.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			e.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 		} else {
-			e.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			e.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 		}
 	}
 
