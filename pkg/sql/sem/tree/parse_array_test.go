@@ -99,7 +99,7 @@ lo}`, coltypes.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 	}
 }
 
-const randomArrayIterations = 10000
+const randomArrayIterations = 1000
 const randomArrayMaxLength = 10
 const randomStringMaxLength = 1000
 
