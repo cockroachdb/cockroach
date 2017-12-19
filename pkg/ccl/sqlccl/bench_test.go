@@ -78,14 +78,14 @@ func BenchmarkClusterRestore(b *testing.B) {
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	bankData := sampledataccl.BankRows(b.N)
-	backup, err := sampledataccl.ToBackup(b, bankData, dir)
+	backup, err := sampledataccl.ToBackup(b, bankData, filepath.Join(dir, "foo"))
 	if err != nil {
 		b.Fatalf("%+v", err)
 	}
 	b.SetBytes(backup.Desc.EntryCounts.DataSize / int64(b.N))
 
 	b.ResetTimer()
-	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
+	sqlDB.Exec(b, `RESTORE data.* FROM 'nodelocal:///foo'`)
 	b.StopTimer()
 }
 
