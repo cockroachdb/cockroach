@@ -15,6 +15,7 @@
 package pgwire_test
 
 import (
+	"bytes"
 	gosql "database/sql"
 	"database/sql/driver"
 	"encoding/json"
@@ -1802,7 +1803,8 @@ func TestPGWireTooManyArguments(t *testing.T) {
 	}
 	defer db.Close()
 
-	query := "SELECT"
+	var b bytes.Buffer
+	b.WriteString("SELECT")
 
 	args := make([]interface{}, 1<<16)
 	for i := 1; i <= 1<<16; i++ {
@@ -1810,11 +1812,11 @@ func TestPGWireTooManyArguments(t *testing.T) {
 		if i == 1 {
 			comma = ""
 		}
-		query += fmt.Sprintf("%s $%d::int", comma, i)
+		b.WriteString(fmt.Sprintf("%s $%d::int", comma, i))
 		args[i-1] = i
 	}
-	query += ";"
-
+	b.WriteString(";")
+	query := b.String()
 	if _, err := db.Prepare(query); !testutils.IsError(err, "more than 65535 arguments") {
 		t.Fatalf("unexpected error: %v", err)
 	}
