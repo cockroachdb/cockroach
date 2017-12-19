@@ -12,27 +12,48 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package util
+package engine
 
 import (
+	"C"
 	"bufio"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
+
+const lockFilename = `TEMP_DIR.LOCK`
 
 // CreateTempDir creates a temporary directory with a prefix under the given
 // parentDir and returns the absolute path of the temporary directory.
 // It is advised to invoke CleanupTempDirs before creating new temporary
 // directories in cases where the disk is completely full.
-func CreateTempDir(parentDir, prefix string) (string, error) {
+func CreateTempDir(parentDir, prefix string, stopper *stop.Stopper) (string, error) {
 	// We generate a unique temporary directory with the specified prefix.
 	tempPath, err := ioutil.TempDir(parentDir, prefix)
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Abs(tempPath)
+	absPath, err := filepath.Abs(tempPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Create a lock file.
+	flock, err := LockFile(filepath.Join(absPath, lockFilename))
+	if err != nil {
+		return "", errors.Wrapf(err, "could not create lock on new temporary directory")
+	}
+	stopper.AddCloser(stop.CloserFn(func() {
+		_ = UnlockFile(flock)
+	}))
+
+	return absPath, nil
 }
 
 // RecordTempDir records tempPath to the record file specified by recordPath to
@@ -78,6 +99,17 @@ func CleanupTempDirs(recordPath string) error {
 		if path == "" {
 			continue
 		}
+
+		// Check if another Cockroach instance is using this temporary
+		// directory i.e. has a lock on the temp dir lock file.
+		flock, err := LockFile(filepath.Join(path, lockFilename))
+		if err != nil {
+			return errors.Wrapf(err, "temporary directory %s still in use", path)
+		}
+		defer func() {
+			_ = UnlockFile(flock)
+		}()
+
 		// If path/directory does not exist, error is nil.
 		if err := os.RemoveAll(path); err != nil {
 			return err

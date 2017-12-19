@@ -2343,3 +2343,14 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 func IsValidSplitKey(key roachpb.Key, allowMeta2Splits bool) bool {
 	return bool(C.MVCCIsValidSplitKey(goToCSlice(key), C._Bool(allowMeta2Splits)))
 }
+
+// LockFile sets a lock on the specified file using RocksDB's file locking interface.
+func LockFile(filename string) (C.DBFileLock, error) {
+	var lock C.DBFileLock
+	return lock, statusToError(C.DBLockFile(goToCSlice([]byte(filename)), &lock))
+}
+
+// UnlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
+func UnlockFile(lock C.DBFileLock) error {
+	return statusToError(C.DBUnlockFile(lock))
+}

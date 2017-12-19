@@ -114,3 +114,19 @@ glob_not_exists "$storedir/$tempprefix*"
 # Verify the store file still exists.
 file_exists $storedir
 end_test
+
+start_test "Check that temp directory does not get wiped upon subsequent failed cockroach start attempt and that a cockroach instance can be subsequently started up after a shutdown"
+send "$argv start --insecure --store=$storedir & \r"
+eexpect "node starting"
+# Try to start up a second cockroach instance with the same store path.
+send "$argv start --insecure --store=$storedir\r"
+eexpect "ERROR: could not cleanup temporary directories from record file: temporary directory $cwd/$storedir/$tempprefix*"
+# Verify the temp directory still exists.
+glob_exists "$storedir/$tempprefix*"
+send "pkill -9 cockroach\r"
+# We should be able to start the cockroach instance again.
+send "$argv start --insecure --store=$storedir\r"
+eexpect "node starting"
+interrupt
+eexpect "shutdown completed"
+end_test
