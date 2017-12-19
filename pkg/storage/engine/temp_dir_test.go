@@ -12,18 +12,26 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package util
+package engine
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestCreateTempDir(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
 	// Temporary parent directory to test this.
 	dir, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -35,7 +43,7 @@ func TestCreateTempDir(t *testing.T) {
 		}
 	}()
 
-	tempDir, err := CreateTempDir(dir, "test-create-temp")
+	tempDir, err := CreateTempDir(dir, "test-create-temp", stopper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,6 +62,7 @@ func TestCreateTempDir(t *testing.T) {
 }
 
 func TestRecordTempDir(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	recordFile := "foobar"
 
 	f, err := ioutil.TempFile("", "record-file")
@@ -87,6 +96,8 @@ func TestRecordTempDir(t *testing.T) {
 }
 
 func TestCleanupTempDirs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	recordFile, err := ioutil.TempFile("", "record-file")
 	if err != nil {
 		t.Fatal(err)
