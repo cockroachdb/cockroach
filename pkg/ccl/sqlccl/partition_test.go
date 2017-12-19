@@ -99,6 +99,7 @@ type partitioningTest struct {
 }
 
 type repartitioningTest struct {
+	index      string
 	old, new   partitioningTest
 	isFastPath bool
 }
@@ -198,7 +199,7 @@ func (t *partitioningTest) parse() error {
 func (t *partitioningTest) verifyScansFn(ctx context.Context, db *gosql.DB) func() error {
 	return func() error {
 		for where, expectedNodes := range t.scans {
-			query := fmt.Sprintf(`SELECT * FROM %s WHERE %s`, tree.Name(t.name), where)
+			query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, tree.Name(t.name), where)
 			log.Infof(ctx, "query: %s", query)
 			if err := verifyScansOnNode(db, query, expectedNodes); err != nil {
 				if log.V(1) {
@@ -653,6 +654,44 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				`@primary /1/8-/2`,
 			},
 		},
+
+		{
+			name:   `secondary index - unpartitioned`,
+			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`,
+		},
+		{
+			name: `secondary index - list partitioning`,
+			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT, INDEX b_idx (b) PARTITION BY LIST (b) (
+				PARTITION p3 VALUES IN (3),
+				PARTITION p4 VALUES IN (4)
+			))`,
+			configs: []string{`@b_idx:+n1`, `.p3:+n2`, `.p4:+n3`},
+			generatedSpans: []string{
+				`@b_idx /2-/2/3`,
+				`   .p3 /2/3-/2/4`,
+				`   .p4 /2/4-/2/5`,
+				`@b_idx /2/5-/3`,
+			},
+			scans: map[string]string{`b < 3`: `n1`, `b = 3`: `n2`, `b = 4`: `n3`, `b > 4`: `n1`},
+		},
+		{
+			// Intentionally a little different than `single col list
+			// partitioning` for the repartitioning tests.
+			name: `secondary index - list partitioning - DEFAULT`,
+			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT, INDEX b_idx (b) PARTITION BY LIST (b) (
+				PARTITION p4 VALUES IN (4),
+				PARTITION p5 VALUES IN (5),
+				PARTITION pd VALUES IN (DEFAULT)
+			))`,
+			configs: []string{`@b_idx`, `.p4:+n2`, `.p5:+n3`, `.pd:+n1`},
+			generatedSpans: []string{
+				`.pd /2-/2/4`,
+				`.p4 /2/4-/2/5`,
+				`.p5 /2/5-/2/6`,
+				`.pd /2/6-/3`,
+			},
+			scans: map[string]string{`b < 4`: `n1`, `b = 4`: `n2`, `b = 5`: `n3`, `b > 5`: `n1`},
+		},
 	}
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
@@ -696,73 +735,87 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartitioningTest, error) {
 	tests := []repartitioningTest{
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `unpartitioned`},
 			new:        partitioningTest{name: `unpartitioned`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `unpartitioned`},
 			new:        partitioningTest{name: `single col list partitioning`},
 			isFastPath: false,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `unpartitioned`},
 			new:        partitioningTest{name: `single col list partitioning - DEFAULT`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `unpartitioned`},
 			new:        partitioningTest{name: `single col range partitioning`},
 			isFastPath: false,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `unpartitioned`},
 			new:        partitioningTest{name: `single col range partitioning - MAXVALUE`},
 			isFastPath: true,
 		},
 
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col list partitioning`},
 			new:        partitioningTest{name: `single col list partitioning - DEFAULT`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col list partitioning - DEFAULT`},
 			new:        partitioningTest{name: `single col list partitioning`},
 			isFastPath: false,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `multi col list partitioning`},
 			new:        partitioningTest{name: `multi col list partitioning - DEFAULT`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `multi col list partitioning - DEFAULT`},
 			new:        partitioningTest{name: `multi col list partitioning`},
 			isFastPath: false,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `multi col list partitioning - DEFAULT`},
 			new:        partitioningTest{name: `multi col list partitioning - DEFAULT DEFAULT`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `multi col list partitioning - DEFAULT DEFAULT`},
 			new:        partitioningTest{name: `multi col list partitioning - DEFAULT`},
 			isFastPath: false,
 		},
 
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col range partitioning`},
 			new:        partitioningTest{name: `single col range partitioning - MAXVALUE`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col range partitioning - MAXVALUE`},
 			new:        partitioningTest{name: `single col range partitioning`},
 			isFastPath: false,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `multi col range partitioning`},
 			new:        partitioningTest{name: `multi col range partitioning - MAXVALUE`},
 			isFastPath: true,
@@ -773,27 +826,32 @@ func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartition
 			// The `multi col range partitioning - MAXVALUE` partition test has
 			// been constructed to cover exactly the same set of values so we
 			// can have a true<->true test case as well.
+			index:      `primary`,
 			old:        partitioningTest{name: `multi col range partitioning - MAXVALUE`},
 			new:        partitioningTest{name: `multi col range partitioning`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `multi col range partitioning - MAXVALUE`},
 			new:        partitioningTest{name: `multi col range partitioning - MAXVALUE MAXVALUE`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `multi col range partitioning - MAXVALUE MAXVALUE`},
 			new:        partitioningTest{name: `multi col range partitioning - MAXVALUE`},
 			isFastPath: false,
 		},
 
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col list partitioning`},
 			new:        partitioningTest{name: `single col range partitioning`},
 			isFastPath: false,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col range partitioning`},
 			new:        partitioningTest{name: `single col list partitioning`},
 			isFastPath: false,
@@ -802,24 +860,53 @@ func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartition
 		// TODO(dan): One repartitioning is fully implemented, these tests also
 		// need to pass with no ccl code.
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col list partitioning`},
 			new:        partitioningTest{name: `unpartitioned`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col list partitioning - DEFAULT`},
 			new:        partitioningTest{name: `unpartitioned`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col range partitioning`},
 			new:        partitioningTest{name: `unpartitioned`},
 			isFastPath: true,
 		},
 		{
+			index:      `primary`,
 			old:        partitioningTest{name: `single col range partitioning - MAXVALUE`},
 			new:        partitioningTest{name: `unpartitioned`},
 			isFastPath: true,
+		},
+
+		{
+			index:      `b_idx`,
+			old:        partitioningTest{name: `secondary index - unpartitioned`},
+			new:        partitioningTest{name: `secondary index - list partitioning`},
+			isFastPath: false,
+		},
+		{
+			index:      `b_idx`,
+			old:        partitioningTest{name: `secondary index - list partitioning`},
+			new:        partitioningTest{name: `secondary index - unpartitioned`},
+			isFastPath: true,
+		},
+		{
+			index:      `b_idx`,
+			old:        partitioningTest{name: `secondary index - list partitioning`},
+			new:        partitioningTest{name: `secondary index - list partitioning - DEFAULT`},
+			isFastPath: true,
+		},
+		{
+			index:      `b_idx`,
+			old:        partitioningTest{name: `secondary index - list partitioning - DEFAULT`},
+			new:        partitioningTest{name: `secondary index - list partitioning`},
+			isFastPath: false,
 		},
 	}
 
@@ -1010,16 +1097,23 @@ func TestRepartitioning(t *testing.T) {
 				}
 				sqlDB.Exec(t, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", test.old.parsed.tableName, test.new.parsed.tableName))
 
+				testIndex, _, err := test.new.parsed.tableDesc.FindIndexByName(test.index)
+				if err != nil {
+					t.Fatalf("%+v", err)
+				}
+
 				var repartition bytes.Buffer
-				if test.new.parsed.tableDesc.PrimaryIndex.Partitioning.NumColumns == 0 {
-					fmt.Fprintf(&repartition, `ALTER TABLE %s PARTITION BY NOTHING`, test.new.parsed.tableName)
-				} else {
+				if testIndex.ID == test.new.parsed.tableDesc.PrimaryIndex.ID {
 					fmt.Fprintf(&repartition, `ALTER TABLE %s `, test.new.parsed.tableName)
+				} else {
+					fmt.Fprintf(&repartition, `ALTER INDEX %s@%s `, test.new.parsed.tableName, testIndex.Name)
+				}
+				if testIndex.Partitioning.NumColumns == 0 {
+					repartition.WriteString(`PARTITION BY NOTHING`)
+				} else {
 					if err := sql.ShowCreatePartitioning(
-						&sqlbase.DatumAlloc{}, test.new.parsed.tableDesc,
-						&test.new.parsed.tableDesc.PrimaryIndex,
-						&test.new.parsed.tableDesc.PrimaryIndex.Partitioning,
-						&repartition, 0 /* indent */, 0, /* colOffset */
+						&sqlbase.DatumAlloc{}, test.new.parsed.tableDesc, &testIndex,
+						&testIndex.Partitioning, &repartition, 0 /* indent */, 0, /* colOffset */
 					); err != nil {
 						t.Fatalf("%+v", err)
 					}
