@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -119,11 +120,11 @@ func TestSSLEnforcement(t *testing.T) {
 		{adminPrefix + "health", insecureContext, http.StatusPermanentRedirect},
 
 		// /debug/: server.adminServer: no auth.
-		{debugEndpoint + "vars", rootCertsContext, http.StatusOK},
-		{debugEndpoint + "vars", nodeCertsContext, http.StatusOK},
-		{debugEndpoint + "vars", testCertsContext, http.StatusOK},
-		{debugEndpoint + "vars", noCertsContext, http.StatusOK},
-		{debugEndpoint + "vars", insecureContext, http.StatusPermanentRedirect},
+		{debug.Endpoint + "vars", rootCertsContext, http.StatusOK},
+		{debug.Endpoint + "vars", nodeCertsContext, http.StatusOK},
+		{debug.Endpoint + "vars", testCertsContext, http.StatusOK},
+		{debug.Endpoint + "vars", noCertsContext, http.StatusOK},
+		{debug.Endpoint + "vars", insecureContext, http.StatusPermanentRedirect},
 
 		// /_status/nodes: server.statusServer: no auth.
 		{statusPrefix + "nodes", rootCertsContext, http.StatusOK},
@@ -257,7 +258,7 @@ func TestCreateSession(t *testing.T) {
 	// Query fields from created session.
 	query := `
 SELECT "hashedSecret", "username", "createdAt", "lastUsedAt", "expiresAt", "revokedAt", "auditInfo"
-FROM system.web_sessions 
+FROM system.web_sessions
 WHERE id = $1`
 
 	result := db.QueryRow(query, id)
