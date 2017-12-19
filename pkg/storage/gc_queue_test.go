@@ -978,7 +978,7 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
-	const keyCount = 1000
+	const keyCount = 100
 	if gcKeyVersionChunkBytes%keyCount != 0 {
 		t.Fatalf("expected gcKeyVersionChunkBytes to be a multiple of %d", keyCount)
 	}
