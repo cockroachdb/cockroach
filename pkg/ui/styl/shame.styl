@@ -5,6 +5,7 @@
 .has-value.Select--single > .Select-control .Select-value .Select-value-label,
 .has-value.is-pseudo-focused.Select--single > .Select-control .Select-value .Select-value-label
   color $link-color !important
+  overflow visible !important
 
 .Select-option
   padding 10px 25px !important
@@ -25,6 +26,7 @@
   box-shadow 0 0 0 black !important
   border-radius 0 3px 3px 0 !important
   background-color transparent !important
+  cursor pointer !important
 
 .Select-input
   line-height inherit !important
@@ -37,7 +39,8 @@
 
 .Select-menu-outer
   width auto !important
-  top calc(100% + 21px) !important
+  top calc(100% + 3px) !important
+  left calc(100% - 130px) !important
   border none !important
   box-shadow 0 2px 4px rgba(0, 0, 0, .2) !important
   max-height 200px !important
@@ -62,8 +65,6 @@
   width 100%
 
 .dropdown--side-arrows
-  .Select
-    padding 12px 24px !important
   .Select-arrow-zone
     display none
 
