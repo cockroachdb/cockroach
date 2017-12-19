@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -99,7 +100,7 @@ func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error
 
 // debugURL returns the root debug URL.
 func debugURL(s serverutils.TestServerInterface) string {
-	return s.AdminURL() + debugEndpoint
+	return s.AdminURL() + debug.Endpoint
 }
 
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
