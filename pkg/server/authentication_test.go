@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/jsonpb"
@@ -170,6 +173,13 @@ func TestVerifyPassword(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
+
+	if util.RaceEnabled {
+		// The default bcrypt cost makes this test approximately 30s slower when the
+		// race detector is on.
+		defer func(prev int) { security.BcryptCost = prev }(security.BcryptCost)
+		security.BcryptCost = bcrypt.MinCost
+	}
 
 	for _, user := range []struct {
 		username string
