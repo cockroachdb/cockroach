@@ -170,6 +170,11 @@ message OutputRouterSpec {
     repeated ColumnEncoding encodings = 3 [(gogoproto.nullable) = false];
   }
   optional RangeRouterSpec range_router_spec = 4 [(gogoproto.nullable) = false];
+
+  // disable_buffering disables output buffering. Generally buffering should be
+  // enabled to prevent deadlocks. However some plans are known not to deadlock,
+  // and so can set this flag to prevent unbounded buffering causing OOMs.
+  optional bool disable_buffering = 5 [(gogoproto.nullable) = false];
 }
 
 message DatumInfo {
