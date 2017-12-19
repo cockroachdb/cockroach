@@ -18,6 +18,7 @@ package storage
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+var leaseStatusLogLimiter = log.Every(5 * time.Second)
 
 // leaseRequestHandle is a handle to an asynchronous lease request.
 type leaseRequestHandle struct {
@@ -420,9 +423,9 @@ func (r *Replica) leaseStatus(
 			// and liveness info isn't available for owner), we can neither
 			// use the lease nor do we want to attempt to acquire it.
 			if err != nil {
-				// TODO(tschottdorf): this can be super spammy during startup
-				// (err=node not in liveness table) Rate limit this error.
-				log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %s", err)
+				if leaseStatusLogLimiter.ShouldLog() {
+					log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %s", err)
+				}
 			}
 			status.State = LeaseState_ERROR
 			return status
