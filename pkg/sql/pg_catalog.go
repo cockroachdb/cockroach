@@ -186,8 +186,8 @@ CREATE TABLE pg_catalog.pg_attribute (
 					tree.DNull, // attalign
 					tree.MakeDBool(tree.DBool(!column.Nullable)),          // attnotnull
 					tree.MakeDBool(tree.DBool(column.DefaultExpr != nil)), // atthasdef
-					tree.MakeDBool(false),                                 // attisdropped
-					tree.MakeDBool(true),                                  // attislocal
+					tree.DBoolFalse,                                       // attisdropped
+					tree.DBoolTrue,                                        // attislocal
 					zeroVal,                                               // attinhcount
 					typColl(colTyp, h),                                    // attcollation
 					tree.DNull,                                            // attacl
@@ -287,17 +287,17 @@ CREATE TABLE pg_catalog.pg_class (
 				zeroVal,                     // relallvisible
 				oidZero,                     // reltoastrelid
 				tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
-				tree.MakeDBool(false),                               // relisshared
+				tree.DBoolFalse,                                     // relisshared
 				relPersistencePermanent,                             // relPersistence
-				tree.MakeDBool(false),                               // relistemp
+				tree.DBoolFalse,                                     // relistemp
 				relKind,                                             // relkind
 				tree.NewDInt(tree.DInt(len(table.Columns))),         // relnatts
 				tree.NewDInt(tree.DInt(len(table.Checks))),          // relchecks
-				tree.MakeDBool(false),                               // relhasoids
+				tree.DBoolFalse,                                     // relhasoids
 				tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhaspkey
-				tree.MakeDBool(false),                               // relhasrules
-				tree.MakeDBool(false),                               // relhastriggers
-				tree.MakeDBool(false),                               // relhassubclass
+				tree.DBoolFalse,                                     // relhasrules
+				tree.DBoolFalse,                                     // relhastriggers
+				tree.DBoolFalse,                                     // relhassubclass
 				zeroVal,                                             // relfrozenxid
 				tree.DNull,                                          // relacl
 				tree.DNull,                                          // reloptions
@@ -320,21 +320,21 @@ CREATE TABLE pg_catalog.pg_class (
 					tree.DNull,                                      // reltuples
 					zeroVal,                                         // relallvisible
 					oidZero,                                         // reltoastrelid
-					tree.MakeDBool(false),                           // relhasindex
-					tree.MakeDBool(false),                           // relisshared
+					tree.DBoolFalse,                                 // relhasindex
+					tree.DBoolFalse,                                 // relisshared
 					relPersistencePermanent,                         // relPersistence
-					tree.MakeDBool(false),                           // relistemp
+					tree.DBoolFalse,                                 // relistemp
 					relKindIndex,                                    // relkind
 					tree.NewDInt(tree.DInt(len(index.ColumnNames))), // relnatts
-					zeroVal,               // relchecks
-					tree.MakeDBool(false), // relhasoids
-					tree.MakeDBool(false), // relhaspkey
-					tree.MakeDBool(false), // relhasrules
-					tree.MakeDBool(false), // relhastriggers
-					tree.MakeDBool(false), // relhassubclass
-					zeroVal,               // relfrozenxid
-					tree.DNull,            // relacl
-					tree.DNull,            // reloptions
+					zeroVal,         // relchecks
+					tree.DBoolFalse, // relhasoids
+					tree.DBoolFalse, // relhaspkey
+					tree.DBoolFalse, // relhasrules
+					tree.DBoolFalse, // relhastriggers
+					tree.DBoolFalse, // relhassubclass
+					zeroVal,         // relfrozenxid
+					tree.DNull,      // relacl
+					tree.DNull,      // reloptions
 				)
 			})
 		})
@@ -524,8 +524,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 					dNameOrNull(name),                          // conname
 					pgNamespaceForDB(db, h).Oid,                // connamespace
 					contype,                                    // contype
-					tree.MakeDBool(false),                      // condeferrable
-					tree.MakeDBool(false),                      // condeferred
+					tree.DBoolFalse,                            // condeferrable
+					tree.DBoolFalse,                            // condeferred
 					tree.MakeDBool(tree.DBool(!c.Unvalidated)), // convalidated
 					h.TableOid(db, table),                      // conrelid
 					oidZero,                                    // contypid
@@ -534,9 +534,9 @@ CREATE TABLE pg_catalog.pg_constraint (
 					confupdtype,                                // confupdtype
 					confdeltype,                                // confdeltype
 					confmatchtype,                              // confmatchtype
-					tree.MakeDBool(true),                       // conislocal
+					tree.DBoolTrue,                             // conislocal
 					zeroVal,                                    // coninhcount
-					tree.MakeDBool(true),                       // connoinherit
+					tree.DBoolTrue,                             // connoinherit
 					conkey,                                     // conkey
 					confkey,                                    // confkey
 					tree.DNull,                                 // conpfeqop
@@ -612,8 +612,8 @@ CREATE TABLE pg_catalog.pg_database (
 				builtins.DatEncodingUTFId,  // encoding
 				builtins.DatEncodingEnUTF8, // datcollate
 				builtins.DatEncodingEnUTF8, // datctype
-				tree.MakeDBool(false),      // datistemplate
-				tree.MakeDBool(true),       // datallowconn
+				tree.DBoolFalse,            // datistemplate
+				tree.DBoolTrue,             // datallowconn
 				negOneVal,                  // datconnlimit
 				tree.DNull,                 // datlastsysoid
 				tree.DNull,                 // datfrozenxid
@@ -861,14 +861,14 @@ CREATE TABLE pg_catalog.pg_index (
 					tree.NewDInt(tree.DInt(len(index.ColumnNames))),                                          // indnatts
 					tree.MakeDBool(tree.DBool(index.Unique)),                                                 // indisunique
 					tree.MakeDBool(tree.DBool(table.IsPhysicalTable() && index.ID == table.PrimaryIndex.ID)), // indisprimary
-					tree.MakeDBool(false),                    // indisexclusion
+					tree.DBoolFalse,                          // indisexclusion
 					tree.MakeDBool(tree.DBool(index.Unique)), // indimmediate
-					tree.MakeDBool(false),                    // indisclustered
+					tree.DBoolFalse,                          // indisclustered
 					tree.MakeDBool(tree.DBool(!isMutation)),  // indisvalid
-					tree.MakeDBool(false),                    // indcheckxmin
+					tree.DBoolFalse,                          // indcheckxmin
 					tree.MakeDBool(tree.DBool(isReady)),      // indisready
-					tree.MakeDBool(true),                     // indislive
-					tree.MakeDBool(false),                    // indisreplident
+					tree.DBoolTrue,                           // indislive
+					tree.DBoolFalse,                          // indisreplident
 					indkey,                                   // indkey
 					zeroVal,                                  // indcollation
 					zeroVal,                                  // indclass
@@ -1170,9 +1170,9 @@ CREATE TABLE pg_catalog.pg_proc (
 					tree.DNull,                                  // protransform
 					tree.MakeDBool(tree.DBool(isAggregate)),     // proisagg
 					tree.MakeDBool(tree.DBool(isWindow)),        // proiswindow
-					tree.MakeDBool(false),                       // prosecdef
+					tree.DBoolFalse,                             // prosecdef
 					tree.MakeDBool(tree.DBool(!builtin.Impure)), // proleakproof
-					tree.MakeDBool(false),                       // proisstrict
+					tree.DBoolFalse,                             // proisstrict
 					tree.MakeDBool(tree.DBool(isRetSet)),        // proretset
 					tree.DNull,                                  // provolatile
 					tree.DNull,                                  // proparallel
@@ -1255,13 +1255,13 @@ CREATE TABLE pg_catalog.pg_roles (
 					tree.MakeDBool(isRole),      // rolinherit. Roles inherit by default.
 					tree.MakeDBool(isRoot),      // rolcreaterole
 					tree.MakeDBool(isRoot),      // rolcreatedb
-					tree.MakeDBool(false),       // rolcatupdate
+					tree.DBoolFalse,             // rolcatupdate
 					tree.MakeDBool(!isRole),     // rolcanlogin. Only users can login.
-					tree.MakeDBool(false),       // rolreplication
+					tree.DBoolFalse,             // rolreplication
 					negOneVal,                   // rolconnlimit
 					tree.NewDString("********"), // rolpassword
 					tree.DNull,                  // rolvaliduntil
-					tree.MakeDBool(false),       // rolbypassrls
+					tree.DBoolFalse,             // rolbypassrls
 					tree.NewDString("{}"),       // rolconfig
 				)
 			})
@@ -1353,7 +1353,7 @@ CREATE TABLE pg_catalog.pg_settings (
 				valueDatum,                              // reset_val
 				tree.DNull,                              // sourcefile
 				tree.DNull,                              // sourceline
-				tree.MakeDBool(false),                   // pending_restart
+				tree.DBoolFalse,                         // pending_restart
 			); err != nil {
 				return err
 			}
@@ -1387,9 +1387,9 @@ CREATE TABLE pg_catalog.pg_tables (
 				tree.DNull,                // tableowner
 				tree.DNull,                // tablespace
 				tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // hasindexes
-				tree.MakeDBool(false),                               // hasrules
-				tree.MakeDBool(false),                               // hastriggers
-				tree.MakeDBool(false),                               // rowsecurity
+				tree.DBoolFalse,                                     // hasrules
+				tree.DBoolFalse,                                     // hastriggers
+				tree.DBoolFalse,                                     // rowsecurity
 			)
 		})
 	},
@@ -1536,12 +1536,12 @@ CREATE TABLE pg_catalog.pg_type (
 				typByVal(typ),              // typbyval
 				typTypeBase,                // typtype
 				cat,                        // typcategory
-				tree.MakeDBool(false), // typispreferred
-				tree.MakeDBool(true),  // typisdefined
-				typDelim,              // typdelim
-				oidZero,               // typrelid
-				typElem,               // typelem
-				typArray,              // typarray
+				tree.DBoolFalse,            // typispreferred
+				tree.DBoolTrue,             // typisdefined
+				typDelim,                   // typdelim
+				oidZero,                    // typrelid
+				typElem,                    // typelem
+				typArray,                   // typarray
 
 				// regproc references
 				h.RegProc(builtinPrefix+"in"),   // typinput
@@ -1552,16 +1552,16 @@ CREATE TABLE pg_catalog.pg_type (
 				oidZero, // typmodout
 				oidZero, // typanalyze
 
-				tree.DNull,            // typalign
-				tree.DNull,            // typstorage
-				tree.MakeDBool(false), // typnotnull
-				oidZero,               // typbasetype
-				negOneVal,             // typtypmod
-				zeroVal,               // typndims
-				typColl(typ, h),       // typcollation
-				tree.DNull,            // typdefaultbin
-				tree.DNull,            // typdefault
-				tree.DNull,            // typacl
+				tree.DNull,      // typalign
+				tree.DNull,      // typstorage
+				tree.DBoolFalse, // typnotnull
+				oidZero,         // typbasetype
+				negOneVal,       // typtypmod
+				zeroVal,         // typndims
+				typColl(typ, h), // typcollation
+				tree.DNull,      // typdefaultbin
+				tree.DNull,      // typdefault
+				tree.DNull,      // typacl
 			); err != nil {
 				return err
 			}

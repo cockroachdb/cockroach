@@ -125,10 +125,10 @@ func (s *subquery) doEval(ctx context.Context, p *planner) (result tree.Datum, e
 			return result, err
 		}
 		if next {
-			result = tree.MakeDBool(true)
+			result = tree.DBoolTrue
 		}
 		if result == nil {
-			result = tree.MakeDBool(false)
+			result = tree.DBoolFalse
 		}
 
 	case execModeAllRows, execModeAllRowsNormalized:

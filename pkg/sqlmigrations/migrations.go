@@ -150,7 +150,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: grantAdminPrivileges,
 	},
 	{
-		name:   "make root a member of the admin rol",
+		name:   "make root a member of the admin role",
 		workFn: addRootToAdminRole,
 	},
 }
