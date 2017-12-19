@@ -49,15 +49,18 @@ func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (router, error) {
 		return nil, errors.Errorf("no streams in router")
 	}
 
+	var rb routerBase
+	rb.setupStreams(streams, spec.DisableBuffering)
+
 	switch spec.Type {
 	case OutputRouterSpec_BY_HASH:
-		return makeHashRouter(spec.HashColumns, streams)
+		return makeHashRouter(rb, spec.HashColumns)
 
 	case OutputRouterSpec_MIRROR:
-		return makeMirrorRouter(streams)
+		return makeMirrorRouter(rb)
 
 	case OutputRouterSpec_BY_RANGE:
-		return makeRangeRouter(streams, spec.RangeRouterSpec)
+		return makeRangeRouter(rb, spec.RangeRouterSpec)
 
 	default:
 		return nil, errors.Errorf("router type %s not supported", spec.Type)
@@ -175,9 +178,17 @@ func (rb *routerBase) aggStatus() ConsumerStatus {
 	return ConsumerStatus(atomic.LoadUint32(&rb.aggregatedStatus))
 }
 
-func (rb *routerBase) setupStreams(streams []RowReceiver) {
+func (rb *routerBase) setupStreams(streams []RowReceiver, disableBuffering bool) {
 	rb.numNonDrainingStreams = int32(len(streams))
-	rb.semaphore = make(chan struct{}, len(streams))
+	n := len(streams)
+	if disableBuffering {
+		// By starting the semaphore at 1, the producer is blocked whenever one of
+		// the streams are blocked.
+		n = 1
+		// TODO(radu): instead of disabling buffering this way, we should short-circuit
+		// the entire router implementation and push directly to the output stream
+	}
+	rb.semaphore = make(chan struct{}, n)
 	rb.outputs = make([]routerOutput, len(streams))
 	for i := range rb.outputs {
 		ro := &rb.outputs[i]
@@ -366,13 +377,11 @@ var _ RowReceiver = &mirrorRouter{}
 var _ RowReceiver = &hashRouter{}
 var _ RowReceiver = &rangeRouter{}
 
-func makeMirrorRouter(streams []RowReceiver) (router, error) {
-	if len(streams) < 2 {
+func makeMirrorRouter(rb routerBase) (router, error) {
+	if len(rb.outputs) < 2 {
 		return nil, errors.Errorf("need at least two streams for mirror router")
 	}
-	mr := &mirrorRouter{}
-	mr.routerBase.setupStreams(streams)
-	return mr, nil
+	return &mirrorRouter{routerBase: rb}, nil
 }
 
 // Push is part of the RowReceiver interface.
@@ -414,16 +423,14 @@ func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Con
 
 var crc32Table = crc32.MakeTable(crc32.Castagnoli)
 
-func makeHashRouter(hashCols []uint32, streams []RowReceiver) (router, error) {
-	if len(streams) < 2 {
+func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
+	if len(rb.outputs) < 2 {
 		return nil, errors.Errorf("need at least two streams for hash router")
 	}
 	if len(hashCols) == 0 {
 		return nil, errors.Errorf("no hash columns for BY_HASH router")
 	}
-	hr := &hashRouter{hashCols: hashCols}
-	hr.routerBase.setupStreams(streams)
-	return hr, nil
+	return &hashRouter{hashCols: hashCols, routerBase: rb}, nil
 }
 
 // Push is part of the RowReceiver interface.
@@ -491,9 +498,7 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 	return int(crc32.Update(0, crc32Table, hr.buffer) % uint32(len(hr.outputs))), nil
 }
 
-func makeRangeRouter(
-	streams []RowReceiver, spec OutputRouterSpec_RangeRouterSpec,
-) (*rangeRouter, error) {
+func makeRangeRouter(rb routerBase, spec OutputRouterSpec_RangeRouterSpec) (*rangeRouter, error) {
 	if len(spec.Encodings) == 0 {
 		return nil, errors.New("missing encodings")
 	}
@@ -510,13 +515,12 @@ func makeRangeRouter(
 		}
 		prevKey = span.End
 	}
-	rr := rangeRouter{
+	return &rangeRouter{
+		routerBase:  rb,
 		spans:       spec.Spans,
 		defaultDest: defaultDest,
 		encodings:   spec.Encodings,
-	}
-	rr.routerBase.setupStreams(streams)
-	return &rr, nil
+	}, nil
 }
 
 func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
