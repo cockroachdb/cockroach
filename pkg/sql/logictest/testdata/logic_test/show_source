@@ -125,9 +125,11 @@ test
 query TTTT colnames
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
-Database  Table       User  Privileges
-system    descriptor  root  GRANT
-system    descriptor  root  SELECT
+Database  Table       User   Privileges
+system    descriptor  admin  GRANT
+system    descriptor  admin  SELECT
+system    descriptor  root   GRANT
+system    descriptor  root   SELECT
 
 query TTBITTBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
@@ -158,6 +160,7 @@ lease
 locations
 namespace
 rangelog
+role_members
 settings
 table_statistics
 ui

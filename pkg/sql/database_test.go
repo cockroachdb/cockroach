@@ -44,8 +44,8 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	if desc.ID != 0 {
 		t.Fatalf("expected ID == 0, got %d", desc.ID)
 	}
-	if len(desc.GetPrivileges().Users) != 1 {
-		t.Fatalf("wrong number of privilege users, expected 1, got: %d", len(desc.GetPrivileges().Users))
+	if len(desc.GetPrivileges().Users) != 2 {
+		t.Fatalf("wrong number of privilege users, expected 2, got: %d", len(desc.GetPrivileges().Users))
 	}
 }
 
