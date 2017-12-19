@@ -297,7 +297,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == tree.DropCascade {
 						if err := params.p.dropIndexByName(
-							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false, t.DropBehavior, ignoreOutboundFK,
+							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
+							t.DropBehavior, ignoreIdxConstraint,
 							tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
 						); err != nil {
 							return err
@@ -337,7 +338,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case sqlbase.ConstraintTypePK:
 				return fmt.Errorf("cannot drop primary key")
 			case sqlbase.ConstraintTypeUnique:
-				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX if you really want to drop it", t.Constraint)
+				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX with CASCADE if you really want to drop it", t.Constraint)
 			case sqlbase.ConstraintTypeCheck:
 				for i := range n.tableDesc.Checks {
 					if n.tableDesc.Checks[i].Name == name {
