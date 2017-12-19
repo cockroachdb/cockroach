@@ -213,10 +213,10 @@ func doLocalCSVTransform(
 		)
 		// Both read and write progress funcs register their progress as 50% of total progress.
 		readProgressFn = func(pct float32) error {
-			return job.Progressed(ctx, pct*readPct, jobs.Noop)
+			return job.Progressed(ctx, jobs.Noop(pct*readPct))
 		}
 		writeProgressFn = func(pct float32) error {
-			return job.Progressed(ctx, readPct+pct*writePct, jobs.Noop)
+			return job.Progressed(ctx, jobs.Noop(readPct+pct*writePct))
 		}
 	}
 
