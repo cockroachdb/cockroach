@@ -306,8 +306,9 @@ func (l *DistLoader) LoadCSV(
 			Spec: distsqlrun.ProcessorSpec{
 				Core: distsqlrun.ProcessorCoreUnion{ReadCSV: &rcs},
 				Output: []distsqlrun.OutputRouterSpec{{
-					Type:            distsqlrun.OutputRouterSpec_BY_RANGE,
-					RangeRouterSpec: routerSpec,
+					Type:             distsqlrun.OutputRouterSpec_BY_RANGE,
+					RangeRouterSpec:  routerSpec,
+					DisableBuffering: true,
 				}},
 				StageID: stageID,
 			},
