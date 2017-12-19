@@ -303,6 +303,15 @@ void DBRunLDB(int argc, char** argv);
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 
+// DBFileLock contains various parameters set during DBLockFile and required for DBUnlockFile.
+typedef void* DBFileLock;
+
+// DBLockFile sets a lock on the specified file using RocksDB's file locking interface.
+DBStatus DBLockFile(DBSlice filename, DBFileLock* lock);
+
+// DBUnlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
+DBStatus DBUnlockFile(DBFileLock lock);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
