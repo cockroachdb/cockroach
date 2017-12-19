@@ -17,13 +17,18 @@ package storage
 
 import (
 	"bytes"
+	"math"
 	"reflect"
 	"testing"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
 )
@@ -185,5 +190,51 @@ func TestSpanSetBatch(t *testing.T) {
 	iter.SeekReverse(insideKey)
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected valid iterator, err=%v", err)
+	}
+}
+
+// TestSpanSetMVCCResolveWriteIntentRangeUsingIter verifies that
+// MVCCResolveWriteIntentRangeUsingIter does not stray outside of the passed-in
+// key range (which it only used to do in this corner case tested here).
+//
+// See #20894.
+func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
+	defer eng.Close()
+
+	ctx := context.Background()
+
+	value := roachpb.MakeValueFromString("irrelevant")
+
+	if err := engine.MVCCPut(
+		ctx,
+		eng,
+		nil, // ms
+		roachpb.Key("b"),
+		hlc.Timestamp{WallTime: 10}, // irrelevant
+		value,
+		nil, // txn
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	var ss spanset.SpanSet
+	ss.Add(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")})
+
+	batch := spanset.NewBatch(eng.NewBatch(), &ss)
+	defer batch.Close()
+
+	iterAndBuf := engine.GetIterAndBuf(batch)
+	defer iterAndBuf.Cleanup()
+
+	intent := roachpb.Intent{
+		Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")},
+		Txn:    enginepb.TxnMeta{}, // unused
+		Status: roachpb.PENDING,
+	}
+
+	if _, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, nil /* ms */, intent, math.MaxInt64); err != nil {
+		t.Fatal(err)
 	}
 }
