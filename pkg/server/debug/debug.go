@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package server
+package debug
 
 import (
 	"expvar"
@@ -45,7 +45,8 @@ const (
 	DebugRemoteAny DebugRemoteMode = "any"
 )
 
-const debugEndpoint = "/debug/"
+// Endpoint is the entry point under which the debug tools are housed.
+const Endpoint = "/debug/"
 
 var debugRemote = settings.RegisterValidatedStringSetting(
 	"server.remote_debugging.mode",
@@ -61,17 +62,17 @@ var debugRemote = settings.RegisterValidatedStringSetting(
 	},
 )
 
-type debugServer struct {
+type DebugServer struct {
 	st  *cluster.Settings
 	mux *http.ServeMux
 	spy logSpy
 }
 
-func newDebugServer(st *cluster.Settings) *debugServer {
+func NewDebugServer(st *cluster.Settings) *DebugServer {
 	mux := http.NewServeMux()
 
 	// Install a redirect to the UI's collection of debug tools.
-	mux.HandleFunc(debugEndpoint, handleLanding) // TODO /debug?
+	mux.HandleFunc(Endpoint, handleLanding) // TODO /debug?
 
 	// Cribbed straight from pprof's `init()` method. See:
 	// https://golang.org/src/net/http/pprof/pprof.go
@@ -101,7 +102,7 @@ func newDebugServer(st *cluster.Settings) *debugServer {
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
-	return &debugServer{
+	return &DebugServer{
 		st:  st,
 		mux: mux,
 		spy: spy,
@@ -110,7 +111,7 @@ func newDebugServer(st *cluster.Settings) *debugServer {
 
 // ServeHTTP serves various tools under the /debug endpoint. It restricts access
 // according to the `server.remote_debugging.mode` cluster variable.
-func (ds *debugServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (ds *DebugServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if any, _ := ds.authRequest(r); !any {
 		http.Error(w, "not allowed (due to the 'server.remote_debugging.mode' setting)",
 			http.StatusForbidden)
@@ -122,7 +123,7 @@ func (ds *debugServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // authRequest restricts access to /debug/*.
-func (ds *debugServer) authRequest(r *http.Request) (allow, sensitive bool) {
+func (ds *DebugServer) authRequest(r *http.Request) (allow, sensitive bool) {
 	allow, sensitive = trace.AuthRequest(r)
 	switch DebugRemoteMode(strings.ToLower(debugRemote.Get(&ds.st.SV))) {
 	case DebugRemoteAny:
@@ -137,8 +138,8 @@ func (ds *debugServer) authRequest(r *http.Request) (allow, sensitive bool) {
 }
 
 func handleLanding(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != debugEndpoint {
-		http.Redirect(w, r, debugEndpoint, http.StatusMovedPermanently)
+	if r.URL.Path != Endpoint {
+		http.Redirect(w, r, Endpoint, http.StatusMovedPermanently)
 		return
 	}
 
