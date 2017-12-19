@@ -3036,19 +3036,16 @@ func (s *Store) processRaftSnapshotRequest(
 		var addedPlaceholder bool
 		var removePlaceholder bool
 		if !r.IsInitialized() {
-			if earlyReturn := func() bool {
+			if err := func() error {
 				s.mu.Lock()
 				defer s.mu.Unlock()
 				placeholder, err := s.canApplySnapshotLocked(ctx, inSnap.State.Desc)
 				if err != nil {
-					// If the storage cannot accept the snapshot, drop it before
-					// passing it to RawNode.Step, since our error handling
-					// options past that point are limited.
-					// TODO(arjun): Now that we have better raft transport error
-					// handling, consider if this error should be returned and
-					// handled by the sending store.
+					// If the storage cannot accept the snapshot, return an
+					// error before passing it to RawNode.Step, since our
+					// error handling options past that point are limited.
 					log.Infof(ctx, "cannot apply snapshot: %s", err)
-					return true
+					return err
 				}
 
 				if placeholder != nil {
@@ -3061,9 +3058,9 @@ func (s *Store) processRaftSnapshotRequest(
 					}
 					addedPlaceholder = true
 				}
-				return false
-			}(); earlyReturn {
 				return nil
+			}(); err != nil {
+				return roachpb.NewError(err)
 			}
 
 			if addedPlaceholder {
