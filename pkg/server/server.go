@@ -467,6 +467,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
+		MetricsRegistry:         s.registry,
 	}
 	if sqlExecutorTestingKnobs := s.cfg.TestingKnobs.SQLExecutor; sqlExecutorTestingKnobs != nil {
 		execCfg.TestingKnobs = sqlExecutorTestingKnobs.(*sql.ExecutorTestingKnobs)
@@ -482,7 +483,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
-	s.registry.AddMetricStruct(s.sqlExecutor)
 
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,
