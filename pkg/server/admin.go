@@ -1175,9 +1175,10 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		off[i] = serverpb.DrainMode(req.Off[i])
 	}
 
-	_ = s.server.Undrain(off)
+	ctx := stream.Context()
+	_ = s.server.Undrain(ctx, off)
 
-	nowOn, err := s.server.Drain(on)
+	nowOn, err := s.server.Drain(ctx, on)
 	if err != nil {
 		return err
 	}
@@ -1198,7 +1199,6 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 
 	s.server.grpc.Stop()
 
-	ctx := stream.Context()
 	go func() {
 		// The explicit closure here allows callers.Lookup() to return something
 		// sensible referring to this file (otherwise it ends up in runtime

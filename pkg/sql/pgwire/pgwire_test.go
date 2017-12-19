@@ -206,7 +206,8 @@ func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
 	host, port, err := net.SplitHostPort(s.ServingAddr())
 	if err != nil {
@@ -237,7 +238,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	go func() {
 		defer close(errChan)
 		errChan <- func() error {
-			if now, err := s.(*server.TestServer).Drain(on); err != nil {
+			if now, err := s.(*server.TestServer).Drain(ctx, on); err != nil {
 				return err
 			} else if !reflect.DeepEqual(on, now) {
 				return errors.Errorf("expected drain modes %v, got %v", on, now)
@@ -267,7 +268,7 @@ func TestPGWireDrainClient(t *testing.T) {
 		}
 	}
 
-	if now := s.(*server.TestServer).Undrain(on); len(now) != 0 {
+	if now := s.(*server.TestServer).Undrain(ctx, on); len(now) != 0 {
 		t.Fatalf("unexpected active drain modes: %v", now)
 	}
 }

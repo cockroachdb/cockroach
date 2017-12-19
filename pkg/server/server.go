@@ -1177,7 +1177,10 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 					defer func() {
 						<-decommissionSem
 					}()
-					if _, err := s.Drain(GracefulDrainModes); err != nil {
+
+					// Don't use ctx because there is an associated timeout
+					// meant to be used when heartbeating.
+					if _, err := s.Drain(context.Background(), GracefulDrainModes); err != nil {
 						log.Warningf(ctx, "failed to set Draining when Decommissioning: %v", err)
 					}
 				})
@@ -1298,7 +1301,9 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	return nil
 }
 
-func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.DrainMode, error) {
+func (s *Server) doDrain(
+	ctx context.Context, modes []serverpb.DrainMode, setTo bool,
+) ([]serverpb.DrainMode, error) {
 	for _, mode := range modes {
 		switch mode {
 		case serverpb.DrainMode_CLIENT:
@@ -1313,7 +1318,7 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 				return nil, err
 			}
 		case serverpb.DrainMode_LEASES:
-			s.nodeLiveness.SetDraining(context.TODO(), setTo)
+			s.nodeLiveness.SetDraining(ctx, setTo)
 			if err := s.node.SetDraining(setTo); err != nil {
 				return nil, err
 			}
@@ -1338,15 +1343,15 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 // On success, returns all active drain modes after carrying out the request.
 // On failure, the system may be in a partially drained state and should be
 // recovered by calling Undrain() with the same (or a larger) slice of modes.
-func (s *Server) Drain(on []serverpb.DrainMode) ([]serverpb.DrainMode, error) {
-	return s.doDrain(on, true)
+func (s *Server) Drain(ctx context.Context, on []serverpb.DrainMode) ([]serverpb.DrainMode, error) {
+	return s.doDrain(ctx, on, true)
 }
 
 // Undrain idempotently deactivates the given DrainModes on the Server in the
 // order in which they are supplied.
 // On success, returns any remaining active drain modes.
-func (s *Server) Undrain(off []serverpb.DrainMode) []serverpb.DrainMode {
-	nowActive, err := s.doDrain(off, false)
+func (s *Server) Undrain(ctx context.Context, off []serverpb.DrainMode) []serverpb.DrainMode {
+	nowActive, err := s.doDrain(ctx, off, false)
 	if err != nil {
 		panic(fmt.Sprintf("error returned to Undrain: %s", err))
 	}

@@ -734,12 +734,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 				close(stopWithoutDrain)
 				return
 			}
-			if _, err := s.Drain(server.GracefulDrainModes); err != nil {
-				// Don't use shutdownCtx because this is in a goroutine that may
-				// still be running after shutdownCtx's span has been finished.
-				log.Warning(context.Background(), err)
+			// Don't use shutdownCtx because this is in a goroutine that may
+			// still be running after shutdownCtx's span has been finished.
+			ctx := context.Background()
+			if _, err := s.Drain(ctx, server.GracefulDrainModes); err != nil {
+				log.Warning(ctx, err)
 			}
-			stopper.Stop(context.Background())
+			stopper.Stop(ctx)
 		}()
 	}
 
