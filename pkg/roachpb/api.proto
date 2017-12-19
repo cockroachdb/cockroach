@@ -1311,3 +1311,8 @@ service Internal {
 service External {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
 }
+
+service KVDebug {
+  rpc TxnCoordSender (stream BatchRequest) returns (stream BatchResponse) {}
+  rpc EvalEngine (stream BatchRequest) returns (stream BatchResponse) {}
+}

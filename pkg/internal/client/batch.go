@@ -67,6 +67,11 @@ type Batch struct {
 	rowsStaticIdx int
 }
 
+// RawRequests exposes the request slice assembled so far.
+func (b *Batch) RawRequests() []roachpb.RequestUnion {
+	return b.reqs
+}
+
 // RawResponse returns the BatchResponse which was the result of a successful
 // execution of the batch, and nil otherwise.
 func (b *Batch) RawResponse() *roachpb.BatchResponse {
