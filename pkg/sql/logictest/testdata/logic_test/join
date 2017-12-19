@@ -1089,6 +1089,7 @@ SELECT *
 3  scan    ·         ·
 3  ·       table     square@primary
 3  ·       spans     /!NULL-/5/#
+3  ·       filter    sq > 1
 
 query IIII rowsort
 SELECT *
@@ -1551,7 +1552,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 2  ·       spans           /3-                ·                                     ·
 2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
 2  ·       table           xyv@primary        ·                                     ·
-2  ·       spans           ALL                ·                                     ·
+2  ·       spans           /3-                ·                                     ·
 
 query IIII rowsort
 SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
@@ -1581,7 +1582,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 2  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                                   ·
 3  scan    ·               ·                  (x, y, u)                                           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
 3  ·       table           xyu@primary        ·                                                   ·
-3  ·       spans           ALL                ·                                                   ·
+3  ·       spans           /3-                ·                                                   ·
 3  scan    ·               ·                  (x, y, v)                                           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
 3  ·       table           xyv@primary        ·                                                   ·
 3  ·       spans           /3-                ·                                                   ·
@@ -1739,7 +1740,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OU
 2  ·       spans           /3-                ·                                     ·
 2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
 2  ·       table           xyv@primary        ·                                     ·
-2  ·       spans           ALL                ·                                     ·
+2  ·       spans           /3-                ·                                     ·
 
 query IIII rowsort
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
@@ -1769,7 +1770,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT O
 2  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                                   ·
 3  scan    ·               ·                  (x, y, u)                                           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
 3  ·       table           xyu@primary        ·                                                   ·
-3  ·       spans           ALL                ·                                                   ·
+3  ·       spans           /3-                ·                                                   ·
 3  scan    ·               ·                  (x, y, v)                                           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
 3  ·       table           xyv@primary        ·                                                   ·
 3  ·       spans           /3-                ·                                                   ·
@@ -1889,3 +1890,101 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2
 2  ·       table           xyv@primary            ·                                     ·
 2  ·       spans           /1/2-                  ·                                     ·
 2  ·       filter          (x, y) >= (1, 2)       ·                                     ·
+
+
+# Regression test for #20858.
+
+statement ok
+CREATE TABLE l (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE r (a INT PRIMARY KEY)
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
+----
+0  render  ·               ·           (a)              ·
+0  ·       render 0        test.l.a    ·                ·
+1  join    ·               ·           (a, a[omitted])  ·
+1  ·       type            left outer  ·                ·
+1  ·       equality        (a) = (a)   ·                ·
+1  ·       mergeJoinOrder  +"(a=a)"    ·                ·
+2  scan    ·               ·           (a)              a=CONST; key()
+2  ·       table           l@primary   ·                ·
+2  ·       spans           /3-/3/#     ·                ·
+2  scan    ·               ·           (a)              a=CONST; key()
+2  ·       table           r@primary   ·                ·
+2  ·       spans           /3-/3/#     ·                ·
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
+----
+0  join  ·               ·           (a, a)  ·
+0  ·     type            left outer  ·       ·
+0  ·     equality        (a) = (a)   ·       ·
+0  ·     mergeJoinOrder  +"(a=a)"    ·       ·
+1  scan  ·               ·           (a)     a=CONST; key()
+1  ·     table           l@primary   ·       ·
+1  ·     spans           /3-/3/#     ·       ·
+1  scan  ·               ·           (a)     a=CONST; key()
+1  ·     table           r@primary   ·       ·
+1  ·     spans           /3-/3/#     ·       ·
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
+----
+0  render  ·               ·            (a)                     ·
+0  ·       render 0        test.r.a     ·                       ·
+1  render  ·               ·            (a, a[hidden,omitted])  ·
+1  ·       render 0        test.r.a     ·                       ·
+1  ·       render 1        NULL         ·                       ·
+2  join    ·               ·            (a[omitted], a)         ·
+2  ·       type            right outer  ·                       ·
+2  ·       equality        (a) = (a)    ·                       ·
+2  ·       mergeJoinOrder  +"(a=a)"     ·                       ·
+3  scan    ·               ·            (a)                     a=CONST; key()
+3  ·       table           l@primary    ·                       ·
+3  ·       spans           /3-/3/#      ·                       ·
+3  scan    ·               ·            (a)                     a=CONST; key()
+3  ·       table           r@primary    ·                       ·
+3  ·       spans           /3-/3/#      ·                       ·
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
+----
+0  join  ·               ·            (a, a)  ·
+0  ·     type            right outer  ·       ·
+0  ·     equality        (a) = (a)    ·       ·
+0  ·     mergeJoinOrder  +"(a=a)"     ·       ·
+1  scan  ·               ·            (a)     a=CONST; key()
+1  ·     table           l@primary    ·       ·
+1  ·     spans           /3-/3/#      ·       ·
+1  scan  ·               ·            (a)     a=CONST; key()
+1  ·     table           r@primary    ·       ·
+1  ·     spans           /3-/3/#      ·       ·
+
+statement ok
+INSERT INTO l VALUES (1), (2), (3)
+
+statement ok
+INSERT INTO r VALUES (2), (3), (4)
+
+query I
+SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 1
+----
+1
+
+query I
+SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
+----
+2
+
+query I
+SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3
+----
+3
+
+query I
+SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 4
+----
+4
