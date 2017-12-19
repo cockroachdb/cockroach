@@ -22,10 +22,10 @@ import (
 type VersionKey int
 
 // Version constants. To add a version:
-// - add it at the end of this block
-// - add it at the end of the `Versions` block below
-// - (typically only applies to major and minor releases): bump BinaryMinimumSupportedVersion.
-//   For example, when introducing the `1.4` release, BinaryMinimumSupportedVersion would increase to `1.3`.
+//   - Add it at the end of this block.
+//   - Add it at the end of the `Versions` block below.
+//   - For major or minor versions, bump BinaryMinimumSupportedVersion. For
+//     example, if introducing the `1.4` release, bump it from `1.2` to `1.3`.
 const (
 	VersionBase VersionKey = iota
 	VersionRaftLogTruncationBelowRaft
@@ -40,22 +40,32 @@ const (
 	VersionClearRange
 	VersionPartitioning
 
-	// Add new versions here (step one of two)
+	// Add new versions here (step one of two).
 
 )
 
-// Versions lists all historical versions here in chronological order, with comments describing what
-// backwards-incompatible features were introduced.
+// versionsSingleton lists all historical versions here in chronological order,
+// with comments describing what backwards-incompatible features were
+// introduced.
 //
-// NB: The version upgrade process requires the versions as seen by a cluster to be monotonic. Once
-// we've added 1.1-2 (VersionClearRange), we can't go back and add 1.0-4
-// (VersionFixSomeCriticalBug) because clusters running 1.1-2 can't coordinate the switch over to
-// the functionality added by 1.0-4. Such clusters would need to be wiped. As a result, we recommend
-// not bumping to a new minor version until the prior 1.X.0 release has been performed.
+// A roachpb.Version has the colloquial form MAJOR.MINOR[.PATCH][-UNSTABLE],
+// where the PATCH and UNSTABLE components can be omitted if zero. Keep in mind
+// that a version with an unstable component, like 1.1-2, represents a version
+// that was developed AFTER v1.1 was released and is not slated for release
+// until the next stable version (either 1.2-0 or 2.0-0). Patch releases, like
+// 1.1.2, do not have associated migrations.
+//
+// NB: The version upgrade process requires the versions as seen by a cluster to
+// be monotonic. Once we've added 1.1-0 (Version1_1), we can't slot in 1.0-4
+// (VersionFixSomeCriticalBug) because clusters already running 1.1-0 won't
+// migrate through the new 1.0-4 version. Such clusters would need to be wiped.
+// As a result, do not bump the major or minor version until we are absolutely
+// sure that no new migrations will need to be added (i.e., when cutting the
+// final release candidate).
 var versionsSingleton = keyedVersions([]keyedVersion{
 	{
-		// VersionBase corresponds to any binary older than 1.0-1, though these binaries won't know
-		// anything about the mechanism in which this version is used.
+		// VersionBase corresponds to any binary older than 1.0-1, though these
+		// binaries predate this cluster versioning system.
 		Key:     VersionBase,
 		Version: roachpb.Version{Major: 1},
 	},
@@ -75,8 +85,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 1, Minor: 0, Unstable: 3},
 	},
 	{
-		// Version1_1 is CockroachDB v1.1 (it remains unchainged for all v1.1.x releases
-		// unless we need to introduce a new migration).
+		// Version1_1 is CockroachDB v1.1. It's used for all v1.1.x patch releases.
 		Key:     Version1_1,
 		Version: roachpb.Version{Major: 1, Minor: 1},
 	},
@@ -132,10 +141,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 }).Validated()
 
 var (
-	// BinaryMinimumSupportedVersion is the earliest version of data supported
-	// by this binary. If this binary is started using a store that has data
-	// marked with an earlier version than BinaryMinimumSupportedVersion, then
-	// the binary will exit with an error.
+	// BinaryMinimumSupportedVersion is the earliest version of data supported by
+	// this binary. If this binary is started using a store marked with an older
+	// version than BinaryMinimumSupportedVersion, then the binary will exit with
+	// an error.
 	BinaryMinimumSupportedVersion = VersionByKey(VersionBase)
 
 	// BinaryServerVersion is the version of this binary.
