@@ -318,3 +318,39 @@ DROP INDEX t1@c;
 
 statement ok
 DROP TABLE t1
+
+# Regression test for #20067.
+
+statement ok
+CREATE TABLE p20067 (
+  p_id INT PRIMARY KEY,
+  name STRING NOT NULL
+)
+
+statement ok
+CREATE TABLE c20067 (
+  p_id INT,
+  c_id INT,
+  name STRING NOT NULL,
+  PRIMARY KEY (p_id, c_id),
+  CONSTRAINT uq_name UNIQUE(name)
+) INTERLEAVE IN PARENT p20067 (p_id)
+
+statement ok
+BEGIN;
+INSERT INTO p20067 VALUES (1, 'John Doe');
+INSERT INTO c20067 VALUES (1, 1, 'John Doe Junior');
+COMMIT;
+
+statement error duplicate key value \(name\)=\('John Doe Junior'\) violates unique constraint "uq_name"
+INSERT INTO c20067 VALUES (2, 1, 'John Doe Junior')
+
+statement error duplicate key value \(name\)=\('John Doe Junior'\) violates unique constraint "uq_name"
+BEGIN; INSERT INTO p20067 VALUES (2, 'John Doe'); INSERT INTO c20067 VALUES (2, 1, 'John Doe Junior'); END;
+
+# End the last transaction.
+statement ok
+END
+
+statement error duplicate key value \(p_id,c_id\)=\(1,1\) violates unique constraint "primary"
+INSERT INTO c20067 VALUES (1, 1, 'John Doe')
