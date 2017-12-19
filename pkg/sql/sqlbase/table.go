@@ -2648,8 +2648,12 @@ func AdjustEndKeyForInterleave(
 		return encoding.EncodeInterleavedSentinel(end), nil
 	}
 
+	// Case 3: tightened child, split w/ family ID, sibling/nibling, or grandchild key
 	// len(keyTokens) > nIndexTokens
-	// Case 3: tightened child, sibling/nibling, or grandchild key
+	// Need to keep at least the next token.
+	nIndexTokens++
+
+	_, isSentinel := encoding.DecodeIfInterleavedSentinel(keyTokens[nIndexTokens-1])
 
 	// Case 3a: tightened child key
 	// This could from a previous invocation of AdjustEndKeyForInterleave.
@@ -2657,22 +2661,30 @@ func AdjustEndKeyForInterleave(
 	// tightened
 	//	/1/#/2 --> /1/#/1/#
 	// We don't really want to tighten on '#' again.
-	if _, isSentinel := encoding.DecodeIfInterleavedSentinel(keyTokens[nIndexTokens]); isSentinel && len(keyTokens)-1 == nIndexTokens {
+	if isSentinel && len(keyTokens) == nIndexTokens {
 		if inclusive {
 			end = end.PrefixEnd()
 		}
 		return end, nil
 	}
 
-	// Case 3b/c: sibling/nibling or grandchild key
+	// Case 3b/c: split key w/ family ID or sibling/nibling key
+	// In the former case, we need to keep the family ID and subsequent
+	// token to fully read the row with the family ID.
+	// In the latter case, we unfortunately read a few extra keys.
+	if !isSentinel && nIndexTokens+1 <= len(keyTokens) {
+		nIndexTokens++
+	}
+
+	// Case 3d: or grandchild key
 	// Ideally, we want to form
 	//    /1/#/2/#/3 --> /1/#/2/#
 	// We truncate up to and including the interleave sentinel (or next
 	// sibling/nibling column value) after the last index key token.
-	firstNTokenLen := 0
+	desiredTokenLen := 0
 	for _, token := range keyTokens[:nIndexTokens] {
-		firstNTokenLen += len(token)
+		desiredTokenLen += len(token)
 	}
 
-	return end[:firstNTokenLen+1], nil
+	return end[:desiredTokenLen], nil
 }

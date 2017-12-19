@@ -75,6 +75,24 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		return physicalPlan{}, err
 	}
 
+	// We need to tighten a temporary set of spans since we could end
+	// up eliding all spans.
+	// TODO(richardwu): figure out how to tell the planner to stop creating
+	// this plan.
+	tempPartitions := make([]spanPartition, len(spanPartitions))
+	copy(tempPartitions, spanPartitions)
+	for i := range tempPartitions {
+		tempPartitions[i].spans = make(roachpb.Spans, len(spanPartitions[i].spans))
+		copy(tempPartitions[i].spans, spanPartitions[i].spans)
+	}
+	if tempPartitions, err = tightenPartitionsForInterleave(tempPartitions, &desc, &desc.PrimaryIndex); err != nil {
+		return physicalPlan{}, err
+	}
+
+	if len(tempPartitions) > 0 {
+		spanPartitions = tempPartitions
+	}
+
 	var p physicalPlan
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {

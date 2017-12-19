@@ -1322,6 +1322,15 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 			expected: "/12345678901234/#/12345/12345678901234/#",
 		},
 
+		// Non-interleaved sentinel (e.g. family ID) needs to be
+		// included in EndKey.
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/12345678901234/#/12345/12345678901234/shelloworld",
+			expected: "/12345678901234/#/12345/12345678901234/shelloworld/NULLASC",
+		},
+
 		// Index key with extra columns (implicit primary key columns).
 		// We should expect two extra columns (in addition to the
 		// two index columns).
