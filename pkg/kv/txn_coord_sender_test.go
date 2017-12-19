@@ -1625,7 +1625,7 @@ func TestContextDoneNil(t *testing.T) {
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	testCases := []struct {
 		err   error
