@@ -479,7 +479,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// partition. This also needs to be done for indexes.
 			}
 		default:
-			return fmt.Errorf("unsupported alter cmd: %T", cmd)
+			return fmt.Errorf("unsupported alter command: %T", cmd)
 		}
 	}
 	// Were some changes made?

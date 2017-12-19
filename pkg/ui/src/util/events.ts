@@ -44,6 +44,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Schema Change: User ${info.User} began a schema change to create an index ${info.IndexName} on table ${info.TableName} with ID ${info.MutationID}`;
     case eventTypes.DROP_INDEX:
       return `Schema Change: User ${info.User} began a schema change to drop index ${info.IndexName} on table ${info.TableName} with ID ${info.MutationID}`;
+    case eventTypes.ALTER_INDEX:
+      return `Schema Change: User ${info.User} began a schema change to alter index ${info.IndexName} on table ${info.TableName} with ID ${info.MutationID}`;
     case eventTypes.CREATE_VIEW:
       return `View Created: User ${info.User} created view ${info.ViewName}`;
     case eventTypes.DROP_VIEW:

@@ -152,6 +152,14 @@ func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // StatementType implements the Statement interface.
+func (*AlterIndex) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterIndex) StatementTag() string { return "ALTER INDEX" }
+
+func (*AlterIndex) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*AlterTable) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -782,6 +790,7 @@ func (ValuesClause) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (ValuesClause) StatementTag() string { return "VALUES" }
 
+func (n *AlterIndex) String() string                { return AsString(n) }
 func (n *AlterTable) String() string                { return AsString(n) }
 func (n AlterTableCmds) String() string             { return AsString(n) }
 func (n *AlterTableAddColumn) String() string       { return AsString(n) }
