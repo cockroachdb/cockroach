@@ -266,6 +266,12 @@ func startExec(params runParams, plan planNode) error {
 			return nil
 		},
 		subqueryNode: func(ctx context.Context, sq *subquery) error {
+			// TODO(andrei): I believe something is funky here: this function calls
+			// startExec() recursively, but it also return no error, and so the
+			// current observer will be called again on all the nodes in the
+			// subquery's plan. This might also have something to do with the need for
+			// the sq.started check below. We should avoid this double-visitation
+			// somehow.
 			if !sq.expanded {
 				panic("subquery was not expanded properly")
 			}
