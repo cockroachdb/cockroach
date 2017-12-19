@@ -525,7 +525,6 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %union {
   id             int
   pos            int
-  empty          struct{}
   str            string
   union          sqlSymUnion
 }
