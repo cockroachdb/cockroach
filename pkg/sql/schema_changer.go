@@ -708,7 +708,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 		return err
 	}
 
-	if err := sc.job.Progressed(ctx, .1, jobs.Noop); err != nil {
+	if err := sc.job.Progressed(ctx, jobs.FractionUpdater(.1)); err != nil {
 		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
 			*sc.job.ID(), err)
 	}
