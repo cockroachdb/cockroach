@@ -134,6 +134,13 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		return physicalPlan{}, false, err
 	}
 
+	if ancsPartitions, err = tightenPartitionsForInterleave(ancsPartitions, ancestor.desc, ancestor.index); err != nil {
+		return physicalPlan{}, false, err
+	}
+	if descPartitions, err = tightenPartitionsForInterleave(descPartitions, descendant.desc, descendant.index); err != nil {
+		return physicalPlan{}, false, err
+	}
+
 	// We want to ensure that all child spans with a given interleave
 	// prefix value (which also happens to be our equality join columns)
 	// are read on the same node as the corresponding ancestor rows.

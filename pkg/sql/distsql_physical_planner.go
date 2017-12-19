@@ -639,6 +639,77 @@ func (dsp *DistSQLPlanner) partitionSpans(
 	return partitions, nil
 }
 
+// tightenPartitionsForInterleave takes a set of span partitions and their spans
+// and tightens the spans with respect to an index such that the spans do not
+// include interleaved children at the beginning and end.
+func tightenPartitionsForInterleave(
+	partitions []spanPartition, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+) ([]spanPartition, error) {
+	for i := 0; i < len(partitions); i++ {
+		part := &partitions[i]
+		for j := 0; j < len(part.spans); j++ {
+			span := &part.spans[j]
+			var err error
+			if span.Key, err = sqlbase.AdjustStartKeyForInterleave(index, span.Key); err != nil {
+				return nil, err
+			}
+
+			// Since EndKey can only be pushed back at this point,
+			// we can shortcut here if the start key is pushed
+			// beyond the initial end key.
+			if span.Key.Compare(span.EndKey) >= 0 {
+				part.spans = append(part.spans[:j], part.spans[j+1:]...)
+				part.spans = part.spans[:len(part.spans)-1]
+				j--
+				continue
+			}
+
+			// For end keys, we don't know if they've been invoked
+			// with PrefixEnd or not during initial index selection
+			// and span generation.
+			// If the key can be decomposed using
+			// DecomposeKeyTokens, then it has not been invoked
+			// with DecomposeKeyTokens.
+			// Otherwise, we try to UndoPrefixEnd and see if that
+			// produces a decomposable end key.
+			// If all else fails, we simply keep the EndKey as is
+			// (best effort).
+			inclusive := false
+			if _, _, err := encoding.DecomposeKeyTokens(span.EndKey); err != nil {
+				temp, ok := encoding.UndoPrefixEnd(span.EndKey)
+				if _, _, err := encoding.DecomposeKeyTokens(temp); !ok || err != nil {
+					continue
+				}
+
+				span.EndKey = temp
+				inclusive = true
+			}
+
+			if span.EndKey, err = sqlbase.AdjustEndKeyForInterleave(table, index, span.EndKey, inclusive); err != nil {
+				return nil, err
+			}
+
+			// If the end key was tightened to before the start
+			// key, this span is no longer necessary.
+			if span.Key.Compare(span.EndKey) >= 0 {
+				part.spans = append(part.spans[:j], part.spans[j+1:]...)
+				part.spans = part.spans[:len(part.spans)-1]
+				j--
+			}
+		}
+
+		// If all the spans were tightened such that they were no
+		// longer valid, we can remove this span partition.
+		if len(part.spans) == 0 {
+			partitions = append(partitions[:i], partitions[i+1:]...)
+			partitions = partitions[:len(partitions)-1]
+			i--
+		}
+	}
+
+	return partitions, nil
+}
+
 // nodeVersionIsCompatible decides whether a particular node's DistSQL version
 // is compatible with planVer. It uses gossip to find out the node's version
 // range.
@@ -758,6 +829,9 @@ func (dsp *DistSQLPlanner) createTableReaders(
 
 	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
 	if err != nil {
+		return physicalPlan{}, err
+	}
+	if spanPartitions, err = tightenPartitionsForInterleave(spanPartitions, n.desc, n.index); err != nil {
 		return physicalPlan{}, err
 	}
 

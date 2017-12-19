@@ -257,6 +257,10 @@ func EncodeVarintDescending(b []byte, v int64) []byte {
 // getVarintLen returns the encoded length of an encoded varint. Assumes the
 // slice has at least one byte.
 func getVarintLen(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, errors.Errorf("insufficient bytes to get varint length")
+	}
+
 	length := int(b[0]) - intZero
 	if length >= 0 {
 		if length <= intSmall {

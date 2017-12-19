@@ -74,6 +74,11 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	if err != nil {
 		return physicalPlan{}, err
 	}
+	// Since the spans are used to read/write to the primary index, we can
+	// adjust the spans with respect to the primary index.
+	// if spanPartitions, err = adjustPartitionsForInterleave(spanPartitions, &desc, &desc.PrimaryIndex); err != nil {
+	// 	return physicalPlan{}, err
+	// }
 
 	var p physicalPlan
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
