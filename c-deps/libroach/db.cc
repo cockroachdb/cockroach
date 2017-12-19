@@ -2584,3 +2584,9 @@ const rocksdb::Comparator* CockroachComparator() { return &kComparator; }
 rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch) {
   return new DBBatchInserter(batch);
 }
+
+DBStatus DBLockFile(char* filename) {
+  rocksdb::FileLock* flock = new rocksdb::FileLock();
+  return ToDBStatus(rocksdb::NewMemEnv(rocksdb::Env::Default())->LockFile(std::string(filename), &flock));
+  delete flock;
+}

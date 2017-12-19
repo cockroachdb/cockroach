@@ -12,14 +12,18 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package util
+package engine
 
 import (
 	"bufio"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/pkg/errors"
 )
+
+const lockFilename = `TEMP_DIR.LOCK`
 
 // CreateTempDir creates a temporary directory with a prefix under the given
 // parentDir and returns the absolute path of the temporary directory.
@@ -32,7 +36,17 @@ func CreateTempDir(parentDir, prefix string) (string, error) {
 		return "", err
 	}
 
-	return filepath.Abs(tempPath)
+	absPath, err := filepath.Abs(tempPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Create a lock file.
+	if err := lockLockfile(absPath); err != nil {
+		return "", errors.Wrapf(err, "could not create lock on new temporary directory")
+	}
+
+	return absPath, nil
 }
 
 // RecordTempDir records tempPath to the record file specified by recordPath to
@@ -78,6 +92,13 @@ func CleanupTempDirs(recordPath string) error {
 		if path == "" {
 			continue
 		}
+
+		// Check if another Cockroach instance is using this temporary
+		// directory i.e. has a lock on the temp dir lock file.
+		if err := lockLockfile(path); err != nil {
+			return errors.Wrapf(err, "temporary directory %s still in use", path)
+		}
+
 		// If path/directory does not exist, error is nil.
 		if err := os.RemoveAll(path); err != nil {
 			return err
@@ -86,4 +107,14 @@ func CleanupTempDirs(recordPath string) error {
 
 	// Clear out the record file now that we're done.
 	return f.Truncate(0)
+}
+
+func lockLockfile(tempDir string) (err error) {
+	// if err := ioutil.WriteFile(filepath.Join(tempDir, lockFilename), []byte(nil), 0644); err != nil {
+	// 	return err
+	// }
+
+	return LockFile(filepath.Join(tempDir, lockFilename))
+
+	// return syscall.FcntlFlock(lfile.Fd(), syscall.F_SETLK, &flock)
 }

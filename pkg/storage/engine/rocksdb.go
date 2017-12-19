@@ -2238,3 +2238,7 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 func IsValidSplitKey(key roachpb.Key, allowMeta2Splits bool) bool {
 	return bool(C.MVCCIsValidSplitKey(goToCSlice(key), C._Bool(allowMeta2Splits)))
 }
+
+func LockFile(filename string) error {
+	return statusToError(C.DBLockFile(C.CString(filename)))
+}

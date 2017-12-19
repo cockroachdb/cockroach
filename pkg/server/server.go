@@ -328,7 +328,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// also remove the record after the temp directory is
 			// removed.
 			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
-			err = util.CleanupTempDirs(recordPath)
+			err = engine.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())

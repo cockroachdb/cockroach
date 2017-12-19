@@ -298,6 +298,8 @@ void DBRunLDB(int argc, char** argv);
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 
+DBStatus DBLockFile(char* filename);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
