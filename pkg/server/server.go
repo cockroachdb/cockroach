@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	migrations "github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -1198,8 +1199,19 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// in an acceptable form for this version of the software.
 	// We have to do this after actually starting up the server to be able to
 	// seamlessly use the kv client against other nodes in the cluster.
+	var mmKnobs sqlmigrations.MigrationManagerTestingKnobs
+	if migrationManagerTestingKnobs := s.cfg.TestingKnobs.SQLMigrationManager; migrationManagerTestingKnobs != nil {
+		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
+	}
 	migMgr := migrations.NewManager(
-		s.stopper, s.db, s.sqlExecutor, s.clock, &s.internalMemMetrics, s.NodeID().String())
+		s.stopper,
+		s.db,
+		s.sqlExecutor,
+		s.clock,
+		mmKnobs,
+		&s.internalMemMetrics,
+		s.NodeID().String(),
+	)
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
 		select {
 		case <-s.stopper.ShouldQuiesce():

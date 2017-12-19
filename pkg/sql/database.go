@@ -226,7 +226,7 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 func getAllDatabaseDescs(
 	ctx context.Context, txn *client.Txn,
 ) ([]*sqlbase.DatabaseDescriptor, error) {
-	descs, err := getAllDescriptors(ctx, txn)
+	descs, err := GetAllDescriptors(ctx, txn)
 	if err != nil {
 		return nil, err
 	}

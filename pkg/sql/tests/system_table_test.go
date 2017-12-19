@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -104,29 +103,39 @@ func TestSystemTableLiterals(t *testing.T) {
 		id     sqlbase.ID
 		schema string
 		pkg    sqlbase.TableDescriptor
+		// Starting with the RoleMembers table, all newly created tables have two sets of privileges:
+		// one for "root", another for "admin". Previous tables get them through a migration.
+		hasAdmin bool
 	}
 
 	for _, test := range []testcase{
-		{keys.NamespaceTableID, sqlbase.NamespaceTableSchema, sqlbase.NamespaceTable},
-		{keys.DescriptorTableID, sqlbase.DescriptorTableSchema, sqlbase.DescriptorTable},
-		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable},
-		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable},
-		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
-		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
-		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
-		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
-		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable},
-		{keys.SettingsTableID, sqlbase.SettingsTableSchema, sqlbase.SettingsTable},
-		{keys.WebSessionsTableID, sqlbase.WebSessionsTableSchema, sqlbase.WebSessionsTable},
-		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable},
-		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable},
+		{keys.NamespaceTableID, sqlbase.NamespaceTableSchema, sqlbase.NamespaceTable, false},
+		{keys.DescriptorTableID, sqlbase.DescriptorTableSchema, sqlbase.DescriptorTable, false},
+		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable, false},
+		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable, false},
+		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable, false},
+		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable, false},
+		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable, false},
+		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable, false},
+		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable, false},
+		{keys.SettingsTableID, sqlbase.SettingsTableSchema, sqlbase.SettingsTable, false},
+		{keys.WebSessionsTableID, sqlbase.WebSessionsTableSchema, sqlbase.WebSessionsTable, false},
+		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable, false},
+		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable, false},
+		{keys.RoleMembersTableID, sqlbase.RoleMembersTableSchema, sqlbase.RoleMembersTable, true},
 	} {
+		var privs *sqlbase.PrivilegeDescriptor
+		if test.hasAdmin {
+			privs = sqlbase.NewCustomSuperuserPrivilegeDescriptor(sqlbase.SystemDesiredPrivileges(test.id))
+		} else {
+			privs = sqlbase.NewCustomRootPrivilegeDescriptor(sqlbase.SystemDesiredPrivileges(test.id))
+		}
 		gen, err := sql.CreateTestTableDescriptor(
 			context.TODO(),
 			keys.SystemDatabaseID,
 			test.id,
 			test.schema,
-			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemDesiredPrivileges(test.id)),
+			privs,
 		)
 		if err != nil {
 			t.Fatal(err)

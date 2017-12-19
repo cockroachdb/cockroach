@@ -26,12 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestWriteResumeSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	ctx := context.TODO()
 
 	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
@@ -44,6 +46,10 @@ func TestWriteResumeSpan(t *testing.T) {
 				AsyncExecNotification: func() error {
 					return errors.New("async schema changer disabled")
 				},
+			},
+			// Disable backfill migrations, we still need the jobs table migration.
+			SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+				DisableBackfillMigrations: true,
 			},
 		},
 	})

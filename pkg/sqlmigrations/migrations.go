@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -48,6 +49,22 @@ var (
 const (
 	addDefaultMetaAndLivenessZoneConfigsName = "add default .meta and .liveness zone configs"
 )
+
+// MigrationManagerTestingKnobs contains testing knobs.
+type MigrationManagerTestingKnobs struct {
+	// DisableMigrations skips all migrations.
+	DisableMigrations bool
+	// DisableBackfillMigrations stops applying migrations once
+	// a migration with 'doesBackfill == true' is encountered.
+	// TODO(mberhault): we could skip only backfill migrations and dependencies
+	// if we had some concept of migration dependencies.
+	DisableBackfillMigrations bool
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*MigrationManagerTestingKnobs) ModuleTestingKnobs() {}
+
+var _ base.ModuleTestingKnobs = &MigrationManagerTestingKnobs{}
 
 // backwardCompatibleMigrations is a hard-coded list of migrations to be run on
 // startup. They will always be run from top-to-bottom, and because they are
@@ -111,8 +128,30 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newRanges:      1,
 	},
 	{
-		name:   addDefaultMetaAndLivenessZoneConfigsName,
-		workFn: addDefaultMetaAndLivenessZoneConfigs,
+		name:      addDefaultMetaAndLivenessZoneConfigsName,
+		workFn:    addDefaultMetaAndLivenessZoneConfigs,
+		newRanges: 1,
+	},
+	{
+		name:           "create system.role_members table",
+		workFn:         createRoleMembersTable,
+		newDescriptors: 1,
+		newRanges:      1,
+	},
+	{
+		name:         "add system.users isRole column and create admin role",
+		workFn:       addRoles,
+		doesBackfill: true,
+	},
+	{
+		// We keep this a separate migration as we don't want to re-run addRoles
+		// if this part fails.
+		name:   "grant superuser privileges on all objects to the admin role",
+		workFn: grantAdminPrivileges,
+	},
+	{
+		name:   "make root a member of the admin rol",
+		workFn: addRootToAdminRole,
 	},
 }
 
@@ -130,6 +169,8 @@ type migrationDescriptor struct {
 	// automate certain tests, which check the number of ranges/descriptors
 	// present on server bootup.
 	newRanges, newDescriptors int
+	// doesBackfill should be set to true if the migration triggers a backfill.
+	doesBackfill bool
 }
 
 type runner struct {
@@ -170,6 +211,7 @@ type Manager struct {
 	db           db
 	sqlExecutor  *sql.Executor
 	memMetrics   *sql.MemoryMetrics
+	testingKnobs MigrationManagerTestingKnobs
 }
 
 // NewManager initializes and returns a new Manager object.
@@ -178,6 +220,7 @@ func NewManager(
 	db *client.DB,
 	executor *sql.Executor,
 	clock *hlc.Clock,
+	testingKnobs MigrationManagerTestingKnobs,
 	memMetrics *sql.MemoryMetrics,
 	clientID string,
 ) *Manager {
@@ -191,6 +234,7 @@ func NewManager(
 		db:           db,
 		sqlExecutor:  executor,
 		memMetrics:   memMetrics,
+		testingKnobs: testingKnobs,
 	}
 }
 
@@ -222,6 +266,11 @@ func AdditionalInitialDescriptors(
 // required migrations have been run (and running all those that are definitely
 // safe to run).
 func (m *Manager) EnsureMigrations(ctx context.Context) error {
+	if m.testingKnobs.DisableMigrations {
+		log.Info(ctx, "skipping all migrations due to testing knob")
+		return nil
+	}
+
 	// First, check whether there are any migrations that need to be run.
 	completedMigrations, err := getCompletedMigrations(ctx, m.db)
 	if err != nil {
@@ -229,6 +278,11 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	}
 	allMigrationsCompleted := true
 	for _, migration := range backwardCompatibleMigrations {
+		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
+			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
+				migration.name)
+			break
+		}
 		key := migrationKey(migration)
 		if _, ok := completedMigrations[string(key)]; !ok {
 			allMigrationsCompleted = false
@@ -318,6 +372,12 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 			continue
 		}
 
+		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
+			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
+				migration.name)
+			break
+		}
+
 		if log.V(1) {
 			log.Infof(ctx, "running migration %q", migration.name)
 		}
@@ -357,7 +417,7 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 }
 
 func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
-	const alterStmt = `ALTER TABLE system.eventlog ALTER COLUMN "uniqueID" SET DEFAULT uuid_v4();`
+	const alterStmt = `ALTER TABLE system.eventlog ALTER COLUMN "uniqueID" SET DEFAULT uuid_v4()`
 
 	// System tables can only be modified by a privileged internal user.
 	session := r.newRootSession(ctx)
@@ -397,6 +457,10 @@ func createTableStatisticsTable(ctx context.Context, r runner) error {
 
 func createLocationsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.LocationsTable)
+}
+
+func createRoleMembersTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.RoleMembersTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
@@ -521,7 +585,7 @@ func addRootUser(ctx context.Context, r runner) error {
 	defer session.Finish(r.sqlExecutor)
 
 	// Upsert the root user into the table. We intentionally override any existing entry.
-	const upsertRootStmt = `UPSERT INTO system.users (username, "hashedPassword") VALUES ($1, '');`
+	const upsertRootStmt = `UPSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`
 
 	pl := tree.MakePlaceholderInfo()
 	pl.SetValue("1", tree.NewDString(security.RootUser))
@@ -637,4 +701,132 @@ func getZoneConfig(ctx context.Context, r runner, id uint32) (config.ZoneConfig,
 	err = fmt.Errorf("failed attempt to retrieve .%s zone config: %v",
 		config.NamedZonesByID[id], err)
 	return config.ZoneConfig{}, err
+}
+
+func addRoles(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Add the roles column to the system.users table.
+	const alterStmt = `
+					ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "isRole" BOOL NOT NULL DEFAULT false
+					`
+
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session, alterStmt, nil, 1); err == nil {
+		res.Close(ctx)
+	} else {
+		return err
+	}
+
+	// Create the `admin` role.
+	const upsertAdminStmt = `
+					INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
+					`
+
+	// Add the `admin` role. We retry a few times as the schema change may still be backfilling.
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, upsertAdminStmt, &pl, 1)
+		if err == nil {
+			res.Close(ctx)
+			break
+		}
+		if sqlbase.IsUniquenessConstraintViolationError(err) {
+			log.Fatalf(ctx, `cannot create role %q, a user with that name exists. Please drop the user `+
+				`(DROP USER %s) using a previous version of CockroachDB and try again`,
+				sqlbase.AdminRole, sqlbase.AdminRole)
+		}
+		log.Warningf(ctx, "failed to insert %s role into the system.users table: %s", sqlbase.AdminRole, err)
+	}
+	return err
+}
+
+func grantAdminPrivileges(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Give the admin role permissions on all databases and tables.
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		descriptors, descErr := sql.GetAllDescriptors(ctx, txn)
+		if descErr != nil {
+			return descErr
+		}
+
+		for _, desc := range descriptors {
+			// Lookup desired privileges:
+			var desiredPrivs privilege.List
+
+			descID := desc.GetID()
+			if sqlbase.IsReservedID(descID) {
+				// System databases and tables have custom maximum allowed privileges.
+				systemPrivs, ok := sqlbase.SystemAllowedPrivileges[descID]
+				if !ok || len(systemPrivs) == 0 {
+					return fmt.Errorf("no allowed privileges found for system object with ID=%d", descID)
+				}
+				desiredPrivs = systemPrivs[0]
+			} else {
+				// Non-system object: fall back on default superuser privileges.
+				desiredPrivs = sqlbase.DefaultSuperuserPrivileges
+			}
+
+			// Grant privileges to the admin role.
+			desc.GetPrivileges().Grant(sqlbase.AdminRole, desiredPrivs)
+
+			// Validate descriptors.
+			switch d := desc.(type) {
+			case *sqlbase.DatabaseDescriptor:
+				if err := d.Validate(); err != nil {
+					return err
+				}
+			case *sqlbase.TableDescriptor:
+				if err := d.Validate(ctx, txn); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Now update the descriptors transactionally.
+		b := txn.NewBatch()
+		for _, descriptor := range descriptors {
+			descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
+			b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
+		}
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	})
+	return err
+}
+
+func addRootToAdminRole(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// We just created the table, so we can use insert.
+	const upsertAdminStmt = `
+					INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+					`
+
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
+	pl.SetValue("2", tree.NewDString(security.RootUser))
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, upsertAdminStmt, &pl, 1)
+		if err == nil {
+			res.Close(ctx)
+			break
+		}
+		log.Warningf(ctx, "failed to make %s a member of the %s role: %s", security.RootUser, sqlbase.AdminRole, err)
+	}
+	return err
 }

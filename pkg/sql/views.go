@@ -136,7 +136,7 @@ func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor
 	// Collect all the descriptors.
 	databases := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
 	tables := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-	descs, err := getAllDescriptors(ctx, p.txn)
+	descs, err := GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}

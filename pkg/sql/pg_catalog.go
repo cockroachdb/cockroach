@@ -1231,9 +1231,11 @@ CREATE TABLE pg_catalog.pg_roles (
 	rolcreatedb BOOL,
 	rolcatupdate BOOL,
 	rolcanlogin BOOL,
+	rolreplication BOOL,
 	rolconnlimit INT,
 	rolpassword STRING,
 	rolvaliduntil TIMESTAMPTZ,
+	rolbypassrls BOOL,
 	rolconfig STRING
 );
 `,
@@ -1243,21 +1245,23 @@ CREATE TABLE pg_catalog.pg_roles (
 		// need to do the same. This shouldn't be an issue, because pg_roles doesn't
 		// include sensitive information such as password hashes.
 		h := makeOidHasher()
-		return forEachUser(ctx, p,
-			func(username string) error {
-				isRoot := tree.DBool(username == security.RootUser)
+		return forEachRole(ctx, p,
+			func(username string, isRole tree.DBool) error {
+				isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
 				return addRow(
 					h.UserOid(username),         // oid
 					tree.NewDName(username),     // rolname
 					tree.MakeDBool(isRoot),      // rolsuper
-					tree.MakeDBool(false),       // rolinherit
+					tree.MakeDBool(isRole),      // rolinherit. Roles inherit by default.
 					tree.MakeDBool(isRoot),      // rolcreaterole
 					tree.MakeDBool(isRoot),      // rolcreatedb
 					tree.MakeDBool(false),       // rolcatupdate
-					tree.MakeDBool(true),        // rolcanlogin
+					tree.MakeDBool(!isRole),     // rolcanlogin. Only users can login.
+					tree.MakeDBool(false),       // rolreplication
 					negOneVal,                   // rolconnlimit
 					tree.NewDString("********"), // rolpassword
 					tree.DNull,                  // rolvaliduntil
+					tree.MakeDBool(false),       // rolbypassrls
 					tree.NewDString("{}"),       // rolconfig
 				)
 			})
