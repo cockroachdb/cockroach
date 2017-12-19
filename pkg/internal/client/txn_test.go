@@ -47,7 +47,7 @@ var (
 func TestTxnSnowballTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(nil), clock)
 	tracer := tracing.NewTracer()
 	ctx, sp, err := tracing.StartSnowballTrace(context.Background(), tracer, "test-txn")
@@ -147,7 +147,7 @@ func TestInitPut(t *testing.T) {
 	// This test is mostly an excuse to exercise otherwise unused code.
 	// TODO(vivekmenezes): update test or remove when InitPut is being
 	// considered sufficiently tested and this path exercised.
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		return br, nil
@@ -178,7 +178,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	}
 
 	manual := hlc.NewManualClock(testCases[0].expRequestTS.WallTime)
-	clock := hlc.NewClock(manual.UnixNano, 0)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	var testIdx int
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		test := testCases[testIdx]
@@ -207,7 +207,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 // transactional client.
 func TestTransactionConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	dbCtx := DefaultDBContext()
 	dbCtx.UserPriority = 101
 	db := NewDBWithContext(newTestSender(nil), clock, dbCtx)
@@ -227,7 +227,7 @@ func TestTransactionConfig(t *testing.T) {
 // operations were performed.
 func TestCommitReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var calls []roachpb.Method
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
@@ -250,7 +250,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 // that call.
 func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	for _, withGet := range []bool{true, false} {
 		var calls []roachpb.Method
 		db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -280,7 +280,7 @@ func TestCommitReadOnlyTransactionExplicit(t *testing.T) {
 // upon successful invocation of the retryable func.
 func TestCommitMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var calls []roachpb.Method
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
@@ -325,7 +325,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 // request is inserted just before the first mutating command.
 func TestTxnInsertBeginTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var calls []roachpb.Method
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
@@ -349,7 +349,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 // when a BeginTransaction command causes an error.
 func TestBeginTransactionErrorIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		pErr := roachpb.NewError(&roachpb.WriteIntentError{})
 		pErr.SetErrorIndex(0)
@@ -376,7 +376,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 // ended a second time at completion of retryable func.
 func TestCommitTransactionOnce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	count := 0
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		count++
@@ -398,7 +398,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 // transaction does not prompt an EndTransaction call.
 func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			t.Errorf("did not expect EndTransaction")
@@ -419,7 +419,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 // or not.
 func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	for _, success := range []bool{true, false} {
 		expCalls := []roachpb.Method{roachpb.BeginTransaction, roachpb.Put, roachpb.EndTransaction}
 		var calls []roachpb.Method
@@ -459,7 +459,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	attempt := 0
 	keys := []string{"first", "second"}
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -516,7 +516,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 // upon failed invocation of the retryable func.
 func TestAbortMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var calls []roachpb.Method
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
@@ -548,7 +548,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 // test a TxnCoordSender instead.
 func TestRunTransactionRetryOnErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	testCases := []struct {
 		err   error
 		retry bool // Expect retry?
@@ -621,7 +621,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 func TestTransactionStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(nil), clock)
 	for _, write := range []bool{true, false} {
 		for _, commit := range []bool{true, false} {
@@ -656,7 +656,7 @@ func TestTransactionStatus(t *testing.T) {
 
 func TestCommitInBatchWrongTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(nil), clock)
 	txn := NewTxn(db, 0 /* gatewayNodeID */)
 
@@ -702,7 +702,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 func TestSetPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var expected roachpb.UserPriority
 	db := NewDB(newTestSender(
 		func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -741,7 +741,7 @@ func TestSetPriority(t *testing.T) {
 // be retried.
 func TestWrongTxnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(nil), clock)
 
 	var retries int
@@ -783,7 +783,7 @@ func TestWrongTxnRetry(t *testing.T) {
 
 func TestBatchMixRawRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(nil), clock)
 
 	b := &Batch{}
@@ -797,7 +797,7 @@ func TestBatchMixRawRequest(t *testing.T) {
 func TestUpdateDeadlineMaybe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mc := hlc.NewManualClock(1)
-	clock := hlc.NewClock(mc.UnixNano, 0 /* maxOffset */)
+	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	db := NewDB(nil /* sender */, clock)
 	txn := NewTxn(db, 0 /* gatewayNodeID */)
 
@@ -836,7 +836,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 func TestConcurrentTxnRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	var callCountsMu syncutil.Mutex
 	callCounts := make(map[roachpb.Method]int)
 	db := NewDB(newTestSender(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
