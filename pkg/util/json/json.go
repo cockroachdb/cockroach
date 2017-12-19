@@ -137,6 +137,90 @@ type jsonKeyValuePair struct {
 	v JSON
 }
 
+// Builder builds JSON Object by a key value pair sequence.
+type Builder struct {
+	pairs []jsonKeyValuePair
+}
+
+// NewBuilder returns a Builder with empty state.
+func NewBuilder() *Builder {
+	return &Builder{
+		pairs: []jsonKeyValuePair{},
+	}
+}
+
+// Add appends key value pair to the sequence.
+func (b *Builder) Add(k string, v JSON) {
+	b.pairs = append(b.pairs, jsonKeyValuePair{k: jsonString(k), v: v})
+}
+
+// Build returns a JSON object built from a key value pair sequence and clears
+// Builder to empty state.
+func (b *Builder) Build() JSON {
+	orders := make([]int, len(b.pairs))
+	for i := range orders {
+		orders[i] = i
+	}
+	sorter := pairSorter{
+		pairs:        b.pairs,
+		orders:       orders,
+		hasNonUnique: false,
+	}
+	b.pairs = []jsonKeyValuePair{}
+	sort.Sort(&sorter)
+	sorter.unique()
+	return jsonObject(sorter.pairs)
+}
+
+// pairSorter sorts and uniqueifies JSON pairs. In order to keep
+// the last one for pairs with the same key while sort.Sort is
+// not stable, pairSorter uses []int orders to maintain order and
+// bool hasNonUnique to skip unnecessary uniqueifying.
+type pairSorter struct {
+	pairs        []jsonKeyValuePair
+	orders       []int
+	hasNonUnique bool
+}
+
+func (s *pairSorter) Len() int {
+	return len(s.pairs)
+}
+
+func (s *pairSorter) Less(i, j int) bool {
+	cmp := strings.Compare(string(s.pairs[i].k), string(s.pairs[j].k))
+	if cmp != 0 {
+		return cmp == -1
+	}
+	s.hasNonUnique = true
+	return s.orders[i] > s.orders[j]
+}
+
+func (s *pairSorter) Swap(i, j int) {
+	s.pairs[i], s.orders[i], s.pairs[j], s.orders[j] = s.pairs[j], s.orders[j], s.pairs[i], s.orders[i]
+}
+
+func (s *pairSorter) unique() {
+	// If there are any duplicate keys, then in sorted order it will have
+	// two pairs with rank i and i + 1 whose keys are same.
+	// For sorting based on comparisons, if two unique elements (pair.k, order)
+	// have rank i and i + 1, they have to compare once to figure out their
+	// relative order in the final position i and i + 1. So if there are any
+	// equal elements, then the sort must have compared them at some point.
+	if !s.hasNonUnique {
+		return
+	}
+	top := 0
+	for i := 1; i < len(s.pairs); i++ {
+		if s.pairs[top].k != s.pairs[i].k {
+			top++
+			if top != i {
+				s.pairs[top] = s.pairs[i]
+			}
+		}
+	}
+	s.pairs = s.pairs[:top+1]
+}
+
 // jsonObject represents a JSON object as a sorted-by-key list of key-value
 // pairs, which are unique by key.
 type jsonObject []jsonKeyValuePair
