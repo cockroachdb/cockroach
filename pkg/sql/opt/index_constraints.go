@@ -413,8 +413,20 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 		return nil, false
 	}
 	datum := val.private.(tree.Datum)
+	if datum == tree.DNull {
+		switch op {
+		case eqOp, ltOp, gtOp, leOp, geOp, neOp:
+			// This expression should have been converted to NULL during
+			// type checking.
+			panic("comparison with NULL")
+		}
+		return nil, false
+	}
+
 	switch op {
 	case eqOp, ltOp, gtOp, leOp, geOp:
+		if datum == tree.DNull {
+		}
 		sp := MakeFullSpan()
 		switch op {
 		case eqOp:
@@ -436,12 +448,17 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 		return LogicalSpans{sp}, true
 
 	case neOp:
+		if datum == tree.DNull {
+			panic("comparison with NULL")
+		}
 		spans := LogicalSpans{MakeFullSpan(), MakeFullSpan()}
 		spans[0].End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
 		spans[1].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
 		c.preferInclusive(offset, &spans[0])
 		c.preferInclusive(offset, &spans[1])
 		return spans, true
+
+		return nil, false
 
 	default:
 		return nil, false
@@ -609,6 +626,14 @@ Outer:
 // makeSpansForExpr creates spans for index columns starting at <offset>
 // from the given expression.
 func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpans, bool) {
+	if e.op == constOp {
+		datum := e.private.(tree.Datum)
+		if datum == tree.DBoolFalse || datum == tree.DNull {
+			// Condition is never true, return no spans.
+			return LogicalSpans{}, true
+		}
+		return nil, false
+	}
 	// Check for an operation where the left-hand side is an
 	// indexed var for this column.
 	if len(e.children) > 0 && isIndexedVar(e.children[0], offset) {
@@ -789,6 +814,9 @@ func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
 type IndexColumnInfo struct {
 	Typ       types.T
 	Direction encoding.Direction
+	// Nullable should be set to false if this column cannot store NULLs. This is
+	// used to keep the spans simple, e.g. [ - /5] instead of (/NULL - /5].
+	Nullable bool
 }
 
 // MakeIndexConstraints generates constraints from a scalar boolean filter
