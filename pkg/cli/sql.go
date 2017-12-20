@@ -1143,15 +1143,29 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if cliCtx.isInteractive && !sqlCtx.unsafeUpdates {
-		if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
-			return err
-		}
-	}
+	// Enable safe updates, unless disabled.
+	setupSafeUpdates(conn)
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
 		return runStatements(conn, sqlCtx.execStmts)
 	}
 	return runInteractive(conn)
+}
+
+// setupSafeUpdates attempts to enable "safe mode" if the session is
+// interactive and the user is not disabling this behavior with
+// --unsafe-updates.
+func setupSafeUpdates(conn *sqlConn) {
+	if !cliCtx.isInteractive || sqlCtx.unsafeUpdates {
+		// nothing to do.
+		return
+	}
+
+	if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
+		// We only enable the setting in interactive sessions. Ignoring
+		// the error with a warning is acceptable, because the user is
+		// there to decide what they want to do if it doesn't work.
+		fmt.Fprintf(stderr, "warning: cannot enable safe updates: %v\n", err)
+	}
 }
