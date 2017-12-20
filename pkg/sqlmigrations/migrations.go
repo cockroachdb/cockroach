@@ -70,6 +70,8 @@ var _ base.ModuleTestingKnobs = &MigrationManagerTestingKnobs{}
 // startup. They will always be run from top-to-bottom, and because they are
 // assumed to be backward-compatible, they will be run regardless of what other
 // node versions are currently running within the cluster.
+// Migrations must be idempotent: a migration may run successfully but not be recorded
+// as completed, causing a second run.
 var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		name:   "default UniqueID to uuid_v4 in system.eventlog",
@@ -810,9 +812,8 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
 
-	// We just created the table, so we can use insert.
 	const upsertAdminStmt = `
-					INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+					UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
 					`
 
 	pl := tree.MakePlaceholderInfo()
