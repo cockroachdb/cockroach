@@ -131,7 +131,7 @@ type valuesRun struct {
 func (n *valuesNode) startExec(params runParams) error {
 	if n.rows != nil {
 		if !n.isConst {
-			log.Fatalf(params.ctx, "valuesNode evaluted twice")
+			log.Fatalf(params.ctx, "valuesNode evaluated twice")
 		}
 		return nil
 	}
