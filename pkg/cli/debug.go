@@ -455,7 +455,14 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 				return "", err
 			}
 			ent.Data = nil
-			return fmt.Sprintf("%s by %s\n%s\n", &ent, cmd.ProposerLease, &cmd), nil
+			var leaseStr string
+			if l := cmd.DeprecatedProposerLease; l != nil {
+				// Use the full lease, if available.
+				leaseStr = l.String()
+			} else {
+				leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
+			}
+			return fmt.Sprintf("%s by %s\n%s\n", &ent, leaseStr, &cmd), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {

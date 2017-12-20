@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -94,6 +95,34 @@ func evalNewLease(
 				Requested: lease,
 				Message:   "replica not found",
 			}
+	}
+
+	// Requests should not set the sequence number themselves.
+	if lease.Sequence != 0 {
+		return newFailedLeaseTrigger(isTransfer),
+			&roachpb.LeaseRejectedError{
+				Existing:  prevLease,
+				Requested: lease,
+				Message:   "sequence number should not be set",
+			}
+	}
+	// Set the lease's sequence number once VersionLeaseSequence is the minimum
+	// version. We don't want to do it once VersionLeaseSequence IsActive but
+	// not IsMinSupported because that means that the cluster could be
+	// downgraded. This could lead to lease sequence numbers not being
+	// incremented again and could even lead to sequence numbers being lost on
+	// some nodes if older binaries were run again, because proto3 does not
+	// preserve unknown fields (see github.com/gogo/protobuf/issues/275).
+	if rec.ClusterSettings().Version.IsMinSupported(cluster.VersionLeaseSequence) {
+		// We set the new lease sequence to one more than the previous lease
+		// sequence. This is safe and will never result in repeated lease
+		// sequences because the sequence check beneath Raft acts as an atomic
+		// compare-and-swap of sorts. If two lease requests are proposed in
+		// parallel, both with the same previous lease, only one will be
+		// accepted and the other will get a LeaseRejectedError and need to
+		// retry with a different sequence number. This is actually exactly what
+		// the sequence number is used to enforce!
+		lease.Sequence = prevLease.Sequence + 1
 	}
 
 	// Store the lease to disk & in-memory.
