@@ -220,6 +220,30 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		}
 	}
 
+	// Sanity check to make sure that the lease sequence is moving in the right
+	// direction.
+	if s1, s2 := prevLease.Sequence, newLease.Sequence; s1 != 0 {
+		// We're at a version that supports lease sequence numbers.
+		switch {
+		case s2 < s1:
+			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s", prevLease, newLease)
+		case s2 == s1:
+			// If the sequence numbers are the same, make sure they're actually
+			// the same lease. This can happen when callers are using leasePostApply
+			// for some of its side effects, like with splitPostApply.
+			if !prevLease.Equivalent(newLease) {
+				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
+					prevLease, newLease)
+			}
+		case s2 == s1+1:
+			// Lease sequence incremented by 1. Expected case.
+		case s2 > s1+1:
+			// Snapshots will never call leasePostApply, so we always expect
+			// leases to increment one at a time here.
+			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s", prevLease, newLease)
+		}
+	}
+
 	// We're setting the new lease after we've updated the timestamp cache in
 	// order to avoid race conditions where a replica starts serving requests
 	// for a lease without first having taken into account requests served

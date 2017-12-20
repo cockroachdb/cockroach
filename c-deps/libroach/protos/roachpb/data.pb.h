@@ -1696,6 +1696,11 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::google::protobuf::int64 epoch() const;
   void set_epoch(::google::protobuf::int64 value);
 
+  void clear_sequence();
+  static const int kSequenceFieldNumber = 7;
+  ::google::protobuf::int64 sequence() const;
+  void set_sequence(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Lease)
  private:
 
@@ -1706,6 +1711,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::util::hlc::Timestamp* deprecated_start_stasis_;
   ::cockroach::util::hlc::Timestamp* proposed_ts_;
   ::google::protobuf::int64 epoch_;
+  ::google::protobuf::int64 sequence_;
   mutable int _cached_size_;
   friend struct protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -3391,6 +3397,19 @@ inline void Lease::set_epoch(::google::protobuf::int64 value) {
   
   epoch_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.epoch)
+}
+
+inline void Lease::clear_sequence() {
+  sequence_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 Lease::sequence() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.sequence)
+  return sequence_;
+}
+inline void Lease::set_sequence(::google::protobuf::int64 value) {
+  
+  sequence_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.sequence)
 }
 
 // -------------------------------------------------------------------
