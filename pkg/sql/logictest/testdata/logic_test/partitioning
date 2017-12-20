@@ -114,19 +114,19 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p2 VALUES IN (1)
 )
 
-statement error prefix \(DEFAULT\) cannot be present in more than one partition
+statement error \(DEFAULT\) cannot be present in more than one partition
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (DEFAULT),
     PARTITION p2 VALUES IN (DEFAULT)
 )
 
-statement error prefix \(1, 2, DEFAULT\) cannot be present in more than one partition
+statement error \(1, 2, DEFAULT\) cannot be present in more than one partition
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a, b, c) (
     PARTITION p1 VALUES IN ((1, 2, DEFAULT)),
     PARTITION p2 VALUES IN ((1, 2, DEFAULT))
 )
 
-statement error prefix \(1, DEFAULT\) cannot be present in more than one partition
+statement error \(1, DEFAULT, DEFAULT\) cannot be present in more than one partition
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a, b, c) (
     PARTITION p1 VALUES IN ((1, DEFAULT, DEFAULT)),
     PARTITION p2 VALUES IN ((1, DEFAULT, DEFAULT))
@@ -141,6 +141,14 @@ CREATE TABLE t (a DECIMAL PRIMARY KEY) PARTITION BY LIST (a) (
 statement error PARTITION p1: non-DEFAULT value \(1\) not allowed after DEFAULT
 CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
     PARTITION p1 VALUES IN ((DEFAULT, 1))
+)
+
+# Ensure this error takes precedence over the "cannot be present in more than
+# one partition" error.
+statement error PARTITION p1: non-DEFAULT value \(1\) not allowed after DEFAULT
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((DEFAULT, 1)),
+    PARTITION p2 VALUES IN ((DEFAULT, 1))
 )
 
 statement error values must be strictly increasing: \(1\) is out of order
@@ -161,13 +169,13 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) 
     PARTITION p2 VALUES < 1
 )
 
-statement error prefix \(1, 2, MAXVALUE\) cannot be present in more than one partition
+statement error \(1, 2, MAXVALUE\) cannot be present in more than one partition
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY RANGE (a, b, c) (
     PARTITION p1 VALUES < (1, 2, MAXVALUE),
     PARTITION p2 VALUES < (1, 2, MAXVALUE)
 )
 
-statement error prefix \(1, MAXVALUE\) cannot be present in more than one partition
+statement error \(1, MAXVALUE, MAXVALUE\) cannot be present in more than one partition
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY RANGE (a, b, c) (
     PARTITION p1 VALUES < (1, MAXVALUE, MAXVALUE),
     PARTITION p2 VALUES < (1, MAXVALUE, MAXVALUE)
