@@ -1251,7 +1251,7 @@ type readCSVProcessor struct {
 	csvOptions roachpb.CSVOptions
 	sampleSize int32
 	tableDesc  sqlbase.TableDescriptor
-	uri        string
+	uri        []string
 	out        distsqlrun.ProcOutputHelper
 	output     distsqlrun.RowReceiver
 	settings   *cluster.Settings
@@ -1283,7 +1283,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer tracing.FinishSpan(span)
 		defer close(recordCh)
 		_, err := readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
-			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh, nil, cp.settings)
+			len(cp.tableDesc.VisibleColumns()), cp.uri, recordCh, nil, cp.settings)
 		return err
 	})
 	// Convert CSV records to KVs
