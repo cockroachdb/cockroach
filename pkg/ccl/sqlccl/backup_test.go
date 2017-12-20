@@ -1711,12 +1711,16 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	defer cleanupFn()
 	const dir = "nodelocal:///"
 
-	ts := make([]string, 7)
+	ts := make([]string, 9)
 
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[0])
 
 	sqlDB.Exec(t, `UPDATE data.bank SET balance = 1`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[1])
+
+	// Change the data in the tabe.
+	sqlDB.Exec(t, `CREATE TABLE data.teller (id INT PRIMARY KEY, name STRING)`)
+	sqlDB.Exec(t, `INSERT INTO data.teller VALUES (1, 'alice'), (7, 'bob'), (3, 'eve')`)
 
 	sqlDB.Exec(t, `BEGIN`)
 	sqlDB.Exec(t, `UPDATE data.bank SET balance = 2`)
@@ -1734,17 +1738,35 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	)
 
 	sqlDB.Exec(t, `UPDATE data.bank SET balance = 3`)
+
+	// Create a table in some other DB -- this won't be in this backup (yet).
+	sqlDB.Exec(t, `CREATE DATABASE other`)
+	sqlDB.Exec(t, `CREATE TABLE other.sometable (id INT PRIMARY KEY, somevalue INT)`)
+	sqlDB.Exec(t, `INSERT INTO other.sometable VALUES (1, 2), (7, 5), (3, 3)`)
+
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[3])
 
 	sqlDB.Exec(t, `DELETE FROM data.bank WHERE id >= $1 / 2`, numAccounts)
+	sqlDB.Exec(t, `ALTER TABLE other.sometable RENAME TO data.sometable`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[4])
 
-	sqlDB.Exec(t, `UPDATE data.bank SET balance = 5`)
+	sqlDB.Exec(t, `INSERT INTO data.sometable VALUES (2, 2), (4, 5), (6, 3)`)
+	sqlDB.Exec(t, `ALTER TABLE data.bank ADD COLUMN points_balance INT DEFAULT 50`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[5])
+
+	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
+	sqlDB.Exec(t, `ALTER TABLE data.sometable RENAME TO other.sometable`)
+	sqlDB.Exec(t, `CREATE INDEX ON data.teller (name)`)
+	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
+	sqlDB.Exec(t, `INSERT INTO data.teller VALUES (2, 'craig')`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[6])
+
+	sqlDB.Exec(t, `DROP TABLE other.sometable`)
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[7])
 
 	sqlDB.Exec(t, `UPSERT INTO data.bank (id, balance)
 	           SELECT i, 4 FROM GENERATE_SERIES(0, $1 - 1) AS g(i)`, numAccounts)
-	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[6])
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[8])
 
 	incBackup := filepath.Join(dir, "inc")
 	sqlDB.Exec(t,
@@ -1757,18 +1779,29 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			sqlDB = sqlutils.MakeSQLRunner(sqlDB.DB)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, name))
-			rowCount := sqlDB.QueryStr(t,
+			sqlDB.Exec(t,
 				fmt.Sprintf(
-					`SELECT rows FROM [RESTORE data.* FROM $1, $2 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='%s']`,
+					`RESTORE data.* FROM $1, $2 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='%s'`,
 					timestamp, name,
 				),
 				fullBackup, incBackup,
 			)
-			sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s.bank`, name), rowCount)
 			sqlDB.CheckQueryResults(t,
 				fmt.Sprintf(`SELECT * FROM %s.bank ORDER BY id`, name),
-				sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.bank AS OF SYSTEM TIME %s`, timestamp)),
+				sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.bank AS OF SYSTEM TIME %s ORDER BY id`, timestamp)),
 			)
+			if i == 4 || i == 5 {
+				sqlDB.CheckQueryResults(t,
+					fmt.Sprintf(`SELECT * FROM %s.sometable ORDER BY id`, name),
+					sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.sometable AS OF SYSTEM TIME %s ORDER BY id`, timestamp)),
+				)
+			}
+			if i > 2 {
+				sqlDB.CheckQueryResults(t,
+					fmt.Sprintf(`SELECT * FROM %s.teller ORDER BY id`, name),
+					sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.teller AS OF SYSTEM TIME %s ORDER BY id`, timestamp)),
+				)
+			}
 		})
 	}
 
@@ -1896,15 +1929,15 @@ func TestTimestampMismatch(t *testing.T) {
 		// Missing the initial full backup.
 		_, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`,
 			localFoo, incrementalT1FromFull)
-		if !testutils.IsError(err, "backups out of order") {
-			t.Errorf("expected 'backups out of order' error got: %+v", err)
+		if !testutils.IsError(err, "backups listed out of order") {
+			t.Errorf("expected 'backups listed out of order' error got: %+v", err)
 		}
 
 		// Missing an intermediate incremental backup.
 		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
 			localFoo, fullBackup, incrementalT2FromT1)
-		if !testutils.IsError(err, "backups out of order") {
-			t.Errorf("expected 'backups out of order' error got: %+v", err)
+		if !testutils.IsError(err, "backups listed out of order") {
+			t.Errorf("expected 'backups listed out of order' error got: %+v", err)
 		}
 
 		// Backups specified out of order.

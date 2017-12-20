@@ -48,6 +48,11 @@ func (t LegacyTimestamp) String() string {
 	return Timestamp(t).String()
 }
 
+// IsEmpty retruns true if t is an empty Timestamp.
+func (t Timestamp) IsEmpty() bool {
+	return t == Timestamp{}
+}
+
 // Add returns a timestamp with the WallTime and Logical components increased.
 // wallTime is expressed in nanos.
 func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
