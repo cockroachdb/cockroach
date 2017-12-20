@@ -658,17 +658,11 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
 	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
 		typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
+		colType := semTypeName
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_STRING, sqlbase.ColumnType_OID, sqlbase.ColumnType_NAME,
-			sqlbase.ColumnType_BYTES, sqlbase.ColumnType_UUID, sqlbase.ColumnType_INET:
-			// TODO(dan): Flaky. The regex to extract the context in SHOW TRACE
-			// FOR breaks on some of these. There's probably something else
-			// going on here, too, but this is the obvious first thing to fix.
-			continue
 		case sqlbase.ColumnType_COLLATEDSTRING:
 			typ.Locale = sqlbase.RandCollationLocale(rng)
-			// TODO(dan): Get this to work.
-			continue
+			colType = fmt.Sprintf(`STRING COLLATE %s`, *typ.Locale)
 		case sqlbase.ColumnType_JSON:
 			// Not indexable.
 			continue
@@ -680,14 +674,18 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			// correct thing to do is skip this one.
 			continue
 		}
+		serializedDatum := tree.Serialize(datum)
+		// schema is used in a fmt.Sprintf to fill in the table name, so we have
+		// to escape any stray %s.
+		escapedDatum := strings.Replace(serializedDatum, `%`, `%%`, -1)
 		test := partitioningTest{
 			name:    semTypeName,
-			schema:  fmt.Sprintf(schemaFmt, semTypeName, tree.Serialize(datum)),
+			schema:  fmt.Sprintf(schemaFmt, colType, escapedDatum),
 			configs: []string{`@primary:+n1`, `.p:+n2`},
 			scans: map[string]string{
-				fmt.Sprintf(`a < %s:::%s`, datum, semTypeName): `n1`,
-				fmt.Sprintf(`a = %s:::%s`, datum, semTypeName): `n2`,
-				fmt.Sprintf(`a > %s:::%s`, datum, semTypeName): `n1`,
+				fmt.Sprintf(`a < %s`, serializedDatum): `n1`,
+				fmt.Sprintf(`a = %s`, serializedDatum): `n2`,
+				fmt.Sprintf(`a > %s`, serializedDatum): `n1`,
 			},
 		}
 		tests = append(tests, test)
@@ -853,8 +851,12 @@ func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartition
 }
 
 func verifyScansOnNode(db *gosql.DB, query string, node string) error {
+	// TODO(dan): This is a stopgap. At some point we should have a syntax for
+	// doing this directly (running a query and getting back the nodes it ran on
+	// and attributes/localities of those nodes). Users will also want this to
+	// be sure their partitioning is working.
 	rows, err := db.Query(
-		fmt.Sprintf(`SELECT tag, message FROM [SHOW TRACE FOR %s]`, query),
+		fmt.Sprintf(`SELECT CONCAT(tag, ' ', message) FROM [SHOW TRACE FOR %s]`, query),
 	)
 	if err != nil {
 		return err
@@ -862,15 +864,14 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 	defer rows.Close()
 	var scansWrongNode []string
 	var traceLines []string
-	var ctx, message gosql.NullString
+	var traceLine gosql.NullString
 	for rows.Next() {
-		if err := rows.Scan(&ctx, &message); err != nil {
+		if err := rows.Scan(&traceLine); err != nil {
 			return err
 		}
-		traceLine := fmt.Sprintf("%s %s", ctx.String, message.String)
-		traceLines = append(traceLines, traceLine)
-		if strings.Contains(message.String, "read completed") && !strings.Contains(ctx.String, node) {
-			scansWrongNode = append(scansWrongNode, traceLine)
+		traceLines = append(traceLines, traceLine.String)
+		if strings.Contains(traceLine.String, "read completed") && !strings.Contains(traceLine.String, node) {
+			scansWrongNode = append(scansWrongNode, traceLine.String)
 		}
 	}
 	if len(scansWrongNode) > 0 {
