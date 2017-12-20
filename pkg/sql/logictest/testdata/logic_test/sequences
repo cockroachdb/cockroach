@@ -364,7 +364,7 @@ ROLLBACK
 statement ok
 INSERT INTO txn_test (something) VALUES ('baz')
 
-query IT
+query IT rowsort
 SELECT * FROM txn_test
 ----
 1 foo
