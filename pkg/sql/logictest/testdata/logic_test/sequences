@@ -80,6 +80,9 @@ CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
 statement error pgcode 22023 INCREMENT must not be zero
 CREATE SEQUENCE zero_test INCREMENT 0
 
+statement ok
+CREATE SEQUENCE high_minvalue_test MINVALUE 5
+
 # Test unimplemented syntax.
 statement error pq: unimplemented at or near "EOF"
 CREATE SEQUENCE err_test AS INT2
@@ -162,17 +165,17 @@ SELECT nextval('baz')
 # You can create a sequence that goes down.
 
 statement ok
-CREATE SEQUENCE down_test INCREMENT BY -1 START 10
+CREATE SEQUENCE down_test INCREMENT BY -1
 
 query I
 SELECT nextval('down_test')
 ----
-10
+-1
 
 query I
 SELECT nextval('down_test')
 ----
-9
+-2
 
 
 # You can create and use a sequence with special characters.
@@ -287,10 +290,176 @@ SELECT lastval()
 ----
 11
 
+# Setval doesn't let you set values outside the bounds.
+
+statement ok
+CREATE SEQUENCE setval_bounds_test MINVALUE 5 MAXVALUE 10
+
+query I
+SELECT nextval('setval_bounds_test')
+----
+5
+
+statement error pgcode 22003 pq: setval\(\): value 11 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+SELECT setval('setval_bounds_test', 11)
+
+statement error pgcode 22003 pq: setval\(\): value 0 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+SELECT setval('setval_bounds_test', 0)
+
 # nextval fails with nonexistent sequences.
 
 statement error pgcode 42P01 relation "nonexistent_seq" does not exist
 SELECT nextval('nonexistent_seq')
+
+# BEHAVIOR UPON HITTING LIMITS (minvalue, maxvalue)
+
+statement error pgcode 22023 START value \(11\) cannot be greater than MAXVALUE \(10\)
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
+
+statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
+CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
+
+statement ok
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 9
+
+query I
+SELECT nextval('limit_test')
+----
+9
+
+query I
+SELECT nextval('limit_test')
+----
+10
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
+SELECT nextval('limit_test')
+
+statement ok
+CREATE SEQUENCE downward_limit_test INCREMENT BY -1 MINVALUE -10 START WITH -10
+
+query I
+SELECT nextval('downward_limit_test')
+----
+-10
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "downward_limit_test" \(-10\)
+SELECT nextval('downward_limit_test')
+
+# behavior when CYCLE is on
+
+statement ok
+CREATE SEQUENCE cycle_test START 1 MAXVALUE 2 CYCLE
+
+query I
+SELECT nextval('cycle_test')
+----
+1
+
+query I
+SELECT nextval('cycle_test')
+----
+2
+
+query I
+SELECT nextval('cycle_test')
+----
+1
+
+query I
+SELECT nextval('cycle_test')
+----
+2
+
+# downward cycle
+
+statement ok
+CREATE SEQUENCE downward_cycle_test INCREMENT BY -1 START -1 MINVALUE -2 CYCLE
+
+query I
+SELECT nextval('downward_cycle_test')
+----
+-1
+
+query I
+SELECT nextval('downward_cycle_test')
+----
+-2
+
+query I
+SELECT nextval('downward_cycle_test')
+----
+-1
+
+query I
+SELECT nextval('downward_cycle_test')
+----
+-2
+
+# Wrap around goes to START, not MINVALUE.
+
+statement ok
+CREATE SEQUENCE cycle_start_test MAXVALUE 1 START 0 MINVALUE -1000 CYCLE
+
+query I
+SELECT nextval('cycle_start_test')
+----
+0
+
+query I
+SELECT nextval('cycle_start_test')
+----
+1
+
+query I
+SELECT nextval('cycle_start_test')
+----
+0
+
+query I
+SELECT nextval('cycle_start_test')
+----
+1
+
+# Verify behavior when the sequence hits math.MaxInt64
+
+statement ok
+CREATE SEQUENCE rollover_test START WITH 9223372036854775807
+
+query I
+SELECT nextval('rollover_test')
+----
+9223372036854775807
+
+statement error pq: nextval\(\): reached maximum value of sequence "rollover_test" \(9223372036854775807\)
+SELECT nextval('rollover_test')
+
+# Try again; still doesn't work.
+statement error pq: nextval\(\): reached maximum value of sequence "rollover_test" \(9223372036854775807\)
+SELECT nextval('rollover_test')
+
+# If CYCLE option set, wrap around as normal.
+
+statement ok
+CREATE SEQUENCE rollover_cycle_test CYCLE
+
+statement ok
+SELECT setval('rollover_cycle_test', 9223372036854775806)
+
+query I
+SELECT nextval('rollover_cycle_test')
+----
+9223372036854775807
+
+query I
+SELECT nextval('rollover_cycle_test')
+----
+1
+
+query I
+SELECT nextval('rollover_cycle_test')
+----
+2
 
 # USE WITH TABLES
 
