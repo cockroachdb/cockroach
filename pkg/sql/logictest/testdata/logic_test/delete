@@ -270,10 +270,3 @@ delete                ·      ·
            │          limit  10
            └── scan   ·      ·
 ·                     table  indexed@primary
-
-# Ensure that if the fast path is selected, DELETE is still a valid
-# data source (#19805).
-query I
-INSERT INTO indexed(id,value) VALUES (1,2); SELECT 1 FROM [DELETE FROM indexed]
-----
-1
