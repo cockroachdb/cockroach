@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -92,14 +93,14 @@ func getJSON(ts serverutils.TestServerInterface, url string) (interface{}, error
 	}
 	var jI interface{}
 	if err := json.Unmarshal(body, &jI); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "body is:\n%s", body)
 	}
 	return jI, nil
 }
 
 // debugURL returns the root debug URL.
 func debugURL(s serverutils.TestServerInterface) string {
-	return s.AdminURL() + debugEndpoint
+	return s.AdminURL() + debug.Endpoint
 }
 
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
@@ -108,10 +109,6 @@ func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-
-	// This test accesses the debug pages, which currently use the TODO singleton.
-	st := cluster.MakeTestingClusterSettings()
-	settings.SetCanonicalValuesContainer(&st.SV)
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
@@ -291,14 +288,14 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if a, e := len(details.Grants), 3; a != e {
+	if a, e := len(details.Grants), 4; a != e {
 		t.Fatalf("# of grants %d != expected %d", a, e)
 	}
 
 	userGrants := make(map[string][]string)
 	for _, grant := range details.Grants {
 		switch grant.User {
-		case security.RootUser, testuser:
+		case sqlbase.AdminRole, security.RootUser, testuser:
 			userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
 		default:
 			t.Fatalf("unknown grant to user %s", grant.User)
@@ -306,6 +303,10 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 	for u, p := range userGrants {
 		switch u {
+		case sqlbase.AdminRole:
+			if !reflect.DeepEqual(p, []string{"ALL"}) {
+				t.Fatalf("privileges %v != expected %v", p, privileges)
+			}
 		case security.RootUser:
 			if !reflect.DeepEqual(p, []string{"ALL"}) {
 				t.Fatalf("privileges %v != expected %v", p, privileges)
@@ -487,6 +488,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Verify grants.
 			expGrants := []serverpb.TableDetailsResponse_Grant{
+				{User: sqlbase.AdminRole, Privileges: []string{"ALL"}},
 				{User: security.RootUser, Privileges: []string{"ALL"}},
 				{User: "app", Privileges: []string{"DELETE"}},
 				{User: "app", Privileges: []string{"SELECT"}},
@@ -691,7 +693,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	defer session.Finish(ts.sqlExecutor)
 	query := `
 INSERT INTO system.users (username, "hashedPassword")
-VALUES ('admin', 'abc'), ('bob', 'xyz')`
+VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
 	res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -705,7 +707,7 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 	}
 	expResult := serverpb.UsersResponse{
 		Users: []serverpb.UsersResponse_User{
-			{Username: "admin"},
+			{Username: "adminUser"},
 			{Username: "bob"},
 			{Username: "root"},
 		},
@@ -1122,12 +1124,31 @@ func TestHealthAPI(t *testing.T) {
 	}
 }
 
+// getSystemJobIDs queries the jobs table for all jobs IDs. Sorted by decreasing creation time.
+func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner) []int64 {
+	rows := db.Query(t, `SELECT id FROM crdb_internal.jobs ORDER BY created DESC;`)
+	defer rows.Close()
+
+	res := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		res = append(res, id)
+	}
+	return res
+}
+
 func TestAdminAPIJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Get list of existing jobs (migrations). Assumed to all have succeeded.
+	existingIDs := getSystemJobIDs(t, sqlDB)
 
 	testJobs := []struct {
 		id      int64
@@ -1156,10 +1177,10 @@ func TestAdminAPIJobs(t *testing.T) {
 		uri         string
 		expectedIDs []int64
 	}{
-		{"jobs", []int64{3, 2, 1}},
+		{"jobs", append([]int64{3, 2, 1}, existingIDs...)},
 		{"jobs?limit=1", []int64{3}},
 		{"jobs?status=running", []int64{2, 1}},
-		{"jobs?status=succeeded", []int64{3}},
+		{"jobs?status=succeeded", append([]int64{3}, existingIDs...)},
 		{"jobs?status=pending", []int64{}},
 		{"jobs?status=garbage", []int64{}},
 		{fmt.Sprintf("jobs?type=%d", jobs.TypeBackup), []int64{3, 2}},

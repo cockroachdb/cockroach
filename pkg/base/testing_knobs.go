@@ -23,11 +23,12 @@ type ModuleTestingKnobs interface {
 // TestingKnobs contains facilities for controlling various parts of the
 // system for testing.
 type TestingKnobs struct {
-	Store            ModuleTestingKnobs
-	DistSender       ModuleTestingKnobs
-	SQLExecutor      ModuleTestingKnobs
-	SQLLeaseManager  ModuleTestingKnobs
-	SQLSchemaChanger ModuleTestingKnobs
-	DistSQL          ModuleTestingKnobs
-	SQLEvalContext   ModuleTestingKnobs
+	Store               ModuleTestingKnobs
+	DistSender          ModuleTestingKnobs
+	SQLExecutor         ModuleTestingKnobs
+	SQLLeaseManager     ModuleTestingKnobs
+	SQLSchemaChanger    ModuleTestingKnobs
+	SQLMigrationManager ModuleTestingKnobs
+	DistSQL             ModuleTestingKnobs
+	SQLEvalContext      ModuleTestingKnobs
 }

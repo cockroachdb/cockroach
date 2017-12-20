@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -672,7 +673,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		sqlDB,
 		kvDB,
 		jobRegistry,
-		"DROP INDEX t.test@vidx",
+		"DROP INDEX t.test@vidx CASCADE",
 		maxValue,
 		2,
 		initBackfillNotification())
@@ -749,6 +750,10 @@ func TestDropWhileBackfill(t *testing.T) {
 				partialBackfillDone.Store(true)
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 
@@ -1013,6 +1018,10 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 				<-commandsDone
 			},
 		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
@@ -1046,7 +1055,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 1},
 		{"ALTER TABLE t.test DROP x", 1},
 		{"CREATE UNIQUE INDEX foo ON t.test (v)", 2},
-		{"DROP INDEX t.test@foo", 1},
+		{"DROP INDEX t.test@foo CASCADE", 1},
 	}
 
 	for _, testCase := range testCases {
@@ -1266,6 +1275,10 @@ func TestSchemaChangeRetry(t *testing.T) {
 				return nil
 			},
 		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -1346,6 +1359,10 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				seenSpan = sp
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1454,6 +1471,10 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				}
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1571,6 +1592,10 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 			},
 			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1869,6 +1894,10 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 				return nil
 			},
 		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
@@ -1929,6 +1958,10 @@ func TestUpdateDuringColumnBackfill(t *testing.T) {
 				}
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
@@ -2042,7 +2075,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 		{sql: "ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", numKeysPerRow: 2},
 		{sql: "ALTER TABLE t.test DROP pi", numKeysPerRow: 2},
 		{sql: "CREATE UNIQUE INDEX foo ON t.test (v)", numKeysPerRow: 3},
-		{sql: "DROP INDEX t.test@vidx", numKeysPerRow: 2},
+		{sql: "DROP INDEX t.test@vidx CASCADE", numKeysPerRow: 2},
 	}
 
 	for _, tc := range testCases {
@@ -2448,6 +2481,9 @@ func TestTruncateInternals(t *testing.T) {
 			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
 				tscc.ClearSchemaChangers()
 			},
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableMigrations: true,
 		},
 	}
 

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -455,6 +456,9 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Get the number of existing jobs.
+	baseNumJobs := jobutils.GetSystemJobsCount(t, sqlDB)
+
 	if err := ioutil.WriteFile(filepath.Join(dir, "empty.csv"), nil, 0666); err != nil {
 		t.Fatal(err)
 	}
@@ -656,7 +660,7 @@ func TestImportStmt(t *testing.T) {
 			}
 
 			const jobPrefix = `IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
-			if err := jobutils.VerifySystemJob(t, sqlDB, i*2, jobs.TypeImport, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+i*2, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", "), `'`+backupPath+`'`),
 			}); err != nil {
@@ -820,8 +824,9 @@ func BenchmarkConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	create := stmt.(*tree.CreateTable)
+	st := cluster.MakeTestingClusterSettings()
 
-	tableDesc, err := makeSimpleTableDescriptor(ctx, create, sqlbase.ID(100), sqlbase.ID(100), 1)
+	tableDesc, err := makeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), 1)
 	if err != nil {
 		b.Fatal(err)
 	}

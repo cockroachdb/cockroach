@@ -143,10 +143,10 @@ CREATE TABLE t15050b (c DECIMAL DEFAULT IF(NOW() < '2017-04-18 18:00', 2, 2));
 
 # Regression tests for #15632
 
-statement error incompatible IFNULL expressions: could not parse "foo" as type bool: strconv.ParseBool: parsing "foo": invalid syntax
+statement error incompatible IFNULL expressions: could not parse "foo" as type bool
 SELECT IFNULL('foo', false)
 
-statement error incompatible IFNULL expressions: could not parse "foo" as type bool: strconv.ParseBool: parsing "foo": invalid syntax
+statement error incompatible IFNULL expressions: could not parse "foo" as type bool
 SELECT IFNULL(true, 'foo')
 
 query B

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -108,7 +109,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			h.RangeID = desc.RangeID
 
 			cArgs := CommandArgs{Header: h}
-			cArgs.EvalCtx = &mockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, 0), stats: stats}
+			cArgs.EvalCtx = &mockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), stats: stats}
 			cArgs.Args = &roachpb.ClearRangeRequest{
 				Span: roachpb.Span{
 					Key:    startKey,

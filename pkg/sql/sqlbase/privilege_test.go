@@ -34,32 +34,62 @@ func TestPrivilege(t *testing.T) {
 		show          []UserPrivilegeString
 	}{
 		{"", nil, nil,
-			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+				{security.RootUser, []string{"ALL"}},
+			},
 		},
 		{security.RootUser, privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+				{security.RootUser, []string{"ALL"}},
+			},
 		},
 		{security.RootUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+				{security.RootUser, []string{"ALL"}},
+			},
 		},
 		{"foo", privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{{"foo", []string{"DROP", "INSERT"}}, {security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+				{"foo", []string{"DROP", "INSERT"}},
+				{security.RootUser, []string{"ALL"}},
+			},
 		},
 		{"bar", nil, privilege.List{privilege.INSERT, privilege.ALL},
-			[]UserPrivilegeString{{"foo", []string{"DROP", "INSERT"}}, {security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+				{"foo", []string{"DROP", "INSERT"}},
+				{security.RootUser, []string{"ALL"}},
+			},
 		},
 		{"foo", privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{{"foo", []string{"ALL"}}, {security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+				{"foo", []string{"ALL"}},
+				{security.RootUser, []string{"ALL"}},
+			},
 		},
 		{"foo", nil, privilege.List{privilege.SELECT, privilege.INSERT},
-			[]UserPrivilegeString{{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE"}}, {security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+				{"foo", []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE"}},
+				{security.RootUser, []string{"ALL"}},
+			},
 		},
 		{"foo", nil, privilege.List{privilege.ALL},
-			[]UserPrivilegeString{{security.RootUser, []string{"ALL"}}},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+				{security.RootUser, []string{"ALL"}},
+			},
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
 		{security.RootUser, nil, privilege.List{privilege.ALL},
-			[]UserPrivilegeString{},
+			[]UserPrivilegeString{
+				{AdminRole, []string{"ALL"}},
+			},
 		},
 	}
 

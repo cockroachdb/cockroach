@@ -1112,6 +1112,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDBytes(*left.(*DBytes) + *right.(*DBytes)), nil
 			},
 		},
+		BinOp{
+			LeftType:   types.JSON,
+			RightType:  types.JSON,
+			ReturnType: types.JSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				j, err := MustBeDJSON(left).JSON.Concat(MustBeDJSON(right).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return &DJSON{j}, nil
+			},
+		},
 	},
 
 	// TODO(pmattis): Check that the shift is valid.
@@ -2728,8 +2740,13 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return v, nil
 		}
 	case *coltypes.TArray:
-		if s, ok := d.(*DString); ok {
-			return ParseDArrayFromString(ctx, string(*s), typ.ParamType)
+		switch v := d.(type) {
+		case *DString:
+			return ParseDArrayFromString(ctx, string(*v), typ.ParamType)
+		case *DArray:
+			if (*v).ParamTyp == coltypes.CastTargetToDatumType((*typ).ParamType) {
+				return d, nil
+			}
 		}
 	case *coltypes.TOid:
 		switch v := d.(type) {

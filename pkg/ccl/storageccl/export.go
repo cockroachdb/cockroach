@@ -124,11 +124,15 @@ func evalExport(
 	defer exportRequestLimiter.endLimitedRequest()
 	log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 
-	exportStore, err := MakeExportStorage(ctx, args.Storage, cArgs.EvalCtx.ClusterSettings())
-	if err != nil {
-		return result.Result{}, err
+	var exportStore ExportStorage
+	if !args.ReturnSST || (args.Storage != roachpb.ExportStorage{}) {
+		var err error
+		exportStore, err = MakeExportStorage(ctx, args.Storage, cArgs.EvalCtx.ClusterSettings())
+		if err != nil {
+			return result.Result{}, err
+		}
+		defer exportStore.Close()
 	}
-	defer exportStore.Close()
 
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
@@ -203,18 +207,24 @@ func evalExport(
 		return result.Result{}, err
 	}
 
-	filename := fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
-	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(sstContents)); err != nil {
-		return result.Result{}, err
-	}
-
-	reply.Files = []roachpb.ExportResponse_File{{
+	exported := roachpb.ExportResponse_File{
 		Span:     args.Span,
-		Path:     filename,
 		Exported: rows.BulkOpSummary,
 		Sha512:   checksum,
-	}}
+	}
 
+	if exportStore != nil {
+		exported.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
+		if err := exportStore.WriteFile(ctx, exported.Path, bytes.NewReader(sstContents)); err != nil {
+			return result.Result{}, err
+		}
+	}
+
+	if args.ReturnSST {
+		exported.SST = sstContents
+	}
+
+	reply.Files = []roachpb.ExportResponse_File{exported}
 	return result.Result{}, nil
 }
 

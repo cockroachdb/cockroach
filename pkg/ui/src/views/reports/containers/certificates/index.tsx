@@ -183,10 +183,11 @@ class Certificates extends React.Component<CertificatesProps, {}> {
   }
 }
 
-function mapStateToProps(state: AdminUIState) {
+function mapStateToProps(state: AdminUIState, props: CertificatesProps) {
+  const nodeID = props.params[nodeIDAttr];
   return {
-    certificates: state.cachedData.certificates.data,
-    lastError: state.cachedData.certificates.lastError,
+    certificates: state.cachedData.certificates[nodeID] && state.cachedData.certificates[nodeID].data,
+    lastError: state.cachedData.certificates[nodeID] && state.cachedData.certificates[nodeID].lastError,
   };
 }
 

@@ -9,8 +9,8 @@ SELECT defaults()
 query II colnames
 SELECT LENGTH('roach7'), LENGTH(b'roach77')
 ----
-length('roach7')  length(b'roach77')
-6                 7
+length length
+6      7
 
 query II
 SELECT LENGTH('Hello, 世界'), LENGTH(b'Hello, 世界')
@@ -28,7 +28,7 @@ SELECT octet_length('Hello'), octet_length(b'世界')
 query T colnames
 SELECT UPPER('roacH7')
 ----
-upper('roacH7')
+upper
 ROACH7
 
 statement error unknown signature: upper\(decimal\)
@@ -37,7 +37,7 @@ SELECT UPPER(2.2)
 query T colnames
 SELECT LOWER('RoacH7')
 ----
-lower('RoacH7')
+lower
 roach7
 
 statement error unknown signature: lower\(int\)

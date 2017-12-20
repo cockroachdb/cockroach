@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	migrations "github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -358,7 +360,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ScanInterval:            s.cfg.ScanInterval,
 		ScanMaxIdleTime:         s.cfg.ScanMaxIdleTime,
 		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
-		MetricsSampleInterval:   s.cfg.MetricsSampleInterval,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		StorePool:               s.storePool,
 		SQLExecutor:             sqlExecutor,
@@ -838,7 +839,8 @@ func (s *Server) Start(ctx context.Context) error {
 	//
 	// TODO(marc): when cookie-based authentication exists, apply it to all web
 	// endpoints.
-	s.mux.Handle(debugEndpoint, authorizedHandler(http.HandlerFunc(handleDebug)))
+	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
+
 	// Also throw the landing page in there. It won't work well, but it's better than a 404.
 	// The remaining endpoints will be opened late, when we're sure that the subsystems they
 	// talk to are functional.
@@ -1083,15 +1085,15 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
 
 	// Begin recording runtime statistics.
-	s.startSampleEnvironment(s.cfg.MetricsSampleInterval)
+	s.startSampleEnvironment(DefaultMetricsSampleInterval)
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
 	// Begin recording status summaries.
-	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
+	s.node.startWriteSummaries(DefaultMetricsSampleInterval)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
@@ -1199,8 +1201,19 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// in an acceptable form for this version of the software.
 	// We have to do this after actually starting up the server to be able to
 	// seamlessly use the kv client against other nodes in the cluster.
+	var mmKnobs sqlmigrations.MigrationManagerTestingKnobs
+	if migrationManagerTestingKnobs := s.cfg.TestingKnobs.SQLMigrationManager; migrationManagerTestingKnobs != nil {
+		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
+	}
 	migMgr := migrations.NewManager(
-		s.stopper, s.db, s.sqlExecutor, s.clock, &s.internalMemMetrics, s.NodeID().String())
+		s.stopper,
+		s.db,
+		s.sqlExecutor,
+		s.clock,
+		mmKnobs,
+		&s.internalMemMetrics,
+		s.NodeID().String(),
+	)
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
 		select {
 		case <-s.stopper.ShouldQuiesce():

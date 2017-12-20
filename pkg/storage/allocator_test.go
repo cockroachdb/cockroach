@@ -780,7 +780,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, a.scorerOptions(false))
+		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, nil, a.scorerOptions(false))
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -919,6 +919,44 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		)
 		if result != nil {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
+		}
+	}
+
+	// Set up a second round of testing where the other two stores in the big
+	// locality actually have fewer replicas, but enough that it still isn't
+	// worth rebalancing to them.
+	stores[1].Capacity.RangeCount = 46
+	stores[2].Capacity.RangeCount = 46
+	sg.GossipStores(stores, t)
+	for i := 0; i < 10; i++ {
+		result, details := a.RebalanceTarget(
+			context.Background(),
+			config.Constraints{},
+			status,
+			rangeInfo,
+			storeFilterThrottled,
+			false,
+		)
+		if result != nil {
+			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
+		}
+	}
+
+	// Make sure rebalancing does happen if we drop just a little further down.
+	stores[1].Capacity.RangeCount = 45
+	sg.GossipStores(stores, t)
+	for i := 0; i < 10; i++ {
+		result, details := a.RebalanceTarget(
+			context.Background(),
+			config.Constraints{},
+			status,
+			rangeInfo,
+			storeFilterThrottled,
+			false,
+		)
+		if result == nil || result.StoreID != stores[1].StoreID {
+			t.Fatalf("expected rebalance to s%d, but got %v; details: %s",
+				stores[1].StoreID, result, details)
 		}
 	}
 }
@@ -1135,7 +1173,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				if !ok {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
-				if a, e := shouldRebalance(context.Background(), desc, sl, firstRangeInfo, a.scorerOptions(false)), cluster[j].shouldRebalanceFrom; a != e {
+				if a, e := shouldRebalance(context.Background(), desc, sl, firstRangeInfo, nil, a.scorerOptions(false)), cluster[j].shouldRebalanceFrom; a != e {
 					t.Errorf("[store %d]: shouldRebalance %t != expected %t", store.StoreID, a, e)
 				}
 			}
@@ -1204,7 +1242,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, a.scorerOptions(false))
+		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, nil, a.scorerOptions(false))
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}

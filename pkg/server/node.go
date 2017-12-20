@@ -184,7 +184,6 @@ func bootstrapCluster(
 	cfg.Gossip = nil
 	cfg.TestingKnobs = storage.StoreTestingKnobs{}
 	cfg.ScanInterval = 10 * time.Minute
-	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
 	cfg.HistogramWindowInterval = time.Duration(math.MaxInt64)
 	tr := cfg.Settings.Tracer
 	defer tr.Close()
@@ -423,7 +422,7 @@ func (n *Node) start(
 
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 
-	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
+	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
 	n.startGossip(ctx, n.stopper)
 
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, bootstrappedEngines, attrs.Attrs)

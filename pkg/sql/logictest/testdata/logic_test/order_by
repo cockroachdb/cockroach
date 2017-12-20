@@ -367,7 +367,7 @@ query ITTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
 0  nosort  ·      ·
-0  ·       order  +"length('abc')"
+0  ·       order  +length
 1  render  ·      ·
 2  scan    ·      ·
 2  ·       table  t@primary

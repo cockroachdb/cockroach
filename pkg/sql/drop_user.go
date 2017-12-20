@@ -140,7 +140,7 @@ func (n *dropUserNode) startExec(params runParams) error {
 			params.ctx,
 			"drop-user",
 			params.p.txn,
-			"DELETE FROM system.users WHERE username=$1",
+			`DELETE FROM system.users WHERE username=$1 AND "isRole" = false`,
 			normalizedUsername,
 		)
 		if err != nil {
