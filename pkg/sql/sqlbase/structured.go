@@ -1377,9 +1377,9 @@ func TranslateValueEncodingToSpan(
 	return datums, key, nil
 }
 
-func printPartitioningPrefix(datums []tree.Datum, s string) string {
+func printPartitioningPrefix(datums []tree.Datum, numColumns int, s string) string {
 	var buf bytes.Buffer
-	PrintPartitioningTuple(&buf, datums, len(datums)+1, s)
+	PrintPartitioningTuple(&buf, datums, numColumns, s)
 	return buf.String()
 }
 
@@ -1478,12 +1478,8 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 				}
 				if _, exists := listValues[string(keyPrefix)]; exists {
-					if len(datums) != int(partDesc.NumColumns) {
-						return fmt.Errorf("prefix (%s) cannot be present in more than one partition",
-							printPartitioningPrefix(datums, "DEFAULT"))
-					}
-					return fmt.Errorf("%s cannot be present in more than one partition",
-						tree.AsString(datums))
+					return fmt.Errorf("(%s) cannot be present in more than one partition",
+						printPartitioningPrefix(datums, int(partDesc.NumColumns), "DEFAULT"))
 				}
 				listValues[string(keyPrefix)] = struct{}{}
 			}
@@ -1514,12 +1510,8 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
 			if _, exists := rangeValues[string(endKey)]; exists {
-				if len(datums) != int(partDesc.NumColumns) {
-					return fmt.Errorf("prefix (%s) cannot be present in more than one partition",
-						printPartitioningPrefix(datums, "MAXVALUE"))
-				}
-				return fmt.Errorf("%s cannot be present in more than one partition",
-					tree.AsString(datums))
+				return fmt.Errorf("(%s) cannot be present in more than one partition",
+					printPartitioningPrefix(datums, int(partDesc.NumColumns), "MAXVALUE"))
 			}
 
 			rangeValues[string(endKey)] = struct{}{}
