@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1144,7 +1145,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	}
 
 	// Enable safe updates, unless disabled.
-	setupSafeUpdates(conn)
+	setupSafeUpdates(cmd, conn)
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
@@ -1156,8 +1157,19 @@ func runTerm(cmd *cobra.Command, args []string) error {
 // setupSafeUpdates attempts to enable "safe mode" if the session is
 // interactive and the user is not disabling this behavior with
 // --safe-updates=false.
-func setupSafeUpdates(conn *sqlConn) {
-	if !cliCtx.isInteractive || !sqlCtx.safeUpdates {
+func setupSafeUpdates(cmd *cobra.Command, conn *sqlConn) {
+	pf := cmd.Flags()
+	vf := pf.Lookup(cliflags.SafeUpdates.Name)
+
+	if !vf.Changed {
+		// If `--safe-updates` was not specified, we need to set the default
+		// based on whether the session is interactive. We cannot do this
+		// earlier, because "session is interactive" depends on knowing
+		// whether `-e` is also provided.
+		sqlCtx.safeUpdates = cliCtx.isInteractive
+	}
+
+	if !sqlCtx.safeUpdates {
 		// nothing to do.
 		return
 	}
