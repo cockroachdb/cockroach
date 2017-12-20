@@ -188,6 +188,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				t.Fatal(err)
 			}
 
+			if err := at.runScrubChecks(ctx, t, "tpch", "customer"); err != nil {
+				t.Error(err)
+			}
+
 			// All these return the same result.
 			validationQueries := []string{
 				"SELECT COUNT(*) FROM tpch.customer AS OF SYSTEM TIME %s",
@@ -195,10 +199,6 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				"SELECT COUNT(c_name) FROM tpch.customer@foo AS OF SYSTEM TIME %s",
 			}
 			if err := at.runValidationQueries(ctx, t, validationQueries, nil); err != nil {
-				t.Error(err)
-			}
-
-			if err := at.runScrubChecks(ctx, t, "tpch", "customer"); err != nil {
 				t.Error(err)
 			}
 		}
@@ -218,6 +218,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				t.Fatal(err)
 			}
 
+			if err := at.runScrubChecks(ctx, t, "datablocks", "blocks"); err != nil {
+				t.Error(err)
+			}
+
 			// All these return the same result.
 			validationQueries := []string{
 				"SELECT COUNT(*) FROM datablocks.blocks AS OF SYSTEM TIME %s",
@@ -232,10 +236,6 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 			if err := at.runValidationQueries(
 				ctx, t, validationQueries, indexValidationQueries,
 			); err != nil {
-				t.Error(err)
-			}
-
-			if err := at.runScrubChecks(ctx, t, "datablocks", "blocks"); err != nil {
 				t.Error(err)
 			}
 		}
