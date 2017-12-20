@@ -113,6 +113,17 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 			roachpb.AdminSplitRequest{},
 			desc,
 		); pErr != nil {
+			// If we failed to split the range and the range is too large to snapshot,
+			// set the permitLargeSnapshots flag so that we don't continue to block
+			// large snapshots. This could result in unavailability. The flag is reset
+			// whenever the split size is adjusted, which includes when the split
+			// finally succeeds.
+			// TODO(nvanbenschoten): remove after #16954.
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			if r.exceedsDoubleSplitSizeRLocked() {
+				r.mu.permitLargeSnapshots = true
+			}
 			return pErr.GoError()
 		} else if !validSplitKey {
 			// If we couldn't find a split key, set the max-bytes for the range to

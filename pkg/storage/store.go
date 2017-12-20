@@ -724,6 +724,8 @@ type StoreTestingKnobs struct {
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
 	// queue.
 	DisableTimeSeriesMaintenanceQueue bool
+	// DisableRaftSnapshotQueue disables the raft snapshot queue.
+	DisableRaftSnapshotQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
 	// DisablePeriodicGossips disables periodic gossiping.
@@ -904,6 +906,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	}
 	if cfg.TestingKnobs.DisableTimeSeriesMaintenanceQueue {
 		s.setTimeSeriesMaintenanceQueueActive(false)
+	}
+	if cfg.TestingKnobs.DisableRaftSnapshotQueue {
+		s.setRaftSnapshotQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableScanner {
 		s.setScannerActive(false)
@@ -1778,9 +1783,9 @@ func (s *Store) IsDraining() bool {
 // range ID and returns a RangeDescriptor whose Replicas are a copy
 // of the supplied replicas slice, with appropriate ReplicaIDs assigned.
 func (s *Store) NewRangeDescriptor(
-	start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
-	id, err := s.rangeIDAlloc.Allocate()
+	id, err := s.rangeIDAlloc.Allocate(ctx)
 	if err != nil {
 		return nil, err
 	}
