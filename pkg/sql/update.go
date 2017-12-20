@@ -45,6 +45,10 @@ type updateNode struct {
 	checkHelper   checkHelper
 	sourceSlots   []sourceSlot
 
+	// drainOnStart indicates that this node will finish its work entirely upon
+	// startExec, saving the results into the run.rowsUpdated container.
+	drainOnStart bool
+
 	run updateRun
 }
 
@@ -249,16 +253,55 @@ func (p *planner) Update(
 type updateRun struct {
 	// The following fields are populated during Start().
 	editNodeRun
+
+	rowsUpdated *sqlbase.RowContainer
+}
+
+func (u *updateNode) setDrainOnStart() {
+	u.drainOnStart = true
 }
 
 func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(params.p.txn)
+	if err := u.run.tw.init(params.p.txn); err != nil {
+		return err
+	}
+
+	if u.drainOnStart {
+		u.run.rowsUpdated = sqlbase.NewRowContainer(
+			params.p.session.TxnState.makeBoundAccount(),
+			sqlbase.ColTypeInfoFromResCols(u.rh.columns),
+			0)
+		return u.drain(params)
+	}
+	return nil
+}
+
+// drain finishes all work for this updateNode, without giving the parent plan
+// a chance to see any return values from this node.
+func (u *updateNode) drain(params runParams) error {
+	moreRows := true
+	var err error
+	for moreRows {
+		moreRows, err = u.internalNext(params)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {
+	if u.drainOnStart {
+		return u.run.rowsUpdated.Len() > 0, nil
+	}
+
+	return u.internalNext(params)
+}
+
+func (u *updateNode) internalNext(params runParams) (bool, error) {
 	next, err := u.run.rows.Next(params)
 	if !next {
 		if err == nil {
@@ -326,15 +369,29 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 	u.run.resultRow = resultRow
+	if u.drainOnStart {
+		if _, err := u.run.rowsUpdated.AddRow(params.ctx, resultRow); err != nil {
+			return false, err
+		}
+	}
 
 	return true, nil
 }
 
 func (u *updateNode) Values() tree.Datums {
-	return u.run.resultRow
+	if !u.drainOnStart {
+		return u.run.resultRow
+	}
+
+	row := u.run.rowsUpdated.At(0)
+	u.run.rowsUpdated.PopFirst()
+	return row
 }
 
 func (u *updateNode) Close(ctx context.Context) {
+	if u.run.rowsUpdated != nil {
+		u.run.rowsUpdated.Close(ctx)
+	}
 	u.run.rows.Close(ctx)
 	u.tw.close(ctx)
 	*u = updateNode{}
