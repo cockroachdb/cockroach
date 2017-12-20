@@ -171,6 +171,9 @@ func (jb *joinerBase) maybeEmitUnmatchedRow(
 
 // render constructs a row with columns from both sides. The ON condition is
 // evaluated; if it fails, returns nil.
+// Note the left and right merged equality columns (i.e. from a USING clause
+// or after simplifying ON left.x = right.x) are NOT checked for equality.
+// See CompareEncDatumRowForMerge.
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
 	jb.combinedRow = jb.combinedRow[:0]
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
