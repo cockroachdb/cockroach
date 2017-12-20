@@ -438,6 +438,8 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 		spans := LogicalSpans{MakeFullSpan(), MakeFullSpan()}
 		spans[0].End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
 		spans[1].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
+		c.preferInclusive(offset, &spans[0])
+		c.preferInclusive(offset, &spans[1])
 		return spans, true
 
 	default:

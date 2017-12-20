@@ -21,14 +21,14 @@ build-scalar,normalize,index-constraints columns=(int descending)
 build-scalar,normalize,index-constraints columns=(int)
 @1 != 2
 ----
-[ - /2)
-(/2 - ]
+[ - /1]
+[/3 - ]
 
 build-scalar,normalize,index-constraints columns=(int descending)
 @1 != 2
 ----
-[ - /2)
-(/2 - ]
+[ - /3]
+[/1 - ]
 
 build-scalar,normalize,index-constraints columns=(int)
 @1 < 2
@@ -70,11 +70,23 @@ build-scalar,normalize,index-constraints columns=(int, int descending)
 ----
 [/3/4 - ]
 
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 != 1 AND @2 > 5
+----
+[ - /0]
+[/2/6 - ]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 != 1 AND @2 < 5
+----
+[ - /0/4]
+[/2 - ]
+
 build-scalar,normalize,index-constraints columns=(int)
 @1 >= 1 AND @1 <= 5 AND @1 != 3
 ----
-[/1 - /3)
-(/3 - /5]
+[/1 - /2]
+[/4 - /5]
 
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
@@ -118,8 +130,8 @@ build-scalar,normalize,index-constraints columns=(int)
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 = 1 AND @2 != 2
 ----
-[/1 - /1/2)
-(/1/2 - /1]
+[/1 - /1/1]
+[/1/3 - /1]
 
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 >= 1 AND @1 <= 5 AND @2 != 2
