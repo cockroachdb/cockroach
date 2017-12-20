@@ -17,6 +17,7 @@ package opt
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -545,6 +546,66 @@ func (c *indexConstraintCalc) makeSpansForTupleInequality(
 	return LogicalSpans{sp}, true
 }
 
+// makeSpansForTupleIn creates spans for index columns starting at
+// <offset> from a tuple IN tuple expression, for example:
+//   (a, b, c) IN ((1, 2, 3), (4, 5, 6))
+// Assumes that both sides are tuples.
+func (c *indexConstraintCalc) makeSpansForTupleIn(offset int, e *expr) (LogicalSpans, bool) {
+	lhs, rhs := e.children[0], e.children[1]
+
+	// Find the longest prefix of columns starting at <offset> which is contained
+	// in the left-hand tuple; tuplePos[i] is the position of column <offset+i> in
+	// the tuple.
+	var tuplePos []int
+Outer:
+	for i := offset; i < len(c.colInfos); i++ {
+		for j := range lhs.children {
+			if isIndexedVar(lhs.children[j], i) {
+				tuplePos = append(tuplePos, j)
+				continue Outer
+			}
+		}
+		break
+	}
+	if len(tuplePos) == 0 {
+		return nil, false
+	}
+
+	// Create a span for each (tuple) value inside the right-hand side tuple.
+	spans := make(LogicalSpans, len(rhs.children))
+	for i, valTuple := range rhs.children {
+		if valTuple.op != orderedListOp {
+			return nil, false
+		}
+		vals := make(tree.Datums, len(tuplePos))
+		for j, c := range tuplePos {
+			val := valTuple.children[c]
+			if val.op != constOp {
+				return nil, false
+			}
+			vals[j] = val.private.(tree.Datum)
+		}
+		spans[i].Start = LogicalKey{Vals: vals, Inclusive: true}
+		spans[i].End = spans[i].Start
+	}
+
+	// Sort and de-duplicate the values.
+	// We don't rely on the sorted order of the right-hand side tuple because it's
+	// only useful if all of the following are met:
+	//  - we use all columns in the tuple, i.e. len(tuplePos) = len(lhs.children).
+	//  - the columns are in the right order, i.e. tuplePos[i] = i.
+	//  - the columns have the same directions
+	c.sortSpans(offset, spans)
+	res := spans[:0]
+	for i := range spans {
+		if i > 0 && c.compare(offset, spans[i-1].Start, spans[i].Start, compareStartKeys) == 0 {
+			continue
+		}
+		res = append(res, spans[i])
+	}
+	return res, true
+}
+
 // makeSpansForExpr creates spans for index columns starting at <offset>
 // from the given expression.
 func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpans, bool) {
@@ -559,6 +620,9 @@ func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpan
 		case ltOp, leOp, gtOp, geOp, neOp:
 			// Tuple inequality.
 			return c.makeSpansForTupleInequality(offset, e)
+		case inOp:
+			// Tuple IN tuple.
+			return c.makeSpansForTupleIn(offset, e)
 		}
 	}
 	return nil, false
@@ -745,4 +809,37 @@ func MakeIndexConstraints(
 	}
 	c := makeIndexConstraintCalc(colInfos, andExprs, evalCtx)
 	return c.calcOffset(0)
+}
+
+type logicalSpanSorter struct {
+	c      *indexConstraintCalc
+	offset int
+	spans  []LogicalSpan
+}
+
+var _ sort.Interface = &logicalSpanSorter{}
+
+// Len is part of sort.Interface.
+func (ss *logicalSpanSorter) Len() int {
+	return len(ss.spans)
+}
+
+// Less is part of sort.Interface.
+func (ss *logicalSpanSorter) Less(i, j int) bool {
+	// Compare start keys.
+	return ss.c.compare(ss.offset, ss.spans[i].Start, ss.spans[j].Start, compareStartKeys) < 0
+}
+
+// Swap is part of sort.Interface.
+func (ss *logicalSpanSorter) Swap(i, j int) {
+	ss.spans[i], ss.spans[j] = ss.spans[j], ss.spans[i]
+}
+
+func (c *indexConstraintCalc) sortSpans(offset int, spans LogicalSpans) {
+	ss := logicalSpanSorter{
+		c:      c,
+		offset: offset,
+		spans:  spans,
+	}
+	sort.Sort(&ss)
 }
