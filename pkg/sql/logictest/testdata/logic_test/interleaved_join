@@ -581,26 +581,192 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL)
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzklc9q4zAQxu_7FGFOCatDZDvZrKHgHlPapqT0VHwQ1sQxOJKR5NIS_O5FNs0fk8iFJCffLM18_s03I6QtCMnxmW1QQ_gOFAh4QMAHAgEQmEBMoFAyQa2lsimNYM4_IRwTyERRGrsdE0ikQgi3YDKTI4QwFwZVjuwDl8g4qgeZCVRAgKNhWV7zHnFlwBKyDVNfUcEUCmOLsIHBojThILLLZZauDxOTdZbzXeAnkUS29h0nx5UZRvTv6E7ZrPoTCOySfYgrArI0ew_asBQhpBX5vc_7NFWYMiNb3l7fnoYRtcT6yxudxXlncXtKKaTiqJAfQeLqJgX5RwXRnsy5w-e15-z1pK0dPq_dVr8nbe3wee22Bj1pa4fPW172J3BL1IUUGluX_uk_j-1jgDzF5uXQslQJviiZ1Jhmuah19QZHbZoobRZz0YRsgYdi6hR7R2LaFntucgfad6oDtzi4pO6JUzx1k6eXkP85xTM3eXYJ-b97VuOOY-I-ZG12XP35DgAA__84h19b
 
+###############
+# Outer joins #
+###############
+
+# The schema/values for each table are as follows:
+# Table:        pkey:                     pkey values (same):   values:
+# outer_p1      (pid1)                    {1, 2, 3, ... 20}     100 + pkey
+# outer_c1      (pid1, cid1, cid2)        {2, 4, 6, ... 28}     200 + pkey
+# outer_gc1     (pid1, cid1, cid2, gcid1) {4, 8, 12, ... 36}    300 + pkey
+
+# Split between 4 nodes based on pkey value (p):
+# node 1:       p - 1 mod 20 ∈ [1...5)
+# node 2:       p - 1 mod 20 ∈ [5...10)
+# node 3:       p - 1 mod 20 ∈ [10...15)
+# node 4:       p - 1 mod 20 ∈ [15...20)
+
+statement ok
+CREATE TABLE outer_p1 (
+  pid1 INT PRIMARY KEY,
+  pa1 INT
+)
+
+statement ok
+CREATE TABLE outer_c1 (
+  pid1 INT,
+  cid1 INT,
+  cid2 INT,
+  ca1 INT,
+  PRIMARY KEY (pid1, cid1, cid2)
+) INTERLEAVE IN PARENT outer_p1 (pid1)
+
+statement ok
+CREATE TABLE outer_gc1 (
+  pid1 INT,
+  cid1 INT,
+  cid2 INT,
+  gcid1 INT,
+  gca1 INT,
+  PRIMARY KEY (pid1, cid1, cid2, gcid1)
+) INTERLEAVE IN PARENT outer_c1 (pid1, cid1, cid2)
+
+statement ok
+INSERT INTO outer_p1
+  SELECT i, i+100 FROM generate_series(1, 20) AS g(i)
+
+statement ok
+INSERT INTO outer_c1
+  SELECT i, i, i, i+200 FROM generate_series(-2, 28, 2) AS g(i)
+
+statement ok
+INSERT INTO outer_gc1
+  SELECT i, i, i, i, i+300 FROM generate_series(-4, 36, 4) AS g(i)
+
+statement ok
+ALTER TABLE outer_p1 SPLIT AT
+  SELECT i FROM generate_series(0, 40, 5) AS g(i)
+
+statement ok
+ALTER TABLE outer_p1 TESTING_RELOCATE
+  SELECT ARRAY[(((i-3)/5)%4)::INT + 1], i FROM generate_series(3, 40, 5) AS g(i)
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM TABLE outer_p1
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /0       20        {5}       5
+/0         /5       31        {1}       1
+/5         /10      32        {2}       2
+/10        /15      33        {3}       3
+/15        /20      34        {4}       4
+/20        /25      35        {1}       1
+/25        /30      36        {2}       2
+/30        /35      37        {3}       3
+/35        /40      38        {4}       4
+/40        NULL     39        {5}       5
+
+### Begin OUTER queries
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzslMFq4zAQhu_7FGZOCTsLke3kYFjQacFLSEqgp2KKsSapwZHMSC4twe9eZNPGSZPSkqtvlmY-_tFnmANoo2iV78lC8gACEEJAiAAhBoQ5ZAg1m4KsNexbeiBVL5DMEEpdN85fZwiFYYLkAK50FUECqXbEFeXPtKFcEf83pSYGBEUuL6sub0lbBz6h3Of8Kk3jiB9rP4WvBOvGJYEUKP1Mm3L39Lm5EO-lQTfKCKWf_yOzoq2bSPF7-pd9b_fpQdKKOAnSf6v75XLi4WiKgQwxkDEGco6BXEDWIpjGHZ9qXb4jSESLV3QcLTTasCImdfLwrL0gbGX-mPqs7XJweBIsxv8w1BGOOoY6olHHUEc86ri2tC7o2JCtjbb0ra0080uN1I76DWhNwwXdsSm6mP647rjuQpF1fVX0h1R3pW7AISy-hBcn8OwcDm9Jjm6B41vg-Y_grP31FgAA___ZxXLK
+
+query IIIII rowsort,colnames
+SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)
+----
+pid1  pa1  cid1  cid2  ca1
+-2    NULL  -2    -2    198
+0     NULL  0     0     200
+1     101   NULL  NULL  NULL
+2     102   2     2     202
+3     103   NULL  NULL  NULL
+4     104   4     4     204
+5     105   NULL  NULL  NULL
+6     106   6     6     206
+7     107   NULL  NULL  NULL
+8     108   8     8     208
+9     109   NULL  NULL  NULL
+10    110   10    10    210
+11    111   NULL  NULL  NULL
+12    112   12    12    212
+13    113   NULL  NULL  NULL
+14    114   14    14    214
+15    115   NULL  NULL  NULL
+16    116   16    16    216
+17    117   NULL  NULL  NULL
+18    118   18    18    218
+19    119   NULL  NULL  NULL
+20    120   20    20    220
+22    NULL  22    22    222
+24    NULL  24    24    224
+26    NULL  26    26    226
+28    NULL  28    28    228
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzslM-K2zAQh-99CjOnhEwh_pe2hoJOBZeQlEBPxRRjTbwGRzKSvOwS_O6LZEjiJLvs4j36ODP69BOfYI4gJKdNfiANyT_wASEAhBAQIkCIIUNolCxIa6nskR5I-RMkS4RKNK2x7QyhkIogOYKpTE2QQCoMqZryR9pRzkn9lpUgBQicTF7VLm9NewM2oTrk6pnJ1pD6Xxb2GXbkbVuTeMxHFiALkUXIYkDYVeXDLeYoN7rBAOGUXtPezJi_QBYskIWL-U9lmUHLXkSCk0q89Nfm73o9s5et5ngqA2TfLsoQ2fc5eixCj8XosR-QdQiyNWc92uQlQeJ3-IrCs7lWSMVJER_Iyro7kjfyq2yujt0PDgbB_vR3Y_8umBSOVRhOCscqjCaFn7mE7yjckW6k0PSuLbu0S5p4Sf1G17JVBf1RsnAxfbl1nGtw0qaf-n2RCjdyD7yE_Tfh1QBeXsPBmORwDByNgeMPwVn35SUAAP__bLys9A==
+
+query IIIIII rowsort,colnames
+SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)
+----
+pid1  cid1  cid2  gcid1  gca1  ca1
+-4    -4    -4    -4     296   NULL
+-2    -2    -2    NULL   NULL  198
+0     0     0     0      300   200
+2     2     2     NULL   NULL  202
+4     4     4     4      304   204
+6     6     6     NULL   NULL  206
+8     8     8     8      308   208
+10    10    10    NULL   NULL  210
+12    12    12    12     312   212
+14    14    14    NULL   NULL  214
+16    16    16    16     316   216
+18    18    18    NULL   NULL  218
+20    20    20    20     320   220
+22    22    22    NULL   NULL  222
+24    24    24    24     324   224
+26    26    26    NULL   NULL  226
+28    28    28    28     328   228
+32    32    32    32     332   NULL
+36    36    36    36     336   NULL
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzklE9Lw0AQxe9-ivJOiiN0k-ohIOy1Iq30KkFCdloD6W7Y3YhS8t1lN2j_WP_RY27ZefPjzRuYbKCN4lmxZofsEQKEBIQUhAlyQmNNyc4ZG-S-eapekY0JlW5aH8o5oTSWkW3gK18zMky1Z1tz8cILLhTbO1NptiAo9kVVR697XnoEh2pd2DdpWs_2qQwTBGU0b302koJkQjIlOQFhUa2evyKN-JB2GBA-PWte-nMpLi9ubeiKnyAcGpC8Qd4RTOu3wZwvVoxMdPRN-G3mVhur2LLai5l3R9YzM1emOWg7bpzsGYshbz0Zcvh0yOF_-dks2DVGO_7TQY3DPbJacX-8zrS25AdrymjTP-eRiwXFzveq6B9THaU44C4sfoSv9-DxIZyc4pyeAk_-Befd2XsAAAD__9UR-Ns=
+
+query IIIII rowsort,colnames
+SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40
+----
+pid1  cid1  cid2  ca1  pa1
+0     0     0     200  NULL
+2     2     2     202  102
+4     4     4     204  104
+6     6     6     206  106
+8     8     8     208  108
+10    10    10    210  110
+12    12    12    212  112
+14    14    14    214  114
+16    16    16    216  116
+18    18    18    218  118
+20    20    20    220  120
+22    22    22    222  NULL
+24    24    24    224  NULL
+26    26    26    226  NULL
+28    28    28    228  NULL
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzslM1q6zAUhPf3KcKs7uWeQmQnLQgK2qaUpGRbTDHWiWtwLCPJpSX43Ytk2vw0_SPb7CzNfIzOwPEGjdE8z9fsIO8hQEhASEGYICO01hTsnLFBHswz_Qw5JlRN2_lwnREKYxlyA1_5miExazzbmvMnXnKu2d6YqmELgmafV3XMuuWVR0io1rl9UabzbB_a8IKgjBadlyMlSIX3LKvy8aO5LMSbtmMnlZKakJqC8J5b88r_VeL_v2sb7PEThIFKIxUQUpekrpD1BNP57XzO5yVDip4-6WA7etcYq9my3ps264-0NDcXpj2wHQ9O9oLFuXyZnDuQ6bmD735ES3ataRz_aMvGYUlZlzxstDOdLfjOmiLGDMdF5OKFZucHVQyHWROl-MBdWHwJT_fg8SGcnJKcngJPfgVn_Z_XAAAA__83-f-X
+
+query IIIIII rowsort,colnames
+SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
+----
+pid1  pa1  cid1  cid2  gcid1  gca1
+4     104  4     4     4      304
+8     108  8     8     8      308
+12    112  12    12    12     312
+16    116  16    16    16     316
+20    120  20    20    20     320
+
 ########################
 # Non-interleaved joins #
 ########################
-
-# Outer joins uses merge joiner.
-query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 FULL OUTER JOIN child1 USING(pid1)]
-----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzcllGL2kwUhu-_XxHO1S47HzhJtDVQyFXBsnWLtFclF1nnVANuJkwm0GXxv5eYgjXacwyngnhnzDwz7xwf8H2D0hqc5y9YQ_IdNCgIQUEECmJQMIZMQeXsEuvaunZJB8zMT0hGCoqyanz7daZgaR1C8ga-8BuEBL7mzxtcYG7QgQKDPi82u0MqV7zk7jWtcoelb498anwSpFqlIWRbBbbxv7fd7_b8Gqzzen24U6oh22YKap-vEBK9Vf8w3nJdbMxhOpVGooDhXwPu97HOoEPT3-ehPfisVSfu-hndCj_ZouzfdYM__F2qH-4_uGK17j6CggWWBl0SzD7Ovz0-3rV3j-5VkIYqSGMVpOPeFPY3jM64YVOeSn8y-Nz-b6vestMHxwcH6-tWUxrv4mrqm1czvG5DpPEubkh484ZE122INN7FDYlu3pD4ug2Rxru4IfHNG8J00AXWlS1rPKvhjNqLoVlhN67aNm6JX5xd7o7pHp923O7_22Dtu7dh9zAru1dtwPPhiQSeSmAtyq3HNK0HjCwcBk8k8FQCa1Hu3siO6LBPj_6kI3reEQnrw5mN-nQsEZyGGcFpmBGchjnBGZoRfCwRnIYZwWmYEZyGOcEZmhF8IhH8nURRGmYUpWFGURrmFGVoRtH3EkVpmFGUhhlFaZhTlKEZRacSRbWoJzA0IylDM5YyNKcph3NdQVYWZG1BVheEfUFWGLSoMeijyjDIVprmbKVpzlaaZm1lcM7WIWXp-Dcb0paG0pytg_rSYJyz9ag8kLZm2_9-BQAA___b-Uik
-
-query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 LEFT OUTER JOIN child1 USING(pid1)]
-----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzclsFq20AQhu99ijCnlmzBK8luLSjomkKTEnorOijaqS1QtGJ3BQ3B715kFVzL7ozFxGB8s6z9dv9Zf-D_FRpr8L54Rg_pT9CgIAIFMShIQMEccgWtsyV6b12_ZADuzG9IZwqqpu1C_3WuoLQOIX2FUIUaIYUfxVONj1gYdKDAYCiqentI66rnwr1kbeGwCf2RD11IbzKtsgjyjQLbhb_b7nZ7erlZF369v1OmId_kCnwoVgip3qg3jFeuq9rsp1NZLAoY_Tfgbh_rDDo0431u-4NPWnVk1m_oVvjVVs141hp_hfeZvv3wxVWr9fBxNHGisvlo6N1A8QkDdc2xsEdz3tuPth0tO35wsnewvmwTpfHObqK-NhOjyxZCGu_sQkTXJkR82UJI451diPjahEguWwhpvLMLkVybEExdfETf2sbjSe1k1s-BZoXD7XjbuRK_O1tujxkeH7bc9r_XoA_D22h4uGuGV33A0-GFBF5KYC3Krec0rSdcWTQNXkjgpQTWotyjKzugozE9-5eO6fuOSVjv39lsTCcSwWmYEZyGGcFpmBOcoRnB5xLBaZgRnIYZwWmYE5yhGcEXEsE_SRSlYUZRGmYUpWFOUYZmFP0sUZSGGUVpmFGUhjlFGZpRdClRVIt6AkMzkjI0YylDc5pyONcVZGVB1hZkdUHYF2SFQYsagz6oDJNspWnOVprmbKVp1lYG52ydUpYOf7MpbWkqzdk6qS9NxjlbD8oDaWu-efcnAAD__yxqM1o=
-
-query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 RIGHT OUTER JOIN child1 USING(pid1)]
-----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzclsGK2zAQhu99imVOLatCZDtpYyj4uoXulqW34oM3miYGr2UkGbosefdiuzSNk87ETAMhtzjWJ_2jfJD_FWpr8L54Rg_pd9CgIAIFMShIQMEccgWNsyv03rpuyQDcmZ-QzhSUddOG7utcwco6hPQVQhkqhBS-FU8VPmJh0IECg6Eoq_6QxpXPhXvJmsJhHbojH9qQ3mRaZRHkWwW2Db-33e329HKzKfxmf6dMQ77NFfhQrBFSvVX_Md5qU1ZmP53KYlHA6J8Bd_tYZ9ChGe9z2x180qojs35Bt8bPtqzHs1b4I7zN9O27T65cb4aPfyaO-4kTlc1HQ-8Gik8YqK2PhT2a896-t81o2fGDk72D9WWbKI13dhP1tZkYXbYQ0nhnFyK6NiHiyxZCGu_sQsTXJkRy2UJI451diOTahGDq4iP6xtYeT2ons24ONGscbsfb1q3wq7Or_pjh8aHn-v9egz4Mb6Ph4a4eXnUBT4cXEngpgbUot57TtJ5wZdE0eCGBlxJYi3KPruyAjsb07G86pu87JmG9f2ezMZ1IBKdhRnAaZgSnYU5whmYEn0sEp2FGcBpmBKdhTnCGZgRfSAT_IFGUhhlFaZhRlIY5RRmaUfSjRFEaZhSlYUZRGuYUZWhG0aVEUS3qCQzNSMrQjKUMzWnK4VxXkJUFWVuQ1QVhX5AVBi1qDPqgMkyylaY5W2mas5WmWVsZnLN1Slk6_M2mtKWpNGfrpL40GedsPSgPpK359s2vAAAA___jRjNk
-
 
 # Join on siblings uses merge joiner.
 # TODO(richardwu): Update this once sibling joins are implemented.
