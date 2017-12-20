@@ -659,6 +659,31 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarintAscending(key)
 }
 
+// DecodeDescMetadataID decodes a descriptor ID from a descriptor metadata key.
+func DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
+	// Extract object ID from key.
+	// TODO(marc): move sql/keys.go to keys (or similar) and use a DecodeDescMetadataKey.
+	// We should also check proper encoding.
+	remaining, tableID, err := DecodeTablePrefix(key)
+	if err != nil {
+		return 0, err
+	}
+	if tableID != DescriptorTableID {
+		return 0, errors.Errorf("key is not a descriptor table entry: %v", key)
+	}
+	// DescriptorTable.PrimaryIndex.ID
+	remaining, _, err = encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return 0, err
+	}
+	// descID
+	_, id, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // MakeFamilyKey returns the key for the family in the given row by appending to
 // the passed key.
 func MakeFamilyKey(key []byte, famID uint32) []byte {

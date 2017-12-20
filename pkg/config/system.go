@@ -20,11 +20,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -98,30 +95,6 @@ func (s SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 	return index, true
 }
 
-func decodeDescMetadataID(key roachpb.Key) (uint64, error) {
-	// Extract object ID from key.
-	// TODO(marc): move sql/keys.go to keys (or similar) and use a DecodeDescMetadataKey.
-	// We should also check proper encoding.
-	remaining, tableID, err := keys.DecodeTablePrefix(key)
-	if err != nil {
-		return 0, err
-	}
-	if tableID != keys.DescriptorTableID {
-		return 0, errors.Errorf("key is not a descriptor table entry: %v", key)
-	}
-	// DescriptorTable.PrimaryIndex.ID
-	remaining, _, err = encoding.DecodeUvarintAscending(remaining)
-	if err != nil {
-		return 0, err
-	}
-	// descID
-	_, id, err := encoding.DecodeUvarintAscending(remaining)
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
 // GetLargestObjectID returns the largest object ID found in the config which is
 // less than or equal to maxID. If maxID is 0, returns the largest ID in the
 // config.
@@ -150,7 +123,7 @@ func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	// No maximum specified; maximum ID is the last entry in the descriptor
 	// table.
 	if maxID == 0 {
-		id, err := decodeDescMetadataID(s.Values[highIndex-1].Key)
+		id, err := keys.DecodeDescMetadataID(s.Values[highIndex-1].Key)
 		if err != nil {
 			return 0, err
 		}
@@ -164,7 +137,7 @@ func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	var err error
 	maxIdx := sort.Search(len(searchSlice), func(i int) bool {
 		var id uint64
-		id, err = decodeDescMetadataID(searchSlice[i].Key)
+		id, err = keys.DecodeDescMetadataID(searchSlice[i].Key)
 		if err != nil {
 			return false
 		}
@@ -177,7 +150,7 @@ func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	// If we found an index within the list, maxIdx might point to a descriptor
 	// with exactly maxID.
 	if maxIdx < len(searchSlice) {
-		id, err := decodeDescMetadataID(searchSlice[maxIdx].Key)
+		id, err := keys.DecodeDescMetadataID(searchSlice[maxIdx].Key)
 		if err != nil {
 			return 0, err
 		}
@@ -191,7 +164,7 @@ func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	}
 
 	// Return ID of the immediately preceding descriptor.
-	id, err := decodeDescMetadataID(searchSlice[maxIdx-1].Key)
+	id, err := keys.DecodeDescMetadataID(searchSlice[maxIdx-1].Key)
 	if err != nil {
 		return 0, err
 	}

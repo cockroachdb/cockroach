@@ -1740,7 +1740,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.Exec(t, `DELETE FROM data.bank WHERE id >= $1 / 2`, numAccounts)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[4])
 
-	sqlDB.Exec(t, `UPDATE data.bank SET balance = 5`)
+	sqlDB.Exec(t, `ALTER TABLE data.bank ADD COLUMN points_balance INT DEFAULT 50`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[5])
 
 	sqlDB.Exec(t, `UPSERT INTO data.bank (id, balance)
