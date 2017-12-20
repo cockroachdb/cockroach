@@ -372,14 +372,25 @@ func parseColumns(colStrs []string) ([]IndexColumnInfo, error) {
 			return nil, err
 		}
 		res[i].Direction = encoding.Ascending
-		for _, f := range fields[1:] {
-			switch strings.ToLower(f) {
+		res[i].Nullable = true
+		fields = fields[1:]
+		for len(fields) > 0 {
+			switch strings.ToLower(fields[0]) {
 			case "ascending", "asc":
 				// ascending is the default.
+				fields = fields[1:]
 			case "descending", "desc":
 				res[i].Direction = encoding.Descending
+				fields = fields[1:]
+
+			case "not":
+				if len(fields) < 2 || strings.ToLower(fields[1]) != "null" {
+					return nil, fmt.Errorf("unknown column attribute %s", fields)
+				}
+				res[i].Nullable = false
+				fields = fields[2:]
 			default:
-				return nil, fmt.Errorf("unknown column attribute %s", f)
+				return nil, fmt.Errorf("unknown column attribute %s", fields)
 			}
 		}
 	}
