@@ -69,7 +69,7 @@ func runTestFlow(
 
 	var rowBuf distsqlrun.RowBuffer
 
-	ctx, flow, err := distSQLSrv.SetupSyncFlow(context.TODO(), &req, &rowBuf)
+	ctx, flow, err := distSQLSrv.SetupSyncFlow(context.Background(), &req, &rowBuf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func runTestFlow(
 
 	var res sqlbase.EncDatumRows
 	for {
-		row, meta := rowBuf.Next()
+		row, meta := rowBuf.Next(context.Background())
 		if !meta.Empty() {
 			t.Fatalf("unexpected metadata: %v", meta)
 		}

@@ -214,7 +214,7 @@ func TestJoinReaderDrain(t *testing.T) {
 			t.Fatal(err)
 		}
 		jr.Run(ctx, nil)
-		row, meta := out.Next()
+		row, meta := out.Next(context.Background())
 		if row != nil {
 			t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))
 		}

@@ -611,7 +611,7 @@ func checkExpectedRows(
 
 	var rets []string
 	for {
-		row, meta := results.Next()
+		row, meta := results.Next(context.Background())
 		if !meta.Empty() {
 			return errors.Errorf("unexpected metadata: %v", meta)
 		}

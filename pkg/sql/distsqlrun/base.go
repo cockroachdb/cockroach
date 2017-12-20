@@ -124,7 +124,7 @@ type RowSource interface {
 	// been skipped in case they continue to consume rows. Usually a consumer
 	// should react to an error by calling ConsumerDone(), thus asking the
 	// RowSource to drain, and separately discard any future data rows.
-	Next() (sqlbase.EncDatumRow, ProducerMetadata)
+	Next(ctx context.Context) (sqlbase.EncDatumRow, ProducerMetadata)
 
 	// ConsumerDone lets the producer know that we will not need any more data
 	// rows. The producer is expected to start draining and only send metadata
@@ -162,7 +162,7 @@ type RowSource interface {
 func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver) {
 	src.ConsumerDone()
 	for {
-		row, meta := src.Next()
+		row, meta := src.Next(ctx)
 		if meta.Empty() {
 			if row == nil {
 				return
@@ -255,9 +255,9 @@ func (rs *NoMetadataRowSource) Types() []sqlbase.ColumnType {
 // that it's not under the impression that everything is hunky-dory and it can
 // continue consuming rows. So, this interface returns the error. Just like with
 // a raw RowSource, the consumer should generally call ConsumerDone() and drain.
-func (rs *NoMetadataRowSource) NextRow() (sqlbase.EncDatumRow, error) {
+func (rs *NoMetadataRowSource) NextRow(ctx context.Context) (sqlbase.EncDatumRow, error) {
 	for {
-		row, meta := rs.src.Next()
+		row, meta := rs.src.Next(ctx)
 		if meta.Err != nil {
 			return nil, meta.Err
 		}
@@ -357,7 +357,7 @@ func (rc *RowChannel) Types() []sqlbase.ColumnType {
 }
 
 // Next is part of the RowSource interface.
-func (rc *RowChannel) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (rc *RowChannel) Next(_ context.Context) (sqlbase.EncDatumRow, ProducerMetadata) {
 	d, ok := <-rc.C
 	if !ok {
 		// No more rows.
@@ -434,8 +434,10 @@ func (mrc *MultiplexedRowChannel) Types() []sqlbase.ColumnType {
 }
 
 // Next is part of the RowSource interface.
-func (mrc *MultiplexedRowChannel) Next() (row sqlbase.EncDatumRow, meta ProducerMetadata) {
-	return mrc.rowChan.Next()
+func (mrc *MultiplexedRowChannel) Next(
+	ctx context.Context,
+) (row sqlbase.EncDatumRow, meta ProducerMetadata) {
+	return mrc.rowChan.Next(ctx)
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -588,7 +590,7 @@ func (rb *RowBuffer) Types() []sqlbase.ColumnType {
 //
 // There's no synchronization here with Push(). The assumption is that these
 // two methods are not called concurrently.
-func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (rb *RowBuffer) Next(_ context.Context) (sqlbase.EncDatumRow, ProducerMetadata) {
 	if rb.args.OnNext != nil {
 		row, meta := rb.args.OnNext(rb)
 		if row != nil || !meta.Empty() {

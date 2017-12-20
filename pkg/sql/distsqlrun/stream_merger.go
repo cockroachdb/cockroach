@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 // We define a group to be a set of rows from a given source with the same
@@ -38,12 +39,14 @@ type streamMerger struct {
 // NextBatch returns a set of rows from the left stream and a set of rows from
 // the right stream, all matching on the equality columns. One of the sets can
 // be empty.
-func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, error) {
-	lrow, err := sm.left.peekAtCurrentGroup()
+func (sm *streamMerger) NextBatch(
+	ctx context.Context,
+) ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, error) {
+	lrow, err := sm.left.peekAtCurrentGroup(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	rrow, err := sm.right.peekAtCurrentGroup()
+	rrow, err := sm.right.peekAtCurrentGroup(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -59,13 +62,13 @@ func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRo
 	}
 	var leftGroup, rightGroup []sqlbase.EncDatumRow
 	if cmp <= 0 {
-		leftGroup, err = sm.left.advanceGroup()
+		leftGroup, err = sm.left.advanceGroup(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 	if cmp >= 0 {
-		rightGroup, err = sm.right.advanceGroup()
+		rightGroup, err = sm.right.advanceGroup(ctx)
 		if err != nil {
 			return nil, nil, err
 		}

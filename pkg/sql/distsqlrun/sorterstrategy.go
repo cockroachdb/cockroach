@@ -121,7 +121,7 @@ func (ss *sortAllStrategy) executeImpl(
 	ctx context.Context, s *sorter, r sortableRowContainer,
 ) (sqlbase.EncDatumRow, error) {
 	for {
-		row, err := s.input.NextRow()
+		row, err := s.input.NextRow(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +197,7 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 	defer ss.rows.Close(ctx)
 	heapCreated := false
 	for {
-		row, err := s.input.NextRow()
+		row, err := s.input.NextRow(ctx)
 		if err != nil {
 			return err
 		}
@@ -267,7 +267,7 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 		return true, nil
 	}
 
-	nextRow, err := s.input.NextRow()
+	nextRow, err := s.input.NextRow(ctx)
 	if err != nil || nextRow == nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 				return err
 			}
 
-			nextRow, err = s.input.NextRow()
+			nextRow, err = s.input.NextRow(ctx)
 			if err != nil {
 				return err
 			}

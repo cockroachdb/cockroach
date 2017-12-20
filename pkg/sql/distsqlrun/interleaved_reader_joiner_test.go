@@ -411,7 +411,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 			var res sqlbase.EncDatumRows
 			for {
-				row, meta := out.Next()
+				row, meta := out.Next(context.Background())
 				if !meta.Empty() {
 					t.Fatalf("unexpected metadata: %+v", meta)
 				}

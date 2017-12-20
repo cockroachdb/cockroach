@@ -95,7 +95,7 @@ func (d *distinct) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
 	var scratch []byte
 
 	for {
-		row, meta := d.input.Next()
+		row, meta := d.input.Next(ctx)
 		if !meta.Empty() {
 			if meta.Err != nil {
 				return false, meta.Err
