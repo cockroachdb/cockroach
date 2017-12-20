@@ -810,9 +810,8 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
 
-	// We just created the table, so we can use insert.
 	const upsertAdminStmt = `
-					INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+					UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
 					`
 
 	pl := tree.MakePlaceholderInfo()
