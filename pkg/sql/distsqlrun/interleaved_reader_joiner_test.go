@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -55,13 +56,6 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	// Create a parent table and child table where each row is (not
-	// including primary iD columns):
-	//
-	//  |     a    |
-	//  |-----------
-	//  | rowId/10 |
-
 	aFn := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row % 10))
 	}
@@ -75,7 +69,6 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		30,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, aFn),
 	)
-
 	// Child table has 3 rows for the first two parent rows and 2 rows for every
 	// other parent row.
 	sqlutils.CreateTableInterleaved(t, sqlDB, "child1",
@@ -84,7 +77,6 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		62,
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(30), sqlutils.RowIdxFn, bFn),
 	)
-
 	// Create another table also interleaved into parent with 1 or 0 rows
 	// interleaved into each parent row.
 	sqlutils.CreateTableInterleaved(t, sqlDB, "child2",
@@ -93,6 +85,14 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		15,
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(30), sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
+	r := sqlutils.MakeSQLRunner(sqlDB)
+	// Insert additional rows into child1 not interleaved in parent.
+	r.Exec(t, fmt.Sprintf(`INSERT INTO %s.child1 VALUES
+	(-1, -1, 0),
+	(0, 0, 0),
+	(63, 63, 6),
+	(70, 70, 7)
+	`, sqlutils.TestDB))
 
 	pd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "parent")
 	cd1 := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child1")
@@ -112,21 +112,44 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *cd1,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			post: PostProcessSpec{
-				Filter:     Expression{Expr: "@1 <= 4 AND @3 <= 4"},
+				Filter:     Expression{Expr: "@1 <= 4 OR @3 <= 4 OR @3 > 30"},
+				Projection: true,
+				// pd.pid1, cid1, cid2
+				OutputColumns: []uint32{0, 3, 4},
+			},
+			expected: "[[1 1 0] [1 31 3] [1 61 6] [2 2 0] [2 32 3] [2 62 6] [3 3 0] [3 33 3] [4 4 0] [4 34 3]]",
+		},
+
+		{
+			spec: InterleavedReaderJoinerSpec{
+				Tables: []InterleavedReaderJoinerSpec_Table{
+					{
+						Desc:     *pd,
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
+						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+					},
+					{
+						Desc:     *cd1,
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
+						Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
+					},
+				},
+				Type: JoinType_INNER,
+			},
+			post: PostProcessSpec{
+				Filter:     Expression{Expr: "@1 <= 4 OR @3 <= 4 OR @3 > 30"},
 				Projection: true,
 				// pd.pid1, cid1, cid2
 				OutputColumns: []uint32{0, 3, 4},
@@ -140,18 +163,16 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *cd1,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @5"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			post: PostProcessSpec{
 				Filter:     Expression{Expr: "@1 <= 4 AND @5 <= 4"},
@@ -168,38 +189,35 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *cd1,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						// No spans specified for cd1 should return no rows.
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			expected: "[]",
 		},
+
 		{
 			spec: InterleavedReaderJoinerSpec{
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						// No spans specified for pd should return no rows.
 					},
 					{
 						Desc:     *cd1,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			expected: "[]",
 		},
@@ -214,7 +232,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 						Post: PostProcessSpec{
 							Filter: Expression{Expr: "@1 < 4"},
 						},
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
@@ -222,13 +240,11 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 						Post: PostProcessSpec{
 							Filter: Expression{Expr: "@1 > 4"},
 						},
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			expected: "[]",
 		},
@@ -242,7 +258,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 						Post: PostProcessSpec{
 							Filter: Expression{Expr: "@1 <= 18"},
 						},
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
@@ -250,13 +266,11 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 						Post: PostProcessSpec{
 							Filter: Expression{Expr: "@1 >= 12"},
 						},
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: cd2.PrimaryIndexSpan()}},
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			post: PostProcessSpec{
 				Projection: true,
@@ -272,20 +286,18 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						// Filter on id <= 18.
 						Spans: pdSpans,
 					},
 					{
 						Desc:     *cd2,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						// Filter on pid >= 12.
 						Spans: cd2Spans,
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			post: PostProcessSpec{
 				Projection: true,
@@ -303,19 +315,17 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *cd2,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						// Filter on pid >= 12.
 						Spans: cd2Spans,
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			post: PostProcessSpec{
 				// Filter on id <= 18.
@@ -339,7 +349,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 							Projection:    true,
 							OutputColumns: []uint32{0},
 						},
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
@@ -350,13 +360,11 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 							// Skip the primary ID of child2.
 							OutputColumns: []uint32{0, 2},
 						},
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: cd2.PrimaryIndexSpan()}},
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @2"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			expected: "[[12 12 'one-two'] [13 13 'one-three'] [14 14 'one-four'] [15 15 'one-five']]",
 		},
@@ -367,23 +375,42 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *cd1,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
 					},
 				},
-				// Join on the interleave prefix (pid).
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			post: PostProcessSpec{
 				Limit: 5,
 			},
 			expected: "[[1 1 1 1 0] [1 1 1 31 3] [1 1 1 61 6] [2 2 2 2 0] [2 2 2 32 3]]",
+		},
+
+		// With an OnExpr.
+		{
+			spec: InterleavedReaderJoinerSpec{
+				Tables: []InterleavedReaderJoinerSpec_Table{
+					{
+						Desc:     *pd,
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
+						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+					},
+					{
+						Desc:     *cd1,
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
+						Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
+					},
+				},
+				OnExpr: Expression{Expr: "@4 >= 60"},
+				Type:   JoinType_INNER,
+			},
+			expected: "[[1 1 1 61 6] [2 2 2 62 6] [30 0 30 60 6]]",
 		},
 	}
 
@@ -460,17 +487,16 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *cd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_DESC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_DESC}}},
 						Spans:    []TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
 					},
 				},
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			expected: "unmatched column orderings",
 		},
@@ -480,17 +506,16 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 					{
 						Desc:     *cd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
 					},
 				},
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_FULL_OUTER,
+				Type: JoinType_FULL_OUTER,
 			},
 			expected: "interleavedReaderJoiner only supports inner joins",
 		},
@@ -500,12 +525,11 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				Tables: []InterleavedReaderJoinerSpec_Table{
 					{
 						Desc:     *pd,
-						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}}},
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 				},
-				OnExpr: Expression{Expr: "@1 = @3"},
-				Type:   JoinType_INNER,
+				Type: JoinType_INNER,
 			},
 			expected: "interleavedReaderJoiner only reads from two tables in an interleaved hierarchy",
 		},
