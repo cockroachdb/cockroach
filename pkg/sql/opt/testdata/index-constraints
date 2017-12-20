@@ -1,4 +1,22 @@
 build-scalar,normalize,index-constraints columns=(int)
+NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+false
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+true
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int)
+@1
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int)
 @1 > 2
 ----
 [/3 - ]
@@ -49,6 +67,42 @@ build-scalar,normalize,index-constraints columns=(int desc)
 @1 = 2
 ----
 [/2 - /2]
+
+build-scalar,normalize,index-constraints columns=(int)
+NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 > NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 < NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 >= NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 >= NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 = NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 != NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 = 1 AND @2 > NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@2 = 1 AND @1 > NULL
+----
 
 build-scalar,normalize,index-constraints columns=(int)
 @1 > 2 AND @1 < 4
