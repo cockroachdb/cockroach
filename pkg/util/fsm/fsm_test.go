@@ -1,0 +1,128 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package fsm
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+type state1 struct{}
+type state2 struct{}
+type state3 struct {
+	Field Bool
+}
+type state4 struct {
+	Field1 Bool
+	Field2 Bool
+}
+
+func (state1) State() {}
+func (state2) State() {}
+func (state3) State() {}
+func (state4) State() {}
+
+type event1 struct{}
+type event2 struct{}
+type event3 struct {
+	Field Bool
+}
+type event4 struct {
+	Field1 Bool
+	Field2 Bool
+}
+
+func (event1) Event() {}
+func (event2) Event() {}
+func (event3) Event() {}
+func (event4) Event() {}
+
+var noAction func(ExtendedState)
+
+func TestBasicTransitions(t *testing.T) {
+	trans := Match(Pattern{
+		state1{}: {
+			event1{}: {state2{}, noAction},
+			event2{}: {state1{}, noAction},
+		},
+		state2{}: {
+			event1{}: {state1{}, noAction},
+			event2{}: {state2{}, noAction},
+		},
+	})
+
+	// Valid transitions.
+	require.Equal(t, trans.apply(state1{}, event1{}, nil), state2{})
+	require.Equal(t, trans.apply(state1{}, event2{}, nil), state1{})
+	require.Equal(t, trans.apply(state2{}, event1{}, nil), state1{})
+	require.Equal(t, trans.apply(state2{}, event2{}, nil), state2{})
+
+	// Invalid transitions.
+	require.Panics(t, func() { trans.apply(state3{}, event1{}, nil) })
+	require.Panics(t, func() { trans.apply(state1{}, event3{}, nil) })
+}
+
+func TestTransitionActions(t *testing.T) {
+	var extendedState int
+	trans := Match(Pattern{
+		state1{}: {
+			event1{}: {state2{}, func(e ExtendedState) { *e.(*int) = 1 }},
+			event2{}: {state1{}, func(e ExtendedState) { *e.(*int) = 2 }},
+		},
+		state2{}: {
+			event1{}: {state1{}, func(e ExtendedState) { *e.(*int) = 3 }},
+			event2{}: {state2{}, func(e ExtendedState) { *e.(*int) = 4 }},
+		},
+	})
+
+	trans.apply(state1{}, event1{}, &extendedState)
+	require.Equal(t, extendedState, 1)
+
+	trans.apply(state1{}, event2{}, &extendedState)
+	require.Equal(t, extendedState, 2)
+
+	trans.apply(state2{}, event1{}, &extendedState)
+	require.Equal(t, extendedState, 3)
+
+	trans.apply(state2{}, event2{}, &extendedState)
+	require.Equal(t, extendedState, 4)
+}
+
+func TestTransitionsWithWildcards(t *testing.T) {
+	trans := Match(Pattern{
+		state3{Wildcard}: {
+			event3{Wildcard}: {state1{}, noAction},
+		},
+	})
+
+	require.Equal(t, trans.apply(state3{True}, event3{True}, nil), state1{})
+	require.Equal(t, trans.apply(state3{True}, event3{False}, nil), state1{})
+	require.Equal(t, trans.apply(state3{False}, event3{True}, nil), state1{})
+	require.Equal(t, trans.apply(state3{False}, event3{False}, nil), state1{})
+}
+
+func TestTransitionsWithBindings(t *testing.T) {
+	trans := Match(Pattern{
+		state3{Binding("a")}: {
+			event3{Binding("b")}: {state4{Binding("b"), Binding("a")}, noAction},
+		},
+	})
+
+	require.Equal(t, trans.apply(state3{True}, event3{True}, nil), state4{True, True})
+	require.Equal(t, trans.apply(state3{True}, event3{False}, nil), state4{False, True})
+	require.Equal(t, trans.apply(state3{False}, event3{True}, nil), state4{True, False})
+	require.Equal(t, trans.apply(state3{False}, event3{False}, nil), state4{False, False})
+}
