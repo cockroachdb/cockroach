@@ -8,3 +8,64 @@ SELECT 1 FROM [INSERT INTO a VALUES (1, 2)]
 
 query error statement source "DELETE FROM a" does not return any columns
 SELECT 1 FROM [DELETE FROM a]
+
+# Ensure statement sources are fully consumed.
+
+query I
+SELECT * FROM [INSERT INTO a VALUES (1, 0), (2, 0) RETURNING a] LIMIT 1
+----
+1
+
+query II
+SELECT * FROM a
+----
+1 0
+2 0
+
+query II
+SELECT * FROM [UPDATE a SET a = a-1 RETURNING a, b] LIMIT 1
+----
+0 0
+
+query II
+SELECT * FROM a
+----
+0 0
+1 0
+
+query II
+SELECT * FROM [INSERT INTO a(a) VALUES (0), (1) ON CONFLICT(a) DO UPDATE SET a.a = excluded.a + 5 RETURNING a, b] LIMIT 1
+----
+5 0
+
+query II
+SELECT * FROM a
+----
+5 0
+6 0
+
+query II
+SELECT * FROM [UPSERT INTO a VALUES (5, 1), (7, 1) RETURNING a, b] LIMIT 1
+----
+5 1
+
+query II
+SELECT * FROM a
+----
+5 1
+6 0
+7 1
+
+query I
+SELECT * FROM [DELETE FROM a RETURNING a] LIMIT 1
+----
+5
+
+query II
+SELECT * FROM a
+----
+
+# Ensure errors from draining statement sources are propagated.
+
+query error duplicate key value \(a\)=\(1\) violates unique constraint "primary"
+SELECT * FROM [INSERT INTO a VALUES (1), (1) RETURNING a] LIMIT 1
