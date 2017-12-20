@@ -60,7 +60,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
 			previousTableDesc := *n.tableDesc
-			partitioning, _, err := createPartitionedBy(
+			partitioning, err := createPartitionedBy(
 				params.ctx, params.p.evalCtx.Settings, &params.p.evalCtx, n.tableDesc, n.indexDesc, t.PartitionBy)
 			if err != nil {
 				return err
