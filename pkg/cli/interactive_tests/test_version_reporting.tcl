@@ -33,7 +33,8 @@ start_server $argv
 send "select 1;\r"
 eexpect "driver: bad connection"
 # Check that the prompt immediately succeeds the error message
-eexpect "connection lost; opening new connection: all session settings will be lost"
+eexpect "connection lost"
+eexpect "opening new connection: all session settings will be lost"
 expect {
     "\r\n# " {
 	report "unexpected server message"

@@ -68,7 +68,8 @@ type sqlConn struct {
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && cliCtx.isInteractive {
-			fmt.Fprintf(stderr, "connection lost; opening new connection: all session settings will be lost\n")
+			fmt.Fprintf(stderr, "warning: connection lost!\n"+
+				"opening new connection: all session settings will be lost\n")
 		}
 		conn, err := pq.Open(c.url)
 		if err != nil {
@@ -79,7 +80,7 @@ func (c *sqlConn) ensureConn() error {
 			if _, err := conn.(sqlConnI).Exec(
 				`SET DATABASE = `+tree.Name(c.dbName).String(), nil,
 			); err != nil {
-				fmt.Fprintf(stderr, "unable to restore current database: %v\n", err)
+				fmt.Fprintf(stderr, "warning: unable to restore current database: %v\n", err)
 			}
 		}
 		c.conn = conn.(sqlConnI)
@@ -112,14 +113,14 @@ func (c *sqlConn) checkServerMetadata() error {
 		return err
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, "unable to retrieve the server's version")
+		fmt.Fprintf(stderr, "warning: unable to retrieve the server's version: %v\n", err)
 	} else {
 		defer func() { _ = rows.Close() }()
 
 		// Read the node_build_info table as an array of strings.
 		rowVals, err := getAllRowStrings(rows, true /* showMoreChars */)
 		if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
-			fmt.Fprintln(stderr, "error while retrieving the server's version")
+			fmt.Fprintln(stderr, "warning: incorrect data while retrieving the server version")
 			// It is not an error that the server version cannot be retrieved.
 			return nil
 		}
@@ -186,19 +187,19 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
 
 	rows, err := c.Query(sql, nil)
 	if err != nil {
-		fmt.Fprintf(stderr, "error retrieving the %s: %v\n", what, err)
+		fmt.Fprintf(stderr, "warning: error retrieving the %s: %v\n", what, err)
 		return nil, false
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(stderr, "cannot get the %s\n", what)
+		fmt.Fprintf(stderr, "warning: cannot get the %s\n", what)
 		return nil, false
 	}
 
 	err = rows.Next(dbVals[:])
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid %s: %v\n", what, err)
+		fmt.Fprintf(stderr, "warning: invalid %s: %v\n", what, err)
 		return nil, false
 	}
 
