@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -31,6 +32,9 @@ import (
 // It is guaranteed that the results preserve this ordering.
 type mergeJoiner struct {
 	joinerBase
+
+	flowCtx *FlowCtx
+	evalCtx *tree.EvalContext
 
 	leftSource, rightSource RowSource
 
@@ -54,6 +58,7 @@ func newMergeJoiner(
 	}
 
 	m := &mergeJoiner{
+		flowCtx:     flowCtx,
 		leftSource:  leftSource,
 		rightSource: rightSource,
 	}
@@ -90,6 +95,7 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	log.VEventf(ctx, 2, "starting merge joiner run")
 
 	cancelChecker := sqlbase.NewCancelChecker(ctx)
+	m.evalCtx = m.flowCtx.NewEvalCtx()
 
 	for {
 		moreBatches, err := m.outputBatch(ctx, cancelChecker)
@@ -112,7 +118,7 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 func (m *mergeJoiner) outputBatch(
 	ctx context.Context, cancelChecker *sqlbase.CancelChecker,
 ) (bool, error) {
-	leftRows, rightRows, err := m.streamMerger.NextBatch()
+	leftRows, rightRows, err := m.streamMerger.NextBatch(m.evalCtx)
 	if err != nil {
 		return false, err
 	}
