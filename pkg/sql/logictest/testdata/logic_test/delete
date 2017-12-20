@@ -270,10 +270,3 @@ EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 3  ·           limit  10
 3  scan        ·      ·
 3  ·           table  indexed@primary
-
-# Ensure that if the fast path is selected, DELETE is still a valid
-# data source (#19805).
-query I
-INSERT INTO indexed(id,value) VALUES (1,2); SELECT 1 FROM [DELETE FROM indexed]
-----
-1
