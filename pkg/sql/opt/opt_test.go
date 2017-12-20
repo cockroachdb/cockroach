@@ -25,6 +25,11 @@ package opt
 //
 // The supported commands are:
 //
+//  - legacy-normalize
+//
+//    Builds an expression tree from a scalar SQL expression and runs the
+//    TypedExpr normalization code. It must be followed by build-scalar.
+//
 //  - build-scalar
 //
 //    Builds an expression tree from a scalar SQL expression and outputs a
@@ -32,15 +37,9 @@ package opt
 //    using @1, @2, etc. in which case the types of the variables must be passed
 //    via a "columns" argument.
 //
-//  - legacy-normalize
-//
-//    Runs the TypedExpr normalization code and rebuilds the scalar expression.
-//    If present, must follow build-scalar.
-//
 //  - normalize
 //
-//    Normalizes the expression. If present, must follow build-scalar or
-//    legacy-normalize.
+//    Normalizes the expression. If present, must follow build-scalar.
 //
 //  - index-constraints
 //
@@ -49,7 +48,7 @@ package opt
 //    If present, build-scalar must have been an earlier command.
 //
 // The supported arguments are:
-//  - columns=(<type>[ ascending| descending], ...)
+//  - columns=(<type> [ascending|asc|descending|desc], ...)
 //
 //    Sets the types of index var columns, and optionally direction.
 
@@ -310,25 +309,25 @@ func TestOpt(t *testing.T) {
 				}
 
 				evalCtx := tree.MakeTestingEvalContext()
+				var err error
+				typedExpr, err = parseScalarExpr(d.sql, colInfos)
+				if err != nil {
+					d.fatalf(t, "%v", err)
+				}
 				for _, cmd := range strings.Split(d.cmd, ",") {
 					switch cmd {
-					case "build-scalar":
-						var err error
-						typedExpr, err = parseScalarExpr(d.sql, colInfos)
-						if err != nil {
-							d.fatalf(t, "%v", err)
-						}
-
-						buildScalarFn()
 					case "legacy-normalize":
 						// Apply the TypedExpr normalization and rebuild the expression.
 						typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
+					case "build-scalar":
 						buildScalarFn()
+
 					case "normalize":
 						normalizeExpr(e)
+
 					case "index-constraints":
 						if e == nil {
 							d.fatalf(t, "no expression for index-constraints")
@@ -375,9 +374,9 @@ func parseColumns(colStrs []string) ([]IndexColumnInfo, error) {
 		res[i].direction = encoding.Ascending
 		for _, f := range fields[1:] {
 			switch strings.ToLower(f) {
-			case "ascending":
+			case "ascending", "asc":
 				// ascending is the default.
-			case "descending":
+			case "descending", "desc":
 				res[i].direction = encoding.Descending
 			default:
 				return nil, fmt.Errorf("unknown column attribute %s", f)
