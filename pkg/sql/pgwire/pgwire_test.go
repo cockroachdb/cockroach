@@ -915,10 +915,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(`"hello"`).Results(`"hello"`),
 		},
 
-		// TODO(jordan): blocked on #13651
-		//"SELECT $1::INT[]": {
-		//	baseTest.SetArgs(pq.Array([]int{10})).Results(pq.Array([]int{10})),
-		//},
+		"SELECT $1::INT[]": {
+			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
+		},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
