@@ -1155,9 +1155,9 @@ func runTerm(cmd *cobra.Command, args []string) error {
 
 // setupSafeUpdates attempts to enable "safe mode" if the session is
 // interactive and the user is not disabling this behavior with
-// --unsafe-updates.
+// --safe-updates=false.
 func setupSafeUpdates(conn *sqlConn) {
-	if !cliCtx.isInteractive || sqlCtx.unsafeUpdates {
+	if !cliCtx.isInteractive || !sqlCtx.safeUpdates {
 		// nothing to do.
 		return
 	}
