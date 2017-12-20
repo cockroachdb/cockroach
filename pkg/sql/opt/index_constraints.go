@@ -385,6 +385,32 @@ func (c *indexConstraintCalc) intersectSpanSet(
 	return res
 }
 
+// makeEqSpan returns a span that constraints column <offset> to a single value.
+// The value can be NULL.
+func (c *indexConstraintCalc) makeEqSpan(offset int, value tree.Datum) LogicalSpan {
+	return LogicalSpan{
+		Start: LogicalKey{Vals: tree.Datums{value}, Inclusive: true},
+		End:   LogicalKey{Vals: tree.Datums{value}, Inclusive: true},
+	}
+}
+
+// makeNotNullSpan returns a span that constrains the column to non-NULL values.
+// If the column is not nullable, returns a full span.
+func (c *indexConstraintCalc) makeNotNullSpan(offset int) LogicalSpan {
+	sp := MakeFullSpan()
+	if !c.colInfos[offset].Nullable {
+		// The column is not nullable; not-null constraints aren't useful.
+		return sp
+	}
+	if c.colInfos[offset].Direction == encoding.Ascending {
+		sp.Start = LogicalKey{Vals: tree.Datums{tree.DNull}, Inclusive: false}
+	} else {
+		sp.End = LogicalKey{Vals: tree.Datums{tree.DNull}, Inclusive: false}
+	}
+
+	return sp
+}
+
 // makeSpansForSingleColumn creates spans for a single index column from a
 // simple comparison expression. The arguments are the operator and right
 // operand.
@@ -410,6 +436,10 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 	// The rest of the supported expressions must have a constant scalar on the
 	// right-hand side.
 	if val.op != constOp {
+		// This condition always requires that both sides are not-NULL.
+		if c.colInfos[offset].Nullable {
+			return LogicalSpans{c.makeNotNullSpan(offset)}, true
+		}
 		return nil, false
 	}
 	datum := val.private.(tree.Datum)
@@ -419,46 +449,47 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 			// This expression should have been converted to NULL during
 			// type checking.
 			panic("comparison with NULL")
+
+		case isOp:
+			if !c.colInfos[offset].Nullable {
+				// The column is not nullable; IS NULL is always false.
+				return LogicalSpans{}, true
+			}
+			return LogicalSpans{c.makeEqSpan(offset, tree.DNull)}, true
+
+		case isNotOp:
+			return LogicalSpans{c.makeNotNullSpan(offset)}, true
 		}
 		return nil, false
 	}
 
 	switch op {
-	case eqOp, ltOp, gtOp, leOp, geOp:
-		if datum == tree.DNull {
+	case eqOp, isOp:
+		return LogicalSpans{c.makeEqSpan(offset, datum)}, true
+
+	case ltOp, gtOp, leOp, geOp:
+		sp := c.makeNotNullSpan(offset)
+		inclusive := (op == leOp || op == geOp)
+		if (op == ltOp || op == leOp) == (c.colInfos[offset].Direction == encoding.Ascending) {
+			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: inclusive}
+		} else {
+			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: inclusive}
 		}
-		sp := MakeFullSpan()
-		switch op {
-		case eqOp:
-			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
-			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
-		case ltOp:
-			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
-		case gtOp:
-			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
-		case leOp:
-			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
-		case geOp:
-			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
+		if !inclusive {
+			c.preferInclusive(offset, &sp)
 		}
-		if c.colInfos[offset].Direction == encoding.Descending {
-			sp.Start, sp.End = sp.End, sp.Start
-		}
-		c.preferInclusive(offset, &sp)
 		return LogicalSpans{sp}, true
 
-	case neOp:
+	case neOp, isNotOp:
 		if datum == tree.DNull {
 			panic("comparison with NULL")
 		}
-		spans := LogicalSpans{MakeFullSpan(), MakeFullSpan()}
+		spans := LogicalSpans{c.makeNotNullSpan(offset), c.makeNotNullSpan(offset)}
 		spans[0].End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
 		spans[1].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
 		c.preferInclusive(offset, &spans[0])
 		c.preferInclusive(offset, &spans[1])
 		return spans, true
-
-		return nil, false
 
 	default:
 		return nil, false
@@ -634,13 +665,16 @@ func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpan
 		}
 		return nil, false
 	}
+	if len(e.children) < 2 {
+		return nil, false
+	}
 	// Check for an operation where the left-hand side is an
 	// indexed var for this column.
-	if len(e.children) > 0 && isIndexedVar(e.children[0], offset) {
+	if isIndexedVar(e.children[0], offset) {
 		return c.makeSpansForSingleColumn(offset, e.op, e.children[1])
 	}
 	// Check for tuple operations.
-	if len(e.children) == 2 && e.children[0].op == orderedListOp && e.children[1].op == orderedListOp {
+	if e.children[0].op == orderedListOp && e.children[1].op == orderedListOp {
 		switch e.op {
 		case ltOp, leOp, gtOp, geOp, neOp:
 			// Tuple inequality.
@@ -650,6 +684,16 @@ func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpan
 			return c.makeSpansForTupleIn(offset, e)
 		}
 	}
+
+	// Last resort: for conditions like a > b, our column can appear on the right
+	// side. We can deduce a not-null constraint from such conditions.
+	if c.colInfos[offset].Nullable && isIndexedVar(e.children[1], offset) {
+		switch e.op {
+		case eqOp, ltOp, leOp, gtOp, geOp, neOp:
+			return LogicalSpans{c.makeNotNullSpan(offset)}, true
+		}
+	}
+
 	return nil, false
 }
 
