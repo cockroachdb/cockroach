@@ -447,13 +447,119 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 	}
 }
 
+// makeSpansForTupleInequality creates spans for index columns starting at
+// <offset> from a tuple inequality.
+// Assumes that e.op is an inequality and both sides are tuples.
+func (c *indexConstraintCalc) makeSpansForTupleInequality(
+	offset int, e *expr,
+) (LogicalSpans, bool) {
+	lhs, rhs := e.children[0], e.children[1]
+
+	// Find the longest prefix of the tuple that maps to index columns (with the
+	// same direction) starting at <offset>.
+	prefixLen := 0
+	dir := c.colInfos[offset].direction
+	for i := range lhs.children {
+		if !isIndexedVar(lhs.children[i], offset+i) {
+			// Variable doesn't refer to the right column.
+			break
+		}
+		if rhs.children[i].op != constOp {
+			// Right-hand value is not a constant.
+			break
+		}
+		if c.colInfos[offset+i].direction != dir {
+			// The direction changed. For example:
+			//   a ASCENDING, b DESCENDING, c ASCENDING
+			//   (a, b, c) >= (1, 2, 3)
+			// We can only use a >= 1 here.
+			//
+			// TODO(radu): we could support inequalities for cases like this by
+			// allowing negation, for example:
+			//  (a, -b, c) >= (1, -2, 3)
+			break
+		}
+		prefixLen++
+	}
+	if prefixLen == 0 {
+		return nil, false
+	}
+
+	datums := make(tree.Datums, prefixLen)
+	for i := range datums {
+		datums[i] = rhs.children[i].private.(tree.Datum)
+	}
+
+	// less indicates if the op is < or <=;
+	// inclusive indicates if the op is <= or >=.
+	var less, inclusive bool
+
+	switch e.op {
+	case neOp:
+		if prefixLen < len(lhs.children) {
+			// If we have (a, b, c) != (1, 2, 3), we cannot
+			// determine any constraint on (a, b).
+			return nil, false
+		}
+		spans := LogicalSpans{MakeFullSpan(), MakeFullSpan()}
+		spans[0].End = LogicalKey{Vals: datums, Inclusive: false}
+		// We don't want the spans to alias each other, the preferInclusive
+		// calls below could mangle them.
+		datumsCopy := append([]tree.Datum(nil), datums...)
+		spans[1].Start = LogicalKey{Vals: datumsCopy, Inclusive: false}
+		c.preferInclusive(offset, &spans[0])
+		c.preferInclusive(offset, &spans[1])
+		return spans, true
+
+	case ltOp:
+		less, inclusive = true, false
+	case leOp:
+		less, inclusive = true, true
+	case gtOp:
+		less, inclusive = false, false
+	case geOp:
+		less, inclusive = false, true
+	default:
+		panic(fmt.Sprintf("unsupported op %s", e.op))
+	}
+
+	if prefixLen < len(lhs.children) {
+		// If we only keep a prefix, exclusive inequalities become exclusive.
+		// For example:
+		//   (a, b, c) > (1, 2, 3) becomes (a, b) >= (1, 2)
+		inclusive = true
+	}
+
+	if dir == encoding.Descending {
+		// If the direction is descending, the inequality is reversed.
+		less = !less
+	}
+
+	sp := MakeFullSpan()
+	if less {
+		sp.End = LogicalKey{Vals: datums, Inclusive: inclusive}
+	} else {
+		sp.Start = LogicalKey{Vals: datums, Inclusive: inclusive}
+	}
+	c.preferInclusive(offset, &sp)
+	return LogicalSpans{sp}, true
+}
+
 // makeSpansForExpr creates spans for index columns starting at <offset>
 // from the given expression.
 func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpans, bool) {
 	// Check for an operation where the left-hand side is an
 	// indexed var for this column.
-	if isIndexedVar(e.children[0], offset) {
+	if len(e.children) > 0 && isIndexedVar(e.children[0], offset) {
 		return c.makeSpansForSingleColumn(offset, e.op, e.children[1])
+	}
+	// Check for tuple operations.
+	if len(e.children) == 2 && e.children[0].op == orderedListOp && e.children[1].op == orderedListOp {
+		switch e.op {
+		case ltOp, leOp, gtOp, geOp, neOp:
+			// Tuple inequality.
+			return c.makeSpansForTupleInequality(offset, e)
+		}
 	}
 	return nil, false
 }
