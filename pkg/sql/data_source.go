@@ -415,6 +415,8 @@ func (p *planner) getDataSource(
 		switch n := plan.(type) {
 		case *insertNode:
 			n.setDrainOnStart()
+		case *deleteNode:
+			n.setDrainOnStart()
 		}
 		return planDataSource{
 			info: newSourceInfoForSingleTable(anonymousTable, cols),

@@ -39,6 +39,10 @@ type deleteNode struct {
 
 	tw tableDeleter
 
+	// drainOnStart indicates that this node will finish its work entirely upon
+	// startExec, saving the results into the run.rowsDeleted container.
+	drainOnStart bool
+
 	run deleteRun
 }
 
@@ -117,7 +121,13 @@ type deleteRun struct {
 	// The following fields are populated during Start().
 	editNodeRun
 
+	rowsDeleted *sqlbase.RowContainer
+
 	fastPath bool
+}
+
+func (d *deleteNode) setDrainOnStart() {
+	d.drainOnStart = true
 }
 
 func (d *deleteNode) startExec(params runParams) error {
@@ -137,7 +147,32 @@ func (d *deleteNode) startExec(params runParams) error {
 		return d.fastDelete(params, scan)
 	}
 
-	return d.run.tw.init(d.p.txn)
+	if err := d.run.tw.init(d.p.txn); err != nil {
+		return err
+	}
+
+	if d.drainOnStart {
+		d.run.rowsDeleted = sqlbase.NewRowContainer(
+			params.p.session.TxnState.makeBoundAccount(),
+			sqlbase.ColTypeInfoFromResCols(d.rh.columns),
+			0)
+		return d.drain(params)
+	}
+	return nil
+}
+
+// drain finishes all work for this deleteNode, without giving the parent plan
+// a chance to see any return values from this node.
+func (d *deleteNode) drain(params runParams) error {
+	moreRows := true
+	var err error
+	for moreRows {
+		moreRows, err = d.internalNext(params)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (d *deleteNode) Next(params runParams) (bool, error) {
@@ -145,6 +180,14 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 
+	if d.drainOnStart {
+		return d.run.rowsDeleted.Len() > 0, nil
+	}
+
+	return d.internalNext(params)
+}
+
+func (d *deleteNode) internalNext(params runParams) (bool, error) {
 	traceKV := d.p.session.Tracing.KVTracingEnabled()
 
 	next, err := d.run.rows.Next(params)
@@ -154,7 +197,10 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			_, err = d.tw.finalize(params.ctx, traceKV)
+			_, err := d.tw.finalize(params.ctx, traceKV)
+			if err != nil {
+				return false, err
+			}
 		}
 		return false, err
 	}
@@ -171,15 +217,29 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 	d.run.resultRow = resultRow
+	if d.drainOnStart {
+		if _, err := d.run.rowsDeleted.AddRow(params.ctx, resultRow); err != nil {
+			return false, err
+		}
+	}
 
 	return true, nil
 }
 
 func (d *deleteNode) Values() tree.Datums {
-	return d.run.resultRow
+	if !d.drainOnStart {
+		return d.run.resultRow
+	}
+
+	row := d.run.rowsDeleted.At(0)
+	d.run.rowsDeleted.PopFirst()
+	return row
 }
 
 func (d *deleteNode) Close(ctx context.Context) {
+	if d.run.rowsDeleted != nil {
+		d.run.rowsDeleted.Close(ctx)
+	}
 	d.run.rows.Close(ctx)
 	d.tw.close(ctx)
 	*d = deleteNode{}
