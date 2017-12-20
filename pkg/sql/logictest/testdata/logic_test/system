@@ -434,3 +434,8 @@ statement error user testuser does not have INSERT privilege on relation setting
 UPSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalueother')
 
 user root
+
+query TTB
+SELECT * from system.role_members
+----
+admin  root  true
