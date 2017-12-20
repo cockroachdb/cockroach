@@ -820,6 +820,13 @@ func (v *isConstVisitor) run(expr Expr) bool {
 	return v.isConst
 }
 
+// IsConst returns whether the expression is constant. A constant expression
+// does not contain variables, as defined by ContainsVars, nor impure functions.
+func IsConst(evalCtx *EvalContext, expr Expr) bool {
+	v := isConstVisitor{ctx: evalCtx}
+	return v.run(expr)
+}
+
 // isVar returns true if the expression's value can vary during plan
 // execution.
 func isVar(evalCtx *EvalContext, expr Expr) bool {
