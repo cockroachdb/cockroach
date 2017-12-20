@@ -2916,7 +2916,18 @@ func (r *Replica) insertProposalLocked(
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	proposal.command.ProposerReplica = proposerReplica
-	proposal.command.ProposerLease = proposerLease
+
+	// If the cluster version is and always will be VersionLeaseSequence or
+	// greater, we can use the Lease.Sequence field instead of sending the
+	// entire Lease through Raft. This decision is based on the minimum
+	// supported version and not the active version because Raft entries need to
+	// be usable even across allowable version downgrades.
+	if r.store.cfg.Settings.Version.IsMinSupported(cluster.VersionLeaseSequence) {
+		proposal.command.ProposerLeaseSequence = proposerLease.Sequence
+	} else {
+		proposal.command.DeprecatedProposerLease = &proposerLease
+	}
+
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
@@ -3141,13 +3152,11 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	if false {
 		log.Infof(p.ctx, `%s: proposal: %d
   RaftCommand.ProposerReplica:               %d
-  RaftCommand.ProposerLease:                 %d
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
 `, p.Request.Summary(), len(data),
 			p.command.ProposerReplica.Size(),
-			p.command.ProposerLease.Size(),
 			p.command.ReplicatedEvalResult.Size(),
 			p.command.ReplicatedEvalResult.Delta.Size(),
 			p.command.WriteBatch.Size(),
@@ -4384,47 +4393,55 @@ func (r *Replica) checkForcedErrLocked(
 	if isLeaseRequest {
 		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
 	}
-	var forcedErr *roachpb.Error
 	if idKey == "" {
 		// This is an empty Raft command (which is sent by Raft after elections
 		// to trigger reproposals or during concurrent configuration changes).
 		// Nothing to do here except making sure that the corresponding batch
 		// (which is bogus) doesn't get executed (for it is empty and so
 		// properties like key range are undefined).
-		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry")
-	} else if !raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease) {
-		// Verify the lease matches the proposer's expectation. We rely on
-		// the proposer's determination of whether the existing lease is
-		// held, and can be used, or is expired, and can be replaced.
-		// Verify checks that the lease has not been modified since proposal
-		// due to Raft delays / reorderings.
-		// To understand why this lease verification is necessary, see comments on the
-		// proposer_lease field in the proto.
+		return leaseIndex, proposalNoRetry, roachpb.NewErrorf("no-op on empty Raft entry")
+	}
 
+	// Verify the lease matches the proposer's expectation. We rely on
+	// the proposer's determination of whether the existing lease is
+	// held, and can be used, or is expired, and can be replaced.
+	// Verify checks that the lease has not been modified since proposal
+	// due to Raft delays / reorderings.
+	// To understand why this lease verification is necessary, see comments on the
+	// proposer_lease field in the proto.
+	leaseMismatch := false
+	if raftCmd.DeprecatedProposerLease != nil {
+		// VersionLeaseSequence must not have been active when this was proposed.
+		leaseMismatch = !raftCmd.DeprecatedProposerLease.Equivalent(*r.mu.state.Lease)
+	} else {
+		leaseMismatch = raftCmd.ProposerLeaseSequence != r.mu.state.Lease.Sequence
+	}
+	if leaseMismatch {
 		log.VEventf(
 			ctx, 1,
-			"command proposed from replica %+v with %v incompatible to %v",
-			raftCmd.ProposerReplica, raftCmd.ProposerLease, *r.mu.state.Lease,
+			"command proposed from replica %+v with lease #%d incompatible to %v",
+			raftCmd.ProposerReplica, raftCmd.ProposerLeaseSequence, *r.mu.state.Lease,
 		)
-		if !isLeaseRequest {
-			// We return a NotLeaseHolderError so that the DistSender retries.
-			nlhe := newNotLeaseHolderError(
-				r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
-			nlhe.CustomMsg = fmt.Sprintf(
-				"stale proposal: command was proposed under lease %s but is being applied "+
-					"under lease: %s", raftCmd.ProposerLease, r.mu.state.Lease)
-			forcedErr = roachpb.NewError(nlhe)
-		} else {
+		if isLeaseRequest {
 			// For lease requests we return a special error that
 			// redirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
-			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
+			return leaseIndex, proposalNoRetry, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
 				Message:   "proposed under invalid lease",
 			})
 		}
-	} else if isLeaseRequest {
+		// We return a NotLeaseHolderError so that the DistSender retries.
+		nlhe := newNotLeaseHolderError(
+			r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
+		nlhe.CustomMsg = fmt.Sprintf(
+			"stale proposal: command was proposed under lease #%d but is being applied "+
+				"under lease: %s", raftCmd.ProposerLeaseSequence, r.mu.state.Lease)
+		return leaseIndex, proposalNoRetry, roachpb.NewError(nlhe)
+	}
+
+	if isLeaseRequest {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex is ignored). This
 		// makes sense since lease commands are proposed by anyone, so we can't expect a coherent
 		// MaxLeaseIndex. Also, lease proposals are often replayed, so not making them update the
@@ -4433,7 +4450,7 @@ func (r *Replica) checkForcedErrLocked(
 		// However, leases get special vetting to make sure we don't give one to a replica that was
 		// since removed (see #15385 and a comment in redirectOnOrAcquireLease).
 		if _, ok := r.mu.state.Desc.GetReplicaDescriptor(requestedLease.Replica.StoreID); !ok {
-			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
+			return leaseIndex, proposalNoRetry, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
 				Message:   "replica not part of range",
@@ -4455,20 +4472,20 @@ func (r *Replica) checkForcedErrLocked(
 		// The command is trying to apply at a past log position. That's
 		// unfortunate and hopefully rare; the client on the proposer will try
 		// again. Note that in this situation, the leaseIndex does not advance.
-		forcedErr = roachpb.NewErrorf(
-			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
-		)
-
+		retry := proposalNoRetry
 		if proposedLocally {
 			log.VEventf(
 				ctx, 1,
 				"retry proposal %x: applied at lease index %d, required <= %d",
 				proposal.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
-			return leaseIndex, proposalIllegalLeaseIndex, forcedErr
+			retry = proposalIllegalLeaseIndex
 		}
+		return leaseIndex, retry, roachpb.NewErrorf(
+			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
+		)
 	}
-	return leaseIndex, proposalNoRetry, forcedErr
+	return leaseIndex, proposalNoRetry, nil
 }
 
 // processRaftCommand processes a raft command by unpacking the

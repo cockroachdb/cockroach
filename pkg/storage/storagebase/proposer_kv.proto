@@ -141,8 +141,8 @@ message RaftCommand {
   // used for lease validation.
   roachpb.ReplicaDescriptor proposer_replica = 2 [(gogoproto.nullable) = false];
 
-  // proposer_lease is provided to verify at raft command apply-time that
-  // the lease under which the command was proposed remains in effect.
+  // proposer_lease_seq is provided to verify at raft command apply-time
+  // that the lease under which the command was proposed remains in effect.
   //
   // To see why lease verification downstream of Raft is required, consider the
   // following example:
@@ -153,7 +153,15 @@ message RaftCommand {
   // - the command applies on replica 1
   // - replica 2 serves anomalous reads which don't see the write
   // - the command applies on replica 2
-  roachpb.Lease proposer_lease = 5 [(gogoproto.nullable) = false];
+  int64 proposer_lease_sequence = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
+
+  // deprecated_proposer_lease served the same purpose as proposer_lease_seq.
+  // As of VersionLeaseSequence, it is no longer in use.
+  //
+  // However, unless we add a check that all existing Raft logs on all nodes
+  // in the cluster contain only "new" leases, we won't be able to remove the
+  // legacy code.
+  roachpb.Lease deprecated_proposer_lease = 5;
 
   // When the command is applied, its result is an error if the lease log
   // counter has already reached (or exceeded) max_lease_index.
