@@ -1625,6 +1625,10 @@ CockroachDB supports the following flags:
 
 	"to_jsonb": {toJSONImpl},
 
+	"json_build_array": {jsonBuildArrayImpl},
+
+	"jsonb_build_array": {jsonBuildArrayImpl},
+
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
@@ -2513,6 +2517,24 @@ var toJSONImpl = tree.Builtin{
 		return tree.NewDJSON(j), nil
 	},
 	Info: "Returns the value as JSON or JSONB.",
+}
+
+var jsonBuildArrayImpl = tree.Builtin{
+	Types:        tree.VariadicType{VarType: types.Any},
+	ReturnType:   tree.FixedReturnType(types.JSON),
+	NullableArgs: true,
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		jsons := make([]json.JSON, len(args))
+		for i, arg := range args {
+			j, err := asJSON(arg)
+			if err != nil {
+				return nil, err
+			}
+			jsons[i] = j
+		}
+		return tree.NewDJSON(json.FromArrayOfJSON(jsons)), nil
+	},
+	Info: "Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.",
 }
 
 func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {
