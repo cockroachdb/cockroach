@@ -794,9 +794,13 @@ func valueEncodePartitionTuple(
 			// Fall-through.
 		}
 
-		typedExpr, err := tree.TypeCheck(expr, nil, cols[i].Type.ToDatumType())
+		typedExpr, err := sqlbase.SanitizeVarFreeExpr(expr, cols[i].Type.ToDatumType(), "partition",
+			nil /* semaCtx */, evalCtx)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, expr.String())
+			return nil, nil, err
+		}
+		if !tree.IsConst(evalCtx, typedExpr) {
+			return nil, nil, fmt.Errorf("%s: partition values must be constant", typedExpr)
 		}
 		datum, err := typedExpr.Eval(evalCtx)
 		if err != nil {

@@ -57,15 +57,6 @@ var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
 	coltypes.Double.Name: ColumnType_DOUBLE_PRECISION,
 }
 
-func exprContainsVarsError(context string, Expr tree.Expr) error {
-	return fmt.Errorf("%s expression '%s' may not contain variable sub-expressions", context, Expr)
-}
-
-func incompatibleExprTypeError(context string, expectedType types.T, actualType types.T) error {
-	return fmt.Errorf("incompatible type for %s expression: %s vs %s",
-		context, expectedType, actualType)
-}
-
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
@@ -77,17 +68,19 @@ func SanitizeVarFreeExpr(
 	evalCtx *tree.EvalContext,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(evalCtx, expr) {
-		return nil, exprContainsVarsError(context, expr)
+		return nil, fmt.Errorf("%s expression '%s' may not contain variable sub-expressions",
+			context, expr)
 	}
 	typedExpr, err := tree.TypeCheck(expr, semaCtx, expectedType)
 	if err != nil {
 		return nil, err
 	}
-	defaultType := typedExpr.ResolvedType()
-	if !expectedType.Equivalent(defaultType) && typedExpr != tree.DNull {
-		// The DEFAULT expression must match the column type exactly unless it is a
-		// constant NULL value.
-		return nil, incompatibleExprTypeError(context, expectedType, defaultType)
+	actualType := typedExpr.ResolvedType()
+	if !expectedType.Equivalent(actualType) && typedExpr != tree.DNull {
+		// The expression must match the column type exactly unless it is a constant
+		// NULL value.
+		return nil, fmt.Errorf("expected %s expression to have type %s, but '%s' has type %s",
+			context, expectedType, expr, actualType)
 	}
 	return typedExpr, nil
 }
