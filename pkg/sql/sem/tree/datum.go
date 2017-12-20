@@ -2847,7 +2847,12 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 // Format implements the Datum interface.
 func (d *DOid) Format(buf *bytes.Buffer, f FmtFlags) {
 	if d.semanticType == coltypes.Oid || d.name == "" {
-		FormatNode(buf, f, &d.DInt)
+		// If we call FormatNode directly when the disambiguateDatumTypes flag
+		// is set, then we get something like 123:::INT:::OID. This is the
+		// important flag set by FmtParsable which is supposed to be
+		// roundtrippable. Since in this branch, a DOid is a thin wrapper around
+		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
+		d.DInt.Format(buf, f)
 	} else {
 		lex.EncodeSQLStringWithFlags(buf, d.name, lex.EncodeFlags{BareStrings: true})
 	}
