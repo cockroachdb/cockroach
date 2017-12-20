@@ -412,6 +412,10 @@ func (p *planner) getDataSource(
 			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
 				"statement source \"%v\" does not return any columns", t.Statement)
 		}
+		switch n := plan.(type) {
+		case *insertNode:
+			n.setDrainOnStart()
+		}
 		return planDataSource{
 			info: newSourceInfoForSingleTable(anonymousTable, cols),
 			plan: plan,
