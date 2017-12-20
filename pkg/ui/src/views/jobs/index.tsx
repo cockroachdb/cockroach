@@ -183,7 +183,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
         <div className="section-heading__tooltip">
           <ToolTipWrapper text={titleTooltip}>
             <div className="section-heading__tooltip-hover-area">
-              <div className="section-heading__info-icon">!</div>
+              <div className="section-heading__info-icon">i</div>
             </div>
           </ToolTipWrapper>
         </div>
