@@ -706,6 +706,110 @@ func TestJSONFetchPath(t *testing.T) {
 	}
 }
 
+func TestJSONDeepSet(t *testing.T) {
+	cases := map[string][]struct {
+		path          []string
+		to            string
+		createMissing bool
+		expected      string
+	}{
+		`{}`: {
+			{[]string{}, `1`, true, `{}`},
+			{[]string{`a`}, `1`, true, `{"a": 1}`},
+			{[]string{`a`}, `1`, false, `{}`},
+			{[]string{`a`, `b`}, `1`, true, `{}`},
+		},
+		`{"a": 1}`: {
+			{[]string{}, `2`, true, `{"a": 1}`},
+			{[]string{`a`}, `2`, true, `{"a": 2}`},
+			{[]string{`a`}, `2`, false, `{"a": 2}`},
+			{[]string{`a`, `b`}, `2`, true, `{"a": 1}`},
+		},
+		`{"a": {"b": 1}}`: {
+			{[]string{}, `2`, true, `{"a": {"b": 1}}`},
+			{[]string{`a`}, `2`, true, `{"a": 2}`},
+			{[]string{`a`, `b`}, `2`, true, `{"a": {"b": 2}}`},
+			{[]string{`a`, `b`}, `2`, false, `{"a": {"b": 2}}`},
+			{[]string{`a`, `c`}, `3`, true, `{"a": {"b": 1, "c": 3}}`},
+			{[]string{`a`, `c`}, `3`, false, `{"a": {"b": 1}}`},
+			{[]string{`b`}, `2`, true, `{"a": {"b": 1}, "b": 2}`},
+			{[]string{`b`}, `2`, false, `{"a": {"b": 1}}`},
+		},
+		`{"b": 1}`: {
+			{[]string{`a`}, `2`, true, `{"a": 2, "b": 1}`},
+			{[]string{`b`}, `2`, true, `{"b": 2}`},
+			{[]string{`c`}, `2`, true, `{"b": 1, "c": 2}`},
+		},
+		`[]`: {
+			{[]string{`-2`}, `1`, true, `[1]`},
+			{[]string{`-1`}, `1`, true, `[1]`},
+			{[]string{`0`}, `1`, true, `[1]`},
+			{[]string{`1`}, `1`, true, `[1]`},
+			{[]string{`2`}, `1`, true, `[1]`},
+			{[]string{`-2`}, `1`, false, `[]`},
+			{[]string{`-1`}, `1`, false, `[]`},
+			{[]string{`0`}, `1`, false, `[]`},
+			{[]string{`1`}, `1`, false, `[]`},
+			{[]string{`2`}, `1`, false, `[]`},
+			{[]string{`2`, `0`}, `1`, true, `[]`},
+		},
+		`[10]`: {
+			{[]string{`-2`}, `1`, true, `[1, 10]`},
+			{[]string{`-1`}, `1`, true, `[1]`},
+			{[]string{`0`}, `1`, true, `[1]`},
+			{[]string{`1`}, `1`, true, `[10, 1]`},
+			{[]string{`2`}, `1`, true, `[10, 1]`},
+			{[]string{`-2`}, `1`, false, `[10]`},
+			{[]string{`-1`}, `1`, false, `[1]`},
+			{[]string{`0`}, `1`, false, `[1]`},
+			{[]string{`1`}, `1`, false, `[10]`},
+			{[]string{`2`}, `1`, false, `[10]`},
+		},
+		`[10, 20]`: {
+			{[]string{`-3`}, `1`, true, `[1, 10, 20]`},
+			{[]string{`-2`}, `1`, true, `[1, 20]`},
+			{[]string{`-1`}, `1`, true, `[10, 1]`},
+			{[]string{`0`}, `1`, true, `[1, 20]`},
+			{[]string{`1`}, `1`, true, `[10, 1]`},
+			{[]string{`2`}, `1`, true, `[10, 20, 1]`},
+			{[]string{`3`}, `1`, true, `[10, 20, 1]`},
+		},
+		`[[10], [20, 30], {"a": 1}]`: {
+			{[]string{`0`}, `1`, true, `[1, [20, 30], {"a": 1}]`},
+			{[]string{`0`, `0`}, `1`, true, `[[1], [20, 30], {"a": 1}]`},
+			{[]string{`0`, `1`}, `1`, true, `[[10, 1], [20, 30], {"a": 1}]`},
+			{[]string{`1`, `0`}, `1`, true, `[[10], [1, 30], {"a": 1}]`},
+			{[]string{`2`, `a`}, `2`, true, `[[10], [20, 30], {"a": 2}]`},
+			{[]string{`2`, `b`}, `2`, true, `[[10], [20, 30], {"a": 1, "b": 2}]`},
+		},
+		`[{"a": [1]}]`: {
+			{[]string{`0`, `a`, `0`}, `2`, true, `[{"a": [2]}]`},
+			{[]string{`0`, `a`, `0`, `0`}, `2`, true, `[{"a": [1]}]`},
+		},
+	}
+
+	for k, tests := range cases {
+		j := jsonTestShorthand(k)
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf(`set(%s, %s, %s)`, k, tc.path, tc.to), func(t *testing.T) {
+				result, err := DeepSet(j, tc.path, jsonTestShorthand(tc.to), tc.createMissing)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				cmp, err := result.Compare(jsonTestShorthand(tc.expected))
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if cmp != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			})
+		}
+	}
+}
+
 func TestJSONRemoveKey(t *testing.T) {
 	json := jsonTestShorthand
 	cases := map[string][]struct {
