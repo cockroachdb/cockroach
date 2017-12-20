@@ -326,6 +326,12 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name"},
 	},
 	{
+		name: "alter_sequence_options_stmt",
+		inline: []string{"sequence_option_list", "sequence_option_elem"},
+		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer"},
+		unlink: []string{"integer", "sequence_name"},
+	},
+	{
 		name:   "alter_table",
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_def", "opt_drop_behavior", "alter_column_default", "opt_column", "opt_set_data", "table_constraint"},
@@ -409,6 +415,12 @@ var specs = []stmtSpec{
 		unlink:  []string{"index_name", "table_name", "column_name"},
 		nosplit: true,
 	},
+	{
+		name: "create_sequence_stmt",
+		inline: []string{"opt_sequence_option_list", "sequence_option_list", "sequence_option_elem"},
+		replace: map[string]string{"signed_iconst64": "integer"},
+		unlink: []string{"integer"},
+	},
 	{name: "create_table_as_stmt", inline: []string{"opt_column_list", "name_list"}},
 	{name: "create_table_stmt", inline: []string{"opt_table_elem_list", "table_elem_list", "table_elem"}},
 	{
@@ -469,6 +481,12 @@ var specs = []stmtSpec{
 		match:   []*regexp.Regexp{regexp.MustCompile("'DROP' 'INDEX'")},
 		inline:  []string{"opt_drop_behavior", "table_name_with_index_list", "table_name_with_index"},
 		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"}, unlink: []string{"table_name", "index_name"},
+	},
+	{
+		name: "drop_sequence_stmt",
+		inline: []string{"table_name_list", "opt_drop_behavior"},
+		replace: map[string]string{"any_name": "sequence_name"},
+		unlink: []string{"sequence_name"},
 	},
 	{
 		name:   "drop_stmt",
