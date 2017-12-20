@@ -2963,13 +2963,29 @@ create_table_stmt:
   }
 
 create_table_as_stmt:
-  CREATE TABLE any_name opt_column_list AS select_stmt
+  CREATE TABLE any_name opt_column_list opt_interleave opt_partition_by AS select_stmt
   {
-    $$.val = &tree.CreateTable{Table: $3.normalizableTableName(), IfNotExists: false, Interleave: nil, Defs: nil, AsSource: $6.slct(), AsColumnNames: $4.nameList()}
+    $$.val = &tree.CreateTable{
+      Table: $3.normalizableTableName(),
+      IfNotExists: false,
+      Interleave: $5.interleave(),
+      Defs: nil,
+      AsSource: $8.slct(),
+      AsColumnNames: $4.nameList(),
+      PartitionBy: $6.partitionBy(),
+    }
   }
-| CREATE TABLE IF NOT EXISTS any_name opt_column_list AS select_stmt
+| CREATE TABLE IF NOT EXISTS any_name opt_column_list opt_interleave opt_partition_by AS select_stmt
   {
-    $$.val = &tree.CreateTable{Table: $6.normalizableTableName(), IfNotExists: true, Interleave: nil, Defs: nil, AsSource: $9.slct(), AsColumnNames: $7.nameList()}
+    $$.val = &tree.CreateTable{
+      Table: $6.normalizableTableName(),
+      IfNotExists: true,
+      Interleave: $8.interleave(),
+      Defs: nil,
+      AsSource: $11.slct(),
+      AsColumnNames: $7.nameList(),
+      PartitionBy: $9.partitionBy(),
+    }
   }
 
 opt_table_elem_list:

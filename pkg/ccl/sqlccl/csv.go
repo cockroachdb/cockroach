@@ -342,7 +342,7 @@ func makeSimpleTableDescriptor(
 		}
 	}
 	semaCtx := tree.SemaContext{}
-	evalCtx := tree.EvalContext{}
+	evalCtx := tree.EvalContext{Settings: st}
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
