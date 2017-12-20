@@ -308,7 +308,7 @@ func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 }
 
 func (c *ReadCSVSpec) summary() (string, []string) {
-	return "ReadCSV", []string{c.Uri}
+	return "ReadCSV", c.Uri
 }
 
 func (s *SSTWriterSpec) summary() (string, []string) {
