@@ -359,6 +359,12 @@ message Lease {
   // The epoch of the lease holder's node liveness entry. If this value
   // is non-zero, the start and expiration values are ignored.
   int64 epoch = 6;
+
+  // A zero-indexed sequence number which is increased on each new range lease
+  // acquisition. The sequence number is used to detect lease changes between
+  // command proposal and application without requiring that we send the entire
+  // Lease through Raft.
+  int64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
 }
 
 // AbortSpanEntry contains information about a transaction which has
