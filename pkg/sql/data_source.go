@@ -407,8 +407,13 @@ func (p *planner) getDataSource(
 		if err != nil {
 			return planDataSource{}, err
 		}
+		cols := planColumns(plan)
+		if len(cols) == 0 {
+			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"statement source \"%v\" does not return any columns", t.Statement)
+		}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
+			info: newSourceInfoForSingleTable(anonymousTable, cols),
 			plan: plan,
 		}, nil
 
