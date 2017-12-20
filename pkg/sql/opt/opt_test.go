@@ -18,7 +18,7 @@ package opt
 // is used for optimizer-specific testcases.
 //
 // Each testfile contains testcases of the form
-//   <command>[,<command>...] [<index-var-types> ...]
+//   <command>[,<command>...] [arg | arg=val | arg=(val1, val2, ...)]...
 //   <SQL statement or expression>
 //   ----
 //   <expected results>
@@ -30,7 +30,7 @@ package opt
 //    Builds an expression tree from a scalar SQL expression and outputs a
 //    representation of the tree. The expression can refer to external variables
 //    using @1, @2, etc. in which case the types of the variables must be passed
-//    on the command line.
+//    via a "columns" argument.
 //
 //  - legacy-normalize
 //
@@ -45,8 +45,13 @@ package opt
 //  - index-constraints
 //
 //    Creates index constraints on the assumption that the index is formed by
-//    the index var columns (as specified by <index-var-types>).
+//    the index var columns (as specified by "columns").
 //    If present, build-scalar must have been an earlier command.
+//
+// The supported arguments are:
+//  - columns=(<type>[ ascending| descending], ...)
+//
+//    Sets the types of index var columns, and optionally direction.
 
 import (
 	"bufio"
@@ -57,6 +62,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -64,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 var (
@@ -140,6 +147,28 @@ func (r *testdataReader) Close() error {
 	return r.file.Close()
 }
 
+var splitDirectivesRE = regexp.MustCompile(`^ *[a-zA-Z0-9_,-]+(|=[a-zA-Z0-9_]+|=\([^)]*\))( |$)`)
+
+// splits a directive line into tokens, where each token is
+// either:
+//  - a,list,of,things
+//  - argument
+//  - argument=value
+//  - argument=(values, ...)
+func splitDirectives(t *testing.T, line string) []string {
+	var res []string
+
+	for line != "" {
+		str := splitDirectivesRE.FindString(line)
+		if len(str) == 0 {
+			t.Fatalf("cannot parse directive %s\n", line)
+		}
+		res = append(res, strings.TrimSpace(line[0:len(str)]))
+		line = line[len(str):]
+	}
+	return res
+}
+
 func (r *testdataReader) Next(t *testing.T) bool {
 	t.Helper()
 
@@ -148,15 +177,17 @@ func (r *testdataReader) Next(t *testing.T) bool {
 		line := r.scanner.Text()
 		r.emit(line)
 
-		fields := strings.Fields(line)
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") {
+			// Skip comment lines.
+			continue
+		}
+
+		fields := splitDirectives(t, line)
 		if len(fields) == 0 {
 			continue
 		}
 		cmd := fields[0]
-		if strings.HasPrefix(cmd, "#") {
-			// Skip comment lines.
-			continue
-		}
 		r.data.pos = fmt.Sprintf("%s:%d", r.path, r.scanner.line)
 		r.data.cmd = cmd
 		r.data.cmdArgs = fields[1:]
@@ -244,8 +275,30 @@ func TestOpt(t *testing.T) {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
 				var e *expr
-				var types []types.T
+				var colInfos []IndexColumnInfo
 				var typedExpr tree.TypedExpr
+
+				for _, arg := range d.cmdArgs {
+					key := arg
+					val := ""
+					if pos := strings.Index(key, "="); pos >= 0 {
+						key = arg[:pos]
+						val = arg[pos+1:]
+					}
+					if len(val) > 2 && val[0] == '(' && val[len(val)-1] == ')' {
+						val = val[1 : len(val)-1]
+					}
+					switch key {
+					case "columns":
+						var err error
+						colInfos, err = parseColumns(strings.Split(val, ","))
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+					default:
+						d.fatalf(t, "unknown argument: %s", key)
+					}
+				}
 
 				buildScalarFn := func() {
 					defer func() {
@@ -261,11 +314,7 @@ func TestOpt(t *testing.T) {
 					switch cmd {
 					case "build-scalar":
 						var err error
-						types, err = parseTypes(d.cmdArgs)
-						if err != nil {
-							d.fatalf(t, "%v", err)
-						}
-						typedExpr, err = parseScalarExpr(d.sql, types)
+						typedExpr, err = parseScalarExpr(d.sql, colInfos)
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
@@ -285,7 +334,7 @@ func TestOpt(t *testing.T) {
 							d.fatalf(t, "no expression for index-constraints")
 						}
 
-						spans := MakeIndexConstraints(e, types, &evalCtx)
+						spans := MakeIndexConstraints(e, colInfos, &evalCtx)
 						var buf bytes.Buffer
 						for _, sp := range spans {
 							fmt.Fprintf(&buf, "%s\n", sp)
@@ -302,6 +351,7 @@ func TestOpt(t *testing.T) {
 	}
 }
 
+// parseType parses a string describing a type.
 func parseType(typeStr string) (types.T, error) {
 	colType, err := parser.ParseType(typeStr)
 	if err != nil {
@@ -310,13 +360,28 @@ func parseType(typeStr string) (types.T, error) {
 	return coltypes.CastTargetToDatumType(colType), nil
 }
 
-func parseTypes(typeStrs []string) ([]types.T, error) {
-	res := make([]types.T, len(typeStrs))
-	for i, typeStr := range typeStrs {
+// parseColumns parses descriptions of index columns; each
+// string corresponds to an index column and is of the form:
+//   <type> [ascending|descending]
+func parseColumns(colStrs []string) ([]IndexColumnInfo, error) {
+	res := make([]IndexColumnInfo, len(colStrs))
+	for i := range colStrs {
+		fields := strings.Fields(colStrs[i])
 		var err error
-		res[i], err = parseType(typeStr)
+		res[i].typ, err = parseType(fields[0])
 		if err != nil {
 			return nil, err
+		}
+		res[i].direction = encoding.Ascending
+		for _, f := range fields[1:] {
+			switch strings.ToLower(f) {
+			case "ascending":
+				// ascending is the default.
+			case "descending":
+				res[i].direction = encoding.Descending
+			default:
+				return nil, fmt.Errorf("unknown column attribute %s", f)
+			}
 		}
 	}
 	return res, nil
@@ -343,14 +408,17 @@ func (*indexedVars) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	panic("unimplemented")
 }
 
-func parseScalarExpr(sql string, indexVarTypes []types.T) (tree.TypedExpr, error) {
+func parseScalarExpr(sql string, indexVarCols []IndexColumnInfo) (tree.TypedExpr, error) {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		return nil, err
 	}
 
 	// Set up an indexed var helper so we can type-check the expression.
-	iv := &indexedVars{types: indexVarTypes}
+	iv := &indexedVars{types: make([]types.T, len(indexVarCols))}
+	for i, colInfo := range indexVarCols {
+		iv.types[i] = colInfo.typ
+	}
 
 	sema := tree.MakeSemaContext(false /* privileged */)
 	iVarHelper := tree.MakeIndexedVarHelper(iv, len(iv.types))

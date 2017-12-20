@@ -10,19 +10,19 @@ plus (type: int)
  ├── const (1) (type: int)
  └── const (2) (type: int)
 
-build-scalar string
+build-scalar columns=(string)
 @1
 ----
 variable (0) (type: string)
 
-build-scalar int
+build-scalar columns=(int)
 @1 + 2
 ----
 plus (type: int)
  ├── variable (0) (type: int)
  └── const (2) (type: int)
 
-build-scalar int int
+build-scalar columns=(int, int)
 @1 >= 5 AND @1 <= 10 AND @2 < 4
 ----
 and (type: bool)
@@ -37,7 +37,7 @@ and (type: bool)
       ├── variable (1) (type: int)
       └── const (4) (type: int)
 
-build-scalar,normalize int int
+build-scalar,normalize columns=(int, int)
 @1 >= 5 AND @1 <= 10 AND @2 > 0 AND @2 < 10
 ----
 and (type: bool)
@@ -54,7 +54,7 @@ and (type: bool)
       ├── variable (1) (type: int)
       └── const (10) (type: int)
 
-build-scalar,normalize int int
+build-scalar,normalize columns=(int, int)
 @1 >= 5 OR @1 <= 10 OR @2 > 0 OR @2 < 10
 ----
 or (type: bool)
@@ -71,7 +71,7 @@ or (type: bool)
       ├── variable (1) (type: int)
       └── const (10) (type: int)
 
-build-scalar,normalize int int int
+build-scalar,normalize columns=(int, int, int)
 @1 >= 5 AND (@2 = 1 OR @2 > 3) AND (@3 > 2)
 ----
 and (type: bool)
@@ -89,7 +89,7 @@ and (type: bool)
       ├── variable (2) (type: int)
       └── const (2) (type: int)
 
-build-scalar,normalize int int int
+build-scalar,normalize columns=(int, int, int)
 @1 >= 5 AND (@2 = 1 OR @2 = 3 OR @2 > 5) AND (@3 > 2)
 ----
 and (type: bool)
@@ -110,7 +110,7 @@ and (type: bool)
       ├── variable (2) (type: int)
       └── const (2) (type: int)
 
-build-scalar,normalize int int int
+build-scalar,normalize columns=(int, int, int)
 (@1 >= 5 AND @1 <= 10) OR (@2 > 1 AND @2 < 3) OR (@3 > 2)
 ----
 or (type: bool)
@@ -132,7 +132,7 @@ or (type: bool)
       ├── variable (2) (type: int)
       └── const (2) (type: int)
 
-build-scalar int int
+build-scalar columns=(int, int)
 (@1, @2) = (1, 2)
 ----
 eq (type: bool)
@@ -143,7 +143,7 @@ eq (type: bool)
       ├── const (1) (type: int)
       └── const (2) (type: int)
 
-build-scalar int
+build-scalar columns=(int)
 @1 IN (1, 2)
 ----
 in (type: bool)
@@ -152,7 +152,7 @@ in (type: bool)
       ├── const (1) (type: int)
       └── const (2) (type: int)
 
-build-scalar int int
+build-scalar columns=(int, int)
 (@1, @2) IN ((1, 2), (3, 4))
 ----
 in (type: bool)
@@ -167,7 +167,7 @@ in (type: bool)
            ├── const (3) (type: int)
            └── const (4) (type: int)
 
-build-scalar int int int int
+build-scalar columns=(int, int, int, int)
 (@1, @2 + @3, 5 + @4 * 2) = (@2 + @3, 8, @1 - @4)
 ----
 eq (type: bool)
@@ -190,7 +190,7 @@ eq (type: bool)
            ├── variable (0) (type: int)
            └── variable (3) (type: int)
 
-build-scalar,normalize int int int int
+build-scalar,normalize columns=(int, int, int, int)
 (@1, @2 + @3, 5 + @4 * 2) = (@2 + @3, 8, @1 - @4)
 ----
 and (type: bool)
@@ -214,7 +214,7 @@ and (type: bool)
            ├── variable (0) (type: int)
            └── variable (3) (type: int)
 
-build-scalar int int int int
+build-scalar columns=(int, int, int, int)
 ((@1, @2), (@3, @4)) = ((1, 2), (3, 4))
 ----
 eq (type: bool)
@@ -233,7 +233,7 @@ eq (type: bool)
            ├── const (3) (type: int)
            └── const (4) (type: int)
 
-build-scalar,normalize int int int int
+build-scalar,normalize columns=(int, int, int, int)
 ((@1, @2), (@3, @4)) = ((1, 2), (3, 4))
 ----
 and (type: bool)
@@ -250,7 +250,7 @@ and (type: bool)
       ├── variable (3) (type: int)
       └── const (4) (type: int)
 
-build-scalar int int int string
+build-scalar columns=(int, int, int, string)
 (@1, (@2, 'a'), (@3, 'b', 5)) = (9, (@1 + @3, @4), (5, @4, @1))
 ----
 eq (type: bool)
@@ -275,7 +275,7 @@ eq (type: bool)
            ├── variable (3) (type: string)
            └── variable (0) (type: int)
 
-build-scalar,normalize int int int string
+build-scalar,normalize columns=(int, int, int, string)
 (@1, (@2, 'a'), (@3, 'b', 5)) = (9, (@1 + @3, @4), (5, @4, @1))
 ----
 and (type: bool)
