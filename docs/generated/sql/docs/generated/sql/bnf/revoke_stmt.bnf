@@ -1,0 +1,25 @@
+revoke_stmt ::=
+	'REVOKE' 'ALL' 'ON' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'ALL' 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'ALL' 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'CREATE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'CREATE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'CREATE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'DROP' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'DROP' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'DROP' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'GRANT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'GRANT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'GRANT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'SELECT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'SELECT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'SELECT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'INSERT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'INSERT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'INSERT' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'DELETE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'DELETE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'DELETE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'UPDATE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'UPDATE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'TABLE' table_name ( ',' table_name )* 'FROM' name ( ( ',' name ) )*
+	| 'REVOKE' 'UPDATE' ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* 'ON' 'DATABASE' database_name ( ',' database_name )* 'FROM' name ( ( ',' name ) )*

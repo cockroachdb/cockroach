@@ -1,0 +1,3 @@
+explain_stmt ::=
+	'EXPLAIN' explainable_stmt
+	| 'EXPLAIN' '(' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' ) ( ( ',' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' ) ) )* ')' explainable_stmt

@@ -1,0 +1,5 @@
+create_index_stmt ::=
+	'CREATE' ( 'UNIQUE' |  ) 'INDEX' ( index_name |  ) 'ON' table_name '(' ( ( ( column_name ( 'ASC' | 'DESC' |  ) ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ) ')' ( ( 'COVERING' | 'STORING' ) '(' ( ( name ) ( ( ',' column_name ) )* ) ')' |  ) opt_interleave opt_partition_by opt_using_gin
+	| 'CREATE' ( 'UNIQUE' |  ) 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' ( ( ( column_name ( 'ASC' | 'DESC' |  ) ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ) ')' ( ( 'COVERING' | 'STORING' ) '(' ( ( name ) ( ( ',' column_name ) )* ) ')' |  ) opt_interleave opt_partition_by opt_using_gin
+	| 'CREATE' 'INVERTED' 'INDEX' ( index_name |  ) 'ON' table_name '(' ( ( ( column_name ( 'ASC' | 'DESC' |  ) ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ) ')'
+	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' ( ( ( column_name ( 'ASC' | 'DESC' |  ) ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ) ')'

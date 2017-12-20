@@ -1,0 +1,3 @@
+family_def ::=
+	'FAMILY' name '(' name ( ( ',' name ) )* ')'
+	| 'FAMILY'  '(' name ( ( ',' name ) )* ')'
