@@ -76,7 +76,7 @@ statement error CHECK expression .* may not contain variable sub-expressions
 CREATE TABLE t4 (a INT, b INT CHECK (EXISTS (SELECT * FROM t2)))
 
 # non-boolean expressions are errors
-statement error pq: incompatible type for CHECK expression: bool vs int
+statement error pq: expected CHECK expression to have type bool, but '1' has type int
 CREATE TABLE t4 (a INT CHECK(1))
 
 # Function calls in CHECK are okay.
