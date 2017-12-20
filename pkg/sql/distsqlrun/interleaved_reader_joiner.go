@@ -27,10 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-type postProcHelper struct {
-	tableID sqlbase.ID
-	indexID sqlbase.IndexID
-	post    ProcOutputHelper
+type tableInfo struct {
+	tableID  sqlbase.ID
+	indexID  sqlbase.IndexID
+	post     ProcOutputHelper
+	ordering sqlbase.ColumnOrdering
 }
 
 // interleavedReaderJoiner is at the start of a computation flow: it performs KV
@@ -42,12 +43,11 @@ type interleavedReaderJoiner struct {
 
 	flowCtx *FlowCtx
 
-	// TableIDs for tracing.
-	tableIDs []int
-	// Post-processing helper for each table-index's rows.
-	tablePosts []postProcHelper
-	allSpans   roachpb.Spans
-	limitHint  int64
+	// Each tableInfo contains the output helper (for intermediate
+	// filtering) and ordering info for each table-index being joined.
+	tables    []tableInfo
+	allSpans  roachpb.Spans
+	limitHint int64
 
 	fetcher sqlbase.MultiRowFetcher
 	alloc   sqlbase.DatumAlloc
@@ -57,8 +57,8 @@ type interleavedReaderJoiner struct {
 	// arbitrary number of ancestor and child rows.
 	// We can use streamMerger here for simplicity.
 	ancestorRow sqlbase.EncDatumRow
-	// ancestorTablePos is the corresponding index of theancestor table in
-	// tablePosts and tableIDs.
+	// ancestorTablePos is the corresponding index of the ancestor table in
+	// tables.
 	ancestorTablePos int
 }
 
@@ -97,11 +97,7 @@ func newInterleavedReaderJoiner(
 		}
 	}
 
-	// Table IDs are used for tracing.
-	tableIDs := make([]int, len(spec.Tables))
-	// Post-processing for each table's rows that comes out of
-	// MultiRowFetcher.
-	tablePosts := make([]postProcHelper, len(spec.Tables))
+	tables := make([]tableInfo, len(spec.Tables))
 	// We need to take spans from all tables and merge them together
 	// for MultiRowFetcher.
 	allSpans := make(roachpb.Spans, 0, len(spec.Tables))
@@ -123,15 +119,15 @@ func newInterleavedReaderJoiner(
 			ancestorTablePos = i
 		}
 
-		if err := tablePosts[i].post.Init(
+		if err := tables[i].post.Init(
 			&table.Post, table.Desc.ColumnTypes(), &flowCtx.EvalCtx, nil, /*output*/
 		); err != nil {
 			return nil, errors.Wrapf(err, "failed to initialize post-processing helper")
 		}
 
-		tableIDs[i] = int(table.Desc.ID)
-		tablePosts[i].tableID = table.Desc.ID
-		tablePosts[i].indexID = index.ID
+		tables[i].tableID = table.Desc.ID
+		tables[i].indexID = index.ID
+		tables[i].ordering = convertToColumnOrdering(table.Ordering)
 		for _, trSpan := range table.Spans {
 			allSpans = append(allSpans, trSpan.Span)
 		}
@@ -141,8 +137,7 @@ func newInterleavedReaderJoiner(
 
 	irj := &interleavedReaderJoiner{
 		flowCtx:          flowCtx,
-		tableIDs:         tableIDs,
-		tablePosts:       tablePosts,
+		tables:           tables,
 		allSpans:         allSpans,
 		ancestorTablePos: ancestorTablePos,
 	}
@@ -158,8 +153,8 @@ func newInterleavedReaderJoiner(
 	// TODO(richardwu): Generalize this to 2+ tables.
 	if err := irj.joinerBase.init(
 		flowCtx,
-		irj.tablePosts[0].post.outputTypes,
-		irj.tablePosts[1].post.outputTypes,
+		irj.tables[0].post.outputTypes,
+		irj.tables[1].post.outputTypes,
 		spec.Type,
 		spec.OnExpr,
 		nil, /*leftEqColumns*/
@@ -225,7 +220,11 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTag(ctx, "InterleaveReaderJoiner", irj.tableIDs)
+	tableIDs := make([]sqlbase.ID, len(irj.tables))
+	for i := range tableIDs {
+		tableIDs[i] = irj.tables[i].tableID
+	}
+	ctx = log.WithLogTag(ctx, "InterleaveReaderJoiner", tableIDs)
 	ctx, span := processorSpan(ctx, "interleaved reader joiner")
 	defer tracing.FinishSpan(span)
 
@@ -260,12 +259,11 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 		}
 
 		// Lookup the helper that belongs to this row.
-		var helper *postProcHelper
+		var tInfo *tableInfo
 		isAncestorRow := false
-		for i := range irj.tablePosts {
-			h := &irj.tablePosts[i]
-			if desc.ID == h.tableID && index.ID == h.indexID {
-				helper = h
+		for i := range irj.tables {
+			tInfo = &irj.tables[i]
+			if desc.ID == tInfo.tableID && index.ID == tInfo.indexID {
 				if i == irj.ancestorTablePos {
 					isAncestorRow = true
 				}
@@ -274,7 +272,7 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 		}
 
 		// We post-process the intermediate row from either table.
-		tableRow, consumerStatus, err := helper.post.ProcessRow(ctx, row)
+		tableRow, consumerStatus, err := tInfo.post.ProcessRow(ctx, row)
 		if err != nil || consumerStatus != NeedMoreRows {
 			if err != nil {
 				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
@@ -306,18 +304,47 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 
 		// TODO(richardwu): Generalize this to 2+ tables and sibling
 		// tables.
-		var renderedRow sqlbase.EncDatumRow
+		var lrow, rrow sqlbase.EncDatumRow
 		if irj.ancestorTablePos == 0 {
-			renderedRow, err = irj.render(irj.ancestorRow, tableRow)
+			lrow, rrow = irj.ancestorRow, tableRow
 		} else {
-			renderedRow, err = irj.render(tableRow, irj.ancestorRow)
+			lrow, rrow = tableRow, irj.ancestorRow
 		}
 
+		// TODO(richardwu): this is a very expensive comparison
+		// in the hot path. We can avoid this if there is a foreign
+		// key constraint between the merge columns.
+		// That is: any child rows can be joined with the most
+		// recent parent row without this comparison.
+		cmp, err := CompareEncDatumRowForMerge(
+			irj.tables[0].post.outputTypes,
+			lrow,
+			rrow,
+			irj.tables[0].ordering,
+			irj.tables[1].ordering,
+			false, /* nullEquality */
+			&irj.alloc,
+			&irj.flowCtx.EvalCtx,
+		)
 		if err != nil {
 			irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			break
 		}
 
+		// The child row does not match the most recent ancestorRow
+		// on the equality columns.
+		// Reset the ancestorRow (we know there are no more
+		// corresponding children rows) and continue.
+		if cmp != 0 {
+			irj.ancestorRow = nil
+			continue
+		}
+
+		renderedRow, err := irj.render(lrow, rrow)
+		if err != nil {
+			irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			break
+		}
 		if renderedRow != nil {
 			consumerStatus, err = irj.out.EmitRow(ctx, renderedRow)
 			if err != nil || consumerStatus != NeedMoreRows {

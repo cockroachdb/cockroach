@@ -6,8 +6,10 @@
 #     child1          (pid1, cid1)                150       66
 #       grandchild1   (pid1, cid1, gcid1)         410       201
 #     child2          (pid1, cid2, cid3)          15        7
-#       grandchild2   (pid1, cid2, cid3, gcid1)   51        13
+#       grandchild2   (pid1, cid2, cid3, gcid2)   51        13
 #   parent2           (pid2)                      5         2
+# Additional rows in child1, child2, and grandchild1 with no corresponding
+# parent row are also inserted.
 #
 # All IDs belonging to a table (pid1 --> parent1, cid1 --> child1, cid2,cid3
 # --> child2, etc.) start from 1 up to (# rows).
@@ -40,8 +42,7 @@ CREATE TABLE child1 (
   pid1 INT,
   cid1 INT,
   ca1 INT,
-  PRIMARY KEY(pid1, cid1),
-  FOREIGN KEY (pid1) REFERENCES parent1
+  PRIMARY KEY(pid1, cid1)
 )
 INTERLEAVE IN PARENT parent1 (pid1)
 
@@ -51,8 +52,7 @@ CREATE TABLE child2 (
   cid2 INT,
   cid3 INT,
   ca2 INT,
-  PRIMARY KEY(pid1, cid2, cid3),
-  FOREIGN KEY (pid1) REFERENCES parent1
+  PRIMARY KEY(pid1, cid2, cid3)
 )
 INTERLEAVE IN PARENT parent1 (pid1)
 
@@ -62,8 +62,7 @@ CREATE TABLE grandchild1 (
   cid1 INT,
   gcid1 INT,
   gca1 INT,
-  PRIMARY KEY(pid1, cid1, gcid1),
-  FOREIGN KEY (pid1, cid1) REFERENCES child1
+  PRIMARY KEY(pid1, cid1, gcid1)
 )
 INTERLEAVE IN PARENT child1 (pid1, cid1)
 
@@ -107,6 +106,15 @@ INSERT INTO child1 SELECT
 FROM
   GENERATE_SERIES(1, 150) AS ID(cid)
 
+# Insert additional rows with no correspond parent rows to check for correctness.
+statement ok
+INSERT INTO child1 VALUES
+  (-1, -1, -1),
+  (0, 0, 0),
+  (41, 41, 41),
+  (151, 151, 19),
+  (160, 160, 28)
+
 # child2 has fewer rows than parent1.
 statement ok
 INSERT INTO child2 SELECT
@@ -118,6 +126,13 @@ FROM
   GENERATE_SERIES(1, 15) AS ID(cid)
 
 statement ok
+INSERT INTO child2 VALUES
+  (-1, -1, -1, -1),
+  (0, 0, 0, 0),
+  (16, 16, 2, 2),
+  (20, 20, 6, 6)
+
+statement ok
 INSERT INTO grandchild1 SELECT
   mod(mod(gcid-1, 150), 40) + 1,
   mod(gcid-1, 150) + 1,
@@ -125,6 +140,14 @@ INSERT INTO grandchild1 SELECT
   mod(gcid, 201)
 FROM
   GENERATE_SERIES(1, 410) AS ID(gcid)
+
+statement ok
+INSERT INTO grandchild1 VALUES
+  (-1, -1, -1, -1),
+  (0, 0, 0, 0),
+  (200, 200, 200, 200),
+  (411, 411, 411, 9)
+
 
 # We let grandchild2.pid1 exceed child2.pid1 (one of the interleaved keys).
 # So instead of
@@ -337,6 +360,8 @@ pid1 pa1 cid2 cid3 ca2
 13  5  13  13  6
 14  6  14  0   0
 15  7  15  1   1
+16  0  16  2   2
+20  4  20  6   6
 
 # Note this spans all 5 nodes, which makes sense since we want to read all
 # parent rows even if child rows are non-existent (so we can support OUTER
@@ -482,20 +507,9 @@ WHERE
   OR gcid2 >= 49 AND gcid2 <= 51
 ----
 pid1  cid2  cid3  ca2  pid1  cid2  cid3  gcid2  gca2
-2     2     2     2    2     12    12    42     3
-2     2     2     2    11    6     6     51     12
-3     3     3     3    3     13    13    43     4
-4     4     4     4    4     14    0     44     5
 5     5     5     5    5     5     5     5      5
-5     5     5     5    5     15    1     45     6
-5     5     5     5    6     1     1     46     7
 6     6     6     6    6     6     6     6      6
 7     7     7     0    7     7     7     7      7
-7     7     7     0    27    12    12    27     1
-8     8     8     1    9     4     4     49     10
-9     9     9     2    10    5     5     50     11
-10    10    10    3    28    13    13    28     2
-10    10    10    3    29    14    0     29     3
 12    12    12    5    12    12    12    12     12
 13    13    13    6    13    13    13    13     0
 14    14    0     0    14    14    0     14     1
