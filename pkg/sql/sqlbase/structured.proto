@@ -316,7 +316,9 @@ message IndexDescriptor {
   //
   // Only used for secondary indexes.
   // For non-unique indexes, these columns are appended to the key.
-  // For unique indexes, these columns are stored in the value.
+  // For unique indexes, these columns are stored in the value (unless the key
+  // contains a NULL value: then the extra columns are appended to the key to
+  // unique-ify it).
   // This distinction exists because we want to be able to insert an entry using
   // a single conditional put on the key.
   repeated uint32 extra_column_ids = 7 [(gogoproto.customname) = "ExtraColumnIDs",
