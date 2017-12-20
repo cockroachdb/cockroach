@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -121,6 +122,143 @@ func readBackupDescriptor(
 	return backupDesc, err
 }
 
+// getRelevantDescChanges finds the changes between start and end time to the
+// SQL descriptors matching `descs` or `expandedDBs`, ordered by time. A
+// descriptor revision matches if it is an earlier revision of a descriptor in
+// descs (same ID) or has parentID in `expanded`. Deleted descriptors are
+// represented as nil.
+func getRelevantDescChanges(
+	ctx context.Context,
+	db *client.DB,
+	startTime, endTime hlc.Timestamp,
+	descs []sqlbase.Descriptor,
+	expanded []sqlbase.ID,
+) ([]BackupDescriptor_DescriptorRevision, error) {
+
+	allChanges, err := getAllDescChanges(ctx, db, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	// If no descriptors changed, we can just stop now and have RESTORE use the
+	// normal list of descs (i.e. as of endTime).
+	if len(allChanges) == 0 {
+		return nil, nil
+	}
+
+	// interestingChanges will be every descriptor change relevant to the backup.
+	var interestingChanges []BackupDescriptor_DescriptorRevision
+
+	// interestingIDs are the descriptor for which we're interested in capturing
+	// changes. This is initially the descriptors matched (as of endTime) by our
+	// target spec, plus those that belonged to a DB that our spec expanded at any
+	// point in the interval.
+	interestingIDs := make(map[sqlbase.ID]struct{}, len(descs))
+
+	// The descriptors that currently (endTime) match the target spec (desc) are
+	// obviously interesting to our backup.
+	for _, i := range descs {
+		interestingIDs[i.GetID()] = struct{}{}
+	}
+
+	// We're also interested in any desc that belonged to a DB we're backing up.
+	// We'll start by looking at all descriptors as of the beginning of the
+	// interval and add to the set of IDs that we are interested any descriptor that
+	// belongs to one of the parents we care about.
+	interestingParents := make(map[sqlbase.ID]struct{}, len(expanded))
+	for _, i := range expanded {
+		interestingParents[i] = struct{}{}
+	}
+
+	if !startTime.IsEmpty() {
+		starting, err := loadAllDescs(ctx, db, startTime)
+		if err != nil {
+			return nil, err
+		}
+		for _, i := range starting {
+			if table := i.GetTable(); table != nil {
+				// We need to add to interestingIDs so that if we later see a delete for
+				// this ID we still know it is interesting to us, even though we will not
+				// have a parentID at that point (since the delete is a nil desc).
+				if _, ok := interestingParents[table.ParentID]; ok {
+					interestingIDs[table.ID] = struct{}{}
+				}
+			}
+			if _, ok := interestingIDs[i.GetID()]; ok {
+				desc := i
+				// We inject a fake "revision" that captures the starting state for
+				// matched descriptor, to allow restoring to times before its first rev
+				// actually inside the window. This likely ends up duplicating the last
+				// version in the previous BACKUP descriptor, but avoids adding more
+				// complicated special-cases in RESTORE, so it only needs to look in a
+				// single BACKUP to restore to a particular time.
+				initial := BackupDescriptor_DescriptorRevision{Time: startTime, ID: i.GetID(), Desc: &desc}
+				interestingChanges = append(interestingChanges, initial)
+			}
+		}
+	}
+
+	for _, change := range allChanges {
+		// A change to an ID that we are interested in is obviously interesting --
+		// a change is also interesting if it is to a table that has a parent that
+		// we are interested and thereafter it also becomes an ID in which we are
+		// interested in changes (since, as mentioned above, to decide if deletes
+		// are interesting).
+		if _, ok := interestingIDs[change.ID]; ok {
+			interestingChanges = append(interestingChanges, change)
+		} else if change.Desc != nil {
+			if table := change.Desc.GetTable(); table != nil {
+				if _, ok := interestingParents[table.ParentID]; ok {
+					interestingIDs[table.ID] = struct{}{}
+					interestingChanges = append(interestingChanges, change)
+				}
+			}
+		}
+	}
+
+	sort.Slice(interestingChanges, func(i, j int) bool {
+		return interestingChanges[i].Time.Less(interestingChanges[j].Time)
+	})
+
+	return interestingChanges, nil
+}
+
+// getAllDescChanges gets every sql descriptor change between start and end time
+// returning its ID, content and the change time (with deletions represented as
+// nil content).
+func getAllDescChanges(
+	ctx context.Context, db *client.DB, startTime, endTime hlc.Timestamp,
+) ([]BackupDescriptor_DescriptorRevision, error) {
+	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
+	endKey := startKey.PrefixEnd()
+
+	allRevs, err := getAllRevisions(ctx, db, startKey, endKey, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []BackupDescriptor_DescriptorRevision
+
+	for _, revs := range allRevs {
+		id, err := keys.DecodeDescMetadataID(revs.Key)
+		if err != nil {
+			return nil, err
+		}
+		for _, rev := range revs.Values {
+			r := BackupDescriptor_DescriptorRevision{ID: sqlbase.ID(id), Time: rev.Timestamp}
+			if len(rev.RawBytes) != 0 {
+				var desc sqlbase.Descriptor
+				if err := rev.GetProto(&desc); err != nil {
+					return nil, err
+				}
+				r.Desc = &desc
+			}
+			res = append(res, r)
+		}
+	}
+	return res, nil
+}
+
 func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
@@ -191,14 +329,39 @@ func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeD
 	return rangeDescs, nil
 }
 
+type tableAndIndex struct {
+	tableID sqlbase.ID
+	indexID sqlbase.IndexID
+}
+
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
-func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
+func spansForAllTableIndexes(
+	tables []*sqlbase.TableDescriptor, revs []BackupDescriptor_DescriptorRevision,
+) []roachpb.Span {
+
+	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
 		for _, index := range table.AllNonDropIndexes() {
 			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(index.ID)), false); err != nil {
 				panic(errors.Wrap(err, "IndexSpan"))
+			}
+			added[tableAndIndex{tableID: table.ID, indexID: index.ID}] = true
+		}
+	}
+	// if there are desc revisions, ensure that we also add any index spans
+	// in them that we didn't already get above.
+	for _, rev := range revs {
+		if tbl := rev.Desc.GetTable(); tbl != nil {
+			for _, idx := range tbl.AllNonDropIndexes() {
+				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
+				if !added[key] {
+					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(idx.ID)), false); err != nil {
+						panic(errors.Wrap(err, "IndexSpan"))
+					}
+					added[key] = true
+				}
 			}
 		}
 	}
@@ -337,31 +500,34 @@ func writeBackupDescriptor(
 	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
 }
 
+func loadAllDescs(
+	ctx context.Context, db *client.DB, asOf hlc.Timestamp,
+) ([]sqlbase.Descriptor, error) {
+	var allDescs []sqlbase.Descriptor
+	// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
+	// express that whatever this txn does should not count towards lease
+	// placement stats.
+	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+	opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
+	err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
+		var err error
+		txn.SetFixedTimestamp(ctx, asOf)
+		allDescs, err = allSQLDescriptors(ctx, txn)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return allDescs, nil
+}
+
 func resolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
-	var err error
-
-	db := p.ExecCfg().DB
-
-	var allDescs []sqlbase.Descriptor
-	{
-		// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
-		// express that whatever this txn does should not count towards lease
-		// placement stats.
-		txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
-		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
-		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
-			var err error
-			txn.SetFixedTimestamp(ctx, endTime)
-			allDescs, err = allSQLDescriptors(ctx, txn)
-			return err
-		})
-		if err != nil {
-			return nil, nil, err
-		}
+	allDescs, err := loadAllDescs(ctx, p.ExecCfg().DB, endTime)
+	if err != nil {
+		return nil, nil, err
 	}
-
 	sessionDatabase := p.SessionData().Database
 
 	var matched descriptorsMatched
@@ -441,7 +607,7 @@ func backup(
 		mu.files = checkpointDesc.Files
 		mu.exported = checkpointDesc.EntryCounts
 		for _, file := range checkpointDesc.Files {
-			if (file.StartTime == hlc.Timestamp{} && file.EndTime != hlc.Timestamp{}) {
+			if file.StartTime.IsEmpty() && !file.EndTime.IsEmpty() {
 				completedIntroducedSpans = append(completedIntroducedSpans, file.Span)
 			} else {
 				completedSpans = append(completedSpans, file.Span)
@@ -705,6 +871,11 @@ func backupPlanHook(
 			return err
 		}
 
+		mvccFilter := MVCCFilter_Latest
+		if _, ok := opts[backupOptRevisionHistory]; ok {
+			mvccFilter = MVCCFilter_All
+		}
+
 		targetDescs, completeDBs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
 			return err
@@ -729,8 +900,6 @@ func backupPlanHook(
 			return err
 		}
 
-		spans := spansForAllTableIndexes(tables)
-
 		var prevBackups []BackupDescriptor
 		if len(incrementalFrom) > 0 {
 			prevBackups = make([]BackupDescriptor, len(incrementalFrom))
@@ -745,6 +914,20 @@ func backupPlanHook(
 
 		var startTime hlc.Timestamp
 		var newSpans roachpb.Spans
+		if len(prevBackups) > 0 {
+			startTime = prevBackups[len(prevBackups)-1].EndTime
+		}
+
+		var revs []BackupDescriptor_DescriptorRevision
+		if mvccFilter == MVCCFilter_All {
+			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs)
+			if err != nil {
+				return err
+			}
+		}
+
+		spans := spansForAllTableIndexes(tables, revs)
+
 		if len(prevBackups) > 0 {
 			tablesInPrev := make(map[sqlbase.ID]struct{})
 			dbsInPrev := make(map[sqlbase.ID]struct{})
@@ -770,7 +953,7 @@ func backupPlanHook(
 			}
 
 			var err error
-			_, startTime, err = makeImportSpans(spans, prevBackups, keys.MinKey,
+			_, coveredTime, err := makeImportSpans(spans, prevBackups, keys.MinKey,
 				func(span intervalccl.Range, start, end hlc.Timestamp) error {
 					if (start == hlc.Timestamp{}) {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
@@ -781,25 +964,24 @@ func backupPlanHook(
 			if err != nil {
 				return errors.Wrap(err, "invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
 			}
-		}
-
-		mvccFilter := MVCCFilter_Latest
-		if _, ok := opts[backupOptRevisionHistory]; ok {
-			mvccFilter = MVCCFilter_All
+			if coveredTime != startTime {
+				return errors.Errorf("expected previous backups to cover until time %v, got %v", startTime, coveredTime)
+			}
 		}
 
 		backupDesc := BackupDescriptor{
-			StartTime:       startTime,
-			EndTime:         endTime,
-			MVCCFilter:      mvccFilter,
-			Descriptors:     targetDescs,
-			CompleteDbs:     completeDBs,
-			Spans:           spans,
-			IntroducedSpans: newSpans,
-			FormatVersion:   BackupFormatDescriptorTrackingVersion,
-			BuildInfo:       build.GetInfo(),
-			NodeID:          p.ExecCfg().NodeID.Get(),
-			ClusterID:       p.ExecCfg().ClusterID(),
+			StartTime:         startTime,
+			EndTime:           endTime,
+			MVCCFilter:        mvccFilter,
+			Descriptors:       targetDescs,
+			DescriptorChanges: revs,
+			CompleteDbs:       completeDBs,
+			Spans:             spans,
+			IntroducedSpans:   newSpans,
+			FormatVersion:     BackupFormatDescriptorTrackingVersion,
+			BuildInfo:         build.GetInfo(),
+			NodeID:            p.ExecCfg().NodeID.Get(),
+			ClusterID:         p.ExecCfg().ClusterID(),
 		}
 
 		// Sanity check: re-run the validation that RESTORE will do, but this time
@@ -1035,6 +1217,55 @@ func showBackupPlanHook(
 		return nil
 	}
 	return fn, header, nil
+}
+
+type versionedValues struct {
+	Key    roachpb.Key
+	Values []roachpb.Value
+}
+
+// getAllRevisions scans all keys between startKey and endKey getting all
+// revisions between startTime and endTime.
+// TODO(dt): if/when client gets a ScanRevisionsRequest or similar, use that.
+func getAllRevisions(
+	ctx context.Context,
+	db *client.DB,
+	startKey, endKey roachpb.Key,
+	startTime, endTime hlc.Timestamp,
+) ([]versionedValues, error) {
+	// TODO(dt): version check.
+	header := roachpb.Header{Timestamp: endTime}
+	req := &roachpb.ExportRequest{
+		Span:       roachpb.Span{Key: startKey, EndKey: endKey},
+		StartTime:  startTime,
+		MVCCFilter: roachpb.MVCCFilter_All,
+		ReturnSST:  true,
+	}
+	resp, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
+	if pErr != nil {
+		return nil, pErr.GoError()
+	}
+
+	var res []versionedValues
+	for _, file := range resp.(*roachpb.ExportResponse).Files {
+		sst := engine.MakeRocksDBSstFileReader()
+		defer sst.Close()
+
+		if err := sst.IngestExternalFile(file.SST); err != nil {
+			return nil, err
+		}
+		start, end := engine.MVCCKey{Key: startKey}, engine.MVCCKey{Key: endKey}
+		if err := sst.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
+			if len(res) == 0 || !res[len(res)-1].Key.Equal(kv.Key.Key) {
+				res = append(res, versionedValues{Key: kv.Key.Key})
+			}
+			res[len(res)-1].Values = append(res[len(res)-1].Values, roachpb.Value{Timestamp: kv.Key.Timestamp, RawBytes: kv.Value})
+			return false, nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func init() {

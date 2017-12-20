@@ -73,12 +73,58 @@ func loadBackupDescs(
 	return backupDescs, nil
 }
 
+func loadSQLDescsFromBackupsAtTime(
+	backupDescs []BackupDescriptor, asOf hlc.Timestamp,
+) ([]sqlbase.Descriptor, BackupDescriptor) {
+	lastBackupDesc := backupDescs[len(backupDescs)-1]
+
+	if asOf.IsEmpty() {
+		return lastBackupDesc.Descriptors, lastBackupDesc
+	}
+
+	for _, b := range backupDescs {
+		if asOf.Less(b.StartTime) {
+			break
+		}
+		lastBackupDesc = b
+	}
+	if len(lastBackupDesc.DescriptorChanges) == 0 {
+		return lastBackupDesc.Descriptors, lastBackupDesc
+	}
+
+	byID := make(map[sqlbase.ID]*sqlbase.Descriptor, len(lastBackupDesc.Descriptors))
+	for _, rev := range lastBackupDesc.DescriptorChanges {
+		if asOf.Less(rev.Time) {
+			break
+		}
+		if rev.Desc == nil {
+			delete(byID, rev.ID)
+		} else {
+			byID[rev.ID] = rev.Desc
+		}
+	}
+
+	allDescs := make([]sqlbase.Descriptor, 0, len(byID))
+	for _, desc := range byID {
+		if t := desc.GetTable(); t != nil {
+			// A table revsions may have been captured before it was in a DB that is
+			// backed up -- if the DB is missing, filter the table.
+			if byID[t.ParentID] == nil {
+				continue
+			}
+		}
+		allDescs = append(allDescs, *desc)
+	}
+	return allDescs, lastBackupDesc
+}
+
 func selectTargets(
-	p sql.PlanHookState, backupDescs []BackupDescriptor, targets tree.TargetList,
+	p sql.PlanHookState, backupDescs []BackupDescriptor, targets tree.TargetList, asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	sessionDatabase := p.SessionData().Database
-	lastBackupDesc := backupDescs[len(backupDescs)-1]
-	matched, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
+	allDescs, lastBackupDesc := loadSQLDescsFromBackupsAtTime(backupDescs, asOf)
+
+	matched, err := descriptorsMatchingTargets(sessionDatabase, allDescs, targets)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -592,7 +638,7 @@ rangeLoop:
 			case backupSpan:
 				if ts != ie.start {
 					return nil, hlc.Timestamp{}, errors.Errorf(
-						"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
+						"no backup covers time [%s,%s) for range [%s,%s) or backups listed out of order (mismatched start time)",
 						ts, ie.start,
 						roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
 				}
@@ -862,15 +908,6 @@ func restore(
 		lowWaterMark: -1,
 	}
 
-	if endTime != (hlc.Timestamp{}) {
-		for _, b := range backupDescs {
-			if b.StartTime.Less(endTime) && endTime.Less(b.EndTime) && b.MVCCFilter != MVCCFilter_All {
-				return mu.res, nil, nil, errors.Errorf(
-					"incompatible RESTORE timestamp (BACKUP needs option '%s')", backupOptRevisionHistory)
-			}
-		}
-	}
-
 	var databases []*sqlbase.DatabaseDescriptor
 	var tables []*sqlbase.TableDescriptor
 	var oldTableIDs []sqlbase.ID
@@ -891,7 +928,7 @@ func restore(
 
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
-	spans := spansForAllTableIndexes(tables)
+	spans := spansForAllTableIndexes(tables, nil)
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
@@ -1156,7 +1193,17 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	sqlDescs, restoreDBs, err := selectTargets(p, backupDescs, restoreStmt.Targets)
+
+	if !endTime.IsEmpty() {
+		for _, b := range backupDescs {
+			if b.StartTime.Less(endTime) && endTime.Less(b.EndTime) && b.MVCCFilter != MVCCFilter_All {
+				return errors.Errorf(
+					"incompatible RESTORE timestamp (BACKUP needs option '%s')", backupOptRevisionHistory)
+			}
+		}
+	}
+
+	sqlDescs, restoreDBs, err := selectTargets(p, backupDescs, restoreStmt.Targets, endTime)
 	if err != nil {
 		return err
 	}
@@ -1209,10 +1256,11 @@ func loadBackupSQLDescs(
 	if err != nil {
 		return nil, nil, err
 	}
-	lastBackupDesc := backupDescs[len(backupDescs)-1]
+
+	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupDescs, details.EndTime)
 
 	var sqlDescs []sqlbase.Descriptor
-	for _, desc := range lastBackupDesc.Descriptors {
+	for _, desc := range allDescs {
 		if _, ok := details.TableRewrites[desc.GetID()]; ok {
 			sqlDescs = append(sqlDescs, desc)
 		}
