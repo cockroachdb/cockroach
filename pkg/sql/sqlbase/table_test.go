@@ -819,7 +819,7 @@ func TestEquivSignature(t *testing.T) {
 	}
 }
 
-func TestTightenStartKey(t *testing.T) {
+func TestAdjustStartKeyForInterleave(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -827,11 +827,14 @@ func TestTightenStartKey(t *testing.T) {
 
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 
-	// Create DESC indexes for testing.
+	// Secondary indexes with DESC direction in the last column.
 	r := sqlutils.MakeSQLRunner(sqlDB)
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
+	// Index with implicit primary columns (pid1, cid2).
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_non_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE UNIQUE INDEX child_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
 
 	// The interleaved hierarchy is as follows:
 	//    parent		(pid1)
@@ -843,6 +846,8 @@ func TestTightenStartKey(t *testing.T) {
 
 	parentDescIdx := parent.Indexes[0]
 	childDescIdx := child.Indexes[0]
+	childNonUniqueIdx := child.Indexes[1]
+	childUniqueIdx := child.Indexes[2]
 	grandchildDescIdx := grandchild.Indexes[0]
 
 	testCases := []struct {
@@ -943,11 +948,75 @@ func TestTightenStartKey(t *testing.T) {
 			input:    "/1/#/2/3/#/4",
 			expected: "/1/#/2/4",
 		},
+
+		// Key with len > 1 tokens.
+		{
+			index:    &child.PrimaryIndex,
+			input:    "/12345678901234/#/1234/1234567890/#/123/1234567",
+			expected: "/12345678901234/#/1234/1234567891",
+		},
+		{
+			index:    &child.PrimaryIndex,
+			input:    "/12345678901234/#/d1403.2594/shelloworld/#/123/1234567",
+			expected: "/12345678901234/#/d1403.2594/shelloworld/PrefixEnd",
+		},
+
+		// Index key with extra columns (implicit primary key columns).
+		// We should expect two extra columns (in addition to the
+		// two index columns).
+		{
+			index:    &childNonUniqueIdx,
+			input:    "/2/3",
+			expected: "/2/3",
+		},
+		{
+			index:    &childNonUniqueIdx,
+			input:    "/2/3/4",
+			expected: "/2/3/4",
+		},
+		{
+			index:    &childNonUniqueIdx,
+			input:    "/2/3/4/5",
+			expected: "/2/3/4/5",
+		},
+		{
+			index:    &childNonUniqueIdx,
+			input:    "/2/3/4/5/#/10",
+			expected: "/2/3/4/6",
+		},
+
+		// Unique indexes only include implicit columns if they have
+		// a NULL value.
+		{
+			index:    &childUniqueIdx,
+			input:    "/2/3",
+			expected: "/2/3",
+		},
+		{
+			index:    &childUniqueIdx,
+			input:    "/2/3/4",
+			expected: "/2/4",
+		},
+		{
+			index:    &childUniqueIdx,
+			input:    "/2/NULLASC/4",
+			expected: "/2/NULLASC/4",
+		},
+		{
+			index:    &childUniqueIdx,
+			input:    "/2/NULLASC/4/5",
+			expected: "/2/NULLASC/4/5",
+		},
+		{
+			index:    &childUniqueIdx,
+			input:    "/2/NULLASC/4/5/#/6",
+			expected: "/2/NULLASC/4/6",
+		},
 	}
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual, err := TightenStartKey(tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)))
+			actual, err := AdjustStartKeyForInterleave(tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -960,7 +1029,7 @@ func TestTightenStartKey(t *testing.T) {
 	}
 }
 
-func TestTightenEndKey(t *testing.T) {
+func TestAdjustEndKeyForInterleave(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -968,11 +1037,14 @@ func TestTightenEndKey(t *testing.T) {
 
 	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
 
-	// Create DESC indexes for testing.
+	// Secondary indexes with DESC direction in the last column.
 	r := sqlutils.MakeSQLRunner(sqlDB)
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
 	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
+	// Index with implicit primary columns (pid1, cid2).
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_non_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE UNIQUE INDEX child_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
 
 	// The interleaved hierarchy is as follows:
 	//    parent		(pid1)
@@ -984,6 +1056,8 @@ func TestTightenEndKey(t *testing.T) {
 
 	parentDescIdx := parent.Indexes[0]
 	childDescIdx := child.Indexes[0]
+	childNonUniqueIdx := child.Indexes[1]
+	childUniqueIdx := child.Indexes[2]
 	grandchildDescIdx := grandchild.Indexes[0]
 
 	testCases := []struct {
@@ -992,7 +1066,7 @@ func TestTightenEndKey(t *testing.T) {
 		// See ShortToLongKeyFmt for how to represent a key.
 		input string
 		// If the end key is assumed to be inclusive when passed to
-		// to TightenEndKey.
+		// to AdjustEndKeyForInterleave.
 		inclusive bool
 		expected  string
 	}{
@@ -1239,11 +1313,130 @@ func TestTightenEndKey(t *testing.T) {
 			inclusive: true,
 			expected:  "/1/#/3",
 		},
+
+		// Key with len > 1 tokens.
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/12345678901234/#/12345/12345678901234/#/123/1234567",
+			expected: "/12345678901234/#/12345/12345678901234/#",
+		},
+
+		// Index key with extra columns (implicit primary key columns).
+		// We should expect two extra columns (in addition to the
+		// two index columns).
+		{
+			table:    child,
+			index:    &childNonUniqueIdx,
+			input:    "/2/3",
+			expected: "/2/3",
+		},
+		{
+			table:    child,
+			index:    &childNonUniqueIdx,
+			input:    "/2/3/4",
+			expected: "/2/3/4",
+		},
+		{
+			table:    child,
+			index:    &childNonUniqueIdx,
+			input:    "/2/3/4/5",
+			expected: "/2/3/4/5",
+		},
+		// End key not adjusted since secondary indexes can't have
+		// interleaved rows.
+		{
+			table:    child,
+			index:    &childNonUniqueIdx,
+			input:    "/2/3/4/5/#/10",
+			expected: "/2/3/4/5/#/10",
+		},
+
+		{
+			table:    child,
+			index:    &childUniqueIdx,
+			input:    "/2/3",
+			expected: "/2/3",
+		},
+		// End key not adjusted since secondary indexes can't have
+		// interleaved rows.
+		{
+			table:    child,
+			index:    &childUniqueIdx,
+			input:    "/2/3/4",
+			expected: "/2/3/4",
+		},
+		{
+			table:    child,
+			index:    &childUniqueIdx,
+			input:    "/2/NULLASC/4",
+			expected: "/2/NULLASC/4",
+		},
+		{
+			table:    child,
+			index:    &childUniqueIdx,
+			input:    "/2/NULLASC/4/5",
+			expected: "/2/NULLASC/4/5",
+		},
+		// End key not adjusted since secondary indexes can't have
+		// interleaved rows.
+		{
+			table:    child,
+			index:    &childUniqueIdx,
+			input:    "/2/NULLASC/4/5/#/6",
+			expected: "/2/NULLASC/4/5/#/6",
+		},
+
+		// Keys with decimal values.
+		// Not tightened since it's difficult to "go back" one logical
+		// decimal value.
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/2/d3.4567",
+			expected: "/1/#/2/d3.4567",
+		},
+		{
+			table:     child,
+			index:     &child.PrimaryIndex,
+			input:     "/1/#/2/d3.4567",
+			inclusive: true,
+			expected:  "/1/#/2/d3.4567/#",
+		},
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/2/d3.4567/#/8",
+			expected: "/1/#/2/d3.4567/#",
+		},
+
+		// Keys with bytes values.
+		// Not tightened since it's difficult to "go back" one logical
+		// bytes value.
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/2/shelloworld",
+			expected: "/1/#/2/shelloworld",
+		},
+		{
+			table:     child,
+			index:     &child.PrimaryIndex,
+			input:     "/1/#/2/shelloworld",
+			inclusive: true,
+			expected:  "/1/#/2/shelloworld/#",
+		},
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/2/shelloworld/#/3",
+			expected: "/1/#/2/shelloworld/#",
+		},
 	}
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual, err := TightenEndKey(tc.table, tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)), tc.inclusive)
+			actual, err := AdjustEndKeyForInterleave(tc.table, tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)), tc.inclusive)
 			if err != nil {
 				t.Fatal(err)
 			}

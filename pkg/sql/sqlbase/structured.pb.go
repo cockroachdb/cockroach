@@ -692,7 +692,9 @@ type IndexDescriptor struct {
 	//
 	// Only used for secondary indexes.
 	// For non-unique indexes, these columns are appended to the key.
-	// For unique indexes, these columns are stored in the value.
+	// For unique indexes, these columns are stored in the value (unless the key
+	// contains a NULL value: then the extra columns are appended to the key to
+	// unique-ify it).
 	// This distinction exists because we want to be able to insert an entry using
 	// a single conditional put on the key.
 	ExtraColumnIDs []ColumnID `protobuf:"varint,7,rep,name=extra_column_ids,json=extraColumnIds,casttype=ColumnID" json:"extra_column_ids,omitempty"`
