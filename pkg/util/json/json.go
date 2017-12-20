@@ -802,6 +802,118 @@ func FetchPath(j JSON, path []string) (JSON, error) {
 	return j, nil
 }
 
+var errCannotSetPathInScalar = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot set path in scalar")
+
+// setValKeyOrIdx sets a key or index within a JSON object or array. If the
+// provided value is neither an object or array the value is returned
+// unchanged.
+// If the value is an object which does not have the provided key and
+// createMissing is true, the key is inserted into the object with the value `to`.
+// If the value is an array and the provided index is negative, it counts from the back of the array.
+// Further, if the value is an array, and createMissing is true:
+// * if the provided index points to before the start of the array, `to` is prepended to the array.
+// * if the provided index points to after the end of the array, `to` is appended to the array.
+func setValKeyOrIdx(j JSON, key string, to JSON, createMissing bool) (JSON, error) {
+	switch v := j.(type) {
+	case *jsonEncoded:
+		n, err := v.shallowDecode()
+		if err != nil {
+			return nil, err
+		}
+		return setValKeyOrIdx(n, key, to, createMissing)
+	case jsonObject:
+		result := make(jsonObject, 0, len(v)+1)
+		curIdx := 0
+		for curIdx < len(v) && string(v[curIdx].k) < key {
+			result = append(result, v[curIdx])
+			curIdx++
+		}
+		keyAlreadyExists := curIdx < len(v) && string(v[curIdx].k) == key
+		if createMissing || keyAlreadyExists {
+			result = append(result, jsonKeyValuePair{
+				k: jsonString(key),
+				v: to,
+			})
+		}
+		if keyAlreadyExists {
+			curIdx++
+		}
+		for curIdx < len(v) {
+			result = append(result, v[curIdx])
+			curIdx++
+		}
+		return result, nil
+	case jsonArray:
+		idx, err := strconv.Atoi(key)
+		if err != nil {
+			return nil, err
+		}
+		if idx < 0 {
+			idx = len(v) + idx
+		}
+		if !createMissing && (idx < 0 || idx >= len(v)) {
+			return v, nil
+		}
+		var result jsonArray
+		if idx < 0 {
+			result = make(jsonArray, len(v)+1)
+			copy(result[1:], v)
+			result[0] = to
+		} else if idx >= len(v) {
+			result = make(jsonArray, len(v)+1)
+			copy(result, v)
+			result[len(result)-1] = to
+		} else {
+			result = make(jsonArray, len(v))
+			copy(result, v)
+			result[idx] = to
+		}
+		return result, nil
+	}
+	return j, nil
+}
+
+// DeepSet sets a path to a value in a JSON document.
+// Largely follows the same semantics as setValKeyOrIdx, but with a path.
+// Implements the jsonb_set builtin.
+func DeepSet(j JSON, path []string, to JSON, createMissing bool) (JSON, error) {
+	if j.isScalar() {
+		return nil, errCannotSetPathInScalar
+	}
+	return deepSet(j, path, to, createMissing)
+}
+
+func deepSet(j JSON, path []string, to JSON, createMissing bool) (JSON, error) {
+	switch len(path) {
+	case 0:
+		return j, nil
+	case 1:
+		return setValKeyOrIdx(j, path[0], to, createMissing)
+	default:
+		switch v := j.(type) {
+		case *jsonEncoded:
+			n, err := v.shallowDecode()
+			if err != nil {
+				return nil, err
+			}
+			return deepSet(n, path, to, createMissing)
+		default:
+			fetched, err := j.FetchValKeyOrIdx(path[0])
+			if err != nil {
+				return nil, err
+			}
+			if fetched == nil {
+				return j, nil
+			}
+			sub, err := deepSet(fetched, path[1:], to, createMissing)
+			if err != nil {
+				return nil, err
+			}
+			return setValKeyOrIdx(j, path[0], sub, createMissing)
+		}
+	}
+}
+
 func (j jsonObject) FetchValKeyOrIdx(key string) (JSON, error) {
 	return j.FetchValKey(key)
 }
