@@ -249,13 +249,14 @@ results of each SQL statement are printed on the standard output.`,
 Reveal the SQL statements sent implicitly by the command-line utility.`,
 	}
 
-	UnsafeUpdates = FlagInfo{
-		Name: "unsafe-updates",
+	SafeUpdates = FlagInfo{
+		Name: "safe-updates",
 		Description: `
-Allow SQL statements that may have undesired side effects. For example
-a DELETE or UPDATE without a WHERE clause. By default, such statements
-are rejected to prevent accidents. This can also be overridden in a
-session with SET sql_safe_updates = FALSE.`,
+Disable SQL statements that may have undesired side effects. For
+example a DELETE or UPDATE without a WHERE clause. By default, this
+setting is enabled (true) and such statements are rejected to prevent
+accidents. This can also be overridden in a session with SET
+sql_safe_updates = FALSE.`,
 	}
 
 	TableDisplayFormat = FlagInfo{
