@@ -19,6 +19,4 @@ package cli
 func TestingReset() {
 	// Reset the client contexts for each test.
 	initCLIDefaults()
-
-	cmdTimeout = defaultCmdTimeout
 }
