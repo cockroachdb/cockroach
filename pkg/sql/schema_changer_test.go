@@ -1222,59 +1222,56 @@ func dropColumnSchemaChange(
 
 }
 
+// Drop an index and check that it succeeds.
+func dropIndexSchemaChange(
+	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
+) {
+	if _, err := sqlDB.Exec("DROP INDEX t.test@foo CASCADE"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(context.TODO(), kvDB, numKeysPerRow, maxValue); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Test schema changes are retried and complete properly. This also checks
 // that a mutation checkpoint reduces the number of chunks operated on during
 // a retry.
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
+
 	currChunk := 0
 	seenSpan := roachpb.Span{}
+	checkSpan := func(sp roachpb.Span) error {
+		currChunk++
+		// Fail somewhere in the middle.
+		if currChunk == 3 {
+			return context.DeadlineExceeded
+		}
+		if sp.Key != nil && seenSpan.Key != nil {
+			// Check that the keys are never reevaluated
+			if seenSpan.Key.Compare(sp.Key) >= 0 {
+				t.Errorf("reprocessing span %s, already seen span %s", sp, seenSpan)
+			}
+			if !seenSpan.EndKey.Equal(sp.EndKey) {
+				t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
+			}
+		}
+		seenSpan = sp
+		return nil
+	}
+
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				currChunk++
-				// Fail somewhere in the middle.
-				if currChunk == 3 {
-					return context.DeadlineExceeded
-				}
-				if seenSpan.Key != nil {
-					// Check that the keys are never reevaluated
-					if seenSpan.Key.Compare(sp.Key) >= 0 {
-						t.Errorf("reprocessing span %s, already seen span %s", sp, seenSpan)
-					}
-					if !seenSpan.EndKey.Equal(sp.EndKey) {
-						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
-					}
-				}
-				seenSpan = sp
-				return nil
-			},
+			RunBeforeBackfillChunk: checkSpan,
 			// Disable asynchronous schema change execution to allow
 			// synchronous path to run schema changes.
 			AsyncExecNotification:   asyncSchemaChangerDisabled,
 			WriteCheckpointInterval: time.Nanosecond,
 		},
-		DistSQL: &distsqlrun.TestingKnobs{
-			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-				currChunk++
-				// Fail somewhere in the middle.
-				if currChunk == 3 {
-					return context.DeadlineExceeded
-				}
-				if seenSpan.Key != nil {
-					// Check that the keys are never reevaluated
-					if seenSpan.Key.Compare(sp.Key) >= 0 {
-						t.Errorf("reprocessing span %s, already seen span %s", sp, seenSpan)
-					}
-					if !seenSpan.EndKey.Equal(sp.EndKey) {
-						t.Errorf("different EndKey: span %s, already seen span %s", sp, seenSpan)
-					}
-				}
-				seenSpan = sp
-				return nil
-			},
-		},
+		DistSQL: &distsqlrun.TestingKnobs{RunBeforeBackfillChunk: checkSpan},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
@@ -1305,6 +1302,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	currChunk = 0
 	seenSpan = roachpb.Span{}
 	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+
+	currChunk = 0
+	seenSpan = roachpb.Span{}
+	dropIndexSchemaChange(t, sqlDB, kvDB, maxValue, 1)
 }
 
 // Test schema changes are retried and complete properly when the table

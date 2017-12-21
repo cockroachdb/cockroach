@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -192,55 +191,6 @@ func (sc *SchemaChanger) runBackfill(
 	return nil
 }
 
-func (sc *SchemaChanger) maybeWriteResumeSpan(
-	ctx context.Context,
-	txn *client.Txn,
-	version sqlbase.DescriptorVersion,
-	resume roachpb.Span,
-	mutationIdx int,
-	lastCheckpoint *time.Time,
-) error {
-	checkpointInterval := checkpointInterval
-	if sc.testingKnobs.WriteCheckpointInterval > 0 {
-		checkpointInterval = sc.testingKnobs.WriteCheckpointInterval
-	}
-	if timeutil.Since(*lastCheckpoint) < checkpointInterval {
-		return nil
-	}
-	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
-	if err != nil {
-		return err
-	}
-	if tableDesc.Version != version {
-		return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
-	}
-
-	mutationID := tableDesc.Mutations[mutationIdx].MutationID
-	jobID, err := sc.getJobIDForMutation(ctx, version, mutationID)
-	if err != nil {
-		return err
-	}
-
-	resumeSpanIndex := distsqlrun.GetResumeSpanIndexofMutationID(tableDesc, mutationIdx)
-	resumeSpans, err := distsqlrun.GetResumeSpansFromJob(ctx, sc.jobRegistry, txn, jobID, resumeSpanIndex)
-	if err != nil {
-		return err
-	}
-	if len(resumeSpans) > 0 {
-		resumeSpans[0] = resume
-	} else {
-		resumeSpans = append(resumeSpans, resume)
-	}
-
-	err = distsqlrun.SetResumeSpansInJob(ctx, resumeSpans, sc.jobRegistry, mutationIdx, txn, jobID)
-	if err != nil {
-		return err
-	}
-
-	*lastCheckpoint = timeutil.Now()
-	return nil
-}
-
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, error) {
@@ -268,7 +218,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	alloc := &sqlbase.DatumAlloc{}
 	for _, desc := range dropped {
 		var resume roachpb.Span
-		lastCheckpoint := timeutil.Now()
 		for row, done := int64(0), false; !done; row += chunkSize {
 			// First extend the schema change lease.
 			if err := sc.ExtendLease(ctx, lease); err != nil {
@@ -308,14 +257,8 @@ func (sc *SchemaChanger) truncateIndexes(
 				resume, err = td.deleteIndex(
 					ctx, &desc, resumeAt, chunkSize, false, /* traceKV */
 				)
-				if err != nil {
-					return err
-				}
-				if err := sc.maybeWriteResumeSpan(ctx, txn, version, resume, mutationIdx, &lastCheckpoint); err != nil {
-					return err
-				}
 				done = resume.Key == nil
-				return nil
+				return err
 			}); err != nil {
 				return err
 			}
