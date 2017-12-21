@@ -36,7 +36,12 @@ NULL       /2       1         {1}       1
 /4         /5       4         {4}       4
 /5         NULL     5         {5}       5
 
-# Simple UNION ALL. (The ORDER BY applies to the UNION, not the last select.)
+# Simple UNION ALL and UNION. (The ORDER BY applies to the UNION, not the last select.)
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElU-PokAQxe_7KTZ13d7EavAfJ69edOPObcKBoSuGRGnS3SQ6xu8-AQ6ORquHEODIn997r7teUhfItaJNciQL0TsgCJAgIAABIQiYQiygMDola7WpfmmAtTpBNBGQ5UXpqtexgFQbgugCLnMHggjeko8D7ShRZECAIpdkh9qkMNkxMefV6fwJArali36vEOKrAF26m551yZ4gwqsY3FO28fyvjXu0W-Gfl-LBOOI3TW0UGVLPRJ8k2Oi_urj795V3eOeNI7RjGE_ZxrPbAHsVlyNMaBhP2caz10vsJh6MMKFhPGUbz14vsZt4OMKEhvGUbTx7vcReF-yObKFzSz_acJNqQZLaU7NQrS5NSv-MTmub5nFbc_ULRdY1X2XzsM6bT1XA7zCycMDDkoXDOxgf4aALHPJnRj73lKXnPDxj4QUPz7scetEFXrIwem4M-ZKhr2V8zTzRsVPPkC8aTj3R-arhzIPzXfNl58vmo_m24dITne-bnHhwvnGe7JIv3CMdX399BQAA__9E1reF
+
 query I
 SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
 ----
@@ -52,11 +57,55 @@ SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
 5
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElU-PokAQxe_7KTZ13d7EavAfJ69edOPObcKBoSuGRGnS3SQ6xu8-AQ6ORquHEODIn997r7teUhfItaJNciQL0TsgCJAgIAABIQiYQiygMDola7WpfmmAtTpBNBGQ5UXpqtexgFQbgugCLnMHggjeko8D7ShRZECAIpdkh9qkMNkxMefV6fwJArali36vEOKrAF26m551yZ4gwqsY3FO28fyvjXu0W-Gfl-LBOOI3TW0UGVLPRJ8k2Oi_urj795V3eOeNI7RjGE_ZxrPbAHsVlyNMaBhP2caz10vsJh6MMKFhPGUbz14vsZt4OMKEhvGUbTx7vcReF-yObKFzSz_acJNqQZLaU7NQrS5NSv-MTmub5nFbc_ULRdY1X2XzsM6bT1XA7zCycMDDkoXDOxgf4aALHPJnRj73lKXnPDxj4QUPz7scetEFXrIwem4M-ZKhr2V8zTzRsVPPkC8aTj3R-arhzIPzXfNl58vmo_m24dITne-bnHhwvnGe7JIv3CMdX399BQAA__9E1reF
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElUGPmzAUhO_9FdW71od9Nux2OeXQy1661ba3igPFTyukBCPbSEkj_nsFHFKi5HkjBziCMzMZ5pN8hNpo-l7syEH2GxAESBCgQEACAlLIBTTWlOScsf1PRsGL3kP2IKCqm9b3r3MBpbEE2RF85bcEGfwq_mzpjQpNFgRo8kW1HUIaW-0Ke9jsD39BwGvrs88bhLwTYFp_8nO-eCfIsBMfz_xWOV_VpZ8GMu7yFvc7NVKzNkquup9M29pYTZb0xDXv7pGf3tLup7H-_GNu8MtV88eJOa4AYCAzEsBlGqlZG00BlCtsFMiM3GiZRmrWRtON1AobBTIjN1qmkZq10XSjZIWNApmRGy3TSM3a6Pple8H9jVxjakdnl-5l54f-Mib9TuPN7UxrS_phTTnEjI-vg254ocn58RTHh5d6POr_4P9iZMXJRIznYsmKFZ-sYpITVpzyySkrlpJXP7LqJ178FFP6Kyt-5pOfY5IxwFgIsijKkMcMA5xhFGjIk4YB1JBnLRTOs4YB2DCKNuRxwwBvGAWc5IGTAeDkbcDl3ad_AQAA__-LyfKF
+
+query I
+SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x
+----
+1
+2
+3
+4
+5
+
+# UNION with no overlap.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz WHERE x < 3 UNION SELECT x FROM xyz WHERE x >= 3 ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlkFr3DAQhe_9Fctcq8OO7E0aQWEPpbCXpKS5tT641hAMG2uRZEga_N-L7UPqJTuKLRt8tLRv3rx930GvUBlNt_kTOVC_AEGABAEJCEhBwA4yASdrCnLO2PYnveCgn0FtBZTVqfbtcSagMJZAvYIv_ZFAwUP-50j3lGuyIECTz8tjZ3Ky5VNuX_bPL39BwPfy6MmqzR43v-vtNqGvm0Qpdbh9AAF3tW9vIGsEmNq_mTmfPxIobMTHF_pWOl9WhR9uw0yXY6ZPjFuMSJssmja9OP1taF0Zq8mSHkzNmjn8d2PS_TTWn__Re_x8cfjVYDiujdzAQpHkLhN3Orlzpx2SK9dWbmChyHKXiTu93LnTDstN1lZuYKHIcpeJO73cudMOy03XVm5gochyl4k7vdy5015-ULwz_Z7cyVSOzh4W70_etg8O0o_Uv06cqW1BP6wpOpv-867TdQeanO9vsf84VP1Vu-D_YmTF6UCM52LJihPeOYlxTlnxjnfesWIpefUVq77mxdcxob-w4hve-SbGGQOMhSCLogx5zDDAGUaBhjxpGEANedZC5jxrGIANo2hDHjcM8IZRwEkeOBkATo4DLms-_QsAAP__cnI-Vw==
+
+query I
+SELECT x FROM xyz WHERE x < 3 UNION SELECT x FROM xyz WHERE x >= 3 ORDER BY x
+----
+1
+2
+3
+4
+5
+
+# UNION with partial overlap.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz WHERE x <= 4 UNION SELECT x FROM xyz WHERE x > 1 ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlkFr3DAQhe_9Fctcq8OO7E0aQWEPpbCXpKS5tT641hAMjmUkGZIG__di-5B6yY52Ixt8tLRv3rx930GvUBtNt_kTOVC_AEGABAEJCEhBwA4yAY01BTlnbP-TUXDQz6C2Asq6aX1_nAkojCVQr-BLXxEoeMj_VHRPuSYLAjT5vKwGk8aWT7l92T-__AUB38vKk1WbPW5-t9ttQhtUSh1uH0DAXev7C8g6Aab1b17O548ECjtx_j7fSufLuvDTZZjp8pLpH0xbfN2kZ8dNFo2bnpz-NrStjdVkSU-mZt0c_rtL0v001h__03v8fHL41WQ4rozcwD6R5C6TNoLcueNOyZUrKzewT2S5y6SNKHfuuNNyk5WVG9gnstxl0kaUO3fcabnpysoN7BNZ7jJpI8qdO-7pB8U70-_JNaZ2dPSweH_ytn9wkH6k8XXiTGsL-mFNMdiMn3eDbjjQ5Px4i-PHoR6v-gX_FyMrTidiPBZLVpzwzkmMc8qKd7zzjhVLyauvWPU1L76OCf2FFd_wzjcxzhhgLARZFGXIY4YBzjAKNORJwwBqyLMWMudZwwBsGEUb8rhhgDeMAk7ywMkAcPIy4LLu078AAAD__5emPlI=
+
+query I
+SELECT x FROM xyz WHERE x <= 4 UNION SELECT x FROM xyz WHERE x > 1 ORDER BY x
+----
+1
+2
+3
+4
+5
 
 # UNION ALL with swapped column orders.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElL1qwzAUhfc-RTnzLURy0h9PXrMkJXQrHlTrEgyJZSQZkga_e4k8pAlJqSsXj_r5_PlcxDmgMpoXassO6TsECBKEBIQpCDPkhNqagp0z9nilA-Z6h3RCKKu68cftnFAYy0gP8KXfMFK8qY8Nr1hptiBo9qrcBElty62y-2y3_wRh2fj0PpOUCeQtwTT-9Enn1ZqRipb-SSsokze18qb2ZGsqYzVb1meuvL3yYwvzYOqLa9fFyZlYjDPmIbU9xizHSTuktkfaZJy0Q2p7pJ2Ok3ZI7R8L44p2xa42leNfNcLkWCis19y1jzONLfjVmiJouuUycGFDs_PdqewW8yochbl8h0UMLH-EhTijJ5d0EqOexsCzGPgxBn6KgZ9j4JeoV9LvjeXt3VcAAAD__41Qv_4=
+
 query II rowsort
 SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
 ----
@@ -71,7 +120,12 @@ SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
 4 2
 5 2
 
-# UNION ALL with different ORDER BY types.
+# UNION ALL and UNION with different ORDER BY types.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlkFvm0AQhe_9FdVcs5U8C9guJ19zSaq0t4oD9Y4iS44X7S5S0oj_XgGVEtIwg-Wl5Gjg8c3b99j1M5ysoZvygTzkPwFBgQYFCShIQUEGhYLK2T15b137SC-4No-QrxQcTlUd2suFgr11BPkzhEM4EuTwo_x1pDsqDTlQYCiUh2MHqdzhoXRPu8en36Dgtg755x2qXQJFo8DW4eWVPpT3BDk2ajr2u3XhLXGnr16T9ChJj5JeANYZcmT-JRTNO-Pc2C-2Gj77d47RIZJz7J67yuPe0_-2ytlHWOX1xXbxavTlm2VeLi0fTl6-MfZ2wMZldgABG3EHiGxw6sc3p8Hhx6eXSVDARkwwssGpCc5pcJhgskyCAjZigpENTk1wToPDBNNlEhSwEROMbHBqgnMaHP8L8w7pjnxlT54mnbCr9oAmc0_9ge5t7fb0zdl9h-l_3na67oIhH_q72P-4PvW32gFfi5EV64EY34o1K17z5IQVp7w4ZcUZP3bGijc8ec2Ktzx5c4l4y0eV8XN_5VuyEmrCl0zoCfItQy3A-Z4JaSNfNBSahnzVJOd811D4RpBvm-ScrxtuBbhQOAHOF04LhdN84QTnWtjWhMJpvnDSrsgXTguF0-ftbUXz6U8AAAD__7-ewX0=
+
 query I
 (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
@@ -87,11 +141,25 @@ query I
 5
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlkFvm0AQhe_9FdVcs5U8C9guJ19zSaq0t4oD9Y4iS44X7S5S0oj_XgGVEtIwg-Wl5Gjg8c3b99j1M5ysoZvygTzkPwFBgQYFCShIQUEGhYLK2T15b137SC-4No-QrxQcTlUd2suFgr11BPkzhEM4EuTwo_x1pDsqDTlQYCiUh2MHqdzhoXRPu8en36Dgtg755x2qXQJFo8DW4eWVPpT3BDk2ajr2u3XhLXGnr16T9ChJj5JeANYZcmT-JRTNO-Pc2C-2Gj77d47RIZJz7J67yuPe0_-2ytlHWOX1xXbxavTlm2VeLi0fTl6-MfZ2wMZldgABG3EHiGxw6sc3p8Hhx6eXSVDARkwwssGpCc5pcJhgskyCAjZigpENTk1wToPDBNNlEhSwEROMbHBqgnMaHP8L8w7pjnxlT54mnbCr9oAmc0_9ge5t7fb0zdl9h-l_3na67oIhH_q72P-4PvW32gFfi5EV64EY34o1K17z5IQVp7w4ZcUZP3bGijc8ec2Ktzx5c4l4y0eV8XN_5VuyEmrCl0zoCfItQy3A-Z4JaSNfNBSahnzVJOd811D4RpBvm-ScrxtuBbhQOAHOF04LhdN84QTnWtjWhMJpvnDSrsgXTguF0-ftbUXz6U8AAAD__7-ewX0=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlkFvm0AQhe_9FdVcs5W8sxjbnHzoJZekSnurOFAYRUgOi5ZFShr5v1c2lRIozGABdY4G3rzZt9-O9xUKm9Fd8kQVRD9BgwIEBQYUBKBgDbGC0tmUqsq60yeN4DZ7hmilIC_K2p8exwpS6wiiV_C5PxBE8CP5daAHSjJyoCAjn-SHs0np8qfEveyfX36DgvvaR5_3Wu0NxEcFtvZvJSufPBJE-qjG2363zncd93jz3gkHnfASp6955fMi9R0vPVjdDFZ_K2pdRo6yf_uPjz0t3Nkvtmx_-3eVg00Elyzx0j0cTnb93_YwXHQPNx9hD7cjmqiLvjZ6O7g4hN3kzdQ3w6d91aqurzNlBNsZp4zgNHHKzBzf2AO-ZHzhovG1Dzhehz7Bdkb6BKeJ9M0c31j6lowvXDS-Nn3mOvQJtjPSJzhNpG_m-MbSt2R84aLxtekLrkOfYDsjfYLTRPpmjm8sfUvGFy4a3_DVuqf6A1WlLSrq3G77K69Ot17KHqm5Ile2dil9czY92zQ_78-684OMKt-81c2P26J5dWrwvVizYuTFyIpNS6y7YsOKt7w4YMVrvu01Kw55cciKN3zbmylr3rLiHd_2jt-qQKBEYEyCjKdMC5jpSZxpHjQtLZ1HTQusaR42gRfN06Y3gjnPm94Kcp44KXceOVwJs4VHDgXkkEdOyB154tAI5jxyKCCHPHJC7sgTh8J8Qx45FJBDHjkpd544FIYcClNOQM7wyEn_ZzxxRhhyRhhyAnKGR66be3z89CcAAP__hliVOw==
+
+query I
+(SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x
+----
+1
+2
+3
+4
+5
 
 # UNION ALL with conflicting numbers of ORDER BY columns.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEljFv2zAQhff-iuJWs4CPkmxXk9YsSZF2KzSo5iEw4JgCSQNJA__3wlKBxIF1R0sENFrS08d374n0GxysofvmmTyUvwFBgQYFGSjIQUEBtYLW2S15b935kV5wZ16gXCrYHdpjOF-uFWytIyjfIOzCnqCEX82fPT1SY8iBAkOh2e07SOt2z417rV5e_4KCh2Mov1aoKq2qDOqTAnsM72_1oXkiKPGk4sk_rQufoZVeqCpbRAP1IPCdY50hR-Y6qD5dWdm9_Wbby-f_L2dwIdktzm-e-SA2TzDwOFIxYdLJpryabBcXgy9fz_NyaXwYPb4h9uaCjbPtBwI5_X6Q2mrkZzjO55jPUM-WpUBOn2Vqq5FZjvM5JststiwFcvosU1uNzHKczzFZ5rNlKZDTZ5naamSW43xO_atzhfRIvrUHT1En8fJ8kJN5ov7g9_botvTD2W2H6X8-dLrugiEf-rvY_7g79LfOC_woRlasL8T4WaxZ8YonZ6w458U5Ky74ZReseM2TV6x4w5PXU8QbPqqCX_d3viVLoSZ8yYSeIN8y1AKc75mQNvJFQ6FpyFdNcs53DYVvBPm2Sc75uuFGgAuFE-B84bRQOM0XTnCuhW1NKJzmCyftinzhtFA4fdveVp--_AsAAP__ZcDMag==
+
 query I
 (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
 ----
@@ -106,7 +174,15 @@ query I
 5
 5
 
+# Only one distinct processor should be used in the single node UNION case.
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) VALUES (1), (2) UNION VALUES (2), (3)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzEljFv2zAQhff-iuJWs4CPkmxXk9YsSZF2KzSo5iEw4JgCSQNJA__3wlKBxIF1R0sENFrS08d374n0GxysofvmmTyUvwFBgQYFGSjIQUEBtYLW2S15b935kV5wZ16gXCrYHdpjOF-uFWytIyjfIOzCnqCEX82fPT1SY8iBAkOh2e07SOt2z417rV5e_4KCh2Mov1aoKq2qDOqTAnsM72_1oXkiKPGk4sk_rQufoZVeqCpbRAP1IPCdY50hR-Y6qD5dWdm9_Wbby-f_L2dwIdktzm-e-SA2TzDwOFIxYdLJpryabBcXgy9fz_NyaXwYPb4h9uaCjbPtBwI5_X6Q2mrkZzjO55jPUM-WpUBOn2Vqq5FZjvM5JststiwFcvosU1uNzHKczzFZ5rNlKZDTZ5naamSW43xO_atzhfRIvrUHT1En8fJ8kJN5ov7g9_botvTD2W2H6X8-dLrugiEf-rvY_7g79LfOC_woRlasL8T4WaxZ8YonZ6w458U5Ky74ZReseM2TV6x4w5PXU8QbPqqCX_d3viVLoSZ8yYSeIN8y1AKc75mQNvJFQ6FpyFdNcs53DYVvBPm2Sc75uuFGgAuFE-B84bRQOM0XTnCuhW1NKJzmCyftinzhtFA4fdveVp--_AsAAP__ZcDMag==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEjz9LxTAUxXc_RTmTQoa2OmUScXmLioOLZCjJ5RmsScm9AeGR7y4vGZ4VK4iDY87N7_w5IERHd9MbMfQzBhiFJUVLzDEdpfZh596hewUflixH2SjYmAj6APEyEzSepjkTQ8GRTH6uflfdTXc-dvYlh1e-gCkKMcvJg2XaE3Rf1D_nnOxziMlRIrdKMOWbJreexQcr6y7Xw2b-8Judj8RLDExfemwtMwrk9tTGcMzJ0kOKtsa0533lquCIpV3H9tiFeqoFP8PDX-DxR_hyBffFlLOPAAAA__9xete1
+
+query I rowsort
+VALUES (1), (2) UNION VALUES (2), (3)
+----
+1
+2
+3
