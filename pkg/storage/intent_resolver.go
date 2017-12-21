@@ -473,6 +473,10 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 func (ir *intentResolver) cleanupFinishedTxnIntents(
 	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp,
 ) error {
+	if len(intents) == 0 {
+		return nil
+	}
+
 	// Resolve intents.
 	if err := ir.resolveIntents(ctx, intents, ResolveOptions{Wait: true, Poison: false}); err != nil {
 		return errors.Wrapf(err, "failed to resolve intents")
