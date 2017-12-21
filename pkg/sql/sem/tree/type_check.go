@@ -411,7 +411,7 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedE
 	}
 
 	switch expr.Operator {
-	case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
+	case IsDistinctFrom, IsNotDistinctFrom:
 		// These operators handle NULL arguments, so they do not result in an
 		// evaluation directly to NULL in the presence of any NULL arguments.
 		//

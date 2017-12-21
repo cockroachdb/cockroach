@@ -445,16 +445,6 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			expr = &exprCopy
 			expr.Right = &tupleCopy
 		}
-	case Is:
-		// IS expressions are specializations of IS NOT DISTINCT FROM, normalize
-		// IS to more general forms.
-		// See https://github.com/cockroachdb/cockroach/issues/19111.
-		return NewTypedComparisonExpr(IsNotDistinctFrom, expr.TypedLeft(), expr.TypedRight()).normalize(v)
-	case IsNot:
-		// IS NOT expressions are specializations of IS DISTINCT FROM, normalize
-		// IS NOT to more general forms.
-		// See https://github.com/cockroachdb/cockroach/issues/19111.
-		return NewTypedComparisonExpr(IsDistinctFrom, expr.TypedLeft(), expr.TypedRight()).normalize(v)
 	case IsNotDistinctFrom:
 		if expr.TypedRight() != DNull {
 			if expr.TypedLeft() == DNull {
