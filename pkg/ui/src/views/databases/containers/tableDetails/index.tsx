@@ -123,7 +123,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
                   format={ Bytes }/>
                 <SummaryHeadlineStat
                   title="Ranges"
-                  tooltip="The total number of ranges in this database."
+                  tooltip="The total number of ranges in this table."
                   value={ tableInfo.rangeCount }/>
               </SummaryBar>
             </div>

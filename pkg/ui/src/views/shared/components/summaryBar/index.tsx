@@ -6,6 +6,7 @@ import "./summarybar.styl";
 
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
+import {ToolTipWrapper} from "oss/src/views/shared/components/toolTip";
 
 interface SummaryValueProps {
   title: React.ReactNode;
@@ -163,7 +164,16 @@ export class SummaryHeadlineStat extends React.Component<SummaryHeadlineStatProp
   render() {
     return <div className="summary-headline">
       <div className="summary-headline__value">{computeValue(this.props.value, this.props.format)}</div>
-      <div className="summary-headline__title">{this.props.title}</div>
+      <div className="summary-headline__title">
+        {this.props.title}
+        <div className="section-heading__tooltip">
+          <ToolTipWrapper text={this.props.tooltip}>
+            <div className="section-heading__tooltip-hover-area">
+              <div className="section-heading__info-icon">i</div>
+            </div>
+          </ToolTipWrapper>
+        </div>
+      </div>
     </div>;
   }
 }
