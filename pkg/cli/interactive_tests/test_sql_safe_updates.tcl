@@ -50,4 +50,10 @@ eexpect "DELETE"
 eexpect ":/# "
 end_test
 
+start_test "Check that dangerous statements are properly rejected when using --safe-updates -e."
+send "$argv sql --safe-updates -e 'delete from d.t'\r"
+eexpect "rejected: DELETE without WHERE clause"
+eexpect ":/# "
+end_test
+
 stop_server $argv

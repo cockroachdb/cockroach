@@ -327,7 +327,7 @@ func init() {
 	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, false)
 
 	VarFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
-	BoolFlag(sqlShellCmd.Flags(), &sqlCtx.unsafeUpdates, cliflags.UnsafeUpdates, false)
+	BoolFlag(sqlShellCmd.Flags(), &sqlCtx.safeUpdates, cliflags.SafeUpdates, true)
 
 	VarFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
 	StringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, "")
