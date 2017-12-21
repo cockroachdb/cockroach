@@ -97,6 +97,7 @@ func createTestNode(
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(st)
 	active, renewal := cfg.NodeLivenessDurations()
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	cfg.NodeLiveness = storage.NewNodeLiveness(
 		cfg.AmbientCtx,
 		cfg.Clock,
@@ -104,6 +105,7 @@ func createTestNode(
 		cfg.Gossip,
 		active,
 		renewal,
+		cfg.HistogramWindowInterval,
 	)
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
 	cfg.StorePool = storage.NewStorePool(
