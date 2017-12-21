@@ -88,6 +88,8 @@ func initCLIDefaults() {
 
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
+	startCtx.tempDir = ""
+	startCtx.externalIODir = ""
 
 	quitCtx.serverDecommission = false
 
@@ -188,6 +190,12 @@ var startCtx struct {
 	// server-specific values of some flags.
 	serverInsecure    bool
 	serverSSLCertsDir string
+
+	// temporary directory to use to spill computation results to disk.
+	tempDir string
+	// directory to use for remotely-initiated operations that can
+	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
+	externalIODir string
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
