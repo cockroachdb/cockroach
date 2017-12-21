@@ -420,12 +420,12 @@ func makeSQLConn(url string) *sqlConn {
 // and no certificates have been supplied.
 // Attempting to use security.RootUser without valid certificates will return an error.
 func getPasswordAndMakeSQLClient() (*sqlConn, error) {
-	if len(sqlConnURL) != 0 {
-		return makeSQLConn(sqlConnURL), nil
+	if len(cliCtx.sqlConnURL) != 0 {
+		return makeSQLConn(cliCtx.sqlConnURL), nil
 	}
 	var user *url.Userinfo
-	if !baseCfg.Insecure && !baseCfg.ClientHasValidCerts(sqlConnUser) {
-		if sqlConnUser == security.RootUser {
+	if !baseCfg.Insecure && !baseCfg.ClientHasValidCerts(cliCtx.sqlConnUser) {
+		if cliCtx.sqlConnUser == security.RootUser {
 			return nil, errors.Errorf("connections with user %s must use a client certificate", security.RootUser)
 		}
 
@@ -434,21 +434,21 @@ func getPasswordAndMakeSQLClient() (*sqlConn, error) {
 			return nil, err
 		}
 
-		user = url.UserPassword(sqlConnUser, pwd)
+		user = url.UserPassword(cliCtx.sqlConnUser, pwd)
 	} else {
-		user = url.User(sqlConnUser)
+		user = url.User(cliCtx.sqlConnUser)
 	}
 	return makeSQLClient(user)
 }
 
 func makeSQLClient(user *url.Userinfo) (*sqlConn, error) {
-	sqlURL := sqlConnURL
-	if len(sqlConnURL) == 0 {
+	sqlURL := cliCtx.sqlConnURL
+	if len(sqlURL) == 0 {
 		u, err := sqlCtx.PGURL(user)
 		if err != nil {
 			return nil, err
 		}
-		u.Path = sqlConnDBName
+		u.Path = cliCtx.sqlConnDBName
 		sqlURL = u.String()
 	}
 	return makeSQLConn(sqlURL), nil
