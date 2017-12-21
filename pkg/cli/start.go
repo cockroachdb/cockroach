@@ -264,6 +264,7 @@ var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memor
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
 func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
+	externalIODir := startCtx.externalIODir
 	if externalIODir == "" && !firstStore.InMemory {
 		externalIODir = filepath.Join(firstStore.Path, "extern")
 	}
@@ -321,7 +322,7 @@ func initTempStorageConfig(
 		// The default temp storage size is different when the temp
 		// storage is in memory (which occurs when no temp directory
 		// is specified and the first store is in memory).
-		if tempDir == "" && firstStore.InMemory {
+		if startCtx.tempDir == "" && firstStore.InMemory {
 			tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
 		} else {
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
@@ -333,12 +334,13 @@ func initTempStorageConfig(
 	tempStorageConfig := base.TempStorageConfigFromEnv(
 		ctx,
 		firstStore,
-		tempDir,
+		startCtx.tempDir,
 		tempStorageMaxSizeBytes,
 	)
 
 	// Set temp directory to first store's path if the temp storage is not
 	// in memory.
+	tempDir := startCtx.tempDir
 	if tempDir == "" && !tempStorageConfig.InMemory {
 		tempDir = firstStore.Path
 	}
