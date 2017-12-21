@@ -401,8 +401,6 @@ func TestMVCCStatsWithRandomRuns(t *testing.T) {
 		if log.V(1) {
 			log.Infof(context.Background(), "*** cycle %d @ %s", i, ts)
 		}
-		// Manually advance aggregate intent age based on one extra second of simulation.
-		// Same for aggregate gc'able bytes age.
 		key := []byte(fmt.Sprintf("%s-%d", randutil.RandBytes(rng, int(rng.Int31n(32))), i))
 		keys[i] = key
 
