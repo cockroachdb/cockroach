@@ -116,7 +116,7 @@ func TestServerConnSettings(t *testing.T) {
 		// Resetting serverConnPort overwrites the default written by the
 		// package-level init method, or else none of the cases above would have
 		// an empty port.
-		serverConnHost = ""
+		startCtx.serverConnHost = ""
 		serverAdvertiseHost = ""
 		serverAdvertisePort = ""
 		serverConnPort = ""

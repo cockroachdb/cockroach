@@ -95,6 +95,7 @@ func initCLIDefaults() {
 	serverCfg.PIDFile = ""
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
+	startCtx.serverConnHost = ""
 	startCtx.tempDir = ""
 	startCtx.externalIODir = ""
 
@@ -201,6 +202,7 @@ var startCtx struct {
 	// server-specific values of some flags.
 	serverInsecure    bool
 	serverSSLCertsDir string
+	serverConnHost    string
 
 	// temporary directory to use to spill computation results to disk.
 	tempDir string

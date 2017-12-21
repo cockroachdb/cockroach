@@ -742,7 +742,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 	if startCtx.serverInsecure {
 		// Use a non-annotated context here since the annotation just looks funny,
 		// particularly to new users (made worse by it always printing as [n?]).
-		addr := serverConnHost
+		addr := startCtx.serverConnHost
 		if addr == "" {
 			addr = "<all your IP addresses>"
 		}
