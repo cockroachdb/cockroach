@@ -3,7 +3,7 @@ build-scalar,normalize,index-constraints columns=(int)
 ----
 [/3 - ]
 
-build-scalar,normalize,index-constraints columns=(int descending)
+build-scalar,normalize,index-constraints columns=(int desc)
 @1 > 2
 ----
 [ - /3]
@@ -13,7 +13,7 @@ build-scalar,normalize,index-constraints columns=(int)
 ----
 [/2 - ]
 
-build-scalar,normalize,index-constraints columns=(int descending)
+build-scalar,normalize,index-constraints columns=(int desc)
 @1 >= 2
 ----
 [ - /2]
@@ -21,21 +21,21 @@ build-scalar,normalize,index-constraints columns=(int descending)
 build-scalar,normalize,index-constraints columns=(int)
 @1 != 2
 ----
-[ - /2)
-(/2 - ]
+[ - /1]
+[/3 - ]
 
-build-scalar,normalize,index-constraints columns=(int descending)
+build-scalar,normalize,index-constraints columns=(int desc)
 @1 != 2
 ----
-[ - /2)
-(/2 - ]
+[ - /3]
+[/1 - ]
 
 build-scalar,normalize,index-constraints columns=(int)
 @1 < 2
 ----
 [ - /1]
 
-build-scalar,normalize,index-constraints columns=(int descending)
+build-scalar,normalize,index-constraints columns=(int desc)
 @1 < 2
 ----
 [/1 - ]
@@ -45,7 +45,7 @@ build-scalar,normalize,index-constraints columns=(int)
 ----
 [/2 - /2]
 
-build-scalar,normalize,index-constraints columns=(int descending)
+build-scalar,normalize,index-constraints columns=(int desc)
 @1 = 2
 ----
 [/2 - /2]
@@ -65,28 +65,40 @@ build-scalar,normalize,index-constraints columns=(int, int)
 ----
 [/3/6 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int descending)
+build-scalar,normalize,index-constraints columns=(int, int desc)
 @1 > 2 AND @2 < 5
 ----
 [/3/4 - ]
 
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 != 1 AND @2 > 5
+----
+[ - /0]
+[/2/6 - ]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 != 1 AND @2 < 5
+----
+[ - /0/4]
+[/2 - ]
+
 build-scalar,normalize,index-constraints columns=(int)
 @1 >= 1 AND @1 <= 5 AND @1 != 3
 ----
-[/1 - /3)
-(/3 - /5]
+[/1 - /2]
+[/4 - /5]
 
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/8 - /2/9]
 
-build-scalar,normalize,index-constraints columns=(int descending, int)
+build-scalar,normalize,index-constraints columns=(int desc, int)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/2/8 - /1/9]
 
-build-scalar,normalize,index-constraints columns=(int, int descending)
+build-scalar,normalize,index-constraints columns=(int, int desc)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/9 - /2/8]
@@ -118,8 +130,8 @@ build-scalar,normalize,index-constraints columns=(int)
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 = 1 AND @2 != 2
 ----
-[/1 - /1/2)
-(/1/2 - /1]
+[/1 - /1/1]
+[/1/3 - /1]
 
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 >= 1 AND @1 <= 5 AND @2 != 2
@@ -137,12 +149,12 @@ build-scalar,normalize,index-constraints columns=(string, int)
 ----
 [/e'a\x00'/5 - /'z')
 
-build-scalar,normalize,index-constraints columns=(string descending)
+build-scalar,normalize,index-constraints columns=(string desc)
 @1 > 'a' AND @1 < 'z'
 ----
 (/'z' - /e'a\x00']
 
-build-scalar,normalize,index-constraints columns=(string descending, int)
+build-scalar,normalize,index-constraints columns=(string desc, int)
 @1 > 'a' AND @1 < 'z' AND @2 = 5
 ----
 (/'z' - /e'a\x00'/5]
@@ -165,6 +177,8 @@ build-scalar,normalize,index-constraints columns=(decimal, decimal)
 ----
 (/1.5 - ]
 
+# Tests with variable IN tuple.
+
 build-scalar,normalize,index-constraints columns=(int)
 @1 IN (1, 2, 3)
 ----
@@ -172,21 +186,21 @@ build-scalar,normalize,index-constraints columns=(int)
 [/2 - /2]
 [/3 - /3]
 
-build-scalar,normalize,index-constraints columns=(int descending)
+build-scalar,normalize,index-constraints columns=(int desc)
 @1 IN (1, 2, 3)
 ----
 [/3 - /3]
 [/2 - /2]
 [/1 - /1]
 
-build-scalar,legacy-normalize,index-constraints columns=(int)
+legacy-normalize,build-scalar,index-constraints columns=(int)
 @1 IN (1, 5, 1, 4)
 ----
 [/1 - /1]
 [/4 - /4]
 [/5 - /5]
 
-build-scalar,legacy-normalize,index-constraints columns=(int descending)
+legacy-normalize,build-scalar,index-constraints columns=(int desc)
 @1 IN (1, 5, 1, 4)
 ----
 [/5 - /5]
@@ -200,7 +214,7 @@ build-scalar,normalize,index-constraints columns=(int, int)
 [/1/2 - /1/2]
 [/1/3 - /1/3]
 
-build-scalar,normalize,index-constraints columns=(int, int descending)
+build-scalar,normalize,index-constraints columns=(int, int desc)
 @1 = 1 AND @2 IN (1, 2, 3)
 ----
 [/1/3 - /1/3]
@@ -217,7 +231,7 @@ build-scalar,normalize,index-constraints columns=(int, int)
 [/2/2 - /2/2]
 [/2/3 - /2/3]
 
-build-scalar,normalize,index-constraints columns=(int descending, int descending)
+build-scalar,normalize,index-constraints columns=(int desc, int desc)
 @1 IN (1, 2) AND @2 IN (1, 2, 3)
 ----
 [/2/3 - /2/3]
@@ -232,7 +246,7 @@ build-scalar,normalize,index-constraints columns=(int, int)
 ----
 [/2/1 - /4/3]
 
-build-scalar,normalize,index-constraints columns=(int descending, int descending)
+build-scalar,normalize,index-constraints columns=(int desc, int desc)
 @1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
 ----
 [/4/3 - /2/1]
@@ -245,14 +259,14 @@ build-scalar,normalize,index-constraints columns=(int, int)
 [/2/4 - /2/4]
 [/3/4 - /3/4]
 
-build-scalar,normalize,index-constraints columns=(int descending, int)
+build-scalar,normalize,index-constraints columns=(int desc, int)
 @1 IN (1, 2, 3) AND @2 = 4
 ----
 [/3/4 - /3/4]
 [/2/4 - /2/4]
 [/1/4 - /1/4]
 
-build-scalar,normalize,index-constraints columns=(int, int descending)
+build-scalar,normalize,index-constraints columns=(int, int desc)
 @1 IN (1, 2, 3) AND @2 = 4
 ----
 [/1/4 - /1/4]
@@ -265,6 +279,8 @@ build-scalar,normalize,index-constraints columns=(int, int)
 [/1/2 - /1/4]
 [/2/2 - /2/4]
 [/3/2 - /3/4]
+
+# Tests with tuple equality.
 
 build-scalar,normalize,index-constraints columns=(int, int, int)
 (@1, @2, @3) = (1, 2, 3)
@@ -286,7 +302,95 @@ build-scalar,normalize,index-constraints columns=(int, int, int, int)
 ----
 [/6/2/3/4 - /9/2/3/4]
 
-build-scalar,normalize,index-constraints columns=(int descending, int descending, int descending, int descending)
+build-scalar,normalize,index-constraints columns=(int desc, int desc, int desc, int desc)
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/9/2/3/4 - /6/2/3/4]
+
+# Tests with tuple inequalities.
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) >= (1, 2, 3)
+----
+[/1/2/3 - ]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) >= (1, 2, @1)
+----
+[/1/2 - ]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2/4 - ]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) > (1, 2, @1)
+----
+[/1/2 - ]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) <= (1, 2, 3)
+----
+[ - /1/2/3]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) <= (1, 2, @1)
+----
+[ - /1/2]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) < (1, 2, 3)
+----
+[ - /1/2/2]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) < (1, 2, @1)
+----
+[ - /1/2]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+
+build-scalar,normalize,index-constraints columns=(int, int, int)
+(@1, @2, @3) != (1, 2, @1)
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int desc, int desc, int desc)
+(@1, @2, @3) >= (1, 2, 3)
+----
+[ - /1/2/3]
+
+build-scalar,normalize,index-constraints columns=(int desc, int desc, int)
+(@1, @2, @3) > (1, 2, 3)
+----
+[ - /1/2]
+
+build-scalar,normalize,index-constraints columns=(int, int, int desc)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2 - ]
+
+build-scalar,normalize,index-constraints columns=(int, int, int desc)
+(@2, @3) > (1, 2)
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+(@1, @2) >= (1, 2) AND (@1, @2) <= (3, 4)
+----
+[/1/2 - /3/4]
+
+legacy-normalize,build-scalar,index-constraints columns=(int, int)
+(@1, @2) BETWEEN (1, 2) AND (3, 4)
+----
+[/1/2 - /3/4]
+
+legacy-normalize,build-scalar,index-constraints columns=(int, int, int, int)
+(@1, @2, @4) BETWEEN (1, 2, 3) AND (4, 5, 6)
+----
+[/1/2 - /4/5]
