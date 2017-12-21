@@ -170,6 +170,15 @@ import (
 //      repeat 50
 //      statement ok
 //      INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+
+//  - retries <number>
+//    It causes the following `statement` or `query` to be retried on error
+//    the given number of times. For example:
+//      retries 50
+//      statement ok
+//      INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+//    When used with repeat, retries is the total number of retries across
+//    all repeats.
 //
 //  - let $varname
 //    Executes the query that follows (expecting a single result) and remembers
@@ -999,6 +1008,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	t.lastProgress = timeutil.Now()
 
 	repeat := 1
+	retries := 0
 	subtestName := "base"
 	tooManyErrors := false
 	s := newLineScanner(file)
@@ -1077,6 +1087,25 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 					}
 					repeat = count
 
+				case "retries":
+					// A line "retries X" makes the test retry on error the following statement or query X times.
+					// When used with repeat, retries is the total number of retries across
+					// all repeats.
+
+					var err error
+					count := 0
+					if len(fields) != 2 {
+						err = errors.New("invalid line format")
+					} else if count, err = strconv.Atoi(fields[1]); err == nil && count < 2 {
+						err = errors.New("invalid count")
+					}
+					if err != nil {
+						subtestError = errors.Errorf("%s:%d invalid retries line: %s", path, s.line, err)
+						subtestT.Error(subtestError)
+						return
+					}
+					retries = count
+
 				case "sleep":
 					var err error
 					var duration time.Duration
@@ -1109,16 +1138,29 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 					}
 					if !s.skip {
 						for i := 0; i < repeat; i++ {
-							if ok := t.execStatement(stmt); !ok {
-								subtestError = errors.Errorf("%s: error in statement, skipping to next file", stmt.pos)
-								subtestT.Error(subtestError)
-								return
+							doRetry := true
+							for doRetry {
+								doRetry = false
+								if ok := t.execStatement(stmt, retries > 0); !ok {
+									if retries > 0 {
+										retries--
+										doRetry = true
+										subtestT.Log(fmt.Sprintf("%s: error in statement, retrying (retries left: %d)", stmt.pos, retries))
+										continue
+									}
+
+									subtestError = errors.Errorf("%s: error in statement, skipping to next file", stmt.pos)
+
+									subtestT.Error(subtestError)
+									return
+								}
 							}
 						}
 					} else {
 						s.skip = false
 					}
 					repeat = 1
+					retries = 0
 					t.success(path)
 
 				case "query":
@@ -1253,14 +1295,26 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 
 					if !s.skip {
 						for i := 0; i < repeat; i++ {
-							if err := t.execQuery(query); err != nil {
-								t.Error(err)
+							doRetry := true
+							for doRetry {
+								doRetry = false
+								if err := t.execQuery(query, retries > 0); err != nil {
+									if retries > 0 {
+										retries--
+										doRetry = true
+										log.Warningf(context.Background(), "error in query, retrying (retries left: %d)", retries)
+										continue
+									}
+
+									t.Error(err)
+								}
 							}
 						}
 					} else {
 						s.skip = false
 					}
 					repeat = 1
+					retries = 0
 					t.success(path)
 
 				case "let":
@@ -1439,8 +1493,13 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 // verifyError checks that either no error was found where none was
 // expected, or that an error was found when one was expected. Returns
 // "true" to indicate the behavior was as expected.
-func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err error) bool {
+func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err error, retry bool) bool {
 	if expectErr == "" && expectErrCode == "" && err != nil {
+		// This non-error expecting statement or query needs a retry.
+		// Do not error out but instead return !ok.
+		if retry {
+			return false
+		}
 		return t.unexpectedError(sql, pos, err)
 	}
 	if !testutils.IsError(err, expectErr) {
@@ -1499,7 +1558,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 	return false
 }
 
-func (t *logicTest) execStatement(stmt logicStatement) bool {
+func (t *logicTest) execStatement(stmt logicStatement, retry bool) bool {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
@@ -1512,7 +1571,7 @@ func (t *logicTest) execStatement(stmt logicStatement) bool {
 	//   the database in an improper state, so we stop there;
 	// - error on expected error is worth going further, even
 	//   if the obtained error does not match the expected error.
-	ok := t.verifyError("", stmt.pos, stmt.expectErr, stmt.expectErrCode, err)
+	ok := t.verifyError("", stmt.pos, stmt.expectErr, stmt.expectErrCode, err, retry)
 	if ok {
 		t.finishOne("OK")
 	}
@@ -1531,13 +1590,13 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-func (t *logicTest) execQuery(query logicQuery) error {
+func (t *logicTest) execQuery(query logicQuery, retry bool) error {
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
-	if ok := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); !ok {
-		return nil
+	if ok := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err, retry); !ok {
+		return err
 	}
 	if err != nil {
 		// An error occurred, but it was expected.
