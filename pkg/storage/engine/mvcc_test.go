@@ -3514,7 +3514,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			verifyStats("verification", ms, &expMS, t)
+			assertEq(t, engine, "verification", ms, &expMS)
 		})
 	}
 }
