@@ -115,6 +115,7 @@ var debugCtx = struct {
 	replicated        bool
 	inputFile         string
 	printSystemConfig bool
+	maxResults        int64
 }{
 	startKey: engine.NilKey,
 	endKey:   engine.MVCCKeyMax,

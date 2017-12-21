@@ -33,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
 
-var maxResults int64
-
 var sqlConnURL, sqlConnUser, sqlConnDBName string
 var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
@@ -368,7 +366,7 @@ func init() {
 	}
 
 	// Max results flag for range list.
-	Int64Flag(lsRangesCmd.Flags(), &maxResults, cliflags.MaxResults, 1000)
+	Int64Flag(lsRangesCmd.Flags(), &debugCtx.maxResults, cliflags.MaxResults, 1000)
 
 	// Debug commands.
 	{

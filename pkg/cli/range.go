@@ -78,7 +78,7 @@ func runLsRanges(cmd *cobra.Command, args []string) error {
 	}
 	defer finish()
 
-	rows, err := kvDB.Scan(ctx, startKey, endKey, maxResults)
+	rows, err := kvDB.Scan(ctx, startKey, endKey, debugCtx.maxResults)
 	if err != nil {
 		return err
 	}
