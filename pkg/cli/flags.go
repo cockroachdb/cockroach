@@ -135,6 +135,8 @@ func VarFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 }
 
 func init() {
+	initCLIDefaults()
+
 	// Change the logging defaults for the main cockroach binary.
 	// The value is overridden after command-line parsing.
 	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("false"); err != nil {
@@ -218,11 +220,11 @@ func init() {
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
-		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, baseCfg.Insecure)
+		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, startCtx.serverInsecure)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
-		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, base.DefaultCertsDirectory)
+		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
 
 		// Cluster joining flags.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
@@ -307,27 +309,27 @@ func init() {
 	// Node Status command.
 	{
 		f := statusNodeCmd.Flags()
-		BoolFlag(f, &nodeCtx.statusShowRanges, cliflags.NodeRanges, false)
-		BoolFlag(f, &nodeCtx.statusShowStats, cliflags.NodeStats, false)
-		BoolFlag(f, &nodeCtx.statusShowAll, cliflags.NodeAll, false)
-		BoolFlag(f, &nodeCtx.statusShowDecommission, cliflags.NodeDecommission, false)
+		BoolFlag(f, &nodeCtx.statusShowRanges, cliflags.NodeRanges, nodeCtx.statusShowRanges)
+		BoolFlag(f, &nodeCtx.statusShowStats, cliflags.NodeStats, nodeCtx.statusShowStats)
+		BoolFlag(f, &nodeCtx.statusShowAll, cliflags.NodeAll, nodeCtx.statusShowAll)
+		BoolFlag(f, &nodeCtx.statusShowDecommission, cliflags.NodeDecommission, nodeCtx.statusShowDecommission)
 	}
 
 	// Decommission command.
 	VarFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionWait, cliflags.Wait)
 
 	// Quit command.
-	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, false)
+	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
 
 	zf := setZoneCmd.Flags()
-	StringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, "")
-	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, false)
+	StringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, zoneCtx.zoneConfig)
+	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, zoneCtx.zoneDisableReplication)
 
 	VarFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
-	BoolFlag(sqlShellCmd.Flags(), &sqlCtx.safeUpdates, cliflags.SafeUpdates, true)
+	BoolFlag(sqlShellCmd.Flags(), &sqlCtx.safeUpdates, cliflags.SafeUpdates, sqlCtx.safeUpdates)
 
 	VarFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
-	StringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, "")
+	StringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, dumpCtx.asOf)
 
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd}
@@ -335,7 +337,7 @@ func init() {
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
-		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, false)
+		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, sqlCtx.echo)
 		StringFlag(f, &sqlConnURL, cliflags.URL, "")
 		StringFlag(f, &sqlConnUser, cliflags.User, security.RootUser)
 
@@ -354,35 +356,30 @@ func init() {
 	// can override with --format.
 	// By default, query times are not displayed. The default is overridden
 	// in the CLI shell.
-	cliCtx.tableDisplayFormat = tableDisplayTSV
-	cliCtx.showTimes = false
-	if cliCtx.terminalOutput {
-		cliCtx.tableDisplayFormat = tableDisplayPretty
-	}
 	for _, cmd := range tableOutputCommands {
 		f := cmd.Flags()
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
 
 	// Max results flag for range list.
-	Int64Flag(lsRangesCmd.Flags(), &debugCtx.maxResults, cliflags.MaxResults, 1000)
+	Int64Flag(lsRangesCmd.Flags(), &debugCtx.maxResults, cliflags.MaxResults, debugCtx.maxResults)
 
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
 		VarFlag(f, (*mvccKey)(&debugCtx.startKey), cliflags.From)
 		VarFlag(f, (*mvccKey)(&debugCtx.endKey), cliflags.To)
-		BoolFlag(f, &debugCtx.values, cliflags.Values, false)
-		BoolFlag(f, &debugCtx.sizes, cliflags.Sizes, false)
+		BoolFlag(f, &debugCtx.values, cliflags.Values, debugCtx.values)
+		BoolFlag(f, &debugCtx.sizes, cliflags.Sizes, debugCtx.sizes)
 	}
 	{
 		f := debugRangeDataCmd.Flags()
-		BoolFlag(f, &debugCtx.replicated, cliflags.Replicated, false)
+		BoolFlag(f, &debugCtx.replicated, cliflags.Replicated, debugCtx.replicated)
 	}
 	{
 		f := debugGossipValuesCmd.Flags()
-		StringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, "")
-		BoolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, false)
+		StringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, debugCtx.inputFile)
+		BoolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, debugCtx.printSystemConfig)
 	}
 }
 
