@@ -80,7 +80,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
-	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier)
+	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier, params.p.session.Database)
 	if err != nil {
 		return err
 	}
