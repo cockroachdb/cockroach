@@ -48,6 +48,7 @@ var (
 
 const (
 	addDefaultMetaAndLivenessZoneConfigsName = "add default .meta and .liveness zone configs"
+	addSystemUsersIsRoleAndCreateAdminRole   = "add system.users isRole column and create admin role"
 )
 
 // MigrationManagerTestingKnobs contains testing knobs.
@@ -141,7 +142,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newRanges:      1,
 	},
 	{
-		name:         "add system.users isRole column and create admin role",
+		name:         addSystemUsersIsRoleAndCreateAdminRole,
 		workFn:       addRoles,
 		doesBackfill: true,
 	},
@@ -723,7 +724,7 @@ func addRoles(ctx context.Context, r runner) error {
 	}
 
 	// Create the `admin` role.
-	const upsertAdminStmt = `
+	const insertAdminStmt = `
 					INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
 					`
 
@@ -733,17 +734,44 @@ func addRoles(ctx context.Context, r runner) error {
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, upsertAdminStmt, &pl, 1)
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, insertAdminStmt, &pl, 1)
 		if err == nil {
 			res.Close(ctx)
 			break
 		}
-		if sqlbase.IsUniquenessConstraintViolationError(err) {
-			log.Fatalf(ctx, `cannot create role %q, a user with that name exists. Please drop the user `+
-				`(DROP USER %s) using a previous version of CockroachDB and try again`,
-				sqlbase.AdminRole, sqlbase.AdminRole)
+
+		if !sqlbase.IsUniquenessConstraintViolationError(err) {
+			// Non-constraint violation error: try again.
+			log.Warningf(ctx, "failed to insert %s role into the system.users table: %s", sqlbase.AdminRole, err)
+			continue
 		}
-		log.Warningf(ctx, "failed to insert %s role into the system.users table: %s", sqlbase.AdminRole, err)
+
+		// Uniqueness error: we have an entry for admin. Either this is a replay of this migration, or
+		// an admin user existed before.
+		// We perform this check here rather than before the INSERT so that we don't needlessly retry
+		// a SELECT on something that doesn't usually exist.
+		// We look for a user named "admin" that is NOT a role (the only possibility before the ALTER above).
+		selectStmt := `SELECT username FROM system.users WHERE username = $1 AND "isRole" = false`
+
+		// Do not overwrite err or res.
+		var selectRes sql.StatementResults
+		selectRes, selectErr := r.sqlExecutor.ExecuteStatementsBuffered(session, selectStmt, &pl, 1)
+		if selectErr != nil {
+			// Rely on the main retry loop to retry failed SELECT.
+			continue
+		}
+		defer selectRes.Close(ctx)
+
+		if len(selectRes.ResultList) == 0 || selectRes.ResultList[0].Rows.Len() == 0 {
+			// No results: this is the migration being rerun.
+			err = nil
+			break
+		}
+
+		err = fmt.Errorf(`cannot create role %q, a user with that name exists. Please drop the user `+
+			`(DROP USER %s) using a previous version of CockroachDB and try again`,
+			sqlbase.AdminRole, sqlbase.AdminRole)
+		break
 	}
 	return err
 }
