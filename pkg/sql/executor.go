@@ -110,13 +110,13 @@ var (
 		Help: "Latency of SQL request execution"}
 	MetaDistSQLSelect = metric.Metadata{
 		Name: "sql.distsql.select.count",
-		Help: "Number of dist-SQL SELECT statements"}
+		Help: "Number of DistSQL SELECT statements"}
 	MetaDistSQLExecLatency = metric.Metadata{
 		Name: "sql.distsql.exec.latency",
-		Help: "Latency of dist-SQL statement execution"}
+		Help: "Latency of DistSQL statement execution"}
 	MetaDistSQLServiceLatency = metric.Metadata{
 		Name: "sql.distsql.service.latency",
-		Help: "Latency of dist-SQL request execution"}
+		Help: "Latency of DistSQL request execution"}
 	MetaUpdate = metric.Metadata{
 		Name: "sql.update.count",
 		Help: "Number of SQL UPDATE statements"}
@@ -211,14 +211,9 @@ type Executor struct {
 	virtualSchemas virtualSchemaHolder
 
 	// Transient stats.
-	SelectCount *metric.Counter
-	// The subset of SELECTs that are processed through DistSQL.
-	DistSQLSelectCount    *metric.Counter
-	DistSQLExecLatency    *metric.Histogram
-	SQLExecLatency        *metric.Histogram
-	DistSQLServiceLatency *metric.Histogram
-	SQLServiceLatency     *metric.Histogram
-	TxnBeginCount         *metric.Counter
+	SelectCount   *metric.Counter
+	TxnBeginCount *metric.Counter
+	EngineMetrics sqlEngineMetrics
 
 	// txnCommitCount counts the number of times a COMMIT was attempted.
 	TxnCommitCount *metric.Counter
@@ -378,21 +373,23 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		stopper: stopper,
 		reCache: tree.NewRegexpCache(512),
 
-		TxnBeginCount:      metric.NewCounter(MetaTxnBegin),
-		TxnCommitCount:     metric.NewCounter(MetaTxnCommit),
-		TxnAbortCount:      metric.NewCounter(MetaTxnAbort),
-		TxnRollbackCount:   metric.NewCounter(MetaTxnRollback),
-		SelectCount:        metric.NewCounter(MetaSelect),
-		DistSQLSelectCount: metric.NewCounter(MetaDistSQLSelect),
-		// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
-		DistSQLExecLatency: metric.NewLatency(MetaDistSQLExecLatency,
-			6*metricsSampleInterval),
-		SQLExecLatency: metric.NewLatency(MetaSQLExecLatency,
-			6*metricsSampleInterval),
-		DistSQLServiceLatency: metric.NewLatency(MetaDistSQLServiceLatency,
-			6*metricsSampleInterval),
-		SQLServiceLatency: metric.NewLatency(MetaSQLServiceLatency,
-			6*metricsSampleInterval),
+		TxnBeginCount:    metric.NewCounter(MetaTxnBegin),
+		TxnCommitCount:   metric.NewCounter(MetaTxnCommit),
+		TxnAbortCount:    metric.NewCounter(MetaTxnAbort),
+		TxnRollbackCount: metric.NewCounter(MetaTxnRollback),
+		SelectCount:      metric.NewCounter(MetaSelect),
+		EngineMetrics: sqlEngineMetrics{
+			DistSQLSelectCount: metric.NewCounter(MetaDistSQLSelect),
+			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
+			DistSQLExecLatency: metric.NewLatency(MetaDistSQLExecLatency,
+				6*metricsSampleInterval),
+			SQLExecLatency: metric.NewLatency(MetaSQLExecLatency,
+				6*metricsSampleInterval),
+			DistSQLServiceLatency: metric.NewLatency(MetaDistSQLServiceLatency,
+				6*metricsSampleInterval),
+			SQLServiceLatency: metric.NewLatency(MetaSQLServiceLatency,
+				6*metricsSampleInterval),
+		},
 		UpdateCount: metric.NewCounter(MetaUpdate),
 		InsertCount: metric.NewCounter(MetaInsert),
 		DeleteCount: metric.NewCounter(MetaDelete),
@@ -2192,8 +2189,8 @@ func (e *Executor) execStmt(
 		err = e.execClassic(planner, plan, res)
 	}
 	planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
-	e.recordStatementSummary(
-		planner, stmt, useDistSQL, automaticRetryCount, res, err,
+	recordStatementSummary(
+		planner, stmt, useDistSQL, automaticRetryCount, res, err, &e.EngineMetrics,
 	)
 	if e.cfg.TestingKnobs.AfterExecute != nil {
 		e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res, err)
@@ -2255,7 +2252,7 @@ func (e *Executor) execStmtInParallel(
 		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 		err = e.execClassic(planner, plan, bufferedWriter)
 		planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
-		e.recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err)
+		recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err, &e.EngineMetrics)
 		if e.cfg.TestingKnobs.AfterExecute != nil {
 			e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), bufferedWriter, err)
 		}
