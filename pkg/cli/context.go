@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -66,6 +67,9 @@ func initCLIDefaults() {
 	}
 	cliCtx.showTimes = false
 	cliCtx.cmdTimeout = 0 // no timeout
+	cliCtx.sqlConnURL = ""
+	cliCtx.sqlConnUser = security.RootUser
+	cliCtx.sqlConnDBName = ""
 
 	sqlCtx.execStmts = nil
 	sqlCtx.safeUpdates = false
@@ -125,6 +129,10 @@ type cliContext struct {
 	// cmdTimeout sets the maximum run time for the command.
 	// Commands that wish to use this must use cmdTimeoutContext().
 	cmdTimeout time.Duration
+
+	// for CLI commands that use the SQL interface, these parameters
+	// determine how to connect to the server.
+	sqlConnURL, sqlConnUser, sqlConnDBName string
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
