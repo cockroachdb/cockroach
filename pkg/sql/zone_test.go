@@ -245,35 +245,35 @@ func TestInvalidSetShowZones(t *testing.T) {
 		},
 		{
 			"ALTER RANGE foo EXPERIMENTAL CONFIGURE ZONE ''",
-			"\"foo\" is not a built-in zone",
+			`"foo" is not a built-in zone`,
 		},
 		{
 			"ALTER DATABASE foo EXPERIMENTAL CONFIGURE ZONE ''",
-			"database \"foo\" does not exist",
+			`database "foo" does not exist`,
 		},
 		{
 			"ALTER TABLE system.foo EXPERIMENTAL CONFIGURE ZONE ''",
-			"relation \"system.foo\" does not exist",
+			`relation "system.foo" does not exist`,
 		},
 		{
 			"ALTER TABLE foo EXPERIMENTAL CONFIGURE ZONE ''",
-			"no database specified: \"foo\"",
+			`no database specified: "foo"`,
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE foo",
-			"\"foo\" is not a built-in zone",
+			`"foo" is not a built-in zone`,
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE foo",
-			"database \"foo\" does not exist",
+			`database "foo" does not exist`,
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE foo",
-			"no database specified: \"foo\"",
+			`no database specified: "foo"`,
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE system.foo",
-			"relation \"system.foo\" does not exist",
+			`relation "system.foo" does not exist`,
 		},
 	} {
 		if _, err := db.Exec(tc.query); !testutils.IsError(err, tc.err) {
