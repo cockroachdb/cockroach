@@ -879,3 +879,65 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	testZone.GC.TTLSeconds = 60 * 60
 	checkZoneConfig(keys.MetaRangesID, testZone)
 }
+
+func TestAdminUserExists(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Remove the migration so we can test its effects.
+	newMigrations := make([]migrationDescriptor, 0, len(backwardCompatibleMigrations))
+	for _, m := range backwardCompatibleMigrations {
+		if m.name == addSystemUsersIsRoleAndCreateAdminRole {
+			continue
+		}
+		newMigrations = append(newMigrations, m)
+	}
+	defer func(prev []migrationDescriptor) {
+		backwardCompatibleMigrations = prev
+	}(backwardCompatibleMigrations)
+	backwardCompatibleMigrations = newMigrations
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
+	// knows about "isRole", but the migration hasn't run yet.
+	if _, err := sqlDB.Exec(
+		`INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
+		sqlbase.AdminRole,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	r := runner{
+		db:          kvDB,
+		sqlExecutor: s.Executor().(*sql.Executor),
+		memMetrics:  &sql.MemoryMetrics{},
+	}
+	// Run the migration and verify its effects.
+	err := addRoles(ctx, r)
+	if e := `cannot create role "admin", a user with that name exists.`; !testutils.IsError(err, e) {
+		t.Errorf("expected error %s, got %s", e, err)
+	}
+}
+
+func TestReplayMigrations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	r := runner{
+		db:          kvDB,
+		sqlExecutor: s.Executor().(*sql.Executor),
+		memMetrics:  &sql.MemoryMetrics{},
+	}
+
+	// Test all migrations again. StartServer did the first round.
+	for _, m := range backwardCompatibleMigrations {
+		if err := m.workFn(ctx, r); err != nil {
+			t.Error(err)
+		}
+	}
+}
