@@ -20,6 +20,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	gcs "cloud.google.com/go/storage"
 	azr "github.com/Azure/azure-sdk-for-go/storage"
@@ -331,6 +332,25 @@ type s3Storage struct {
 	s3     *s3.S3
 }
 
+func s3Retry(ctx context.Context, fn func() error) error {
+	const maxAttempts = 3
+	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		err := fn()
+		if s3err, ok := err.(s3.RequestFailure); ok {
+			// A 503 error could mean we need to reduce our request rate. Impose an
+			// arbitrary slowdown in that case.
+			// See http://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+			if s3err.StatusCode() == 503 {
+				select {
+				case <-time.After(time.Second * 5):
+				case <-ctx.Done():
+				}
+			}
+		}
+		return err
+	})
+}
+
 var _ ExportStorage = &s3Storage{}
 
 func makeS3Storage(ctx context.Context, conf *roachpb.ExportStorage_S3) (ExportStorage, error) {
@@ -341,7 +361,12 @@ func makeS3Storage(ctx context.Context, conf *roachpb.ExportStorage_S3) (ExportS
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
 	}
-	region, err := s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
+	var region string
+	err = s3Retry(ctx, func() error {
+		var err error
+		region, err = s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
+		return err
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find s3 bucket's region")
 	}
