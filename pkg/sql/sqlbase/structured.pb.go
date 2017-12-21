@@ -1258,6 +1258,7 @@ type TableDescriptor_SequenceOpts struct {
 	// Start value of the sequence.
 	Start int64 `protobuf:"varint,4,opt,name=start" json:"start"`
 	// Whether to wrap around when the min or max value is hit.
+	// Currently unimplemented (doesn't parse, value ignored).
 	Cycle bool `protobuf:"varint,5,opt,name=cycle" json:"cycle"`
 }
 

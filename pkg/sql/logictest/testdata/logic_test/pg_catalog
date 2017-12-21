@@ -1216,13 +1216,13 @@ statement ok
 CREATE SEQUENCE foo
 
 statement ok
-CREATE SEQUENCE bar MAXVALUE 10 MINVALUE 5 START 6 INCREMENT 2 CYCLE
+CREATE SEQUENCE bar MAXVALUE 10 MINVALUE 5 START 6 INCREMENT 2
 
 query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid    seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-1671363588  20        6         2             10                   5       1         true
+1671363588  20        6         2             10                   5       1         false
 3781872120  20        1         1             9223372036854775807  1       1         false
 
 statement ok

@@ -3597,6 +3597,8 @@ sequence_option_list:
 
 sequence_option_elem:
   AS any_name                  { return unimplemented(sqllex, "create sequence AS option") }
+| CYCLE                        { return unimplemented(sqllex, "create sequence CYCLE option") }
+| NO CYCLE                     { return unimplemented(sqllex, "create sequence CYCLE option") }
 | OWNED BY any_name            { return unimplemented(sqllex, "create sequence OWNED BY option") }
 | CACHE signed_iconst64        { return unimplemented(sqllex, "create sequence CACHE option") }
 | INCREMENT signed_iconst64    { x := $2.int64()
@@ -3613,8 +3615,6 @@ sequence_option_elem:
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | START WITH signed_iconst64   { x := $3.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
-| CYCLE                        { $$.val = tree.SequenceOption{Name: tree.SeqOptCycle, BoolVal: true} }
-| NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptCycle, BoolVal: false} }
 
 // %Help: TRUNCATE - empty one or more tables
 // %Category: DML
