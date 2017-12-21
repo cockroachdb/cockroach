@@ -106,6 +106,8 @@ func initCLIDefaults() {
 	nodeCtx.statusShowStats = false
 	nodeCtx.statusShowAll = false
 	nodeCtx.statusShowDecommission = false
+
+	initPreFlagsDefaults()
 }
 
 // cliContext captures the command-line parameters of most CLI commands.

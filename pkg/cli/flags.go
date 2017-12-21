@@ -30,9 +30,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
 
+// special global variables used by flag variable definitions below.
+// These do not correspond directly to the configuration parameters
+// used as input by the CLI commands (these are defined in context
+// structs in context.go). Instead, they are used at the *end* of
+// command-line parsing to override the defaults in the context
+// structs.
+//
+// Corollaries:
+// - it would be a programming error to access these variables directly
+//   outside of this file (flags.go)
+// - the underlying context parameters must receive defaults in
+//   initCLIDefaults() even when they are otherwise overridden by the
+//   flags logic, because some tests to not use the flag logic at all.
 var serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
+
+// initPreFlagsDefaults initializes the values of the global variables
+// defined above.
+func initPreFlagsDefaults() {
+	serverConnPort = base.DefaultPort
+	serverAdvertiseHost = ""
+	serverAdvertisePort = ""
+
+	serverHTTPHost = ""
+	serverHTTPPort = base.DefaultHTTPPort
+
+	clientConnHost = ""
+	clientConnPort = base.DefaultPort
+}
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
 // If the command has an existing pre-run function, it is saved and will be called
@@ -179,13 +206,13 @@ func init() {
 
 		// Server flags.
 		StringFlag(f, &startCtx.serverConnHost, cliflags.ServerHost, startCtx.serverConnHost)
-		StringFlag(f, &serverConnPort, cliflags.ServerPort, base.DefaultPort)
-		StringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, "")
-		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, "")
+		StringFlag(f, &serverConnPort, cliflags.ServerPort, serverConnPort)
+		StringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, serverAdvertiseHost)
+		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, serverAdvertisePort)
 		// The advertise port flag is used for testing purposes only and is kept hidden.
 		_ = f.MarkHidden(cliflags.AdvertisePort.Name)
-		StringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, "")
-		StringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
+		StringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, serverHTTPHost)
+		StringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, serverHTTPPort)
 		StringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
 		VarFlag(f, &serverCfg.Locality, cliflags.Locality)
 
@@ -270,8 +297,8 @@ func init() {
 	clientCmds = append(clientCmds, initCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		StringFlag(f, &clientConnHost, cliflags.ClientHost, "")
-		StringFlag(f, &clientConnPort, cliflags.ClientPort, base.DefaultPort)
+		StringFlag(f, &clientConnHost, cliflags.ClientHost, clientConnHost)
+		StringFlag(f, &clientConnPort, cliflags.ClientPort, clientConnPort)
 
 		BoolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure, baseCfg.Insecure)
 
