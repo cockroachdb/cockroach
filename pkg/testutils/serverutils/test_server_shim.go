@@ -144,6 +144,12 @@ type TestServerInterface interface {
 	SplitRange(
 		splitKey roachpb.Key,
 	) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
+
+	// ExpectedInitialRangeCount returns the expected number of ranges that should
+	// be on the server after initial (asynchronous) splits have been completed,
+	// assuming no additional information is added outside of the normal bootstrap
+	// process.
+	ExpectedInitialRangeCount() (int, error)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

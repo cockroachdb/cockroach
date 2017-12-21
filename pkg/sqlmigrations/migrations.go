@@ -16,6 +16,7 @@ package sqlmigrations
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"golang.org/x/net/context"
@@ -46,11 +47,6 @@ var (
 	leaseRefreshInterval = leaseDuration / 5
 )
 
-const (
-	addDefaultMetaAndLivenessZoneConfigsName = "add default .meta and .liveness zone configs"
-	addSystemUsersIsRoleAndCreateAdminRole   = "add system.users isRole column and create admin role"
-)
-
 // MigrationManagerTestingKnobs contains testing knobs.
 type MigrationManagerTestingKnobs struct {
 	// DisableMigrations skips all migrations.
@@ -79,16 +75,14 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: eventlogUniqueIDDefault,
 	},
 	{
-		name:           "create system.jobs table",
-		workFn:         createJobsTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.jobs table",
+		workFn:           createJobsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.JobsTableID},
 	},
 	{
-		name:           "create system.settings table",
-		workFn:         createSettingsTable,
-		newDescriptors: 1,
-		newRanges:      0, // it lives in gossip range.
+		name:             "create system.settings table",
+		workFn:           createSettingsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.SettingsTableID},
 	},
 	{
 		name:   "enable diagnostics reporting",
@@ -99,12 +93,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: repopulateViewDeps,
 	},
 	{
-		name:           "create system.sessions table",
-		workFn:         createWebSessionsTable,
-		newDescriptors: 1,
-		// The table ID for the sessions table is greater than the previous
-		// table ID by 4 (3 IDs were reserved for non-table entities).
-		newRanges: 4,
+		name:             "create system.sessions table",
+		workFn:           createWebSessionsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.WebSessionsTableID},
 	},
 	{
 		name:   "populate initial version cluster setting table entry",
@@ -115,34 +106,30 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: disableNetTrace,
 	},
 	{
-		name:           "create system.table_statistics table",
-		workFn:         createTableStatisticsTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.table_statistics table",
+		workFn:           createTableStatisticsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.TableStatisticsTableID},
 	},
 	{
 		name:   "add root user",
 		workFn: addRootUser,
 	},
 	{
-		name:           "create system.locations table",
-		workFn:         createLocationsTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.locations table",
+		workFn:           createLocationsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.LocationsTableID},
 	},
 	{
-		name:      addDefaultMetaAndLivenessZoneConfigsName,
-		workFn:    addDefaultMetaAndLivenessZoneConfigs,
-		newRanges: 1,
+		name:   "add default .meta and .liveness zone configs",
+		workFn: addDefaultMetaAndLivenessZoneConfigs,
 	},
 	{
-		name:           "create system.role_members table",
-		workFn:         createRoleMembersTable,
-		newDescriptors: 1,
-		newRanges:      1,
+		name:             "create system.role_members table",
+		workFn:           createRoleMembersTable,
+		newDescriptorIDs: []sqlbase.ID{keys.RoleMembersTableID},
 	},
 	{
-		name:         addSystemUsersIsRoleAndCreateAdminRole,
+		name:         "add system.users isRole column and create admin role",
 		workFn:       addRoles,
 		doesBackfill: true,
 	},
@@ -156,6 +143,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "make root a member of the admin role",
 		workFn: addRootToAdminRole,
 	},
+	{
+		name:   "upgrade table descs to interleaved format version",
+		workFn: upgradeTableDescsToInterleavedFormatVersion,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -167,13 +158,12 @@ type migrationDescriptor struct {
 	// workFn must be idempotent so that we can safely re-run it if a node failed
 	// while running it.
 	workFn func(context.Context, runner) error
-	// newRanges and newDescriptors are the number of additional ranges/descriptors
-	// that would be added by this migration in a fresh cluster. This is needed to
-	// automate certain tests, which check the number of ranges/descriptors
-	// present on server bootup.
-	newRanges, newDescriptors int
 	// doesBackfill should be set to true if the migration triggers a backfill.
 	doesBackfill bool
+	// newDescriptorIDs lists the IDs of any additional descriptors added by this
+	// migration. This is needed to automate certain tests, which check the number
+	// of ranges/descriptors present on server bootup.
+	newDescriptorIDs sqlbase.IDs
 }
 
 type runner struct {
@@ -241,28 +231,26 @@ func NewManager(
 	}
 }
 
-// AdditionalInitialDescriptors returns the number of system descriptors and
-// ranges that have been added by migrations. This is needed for certain tests,
-// which check the number of ranges at node startup.
+// ExpectedDescriptorIDs returns the list of all expected system descriptor IDs,
+// including those added by completed migrations. This is needed for certain
+// tests, which check the number of ranges and system tables at node startup.
 //
 // NOTE: This value may be out-of-date if another node is actively running
 // migrations, and so should only be used in test code where the migration
 // lifecycle is tightly controlled.
-func AdditionalInitialDescriptors(
-	ctx context.Context, db db,
-) (descriptors int, ranges int, _ error) {
+func ExpectedDescriptorIDs(ctx context.Context, db db) (sqlbase.IDs, error) {
 	completedMigrations, err := getCompletedMigrations(ctx, db)
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
+	descriptorIDs := sqlbase.MakeMetadataSchema().DescriptorIDs()
 	for _, migration := range backwardCompatibleMigrations {
-		key := migrationKey(migration)
-		if _, ok := completedMigrations[string(key)]; ok {
-			descriptors += migration.newDescriptors
-			ranges += migration.newRanges
+		if _, ok := completedMigrations[string(migrationKey(migration))]; ok {
+			descriptorIDs = append(descriptorIDs, migration.newDescriptorIDs...)
 		}
 	}
-	return descriptors, ranges, nil
+	sort.Sort(descriptorIDs)
+	return descriptorIDs, nil
 }
 
 // EnsureMigrations should be run during node startup to ensure that all
@@ -858,4 +846,76 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 		log.Warningf(ctx, "failed to make %s a member of the %s role: %s", security.RootUser, sqlbase.AdminRole, err)
 	}
 	return err
+}
+
+var upgradeTableDescBatchSize int64 = 50
+
+// upgradeTableDescsToInterleavedFormatVersion ensures that the upgrade to
+// InterleavedFormatVersion is persisted to disk for all table descriptors. It
+// must otherwise be performed on-the-fly whenever a table descriptor is loaded.
+// In fact, before this migration, a cluster that was continuously upgraded from
+// before beta-20161013 would retain its old-format table descriptors until a
+// schema-mutating statement was executed against every old-format table.
+//
+// TODO(benesch): Remove this migration in v2.1.
+func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) error {
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	startKey := sqlbase.MakeAllDescsMetadataKey()
+	endKey := startKey.PrefixEnd()
+	for done := false; !done; {
+		// It's safe to use multiple transactions here. Any table descriptor that's
+		// created while this migration is in progress will use the desired
+		// InterleavedFormatVersion, as all possible binary versions in the cluster
+		// (the current release and the previous release) create new table
+		// descriptors using InterleavedFormatVersion. We need only upgrade the
+		// ancient table descriptors written by versions before beta-20161013.
+		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			kvs, err := txn.Scan(ctx, startKey, endKey, upgradeTableDescBatchSize)
+			if err != nil {
+				return err
+			}
+			if len(kvs) == 0 {
+				done = true
+				return nil
+			}
+			startKey = kvs[len(kvs)-1].Key.Next()
+
+			b := txn.NewBatch()
+			for _, kv := range kvs {
+				var sqlDesc sqlbase.Descriptor
+				if err := kv.ValueProto(&sqlDesc); err != nil {
+					return err
+				}
+				if table := sqlDesc.GetTable(); table != nil {
+					if upgraded := table.MaybeUpgradeFormatVersion(); upgraded {
+						// Though SetUpVersion typically bails out if the table is being
+						// dropped, it's safe to ignore the DROP state here and
+						// unconditionally set UpVersion. For proof, see
+						// TestDropTableWhileUpgradingFormat.
+						//
+						// In fact, it's of the utmost importance that this migration
+						// upgrades every last old-format table descriptor, including those
+						// that are dropping. Otherwise, the user could upgrade to a version
+						// without support for reading the old format before the drop
+						// completes, leaving a broken table descriptor and the table's
+						// remaining data around forever. This isn't just a theoretical
+						// concern: consider that dropping a large table can take several
+						// days, while upgrading to a new version can take as little as a
+						// few minutes.
+						table.UpVersion = true
+						b.Put(kv.Key, sqlbase.WrapDescriptor(table))
+					}
+				}
+			}
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
+			return txn.Run(ctx, b)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
