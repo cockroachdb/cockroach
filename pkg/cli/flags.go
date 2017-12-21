@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
 
-var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort string
+var serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
 
@@ -178,7 +178,7 @@ func init() {
 		f := StartCmd.Flags()
 
 		// Server flags.
-		StringFlag(f, &serverConnHost, cliflags.ServerHost, "")
+		StringFlag(f, &startCtx.serverConnHost, cliflags.ServerHost, startCtx.serverConnHost)
 		StringFlag(f, &serverConnPort, cliflags.ServerPort, base.DefaultPort)
 		StringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, "")
 		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, "")
@@ -369,16 +369,16 @@ func init() {
 }
 
 func extraServerFlagInit() {
-	serverCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
+	serverCfg.Addr = net.JoinHostPort(startCtx.serverConnHost, serverConnPort)
 	if serverAdvertiseHost == "" {
-		serverAdvertiseHost = serverConnHost
+		serverAdvertiseHost = startCtx.serverConnHost
 	}
 	if serverAdvertisePort == "" {
 		serverAdvertisePort = serverConnPort
 	}
 	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverAdvertisePort)
 	if serverHTTPHost == "" {
-		serverHTTPHost = serverConnHost
+		serverHTTPHost = startCtx.serverConnHost
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }
@@ -387,7 +387,7 @@ func extraClientFlagInit() {
 	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
 	if serverHTTPHost == "" {
-		serverHTTPHost = serverConnHost
+		serverHTTPHost = startCtx.serverConnHost
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }
