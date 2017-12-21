@@ -1493,7 +1493,9 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 // verifyError checks that either no error was found where none was
 // expected, or that an error was found when one was expected. Returns
 // "true" to indicate the behavior was as expected.
-func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err error, retry bool) bool {
+func (t *logicTest) verifyError(
+	sql, pos, expectErr, expectErrCode string, err error, retry bool,
+) bool {
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		// This non-error expecting statement or query needs a retry.
 		// Do not error out but instead return !ok.
