@@ -26,6 +26,27 @@ import (
 	"golang.org/x/net/context"
 )
 
+// serverCfg is used as the client-side copy of default server
+// parameters for CLI utilities (other than `cockroach start`, which
+// constructs a proper server.Config for the newly created server).
+var serverCfg = func() server.Config {
+	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
+	settings.SetCanonicalValuesContainer(&st.SV)
+
+	return server.MakeConfig(context.Background(), st)
+}()
+
+// GetServerCfgStores provides direct public access to the StoreSpecList inside
+// serverCfg. This is used by CCL code to populate some fields.
+//
+// WARNING: consider very carefully whether you should be using this.
+func GetServerCfgStores() base.StoreSpecList {
+	return serverCfg.Stores
+}
+
+var baseCfg = serverCfg.Config
+
+// cliContext captures the command-line parameters of most CLI commands.
 type cliContext struct {
 	// Embed the base context.
 	*base.Config
@@ -48,22 +69,7 @@ type cliContext struct {
 	showTimes bool
 }
 
-var serverCfg = func() server.Config {
-	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
-	settings.SetCanonicalValuesContainer(&st.SV)
-
-	return server.MakeConfig(context.Background(), st)
-}()
-
-// GetServerCfgStores provides direct public access to the StoreSpecList inside
-// serverCfg. This is used by CCL code to populate some fields.
-//
-// WARNING: consider very carefully whether you should be using this.
-func GetServerCfgStores() base.StoreSpecList {
-	return serverCfg.Stores
-}
-
-var baseCfg = serverCfg.Config
+// cliCtx captures the command-line parameters common to most CLI utilities.
 var cliCtx = cliContext{
 	Config: baseCfg,
 
