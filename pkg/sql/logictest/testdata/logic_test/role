@@ -1,0 +1,7 @@
+# LogicTest: default
+
+query T colnames
+SHOW ROLES
+----
+username
+admin

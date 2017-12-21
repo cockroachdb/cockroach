@@ -331,6 +331,7 @@ func TestParse(t *testing.T) {
 		{`SHOW CONSTRAINTS FROM a`},
 		{`SHOW CONSTRAINTS FROM a.b.c`},
 		{`SHOW TABLES FROM a; SHOW COLUMNS FROM b`},
+		{`SHOW ROLES`},
 		{`SHOW USERS`},
 		{`SHOW JOBS`},
 		{`SHOW CLUSTER QUERIES`},
