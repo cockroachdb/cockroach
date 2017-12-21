@@ -200,6 +200,12 @@ func TestValidSetShowZones(t *testing.T) {
 		defaultRow, systemRow, jobsRow, livenessRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.jobs", jobsRow)
 
+	// Verify that the session database is respected.
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE t", yamlOverride)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE t", tableRow)
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE t")
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE t", defaultRow)
+
 	// Ensure zone configs are read transactionally instead of from the cached
 	// system config.
 	txn, err := db.Begin()
@@ -246,8 +252,12 @@ func TestInvalidSetShowZones(t *testing.T) {
 			"database \"foo\" does not exist",
 		},
 		{
+			"ALTER TABLE system.foo EXPERIMENTAL CONFIGURE ZONE ''",
+			"relation \"system.foo\" does not exist",
+		},
+		{
 			"ALTER TABLE foo EXPERIMENTAL CONFIGURE ZONE ''",
-			"relation \"foo\" does not exist",
+			"no database specified: \"foo\"",
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE foo",
@@ -259,7 +269,11 @@ func TestInvalidSetShowZones(t *testing.T) {
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE foo",
-			"relation \"foo\" does not exist",
+			"no database specified: \"foo\"",
+		},
+		{
+			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE system.foo",
+			"relation \"system.foo\" does not exist",
 		},
 	} {
 		if _, err := db.Exec(tc.query); !testutils.IsError(err, tc.err) {
