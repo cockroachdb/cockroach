@@ -132,7 +132,6 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	// Fill in options, starting with defaults then overriding.
 
 	opts := &sqlbase.TableDescriptor_SequenceOpts{
-		Cycle:     false,
 		Increment: 1,
 	}
 	err := assignSequenceOptions(opts, n.n.Options, true /* setDefaults */)

@@ -372,7 +372,7 @@ CREATE TABLE information_schema.sequences (
 				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.MinValue)),  // min value
 				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.MaxValue)),  // max value
 				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.Increment)), // increment
-				yesOrNoDatum(table.SequenceOpts.Cycle),                           // cycle
+				noString, // cycle
 			)
 		})
 	},

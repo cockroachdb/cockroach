@@ -885,12 +885,6 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 				ctx.WriteByte(' ')
 				ctx.Printf("%d", *option.IntVal)
 			}
-		case SeqOptCycle:
-			if option.BoolVal {
-				ctx.WriteString("CYCLE")
-			} else {
-				ctx.WriteString("NO CYCLE")
-			}
 		case SeqOptStart:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
@@ -913,8 +907,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 type SequenceOption struct {
 	Name string
 
-	IntVal  *int64
-	BoolVal bool
+	IntVal *int64
 
 	OptionalWord bool
 }
@@ -925,7 +918,6 @@ const (
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"
 	SeqOptStart     = "START"
-	SeqOptCycle     = "CYCLE"
 )
 
 // CreateUser represents a CREATE USER statement.
