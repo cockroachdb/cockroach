@@ -25,13 +25,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
 
-var sqlConnURL, sqlConnUser, sqlConnDBName string
 var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
@@ -325,11 +323,11 @@ func init() {
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
 		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, sqlCtx.echo)
-		StringFlag(f, &sqlConnURL, cliflags.URL, "")
-		StringFlag(f, &sqlConnUser, cliflags.User, security.RootUser)
+		StringFlag(f, &cliCtx.sqlConnURL, cliflags.URL, cliCtx.sqlConnURL)
+		StringFlag(f, &cliCtx.sqlConnUser, cliflags.User, cliCtx.sqlConnUser)
 
 		if cmd == sqlShellCmd {
-			StringFlag(f, &sqlConnDBName, cliflags.Database, "")
+			StringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database, cliCtx.sqlConnDBName)
 		}
 	}
 

@@ -483,7 +483,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				s.PeriodicallyCheckForUpdates()
 			}
 
-			pgURL, err := serverCfg.PGURL(url.User(sqlConnUser))
+			pgURL, err := serverCfg.PGURL(url.User(cliCtx.sqlConnUser))
 			if err != nil {
 				return err
 			}
