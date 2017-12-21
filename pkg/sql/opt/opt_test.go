@@ -367,17 +367,17 @@ func parseColumns(colStrs []string) ([]IndexColumnInfo, error) {
 	for i := range colStrs {
 		fields := strings.Fields(colStrs[i])
 		var err error
-		res[i].typ, err = parseType(fields[0])
+		res[i].Typ, err = parseType(fields[0])
 		if err != nil {
 			return nil, err
 		}
-		res[i].direction = encoding.Ascending
+		res[i].Direction = encoding.Ascending
 		for _, f := range fields[1:] {
 			switch strings.ToLower(f) {
 			case "ascending", "asc":
 				// ascending is the default.
 			case "descending", "desc":
-				res[i].direction = encoding.Descending
+				res[i].Direction = encoding.Descending
 			default:
 				return nil, fmt.Errorf("unknown column attribute %s", f)
 			}
@@ -416,7 +416,7 @@ func parseScalarExpr(sql string, indexVarCols []IndexColumnInfo) (tree.TypedExpr
 	// Set up an indexed var helper so we can type-check the expression.
 	iv := &indexedVars{types: make([]types.T, len(indexVarCols))}
 	for i, colInfo := range indexVarCols {
-		iv.types[i] = colInfo.typ
+		iv.types[i] = colInfo.Typ
 	}
 
 	sema := tree.MakeSemaContext(false /* privileged */)
