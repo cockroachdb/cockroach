@@ -109,12 +109,6 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		}
 	}
 
-	if n.joinType != joinTypeInner {
-		return physicalPlan{}, false, pgerror.NewErrorf(
-			pgerror.CodeInternalError,
-			"can only plan inner joins with interleaved joins",
-		)
-	}
 	joinType := distsqlJoinType(n.joinType)
 
 	post, joinToStreamColMap := joinOutColumns(n, plans[0], plans[1])
@@ -335,10 +329,6 @@ func distsqlOrdering(
 }
 
 func useInterleavedJoin(n *joinNode) bool {
-	if n.joinType != joinTypeInner {
-		return false
-	}
-
 	// TODO(richardwu): We currently only do an interleave join on
 	// all equality columns. This can be relaxed once a hybrid
 	// hash-merge join is implemented in streamMerger.
