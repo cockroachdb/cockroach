@@ -35,8 +35,6 @@ var sqlConnURL, sqlConnUser, sqlConnDBName string
 var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
-var tempDir string
-var externalIODir string
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
 // If the command has an existing pre-run function, it is saved and will be called
@@ -225,8 +223,8 @@ func init() {
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
 		VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
-		StringFlag(f, &tempDir, cliflags.TempDir, "")
-		StringFlag(f, &externalIODir, cliflags.ExternalIODir, "")
+		StringFlag(f, &startCtx.tempDir, cliflags.TempDir, startCtx.tempDir)
+		StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir, startCtx.externalIODir)
 	}
 
 	for _, cmd := range certCmds {
