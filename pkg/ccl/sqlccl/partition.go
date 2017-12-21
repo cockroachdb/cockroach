@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type repartitioningSide string
@@ -165,6 +166,180 @@ func RepartitioningFastPathAvailable(
 		}
 	}
 	return true, nil
+}
+
+// selectPartitionExprs constructs an expression for selecting all rows in the
+// given partitions.
+func selectPartitionExprs(
+	evalCtx *tree.EvalContext, tableDesc *sqlbase.TableDescriptor, partNames tree.NameList,
+) (tree.Expr, error) {
+	exprsByPartName := make(map[string]tree.TypedExpr)
+
+	a := &sqlbase.DatumAlloc{}
+	var prefixDatums []tree.Datum
+	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *sqlbase.IndexDescriptor) error {
+		return selectPartitionExprsByName(
+			a, tableDesc, idxDesc, &idxDesc.Partitioning, prefixDatums, exprsByPartName)
+	}); err != nil {
+		return nil, err
+	}
+
+	var expr tree.TypedExpr = tree.DBoolFalse
+	for _, partName := range partNames {
+		partExpr, ok := exprsByPartName[string(partName)]
+		if !ok || partExpr == nil {
+			return nil, errors.Errorf("unknown partition: %s", partName)
+		}
+		expr = tree.NewTypedOrExpr(expr, partExpr)
+	}
+
+	if e, equiv := sql.SimplifyExpr(evalCtx, expr); equiv {
+		expr = e
+	}
+	var err error
+	expr, err = evalCtx.NormalizeExpr(expr)
+	if err != nil {
+		return nil, err
+	}
+	// In order to typecheck during simplification and normalization, we used
+	// dummy IndexVars. Swap them out for actual column references.
+	finalExpr, err := tree.SimpleVisit(expr, func(e tree.Expr) (error, bool, tree.Expr) {
+		if ivar, ok := e.(*tree.IndexedVar); ok {
+			col, err := tableDesc.FindColumnByID(sqlbase.ColumnID(ivar.Idx))
+			if err != nil {
+				return err, false, nil
+			}
+			return nil, false, &tree.ColumnItem{ColumnName: tree.Name(col.Name)}
+		}
+		return nil, true, e
+	})
+	return finalExpr, err
+}
+
+// selectPartitionExprsByName constructs an expression for selecting all rows in
+// each partition and subpartition in the given index. To make it easy to
+// simplify and normalize the exprs, references to table columns are represented
+// as TypedOrdinalReferences with an ordinal of the column ID.
+//
+// NB Subpartitions do not affect the expression for their parent partitions. So
+// if a partition foo (a=3) is then subpartitiond by (b=5) and no DEFAULT, the
+// expression for foo is still `a=3`, not `a=3 AND b=5`.
+func selectPartitionExprsByName(
+	a *sqlbase.DatumAlloc,
+	tableDesc *sqlbase.TableDescriptor,
+	idxDesc *sqlbase.IndexDescriptor,
+	partDesc *sqlbase.PartitioningDescriptor,
+	prefixDatums tree.Datums,
+	exprsByPartName map[string]tree.TypedExpr,
+) error {
+	if partDesc.NumColumns == 0 {
+		return nil
+	}
+
+	var colVars tree.TypedExprs
+	{
+		// The recursive calls of selectPartitionExprsByName don't pass though
+		// the column ordinal references, so reconstruct them here.
+		totalPartitioningCols := len(prefixDatums) + int(partDesc.NumColumns)
+		cols := make([]sqlbase.ColumnDescriptor, totalPartitioningCols)
+		for i := range cols {
+			col, err := tableDesc.FindActiveColumnByID(idxDesc.ColumnIDs[i])
+			if err != nil {
+				return err
+			}
+			cols[i] = *col
+		}
+		colVars = make(tree.TypedExprs, totalPartitioningCols)
+		for i := range cols {
+			colVars[i] = tree.NewTypedOrdinalReference(int(cols[i].ID), cols[i].Type.ToDatumType())
+		}
+	}
+
+	if len(partDesc.List) > 0 {
+		type exprAndPartName struct {
+			expr tree.TypedExpr
+			name string
+		}
+		// Any partitions using DEFAULT must specifically exclude any relevant
+		// higher specificity partitions (e.g for partitions `(1, DEFAULT)`,
+		// `(1, 2)`, the expr for the former must exclude the latter. This is
+		// done by bucketing the expression for each partition value by the
+		// number of DEFAULTs it involves.
+		partValueExprs := make([][]exprAndPartName, int(partDesc.NumColumns)+1)
+
+		for _, l := range partDesc.List {
+			for _, valueEncBuf := range l.Values {
+				datums, _, err := sqlbase.TranslateValueEncodingToSpan(
+					a, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
+				if err != nil {
+					return err
+				}
+				allDatums := append(prefixDatums, datums...)
+
+				// When len(allDatums) < len(colVars), the missing elements are DEFAULTs, so
+				// we can simply exclude them from the expr.
+				partValueExpr := tree.NewTypedComparisonExpr(tree.EQ,
+					tree.NewTypedTuple(colVars[:len(allDatums)]), tree.NewDTuple(allDatums...))
+				partValueExprs[len(datums)] = append(partValueExprs[len(datums)], exprAndPartName{
+					expr: partValueExpr,
+					name: l.Name,
+				})
+
+				if err := selectPartitionExprsByName(
+					a, tableDesc, idxDesc, &l.Subpartitioning, allDatums, exprsByPartName,
+				); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Walk backward through partValueExprs, so partition values with fewest
+		// DEFAULTs to most. As we go, keep an expression to be AND NOT'd with
+		// each partition value's expression in `excludeExpr`. This handles the
+		// exclusion of `(1, 2)` from the expression for `(1, DEFAULT)` in the
+		// example above.
+		//
+		// TODO(dan): The result of the way this currently works is correct but
+		// too broad, so we end up with expressions like `(a) IN (1) AND ... (a,
+		// b) != (2, 3)`, where the `!= (2, 3)` part is irrelevant. This only
+		// happens in fairly unrealistic partitionings, so it's unclear if
+		// anything really needs to be done here.
+		var excludeExpr tree.TypedExpr
+		for i := len(partValueExprs) - 1; i >= 0; i-- {
+			if len(partValueExprs[i]) == 0 {
+				continue
+			}
+			var nextExcludeExpr tree.TypedExpr
+			for j := range partValueExprs[i] {
+				partName, partValueExpr := partValueExprs[i][j].name, partValueExprs[i][j].expr
+				if nextExcludeExpr != nil {
+					nextExcludeExpr = tree.NewTypedOrExpr(nextExcludeExpr, partValueExpr)
+				} else {
+					nextExcludeExpr = partValueExpr
+				}
+				if excludeExpr != nil {
+					partValueExpr = tree.NewTypedAndExpr(
+						partValueExpr, tree.NewTypedNotExpr(excludeExpr))
+				}
+				if e, ok := exprsByPartName[partName]; !ok || e == nil {
+					exprsByPartName[partName] = partValueExpr
+				} else {
+					exprsByPartName[partName] = tree.NewTypedOrExpr(e, partValueExpr)
+				}
+			}
+			if excludeExpr != nil {
+				excludeExpr = tree.NewTypedOrExpr(excludeExpr, nextExcludeExpr)
+			} else {
+				excludeExpr = nextExcludeExpr
+			}
+		}
+	}
+
+	for range partDesc.Range {
+		return errors.New("TODO(dan): unsupported for range partitionings")
+	}
+
+	return nil
 }
 
 func init() {

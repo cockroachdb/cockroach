@@ -954,6 +954,75 @@ func TestInitialPartitioning(t *testing.T) {
 	}
 }
 
+func TestSelectPartitionExprs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(dan): PartitionExprs for range partitions is waiting on the new
+	// range partitioning syntax.
+	testData := partitioningTest{
+		name: `partition exprs`,
+		schema: `CREATE TABLE %s (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a) (
+			PARTITION p3 VALUES IN (3) PARTITION BY LIST (b) (
+				PARTITION p34 VALUES IN (4)
+			),
+			PARTITION p5 VALUES IN (5) PARTITION BY LIST (b) (
+				PARTITION p56 VALUES IN (6),
+				PARTITION p5d VALUES IN (DEFAULT)
+			),
+			PARTITION p7 VALUES IN (7) PARTITION BY LIST (b, c) (
+				PARTITION p789 VALUES IN ((8, 9)),
+				PARTITION p7dd VALUES IN ((DEFAULT, DEFAULT))
+			),
+			PARTITION pd VALUES IN (DEFAULT)
+		)`,
+	}
+	if err := testData.parse(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	tests := []struct {
+		// partitions is a comma-separated list of input partitions
+		partitions string
+		// expr is the expected output
+		expr string
+	}{
+		{`p3`, `(a) IN ((3))`},
+		{`p34`, `(a, b) IN ((3, 4))`},
+		{`p5`, `(a) IN ((5))`},
+		{`p56`, `(a, b) IN ((5, 6))`},
+		{`p5d`, `((a) IN ((5))) AND ((a, b) != (5, 6))`},
+		{`p7`, `(a) IN ((7))`},
+		{`p789`, `(a, b, c) IN ((7, 8, 9))`},
+		{`p7dd`, `((a) IN ((7))) AND ((a, b, c) != (7, 8, 9))`},
+		{`pd`, `((a) != (3)) AND (((a) != (5)) AND ((a) != (7)))`},
+
+		// TODO(dan): The expression simplification in this method is all done
+		// by our normal SQL expression simplification code. Seems like it could
+		// use some targeted work to clean these up.
+		{`p5d,p56`, `(((a) IN ((5))) AND ((a, b) != (5, 6))) OR ((a, b) IN ((5, 6)))`},
+		{`p5,p56`, `((a) IN ((5))) OR ((a, b) IN ((5, 6)))`},
+		{`p5,p5d,p56`, `((a) IN ((5))) OR ((((a) IN ((5))) AND ((a, b) != (5, 6))) OR ((a, b) IN ((5, 6))))`},
+		{`p3,p56`, `((a) IN ((3))) OR ((a, b) IN ((5, 6)))`},
+	}
+
+	evalCtx := &tree.EvalContext{}
+	for _, test := range tests {
+		t.Run(test.partitions, func(t *testing.T) {
+			var partNames tree.NameList
+			for _, p := range strings.Split(test.partitions, `,`) {
+				partNames = append(partNames, tree.Name(p))
+			}
+			expr, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if exprStr := expr.String(); exprStr != test.expr {
+				t.Errorf("got %s expected %s", exprStr, test.expr)
+			}
+		})
+	}
+}
+
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
