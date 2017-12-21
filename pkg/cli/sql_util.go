@@ -26,6 +26,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	version "github.com/hashicorp/go-version"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -66,7 +67,8 @@ type sqlConn struct {
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && isInteractive {
-			fmt.Fprintf(stderr, "connection lost; opening new connection: all session settings will be lost\n")
+			fmt.Fprintf(stderr, "warning: connection lost!\n"+
+				"opening new connection: all session settings will be lost\n")
 		}
 		conn, err := pq.Open(c.url)
 		if err != nil {
@@ -77,7 +79,7 @@ func (c *sqlConn) ensureConn() error {
 			if _, err := conn.(sqlConnI).Exec(
 				`SET DATABASE = `+parser.Name(c.dbName).String(), nil,
 			); err != nil {
-				fmt.Fprintf(stderr, "unable to restore current database: %v\n", err)
+				fmt.Fprintf(stderr, "warning: unable to restore current database: %v\n", err)
 			}
 		}
 		c.conn = conn.(sqlConnI)
@@ -109,19 +111,20 @@ func (c *sqlConn) checkServerMetadata() error {
 		return err
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, "unable to retrieve the server's version")
+		fmt.Fprintf(stderr, "warning: unable to retrieve the server's version: %v\n", err)
 	} else {
 		defer func() { _ = rows.Close() }()
 
 		// Read the node_build_info table as an array of strings.
 		rowVals, err := getAllRowStrings(rows, true /* showMoreChars */)
 		if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
-			fmt.Fprintln(stderr, "error while retrieving the server's version")
+			fmt.Fprintln(stderr, "warning: incorrect data while retrieving the server version")
 			// It is not an error that the server version cannot be retrieved.
 			return nil
 		}
 
 		// Extract the version fields from the query results.
+		var v10fields [5]string
 		for _, row := range rowVals {
 			switch row[1] {
 			case "ClusterID":
@@ -132,8 +135,27 @@ func (c *sqlConn) checkServerMetadata() error {
 				c.serverBuild = row[2]
 			case "Organization":
 				c.clusterOrganization = row[2]
-			}
 
+				// Fields for v1.0 compatibility.
+			case "Distribution":
+				v10fields[0] = row[2]
+			case "Tag":
+				v10fields[1] = row[2]
+			case "Platform":
+				v10fields[2] = row[2]
+			case "Time":
+				v10fields[3] = row[2]
+			case "GoVersion":
+				v10fields[4] = row[2]
+			}
+		}
+
+		if newServerVersion == "" {
+			// The "Version" field was not present, this indicates a v1.0
+			// CockroachDB. Use that below.
+			newServerVersion = "v1.0-" + v10fields[1]
+			c.serverBuild = fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
+				v10fields[0], newServerVersion, v10fields[2], v10fields[3], v10fields[4])
 		}
 	}
 
@@ -149,12 +171,24 @@ func (c *sqlConn) checkServerMetadata() error {
 		// (`build.Info.Short()`). This is because we don't care if they're
 		// different platforms/build tools/timestamps. The important bit exposed by
 		// a version mismatch is the wire protocol and SQL dialect.
-		if client := build.GetInfo(); c.serverVersion != client.Tag {
+		client := build.GetInfo()
+		if c.serverVersion != client.Tag {
 			fmt.Println("# Client version:", client.Short())
 		} else {
 			isSame = " (same version as client)"
 		}
 		fmt.Printf("# Server version: %s%s\n", c.serverBuild, isSame)
+
+		sv, err := version.NewVersion(c.serverVersion)
+		if err == nil {
+			cv, err := version.NewVersion(client.Tag)
+			if err == nil {
+				if sv.Compare(cv) == -1 { // server ver < client ver
+					fmt.Fprintln(stderr, "\nwarning: server version older than client! "+
+						"proceed with caution; some features may not be available.\n")
+				}
+			}
+		}
 	}
 
 	// Report the cluster ID only if it it could be fetched
@@ -183,19 +217,19 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
 
 	rows, err := c.Query(sql, nil)
 	if err != nil {
-		fmt.Fprintf(stderr, "error retrieving the %s: %v\n", what, err)
+		fmt.Fprintf(stderr, "warning: error retrieving the %s: %v\n", what, err)
 		return nil, false
 	}
 	defer func() { _ = rows.Close() }()
 
 	if len(rows.Columns()) == 0 {
-		fmt.Fprintf(stderr, "cannot get the %s\n", what)
+		fmt.Fprintf(stderr, "warning: cannot get the %s\n", what)
 		return nil, false
 	}
 
 	err = rows.Next(dbVals[:])
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid %s: %v\n", what, err)
+		fmt.Fprintf(stderr, "warning: invalid %s: %v\n", what, err)
 		return nil, false
 	}
 
