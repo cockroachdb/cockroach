@@ -46,6 +46,56 @@ func GetServerCfgStores() base.StoreSpecList {
 
 var baseCfg = serverCfg.Config
 
+// initCLIDefaults serves as the single point of truth for
+// configuration defaults. It is suitable for calling between tests of
+// the CLI utilities inside a single testing process.
+func initCLIDefaults() {
+	// We don't reset the pointers (because they are tied into the
+	// flags), but instead overwrite the existing structs' values.
+	baseCfg.InitDefaults()
+
+	// isInteractive is only set to `true` by `cockroach sql` -- all
+	// other client commands are non-interactive, regardless of whether
+	// the standard input is a terminal.
+	cliCtx.isInteractive = false
+	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
+	cliCtx.tableDisplayFormat = tableDisplayTSV
+	if cliCtx.terminalOutput {
+		cliCtx.tableDisplayFormat = tableDisplayPretty
+	}
+	cliCtx.showTimes = false
+
+	sqlCtx.execStmts = nil
+	sqlCtx.safeUpdates = false
+	sqlCtx.echo = false
+
+	dumpCtx.dumpMode = dumpBoth
+	dumpCtx.asOf = ""
+
+	debugCtx.startKey = engine.NilKey
+	debugCtx.endKey = engine.MVCCKeyMax
+	debugCtx.values = false
+	debugCtx.sizes = false
+	debugCtx.replicated = false
+	debugCtx.inputFile = ""
+	debugCtx.printSystemConfig = false
+	debugCtx.maxResults = 1000
+
+	zoneCtx.zoneConfig = ""
+	zoneCtx.zoneDisableReplication = false
+
+	startCtx.serverInsecure = baseCfg.Insecure
+	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
+
+	quitCtx.serverDecommission = false
+
+	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
+	nodeCtx.statusShowRanges = false
+	nodeCtx.statusShowStats = false
+	nodeCtx.statusShowAll = false
+	nodeCtx.statusShowDecommission = false
+}
+
 // cliContext captures the command-line parameters of most CLI commands.
 type cliContext struct {
 	// Embed the base context.
@@ -70,17 +120,11 @@ type cliContext struct {
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
-var cliCtx = cliContext{
-	Config: baseCfg,
-
-	terminalOutput: isatty.IsTerminal(os.Stdout.Fd()),
-	// isInteractive is only set to `true` by `cockroach sql` -- all
-	// other client commands are non-interactive, regardless of whether
-	// the standard input is a terminal.
-	isInteractive: false,
-}
+// Defaults set by InitCLIDefaults() above.
+var cliCtx = cliContext{Config: baseCfg}
 
 // sqlCtx captures the command-line parameters of the `sql` command.
+// Defaults set by InitCLIDefaults() above.
 var sqlCtx = struct {
 	*cliContext
 
@@ -97,18 +141,18 @@ var sqlCtx = struct {
 }{cliContext: &cliCtx}
 
 // dumpCtx captures the command-line parameters of the `sql` command.
-var dumpCtx = struct {
+// Defaults set by InitCLIDefaults() above.
+var dumpCtx struct {
 	// dumpMode determines which part of the database should be dumped.
 	dumpMode dumpMode
 
 	// asOf determines the time stamp at which the dump should be taken.
 	asOf string
-}{
-	dumpMode: dumpBoth,
 }
 
 // debugCtx captures the command-line parameters of the `debug` command.
-var debugCtx = struct {
+// Defaults set by InitCLIDefaults() above.
+var debugCtx struct {
 	startKey, endKey  engine.MVCCKey
 	values            bool
 	sizes             bool
@@ -116,18 +160,17 @@ var debugCtx = struct {
 	inputFile         string
 	printSystemConfig bool
 	maxResults        int64
-}{
-	startKey: engine.NilKey,
-	endKey:   engine.MVCCKeyMax,
 }
 
 // zoneCtx captures the command-line parameters of the `zone` command.
+// Defaults set by InitCLIDefaults() above.
 var zoneCtx struct {
 	zoneConfig             string
 	zoneDisableReplication bool
 }
 
 // startCtx captures the command-line arguments for the `start` command.
+// Defaults set by InitCLIDefaults() above.
 var startCtx struct {
 	// server-specific values of some flags.
 	serverInsecure    bool
@@ -135,17 +178,17 @@ var startCtx struct {
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
+// Defaults set by InitCLIDefaults() above.
 var quitCtx struct {
 	serverDecommission bool
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
-var nodeCtx = struct {
+// Defaults set by InitCLIDefaults() above.
+var nodeCtx struct {
 	nodeDecommissionWait   nodeDecommissionWaitType
 	statusShowRanges       bool
 	statusShowStats        bool
 	statusShowDecommission bool
 	statusShowAll          bool
-}{
-	nodeDecommissionWait: nodeDecommissionWaitAll,
 }
