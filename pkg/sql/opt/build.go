@@ -42,8 +42,6 @@ var comparisonOpMap = [...]operator{
 	tree.NotRegIMatch:      notRegIMatchOp,
 	tree.IsDistinctFrom:    isDistinctFromOp,
 	tree.IsNotDistinctFrom: isNotDistinctFromOp,
-	tree.Is:                isOp,
-	tree.IsNot:             isNotOp,
 	tree.Any:               anyOp,
 	tree.Some:              someOp,
 	tree.All:               allOp,
