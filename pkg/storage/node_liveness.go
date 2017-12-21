@@ -74,6 +74,9 @@ var (
 	metaEpochIncrements = metric.Metadata{
 		Name: "liveness.epochincrements",
 		Help: "Number of times this node has incremented its liveness epoch"}
+	metaHeartbeatLatency = metric.Metadata{
+		Name: "liveness.heartbeatlatency",
+		Help: "Node liveness heartbeat latency"}
 )
 
 // IsLive returns whether the node is considered live at the given time with the
@@ -93,6 +96,7 @@ type LivenessMetrics struct {
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  *metric.Counter
 	EpochIncrements    *metric.Counter
+	HeartbeatLatency   *metric.Histogram
 }
 
 // IsLiveCallback is invoked when a node's IsLive state changes to true.
@@ -140,6 +144,7 @@ func NewNodeLiveness(
 	g *gossip.Gossip,
 	livenessThreshold time.Duration,
 	renewalDuration time.Duration,
+	histogramWindow time.Duration,
 ) *NodeLiveness {
 	nl := &NodeLiveness{
 		ambientCtx:        ambient,
@@ -157,6 +162,7 @@ func NewNodeLiveness(
 		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
 		HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
 		EpochIncrements:    metric.NewCounter(metaEpochIncrements),
+		HeartbeatLatency:   metric.NewLatency(metaHeartbeatLatency, histogramWindow),
 	}
 	nl.pauseHeartbeat.Store(false)
 	nl.mu.nodes = map[roachpb.NodeID]Liveness{}
@@ -414,7 +420,9 @@ func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, liveness *Liveness, incrementEpoch bool,
 ) error {
 	defer func(start time.Time) {
-		if dur := timeutil.Now().Sub(start); dur > time.Second {
+		dur := timeutil.Now().Sub(start)
+		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
+		if dur > time.Second {
 			log.Warningf(ctx, "slow heartbeat took %0.1fs", dur.Seconds())
 		}
 	}(timeutil.Now())

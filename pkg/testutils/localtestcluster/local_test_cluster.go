@@ -126,6 +126,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	cfg.AmbientCtx = ambient
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = storage.NewNodeLiveness(
 		cfg.AmbientCtx,
@@ -134,6 +135,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 		cfg.Gossip,
 		active,
 		renewal,
+		cfg.HistogramWindowInterval,
 	)
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, storage.TestTimeUntilStoreDead)
 	cfg.StorePool = storage.NewStorePool(
@@ -146,7 +148,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	)
 	cfg.Transport = transport
 	cfg.TimestampCachePageSize = tscache.TestSklPageSize
-	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	ctx := context.TODO()
 
