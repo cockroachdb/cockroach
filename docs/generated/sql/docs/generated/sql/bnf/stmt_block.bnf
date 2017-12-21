@@ -145,6 +145,7 @@ show_stmt ::=
 	| show_indexes_stmt
 	| show_jobs_stmt
 	| show_queries_stmt
+	| show_roles_stmt
 	| show_session_stmt
 	| show_sessions_stmt
 	| show_stats_stmt
@@ -425,6 +426,9 @@ show_queries_stmt ::=
 	| 'SHOW' 'CLUSTER' 'QUERIES'
 	| 'SHOW' 'LOCAL' 'QUERIES'
 
+show_roles_stmt ::=
+	'SHOW' 'ROLES'
+
 show_session_stmt ::=
 	'SHOW' session_var
 	| 'SHOW' 'SESSION' session_var
@@ -673,6 +677,7 @@ unreserved_keyword ::=
 	| 'RESTRICT'
 	| 'RESUME'
 	| 'REVOKE'
+	| 'ROLES'
 	| 'ROLLBACK'
 	| 'ROLLUP'
 	| 'ROWS'
@@ -1300,6 +1305,7 @@ reserved_keyword ::=
 	| 'PRIMARY'
 	| 'REFERENCES'
 	| 'RETURNING'
+	| 'ROLE'
 	| 'SELECT'
 	| 'SESSION_USER'
 	| 'SOME'
