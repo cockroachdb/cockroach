@@ -99,6 +99,6 @@ proc stop_server {argv} {
 
 proc force_stop_server {argv} {
     report "BEGIN FORCE STOP SERVER"
-    system "$argv quit & sleep 1; if kill -CONT `cat server_pid` 2>/dev/null; then kill -TERM `cat server pid`; sleep 1; if kill -CONT `cat server_pid` 2>/dev/null; then kill -KILL `cat server_pid`; fi; fi"
+    system "$argv quit & sleep 1; if kill -CONT `cat server_pid` 2>/dev/null; then kill -TERM `cat server_pid`; sleep 1; if kill -CONT `cat server_pid` 2>/dev/null; then kill -KILL `cat server_pid`; fi; fi"
     report "END FORCE STOP SERVER"
 }
