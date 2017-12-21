@@ -20,7 +20,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -176,16 +175,13 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 	return ret
 }
 
-// InitialRangeCount returns the number of ranges that would be installed if
-// this metadata schema were installed on a fresh cluster and nothing else. Most
-// clusters will have additional ranges installed by migrations, so this
-// function should be used when only a lower bound, and not an exact count, is
-// needed. See server.ExpectedInitialRangeCount() for a count that includes
-// migrations.
-func (ms MetadataSchema) InitialRangeCount() int {
-	// The number of initial ranges is determined by the number of static splits,
-	// plus the number of non-config system tables. (System config tables all
-	// share a range, while each non-config table is split into its own range.)
-	// Note that `n` static splits create `n+1` ranges.
-	return len(config.StaticSplits()) + 1 + len(ms.descs) - ms.configs
+// DescriptorIDs returns the descriptor IDs present in the metadata schema in
+// sorted order.
+func (ms MetadataSchema) DescriptorIDs() IDs {
+	descriptorIDs := IDs{}
+	for _, md := range ms.descs {
+		descriptorIDs = append(descriptorIDs, md.desc.GetID())
+	}
+	sort.Sort(descriptorIDs)
+	return descriptorIDs
 }

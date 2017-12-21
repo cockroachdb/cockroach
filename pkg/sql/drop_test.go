@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -358,6 +359,7 @@ SHOW TABLES;
 }
 
 func checkKeyCount(t *testing.T, kvDB *client.DB, span roachpb.Span, numKeys int) {
+	t.Helper()
 	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
 		t.Fatal(err)
 	} else if l := numKeys; len(kvs) != l {
@@ -641,6 +643,86 @@ func TestDropTableDeleteData(t *testing.T) {
 		return zoneExists(sqlDB, nil, tableDesc.ID)
 	})
 
+	checkKeyCount(t, kvDB, tableSpan, 0)
+}
+
+func writeTableDesc(ctx context.Context, db *client.DB, tableDesc *sqlbase.TableDescriptor) error {
+	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
+	})
+}
+
+// TestDropTableWhileUpgradingFormat ensures that it's safe for a migration to
+// upgrade the table descriptor's format while the table is scheduled to be
+// dropped.
+//
+// The new format must be backwards-compatible with the old format, but that's
+// true in general.
+func TestDropTableWhileUpgradingFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	blockSchemaChanges := make(chan struct{})
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			// Block schema changes so the data is not cleaned up until we're ready.
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecNotification: func() error {
+				<-blockSchemaChanges
+				return nil
+			},
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+
+	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	const numRows = 100
+	sqlutils.CreateTable(t, sqlDB.DB, "t", "a INT", numRows, sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	// Set TTL so the data is deleted immediately.
+	sqlDB.Exec(t, `ALTER TABLE test.t EXPERIMENTAL CONFIGURE ZONE '{gc: {ttlseconds: 0}}'`)
+
+	// Give the table an old format version.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
+	if err := writeTableDesc(ctx, kvDB, tableDesc); err != nil {
+		t.Fatal(err)
+	}
+
+	tableSpan := tableDesc.TableSpan()
+	checkKeyCount(t, kvDB, tableSpan, numRows)
+
+	sqlDB.Exec(t, `DROP TABLE test.t`)
+
+	// Simulate a migration upgrading the table descriptor's format version after
+	// the table has been dropped but before the truncation has occurred.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	if !tableDesc.Dropped() {
+		t.Fatalf("expected descriptor to be in DROP state, but was in %s", tableDesc.State)
+	}
+	tableDesc.FormatVersion = sqlbase.InterleavedFormatVersion
+	tableDesc.UpVersion = true
+	if err := writeTableDesc(ctx, kvDB, tableDesc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Allow the schema change to proceed and verify that the data is eventually
+	// deleted, despite the interleaved modification to the table descriptor.
+	close(blockSchemaChanges)
+	testutils.SucceedsSoon(t, func() error {
+		return descExists(sqlDB.DB, false, tableDesc.ID)
+	})
 	checkKeyCount(t, kvDB, tableSpan, 0)
 }
 
