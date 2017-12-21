@@ -17,6 +17,7 @@ package cli
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -64,6 +65,7 @@ func initCLIDefaults() {
 		cliCtx.tableDisplayFormat = tableDisplayPretty
 	}
 	cliCtx.showTimes = false
+	cliCtx.cmdTimeout = 0 // no timeout
 
 	sqlCtx.execStmts = nil
 	sqlCtx.safeUpdates = false
@@ -117,11 +119,22 @@ type cliContext struct {
 
 	// showTimes indicates whether to display query times after each result line.
 	showTimes bool
+
+	// cmdTimeout sets the maximum run time for the command.
+	// Commands that wish to use this must use cmdTimeoutContext().
+	cmdTimeout time.Duration
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
 // Defaults set by InitCLIDefaults() above.
 var cliCtx = cliContext{Config: baseCfg}
+
+func cmdTimeoutContext(ctx context.Context) (context.Context, func()) {
+	if cliCtx.cmdTimeout != 0 {
+		return context.WithTimeout(ctx, cliCtx.cmdTimeout)
+	}
+	return context.WithCancel(ctx)
+}
 
 // sqlCtx captures the command-line parameters of the `sql` command.
 // Defaults set by InitCLIDefaults() above.
