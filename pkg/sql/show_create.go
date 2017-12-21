@@ -158,9 +158,6 @@ func (p *planner) showCreateSequence(
 	f.Printf(" MAXVALUE %d", opts.MaxValue)
 	f.Printf(" INCREMENT %d", opts.Increment)
 	f.Printf(" START %d", opts.Start)
-	if opts.Cycle {
-		f.WriteString(" CYCLE")
-	}
 	return f.CloseAndGetString(), nil
 }
 

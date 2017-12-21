@@ -1391,7 +1391,7 @@ CREATE TABLE pg_catalog.pg_sequence (
 				tree.NewDInt(tree.DInt(opts.MaxValue)),  // seqmax
 				tree.NewDInt(tree.DInt(opts.MinValue)),  // seqmin
 				tree.NewDInt(1),                         // seqcache
-				tree.MakeDBool(tree.DBool(opts.Cycle)),  // seqcycle
+				tree.DBoolFalse,                         // seqcycle
 			)
 		})
 	},

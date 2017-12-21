@@ -1680,8 +1680,6 @@ sequence_option_elem ::=
 	| 'NO' 'MAXVALUE'
 	| 'START' signed_iconst64
 	| 'START' 'WITH' signed_iconst64
-	| 'CYCLE'
-	| 'NO' 'CYCLE'
 
 opt_asc_desc ::=
 	'ASC'
