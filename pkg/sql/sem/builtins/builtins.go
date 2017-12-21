@@ -3295,15 +3295,15 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 		}
 		return json.FromArrayOfJSON(jsons), nil
 	case *tree.DTuple:
-		m := map[string]interface{}{}
+		builder := json.NewBuilder()
 		for i, e := range t.D {
 			j, err := asJSON(e)
 			if err != nil {
 				return nil, err
 			}
-			m[fmt.Sprintf("f%d", i+1)] = j
+			builder.Add(fmt.Sprintf("f%d", i+1), j)
 		}
-		return json.FromMap(m)
+		return builder.Build(), nil
 	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime:
 		return json.FromString(tree.AsStringWithFlags(t, tree.FmtBareStrings)), nil
 	default:
