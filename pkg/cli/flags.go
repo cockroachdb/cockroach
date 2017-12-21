@@ -196,12 +196,12 @@ func init() {
 		// postgresql and clients consider it a directory and build a filename
 		// inside it using the port.
 		// Thus, we keep it hidden and use it for testing only.
-		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, "")
+		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
-		StringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, "")
+		StringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, serverCfg.ListeningURLFile)
 
-		StringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
+		StringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, serverCfg.PIDFile)
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.

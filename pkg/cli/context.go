@@ -90,6 +90,9 @@ func initCLIDefaults() {
 	zoneCtx.zoneConfig = ""
 	zoneCtx.zoneDisableReplication = false
 
+	serverCfg.SocketFile = ""
+	serverCfg.ListeningURLFile = ""
+	serverCfg.PIDFile = ""
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
 	startCtx.tempDir = ""
