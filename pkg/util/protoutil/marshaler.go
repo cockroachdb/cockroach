@@ -101,3 +101,8 @@ func (e *protoEncoder) Encode(v interface{}) error {
 	}
 	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
+
+// Delimiter for newline encoded protobuf streams.
+func (*ProtoPb) Delimiter() []byte {
+	return []byte("\n")
+}
