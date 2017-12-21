@@ -107,7 +107,7 @@ conditions apply:
    between the interested parties to achieve consensus. The meeting notes
    or a summary should be added to the RFC comments.
 
-5. At the point where the author(s) and/or shepherd
+7. At the point where the author(s) and/or shepherd
    estimate there is consensus to proceed with the project, begin the
    final comment period (FCP) by posting a comment on the PR.
    For RFCs with lengthy discussion, the motion to FCP is usually preceded
@@ -145,8 +145,8 @@ conditions apply:
    status of the PR from `in-progress` to `completed`. If subsequent
    developments render an RFC obsolete, set its status to `obsolete`.
 
-When you mark a RFC as obsolete, ensure that its text references the
-other RFCs or PRs that make it obsolete.
+   When you mark a RFC as obsolete, ensure that its text references the
+   other RFCs or PRs that make it obsolete.
 
 # Overhead of the RFC process
 
