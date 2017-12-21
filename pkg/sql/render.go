@@ -448,6 +448,19 @@ func (p *planner) makeTupleRender(
 	return r, nil
 }
 
+func (p *planner) makePostRender(ctx context.Context, src planDataSource) (*renderNode, error) {
+	postRender := &renderNode{
+		source:     src,
+		sourceInfo: multiSourceInfo{src.info},
+	}
+	postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(src.info.sourceColumns))
+	if err := p.initTargets(ctx, postRender,
+		tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}}, nil /* desiredTypes */); err != nil {
+		return nil, err
+	}
+	return postRender, nil
+}
+
 // getTimestamp will get the timestamp for an AS OF clause. It will also
 // verify the timestamp against the transaction. If AS OF SYSTEM TIME is
 // specified in any part of the query, then it must be consistent with

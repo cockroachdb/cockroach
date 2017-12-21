@@ -199,11 +199,14 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 0  distinct  ·            ·            (a, b)     a!=NULL; b!=NULL; key(a,b); +a,+b
 0  ·         distinct on  a, b         ·          ·
 0  ·         order key    a, b         ·          ·
-1  nosort    ·            ·            (a, b)     a!=NULL; b!=NULL; +a,+b
-1  ·         order        +a,+b,+c     ·          ·
-2  scan      ·            ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b,+c
-2  ·         table        abc@primary  ·          ·
-2  ·         spans        ALL          ·          ·
+1  render    ·            ·            (a, b)     a!=NULL; b!=NULL; +a,+b
+1  ·         render 0     a            ·          ·
+1  ·         render 1     b            ·          ·
+2  nosort    ·            ·            (a, b)     a!=NULL; b!=NULL; +a,+b
+2  ·         order        +a,+b,+c     ·          ·
+3  scan      ·            ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b,+c
+3  ·         table        abc@primary  ·          ·
+3  ·         spans        ALL          ·          ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]

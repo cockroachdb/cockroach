@@ -184,11 +184,12 @@ EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
 ----
 0  delete  ·      ·
 0  ·       from   unindexed
-1  nosort  ·      ·
-1  ·       order  +v
-2  scan    ·      ·
-2  ·       table  unindexed@primary
-2  ·       spans  ALL
+1  render  ·      ·
+2  nosort  ·      ·
+2  ·       order  +v
+3  scan    ·      ·
+3  ·       table  unindexed@primary
+3  ·       spans  ALL
 
 query II
 DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC RETURNING v,k
