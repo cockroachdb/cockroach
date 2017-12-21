@@ -256,7 +256,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
 	s.nodeLiveness = storage.NewNodeLiveness(
-		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, nlActive, nlRenewal,
+		s.cfg.AmbientCtx,
+		s.clock,
+		s.db,
+		s.gossip,
+		nlActive,
+		nlRenewal,
+		s.cfg.HistogramWindowInterval(),
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
