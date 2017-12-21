@@ -20,8 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -39,16 +37,6 @@ var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
 var tempDir string
 var externalIODir string
-
-const defaultCmdTimeout = 0 // no timeout
-var cmdTimeout time.Duration
-
-func cmdTimeoutContext(ctx context.Context) (context.Context, func()) {
-	if cmdTimeout != 0 {
-		return context.WithTimeout(ctx, cmdTimeout)
-	}
-	return context.WithCancel(ctx)
-}
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
 // If the command has an existing pre-run function, it is saved and will be called
@@ -304,7 +292,7 @@ func init() {
 	}
 
 	for _, cmd := range timeoutCmds {
-		DurationFlag(cmd.Flags(), &cmdTimeout, cliflags.Timeout, defaultCmdTimeout)
+		DurationFlag(cmd.Flags(), &cliCtx.cmdTimeout, cliflags.Timeout, cliCtx.cmdTimeout)
 	}
 
 	// Node Status command.
