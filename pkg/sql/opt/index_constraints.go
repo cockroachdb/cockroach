@@ -166,7 +166,7 @@ func makeIndexConstraintCalc(
 func (c *indexConstraintCalc) compareKeyVals(offset int, a, b tree.Datums) int {
 	for i := 0; i < len(a) && i < len(b); i++ {
 		if cmp := a[i].Compare(c.evalCtx, b[i]); cmp != 0 {
-			if c.colInfos[offset+i].direction == encoding.Descending {
+			if c.colInfos[offset+i].Direction == encoding.Descending {
 				return -cmp
 			}
 			return cmp
@@ -329,7 +329,7 @@ func (c *indexConstraintCalc) preferInclusive(offset int, sp *LogicalSpan) {
 	if !sp.Start.Inclusive {
 		col := len(sp.Start.Vals) - 1
 		if nextVal, hasNext := c.nextDatum(
-			sp.Start.Vals[col], c.colInfos[offset+col].direction,
+			sp.Start.Vals[col], c.colInfos[offset+col].Direction,
 		); hasNext {
 			sp.Start.Vals[col] = nextVal
 			sp.Start.Inclusive = true
@@ -339,7 +339,7 @@ func (c *indexConstraintCalc) preferInclusive(offset int, sp *LogicalSpan) {
 	if !sp.End.Inclusive {
 		col := len(sp.End.Vals) - 1
 		if prevVal, hasPrev := c.nextDatum(
-			sp.End.Vals[col], c.colInfos[offset+col].direction.Reverse(),
+			sp.End.Vals[col], c.colInfos[offset+col].Direction.Reverse(),
 		); hasPrev {
 			sp.End.Vals[col] = prevVal
 			sp.End.Inclusive = true
@@ -399,7 +399,7 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 			spans[i].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 			spans[i].End = spans[i].Start
 		}
-		if c.colInfos[offset].direction == encoding.Descending {
+		if c.colInfos[offset].Direction == encoding.Descending {
 			// Reverse the order of the spans.
 			for i, j := 0, len(spans)-1; i < j; i, j = i+1, j-1 {
 				spans[i], spans[j] = spans[j], spans[i]
@@ -429,7 +429,7 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 		case geOp:
 			sp.Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 		}
-		if c.colInfos[offset].direction == encoding.Descending {
+		if c.colInfos[offset].Direction == encoding.Descending {
 			sp.Start, sp.End = sp.End, sp.Start
 		}
 		c.preferInclusive(offset, &sp)
@@ -459,7 +459,7 @@ func (c *indexConstraintCalc) makeSpansForTupleInequality(
 	// Find the longest prefix of the tuple that maps to index columns (with the
 	// same direction) starting at <offset>.
 	prefixLen := 0
-	dir := c.colInfos[offset].direction
+	dir := c.colInfos[offset].Direction
 	for i := range lhs.children {
 		if !isIndexedVar(lhs.children[i], offset+i) {
 			// Variable doesn't refer to the right column.
@@ -469,7 +469,7 @@ func (c *indexConstraintCalc) makeSpansForTupleInequality(
 			// Right-hand value is not a constant.
 			break
 		}
-		if c.colInfos[offset+i].direction != dir {
+		if c.colInfos[offset+i].Direction != dir {
 			// The direction changed. For example:
 			//   a ASCENDING, b DESCENDING, c ASCENDING
 			//   (a, b, c) >= (1, 2, 3)
@@ -787,8 +787,8 @@ func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
 // IndexColumnInfo encompasses the information for index columns, needed for
 // index constraints.
 type IndexColumnInfo struct {
-	typ       types.T
-	direction encoding.Direction
+	Typ       types.T
+	Direction encoding.Direction
 }
 
 // MakeIndexConstraints generates constraints from a scalar boolean filter
