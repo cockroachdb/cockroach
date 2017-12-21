@@ -362,8 +362,8 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.plan)
 
 	case *unionNode:
-		// Only UNION ALL is supported so far.
-		if n.unionType == tree.UnionOp && n.all {
+		// Only UNION and UNION ALL are supported so far.
+		if n.unionType == tree.UnionOp {
 			recLeft, err := dsp.checkSupportForNode(n.left)
 			if err != nil {
 				return 0, err
@@ -1782,7 +1782,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		return dsp.createPlanForDistinct(planCtx, n)
 
 	case *unionNode:
-		return dsp.createPlanForUnionAll(planCtx, n)
+		return dsp.createPlanForUnion(planCtx, n)
 
 	case *valuesNode:
 		return dsp.createPlanForValues(planCtx, n)
@@ -1918,7 +1918,7 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	return plan, nil
 }
 
-func (dsp *DistSQLPlanner) createPlanForUnionAll(
+func (dsp *DistSQLPlanner) createPlanForUnion(
 	planCtx *planningCtx, n *unionNode,
 ) (physicalPlan, error) {
 	leftPlan, err := dsp.createPlanForNode(planCtx, n.left)
@@ -1928,6 +1928,34 @@ func (dsp *DistSQLPlanner) createPlanForUnionAll(
 	rightPlan, err := dsp.createPlanForNode(planCtx, n.right)
 	if err != nil {
 		return physicalPlan{}, err
+	}
+
+	var distinctSpec distsqlrun.ProcessorCoreUnion
+	if !n.all {
+		// Build a distinct processor spec, which will be used in three places:
+		// on the left plan, on the right, and on the union of the two once the
+		// results have been grouped together.
+		//
+		// Note there is the potential for further optimization here since rows
+		// are not deduplicated between left and right until the single group
+		// stage. In the worst case (total duplication), this causes double the
+		// amount of data to be streamed as necessary.
+		var distinctColumns []uint32
+		for planCol := range planColumns(n.left) {
+			if streamCol := leftPlan.planToStreamColMap[planCol]; streamCol != -1 {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
+		}
+		distinctSpec = distsqlrun.ProcessorCoreUnion{
+			Distinct: &distsqlrun.DistinctSpec{
+				DistinctColumns: distinctColumns,
+			},
+		}
+
+		leftPlan.AddNoGroupingStage(
+			distinctSpec, distsqlrun.PostProcessSpec{}, leftPlan.ResultTypes, leftPlan.MergeOrdering)
+		rightPlan.AddNoGroupingStage(
+			distinctSpec, distsqlrun.PostProcessSpec{}, rightPlan.ResultTypes, rightPlan.MergeOrdering)
 	}
 
 	var p physicalPlan
@@ -1984,6 +2012,11 @@ func (dsp *DistSQLPlanner) createPlanForUnionAll(
 
 	p.ResultTypes = resultTypes
 	p.MergeOrdering = mergeOrdering
+
+	if !n.all {
+		p.AddSingleGroupStage(
+			dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes)
+	}
 
 	return p, nil
 }

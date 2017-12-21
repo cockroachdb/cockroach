@@ -36,7 +36,7 @@ NULL       /2       1         {1}       1
 /4         /5       4         {4}       4
 /5         NULL     5         {5}       5
 
-# Simple UNION ALL. (The ORDER BY applies to the UNION, not the last select.)
+# Simple UNION ALL and UNION. (The ORDER BY applies to the UNION, not the last select.)
 query I
 SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
 ----
@@ -56,6 +56,20 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz UNION ALL SELECT x FROM x
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzElU-PokAQxe_7KTZ13d7EavAfJ69edOPObcKBoSuGRGnS3SQ6xu8-AQ6ORquHEODIn997r7teUhfItaJNciQL0TsgCJAgIAABIQiYQiygMDola7WpfmmAtTpBNBGQ5UXpqtexgFQbgugCLnMHggjeko8D7ShRZECAIpdkh9qkMNkxMefV6fwJArali36vEOKrAF26m551yZ4gwqsY3FO28fyvjXu0W-Gfl-LBOOI3TW0UGVLPRJ8k2Oi_urj795V3eOeNI7RjGE_ZxrPbAHsVlyNMaBhP2caz10vsJh6MMKFhPGUbz14vsZt4OMKEhvGUbTx7vcReF-yObKFzSz_acJNqQZLaU7NQrS5NSv-MTmub5nFbc_ULRdY1X2XzsM6bT1XA7zCycMDDkoXDOxgf4aALHPJnRj73lKXnPDxj4QUPz7scetEFXrIwem4M-ZKhr2V8zTzRsVPPkC8aTj3R-arhzIPzXfNl58vmo_m24dITne-bnHhwvnGe7JIv3CMdX399BQAA__9E1reF
 
+query I
+SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x
+----
+1
+2
+3
+4
+5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz UNION SELECT x FROM xyz ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElUGPmzAUhO_9FdW71od9Nux2OeXQy1661ba3igPFTyukBCPbSEkj_nsFHFKi5HkjBziCMzMZ5pN8hNpo-l7syEH2GxAESBCgQEACAlLIBTTWlOScsf1PRsGL3kP2IKCqm9b3r3MBpbEE2RF85bcEGfwq_mzpjQpNFgRo8kW1HUIaW-0Ke9jsD39BwGvrs88bhLwTYFp_8nO-eCfIsBMfz_xWOV_VpZ8GMu7yFvc7NVKzNkquup9M29pYTZb0xDXv7pGf3tLup7H-_GNu8MtV88eJOa4AYCAzEsBlGqlZG00BlCtsFMiM3GiZRmrWRtON1AobBTIjN1qmkZq10XSjZIWNApmRGy3TSM3a6Pple8H9jVxjakdnl-5l54f-Mib9TuPN7UxrS_phTTnEjI-vg254ocn58RTHh5d6POr_4P9iZMXJRIznYsmKFZ-sYpITVpzyySkrlpJXP7LqJ178FFP6Kyt-5pOfY5IxwFgIsijKkMcMA5xhFGjIk4YB1JBnLRTOs4YB2DCKNuRxwwBvGAWc5IGTAeDkbcDl3ad_AQAA__-LyfKF
+
 # UNION ALL with swapped column orders.
 query II rowsort
 SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
@@ -71,7 +85,7 @@ SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
 4 2
 5 2
 
-# UNION ALL with different ORDER BY types.
+# UNION ALL and UNION with different ORDER BY types.
 query I
 (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
 ----
@@ -90,6 +104,21 @@ query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlkFvm0AQhe_9FdVcs5U8C9guJ19zSaq0t4oD9Y4iS44X7S5S0oj_XgGVEtIwg-Wl5Gjg8c3b99j1M5ysoZvygTzkPwFBgQYFCShIQUEGhYLK2T15b137SC-4No-QrxQcTlUd2suFgr11BPkzhEM4EuTwo_x1pDsqDTlQYCiUh2MHqdzhoXRPu8en36Dgtg755x2qXQJFo8DW4eWVPpT3BDk2ajr2u3XhLXGnr16T9ChJj5JeANYZcmT-JRTNO-Pc2C-2Gj77d47RIZJz7J67yuPe0_-2ytlHWOX1xXbxavTlm2VeLi0fTl6-MfZ2wMZldgABG3EHiGxw6sc3p8Hhx6eXSVDARkwwssGpCc5pcJhgskyCAjZigpENTk1wToPDBNNlEhSwEROMbHBqgnMaHP8L8w7pjnxlT54mnbCr9oAmc0_9ge5t7fb0zdl9h-l_3na67oIhH_q72P-4PvW32gFfi5EV64EY34o1K17z5IQVp7w4ZcUZP3bGijc8ec2Ktzx5c4l4y0eV8XN_5VuyEmrCl0zoCfItQy3A-Z4JaSNfNBSahnzVJOd811D4RpBvm-ScrxtuBbhQOAHOF04LhdN84QTnWtjWhMJpvnDSrsgXTguF0-ftbUXz6U8AAAD__7-ewX0=
+
+query I
+(SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x
+----
+1
+2
+3
+4
+5
+
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION (SELECT x FROM xyz ORDER BY z) ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlkFvm0AQhe_9FdVcs5W8sxjbnHzoJZekSnurOFAYRUgOi5ZFShr5v1c2lRIozGABdY4G3rzZt9-O9xUKm9Fd8kQVRD9BgwIEBQYUBKBgDbGC0tmUqsq60yeN4DZ7hmilIC_K2p8exwpS6wiiV_C5PxBE8CP5daAHSjJyoCAjn-SHs0np8qfEveyfX36DgvvaR5_3Wu0NxEcFtvZvJSufPBJE-qjG2363zncd93jz3gkHnfASp6955fMi9R0vPVjdDFZ_K2pdRo6yf_uPjz0t3Nkvtmx_-3eVg00Elyzx0j0cTnb93_YwXHQPNx9hD7cjmqiLvjZ6O7g4hN3kzdQ3w6d91aqurzNlBNsZp4zgNHHKzBzf2AO-ZHzhovG1Dzhehz7Bdkb6BKeJ9M0c31j6lowvXDS-Nn3mOvQJtjPSJzhNpG_m-MbSt2R84aLxtekLrkOfYDsjfYLTRPpmjm8sfUvGFy4a3_DVuqf6A1WlLSrq3G77K69Ot17KHqm5Ile2dil9czY92zQ_78-684OMKt-81c2P26J5dWrwvVizYuTFyIpNS6y7YsOKt7w4YMVrvu01Kw55cciKN3zbmylr3rLiHd_2jt-qQKBEYEyCjKdMC5jpSZxpHjQtLZ1HTQusaR42gRfN06Y3gjnPm94Kcp44KXceOVwJs4VHDgXkkEdOyB154tAI5jxyKCCHPHJC7sgTh8J8Qx45FJBDHjkpd544FIYcClNOQM7wyEn_ZzxxRhhyRhhyAnKGR66be3z89CcAAP__hliVOw==
 
 # UNION ALL with conflicting numbers of ORDER BY columns.
 query I
