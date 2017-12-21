@@ -224,11 +224,11 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 
 // startPlan starts the plan and all its sub-query nodes.
 func startPlan(params runParams, plan planNode) error {
+	// Trigger limit propagation through the plan and sub-queries.
+	params.p.setUnlimited(plan)
 	if err := startExec(params, plan); err != nil {
 		return err
 	}
-	// Trigger limit propagation through the plan and sub-queries.
-	params.p.setUnlimited(plan)
 	return nil
 }
 

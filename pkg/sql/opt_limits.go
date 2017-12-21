@@ -136,12 +136,26 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 			p.applyLimit(n.plan, numRows, soft)
 		}
 
+	// Applying a limit to a DML statement source (a DML with a RETURNING clause)
+	// is tricky to do properly. See #20732 and #20919 for more context. Since we
+	// don't have a "finalize plan" phase in which we can tell the DML to finish
+	// executing, we instead have the DML fully execute as soon as it's started.
 	case *deleteNode:
+		if numRows != math.MaxInt64 {
+			n.setDrainOnStart()
+		}
 		p.setUnlimited(n.run.rows)
 	case *updateNode:
+		if numRows != math.MaxInt64 {
+			n.setDrainOnStart()
+		}
 		p.setUnlimited(n.run.rows)
 	case *insertNode:
+		if numRows != math.MaxInt64 {
+			n.setDrainOnStart()
+		}
 		p.setUnlimited(n.run.rows)
+
 	case *createTableNode:
 		if n.sourcePlan != nil {
 			p.applyLimit(n.sourcePlan, numRows, soft)
