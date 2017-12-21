@@ -35,8 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-const pageSize = 32 * 1024 * 1024 // 32 MB
-
 var (
 	emptyVal = cacheValue{}
 	floorTS  = makeTS(100, 0)
@@ -85,7 +83,7 @@ func TestIntervalSklAdd(t *testing.T) {
 	val1 := makeVal(ts1, "1")
 	val2 := makeVal(ts2, "2")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 
 	s.Add([]byte("apricot"), val1)
 	require.Equal(t, ts1.WallTime, s.frontPage().maxWallTime)
@@ -107,7 +105,7 @@ func TestIntervalSklSingleRange(t *testing.T) {
 	val3 := makeVal(makeTS(300, 50), "3")
 	val4 := makeVal(makeTS(400, 50), "4")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 
 	// val1:  [a--------------o]
 	s.AddRange([]byte("apricot"), []byte("orange"), 0, val1)
@@ -197,7 +195,7 @@ func TestIntervalSklKeyBoundaries(t *testing.T) {
 	val4 := makeVal(makeTS(400, 0), "4")
 	val5 := makeVal(makeTS(500, 0), "5")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 	s.floorTS = floorTS
 
 	// Can't insert a key at infinity.
@@ -271,7 +269,7 @@ func TestIntervalSklSupersetRange(t *testing.T) {
 	val5 := makeVal(makeTS(500, 0), "5")
 	val6 := makeVal(makeTS(600, 0), "6")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 	s.floorTS = floorTS
 
 	// Same range.
@@ -366,7 +364,7 @@ func TestIntervalSklContiguousRanges(t *testing.T) {
 	val2 := makeVal(ts1, "2")
 	val2WithoutID := makeValWithoutID(ts1)
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 	s.floorTS = floorTS
 
 	// val1:  [b---------k)
@@ -400,7 +398,7 @@ func TestIntervalSklOverlappingRanges(t *testing.T) {
 	val3 := makeVal(makeTS(300, 0), "3")
 	val4 := makeVal(makeTS(400, 0), "4")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 	s.floorTS = floorTS
 
 	// val1:  [b---------k]
@@ -444,7 +442,7 @@ func TestIntervalSklOverlappingRanges(t *testing.T) {
 func TestIntervalSklSingleKeyRanges(t *testing.T) {
 	val1 := makeVal(makeTS(100, 100), "1")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 
 	// Don't allow inverted ranges.
 	require.Panics(t, func() { s.AddRange([]byte("kiwi"), []byte("apple"), 0, val1) })
@@ -500,7 +498,7 @@ func TestIntervalSklRatchetTxnIDs(t *testing.T) {
 	val6 := makeVal(ts3, "5")
 	val6WithoutID := makeValWithoutID(ts3)
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 
 	s.AddRange([]byte("apricot"), []byte("raspberry"), 0, val1)
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
@@ -576,7 +574,7 @@ func TestIntervalSklLookupRange(t *testing.T) {
 	val4 := makeVal(ts3, "4")
 	val5 := makeVal(ts4, "5")
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 
 	// Perform range lookups over a single key.
 	s.Add([]byte("apricot"), val1)
@@ -651,7 +649,7 @@ func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
 
 	// Perform range lookups over [key, key.Next()) ranges.
 	t.Run("[key, key.Next())", func(t *testing.T) {
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 
 		s.AddRange(key1, key2, excludeTo, val1)
 		s.AddRange(key2, key3, excludeTo, val2)
@@ -697,7 +695,7 @@ func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
 
 	// Perform the same lookups, but this time use single key ranges.
 	t.Run("[key, key]", func(t *testing.T) {
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 
 		s.AddRange(key1, key1, 0, val1) // same as Add(key1, val1)
 		s.AddRange(key2, key2, 0, val2) //   ...   Add(key2, val2)
@@ -744,7 +742,7 @@ func TestIntervalSklLookupEqualsEarlierMaxWallTime(t *testing.T) {
 	txnID2 := "2"
 
 	testutils.RunTrueAndFalse(t, "tsWithLogicalPart", func(t *testing.T, logicalPart bool) {
-		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize, makeMetrics())
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, TestSklPageSize, makeMetrics())
 		s.floorTS = floorTS
 
 		// Insert an initial value into intervalSkl.
@@ -913,7 +911,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 		{name: "Pages", pageSize: 4096, minPages: 16},
 		// Test concurrency with a larger page size in order to test slot
 		// concurrency without the added complication of page rotations.
-		{name: "Slots", pageSize: pageSize},
+		{name: "Slots", pageSize: TestSklPageSize},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1164,7 +1162,7 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	const txnID = "123"
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
-	s := newIntervalSkl(clock, MinRetentionWindow, pageSize, makeMetrics())
+	s := newIntervalSkl(clock, MinRetentionWindow, TestSklPageSize, makeMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	size := 1
@@ -1189,7 +1187,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 	const txnID = "123"
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
-	s := newIntervalSkl(clock, MinRetentionWindow, pageSize, makeMetrics())
+	s := newIntervalSkl(clock, MinRetentionWindow, TestSklPageSize, makeMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	for i := 0; i < data; i++ {
