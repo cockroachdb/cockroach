@@ -184,12 +184,14 @@ type RangeInfo struct {
 }
 
 func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
-	writesPerSecond, _ := repl.writeStats.avgQPS()
-	return RangeInfo{
-		Desc:            desc,
-		LogicalBytes:    repl.GetMVCCStats().Total(),
-		WritesPerSecond: writesPerSecond,
+	info := RangeInfo{
+		Desc:         desc,
+		LogicalBytes: repl.GetMVCCStats().Total(),
 	}
+	if writesPerSecond, dur := repl.writeStats.avgQPS(); dur >= MinStatsDuration {
+		info.WritesPerSecond = writesPerSecond
+	}
+	return info
 }
 
 // Allocator tries to spread replicas as evenly as possible across the stores
@@ -374,6 +376,25 @@ func (a *Allocator) AllocateTarget(
 	}
 }
 
+func (a Allocator) simulateRemoveTarget(
+	ctx context.Context,
+	targetStore roachpb.StoreID,
+	constraints config.Constraints,
+	candidates []roachpb.ReplicaDescriptor,
+	rangeInfo RangeInfo,
+) (roachpb.ReplicaDescriptor, string, error) {
+	// Update statistics first
+	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
+	// but as of October 2017 calls to the Allocator are mostly serialized by the ReplicateQueue
+	// (with the main exceptions being Scatter and the status server's allocator debug endpoint).
+	// Try to make this interfere less with other callers.
+	a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.ADD_REPLICA)
+	defer func() {
+		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.REMOVE_REPLICA)
+	}()
+	return a.RemoveTarget(ctx, constraints, candidates, rangeInfo)
+}
+
 // RemoveTarget returns a suitable replica to remove from the provided replica
 // set. It first attempts to randomly select a target from the set of stores
 // that have greater than the average number of replicas. Failing that, it
@@ -444,7 +465,11 @@ func (a Allocator) RemoveTarget(
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
-	ctx context.Context, constraints config.Constraints, rangeInfo RangeInfo, filter storeFilter,
+	ctx context.Context,
+	constraints config.Constraints,
+	raftStatus *raft.Status,
+	rangeInfo RangeInfo,
+	filter storeFilter,
 ) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
@@ -491,6 +516,53 @@ func (a Allocator) RebalanceTarget(
 	if target == nil {
 		return nil, ""
 	}
+
+	// Determine whether we'll just remove the target immediately after adding it.
+	// If we would, we don't want to actually do the rebalance.
+	for len(candidates) > 0 {
+		newReplica := roachpb.ReplicaDescriptor{
+			NodeID:    target.store.Node.NodeID,
+			StoreID:   target.store.StoreID,
+			ReplicaID: rangeInfo.Desc.NextReplicaID,
+		}
+
+		// Deep-copy the Replicas slice since we'll mutate it.
+		desc := *rangeInfo.Desc
+		desc.Replicas = append(desc.Replicas[:len(desc.Replicas):len(desc.Replicas)], newReplica)
+		rangeInfo.Desc = &desc
+
+		// If we can, filter replicas as we would if we were actually removing one.
+		// If we can't (e.g. because we're the leaseholder but not the raft leader),
+		// it's better to simulate the removal with the info that we do have than to
+		// assume that the rebalance is ok (#20241).
+		replicaCandidates := desc.Replicas
+		if raftStatus != nil && raftStatus.Progress != nil {
+			replicaCandidates = simulateFilterUnremovableReplicas(
+				raftStatus, desc.Replicas, newReplica.ReplicaID)
+		}
+
+		removeReplica, details, err := a.simulateRemoveTarget(
+			ctx,
+			target.store.StoreID,
+			constraints,
+			replicaCandidates,
+			rangeInfo)
+		if err != nil {
+			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
+			return nil, ""
+		}
+		if shouldRebalanceBetween(ctx, a.storePool.st, *target, removeReplica, existingCandidates, details) {
+			break
+		}
+		// Remove the considered target from our modified RangeDescriptor and from
+		// the candidates list, then try again if there are any other candidates.
+		rangeInfo.Desc.Replicas = rangeInfo.Desc.Replicas[:len(rangeInfo.Desc.Replicas)-1]
+		candidates = candidates.removeCandidate(*target)
+		target = candidates.selectGood(a.randGen)
+		if target == nil {
+			return nil, ""
+		}
+	}
 	details, err := json.Marshal(decisionDetails{
 		Target:               target.String(),
 		Existing:             existingCandidates.String(),
@@ -501,6 +573,44 @@ func (a Allocator) RebalanceTarget(
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
 	}
 	return &target.store, string(details)
+}
+
+// shouldRebalanceBetween returns whether it's a good idea to rebalance to the
+// given `add` candidate if the replica that will be removed after adding it is
+// `remove`. This is a last failsafe to ensure that we don't take unnecessary
+// rebalance actions that cause thrashing.
+func shouldRebalanceBetween(
+	ctx context.Context,
+	st *cluster.Settings,
+	add candidate,
+	remove roachpb.ReplicaDescriptor,
+	existingCandidates candidateList,
+	removeDetails string,
+) bool {
+	if remove.StoreID == add.store.StoreID {
+		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
+			add.store.StoreID, removeDetails)
+		return false
+	}
+
+	// It's possible that we initially decided to rebalance based on comparing
+	// rebalance candidates in one locality to an existing replica in another
+	// locality (e.g. if one locality has many more nodes than another). This can
+	// make for unnecessary rebalances and even thrashing, so do a more direct
+	// comparison here of the replicas we'll actually be adding and removing.
+	for _, removeCandidate := range existingCandidates {
+		if removeCandidate.store.StoreID == remove.StoreID {
+			if removeCandidate.worthRebalancingTo(st, add) {
+				return true
+			}
+			log.VEventf(ctx, 2, "not rebalancing to %s because it isn't an improvement over "+
+				"what we'd remove after adding it: %s", add, removeCandidate)
+			return false
+		}
+	}
+	// If the code reaches this point, remove must be a non-live store, so let the
+	// rebalance happen.
+	return true
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease
@@ -875,6 +985,16 @@ func filterBehindReplicas(
 		}
 	}
 	return candidates
+}
+
+func simulateFilterUnremovableReplicas(
+	raftStatus *raft.Status,
+	replicas []roachpb.ReplicaDescriptor,
+	brandNewReplicaID roachpb.ReplicaID,
+) []roachpb.ReplicaDescriptor {
+	status := *raftStatus
+	status.Progress[uint64(brandNewReplicaID)] = raft.Progress{Match: 0}
+	return filterUnremovableReplicas(&status, replicas, brandNewReplicaID)
 }
 
 // filterUnremovableReplicas removes any unremovable replicas from the supplied

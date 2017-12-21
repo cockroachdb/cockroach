@@ -197,7 +197,7 @@ func (rq *replicateQueue) shouldQueue(
 		return false, 0
 	}
 
-	target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+	target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
 	if target != nil {
 		log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 	} else {
@@ -485,7 +485,7 @@ func (rq *replicateQueue) processOneChange(
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
-				ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+				ctx, zone.Constraints, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
 			if rebalanceStore == nil {
 				log.VEventf(ctx, 1, "no suitable rebalance target")
 			} else {
@@ -572,7 +572,12 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	return repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details)
+	if err := repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details); err != nil {
+		return err
+	}
+	rangeInfo := rangeInfoForRepl(repl, desc)
+	rq.allocator.storePool.updateLocalStoreAfterRebalance(target.StoreID, rangeInfo, roachpb.ADD_REPLICA)
+	return nil
 }
 
 func (rq *replicateQueue) removeReplica(
@@ -587,7 +592,12 @@ func (rq *replicateQueue) removeReplica(
 	if dryRun {
 		return nil
 	}
-	return repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc, reason, details)
+	if err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc, reason, details); err != nil {
+		return err
+	}
+	rangeInfo := rangeInfoForRepl(repl, desc)
+	rq.allocator.storePool.updateLocalStoreAfterRebalance(target.StoreID, rangeInfo, roachpb.REMOVE_REPLICA)
+	return nil
 }
 
 func (rq *replicateQueue) canTransferLease() bool {

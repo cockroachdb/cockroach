@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -315,6 +317,125 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestStorePoolUpdateLocalStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	// We're going to manually mark stores dead in this test.
+	stopper, g, _, sp, _ := createTestStorePool(
+		TestTimeUntilStoreDead, false /* deterministic */, nodeStatusDead)
+	defer stopper.Stop(context.TODO())
+	sg := gossiputil.NewStoreGossiper(g)
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{
+				Capacity:        100,
+				Available:       50,
+				RangeCount:      5,
+				LogicalBytes:    30,
+				WritesPerSecond: 30,
+			},
+		},
+		{
+			StoreID: 2,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{
+				Capacity:        100,
+				Available:       55,
+				RangeCount:      4,
+				LogicalBytes:    25,
+				WritesPerSecond: 25,
+			},
+		},
+	}
+	sg.GossipStores(stores, t)
+
+	replica := &Replica{RangeID: 1}
+	replica.mu.Lock()
+	replica.mu.state.Stats = enginepb.MVCCStats{
+		KeyBytes: 2,
+		ValBytes: 4,
+	}
+	replica.mu.Unlock()
+	rs := newReplicaStats(clock, nil)
+	for _, store := range stores {
+		rs.record(store.Node.NodeID)
+	}
+	manual.Increment(int64(MinStatsDuration + time.Second))
+	replica.writeStats = rs
+
+	rangeDesc := &roachpb.RangeDescriptor{
+		RangeID: replica.RangeID,
+	}
+
+	rangeInfo := rangeInfoForRepl(replica, rangeDesc)
+
+	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(1), rangeInfo, roachpb.ADD_REPLICA)
+	desc, ok := sp.getStoreDescriptor(roachpb.StoreID(1))
+	if !ok {
+		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
+	}
+	QPS, _ := replica.writeStats.avgQPS()
+	if expectedBytes, expectedQPS := int64(36), 30+QPS; desc.Capacity.LogicalBytes != expectedBytes || desc.Capacity.WritesPerSecond != expectedQPS {
+		t.Fatalf("expected Logical bytes %d, but got %d, expected WritesPerSecond %f, but got %f",
+			expectedBytes, desc.Capacity.LogicalBytes, expectedQPS, desc.Capacity.WritesPerSecond)
+	}
+
+	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeInfo, roachpb.REMOVE_REPLICA)
+	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(2))
+	if !ok {
+		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 2)
+	}
+	if expectedBytes, expectedQPS := int64(19), 25-QPS; desc.Capacity.LogicalBytes != expectedBytes || desc.Capacity.WritesPerSecond != expectedQPS {
+		t.Fatalf("expected Logical bytes %d, but got %d, expected WritesPerSecond %f, but got %f",
+			expectedBytes, desc.Capacity.LogicalBytes, expectedQPS, desc.Capacity.WritesPerSecond)
+	}
+}
+
+// TestStorePoolUpdateLocalStoreBeforeGossip verifies that an attempt to update
+// the local copy of store before that store has been gossiped will be a no-op.
+func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	stopper, _, _, sp, _ := createTestStorePool(
+		TestTimeUntilStoreDead, false /* deterministic */, nodeStatusDead)
+	defer stopper.Stop(context.TODO())
+
+	// Create store.
+	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
+	cfg := TestStoreConfig(clock)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	store := NewStore(cfg, eng, &node)
+
+	// Create replica.
+	rg := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey([]byte("a")),
+		EndKey:   roachpb.RKey([]byte("b")),
+	}
+	replica, err := NewReplica(&rg, store, roachpb.ReplicaID(0))
+	if err != nil {
+		t.Fatalf("make replica error : %s", err)
+	}
+
+	rangeInfo := rangeInfoForRepl(replica, &rg)
+
+	// Update StorePool, which should be a no-op.
+	storeID := roachpb.StoreID(1)
+	if _, ok := sp.getStoreDescriptor(storeID); ok {
+		t.Fatalf("StoreDescriptor not gossiped, should not be found")
+	}
+	sp.updateLocalStoreAfterRebalance(storeID, rangeInfo, roachpb.ADD_REPLICA)
+	if _, ok := sp.getStoreDescriptor(storeID); ok {
+		t.Fatalf("StoreDescriptor still not gossiped, should not be found")
 	}
 }
 
