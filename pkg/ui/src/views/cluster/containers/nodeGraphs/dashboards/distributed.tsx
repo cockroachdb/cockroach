@@ -52,7 +52,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="KV Transaction Durations: 99th percentile"
       tooltip={`The 99th percentile of transaction durations over a 1 minute period.
-                              Values are displayed individually for each node on each node.`}>
+                              Values are displayed individually for each node.`}>
       <Axis units={AxisUnits.Duration} label="transaction duration">
         {
           _.map(nodeIDs, (node) => (
@@ -70,13 +70,49 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph title="KV Transaction Durations: 90th percentile"
       tooltip={`The 90th percentile of transaction durations over a 1 minute period.
-                              Values are displayed individually for each node on each node.`}>
+                              Values are displayed individually for each node.`}>
       <Axis units={AxisUnits.Duration} label="transaction duration">
         {
           _.map(nodeIDs, (node) => (
             <Metric
               key={node}
               name="cr.node.txn.durations-p90"
+              title={nodeAddress(nodesSummary, node)}
+              sources={[node]}
+              downsampleMax
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Node Liveness Heartbeat Latency: 99th percentile"
+      tooltip={`The 99th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.
+                              Values are displayed individually for each node.`}>
+      <Axis units={AxisUnits.Duration} label="heartbeat latency">
+        {
+          _.map(nodeIDs, (node) => (
+            <Metric
+              key={node}
+              name="cr.node.liveness.heartbeatlatency-p99"
+              title={nodeAddress(nodesSummary, node)}
+              sources={[node]}
+              downsampleMax
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Node Liveness Heartbeat Latency: 90th percentile"
+      tooltip={`The 90th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.
+                              Values are displayed individually for each node.`}>
+      <Axis units={AxisUnits.Duration} label="heartbeat latency">
+        {
+          _.map(nodeIDs, (node) => (
+            <Metric
+              key={node}
+              name="cr.node.liveness.heartbeatlatency-p90"
               title={nodeAddress(nodesSummary, node)}
               sources={[node]}
               downsampleMax
