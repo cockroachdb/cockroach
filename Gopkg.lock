@@ -421,7 +421,7 @@
   branch = "master"
   name = "github.com/grpc-ecosystem/grpc-gateway"
   packages = ["protoc-gen-grpc-gateway","protoc-gen-grpc-gateway/descriptor","protoc-gen-grpc-gateway/generator","protoc-gen-grpc-gateway/gengateway","protoc-gen-grpc-gateway/httprule","runtime","runtime/internal","utilities"]
-  revision = "b0be3cdef0ed27e3c420795e2efbfe9c27e839cc"
+  revision = "8879672da99842abac4c1e84ea91d1ae082673fb"
 
 [[projects]]
   branch = "master"
