@@ -56,6 +56,10 @@ type insertNode struct {
 	insertCols []sqlbase.ColumnDescriptor
 	tw         tableWriter
 
+	// drainOnStart indicates that this node will finish its work entirely upon
+	// startExec, saving the results into the run.rowsInserted container.
+	drainOnStart bool
+
 	run insertRun
 }
 
@@ -250,9 +254,15 @@ func (p *planner) Insert(
 		defaultExprs: defaultExprs,
 		insertCols:   ri.InsertCols,
 		tw:           tw,
+		// Because TableUpserter batches the upserts, we need to completely drain
+		// the source and handle all the rows before returning from the first call
+		// to Next, so that we can return an upserted row from each call to Values.
+		// The reason that we need to do something special here is that upserts
+		// normally have a special fast path that involves only a CPut, which
+		// doesn't return enough information to deal with upsert returning.
+		drainOnStart: isUpsertReturning,
 		run: insertRun{
 			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
-			isUpsertReturning:     isUpsertReturning,
 		},
 	}
 
@@ -273,14 +283,19 @@ type insertRun struct {
 	// The following fields are populated during Start().
 	editNodeRun
 
-	isUpsertReturning     bool
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 
 	rowIdxToRetIdx []int
 	rowTemplate    tree.Datums
 
-	doneUpserting bool
-	rowsUpserted  *sqlbase.RowContainer
+	rowsInserted *sqlbase.RowContainer
+}
+
+func (n *insertNode) setDrainOnStart() {
+	n.drainOnStart = true
+	if tu, ok := n.tw.(*tableUpserter); ok {
+		tu.collectRows = true
+	}
 }
 
 func (n *insertNode) startExec(params runParams) error {
@@ -312,14 +327,27 @@ func (n *insertNode) startExec(params runParams) error {
 		return err
 	}
 
-	return n.run.tw.init(params.p.txn)
-}
+	if err := n.run.tw.init(params.p.txn); err != nil {
+		return err
+	}
 
-func (n *insertNode) Next(params runParams) (bool, error) {
-	if n.run.isUpsertReturning {
+	if n.drainOnStart {
+		if !n.isUpsert() {
+			n.run.rowsInserted = sqlbase.NewRowContainer(
+				params.p.session.TxnState.makeBoundAccount(),
+				sqlbase.ColTypeInfoFromResCols(n.rh.columns),
+				0)
+		}
 		return n.drain(params)
 	}
 
+	return nil
+}
+
+func (n *insertNode) Next(params runParams) (bool, error) {
+	if n.drainOnStart {
+		return n.run.rowsInserted.Len() > 0, nil
+	}
 	return n.internalNext(params)
 }
 
@@ -327,9 +355,9 @@ func (n *insertNode) Close(ctx context.Context) {
 	n.tw.close(ctx)
 	n.run.rows.Close(ctx)
 	n.run.rows = nil
-	if n.run.rowsUpserted != nil {
-		n.run.rowsUpserted.Close(ctx)
-		n.run.rowsUpserted = nil
+	if n.run.rowsInserted != nil {
+		n.run.rowsInserted.Close(ctx)
+		n.run.rowsInserted = nil
 	}
 	switch t := n.tw.(type) {
 	case *tableInserter:
@@ -344,27 +372,27 @@ func (n *insertNode) Close(ctx context.Context) {
 }
 
 func (n *insertNode) Values() tree.Datums {
-	if !n.run.isUpsertReturning {
+	if !n.drainOnStart {
 		return n.run.resultRow
 	}
 
-	row := n.run.rowsUpserted.At(0)
-	n.run.rowsUpserted.PopFirst()
+	row := n.run.rowsInserted.At(0)
+	n.run.rowsInserted.PopFirst()
 	return row
 }
 
-// Because TableUpserter batches the upserts, we need to completely drain the
-// source and handle all the rows before returning from the first call to Next,
-// so that we can return an upserted row from each call to Values.
-func (n *insertNode) drain(params runParams) (bool, error) {
-	for !n.run.doneUpserting {
-		_, err := n.internalNext(params)
+// drain finishes all work for this insertNode, without giving the parent plan
+// a chance to see any return values from this node.
+func (n *insertNode) drain(params runParams) error {
+	moreRows := true
+	var err error
+	for moreRows {
+		moreRows, err = n.internalNext(params)
 		if err != nil {
-			return false, err
+			return err
 		}
 	}
-	hasRows := n.run.rowsUpserted.Len() > 0
-	return hasRows, nil
+	return nil
 }
 
 func (n *insertNode) internalNext(params runParams) (bool, error) {
@@ -379,8 +407,8 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 				return false, err
 			}
 
-			if n.run.isUpsertReturning {
-				n.run.rowsUpserted = sqlbase.NewRowContainer(
+			if n.drainOnStart && n.isUpsert() {
+				n.run.rowsInserted = sqlbase.NewRowContainer(
 					params.p.session.TxnState.makeBoundAccount(),
 					sqlbase.ColTypeInfoFromResCols(n.rh.columns),
 					rows.Len(),
@@ -390,12 +418,11 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 					if err != nil {
 						return false, err
 					}
-					_, err = n.run.rowsUpserted.AddRow(params.ctx, cooked)
+					_, err = n.run.rowsInserted.AddRow(params.ctx, cooked)
 					if err != nil {
 						return false, err
 					}
 				}
-				n.run.doneUpserting = true
 			}
 		}
 		return false, err
@@ -426,7 +453,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 	}
 
 	// Handle regular INSERT ... RETURNING without ON CONFLICT clause
-	if !n.run.isUpsertReturning {
+	if !n.isUpsert() {
 		for i, val := range rowVals {
 			if n.run.rowTemplate != nil {
 				n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
@@ -438,6 +465,11 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 			return false, err
 		}
 		n.run.resultRow = resultRow
+		if n.drainOnStart {
+			if _, err := n.run.rowsInserted.AddRow(params.ctx, resultRow); err != nil {
+				return false, err
+			}
+		}
 	}
 
 	return true, nil
