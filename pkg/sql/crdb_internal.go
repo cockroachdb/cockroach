@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -58,6 +60,8 @@ var crdbInternal = virtualSchema{
 		crdbInternalClusterSettingsTable,
 		crdbInternalCreateStmtsTable,
 		crdbInternalForwardDependenciesTable,
+		crdbInternalGossipNodes,
+		crdbInternalGossipLiveness,
 		crdbInternalIndexColumnsTable,
 		crdbInternalJobsTable,
 		crdbInternalLeasesTable,
@@ -1528,6 +1532,86 @@ CREATE TABLE crdb_internal.zones (
 						return err
 					}
 				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipNodes exposes local information about the cluster nodes.
+var crdbInternalGossipNodes = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_nodes (
+  node_id  INT NOT NULL,
+  network  STRING NOT NULL,
+  address  STRING NOT NULL,
+  attrs    STRING NOT NULL,
+  locality STRING NOT NULL,
+  version  STRING NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.gossip_nodes"); err != nil {
+			return err
+		}
+		g := p.session.execCfg.Gossip
+		for key, info := range g.GetInfoStatusByPrefix(gossip.KeyNodeIDPrefix).Infos {
+			bytes, err := info.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+			var d roachpb.NodeDescriptor
+			if err := protoutil.Unmarshal(bytes, &d); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			if err := addRow(
+				tree.NewDInt(tree.DInt(d.NodeID)),
+				tree.NewDString(d.Address.NetworkField),
+				tree.NewDString(d.Address.AddressField),
+				tree.NewDString(d.Attrs.String()),
+				tree.NewDString(d.Locality.String()),
+				tree.NewDString(d.ServerVersion.String()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipLiveness exposes local information about the nodes liveness.
+var crdbInternalGossipLiveness = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_liveness (
+  node_id         INT NOT NULL,
+  epoch           INT NOT NULL,
+  expiration      STRING NOT NULL,
+  draining        BOOL NOT NULL,
+  decommissioning BOOL NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.gossip_liveness"); err != nil {
+			return err
+		}
+		g := p.session.execCfg.Gossip
+		for key, info := range g.GetInfoStatusByPrefix(gossip.KeyNodeLivenessPrefix).Infos {
+			bytes, err := info.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+			var l storage.Liveness
+			if err := protoutil.Unmarshal(bytes, &l); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			if err := addRow(
+				tree.NewDInt(tree.DInt(l.NodeID)),
+				tree.NewDInt(tree.DInt(l.Epoch)),
+				tree.NewDString(l.Expiration.String()),
+				tree.MakeDBool(tree.DBool(l.Draining)),
+				tree.MakeDBool(tree.DBool(l.Decommissioning)),
+			); err != nil {
+				return err
 			}
 		}
 		return nil

@@ -907,6 +907,22 @@ func (g *Gossip) GetInfoStatus() InfoStatus {
 	return is
 }
 
+// GetInfoStatusByPrefix returns a copy of the infoStore content,
+// filtered by the given key prefix.
+func (g *Gossip) GetInfoStatusByPrefix(prefix string) InfoStatus {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	is := InfoStatus{
+		Infos: make(map[string]Info),
+	}
+	for k, v := range g.mu.is.Infos {
+		if strings.HasPrefix(k, prefix+separator) {
+			is.Infos[k] = *protoutil.Clone(v).(*Info)
+		}
+	}
+	return is
+}
+
 // Callback is a callback method to be invoked on gossip update
 // of info denoted by key.
 type Callback func(string, roachpb.Value)
