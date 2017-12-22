@@ -235,6 +235,31 @@ func (c *indexConstraintCtx) compare(
 	return 0
 }
 
+// startsAfter returns true if a span that ends in prevSpanEnd cannot
+// overlap with a span that starts at spanStart.
+func (c *indexConstraintCtx) startsAfter(offset int, prevSpanEnd, spanStart LogicalKey) bool {
+	cmp := c.compareKeyVals(offset, prevSpanEnd.Vals, spanStart.Vals)
+	if cmp != 0 {
+		return cmp < 0
+	}
+	switch {
+	case len(prevSpanEnd.Vals) < len(spanStart.Vals):
+		// The previous end key is a prefix of the current start key.
+		// Overlap only if the end key is inclusive.
+		return !prevSpanEnd.Inclusive
+
+	case len(prevSpanEnd.Vals) > len(spanStart.Vals):
+		// The current start key is a prefix of the previous end key.
+		// Overlap only if the start key is inclusive.
+		return !spanStart.Inclusive
+
+	default:
+		// The previous end key and the current start key have the same values.
+		// If either is inclusive, the spans "touch".
+		return !prevSpanEnd.Inclusive && !spanStart.Inclusive
+	}
+}
+
 func (c *indexConstraintCtx) isSpanValid(offset int, sp *LogicalSpan) bool {
 	a, b := sp.Start, sp.End
 	if cmp := c.compareKeyVals(offset, a.Vals, b.Vals); cmp != 0 {
@@ -257,36 +282,8 @@ func (c *indexConstraintCtx) checkSpans(offset int, ls LogicalSpans) {
 		if !c.isSpanValid(offset, &ls[i]) {
 			panic(fmt.Sprintf("invalid span %s", ls[i]))
 		}
-		if i > 0 {
-			cmp := c.compareKeyVals(offset, ls[i-1].End.Vals, ls[i].Start.Vals)
-			if cmp > 0 {
-				panic(fmt.Sprintf("spans not ordered and disjoint: %s, %s\n", ls[i-1], ls[i]))
-			}
-			if cmp < 0 {
-				continue
-			}
-			switch {
-			case len(ls[i-1].End.Vals) < len(ls[i].Start.Vals):
-				// The previous end key is a prefix of the current start key. Only
-				// acceptable if the end key is exclusive.
-				if ls[i-1].End.Inclusive {
-					panic(fmt.Sprintf("spans not ordered and disjoint: %s, %s\n", ls[i-1], ls[i]))
-				}
-
-			case len(ls[i-1].End.Vals) > len(ls[i].Start.Vals):
-				// The current start key is a prefix of the previous end key. Only
-				// acceptable if the start key is exclusive.
-				if ls[i].Start.Inclusive {
-					panic(fmt.Sprintf("spans not ordered and disjoint: %s, %s\n", ls[i-1], ls[i]))
-				}
-
-			default:
-				// The previous end key and the current start key have the same values.
-				// Only acceptable if they are both exclusive.
-				if ls[i-1].End.Inclusive || ls[i].Start.Inclusive {
-					panic(fmt.Sprintf("spans not ordered and disjoint: %s, %s\n", ls[i-1], ls[i]))
-				}
-			}
+		if i > 0 && !c.startsAfter(offset, ls[i-1].End, ls[i].Start) {
+			panic(fmt.Sprintf("spans not ordered and disjoint: %s, %s\n", ls[i-1], ls[i]))
 		}
 	}
 }
@@ -372,4 +369,57 @@ func (c *indexConstraintCtx) intersectSpanSet(
 	}
 	c.checkSpans(offset, res)
 	return res
+}
+
+// mergeSpanSets takes two sets of (ordered, non-overlapping) spans and
+// generates their union (as ordered, non-overlapping spans).
+func (c *indexConstraintCtx) mergeSpanSets(
+	offset int, a LogicalSpans, b LogicalSpans,
+) LogicalSpans {
+	if len(a) == 0 && len(b) == 0 {
+		return LogicalSpans{}
+	}
+	result := make(LogicalSpans, 0, len(a)+len(b))
+	for len(a) > 0 || len(b) > 0 {
+		if len(b) > 0 &&
+			(len(a) == 0 || c.compare(offset, a[0].Start, b[0].Start, compareStartKeys) > 0) {
+			// Swap the two sets, so that going forward a[0] starts before b[0].
+			a, b = b, a
+		}
+		span := a[0]
+		a = a[1:]
+
+		// Merge this span with any overlapping spans in a or b. Initially, it can
+		// only overlap with spans in b, but after the merge we can have new
+		// overlaps; hence why this is a loop and we check against both a and b. For
+		// example:
+		//   a: [/1 /10] [/20 - /30] [/40 - /50]
+		//   b: [/5 /25] [/30 - /40]
+		//                           span
+		//   initial:                [/1 - /10]
+		//   merge with [/5 - /25]:  [/1 - /25]
+		//   merge with [/20 - /30]: [/1 - /30]
+		//   merge with [/30 - /40]: [/1 - /40]
+		//   merge with [/40 - /50]: [/1 - /50]
+		//
+		for {
+			var mergeSpan LogicalSpan
+			if len(a) > 0 && !c.startsAfter(offset, span.End, a[0].Start) {
+				mergeSpan = a[0]
+				a = a[1:]
+			} else if len(b) > 0 && !c.startsAfter(offset, span.End, b[0].Start) {
+				mergeSpan = b[0]
+				b = b[1:]
+			} else {
+				break
+			}
+
+			// Take the "max" of the end keys.
+			if c.compare(offset, span.End, mergeSpan.End, compareEndKeys) < 0 {
+				span.End = mergeSpan.End
+			}
+		}
+		result = append(result, span)
+	}
+	return result
 }
