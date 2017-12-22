@@ -64,10 +64,18 @@ const (
 	notRegMatchOp
 	regIMatchOp
 	notRegIMatchOp
+
 	isDistinctFromOp
 	isNotDistinctFromOp
+
+	// isOp implements the SQL operator IS, as well as its extended
+	// version IS NOT DISTINCT FROM.
 	isOp
+
+	// isNotOp implements the SQL operator IS NOT, as well as its extended
+	// version IS DISTINCT FROM.
 	isNotOp
+
 	anyOp
 	someOp
 	allOp

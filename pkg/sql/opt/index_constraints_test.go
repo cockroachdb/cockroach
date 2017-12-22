@@ -140,8 +140,8 @@ func TestIntersectSpan(t *testing.T) {
 			c := indexConstraintCalc{
 				// Only the directions from colInfos are used by intersectSpan
 				colInfos: []IndexColumnInfo{
-					{direction: encoding.Ascending},
-					{direction: encoding.Ascending},
+					{Direction: encoding.Ascending},
+					{Direction: encoding.Ascending},
 				},
 				evalCtx: &evalCtx,
 			}
