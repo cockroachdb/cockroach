@@ -838,6 +838,11 @@ func (dsp *DistSQLPlanner) selectRenders(
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
 func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
+	if !n.needSort {
+		// This node exists only to keep track of an ordering requirement,
+		// we don't need to do anything
+		return
+	}
 
 	matchLen := planPhysicalProps(n.plan).computeMatch(n.ordering)
 

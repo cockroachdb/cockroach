@@ -148,12 +148,13 @@ query ITTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY z
 ----
 0  distinct  ·      ·
-1  nosort    ·      ·
-1  ·         order  +z
-2  render    ·      ·
-3  scan      ·      ·
-3  ·         table  xyz@foo
-3  ·         spans  ALL
+1  render    ·      ·
+2  nosort    ·      ·
+2  ·         order  +z
+3  render    ·      ·
+4  scan      ·      ·
+4  ·         table  xyz@foo
+4  ·         spans  ALL
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by y

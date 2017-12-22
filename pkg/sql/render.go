@@ -448,6 +448,24 @@ func (p *planner) makeTupleRender(
 	return r, nil
 }
 
+// makeIdentityRender creates a new renderNode which selects all columns
+// in its source.
+func (p *planner) makeIdentityRender(ctx context.Context, src planDataSource) (*renderNode, error) {
+	render := &renderNode{
+		source:     src,
+		sourceInfo: multiSourceInfo{src.info},
+	}
+	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.sourceColumns))
+	if err := p.initTargets(
+		ctx, render,
+		tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}},
+		nil, /* desiredTypes */
+	); err != nil {
+		return nil, err
+	}
+	return render, nil
+}
+
 // getTimestamp will get the timestamp for an AS OF clause. It will also
 // verify the timestamp against the transaction. If AS OF SYSTEM TIME is
 // specified in any part of the query, then it must be consistent with

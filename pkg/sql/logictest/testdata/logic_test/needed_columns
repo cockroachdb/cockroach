@@ -83,11 +83,12 @@ EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y) ORDER BY x
 query ITTTTT
 EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y, 3 AS z) ORDER BY y
 ----
-0  nosort    ·      ·   (x)                 x=CONST
-0  ·         order  +y  ·                   ·
-1  render    ·      ·   (x, y)              x=CONST; y=CONST
-2  render    ·      ·   (x, y, z[omitted])  x=CONST; y=CONST
-3  emptyrow  ·      ·   ()                  ·
+0  render    ·      ·   (x)                 x=CONST
+1  nosort    ·      ·   (x)                 x=CONST
+1  ·         order  +y  ·                   ·
+2  render    ·      ·   (x, y)              x=CONST; y=CONST
+3  render    ·      ·   (x, y, z[omitted])  x=CONST; y=CONST
+4  emptyrow  ·      ·   ()                  ·
 
 # Propagation to sub-queries.
 query ITTTTT
