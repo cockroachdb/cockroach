@@ -2950,10 +2950,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return MakeDBool(!DBool(left == DNull && right == DNull)), nil
 		case IsNotDistinctFrom:
 			return MakeDBool(left == DNull && right == DNull), nil
-		case Is:
-			return nil, errors.Errorf("IS NULL should never be compared: use IS NOT DISTINCT FROM")
-		case IsNot:
-			return nil, errors.Errorf("IS NOT NULL should never be compared: use IS DISTINCT FROM")
 		default:
 			return DNull, nil
 		}
@@ -3455,18 +3451,6 @@ func foldComparisonExpr(
 		// Note the special handling of NULLs and IS NOT DISTINCT FROM is needed
 		// before this expression fold.
 		return EQ, left, right, false, false
-	case Is:
-		// Is(left, right) is implemented as EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS is needed before this
-		// expression fold.
-		return EQ, left, right, false, false
-	case IsNot:
-		// IsNot(left, right) is implemented as !EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS NOT is needed before this
-		// expression fold.
-		return EQ, left, right, false, true
 	}
 	return op, left, right, false, false
 }
