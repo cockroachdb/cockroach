@@ -15,7 +15,10 @@
 package fsm
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"sort"
 )
 
 // State is a node in a Machine's transition graph.
@@ -73,6 +76,59 @@ func (t Transitions) apply(s State, e Event, es ExtendedState) State {
 		tr.Action(es)
 	}
 	return tr.Next
+}
+
+func (t Transitions) genReport() string {
+	var stateNames []string
+	var eventNames []string
+	stateNameMap := make(map[string]State)
+	eventNameMap := make(map[string]Event)
+	for s, sm := range t.expanded {
+		sName := fmt.Sprintf("%#v", s)
+		stateNames = append(stateNames, sName)
+		stateNameMap[sName] = s
+
+		for e := range sm {
+			eName := fmt.Sprintf("%#v", e)
+			if _, ok := eventNameMap[eName]; !ok {
+				eventNames = append(eventNames, eName)
+				eventNameMap[eName] = e
+			}
+		}
+	}
+
+	sort.Strings(stateNames)
+	sort.Strings(eventNames)
+
+	var b, present, missing bytes.Buffer
+	for _, sName := range stateNames {
+		sm := t.expanded[stateNameMap[sName]]
+
+		for _, eName := range eventNames {
+			if _, ok := sm[eventNameMap[eName]]; ok {
+				fmt.Fprintf(&present, "\t\t%s\n", eName)
+			} else {
+				fmt.Fprintf(&missing, "\t\t%s\n", eName)
+			}
+		}
+
+		fmt.Fprintf(&b, "%s\n", sName)
+		b.WriteString("\thandled events:\n")
+		io.Copy(&b, &present)
+		b.WriteString("\tmissing events:\n")
+		io.Copy(&b, &missing)
+
+		present.Reset()
+		missing.Reset()
+	}
+
+	return b.String()
+}
+
+// PrintReport prints a report of the Transitions graph, reporting on which
+// Events each State handles and which Events each state does not.
+func (t Transitions) PrintReport() {
+	fmt.Print(t.genReport())
 }
 
 // Machine encapsulates a State with a set of State transitions. It reacts to
