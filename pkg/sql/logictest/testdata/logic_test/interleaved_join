@@ -427,23 +427,23 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL)
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzslNGL1DAQxt_9K8I87eIITXunGFiIIMKK7Mrim_YhNHN7gV5SklSUo_-7pPW626Mriigc9K3JN1-_mfbH3IN1mnbqjgKIz8ABIQeEaygRGu8qCsH5JA2FW_0NRIZgbNPGdF0iVM4TiHuIJtYEArY2kq9JfaUDKU3-vTOWPCBoisrUfc4HuomQEsyd8t9lozzZmMKTwN6ZOpIXbLVaSc6-tFlW0IZxLoTY7j6t2ZvdWzYq1Ybx4qeyZvsDm5peXzLlD6-bcRUXo4ox6qHZfRsFkxxl-m4Hc7w9H-zoldXVran1qD6Z6YZuT-OhLFBeobwGhPGf1nQTV5I_X298Ku8fAeHclSwoX6J8BWWH4Np4YidEdSQQvMMLfJ2waq3zmjzpCUllN0Pgzr1wzaOy-eB8EswXsBew_yHY-cLXwtd_WpwzfB0oNM4G-q3NmKXFSvpIwxYOrvUVffSu6mOG47739ReaQhxUPhy2tpf6Bs_N_Jfmq4k5e2zO_ya5-CNz2T37EQAA__-LHJN8
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM parent1 JOIN grandchild2 USING(pid1) WHERE
   pid1 >= 11 AND pid1 <= 13
   OR pid1 >= 19 AND pid1 <= 21
   OR pid1 >= 31 AND pid1 <= 33
 ----
-0  render  ·               ·
-1  join    ·               ·
-1  ·       type            inner
-1  ·       equality        (pid1) = (pid1)
-1  ·       mergeJoinOrder  +"(pid1=pid1)"
-2  scan    ·               ·
-2  ·       table           parent1@primary
-2  ·       spans           /11-/13/# /19-/21/# /31-/33/#
-2  scan    ·               ·
-2  ·       table           grandchild2@primary
-2  ·       spans           /11/#/54/1-/13/#/54/2 /19/#/54/1-/21/#/54/2 /31/#/54/1-/33/#/54/2
+render          ·               ·
+ └── join       ·               ·
+      │         type            inner
+      │         equality        (pid1) = (pid1)
+      │         mergeJoinOrder  +"(pid1=pid1)"
+      ├── scan  ·               ·
+      │         table           parent1@primary
+      │         spans           /11-/13/# /19-/21/# /31-/33/#
+      └── scan  ·               ·
+·               table           grandchild2@primary
+·               spans           /11/#/54/1-/13/#/54/2 /19/#/54/1-/21/#/54/2 /31/#/54/1-/33/#/54/2
 
 # Swap parent1 and grandchild2 positions.
 query IIIIII rowsort,colnames
@@ -474,23 +474,23 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL)
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzslNGL1DAQxt_9K8I87eIITXuHGFiIIMKKdKX4pn0IzVwv0EtKkopy9H-Xtu7udemKIgpC35p88_WbaX_MI1inKVcPFEB8Ag4IKSDcQonQeldRCM4P0lS4119BJAjGtl0crkuEynkC8QjRxIZAwN5G8g2pL1SQ0uTfOWPJA4KmqEwz5rynuwhDgnlQ_pusvbK6ujeNHsIHkb01TSQv2GazkZx97pIkox3jXAixzz9u2ev8DTsp1Y7x7IeyZYeCzU2vrpnS4-sWXNnVqOwUdWz20EXBJEeZosxQ3qC8BYTC1PdPp2yVJxv5UflvRpy6Pc8ICKd_2tBd3Ej-fLvzQ9X4CAgLHwTlSyh7BNfFMzshqppA8B6v8HXGqrPOa_KkZySV_QKBuXvh2ouy5eB0FsxXsFew_yLY6crXytc_WpwLfBUUWmcD_dJmTIbFSrqmaQsH1_mKPnhXjTHT8TD6xgtNIU4qnw57O0pjg0_N_Kfmm5k5uTSnf5Kc_Za57J99DwAA__-nJ5Nz
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   pid1 >= 11 AND pid1 <= 13
   OR pid1 >= 19 AND pid1 <= 21
   OR pid1 >= 31 AND pid1 <= 33
 ----
-0  render  ·               ·
-1  join    ·               ·
-1  ·       type            inner
-1  ·       equality        (pid1) = (pid1)
-1  ·       mergeJoinOrder  +"(pid1=pid1)"
-2  scan    ·               ·
-2  ·       table           grandchild2@primary
-2  ·       spans           /11/#/54/1-/13/#/54/2 /19/#/54/1-/21/#/54/2 /31/#/54/1-/33/#/54/2
-2  scan    ·               ·
-2  ·       table           parent1@primary
-2  ·       spans           /11-/13/# /19-/21/# /31-/33/#
+render          ·               ·
+ └── join       ·               ·
+      │         type            inner
+      │         equality        (pid1) = (pid1)
+      │         mergeJoinOrder  +"(pid1=pid1)"
+      ├── scan  ·               ·
+      │         table           grandchild2@primary
+      │         spans           /11/#/54/1-/13/#/54/2 /19/#/54/1-/21/#/54/2 /31/#/54/1-/33/#/54/2
+      └── scan  ·               ·
+·               table           parent1@primary
+·               spans           /11-/13/# /19-/21/# /31-/33/#
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
 # Returns:
@@ -530,7 +530,7 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL)
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzsls-K2zAQh-99CjEnh0zBku3driCgQimklKSE3lofjDWbNXitIMmlZcm7F9mNdh3Sf-QWctSMvvwm_gTSE3RG06p6JAfyC3BAEICQAUIOCAWUCDtranLO2LBlBJb6O8gUoel2vQ_lEqE2lkA-gW98SyBh2XmyLVXfaEOVJvvBNB1ZQNDkq6Yd8j7SvYeQ0DxW9oeqH5pWh_xQZ-veS6Y4KoEqQxXm2TTbh5fA1ladjtTQZe-b1pOVLEkSxdnXPk0zWrBCSrlcfZ6xt6t3LDbqBbv91Zix9YYliRIR4WLKiMjw_AAdqDxS-d2UyiNV8AMVZz3-i6gKQIhfqqV7nyg-RyXmqLL5bGEDNikBwolfQXWD6hbVG1R3UO4RTO-fVTlfbQkk3-NvdD5b7DtjNVnSE3Hl_oTwlXltdkfbTgeLSTC_nqNLOkfiqvOSdGZXnZekM7_qvCSdf3mDbcjtTOfon27lNFzqpLc0vgCc6W1Nn6yph5hxuR64oaDJ-bHLx8WyG1rDgC9h_kf4ZgKnx7A4Jzk7B87PgYv_gsv9q58BAAD__5XeUlM=
 
-query ITTT
+query TTT
 EXPLAIN
   SELECT * FROM child2 JOIN grandchild2 ON
     child2.pid1=grandchild2.pid1
@@ -541,16 +541,16 @@ EXPLAIN
     OR child2.cid2 >= 12 AND child2.cid2 <= 14
     OR gcid2 >= 49 AND gcid2 <= 51
 ----
-0  join  ·               ·
-0  ·     type            inner
-0  ·     equality        (pid1, cid2, cid3) = (pid1, cid2, cid3)
-0  ·     mergeJoinOrder  +"(pid1=pid1)",+"(cid2=cid2)",+"(cid3=cid3)"
-1  scan  ·               ·
-1  ·     table           child2@primary
-1  ·     spans           ALL
-1  scan  ·               ·
-1  ·     table           grandchild2@primary
-1  ·     spans           ALL
+join       ·               ·
+ │         type            inner
+ │         equality        (pid1, cid2, cid3) = (pid1, cid2, cid3)
+ │         mergeJoinOrder  +"(pid1=pid1)",+"(cid2=cid2)",+"(cid3=cid3)"
+ ├── scan  ·               ·
+ │         table           child2@primary
+ │         spans           ALL
+ └── scan  ·               ·
+·          table           grandchild2@primary
+·          spans           ALL
 
 # Aggregation over parent and child keys.
 # There are 4 rows for each 10 <= pid1 <= 30 and 3 rows for each 30 < pid1 <=
@@ -805,21 +805,21 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM parent1 JOIN (SELECT * FROM c
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzclsFq20AQhu99ijCnlm7Bu5IdR1DQsekhKWlvRQfF2toCRytWa2gIfvciqWAkOftn2BiMb3XtTzM7-01-vVBlCn2XP-mGkt8kSZAiQREJiknQnDJBtTUr3TTGtj_pgdviLyUzQWVV71z735mglbGakhdypdtqSuhX_rjVDzovtCVBhXZ5ue2K1LZ8yu1zWudWV64teb9zyVUqRaoo2wsyO_f_sYenPT5fbfJmM3xSKinbZ4Ial681JXIv3rG91abcFsPuRBqNGjwUV5ziP41147qp-hx0-ujVBg7P2VXGFtrqYvCkrCXRT46c4lvebL6bshqfZKv_uI-p_PTVlutN96_RFGORzl8dZBxwjiNN3pkvph4f92jh-aCwPG-7Q9sLshsUP73d8kLsVuctWWh7QZKB4qeXTF2IZNF5SxbaXpBkoPjpJYsuRLL4vCULbS9IMlD89JLFFyIZeKt-0E1tqka_6W1v1h5CF2vdD6UxO7vSP6xZdWX6j_cd171uFLpx_bdR_-G26r9qG3w7vAyBpQqiFyG0mvlpOaZnA3oAz8awYgxc8eBlCDwaOJdehNCjgU_oyDvw2H9bsf-2pP-65iH74YfBfvhhtB-ABvvhp9F-LLwTv_YP_DpkP_ww2A8_jPYD0GA__DTaj2XIftyEGO6HgeF-GBkOaGC4n4YJMAmQwcQl-KMiJwnCkRzQwHJAI80RDjwHOBJdTnKEY7qc5AhHdUAD1wGNZEc4sB3gUHd_hso50J0TotM756Qol4a6s3KUi0Pd_UmKdOdEKZdGurPClI0j3VlxOsX9eSpvgO6cRJ3eOSdSuTTUnRWqXBzprvypOtY923_4FwAA__9byzFW
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM parent1 JOIN (SELECT * FROM child1 ORDER BY cid1) USING (pid1)
 ----
- 0  render  ·         ·
- 1  join    ·         ·
- 1  ·       type      inner
- 1  ·       equality  (pid1) = (pid1)
- 2  scan    ·         ·
- 2  ·       table     parent1@primary
- 2  ·       spans     ALL
- 2  sort    ·         ·
- 2  ·       order     +cid1
- 3  scan    ·         ·
- 3  ·       table     child1@primary
- 3  ·       spans     ALL
+render               ·         ·
+ └── join            ·         ·
+      │              type      inner
+      │              equality  (pid1) = (pid1)
+      ├── scan       ·         ·
+      │              table     parent1@primary
+      │              spans     ALL
+      └── sort       ·         ·
+           │         order     +cid1
+           └── scan  ·         ·
+·                    table     child1@primary
+·                    spans     ALL
 
 # Multi-table staggered join uses interleaved joiner on the bottom join
 # and a merge joiner.

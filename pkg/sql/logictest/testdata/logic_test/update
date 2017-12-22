@@ -333,47 +333,47 @@ SELECT * from xyz
 ----
 2 777 666
 
-query ITTT
+query TTT
 EXPLAIN UPDATE xyz SET y = x
 ----
-0  update  ·      ·
-0  ·       table  xyz
-0  ·       set    y
-1  scan    ·      ·
-1  ·       table  xyz@primary
-1  ·       spans  ALL
+update     ·      ·
+ │         table  xyz
+ │         set    y
+ └── scan  ·      ·
+·          table  xyz@primary
+·          spans  ALL
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (1, 2)
 ----
-0  update  ·      ·            ()                   ·
-0  ·       table  xyz          ·                    ·
-0  ·       set    x, y         ·                    ·
-1  render  ·      ·            (x, y, z, "1", "2")  "1"=CONST; "2"=CONST; x!=NULL; key(x)
-2  scan    ·      ·            (x, y, z)            x!=NULL; key(x)
-2  ·       table  xyz@primary  ·                    ·
-2  ·       spans  ALL          ·                    ·
+update          0  update  ·      ·            ()  ·
+ │              0  ·       table  xyz          ·   ·
+ │              0  ·       set    x, y         ·   ·
+ └── render     1  render  ·      ·            ()  ·
+      └── scan  2  scan    ·      ·            ()  ·
+·               2  ·       table  xyz@primary  ·   ·
+·               2  ·       spans  ALL          ·   ·
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (y, x)
 ----
-0  update  ·      ·            ()         ·
-0  ·       table  xyz          ·          ·
-0  ·       set    x, y         ·          ·
-1  scan    ·      ·            (x, y, z)  x!=NULL; key(x)
-1  ·       table  xyz@primary  ·          ·
-1  ·       spans  ALL          ·          ·
+update     0  update  ·      ·            ()  ·
+ │         0  ·       table  xyz          ·   ·
+ │         0  ·       set    x, y         ·   ·
+ └── scan  1  scan    ·      ·            ()  ·
+·          1  ·       table  xyz@primary  ·   ·
+·          1  ·       spans  ALL          ·   ·
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (2, 2)
 ----
-0  update  ·      ·            ()              ·
-0  ·       table  xyz          ·               ·
-0  ·       set    x, y         ·               ·
-1  render  ·      ·            (x, y, z, "2")  "2"=CONST; x!=NULL; key(x)
-2  scan    ·      ·            (x, y, z)       x!=NULL; key(x)
-2  ·       table  xyz@primary  ·               ·
-2  ·       spans  ALL          ·               ·
+update          0  update  ·      ·            ()  ·
+ │              0  ·       table  xyz          ·   ·
+ │              0  ·       set    x, y         ·   ·
+ └── render     1  render  ·      ·            ()  ·
+      └── scan  2  scan    ·      ·            ()  ·
+·               2  ·       table  xyz@primary  ·   ·
+·               2  ·       spans  ALL          ·   ·
 
 statement ok
 CREATE TABLE lots (
@@ -441,18 +441,18 @@ TRUNCATE kv
 statement ok
 INSERT INTO kv VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 
-query ITTT
+query TTT
 EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC
 ----
-0  update  ·      ·
-0  ·       table  kv
-0  ·       set    v
-1  render  ·      ·
-2  sort    ·      ·
-2  ·       order  -v
-3  scan    ·      ·
-3  ·       table  kv@primary
-3  ·       spans  ALL
+update               ·      ·
+ │                   table  kv
+ │                   set    v
+ └── render          ·      ·
+      └── sort       ·      ·
+           │         order  -v
+           └── scan  ·      ·
+·                    table  kv@primary
+·                    spans  ALL
 
 query II
 UPDATE kv SET v = v + 1 ORDER BY v DESC RETURNING k,v
@@ -475,18 +475,18 @@ UPDATE kv SET k = k * 2 ORDER BY k DESC
 statement ok
 TRUNCATE kv; INSERT INTO kv VALUES (1, 2), (2, 3), (3, 4)
 
-query ITTT
+query TTT
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-0  update  ·      ·
-0  ·       table  kv
-0  ·       set    v
-1  render  ·      ·
-2  limit   ·      ·
-3  scan    ·      ·
-3  ·       table  kv@primary
-3  ·       spans  /!NULL-/2/#
-3  ·       limit  1
+update               ·      ·
+ │                   table  kv
+ │                   set    v
+ └── render          ·      ·
+      └── limit      ·      ·
+           └── scan  ·      ·
+·                    table  kv@primary
+·                    spans  /!NULL-/2/#
+·                    limit  1
 
 query II
 UPDATE kv SET v = v - 1 WHERE k < 10 ORDER BY k LIMIT 1 RETURNING k, v

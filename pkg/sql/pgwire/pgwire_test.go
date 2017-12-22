@@ -877,7 +877,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		// #14238
 		"EXPLAIN SELECT 1": {
-			baseTest.SetArgs().Results(0, "render", "", "").Results(1, "emptyrow", "", ""),
+			baseTest.SetArgs().Results("render", "", "").Results(" └── emptyrow", "", ""),
 		},
 		// #14245
 		"SELECT 1::oid = $1": {

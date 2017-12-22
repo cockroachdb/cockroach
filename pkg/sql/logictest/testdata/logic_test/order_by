@@ -40,15 +40,15 @@ SELECT a, b FROM t ORDER BY b
 2 8
 1 9
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
-0  sort    ·      ·
-0  ·       order  +b
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  t@primary
-2  ·       spans  ALL
+sort            ·      ·
+ │              order  +b
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  t@primary
+·               spans  ALL
 
 query II
 SELECT a, b FROM t ORDER BY b DESC
@@ -57,15 +57,15 @@ SELECT a, b FROM t ORDER BY b DESC
 2 8
 3 7
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
-0  sort    ·      ·
-0  ·       order  -b
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  t@primary
-2  ·       spans  ALL
+sort            ·      ·
+ │              order  -b
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  t@primary
+·               spans  ALL
 
 query I
 SELECT a FROM t ORDER BY 1 DESC
@@ -74,17 +74,17 @@ SELECT a FROM t ORDER BY 1 DESC
 2
 1
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
-0  limit   ·         ·
-1  sort    ·         ·
-1  ·       order     +b
-1  ·       strategy  top 2
-2  render  ·         ·
-3  scan    ·         ·
-3  ·       table     t@primary
-3  ·       spans     ALL
+limit                ·         ·
+ └── sort            ·         ·
+      │              order     +b
+      │              strategy  top 2
+      └── render     ·         ·
+           └── scan  ·         ·
+·                    table     t@primary
+·                    spans     ALL
 
 query II
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
@@ -92,21 +92,21 @@ SELECT a, b FROM t ORDER BY b DESC LIMIT 2
 1 9
 2 8
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
 ----
-0  limit     ·         ·          (c)                 weak-key(c)
-0  ·         count     2          ·                   ·
-1  distinct  ·         ·          (c)                 weak-key(c)
-2  sort      ·         ·          (c)                 ·
-2  ·         order     +b         ·                   ·
-2  ·         strategy  iterative  ·                   ·
-3  render    ·         ·          (c, b)              ·
-3  ·         render 0  test.t.c   ·                   ·
-3  ·         render 1  test.t.b   ·                   ·
-4  scan      ·         ·          (a[omitted], b, c)  a!=NULL; key(a)
-4  ·         table     t@primary  ·                   ·
-4  ·         spans     ALL        ·                   ·
+limit                     0  limit     ·         ·          (c)  weak-key(c)
+ │                        0  ·         count     2          ·    ·
+ └── distinct             1  distinct  ·         ·          (c)  weak-key(c)
+      └── sort            2  sort      ·         ·          (c)  weak-key(c)
+           │              2  ·         order     +b         ·    ·
+           │              2  ·         strategy  iterative  ·    ·
+           └── render     3  render    ·         ·          (c)  weak-key(c)
+                │         3  ·         render 0  test.t.c   ·    ·
+                │         3  ·         render 1  test.t.b   ·    ·
+                └── scan  4  scan      ·         ·          (c)  weak-key(c)
+·                         4  ·         table     t@primary  ·    ·
+·                         4  ·         spans     ALL        ·    ·
 
 query B
 SELECT DISTINCT c FROM t ORDER BY b DESC LIMIT 2
@@ -153,84 +153,84 @@ SELECT b FROM t ORDER BY a DESC
 8
 9
 
-query ITTT
+query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
-0  nosort   ·      ·
-0  ·        order  -a
-1  render   ·      ·
-2  revscan  ·      ·
-2  ·        table  t@primary
-2  ·        spans  ALL
+nosort             ·      ·
+ │                 order  -a
+ └── render        ·      ·
+      └── revscan  ·      ·
+·                  table  t@primary
+·                  spans  ALL
 
 # Check that LIMIT propagates past nosort nodes.
-query ITTT
+query TTT
 EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
 ----
-0  limit   ·      ·
-1  nosort  ·      ·
-1  ·       order  +a
-2  render  ·      ·
-3  scan    ·      ·
-3  ·       table  t@primary
-3  ·       spans  ALL
-3  ·       limit  1
+limit                ·      ·
+ └── nosort          ·      ·
+      │              order  +a
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  t@primary
+·                    spans  ALL
+·                    limit  1
 
-query ITTT
+query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-0  nosort   ·      ·
-0  ·        order  -a,+b
-1  render   ·      ·
-2  revscan  ·      ·
-2  ·        table  t@primary
-2  ·        spans  ALL
+nosort             ·      ·
+ │                 order  -a,+b
+ └── render        ·      ·
+      └── revscan  ·      ·
+·                  table  t@primary
+·                  spans  ALL
 
-query ITTT
+query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-0  nosort   ·      ·
-0  ·        order  -a,-b
-1  render   ·      ·
-2  revscan  ·      ·
-2  ·        table  t@primary
-2  ·        spans  ALL
+nosort             ·      ·
+ │                 order  -a,-b
+ └── render        ·      ·
+      └── revscan  ·      ·
+·                  table  t@primary
+·                  spans  ALL
 
-query ITTTTT
+query TITTTTT
 EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, t.*)
 ----
-0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
-0  ·     order  +b,+a,+c   ·          ·
-1  scan  ·      ·          (a, b, c)  a!=NULL; key(a)
-1  ·     table  t@primary  ·          ·
-1  ·     spans  ALL        ·          ·
+sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
+ │         0  ·     order  +b,+a,+c   ·          ·
+ └── scan  1  scan  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
+·          1  ·     table  t@primary  ·          ·
+·          1  ·     spans  ALL        ·          ·
 
-query ITTTTT
+query TITTTTT
 EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, a), c
 ----
-0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
-0  ·     order  +b,+a,+c   ·          ·
-1  scan  ·      ·          (a, b, c)  a!=NULL; key(a)
-1  ·     table  t@primary  ·          ·
-1  ·     spans  ALL        ·          ·
+sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
+ │         0  ·     order  +b,+a,+c   ·          ·
+ └── scan  1  scan  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
+·          1  ·     table  t@primary  ·          ·
+·          1  ·     spans  ALL        ·          ·
 
-query ITTTTT
+query TITTTTT
 EXPLAIN(METADATA) SELECT * FROM t ORDER BY b, (a, c)
 ----
-0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
-0  ·     order  +b,+a,+c   ·          ·
-1  scan  ·      ·          (a, b, c)  a!=NULL; key(a)
-1  ·     table  t@primary  ·          ·
-1  ·     spans  ALL        ·          ·
+sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
+ │         0  ·     order  +b,+a,+c   ·          ·
+ └── scan  1  scan  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
+·          1  ·     table  t@primary  ·          ·
+·          1  ·     spans  ALL        ·          ·
 
-query ITTTTT
+query TITTTTT
 EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, (a, c))
 ----
-0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
-0  ·     order  +b,+a,+c   ·          ·
-1  scan  ·      ·          (a, b, c)  a!=NULL; key(a)
-1  ·     table  t@primary  ·          ·
-1  ·     spans  ALL        ·          ·
+sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
+ │         0  ·     order  +b,+a,+c   ·          ·
+ └── scan  1  scan  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
+·          1  ·     table  t@primary  ·          ·
+·          1  ·     spans  ALL        ·          ·
 
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -345,66 +345,66 @@ SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER 
 
 
 # Check that sort is skipped if the ORDER BY clause is constant.
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-0  nosort  ·      ·
-0  ·       order  +"1 + 2"
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  t@primary
-2  ·       spans  ALL
+nosort          ·      ·
+ │              order  +"1 + 2"
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  t@primary
+·               spans  ALL
 
-query ITTT
+query TTT
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@primary
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t@primary
+·          spans  ALL
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-0  nosort  ·      ·
-0  ·       order  +length
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  t@primary
-2  ·       spans  ALL
+nosort          ·      ·
+ │              order  +length
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  t@primary
+·               spans  ALL
 
 # Check that the sort key reuses the existing render.
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT b+2 FROM t ORDER BY b+2
 ----
-0  sort    ·      ·          ("b + 2")                    +"b + 2"
-0  ·       order  +"b + 2"   ·                            ·
-1  render  ·      ·          ("b + 2")                    ·
-2  scan    ·      ·          (a[omitted], b, c[omitted])  a!=NULL; key(a)
-2  ·       table  t@primary  ·                            ·
-2  ·       spans  ALL        ·                            ·
+sort            0  sort    ·      ·          ("b + 2")  +"b + 2"
+ │              0  ·       order  +"b + 2"   ·          ·
+ └── render     1  render  ·      ·          ("b + 2")  +"b + 2"
+      └── scan  2  scan    ·      ·          ("b + 2")  +"b + 2"
+·               2  ·       table  t@primary  ·          ·
+·               2  ·       spans  ALL        ·          ·
 
 # Check that the sort picks up a renamed render properly.
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT b+2 AS y FROM t ORDER BY y
 ----
-0  sort    ·      ·          (y)                          +y
-0  ·       order  +y         ·                            ·
-1  render  ·      ·          (y)                          ·
-2  scan    ·      ·          (a[omitted], b, c[omitted])  a!=NULL; key(a)
-2  ·       table  t@primary  ·                            ·
-2  ·       spans  ALL        ·                            ·
+sort            0  sort    ·      ·          (y)  +y
+ │              0  ·       order  +y         ·    ·
+ └── render     1  render  ·      ·          (y)  +y
+      └── scan  2  scan    ·      ·          (y)  +y
+·               2  ·       table  t@primary  ·    ·
+·               2  ·       spans  ALL        ·    ·
 
 # Check that the sort reuses a render behind a rename properly.
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
-0  sort    ·      ·          (y)                          +y
-0  ·       order  +y         ·                            ·
-1  render  ·      ·          (y)                          ·
-2  scan    ·      ·          (a[omitted], b, c[omitted])  a!=NULL; key(a)
-2  ·       table  t@primary  ·                            ·
-2  ·       spans  ALL        ·                            ·
+sort            0  sort    ·      ·          (y)  +y
+ │              0  ·       order  +y         ·    ·
+ └── render     1  render  ·      ·          (y)  +y
+      └── scan  2  scan    ·      ·          (y)  +y
+·               2  ·       table  t@primary  ·    ·
+·               2  ·       spans  ALL        ·    ·
 
 statement ok
 CREATE TABLE abc (
@@ -439,12 +439,12 @@ fetched: /abc/primary/4/5/6 -> NULL
 fetched: /abc/primary/4/5/6/d -> 'Two'
 output row: [4 5 6 'Two']
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM abc ORDER BY a
 ----
-0  scan  ·      ·
-0  ·     table  abc@primary
-0  ·     spans  ALL
+scan  ·      ·
+·     table  abc@primary
+·     spans  ALL
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM abc ORDER BY b, a]
@@ -455,91 +455,91 @@ output row: [1 2]
 fetched: /abc/ba/5/4/6 -> NULL
 output row: [4 5]
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, a
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abc@ba
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  abc@ba
+·          spans  ALL
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
-query ITTT
+query TTT
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abc@ba
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  abc@ba
+·          spans  ALL
 
 # We use the WHERE condition to force the use of index ba.
-query ITTT
+query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
-0  sort        ·      ·
-0  ·           order  +b,+a,+d
-1  index-join  ·      ·
-2  scan        ·      ·
-2  ·           table  abc@ba
-2  ·           spans  /11-
-2  scan        ·      ·
-2  ·           table  abc@primary
+sort             ·      ·
+ │               order  +b,+a,+d
+ └── index-join  ·      ·
+      ├── scan   ·      ·
+      │          table  abc@ba
+      │          spans  /11-
+      └── scan   ·      ·
+·                table  abc@primary
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
-query ITTT
+query TTT
 EXPLAIN SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
-0  index-join  ·      ·
-1  scan        ·      ·
-1  ·           table  abc@ba
-1  ·           spans  /11-
-1  scan        ·      ·
-1  ·           table  abc@primary
+index-join  ·      ·
+ ├── scan   ·      ·
+ │          table  abc@ba
+ │          spans  /11-
+ └── scan   ·      ·
+·           table  abc@primary
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
-0  nosort  ·      ·
-0  ·       order  +b,+c
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  abc@bc
-2  ·       spans  ALL
+nosort          ·      ·
+ │              order  +b,+c
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  abc@bc
+·               spans  ALL
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
-0  nosort  ·         ·           (a, b)                 b!=NULL; +b
-0  ·       order     +b,+c       ·                      ·
-1  render  ·         ·           (a, b, c)              b!=NULL; c!=NULL; key(b,c); +b,+c
-1  ·       render 0  test.abc.a  ·                      ·
-1  ·       render 1  test.abc.b  ·                      ·
-1  ·       render 2  test.abc.c  ·                      ·
-2  scan    ·         ·           (a, b, c, d[omitted])  b!=NULL; c!=NULL; key(b,c); +b,+c
-2  ·       table     abc@bc      ·                      ·
-2  ·       spans     ALL         ·                      ·
+nosort          0  nosort  ·         ·           (a, b)  b!=NULL; +b
+ │              0  ·       order     +b,+c       ·       ·
+ └── render     1  render  ·         ·           (a, b)  b!=NULL; +b
+      │         1  ·       render 0  test.abc.a  ·       ·
+      │         1  ·       render 1  test.abc.b  ·       ·
+      │         1  ·       render 2  test.abc.c  ·       ·
+      └── scan  2  scan    ·         ·           (a, b)  b!=NULL; +b
+·               2  ·       table     abc@bc      ·       ·
+·               2  ·       spans     ALL         ·       ·
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
-0  nosort  ·      ·
-0  ·       order  +b,+c,+a
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  abc@bc
-2  ·       spans  ALL
+nosort          ·      ·
+ │              order  +b,+c,+a
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  abc@bc
+·               spans  ALL
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-0  nosort  ·      ·
-0  ·       order  +b,+c,-a
-1  render  ·      ·
-2  scan    ·      ·
-2  ·       table  abc@bc
-2  ·       spans  ALL
+nosort          ·      ·
+ │              order  +b,+c,-a
+ └── render     ·      ·
+      └── scan  ·      ·
+·               table  abc@bc
+·               spans  ALL
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT b, c FROM abc ORDER BY b, c]
@@ -570,13 +570,13 @@ fetched: /abc/primary/1/2/3/d -> 'one'
 fetched: /abc/primary/1/2/3 -> NULL
 output row: [1]
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-0  render   ·      ·
-1  revscan  ·      ·
-1  ·        table  abc@primary
-1  ·        spans  ALL
+render        ·      ·
+ └── revscan  ·      ·
+·             table  abc@primary
+·             spans  ALL
 
 query I
 SELECT a FROM abc ORDER BY a DESC
@@ -594,32 +594,32 @@ SELECT a FROM abc ORDER BY a DESC OFFSET 1
 ----
 1
 
-query ITTT
+query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abc@bc
-1  ·       spans  /2-/3
+render     ·      ·
+ └── scan  ·      ·
+·          table  abc@bc
+·          spans  /2-/3
 
-query ITTT
+query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-0  render   ·      ·
-1  revscan  ·      ·
-1  ·        table  abc@bc
-1  ·        spans  /2-/3
+render        ·      ·
+ └── revscan  ·      ·
+·             table  abc@bc
+·             spans  /2-/3
 
 # Verify that the ordering of the primary index is still used for the outer sort.
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-0  nosort  ·      ·            (b, c)                          b!=NULL; c!=NULL; key(b,c); +b,+c
-0  ·       order  +b,+c        ·                               ·
-1  render  ·      ·            (b, c, a[omitted])              a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
-2  scan    ·      ·            (a[omitted], b, c, d[omitted])  a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
-2  ·       table  abc@primary  ·                               ·
-2  ·       spans  /1-/2        ·                               ·
+nosort          0  nosort  ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
+ │              0  ·       order  +b,+c        ·       ·
+ └── render     1  render  ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
+      └── scan  2  scan    ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
+·               2  ·       table  abc@primary  ·       ·
+·               2  ·       spans  /1-/2        ·       ·
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
@@ -627,14 +627,14 @@ CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 statement ok
 INSERT INTO bar VALUES (0, NULL), (1, NULL)
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT * FROM bar ORDER BY baz, id
 ----
-0  sort  ·      ·          (id, baz)  weak-key(baz); +baz,+id
-0  ·     order  +baz,+id   ·          ·
-1  scan  ·      ·          (id, baz)  weak-key(baz); +baz
-1  ·     table  bar@i_bar  ·          ·
-1  ·     spans  ALL        ·          ·
+sort       0  sort  ·      ·          (id, baz)  weak-key(baz); +baz,+id
+ │         0  ·     order  +baz,+id   ·          ·
+ └── scan  1  scan  ·      ·          (id, baz)  weak-key(baz); +baz,+id
+·          1  ·     table  bar@i_bar  ·          ·
+·          1  ·     spans  ALL        ·          ·
 
 # Here rowsort is needed because the ORDER BY clause does not guarantee any
 # relative ordering between rows where baz is NULL. As we see above, because
@@ -659,37 +659,37 @@ statement ok
 INSERT INTO abcd VALUES (1, 4, 2, 3), (2, 3, 4, 1), (3, 2, 1, 2), (4, 4, 1, 1)
 
 # The following tests verify we recognize that sorting is not necessary
-query ITTT
+query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abcd@abc
-1  ·       spans  /1/4-/1/5
+render     ·      ·
+ └── scan  ·      ·
+·          table  abcd@abc
+·          spans  /1/4-/1/5
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abcd@abc
-1  ·       spans  /1/4-/1/5
+render     ·      ·
+ └── scan  ·      ·
+·          table  abcd@abc
+·          spans  /1/4-/1/5
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abcd@abc
-1  ·       spans  /1/4-/1/5
+render     ·      ·
+ └── scan  ·      ·
+·          table  abcd@abc
+·          spans  /1/4-/1/5
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  abcd@abc
-1  ·       spans  /1/4-/1/5
+render     ·      ·
+ └── scan  ·      ·
+·          table  abcd@abc
+·          spans  /1/4-/1/5
 
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
@@ -705,74 +705,74 @@ NaN
 -1
 1
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
-0  sort    ·      ·                 (x)  +x
-0  ·       order  +x                ·    ·
-1  values  ·      ·                 (x)  ·
-1  ·       size   1 column, 3 rows  ·    ·
+sort         0  sort    ·      ·                 (x)  +x
+ │           0  ·       order  +x                ·    ·
+ └── values  1  values  ·      ·                 (x)  +x
+·            1  ·       size   1 column, 3 rows  ·    ·
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
 ----
-0  ordinality  ·     ·
-1  values      ·     ·
-1  ·           size  1 column, 3 rows
+ordinality   ·     ·
+ └── values  ·     ·
+·            size  1 column, 3 rows
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 ----
-0  sort        ·      ·
-0  ·           order  -"ordinality"
-1  ordinality  ·      ·
-2  values      ·      ·
-2  ·           size   1 column, 3 rows
+sort              ·      ·
+ │                order  -"ordinality"
+ └── ordinality   ·      ·
+      └── values  ·      ·
+·                 size   1 column, 3 rows
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
-0  ordinality  ·     ·                 (x, "ordinality")  weak-key("ordinality")
-1  values      ·     ·                 (x)                ·
-1  ·           size  1 column, 3 rows  ·                  ·
+ordinality   0  ordinality  ·     ·                 (x, "ordinality")  weak-key("ordinality")
+ └── values  1  values      ·     ·                 (x, "ordinality")  weak-key("ordinality")
+·            1  ·           size  1 column, 3 rows  ·                  ·
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 ----
-0  ordinality  ·      ·                 (x, "ordinality")  weak-key("ordinality")
-1  sort        ·      ·                 (x)                +x
-1  ·           order  +x                ·                  ·
-2  values      ·      ·                 (x)                ·
-2  ·           size   1 column, 3 rows  ·                  ·
+ordinality        0  ordinality  ·      ·                 (x, "ordinality")  weak-key("ordinality")
+ └── sort         1  sort        ·      ·                 (x, "ordinality")  weak-key("ordinality")
+      │           1  ·           order  +x                ·                  ·
+      └── values  2  values      ·      ·                 (x, "ordinality")  weak-key("ordinality")
+·                 2  ·           size   1 column, 3 rows  ·                  ·
 
 # Check that the ordering of the source does not propagate blindly to RETURNING.
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-0  insert    ·     ·        (b)     ·
-0  ·         into  t(a, b)  ·       ·
-1  render    ·     ·        (x, y)  x=CONST; y=CONST
-2  emptyrow  ·     ·        ()      ·
+insert              0  insert    ·     ·        (b)  ·
+ │                  0  ·         into  t(a, b)  ·    ·
+ └── render         1  render    ·     ·        (b)  ·
+      └── emptyrow  2  emptyrow  ·     ·        (b)  ·
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-0  delete  ·      ·          (b)        ·
-0  ·       from   t          ·          ·
-1  scan    ·      ·          (a, b, c)  a=CONST; key()
-1  ·       table  t@primary  ·          ·
-1  ·       spans  /3-/3/#    ·          ·
+delete     0  delete  ·      ·          (b)  ·
+ │         0  ·       from   t          ·    ·
+ └── scan  1  scan    ·      ·          (b)  ·
+·          1  ·       table  t@primary  ·    ·
+·          1  ·       spans  /3-/3/#    ·    ·
 
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 ----
-0  update  ·      ·          (b)                ·
-0  ·       table  t          ·                  ·
-0  ·       set    c          ·                  ·
-1  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
-2  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
-2  ·       table  t@primary  ·                  ·
-2  ·       spans  ALL        ·                  ·
+update          0  update  ·      ·          (b)  ·
+ │              0  ·       table  t          ·    ·
+ │              0  ·       set    c          ·    ·
+ └── render     1  render  ·      ·          (b)  ·
+      └── scan  2  scan    ·      ·          (b)  ·
+·               2  ·       table  t@primary  ·    ·
+·               2  ·       spans  ALL        ·    ·
 
 statement ok
 CREATE TABLE uvwxyz (
@@ -788,13 +788,13 @@ CREATE TABLE uvwxyz (
 
 # Verify that the outer ordering is propagated to index selection and we choose
 # the index that avoids any sorting.
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-0  render  ·      ·            (y, w, x)                                                             y=CONST; +w,+x
-1  scan    ·      ·            (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  y=CONST; rowid!=NULL; weak-key(u,v,w,x,z,rowid); +w,+x
-1  ·       table  uvwxyz@ywxz  ·                                                                     ·
-1  ·       spans  /1-/2        ·                                                                     ·
+render     0  render  ·      ·            (y, w, x)  y=CONST; +w,+x
+ └── scan  1  scan    ·      ·            (y, w, x)  y=CONST; +w,+x
+·          1  ·       table  uvwxyz@ywxz  ·          ·
+·          1  ·       spans  /1-/2        ·          ·
 
 
 statement ok
@@ -808,12 +808,12 @@ CREATE TABLE blocks (
 
 # Test that ordering goes "through" a renderNode that has a duplicate render of
 # an order-by column (#13696).
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
-0  limit   ·      ·               (block_id, writer_id, block_num, block_id)            block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
-1  render  ·      ·               (block_id, writer_id, block_num, block_id)            block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
-2  scan    ·      ·               (block_id, writer_id, block_num, raw_bytes[omitted])  block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
-2  ·       table  blocks@primary  ·                                                     ·
-2  ·       spans  ALL             ·                                                     ·
-2  ·       limit  1               ·                                                     ·
+limit           0  limit   ·      ·               (block_id, writer_id, block_num, block_id)  block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
+ └── render     1  render  ·      ·               (block_id, writer_id, block_num, block_id)  block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
+      └── scan  2  scan    ·      ·               (block_id, writer_id, block_num, block_id)  block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
+·               2  ·       table  blocks@primary  ·                                           ·
+·               2  ·       spans  ALL             ·                                           ·
+·               2  ·       limit  1               ·                                           ·
