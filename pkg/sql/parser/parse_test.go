@@ -1253,8 +1253,19 @@ func TestParse2(t *testing.T) {
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 		{`DROP USER foo, bar`,
 			`DROP USER 'foo', 'bar'`},
+		{`DROP USER IF EXISTS foo, bar`,
+			`DROP USER IF EXISTS 'foo', 'bar'`},
 		{`ALTER USER foo WITH PASSWORD bar`,
 			`ALTER USER 'foo' WITH PASSWORD 'bar'`},
+
+		{`CREATE ROLE foo`,
+			`CREATE ROLE 'foo'`},
+		{`CREATE ROLE IF NOT EXISTS foo`,
+			`CREATE ROLE IF NOT EXISTS 'foo'`},
+		{`DROP ROLE foo, bar`,
+			`DROP ROLE 'foo', 'bar'`},
+		{`DROP ROLE IF EXISTS foo, bar`,
+			`DROP ROLE IF EXISTS 'foo', 'bar'`},
 
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)`,

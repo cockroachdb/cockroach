@@ -1,0 +1,102 @@
+# LogicTest: default
+
+query T colnames
+SHOW ROLES
+----
+username
+admin
+
+statement error a role named admin already exists
+CREATE ROLE admin
+
+statement error a user named root already exists
+CREATE ROLE root
+
+statement error a user named root already exists
+CREATE ROLE IF NOT EXISTS root
+
+statement ok
+CREATE ROLE IF NOT EXISTS admin
+
+statement error pq: cannot drop user or role admin: grants still exist on .*
+DROP ROLE admin
+
+statement error pq: cannot drop user or role root: grants still exist on .*
+DROP ROLE root
+
+statement error pq: cannot drop users or roles admin, root: grants still exist on .*
+DROP ROLE admin, root
+
+statement ok
+CREATE ROLE myrole
+
+query T colnames
+SHOW ROLES
+----
+username
+admin
+myrole
+
+statement error a role named myrole already exists
+CREATE ROLE myrole
+
+statement ok
+CREATE ROLE IF NOT EXISTS myrole
+
+statement error a role named myrole already exists
+CREATE USER myrole
+
+statement error a role named myrole already exists
+CREATE USER IF NOT EXISTS myrole
+
+statement error pq: user myrole does not exist
+DROP USER myrole
+
+statement ok
+DROP USER IF EXISTS myrole
+
+statement error pq: cannot drop users or roles admin, myrole: grants still exist on .*
+DROP ROLE admin, myrole
+
+query T colnames
+SHOW ROLES
+----
+username
+admin
+myrole
+
+statement ok
+DROP ROLE myrole
+
+query T colnames
+SHOW ROLES
+----
+username
+admin
+
+statement error pq: role myrole does not exist
+DROP ROLE myrole
+
+statement ok
+DROP ROLE IF EXISTS myrole
+
+statement ok
+CREATE ROLE rolea
+
+statement ok
+CREATE ROLE roleb
+
+statement ok
+CREATE ROLE rolec
+
+statement ok
+CREATE ROLE roled
+
+statement error pq: role rolee does not exist
+DROP ROLE rolea, roleb, rolec, roled, rolee
+
+statement ok
+DROP ROLE IF EXISTS rolec, roled, rolee
+
+statement ok
+DROP ROLE rolea, roleb

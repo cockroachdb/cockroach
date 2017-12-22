@@ -60,6 +60,7 @@ copy_from_stmt ::=
 
 create_stmt ::=
 	create_user_stmt
+	| create_role_stmt
 	| create_ddl_stmt
 	| create_stats_stmt
 
@@ -77,6 +78,7 @@ discard_stmt ::=
 
 drop_stmt ::=
 	drop_ddl_stmt
+	| drop_role_stmt
 	| drop_user_stmt
 
 execute_stmt ::=
@@ -223,6 +225,10 @@ create_user_stmt ::=
 	'CREATE' 'USER' string_or_placeholder opt_password
 	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_password
 
+create_role_stmt ::=
+	'CREATE' 'ROLE' string_or_placeholder
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' string_or_placeholder
+
 create_ddl_stmt ::=
 	create_database_stmt
 	| create_index_stmt
@@ -267,6 +273,10 @@ drop_ddl_stmt ::=
 	| drop_table_stmt
 	| drop_view_stmt
 	| drop_sequence_stmt
+
+drop_role_stmt ::=
+	'DROP' 'ROLE' string_or_placeholder_list
+	| 'DROP' 'ROLE' 'IF' 'EXISTS' string_or_placeholder_list
 
 drop_user_stmt ::=
 	'DROP' 'USER' string_or_placeholder_list
@@ -332,7 +342,9 @@ preparable_stmt ::=
 	| backup_stmt
 	| cancel_stmt
 	| create_user_stmt
+	| create_role_stmt
 	| delete_stmt
+	| drop_role_stmt
 	| drop_user_stmt
 	| import_stmt
 	| insert_stmt
