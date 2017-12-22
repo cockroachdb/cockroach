@@ -1629,6 +1629,10 @@ CockroachDB supports the following flags:
 
 	"jsonb_build_array": {jsonBuildArrayImpl},
 
+	"json_object": jsonObjectImpls,
+
+	"jsonb_object": jsonObjectImpls,
+
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
@@ -2458,6 +2462,17 @@ var (
 	jsonObjectDString  = tree.NewDString("object")
 )
 
+var (
+	errJSONObjectNotEvenNumberOfElements = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+		"array must have even number of elements")
+	errJSONObjectNullValueForKey = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+		"null value not allowed for object key")
+	errJSONObjectMismatchedArrayDim = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+		"mismatched array dimensions")
+	errJSONObjectNotTwoColumns = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+		"array must have two columns")
+)
+
 var jsonExtractPathImpl = tree.Builtin{
 	Types:      tree.VariadicType{FixedTypes: []types.T{types.JSON}, VarType: types.String},
 	ReturnType: tree.FixedReturnType(types.JSON),
@@ -2535,6 +2550,90 @@ var jsonBuildArrayImpl = tree.Builtin{
 		return tree.NewDJSON(json.FromArrayOfJSON(jsons)), nil
 	},
 	Info: "Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.",
+}
+
+var jsonObjectImpls = []tree.Builtin{
+	{
+		Types:      tree.ArgTypes{{"texts", types.TArray{Typ: types.String}}},
+		ReturnType: tree.FixedReturnType(types.JSON),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			arr := tree.MustBeDArray(args[0])
+			if arr.Len()%2 != 0 {
+				return nil, errJSONObjectNotEvenNumberOfElements
+			}
+			builder := json.NewBuilder()
+			for i := 0; i < arr.Len(); i += 2 {
+				key, err := asJSONObjectKey(arr.Array[i])
+				if err != nil {
+					return nil, err
+				}
+				val, err := asJSON(arr.Array[i+1])
+				if err != nil {
+					return nil, err
+				}
+				builder.Add(key, val)
+			}
+			return tree.NewDJSON(builder.Build()), nil
+		},
+		Info: "Builds a JSON or JSONB object out of a text array. The array must have " +
+			"exactly one dimension with an even number of members, in which case " +
+			"they are taken as alternating key/value pairs.",
+	},
+	{
+		Types:      tree.ArgTypes{{"texts", types.TArray{Typ: types.TArray{Typ: types.String}}}},
+		ReturnType: tree.FixedReturnType(types.JSON),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			arr := tree.MustBeDArray(args[0])
+			builder := json.NewBuilder()
+			for i := 0; i < arr.Len(); i++ {
+				innerArr := tree.MustBeDArray(arr.Array[i])
+				if innerArr.Len() != 2 {
+					return nil, errJSONObjectNotTwoColumns
+				}
+				key, err := asJSONObjectKey(innerArr.Array[0])
+				if err != nil {
+					return nil, err
+				}
+				val, err := asJSON(innerArr.Array[1])
+				if err != nil {
+					return nil, err
+				}
+				builder.Add(key, val)
+			}
+			return tree.NewDJSON(builder.Build()), nil
+		},
+		Info: "Builds a JSON or JSONB object out of a text array. The array must have " +
+			"two dimensions such that each inner array has exactly two elements, " +
+			"which are taken as a key/value pair.",
+	},
+	{
+		Types: tree.ArgTypes{{"keys", types.TArray{Typ: types.String}},
+			{"values", types.TArray{Typ: types.String}}},
+		ReturnType: tree.FixedReturnType(types.JSON),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			keys := tree.MustBeDArray(args[0])
+			values := tree.MustBeDArray(args[1])
+			if keys.Len() != values.Len() {
+				return nil, errJSONObjectMismatchedArrayDim
+			}
+			builder := json.NewBuilder()
+			for i := 0; i < keys.Len(); i++ {
+				key, err := asJSONObjectKey(keys.Array[i])
+				if err != nil {
+					return nil, err
+				}
+				val, err := asJSON(values.Array[i])
+				if err != nil {
+					return nil, err
+				}
+				builder.Add(key, val)
+			}
+			return tree.NewDJSON(builder.Build()), nil
+		},
+		Info: "This form of json_object takes keys and values pairwise from two " +
+			"separate arrays. In all other respects it is identical to the " +
+			"one-argument form.",
+	},
 }
 
 func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {
@@ -3333,5 +3432,17 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 			return json.MakeJSON(nil)
 		}
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSON", d)
+	}
+}
+
+func asJSONObjectKey(d tree.Datum) (string, error) {
+	switch t := d.(type) {
+	case *tree.DString:
+		return string(*t), nil
+	default:
+		if d == tree.DNull {
+			return "", errJSONObjectNullValueForKey
+		}
+		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSONObjectKey", d)
 	}
 }

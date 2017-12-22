@@ -454,3 +454,131 @@ query T
 SELECT jsonb_build_array(1, '1'::JSON, 1.2, NULL, ARRAY['x', 'y'])
 ----
 [1,1,1.2,null,["x","y"]]
+
+query error pq: json_object\(\): array must have even number of elements
+SELECT json_object('{a,b,c}'::TEXT[])
+
+query error pq: json_object\(\): null value not allowed for object key
+SELECT json_object('{NULL, a}'::TEXT[])
+
+query error pq: json_object\(\): null value not allowed for object key
+SELECT json_object(ARRAY[ARRAY[NULL, 'b']]);
+
+query error pq: json_object\(\): null value not allowed for object key
+SELECT json_object('{a,b,NULL,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+
+query error pq: json_object\(\): mismatched array dimensions
+SELECT json_object('{a,b,c,"d e f",g}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+
+query error pq: json_object\(\): mismatched array dimensions
+SELECT json_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c",g}'::TEXT[])
+
+query error pq: json_object\(\): array must have two columns
+SELECT json_object(ARRAY[ARRAY['a']])
+
+query error pq: json_object\(\): array must have two columns
+SELECT json_object(ARRAY[ARRAY['a', 'b', 'c']])
+
+query T
+SELECT json_object('{}'::TEXT[])
+----
+{}
+
+query T
+SELECT json_object('{}'::TEXT[], '{}'::TEXT[])
+----
+{}
+
+query T
+SELECT json_object('{b, 3, a, 1, b, 4, a, 2}'::TEXT[])
+----
+{"a":"2","b":"4"}
+
+query T
+SELECT json_object('{b, b, a, a}'::TEXT[], '{1, 2, 3, 4}'::TEXT[])
+----
+{"a":"4","b":"2"}
+
+query T
+SELECT json_object('{a,1,b,2,3,NULL,"d e f","a b c"}'::TEXT[])
+----
+{"3":null,"a":"1","b":"2","d e f":"a b c"}
+
+query T
+SELECT json_object('{a,b,"","d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+----
+{"":"3","a":"1","b":"2","d e f":"a b c"}
+
+query T
+SELECT json_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+----
+{"a":"1","b":"2","c":"3","d e f":"a b c"}
+
+query T
+SELECT json_object(ARRAY[ARRAY['a','1'],ARRAY['b','2'],ARRAY['3',NULL],ARRAY['d e f','a b c']])
+----
+{"3":null,"a":"1","b":"2","d e f":"a b c"}
+
+query error pq: jsonb_object\(\): array must have even number of elements
+SELECT jsonb_object('{a,b,c}'::TEXT[])
+
+query error pq: jsonb_object\(\): null value not allowed for object key
+SELECT jsonb_object('{NULL, a}'::TEXT[])
+
+query error pq: jsonb_object\(\): null value not allowed for object key
+SELECT jsonb_object(ARRAY[ARRAY[NULL, 'b']]);
+
+query error pq: jsonb_object\(\): null value not allowed for object key
+SELECT jsonb_object('{a,b,NULL,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+
+query error pq: jsonb_object\(\): mismatched array dimensions
+SELECT jsonb_object('{a,b,c,"d e f",g}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+
+query error pq: jsonb_object\(\): mismatched array dimensions
+SELECT jsonb_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c",g}'::TEXT[])
+
+query error pq: jsonb_object\(\): array must have two columns
+SELECT jsonb_object(ARRAY[ARRAY['a']])
+
+query error pq: jsonb_object\(\): array must have two columns
+SELECT jsonb_object(ARRAY[ARRAY['a', 'b', 'c']])
+
+query T
+SELECT jsonb_object('{}'::TEXT[])
+----
+{}
+
+query T
+SELECT jsonb_object('{}'::TEXT[], '{}'::TEXT[])
+----
+{}
+
+query T
+SELECT jsonb_object('{b, 3, a, 1, b, 4, a, 2}'::TEXT[])
+----
+{"a":"2","b":"4"}
+
+query T
+SELECT jsonb_object('{b, b, a, a}'::TEXT[], '{1, 2, 3, 4}'::TEXT[])
+----
+{"a":"4","b":"2"}
+
+query T
+SELECT jsonb_object('{a,1,b,2,3,NULL,"d e f","a b c"}'::TEXT[])
+----
+{"3":null,"a":"1","b":"2","d e f":"a b c"}
+
+query T
+SELECT jsonb_object('{a,b,"","d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+----
+{"":"3","a":"1","b":"2","d e f":"a b c"}
+
+query T
+SELECT jsonb_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
+----
+{"a":"1","b":"2","c":"3","d e f":"a b c"}
+
+query T
+SELECT jsonb_object(ARRAY[ARRAY['a','1'],ARRAY['b','2'],ARRAY['3',NULL],ARRAY['d e f','a b c']])
+----
+{"3":null,"a":"1","b":"2","d e f":"a b c"}
