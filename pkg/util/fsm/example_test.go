@@ -180,3 +180,93 @@ func ExampleMachine() {
 	// Restarting
 	// Finish...
 }
+
+func ExampleReport() {
+	txnStateTransitions.PrintReport()
+
+	// Output:
+	// fsm_test.stateAborted{RetryIntent:false}
+	// 	handled events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
+	// 		fsm_test.txnFinishEvent{}
+	// 		fsm_test.txnStartEvent{}
+	// 	missing events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
+	// 		fsm_test.txnRestartEvent{}
+	// fsm_test.stateAborted{RetryIntent:true}
+	// 	handled events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
+	// 		fsm_test.txnFinishEvent{}
+	// 		fsm_test.txnStartEvent{}
+	// 	missing events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
+	// 		fsm_test.txnRestartEvent{}
+	// fsm_test.stateNoTxn{}
+	// 	handled events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
+	// 		fsm_test.txnStartEvent{}
+	// 	missing events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
+	// 		fsm_test.txnFinishEvent{}
+	// 		fsm_test.txnRestartEvent{}
+	// fsm_test.stateOpen{RetryIntent:false}
+	// 	handled events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
+	// 		fsm_test.txnFinishEvent{}
+	// 	missing events:
+	// 		fsm_test.txnRestartEvent{}
+	// 		fsm_test.txnStartEvent{}
+	// fsm_test.stateOpen{RetryIntent:true}
+	// 	handled events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
+	// 		fsm_test.txnFinishEvent{}
+	// 	missing events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
+	// 		fsm_test.txnRestartEvent{}
+	// 		fsm_test.txnStartEvent{}
+	// fsm_test.stateRestartWait{}
+	// 	handled events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
+	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
+	// 		fsm_test.txnFinishEvent{}
+	// 		fsm_test.txnRestartEvent{}
+	// 	missing events:
+	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
+	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
+	// 		fsm_test.txnStartEvent{}
+}
