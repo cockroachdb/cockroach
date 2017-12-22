@@ -16,6 +16,7 @@ package fsm_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -66,92 +67,98 @@ var txnStateTransitions = Compile(Pattern{
 	stateNoTxn{}: {
 		noTopLevelTransitionEvent{False}: {
 			Next:   stateNoTxn{},
-			Action: func(es ExtendedState) { es.(*executor).write("Identity") },
+			Action: writeAction("Identity"),
 		},
 		txnStartEvent{}: {
 			Next:   stateOpen{False},
-			Action: func(es ExtendedState) { es.(*executor).write("Open...") },
+			Action: writeAction("Open..."),
 		},
 	},
 	stateOpen{Var("x")}: {
 		noTopLevelTransitionEvent{False}: {
 			Next:   stateOpen{Var("x")},
-			Action: func(es ExtendedState) { es.(*executor).write("Identity") },
+			Action: writeAction("Identity"),
 		},
 		txnFinishEvent{}: {
 			Next:   stateNoTxn{},
-			Action: func(es ExtendedState) { es.(*executor).write("Finish...") },
+			Action: writeAction("Finish..."),
 		},
 		nonRetriableErrEvent{True}: {
 			Next:   stateNoTxn{},
-			Action: func(es ExtendedState) { es.(*executor).write("Error") },
+			Action: writeAction("Error"),
 		},
 		retriableErrEvent{True, Any}: {
 			Next:   stateOpen{Var("x")},
-			Action: func(es ExtendedState) { es.(*executor).write("Transition 6") },
+			Action: writeAction("Transition 6"),
 		},
 		nonRetriableErrEvent{False}: {
 			Next:   stateAborted{Var("x")},
-			Action: func(es ExtendedState) { es.(*executor).write("Abort") },
+			Action: writeAction("Abort"),
 		},
 	},
 	stateOpen{False}: {
 		noTopLevelTransitionEvent{True}: {
 			Next:   stateOpen{True},
-			Action: func(es ExtendedState) { es.(*executor).write("Make Open") },
+			Action: writeAction("Make Open"),
 		},
 		retriableErrEvent{False, Any}: {
 			Next:   stateAborted{False},
-			Action: func(es ExtendedState) { es.(*executor).write("Abort") },
+			Action: writeAction("Abort"),
 		},
 	},
 	stateOpen{True}: {
 		retriableErrEvent{False, False}: {
 			Next:   stateRestartWait{},
-			Action: func(es ExtendedState) { es.(*executor).write("Wait for restart") },
+			Action: writeAction("Wait for restart"),
 		},
 		retriableErrEvent{False, True}: {
 			Next:   stateNoTxn{},
-			Action: func(es ExtendedState) { es.(*executor).write("No more") },
+			Action: writeAction("No more"),
 		},
 	},
 	stateAborted{Var("x")}: {
 		noTopLevelTransitionEvent{False}: {
 			Next:   stateAborted{Var("x")},
-			Action: func(es ExtendedState) { es.(*executor).write("Identity") },
+			Action: writeAction("Identity"),
 		},
 		txnFinishEvent{}: {
 			Next:   stateNoTxn{},
-			Action: func(es ExtendedState) { es.(*executor).write("Abort finished") },
+			Action: writeAction("Abort finished"),
 		},
 		txnStartEvent{}: {
 			Next:   stateOpen{Var("x")},
-			Action: func(es ExtendedState) { es.(*executor).write("Open from abort") },
+			Action: writeAction("Open from abort"),
 		},
 		nonRetriableErrEvent{Any}: {
 			Next:   stateAborted{Var("x")},
-			Action: func(es ExtendedState) { es.(*executor).write("Abort") },
+			Action: writeAction("Abort"),
 		},
 	},
 	stateRestartWait{}: {
 		noTopLevelTransitionEvent{False}: {
 			Next:   stateRestartWait{},
-			Action: func(es ExtendedState) { es.(*executor).write("Identity") },
+			Action: writeAction("Identity"),
 		},
 		txnFinishEvent{}: {
 			Next:   stateNoTxn{},
-			Action: func(es ExtendedState) { es.(*executor).write("No more") },
+			Action: writeAction("No more"),
 		},
 		txnRestartEvent{}: {
 			Next:   stateOpen{True},
-			Action: func(es ExtendedState) { es.(*executor).write("Restarting") },
+			Action: writeAction("Restarting"),
 		},
 		nonRetriableErrEvent{Any}: {
 			Next:   stateAborted{True},
-			Action: func(es ExtendedState) { es.(*executor).write("Abort") },
+			Action: writeAction("Abort"),
 		},
 	},
 })
+
+func writeAction(s string) func(ctx context.Context, es ExtendedState) {
+	return func(ctx context.Context, es ExtendedState) {
+		es.(*executor).write(s)
+	}
+}
 
 type executor struct {
 	m   Machine
@@ -164,13 +171,15 @@ func (e *executor) write(s string) {
 }
 
 func ExampleMachine() {
+	ctx := context.Background()
+
 	var e executor
 	e.m = MakeMachine(txnStateTransitions, stateNoTxn{}, &e)
-	e.m.Apply(txnStartEvent{})
-	e.m.Apply(noTopLevelTransitionEvent{True})
-	e.m.Apply(retriableErrEvent{False, False})
-	e.m.Apply(txnRestartEvent{})
-	e.m.Apply(txnFinishEvent{})
+	e.m.Apply(ctx, txnStartEvent{})
+	e.m.Apply(ctx, noTopLevelTransitionEvent{True})
+	e.m.Apply(ctx, retriableErrEvent{False, False})
+	e.m.Apply(ctx, txnRestartEvent{})
+	e.m.Apply(ctx, txnFinishEvent{})
 	fmt.Print(e.log.String())
 
 	// Output:
