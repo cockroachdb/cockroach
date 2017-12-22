@@ -143,7 +143,7 @@ func (p *planner) validateCheckExpr(
 		return err
 	}
 	sel := &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns),
+		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns, false /* forUpdateOrDelete */),
 		From:  &tree.From{Tables: tree.TableExprs{tableName}},
 		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
 	}

@@ -66,6 +66,10 @@ type scanNode struct {
 	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
 
+	// The number of backfill columns among cols. These backfill
+	// columns are always the last columns within cols.
+	numBackfillColumns int
+
 	spans   []roachpb.Span
 	reverse bool
 	props   physicalProps
@@ -110,7 +114,10 @@ type scanNode struct {
 type scanVisibility int
 
 const (
-	publicColumns             scanVisibility = 0
+	publicColumns scanVisibility = 0
+	// Use this to request mutation columns that are currently being
+	// backfilled. These columns are needed to correctly update/delete
+	// a row by correctly constructing ColumnFamilies and Indexes.
 	publicAndNonPublicColumns scanVisibility = 1
 )
 
@@ -400,6 +407,9 @@ func (n *scanNode) initDescDefaults(
 	}
 
 	// Set up the rest of the scanNode.
+	if n.numBackfillColumns != 0 {
+		panic(fmt.Sprintf("%d backfill columns, already initialized", n.numBackfillColumns))
+	}
 	switch scanVisibility {
 	case publicColumns:
 		// Mutations are invisible.
@@ -411,9 +421,11 @@ func (n *scanNode) initDescDefaults(
 				// middle of a schema change.
 				col.Nullable = true
 				n.cols = append(n.cols, col)
+				n.numBackfillColumns++
 			}
 		}
 	}
+
 	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.cols)
 	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
