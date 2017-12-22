@@ -640,6 +640,22 @@ CREATE INDEX allidx ON t.test (k, v);
 					}
 				}
 
+				// Using the mutation column as an index expression is disallowed.
+				_, err := sqlDB.Exec(`UPDATE t.test SET v = 'u' WHERE i < 'a'`)
+				if !testutils.IsError(err, `column "i" is being backfilled`) {
+					t.Error(err)
+				}
+				// TODO(vivek): Fix this error to return the same is being
+				// backfilled error.
+				_, err = sqlDB.Exec(`UPDATE t.test SET i = 'u' WHERE k = 'a'`)
+				if !testutils.IsError(err, `column "i" does not exist`) {
+					t.Error(err)
+				}
+				_, err = sqlDB.Exec(`DELETE FROM t.test WHERE i < 'a'`)
+				if !testutils.IsError(err, `column "i" is being backfilled`) {
+					t.Error(err)
+				}
+
 				// Update a row without specifying  mutation column "i".
 				if useUpsert {
 					mTest.Exec(t, `UPSERT INTO t.test VALUES ('a', 'u')`)

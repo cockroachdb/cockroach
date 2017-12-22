@@ -132,6 +132,10 @@ type dataSourceInfo struct {
 	// The value is populated and used during name resolution, and shouldn't get
 	// touched by anything but the nameResolutionVisitor without care.
 	colOffset int
+
+	// The number of backfill source columns. The backfill columns are
+	// always the last columns from sourceColumns.
+	numBackfillColumns int
 }
 
 // planDataSource contains the data source information for data
@@ -628,10 +632,12 @@ func (p *planner) getPlanForDesc(
 		return planDataSource{}, err
 	}
 
-	return planDataSource{
+	ds := planDataSource{
 		info: newSourceInfoForSingleTable(*tn, planColumns(scan)),
 		plan: scan,
-	}, nil
+	}
+	ds.info.numBackfillColumns = scan.numBackfillColumns
+	return ds, nil
 }
 
 // getViewPlan builds a planDataSource for the view specified by the
@@ -854,6 +860,16 @@ func findColHelper(
 ) (int, int, error) {
 	col := src.sourceColumns[idx]
 	if col.Name == colName {
+		// Do not return a match if:
+		// 1. The column is being backfilled and therefore should not be
+		// used to resolve a column expression, and,
+		// 2. The column expression being resolved is not from a selector
+		// column expression from an UPDATE/DELETE.
+		if backfillThreshold := len(src.sourceColumns) - src.numBackfillColumns; idx >= backfillThreshold && !c.ForUpdateOrDelete {
+			return invalidSrcIdx, invalidColIdx,
+				pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+					"column %q is being backfilled", tree.ErrString(c))
+		}
 		if colIdx != invalidColIdx {
 			return invalidSrcIdx, invalidColIdx, pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
 				"column reference %q is ambiguous", tree.ErrString(c))

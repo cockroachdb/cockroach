@@ -132,7 +132,7 @@ func (p *planner) Update(
 	// We construct a query containing the columns being updated, and then later merge the values
 	// they are being updated with into that renderNode to ideally reuse some of the queries.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
+		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols, true /* forUpdateOrDelete */),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
 	}, n.OrderBy, n.Limit, nil /* with */, nil /*desiredTypes*/, publicAndNonPublicColumns)
