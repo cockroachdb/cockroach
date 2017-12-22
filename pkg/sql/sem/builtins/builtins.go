@@ -3376,7 +3376,6 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 
 // used by jsonBuildObjImpl to convert a Datum to its string representation
 func asJSONStringKey(d tree.Datum) (string, error) {
-	// TODO: check keys are scalar and not null / composite / array
 	switch d.(type) {
 	case *tree.DJSON, *tree.DArray, *tree.DTuple:
 		return "", pgerror.NewError(pgerror.CodeInvalidParameterValueError,
