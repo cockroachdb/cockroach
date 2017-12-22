@@ -2385,7 +2385,8 @@ func TestingRelocateRange(
 
 	canRetry := func(err error) bool {
 		whitelist := []string{
-			"snapshot intersects existing range",
+			snapshotApplySemBusyMsg,
+			IntersectingSnapshotMsg,
 		}
 		for _, substr := range whitelist {
 			if strings.Contains(err.Error(), substr) {
