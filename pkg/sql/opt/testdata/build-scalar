@@ -299,3 +299,45 @@ and (type: bool)
  └── eq (type: bool)
       ├── variable (0) (type: int)
       └── const (5) (type: int)
+
+build-scalar columns=(int, int)
+@1 IS NULL
+----
+is (type: bool)
+ ├── variable (0) (type: int)
+ └── const (NULL) (type: NULL)
+
+build-scalar columns=(int, int)
+@1 IS NOT DISTINCT FROM NULL
+----
+is (type: bool)
+ ├── variable (0) (type: int)
+ └── const (NULL) (type: NULL)
+
+build-scalar columns=(int, int)
+@1 IS NOT DISTINCT FROM @2
+----
+is (type: bool)
+ ├── variable (0) (type: int)
+ └── variable (1) (type: int)
+
+build-scalar columns=(int, int)
+@1 IS NOT NULL
+----
+is-not (type: bool)
+ ├── variable (0) (type: int)
+ └── const (NULL) (type: NULL)
+
+build-scalar columns=(int, int)
+@1 IS DISTINCT FROM NULL
+----
+is-not (type: bool)
+ ├── variable (0) (type: int)
+ └── const (NULL) (type: NULL)
+
+build-scalar columns=(int, int)
+@1 IS DISTINCT FROM @2
+----
+is-not (type: bool)
+ ├── variable (0) (type: int)
+ └── variable (1) (type: int)

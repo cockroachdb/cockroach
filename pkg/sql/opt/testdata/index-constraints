@@ -1,4 +1,22 @@
 build-scalar,normalize,index-constraints columns=(int)
+NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+false
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+true
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int)
+@1
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int)
 @1 > 2
 ----
 [/3 - ]
@@ -18,27 +36,59 @@ build-scalar,normalize,index-constraints columns=(int desc)
 ----
 [ - /2]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints columns=(int not null)
 @1 != 2
 ----
 [ - /1]
+[/3 - ]
+
+build-scalar,normalize,index-constraints columns=(int desc not null)
+@1 != 2
+----
+[ - /3]
+[/1 - ]
+
+build-scalar,normalize,index-constraints columns=(int not null)
+@1 < 2
+----
+[ - /1]
+
+build-scalar,normalize,index-constraints columns=(int desc not null)
+@1 < 2
+----
+[/1 - ]
+
+build-scalar,normalize,index-constraints columns=(int not null)
+@1 = 2
+----
+[/2 - /2]
+
+build-scalar,normalize,index-constraints columns=(int desc not null)
+@1 = 2
+----
+[/2 - /2]
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 != 2
+----
+(/NULL - /1]
 [/3 - ]
 
 build-scalar,normalize,index-constraints columns=(int desc)
 @1 != 2
 ----
 [ - /3]
-[/1 - ]
+[/1 - /NULL)
 
 build-scalar,normalize,index-constraints columns=(int)
 @1 < 2
 ----
-[ - /1]
+(/NULL - /1]
 
 build-scalar,normalize,index-constraints columns=(int desc)
 @1 < 2
 ----
-[/1 - ]
+[/1 - /NULL)
 
 build-scalar,normalize,index-constraints columns=(int)
 @1 = 2
@@ -49,6 +99,42 @@ build-scalar,normalize,index-constraints columns=(int desc)
 @1 = 2
 ----
 [/2 - /2]
+
+build-scalar,normalize,index-constraints columns=(int)
+NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 > NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 < NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 >= NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 >= NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 = NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 != NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 = 1 AND @2 > NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@2 = 1 AND @1 > NULL
+----
 
 build-scalar,normalize,index-constraints columns=(int)
 @1 > 2 AND @1 < 4
@@ -73,14 +159,14 @@ build-scalar,normalize,index-constraints columns=(int, int desc)
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 != 1 AND @2 > 5
 ----
-[ - /0]
+(/NULL - /0]
 [/2/6 - ]
 
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 != 1 AND @2 < 5
 ----
-[ - /0/4]
-[/2 - ]
+(/NULL - /0/4]
+(/2/NULL - ]
 
 build-scalar,normalize,index-constraints columns=(int)
 @1 >= 1 AND @1 <= 5 AND @1 != 3
@@ -130,13 +216,13 @@ build-scalar,normalize,index-constraints columns=(int)
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 = 1 AND @2 != 2
 ----
-[/1 - /1/1]
+(/1/NULL - /1/1]
 [/1/3 - /1]
 
 build-scalar,normalize,index-constraints columns=(int, int)
 @1 >= 1 AND @1 <= 5 AND @2 != 2
 ----
-[/1 - /5]
+(/1/NULL - /5]
 
 # Tests with a type that doesn't support Prev.
 build-scalar,normalize,index-constraints columns=(string)
@@ -427,7 +513,7 @@ build-scalar,normalize,index-constraints columns=(int, int, int)
 [/7/8 - /7/8]
 [/9/10 - /9/10]
 
-# Verify we sort and de-duplicate if we "project" the tuples;
+# Verify that we sort and de-duplicate if we "project" the tuples;
 # in this case the expression becomes:
 #   (@1, @2) IN ((5, 5), (4, 4), (5, 5))
 build-scalar,normalize,index-constraints columns=(int, int)
@@ -501,3 +587,91 @@ build-scalar,normalize,index-constraints columns=(int, int, int)
 @1 > 1 AND (@2, @3) IN ((2, 3), (4, 5), (6, 7))
 ----
 [/2/2/3 - ]
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 IS NULL
+----
+[/NULL - /NULL]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 IS NULL AND @2 = 2
+----
+[/NULL/2 - /NULL/2]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 IS NULL AND @2 > 2
+----
+[/NULL/3 - /NULL]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 = 1 AND @2 IS NULL
+----
+[/1/NULL - /1/NULL]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@1 >= 1 AND @2 IS NULL
+----
+[/1/NULL - ]
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 IS NOT DISTINCT FROM NULL
+----
+[/NULL - /NULL]
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 IS NOT NULL
+----
+(/NULL - ]
+
+build-scalar,normalize,index-constraints columns=(int)
+@1 IS DISTINCT FROM NULL
+----
+(/NULL - ]
+
+build-scalar,normalize,index-constraints columns=(int desc)
+@1 IS NOT NULL
+----
+[ - /NULL)
+
+build-scalar,normalize,index-constraints columns=(int not null)
+@1 IS NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int not null)
+@1 IS NOT DISTINCT FROM NULL
+----
+
+build-scalar,normalize,index-constraints columns=(int not null)
+@1 IS NOT NULL
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int not null)
+@1 IS DISTINCT FROM NULL
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int desc not null)
+@1 IS NOT NULL
+----
+[ - ]
+
+build-scalar,normalize,index-constraints columns=(int not null)
+@1 IS NOT DISTINCT FROM 1
+----
+[/1 - /1]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@2 = @1
+----
+(/NULL - ]
+
+build-scalar,normalize,index-constraints columns=(int, int)
+@2 < @1
+----
+(/NULL - ]
+
+build-scalar,normalize,index-constraints columns=(int not null, int)
+@1 = @2
+----
+[ - ]
