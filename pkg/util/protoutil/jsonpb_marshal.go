@@ -133,3 +133,8 @@ func (j *JSONPb) NewEncoder(w io.Writer) gwruntime.Encoder {
 		return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 	})
 }
+
+// Delimiter implements gwruntime.Delimited.
+func (*JSONPb) Delimiter() []byte {
+	return []byte("\n")
+}
