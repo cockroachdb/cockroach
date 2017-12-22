@@ -7,3 +7,9 @@ BACKUP foo TO "bar"
 
 statement error pq: unknown statement type: \*tree\.Restore
 RESTORE foo FROM "bar"
+
+statement error pq: unknown statement type: \*tree\.CreateRole
+CREATE ROLE foo
+
+statement error pq: unknown statement type: \*tree\.DropRole
+DROP ROLE foo

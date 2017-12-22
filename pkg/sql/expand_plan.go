@@ -226,7 +226,7 @@ func doExpandPlan(
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
-	case *createUserNode:
+	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
 	case *createStatsNode:
@@ -235,7 +235,7 @@ func doExpandPlan(
 	case *dropTableNode:
 	case *dropViewNode:
 	case *dropSequenceNode:
-	case *dropUserNode:
+	case *DropUserNode:
 	case *zeroNode:
 	case *unaryNode:
 	case *hookFnNode:
@@ -610,7 +610,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
-	case *createUserNode:
+	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
 	case *createStatsNode:
@@ -619,7 +619,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *dropTableNode:
 	case *dropViewNode:
 	case *dropSequenceNode:
-	case *dropUserNode:
+	case *DropUserNode:
 	case *zeroNode:
 	case *unaryNode:
 	case *hookFnNode:

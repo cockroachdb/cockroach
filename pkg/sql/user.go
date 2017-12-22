@@ -72,3 +72,25 @@ func GetAllUsers(ctx context.Context, plan *planner) (map[string]bool, error) {
 	}
 	return users, nil
 }
+
+// Returns true is the requested username is a role, false if it is a user.
+// Returns error if it does not exist.
+func existingUserIsRole(
+	ctx context.Context, ie InternalExecutor, opName string, txn *client.Txn, username string,
+) (bool, error) {
+	values, err := ie.QueryRowInTransaction(
+		ctx,
+		opName,
+		txn,
+		`SELECT "isRole" FROM system.users WHERE username=$1`,
+		username)
+	if err != nil {
+		return false, errors.Errorf("error looking up user %s", username)
+	}
+	if len(values) == 0 {
+		return false, errors.Errorf("no user or role named %s", username)
+	}
+
+	isRole := bool(*(values[0]).(*tree.DBool))
+	return isRole, nil
+}

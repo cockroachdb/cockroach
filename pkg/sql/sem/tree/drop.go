@@ -159,3 +159,18 @@ func (node *DropUser) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	FormatNode(buf, f, node.Names)
 }
+
+// DropRole represents a DROP ROLE statement
+type DropRole struct {
+	Names    Exprs
+	IfExists bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *DropRole) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DROP ROLE ")
+	if node.IfExists {
+		buf.WriteString("IF EXISTS ")
+	}
+	FormatNode(buf, f, node.Names)
+}

@@ -127,6 +127,9 @@ type planNode interface {
 	Close(ctx context.Context)
 }
 
+// PlanNode is the exported name for planNode. Useful for CCL hooks.
+type PlanNode = planNode
+
 // planNodeFastPath is implemented by nodes that can perform all their
 // work during startPlan(), possibly affecting even multiple rows. For
 // example, DELETE can do this.
@@ -181,14 +184,14 @@ var _ planNode = &updateNode{}
 var _ planNode = &valueGenerator{}
 var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
-var _ planNode = &createUserNode{}
-var _ planNode = &dropUserNode{}
+var _ planNode = &CreateUserNode{}
+var _ planNode = &DropUserNode{}
 
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
 var _ planNodeFastPath = &createTableNode{}
-var _ planNodeFastPath = &createUserNode{}
+var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &deleteNode{}
-var _ planNodeFastPath = &dropUserNode{}
+var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
 
 // makePlan implements the Planner interface.
@@ -299,6 +302,14 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 			return &hookFnNode{f: fn, header: header}, nil
 		}
 	}
+	for _, planHook := range wrappedPlanHooks {
+		if node, err := planHook(ctx, stmt, p); err != nil {
+			return nil, err
+		} else if node != nil {
+			return node, err
+		}
+	}
+
 	return nil, nil
 }
 

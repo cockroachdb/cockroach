@@ -762,7 +762,7 @@ check test testshort testrace bench: gotestdashi
 
 # Run make testlogic/testccllogic to run all of the oss/ccl logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
-testlogic testccllogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$$(if $(SUBTESTS),/$(SUBTESTS)),TestLogic)
+testlogic testccllogic: TESTS := $(if $(FILES),Test.*Logic$$//^$(subst $(space),$$|^,$(FILES))$$$(if $(SUBTESTS),/$(SUBTESTS)),Test.*Logic)
 testlogic testccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
 
 testlogic: ## Run SQL Logic Tests.
