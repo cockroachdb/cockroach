@@ -212,6 +212,8 @@ crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
 crdb_internal       create_statements
 crdb_internal       forward_dependencies
+crdb_internal       gossip_liveness
+crdb_internal       gossip_nodes
 crdb_internal       index_columns
 crdb_internal       jobs
 crdb_internal       leases
@@ -375,6 +377,8 @@ def            crdb_internal       cluster_sessions           SYSTEM VIEW  1
 def            crdb_internal       cluster_settings           SYSTEM VIEW  1
 def            crdb_internal       create_statements          SYSTEM VIEW  1
 def            crdb_internal       forward_dependencies       SYSTEM VIEW  1
+def            crdb_internal       gossip_liveness            SYSTEM VIEW  1
+def            crdb_internal       gossip_nodes               SYSTEM VIEW  1
 def            crdb_internal       index_columns              SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
