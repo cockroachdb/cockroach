@@ -138,12 +138,14 @@ func TestIntersectSpan(t *testing.T) {
 			sp1 := parseSpan(tc.a)
 			sp2 := parseSpan(tc.b)
 			c := indexConstraintCalc{
-				// Only the directions from colInfos are used by intersectSpan
-				colInfos: []IndexColumnInfo{
-					{Direction: encoding.Ascending},
-					{Direction: encoding.Ascending},
+				indexCtx: indexCtx{
+					// Only the directions from colInfos are used by intersectSpan
+					colInfos: []IndexColumnInfo{
+						{Direction: encoding.Ascending},
+						{Direction: encoding.Ascending},
+					},
+					evalCtx: &evalCtx,
 				},
-				evalCtx: &evalCtx,
 			}
 			res := ""
 			if sp3, ok := c.intersectSpan(0 /* depth */, &sp1, &sp2); ok {

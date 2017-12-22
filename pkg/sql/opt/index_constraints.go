@@ -24,13 +24,10 @@ import (
 )
 
 type indexConstraintCalc struct {
-	// types of the columns of the index we are generating constraints for.
-	colInfos []IndexColumnInfo
+	indexCtx
 
 	// andExprs is a set of conjuncts that make up the filter.
 	andExprs []*expr
-
-	evalCtx *tree.EvalContext
 
 	// constraints[] is used as the memoization data structure for calcOffset.
 	constraints []LogicalSpans
@@ -40,9 +37,11 @@ func makeIndexConstraintCalc(
 	colInfos []IndexColumnInfo, andExprs []*expr, evalCtx *tree.EvalContext,
 ) indexConstraintCalc {
 	return indexConstraintCalc{
-		colInfos:    colInfos,
+		indexCtx: indexCtx{
+			colInfos: colInfos,
+			evalCtx:  evalCtx,
+		},
 		andExprs:    andExprs,
-		evalCtx:     evalCtx,
 		constraints: make([]LogicalSpans, len(colInfos)),
 	}
 }
