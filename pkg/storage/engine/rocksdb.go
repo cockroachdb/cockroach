@@ -24,7 +24,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -1917,30 +1916,6 @@ func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
 		wall_time: C.int64_t(ts.WallTime),
 		logical:   C.int32_t(ts.Logical),
 	}
-}
-
-// A RocksDBError wraps an error returned from a RocksDB operation.
-type RocksDBError struct {
-	msg string
-}
-
-var _ log.SafeMessager = (*RocksDBError)(nil)
-
-// Error implements the error interface.
-func (err *RocksDBError) Error() string {
-	return err.msg
-}
-
-// SafeMessage implements log.SafeMessager.
-func (err *RocksDBError) SafeMessage() string {
-	// RocksDB errors are of format
-	// <Error Type>: [<Suberror type>] [State]
-	// We extract only the `<Error Type>` part.
-	ps := strings.SplitN(err.msg, ":", 2)
-	if len(ps) < 2 {
-		return "<unknown>"
-	}
-	return ps[0]
 }
 
 func statusToError(s C.DBStatus) error {

@@ -686,9 +686,28 @@ func TestRocksDBErrorSafeMessage(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected error of cause %T: %s", errors.Cause(err), err)
 	}
-	const exp = "IO error" // from `rocksdb::Status::ToString()`
-	if act := rErr.SafeMessage(); act != exp {
-		t.Fatalf("expected %q, got %q", exp, act)
+
+	for _, test := range []struct {
+		err    *RocksDBError
+		expMsg string
+	}{
+		{
+			err:    rErr,
+			expMsg: "io error while lock file <redacted> no locks available",
+		},
+		{
+			// A real-world example.
+			err: &RocksDBError{
+				msg: "Corruption: block checksum mismatch: expected 4187431493, got 3338436330  " +
+					"in /home/agent/activerecord-cockroachdb-adapter/cockroach-data/000012.sst " +
+					"offset 59661 size 7425",
+			},
+			expMsg: "corruption block checksum mismatch expected <redacted> got <redacted> in <redacted> offset <redacted> size <redacted>",
+		},
+	} {
+		if act := test.err.SafeMessage(); act != test.expMsg {
+			t.Errorf("expected %q, got %q\nfrom original error %v", test.expMsg, act, test.err)
+		}
 	}
 }
 
