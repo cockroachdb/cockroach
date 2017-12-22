@@ -134,12 +134,19 @@ func (sp LogicalSpan) String() string {
 // contiguous sequence of index columns, starting at a given offset.
 type LogicalSpans []LogicalSpan
 
+type indexConstraintCtx struct {
+	// types of the columns of the index we are generating constraints for.
+	colInfos []IndexColumnInfo
+
+	evalCtx *tree.EvalContext
+}
+
 // compareKeyVals compares two lists of values for a sequence of index columns
 // (namely <offset>, <offset+1>, ...). The directions of the index columns are
 // taken into account.
 //
 // Returns 0 if the lists are equal, or one is a prefix of the other.
-func (c *indexConstraintCalc) compareKeyVals(offset int, a, b tree.Datums) int {
+func (c *indexConstraintCtx) compareKeyVals(offset int, a, b tree.Datums) int {
 	for i := 0; i < len(a) && i < len(b); i++ {
 		if cmp := a[i].Compare(c.evalCtx, b[i]); cmp != 0 {
 			if c.colInfos[offset+i].Direction == encoding.Descending {
@@ -179,7 +186,7 @@ const (
 //
 // If we are comparing start keys, direction must be compareStartKeys (+1).
 // If we are comparing end keys, direction must be compareEndKeys (-1).
-func (c *indexConstraintCalc) compare(
+func (c *indexConstraintCtx) compare(
 	offset int, a, b LogicalKey, direction comparisonDirection,
 ) int {
 	if cmp := c.compareKeyVals(offset, a.Vals, b.Vals); cmp != 0 {
@@ -222,7 +229,7 @@ func (c *indexConstraintCalc) compare(
 	return 0
 }
 
-func (c *indexConstraintCalc) isSpanValid(offset int, sp *LogicalSpan) bool {
+func (c *indexConstraintCtx) isSpanValid(offset int, sp *LogicalSpan) bool {
 	a, b := sp.Start, sp.End
 	if cmp := c.compareKeyVals(offset, a.Vals, b.Vals); cmp != 0 {
 		return cmp < 0
@@ -239,7 +246,7 @@ func (c *indexConstraintCalc) isSpanValid(offset int, sp *LogicalSpan) bool {
 }
 
 // checkSpans asserts that the given spans are ordered and non-overlapping.
-func (c *indexConstraintCalc) checkSpans(offset int, ls LogicalSpans) {
+func (c *indexConstraintCtx) checkSpans(offset int, ls LogicalSpans) {
 	for i := range ls {
 		if !c.isSpanValid(offset, &ls[i]) {
 			panic(fmt.Sprintf("invalid span %s", ls[i]))
@@ -279,7 +286,7 @@ func (c *indexConstraintCalc) checkSpans(offset int, ls LogicalSpans) {
 }
 
 // nextDatum returns the datum that follows d, in the given direction.
-func (c *indexConstraintCalc) nextDatum(
+func (c *indexConstraintCtx) nextDatum(
 	d tree.Datum, direction encoding.Direction,
 ) (tree.Datum, bool) {
 	if direction == encoding.Descending {
@@ -301,7 +308,7 @@ func (c *indexConstraintCalc) nextDatum(
 //      (/foo - /qux)  =>  [/foo\x00 - /qux).
 //  - for a decimal column, we don't have either Next or Prev so we can't
 //    change anything.
-func (c *indexConstraintCalc) preferInclusive(offset int, sp *LogicalSpan) {
+func (c *indexConstraintCtx) preferInclusive(offset int, sp *LogicalSpan) {
 	if !sp.Start.Inclusive {
 		col := len(sp.Start.Vals) - 1
 		if nextVal, hasNext := c.nextDatum(
@@ -325,7 +332,7 @@ func (c *indexConstraintCalc) preferInclusive(offset int, sp *LogicalSpan) {
 
 // intersectSpan intersects two LogicalSpans and returns
 // a new LogicalSpan. If there is no intersection, returns ok=false.
-func (c *indexConstraintCalc) intersectSpan(
+func (c *indexConstraintCtx) intersectSpan(
 	offset int, a *LogicalSpan, b *LogicalSpan,
 ) (_ LogicalSpan, ok bool) {
 	res := *a
@@ -348,7 +355,7 @@ func (c *indexConstraintCalc) intersectSpan(
 // intersectSpanSet intersects a span with (the union of) a set of spans. The
 // spans in spanSet must be ordered and non-overlapping. The resulting spans are
 // guaranteed to be ordered and non-overlapping.
-func (c *indexConstraintCalc) intersectSpanSet(
+func (c *indexConstraintCtx) intersectSpanSet(
 	offset int, a *LogicalSpan, spanSet LogicalSpans,
 ) LogicalSpans {
 	res := make(LogicalSpans, 0, len(spanSet))
