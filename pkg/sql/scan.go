@@ -110,7 +110,10 @@ type scanNode struct {
 type scanVisibility int
 
 const (
-	publicColumns             scanVisibility = 0
+	publicColumns scanVisibility = 0
+	// Use this to request mutation columns that are currently being
+	// backfilled. These columns are needed to correctly update/delete
+	// a row by correctly constructing ColumnFamilies and Indexes.
 	publicAndNonPublicColumns scanVisibility = 1
 )
 
@@ -399,6 +402,7 @@ func (n *scanNode) initDescDefaults(
 		planDeps[n.desc.ID] = deps
 	}
 
+	numCols := len(n.cols)
 	// Set up the rest of the scanNode.
 	switch scanVisibility {
 	case publicColumns:
@@ -414,7 +418,11 @@ func (n *scanNode) initDescDefaults(
 			}
 		}
 	}
+
 	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.cols)
+	for i := numCols; i < len(n.cols); i++ {
+		n.resultColumns[i].IsBeingBackfilled = true
+	}
 	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i

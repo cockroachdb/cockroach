@@ -30,6 +30,11 @@ type ResultColumn struct {
 
 	// If set, a value won't be produced for this column; used internally.
 	Omitted bool
+
+	// If set, this column is read because it is currently being backfilled
+	// and is needed to construct internal data like a Column-Family or
+	// an Index.
+	IsBeingBackfilled bool
 }
 
 // ResultColumns is the type used throughout the sql module to

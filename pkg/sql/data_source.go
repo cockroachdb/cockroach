@@ -853,7 +853,18 @@ func findColHelper(
 	src *dataSourceInfo, c *tree.ColumnItem, colName string, iSrc, srcIdx, colIdx, idx int,
 ) (int, int, error) {
 	col := src.sourceColumns[idx]
+	// Return if the names match. Do not return a match if:
+	// 1. The column is being backfilled and should not be used to resolve
+	// a column expression, and,
+	// 2. The column expression being resolved is not from an internal
+	// expression which can be artificially created for selector column
+	// expressions.
 	if col.Name == colName {
+		if col.IsBeingBackfilled && !c.InternalUseOnly {
+			return invalidSrcIdx, invalidColIdx,
+				pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+					"column %q is being backfilled", tree.ErrString(c))
+		}
 		if colIdx != invalidColIdx {
 			return invalidSrcIdx, invalidColIdx, pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
 				"column reference %q is ambiguous", tree.ErrString(c))

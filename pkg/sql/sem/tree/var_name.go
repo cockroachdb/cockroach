@@ -147,6 +147,12 @@ type ColumnItem struct {
 	// Selector defines which sub-part of the variable is being
 	// accessed.
 	Selector NameParts
+
+	// This column is used in an internally created expression
+	// such as a selector column expression.
+	// TODO(vivek): Do not artificially create such internal expressions
+	// when scanning columns for an UPDATE/DELETE.
+	InternalUseOnly bool
 }
 
 // Format implements the NodeFormatter interface.

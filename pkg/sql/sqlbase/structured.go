@@ -2147,6 +2147,7 @@ func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
 	colItems := make([]tree.ColumnItem, len(cols))
 	for i, col := range cols {
 		colItems[i].ColumnName = tree.Name(col.Name)
+		colItems[i].InternalUseOnly = true
 		exprs[i].Expr = &colItems[i]
 	}
 	return exprs
