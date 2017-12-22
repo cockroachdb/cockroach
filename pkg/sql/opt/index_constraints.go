@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
+// indexConstraintCalc calculates index constraints from a
+// conjunction (AND-ed expressions).
 type indexConstraintCalc struct {
 	indexConstraintCtx
 
@@ -532,14 +534,29 @@ type IndexColumnInfo struct {
 func MakeIndexConstraints(
 	filter *expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
 ) LogicalSpans {
-	var andExprs []*expr
-	if filter.op == andOp {
-		andExprs = filter.children
+	var orExprs []*expr
+	if filter.op == orOp {
+		orExprs = filter.children
 	} else {
-		andExprs = []*expr{filter}
+		orExprs = []*expr{filter}
 	}
-	c := makeIndexConstraintCalc(colInfos, andExprs, evalCtx)
-	return c.calcOffset(0)
+	var spans LogicalSpans
+	for i, orExpr := range orExprs {
+		var andExprs []*expr
+		if orExpr.op == andOp {
+			andExprs = orExpr.children
+		} else {
+			andExprs = []*expr{orExpr}
+		}
+		c := makeIndexConstraintCalc(colInfos, andExprs, evalCtx)
+		exprSpans := c.calcOffset(0)
+		if i == 0 {
+			spans = exprSpans
+		} else {
+			spans = c.mergeSpanSets(0 /* offset */, spans, exprSpans)
+		}
+	}
+	return spans
 }
 
 type logicalSpanSorter struct {
