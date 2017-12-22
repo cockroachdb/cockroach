@@ -1,25 +1,25 @@
 # LogicTest: default distsql
 
-query ITTT colnames
+query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
-Level  Type     Field  Description
-0      render   ·      ·
-1      norows   ·      ·
+Tree         Field  Description
+render       ·      ·
+ └── norows  ·      ·
 
-query ITTTTT colnames
+query TITTTTT colnames
 EXPLAIN (PLAN, METADATA) SELECT 1
 ----
-Level  Type      Field  Description  Columns  Ordering
-0      render    ·      ·            ("1")    "1"=CONST
-1      emptyrow  ·      ·            ()       ·
+Tree           Level  Type      Field  Description  Columns  Ordering
+render         0      render    ·      ·            ("1")    "1"=CONST
+ └── emptyrow  1      emptyrow  ·      ·            ("1")    "1"=CONST
 
-query ITTTTT colnames
+query TITTTTT colnames
 EXPLAIN (METADATA,PLAN) SELECT 1
 ----
-Level  Type      Field  Description  Columns  Ordering
-0      render    ·      ·            ("1")    "1"=CONST
-1      emptyrow  ·      ·            ()       ·
+Tree           Level  Type      Field  Description  Columns  Ordering
+render         0      render    ·      ·            ("1")    "1"=CONST
+ └── emptyrow  1      emptyrow  ·      ·            ("1")    "1"=CONST
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
@@ -27,13 +27,13 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
 ----
 output row: [1]
 
-query ITTTTT colnames
+query TITTTTT colnames
 EXPLAIN (TYPES) SELECT 1
 ----
-Level  Type      Field     Description  Columns    Ordering
-0      render    ·         ·            ("1" int)  "1"=CONST
-0      ·         render 0  (1)[int]     ·          ·
-1      emptyrow  ·         ·            ()         ·
+Tree           Level  Type      Field     Description  Columns    Ordering
+render         0      render    ·         ·            ("1" int)  "1"=CONST
+ │             0      ·         render 0  (1)[int]     ·          ·
+ └── emptyrow  1      emptyrow  ·         ·            ("1" int)  "1"=CONST
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
@@ -45,193 +45,193 @@ statement error unsupported EXPLAIN option
 EXPLAIN (PLAN,UNKNOWN) SELECT 1
 
 # Ensure that tracing results are sorted after gathering
-query ITTTTT
+query TITTTTT
 EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
 ----
-0  sort            ·      ·             ("timestamp", age, message, tag, loc, operation, span)                                 +"timestamp"
-0  ·               order  +"timestamp"  ·                                                                                      ·
-1  window          ·      ·             ("timestamp", age, message, tag, loc, operation, span)                                 ·
-2  render          ·      ·             ("timestamp", """timestamp""", message, tag, loc, operation, span)                     "timestamp"="""timestamp"""
-3  window          ·      ·             ("timestamp", message, tag, loc, operation, span)                                      ·
-4  render          ·      ·             ("timestamp", message, tag, loc, operation, span, txn_idx, span_idx, message_idx)      ·
-5  show trace for  ·      ·             (txn_idx, span_idx, message_idx, "timestamp", duration, operation, loc, tag, message)  ·
-6  render          ·      ·             ("1")                                                                                  "1"=CONST
-7  emptyrow        ·      ·             ()                                                                                     ·
+sort                                         0  sort            ·      ·             ("timestamp", age, message, tag, loc, operation, span)  +"timestamp"
+ │                                           0  ·               order  +"timestamp"  ·                                                       ·
+ └── window                                  1  window          ·      ·             ("timestamp", age, message, tag, loc, operation, span)  +"timestamp"
+      └── render                             2  render          ·      ·             ("timestamp", age, message, tag, loc, operation, span)  +"timestamp"
+           └── window                        3  window          ·      ·             ("timestamp", age, message, tag, loc, operation, span)  +"timestamp"
+                └── render                   4  render          ·      ·             ("timestamp", age, message, tag, loc, operation, span)  +"timestamp"
+                     └── show trace for      5  show trace for  ·      ·             ("timestamp", age, message, tag, loc, operation, span)  +"timestamp"
+                          └── render         6  render          ·      ·             ("timestamp", age, message, tag, loc, operation, span)  +"timestamp"
+                               └── emptyrow  7  emptyrow        ·      ·             ("timestamp", age, message, tag, loc, operation, span)  +"timestamp"
 
 # Ensure that all relevant statement types can be explained
-query ITTT
+query TTT
 EXPLAIN CREATE DATABASE foo
 ----
-0  create database  ·  ·
+create database  ·  ·
 
-query ITTT
+query TTT
 EXPLAIN CREATE TABLE foo (x INT)
 ----
-0  create table  ·  ·
+create table  ·  ·
 
 statement ok
 CREATE TABLE foo (x INT)
 
-query ITTT
+query TTT
 EXPLAIN CREATE INDEX a ON foo(x)
 ----
-0  create index  ·  ·
+create index  ·  ·
 
 statement ok
 CREATE DATABASE foo
 
-query ITTT
+query TTT
 EXPLAIN DROP DATABASE foo
 ----
-0  drop database  ·  ·
+drop database  ·  ·
 
 # explain SHOW JOBS - beware to test this before the CREATE INDEX
 # below, otherwise the result becomes non-deterministic.
 # Migrations with backfill will affect the number of rows.
-query ITTT
+query TTT
 EXPLAIN SHOW JOBS
 ----
-0  render  ·     ·
-1  values  ·     ·
-1  ·       size  13 columns, 1 row
+render       ·     ·
+ └── values  ·     ·
+·            size  13 columns, 1 row
 
 statement ok
 CREATE INDEX a ON foo(x)
 
-query ITTT
+query TTT
 EXPLAIN DROP INDEX foo@a
 ----
-0  drop index  ·  ·
+drop index  ·  ·
 
-query ITTT
+query TTT
 EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 ----
-0  alter table  ·  ·
+alter table  ·  ·
 
-query ITTT
+query TTT
 EXPLAIN (EXPRS) ALTER TABLE foo SPLIT AT VALUES (42)
 ----
-0  split   ·              ·
-1  values  ·              ·
-1  ·       size           1 column, 1 row
-1  ·       row 0, expr 0  42
+split        ·              ·
+ └── values  ·              ·
+·            size           1 column, 1 row
+·            row 0, expr 0  42
 
-query ITTT
+query TTT
 EXPLAIN DROP TABLE foo
 ----
-0  drop table  ·  ·
+drop table  ·  ·
 
-query ITTT
+query TTT
 EXPLAIN SHOW DATABASES
 ----
-0  sort    ·      ·
-0  ·       order  +"Database"
-1  render  ·      ·
-2  values  ·      ·
-2  ·       size   4 columns, 6 rows
+sort              ·      ·
+ │                order  +"Database"
+ └── render       ·      ·
+      └── values  ·      ·
+·                 size   4 columns, 6 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW TABLES
 ----
-0  sort    ·      ·
-0  ·       order  +"Table"
-1  render  ·      ·
-2  filter  ·      ·
-3  values  ·      ·
-3  ·       size   5 columns, 75 rows
+sort                   ·      ·
+ │                     order  +"Table"
+ └── render            ·      ·
+      └── filter       ·      ·
+           └── values  ·      ·
+·                      size   5 columns, 75 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW DATABASE
 ----
-0  render  ·     ·
-1  filter  ·     ·
-2  values  ·     ·
-2  ·       size  2 columns, 24 rows
+render            ·     ·
+ └── filter       ·     ·
+      └── values  ·     ·
+·                 size  2 columns, 24 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW TIME ZONE
 ----
-0  render  ·     ·
-1  filter  ·     ·
-2  values  ·     ·
-2  ·       size  2 columns, 24 rows
+render            ·     ·
+ └── filter       ·     ·
+      └── values  ·     ·
+·                 size  2 columns, 24 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-0  render  ·     ·
-1  filter  ·     ·
-2  values  ·     ·
-2  ·       size  2 columns, 24 rows
+render            ·     ·
+ └── filter       ·     ·
+      └── values  ·     ·
+·                 size  2 columns, 24 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 ----
-0  render  ·     ·
-1  filter  ·     ·
-2  values  ·     ·
-2  ·       size  2 columns, 24 rows
+render            ·     ·
+ └── filter       ·     ·
+      └── values  ·     ·
+·                 size  2 columns, 24 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
 ----
-0  render  ·     ·
-1  filter  ·     ·
-2  values  ·     ·
-2  ·       size  2 columns, 24 rows
+render            ·     ·
+ └── filter       ·     ·
+      └── values  ·     ·
+·                 size  2 columns, 24 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-0  sort    ·         ·
-0  ·       order     +ordinal_position
-1  render  ·         ·
-2  group   ·         ·
-2  ·       group by  @1-@5
-3  render  ·         ·
-4  join    ·         ·
-4  ·       type      left outer
-4  ·       equality  (column_name) = (column_name)
-5  render  ·         ·
-6  filter  ·         ·
-7  values  ·         ·
-7  ·       size      13 columns, 628 rows
-5  render  ·         ·
-6  filter  ·         ·
-7  values  ·         ·
-7  ·       size      13 columns, 37 rows
+sort                                       ·         ·
+ │                                         order     +ordinal_position
+ └── render                                ·         ·
+      └── group                            ·         ·
+           │                               group by  @1-@5
+           └── render                      ·         ·
+                └── join                   ·         ·
+                     │                     type      left outer
+                     │                     equality  (column_name) = (column_name)
+                     ├── render            ·         ·
+                     │    └── filter       ·         ·
+                     │         └── values  ·         ·
+                     │                     size      13 columns, 628 rows
+                     └── render            ·         ·
+                          └── filter       ·         ·
+                               └── values  ·         ·
+·                                          size      13 columns, 37 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW GRANTS ON foo
 ----
-0  sort    ·      ·
-0  ·       order  +"Database",+"Table",+"User",+"Privileges"
-1  render  ·      ·
-2  filter  ·      ·
-3  values  ·      ·
-3  ·       size   8 columns, 130 rows
+sort                   ·      ·
+ │                     order  +"Database",+"Table",+"User",+"Privileges"
+ └── render            ·      ·
+      └── filter       ·      ·
+           └── values  ·      ·
+·                      size   8 columns, 130 rows
 
 
-query ITTT
+query TTT
 EXPLAIN SHOW INDEX FROM foo
 ----
-0  render  ·     ·
-1  filter  ·     ·
-2  values  ·     ·
-2  ·       size  13 columns, 37 rows
+render            ·     ·
+ └── filter       ·     ·
+      └── values  ·     ·
+·                 size  13 columns, 37 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-0  sort    ·      ·
-0  ·       order  +"Table",+"Name"
-1  values  ·      ·
-1  ·       size   5 columns, 0 rows
+sort         ·      ·
+ │           order  +"Table",+"Name"
+ └── values  ·      ·
+·            size   5 columns, 0 rows
 
-query ITTT
+query TTT
 EXPLAIN SHOW USERS
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  users@primary
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  users@primary
+·          spans  ALL

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 // explainPlanNode wraps the logic for EXPLAIN as a planNode.
@@ -41,25 +42,40 @@ type explainPlanNode struct {
 	run explainPlanRun
 }
 
+var explainPlanColumns = sqlbase.ResultColumns{
+	// Tree shows the node type with the tree structure.
+	{Name: "Tree", Typ: types.String},
+	// Field is the part of the node that a row of output pertains to.
+	{Name: "Field", Typ: types.String},
+	// Description contains details about the field.
+	{Name: "Description", Typ: types.String},
+}
+
+var explainPlanVerboseColumns = sqlbase.ResultColumns{
+	// Tree shows the node type with the tree structure.
+	{Name: "Tree", Typ: types.String},
+	// Level is the depth of the node in the tree.
+	{Name: "Level", Typ: types.Int},
+	// Type is the node type.
+	{Name: "Type", Typ: types.String},
+	// Field is the part of the node that a row of output pertains to.
+	{Name: "Field", Typ: types.String},
+	// Description contains details about the field.
+	{Name: "Description", Typ: types.String},
+	// Columns is the type signature of the data source.
+	{Name: "Columns", Typ: types.String},
+	// Ordering indicates the known ordering of the data from this source.
+	{Name: "Ordering", Typ: types.String},
+}
+
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
 func (p *planner) makeExplainPlanNode(
 	explainer explainer, expanded, optimized bool, origStmt tree.Statement, plan planNode,
 ) planNode {
-	columns := sqlbase.ResultColumns{
-		// Level is the depth of the node in the tree.
-		{Name: "Level", Typ: types.Int},
-		// Type is the node type.
-		{Name: "Type", Typ: types.String},
-		// Field is the part of the node that a row of output pertains to.
-		{Name: "Field", Typ: types.String},
-		// Description contains details about the field.
-		{Name: "Description", Typ: types.String},
-	}
+	columns := explainPlanColumns
+
 	if explainer.showMetadata {
-		// Columns is the type signature of the data source.
-		columns = append(columns, sqlbase.ResultColumn{Name: "Columns", Typ: types.String})
-		// Ordering indicates the known ordering of the data from this source.
-		columns = append(columns, sqlbase.ResultColumn{Name: "Ordering", Typ: types.String})
+		columns = explainPlanVerboseColumns
 	}
 
 	noPlaceholderFlags := tree.FmtExpr(
@@ -105,6 +121,14 @@ func (e *explainPlanNode) Close(ctx context.Context) {
 	e.run.results.Close(ctx)
 }
 
+// explainEntry is a representation of the info that makes it into an output row
+// of an EXPLAIN statement.
+type explainEntry struct {
+	level                 int
+	node, field, fieldVal string
+	plan                  planNode
+}
+
 // explainer represents the run-time state of the EXPLAIN logic.
 type explainer struct {
 	// showMetadata indicates whether the output has separate columns for the
@@ -134,80 +158,93 @@ type explainer struct {
 	// level is the current depth in the tree of planNodes.
 	level int
 
-	// doIndent indicates whether the output should be clarified
-	// with leading white spaces.
-	doIndent bool
-
-	// makeRow produces one row of EXPLAIN output.
-	makeRow func(level int, typ, field, desc string, plan planNode)
-
-	// err remembers whether any error was encountered by makeRow.
-	err error
+	// explainEntry accumulates entries (nodes or attributes).
+	entries []explainEntry
 }
 
 var emptyString = tree.NewDString("")
 
-// populateExplain invokes explain() with a makeRow method
-// which populates a valuesNode.
+// populateExplain walks the plan and generates rows in a valuesNode.
 func (p *planner) populateExplain(
 	ctx context.Context, e *explainer, v *valuesNode, plan planNode,
 ) error {
-	e.makeRow = func(level int, name, field, description string, plan planNode) {
-		if e.err != nil {
-			return
-		}
+	e.entries = nil
+	_ = walkPlan(ctx, plan, e.observer())
 
-		row := tree.Datums{
-			tree.NewDInt(tree.DInt(level)),
-			tree.NewDString(name),
-			tree.NewDString(field),
-			tree.NewDString(description),
-		}
-		if e.showMetadata {
-			if plan != nil {
-				cols := planColumns(plan)
-				// Columns metadata.
-				row = append(row, tree.NewDString(formatColumns(cols, e.showTypes)))
-				// Ordering metadata.
-				row = append(row, tree.NewDString(planPhysicalProps(plan).AsString(cols)))
-			} else {
-				row = append(row, emptyString, emptyString)
-			}
-		}
-		if _, err := v.rows.AddRow(ctx, row); err != nil {
-			e.err = err
+	tp := treeprinter.New()
+	// n keeps track of the current node on each level.
+	n := []treeprinter.Node{tp}
+
+	for _, entry := range e.entries {
+		if entry.plan != nil {
+			n = append(n[:entry.level+1], n[entry.level].Child(entry.node))
+		} else {
+			tp.AddEmptyLine()
 		}
 	}
 
-	e.err = nil
-	_ = walkPlan(ctx, plan, e.observer())
-	return e.err
+	treeRows := tp.FormattedRows()
+
+	for i, entry := range e.entries {
+		var row tree.Datums
+		if !e.showMetadata {
+			row = tree.Datums{
+				tree.NewDString(treeRows[i]),    // Tree
+				tree.NewDString(entry.field),    // Field
+				tree.NewDString(entry.fieldVal), // Description
+			}
+		} else {
+			row = tree.Datums{
+				tree.NewDString(treeRows[i]),         // Tree
+				tree.NewDInt(tree.DInt(entry.level)), // Level
+				tree.NewDString(entry.node),          // Type
+				tree.NewDString(entry.field),         // Field
+				tree.NewDString(entry.fieldVal),      // Description
+				emptyString,                          // Columns
+				emptyString,                          // Ordering
+			}
+			if entry.plan != nil {
+				cols := planColumns(plan)
+				// Columns metadata.
+				row[5] = tree.NewDString(formatColumns(cols, e.showTypes))
+				// Ordering metadata.
+				row[6] = tree.NewDString(planPhysicalProps(plan).AsString(cols))
+			}
+		}
+		if _, err := v.rows.AddRow(ctx, row); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // planToString uses explain() to build a string representation of the planNode.
 func planToString(ctx context.Context, plan planNode) string {
-	var buf bytes.Buffer
 	e := explainer{
 		showMetadata: true,
 		showExprs:    true,
 		showTypes:    true,
 		fmtFlags:     tree.FmtExpr(tree.FmtSimple, true, true, true),
-		makeRow: func(level int, name, field, description string, plan planNode) {
-			if field != "" {
-				field = "." + field
-			}
-			if plan == nil {
-				fmt.Fprintf(&buf, "%d %s%s %s\n", level, name, field, description)
-			} else {
-				cols := planColumns(plan)
-				fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
-					formatColumns(cols, true),
-					planPhysicalProps(plan).AsString(cols),
-				)
-			}
-		},
 	}
 	_ = walkPlan(ctx, plan, e.observer())
+	var buf bytes.Buffer
+	for _, e := range e.entries {
+		field := e.field
+		if field != "" {
+			field = "." + field
+		}
+		if plan == nil {
+			fmt.Fprintf(&buf, "%d %s%s %s\n", e.level, e.node, field, e.fieldVal)
+		} else {
+			cols := planColumns(plan)
+			fmt.Fprintf(
+				&buf, "%d %s%s %s %s %s\n", e.level, e.node, field, e.fieldVal,
+				formatColumns(cols, true),
+				planPhysicalProps(plan).AsString(cols),
+			)
+		}
+	}
 	return buf.String()
 }
 
@@ -238,11 +275,11 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
 
 // enterNode implements the planObserver interface.
 func (e *explainer) enterNode(_ context.Context, name string, plan planNode) (bool, error) {
-	desc := ""
-	if e.doIndent {
-		desc = fmt.Sprintf("%*s-> %s", e.level*3, " ", name)
-	}
-	e.makeRow(e.level, name, "", desc, plan)
+	e.entries = append(e.entries, explainEntry{
+		level: e.level,
+		node:  name,
+		plan:  plan,
+	})
 
 	e.level++
 	return true, nil
@@ -250,10 +287,11 @@ func (e *explainer) enterNode(_ context.Context, name string, plan planNode) (bo
 
 // attr implements the planObserver interface.
 func (e *explainer) attr(nodeName, fieldName, attr string) {
-	if e.doIndent {
-		attr = fmt.Sprintf("%*s%s", e.level*3, " ", attr)
-	}
-	e.makeRow(e.level-1, "", fieldName, attr, nil)
+	e.entries = append(e.entries, explainEntry{
+		level:    e.level - 1,
+		field:    fieldName,
+		fieldVal: attr,
+	})
 }
 
 // leaveNode implements the planObserver interface.

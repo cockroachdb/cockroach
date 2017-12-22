@@ -184,12 +184,12 @@ NULL       /0         5         {5}       5
 # p1 table
 
 # Secondary index should not be tightened.
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE b <= 3
 ----
-0  scan  ·      ·
-0  ·     table  p1@b
-0  ·     spans  /!NULL-/4
+scan  ·      ·
+·     table  p1@b
+·     spans  /!NULL-/4
 
 query II rowsort
 SELECT * FROM p1 WHERE b <= 3
@@ -200,12 +200,12 @@ SELECT * FROM p1 WHERE b <= 3
 4 2
 
 # Partial predicate on primary key should not be tightened.
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3
 ----
-0  scan  ·      ·
-0  ·     table  p1@primary
-0  ·     spans  /!NULL-/4
+scan  ·      ·
+·     table  p1@primary
+·     spans  /!NULL-/4
 
 query II rowsort
 SELECT * FROM p1 WHERE a <= 3
@@ -218,19 +218,19 @@ SELECT * FROM p1 WHERE a <= 3
 3 10
 
 # Tighten end key if span contains full primary key.
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b <= 3
 ----
-0  scan  ·      ·
-0  ·     table  p1@primary
-0  ·     spans  /!NULL-/3/3/#
+scan  ·      ·
+·     table  p1@primary
+·     spans  /!NULL-/3/3/#
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b < 4
 ----
-0  scan  ·      ·
-0  ·     table  p1@primary
-0  ·     spans  /!NULL-/3/3/#
+scan  ·      ·
+·     table  p1@primary
+·     spans  /!NULL-/3/3/#
 
 query II rowsort
 SELECT * FROM p1 WHERE a <= 3 AND b <= 3
@@ -239,12 +239,12 @@ SELECT * FROM p1 WHERE a <= 3 AND b <= 3
 2 2
 
 # Mixed bounds.
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE a >= 2 AND b <= 3
 ----
-0  scan  ·      ·
-0  ·     table  p1@b
-0  ·     spans  /!NULL-/4
+scan  ·      ·
+·     table  p1@b
+·     spans  /!NULL-/4
 
 query II rowsort
 SELECT * FROM p1 WHERE a >= 2 AND b <= 3
@@ -256,44 +256,44 @@ SELECT * FROM p1 WHERE a >= 2 AND b <= 3
 
 # Edge cases.
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 0 AND b <= 0
 ----
-0  scan  ·      ·
-0  ·     table  p1@primary
-0  ·     spans  /!NULL-/0/0/#
+scan  ·      ·
+·     table  p1@primary
+·     spans  /!NULL-/0/0/#
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= -1 AND b <= -1
 ----
-0  scan  ·      ·
-0  ·     table  p1@primary
-0  ·     spans  /!NULL-/-1/-1/#
+scan  ·      ·
+·     table  p1@primary
+·     spans  /!NULL-/-1/-1/#
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808
 ----
-0  scan  ·      ·
-0  ·     table  p1@primary
-0  ·     spans  /1/!NULL-/1/-9223372036854775808/#
+scan  ·      ·
+·     table  p1@primary
+·     spans  /1/!NULL-/1/-9223372036854775808/#
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807
 ----
-0  scan  ·      ·
-0  ·     table  p1@primary
-0  ·     spans  /1/!NULL-/1/9223372036854775807/#
+scan  ·      ·
+·     table  p1@primary
+·     spans  /1/!NULL-/1/9223372036854775807/#
 
 # Table c1 (interleaved table)
 
 # Partial primary key does not tighten.
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM c1 WHERE a <= 3
 ----
-0  scan  ·      ·
-0  ·     table  c1@primary
-0  ·     spans  /!NULL-/4
+scan  ·      ·
+·     table  c1@primary
+·     spans  /!NULL-/4
 
 query II rowsort
 SELECT * FROM c1 WHERE a <= 3
@@ -305,12 +305,12 @@ SELECT * FROM c1 WHERE a <= 3
 2 10
 
 # Tighten span on fully primary key.
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
 ----
-0  scan  ·      ·
-0  ·     table  c1@primary
-0  ·     spans  /!NULL-/3/3/#/52/1/#
+scan  ·      ·
+·     table  c1@primary
+·     spans  /!NULL-/3/3/#/52/1/#
 
 query II rowsort
 SELECT * FROM c1 WHERE a <= 3 AND b <= 3
@@ -322,12 +322,12 @@ SELECT * FROM c1 WHERE a <= 3 AND b <= 3
 # From the primary index.
 
 # Lower bound (i >= 2)
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p2 WHERE i >= 2
 ----
-0  scan  ·      ·
-0  ·     table  p2@primary
-0  ·     spans  /2-
+scan  ·      ·
+·     table  p2@primary
+·     spans  /2-
 
 query II rowsort
 SELECT * FROM p2 WHERE i>= 2
@@ -342,12 +342,12 @@ SELECT * FROM p2 WHERE i>= 2
 
 # Upper bound (i <= 5)
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p2 WHERE i <= 5
 ----
-0  scan  ·      ·
-0  ·     table  p2@primary
-0  ·     spans  /!NULL-/5/#
+scan  ·      ·
+·     table  p2@primary
+·     spans  /!NULL-/5/#
 
 query II rowsort
 SELECT * FROM p2 WHERE i <= 5
@@ -363,12 +363,12 @@ SELECT * FROM p2 WHERE i <= 5
 # Lower bound (i >= 1 AND d >= 2)
 
 # Note 53/2 refers to the 2nd index (after primary index) of table p2.
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2
 ----
-0  scan  ·      ·
-0  ·     table  p2@p2_id
-0  ·     spans  /1/#/53/2/2-
+scan  ·      ·
+·     table  p2@p2_id
+·     spans  /1/#/53/2/2-
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i>= 1 AND d >= 2
@@ -380,12 +380,12 @@ SELECT * FROM p2@p2_id WHERE i>= 1 AND d >= 2
 
 # Upper bound (i <= 6 AND d <= 5)
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
 ----
-0  scan  ·      ·
-0  ·     table  p2@p2_id
-0  ·     spans  /!NULL-/6/#/53/2/6
+scan  ·      ·
+·     table  p2@p2_id
+·     spans  /!NULL-/6/#/53/2/6
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
@@ -395,12 +395,12 @@ SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
 
 # IS NULL
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
 ----
-0  scan  ·      ·
-0  ·     table  p2@p2_id
-0  ·     spans  /1/#/53/2/NULL-
+scan  ·      ·
+·     table  p2@p2_id
+·     spans  /1/#/53/2/NULL-
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NULL
@@ -411,12 +411,12 @@ SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NULL
 
 # IS NOT NULL
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
 ----
-0  scan  ·      ·
-0  ·     table  p2@p2_id
-0  ·     spans  /1/#/53/2/!NULL-
+scan  ·      ·
+·     table  p2@p2_id
+·     spans  /1/#/53/2/!NULL-
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NOT NULL
@@ -429,13 +429,13 @@ SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NOT NULL
 
 # String table
 
-query ITTT colnames
+query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a = 'a'
 ----
-Level  Type  Field  Description
-0      scan  ·      ·
-0      ·     table  bytes_t@primary
-0      ·     spans  /"a"-/"a"/#
+Tree  Field  Description
+scan  ·      ·
+·     table  bytes_t@primary
+·     spans  /"a"-/"a"/#
 
 query T
 SELECT * FROM bytes_t WHERE a = 'a'
@@ -444,26 +444,26 @@ a
 
 # No tightening.
 
-query ITTT colnames
+query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a < 'aa'
 ----
-Level  Type  Field  Description
-0      scan  ·      ·
-0      ·     table  bytes_t@primary
-0      ·     spans  /!NULL-/"aa"
+Tree  Field  Description
+scan  ·      ·
+·     table  bytes_t@primary
+·     spans  /!NULL-/"aa"
 
 query T
 SELECT * FROM bytes_t WHERE a < 'aa'
 ----
 a
 
-query ITTT colnames
+query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
 ----
-Level  Type  Field  Description
-0      scan  ·      ·
-0      ·     table  decimal_t@primary
-0      ·     spans  /1-/1/#
+Tree  Field  Description
+scan  ·      ·
+·     table  decimal_t@primary
+·     spans  /1-/1/#
 
 query R
 SELECT * FROM decimal_t WHERE a = 1.00
@@ -472,13 +472,13 @@ SELECT * FROM decimal_t WHERE a = 1.00
 
 # No tightening.
 
-query ITTT colnames
+query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a < 2
 ----
-Level  Type  Field  Description
-0      scan  ·      ·
-0      ·     table  decimal_t@primary
-0      ·     spans  /!NULL-/2
+Tree  Field  Description
+scan  ·      ·
+·     table  decimal_t@primary
+·     spans  /!NULL-/2
 
 query R rowsort
 SELECT * FROM decimal_t WHERE a < 2
