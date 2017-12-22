@@ -16,6 +16,7 @@ package fsm
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"sort"
@@ -41,7 +42,7 @@ type ExtendedState interface{}
 // the Machine's ExtendedState.
 type Transition struct {
 	Next   State
-	Action func(ExtendedState)
+	Action func(context.Context, ExtendedState)
 }
 
 // Transitions is a set of expanded state transitions generated from a Pattern,
@@ -63,7 +64,7 @@ func Compile(p Pattern) Transitions {
 	return Transitions{expanded: expandPattern(p)}
 }
 
-func (t Transitions) apply(s State, e Event, es ExtendedState) State {
+func (t Transitions) apply(ctx context.Context, s State, e Event, es ExtendedState) State {
 	sm, ok := t.expanded[s]
 	if !ok {
 		panic(fmt.Sprintf("unknown state %#v", s))
@@ -73,7 +74,7 @@ func (t Transitions) apply(s State, e Event, es ExtendedState) State {
 		panic(fmt.Sprintf("unknown state transition %#v(%#v)", s, e))
 	}
 	if tr.Action != nil {
-		tr.Action(es)
+		tr.Action(ctx, es)
 	}
 	return tr.Next
 }
@@ -146,6 +147,6 @@ func MakeMachine(t Transitions, start State, es ExtendedState) Machine {
 }
 
 // Apply applies the Event to the state Machine.
-func (m *Machine) Apply(e Event) {
-	m.cur = m.t.apply(m.cur, e, m.es)
+func (m *Machine) Apply(ctx context.Context, e Event) {
+	m.cur = m.t.apply(ctx, m.cur, e, m.es)
 }
