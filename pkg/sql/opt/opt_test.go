@@ -48,9 +48,15 @@ package opt
 //    If present, build-scalar must have been an earlier command.
 //
 // The supported arguments are:
-//  - columns=(<type> [ascending|asc|descending|desc], ...)
 //
-//    Sets the types of index var columns, and optionally direction.
+//  - vars=(<type>, ...)
+//
+//    Sets the types for the index vars in the expression.
+//
+//  - index=(@<index> [ascending|asc|descending|desc] [not null], ...)
+//
+//    Information for the index (used by index-constraints). Each column of the
+//    index refers to an index var.
 
 import (
 	"bufio"
@@ -62,6 +68,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -274,6 +281,7 @@ func TestOpt(t *testing.T) {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
 				var e *expr
+				var varTypes []types.T
 				var colInfos []IndexColumnInfo
 				var typedExpr tree.TypedExpr
 
@@ -287,10 +295,19 @@ func TestOpt(t *testing.T) {
 					if len(val) > 2 && val[0] == '(' && val[len(val)-1] == ')' {
 						val = val[1 : len(val)-1]
 					}
+					vals := strings.Split(val, ",")
 					switch key {
-					case "columns":
+					case "vars":
+						varTypes, err = parseTypes(vals)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+					case "index":
+						if varTypes == nil {
+							d.fatalf(t, "vars must precede index")
+						}
 						var err error
-						colInfos, err = parseColumns(strings.Split(val, ","))
+						colInfos, err = parseIndexColumns(varTypes, vals)
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
@@ -298,7 +315,6 @@ func TestOpt(t *testing.T) {
 						d.fatalf(t, "unknown argument: %s", key)
 					}
 				}
-
 				buildScalarFn := func() {
 					defer func() {
 						if r := recover(); r != nil {
@@ -310,7 +326,7 @@ func TestOpt(t *testing.T) {
 
 				evalCtx := tree.MakeTestingEvalContext()
 				var err error
-				typedExpr, err = parseScalarExpr(d.sql, colInfos)
+				typedExpr, err = parseScalarExpr(d.sql, varTypes)
 				if err != nil {
 					d.fatalf(t, "%v", err)
 				}
@@ -359,18 +375,38 @@ func parseType(typeStr string) (types.T, error) {
 	return coltypes.CastTargetToDatumType(colType), nil
 }
 
-// parseColumns parses descriptions of index columns; each
-// string corresponds to an index column and is of the form:
-//   <type> [ascending|descending]
-func parseColumns(colStrs []string) ([]IndexColumnInfo, error) {
-	res := make([]IndexColumnInfo, len(colStrs))
-	for i := range colStrs {
-		fields := strings.Fields(colStrs[i])
+// parseColumns parses a list of types.
+func parseTypes(colStrs []string) ([]types.T, error) {
+	res := make([]types.T, len(colStrs))
+	for i, s := range colStrs {
 		var err error
-		res[i].Typ, err = parseType(fields[0])
+		res[i], err = parseType(s)
 		if err != nil {
 			return nil, err
 		}
+	}
+	return res, nil
+}
+
+// parseIndexColumns parses descriptions of index columns; each
+// string corresponds to an index column and is of the form:
+//   <type> [ascending|descending]
+func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumnInfo, error) {
+	res := make([]IndexColumnInfo, len(colStrs))
+	for i := range colStrs {
+		fields := strings.Fields(colStrs[i])
+		if fields[0][0] != '@' {
+			return nil, fmt.Errorf("index column must start with @<index>")
+		}
+		idx, err := strconv.Atoi(fields[0][1:])
+		if err != nil {
+			return nil, err
+		}
+		if idx < 1 || idx > len(indexVarTypes) {
+			return nil, fmt.Errorf("invalid index var @%d", idx)
+		}
+		res[i].VarIdx = idx - 1
+		res[i].Typ = indexVarTypes[res[i].VarIdx]
 		res[i].Direction = encoding.Ascending
 		res[i].Nullable = true
 		fields = fields[1:]
@@ -418,17 +454,14 @@ func (*indexedVars) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	panic("unimplemented")
 }
 
-func parseScalarExpr(sql string, indexVarCols []IndexColumnInfo) (tree.TypedExpr, error) {
+func parseScalarExpr(sql string, varTypes []types.T) (tree.TypedExpr, error) {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		return nil, err
 	}
 
 	// Set up an indexed var helper so we can type-check the expression.
-	iv := &indexedVars{types: make([]types.T, len(indexVarCols))}
-	for i, colInfo := range indexVarCols {
-		iv.types[i] = colInfo.Typ
-	}
+	iv := &indexedVars{types: varTypes}
 
 	sema := tree.MakeSemaContext(false /* privileged */)
 	iVarHelper := tree.MakeIndexedVarHelper(iv, len(iv.types))

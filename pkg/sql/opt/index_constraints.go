@@ -170,7 +170,7 @@ func (c *indexConstraintCalc) makeSpansForTupleInequality(
 	prefixLen := 0
 	dir := c.colInfos[offset].Direction
 	for i := range lhs.children {
-		if !isIndexedVar(lhs.children[i], offset+i) {
+		if !c.isIndexColumn(lhs.children[i], offset+i) {
 			// Variable doesn't refer to the right column.
 			break
 		}
@@ -269,7 +269,7 @@ func (c *indexConstraintCalc) makeSpansForTupleIn(offset int, e *expr) (LogicalS
 Outer:
 	for i := offset; i < len(c.colInfos); i++ {
 		for j := range lhs.children {
-			if isIndexedVar(lhs.children[j], i) {
+			if c.isIndexColumn(lhs.children[j], i) {
 				tuplePos = append(tuplePos, j)
 				continue Outer
 			}
@@ -331,7 +331,7 @@ func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpan
 	}
 	// Check for an operation where the left-hand side is an
 	// indexed var for this column.
-	if isIndexedVar(e.children[0], offset) {
+	if c.isIndexColumn(e.children[0], offset) {
 		return c.makeSpansForSingleColumn(offset, e.op, e.children[1])
 	}
 	// Check for tuple operations.
@@ -348,7 +348,7 @@ func (c *indexConstraintCalc) makeSpansForExpr(offset int, e *expr) (LogicalSpan
 
 	// Last resort: for conditions like a > b, our column can appear on the right
 	// side. We can deduce a not-null constraint from such conditions.
-	if c.colInfos[offset].Nullable && isIndexedVar(e.children[1], offset) {
+	if c.colInfos[offset].Nullable && c.isIndexColumn(e.children[1], offset) {
 		switch e.op {
 		case eqOp, ltOp, leOp, gtOp, geOp, neOp:
 			return LogicalSpans{c.makeNotNullSpan(offset)}, true
@@ -517,20 +517,18 @@ func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
 // IndexColumnInfo encompasses the information for index columns, needed for
 // index constraints.
 type IndexColumnInfo struct {
+	// VarIdx identifies the indexed var that corresponds to this column.
+	VarIdx    int
 	Typ       types.T
 	Direction encoding.Direction
-	// Nullable should be set to false if this column cannot store NULLs. This is
-	// used to keep the spans simple, e.g. [ - /5] instead of (/NULL - /5].
+	// Nullable should be set to false if this column cannot store NULLs; used
+	// to keep the spans simple, e.g. [ - /5] instead of (/NULL - /5].
 	Nullable bool
 }
 
 // MakeIndexConstraints generates constraints from a scalar boolean filter
 // expression. See LogicalSpans for more information on how constraints are
 // represented.
-//
-// TODO(radu): for now we assume the index columns are always columns
-// @1, @2, @3, etc. Eventually we will need to pass in a list of column
-// indices.
 func MakeIndexConstraints(
 	filter *expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
 ) LogicalSpans {
