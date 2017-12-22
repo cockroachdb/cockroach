@@ -47,7 +47,7 @@ ignored = [
   name = "github.com/go-sql-driver/mysql"
   branch = "master"
 
-# https://github.com/grpc-ecosystem/grpc-gateway/commit/893772d
+# https://github.com/grpc-ecosystem/grpc-gateway/pull/497
 [[constraint]]
   name = "github.com/grpc-ecosystem/grpc-gateway"
   branch = "master"
