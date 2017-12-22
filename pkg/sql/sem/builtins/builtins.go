@@ -1629,6 +1629,10 @@ CockroachDB supports the following flags:
 
 	"jsonb_build_array": {jsonBuildArrayImpl},
 
+	"json_build_object": {jsonBuildObjectImpl},
+
+	"jsonb_build_object": {jsonBuildObjectImpl},
+
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
@@ -2506,6 +2510,40 @@ var jsonTypeOfImpl = tree.Builtin{
 	Info: "Returns the type of the outermost JSON value as a text string.",
 }
 
+var jsonBuildObjectImpl = tree.Builtin{
+	Types:        tree.VariadicType{VarType: types.Any},
+	ReturnType:   tree.FixedReturnType(types.JSON),
+	NullableArgs: true,
+	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		if len(args)%2 != 0 {
+			return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+				"argument list must have even number of elements")
+		}
+
+		obj := make(map[string]interface{})
+		for i := 0; i < len(args); i += 2 {
+			if args[i] == tree.DNull {
+				return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+					fmt.Sprintf("argument %d cannot be null", i+1))
+			}
+
+			key, err := asJSONStringKey(args[i])
+			if err != nil {
+				return nil, err
+			}
+
+			val, err := asJSON(args[i+1])
+			if err != nil {
+				return nil, err
+			}
+			obj[key] = val
+		}
+
+		return tree.MakeDJSON(obj)
+	},
+	Info: "Builds a JSON object out of a variadic argument list.",
+}
+
 var toJSONImpl = tree.Builtin{
 	Types:      tree.ArgTypes{{"val", types.Any}},
 	ReturnType: tree.FixedReturnType(types.JSON),
@@ -3333,5 +3371,17 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 			return json.MakeJSON(nil)
 		}
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSON", d)
+	}
+}
+
+// used by jsonBuildObjImpl to convert a Datum to its string representation
+func asJSONStringKey(d tree.Datum) (string, error) {
+	// TODO: check keys are scalar and not null / composite / array
+	switch d.(type) {
+	case *tree.DJSON, *tree.DArray, *tree.DTuple:
+		return "", pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+			"key value must be scalar, not array, tuple, or json")
+	default:
+		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	}
 }
