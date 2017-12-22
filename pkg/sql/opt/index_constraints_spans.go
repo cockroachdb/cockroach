@@ -141,6 +141,12 @@ type indexConstraintCtx struct {
 	evalCtx *tree.EvalContext
 }
 
+// isIndexColumn returns true if e is an indexed var that corresponds
+// to index column <offset>.
+func (c *indexConstraintCtx) isIndexColumn(e *expr, index int) bool {
+	return isIndexedVar(e, c.colInfos[index].VarIdx)
+}
+
 // compareKeyVals compares two lists of values for a sequence of index columns
 // (namely <offset>, <offset+1>, ...). The directions of the index columns are
 // taken into account.
