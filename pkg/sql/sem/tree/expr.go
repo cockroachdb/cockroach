@@ -303,8 +303,6 @@ const (
 	NotRegIMatch
 	IsDistinctFrom
 	IsNotDistinctFrom
-	Is
-	IsNot
 	Contains
 	ContainedBy
 	Existence
@@ -350,8 +348,6 @@ var comparisonOpName = [...]string{
 	NotRegIMatch:      "!~*",
 	IsDistinctFrom:    "IS DISTINCT FROM",
 	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
-	Is:                "IS",
-	IsNot:             "IS NOT",
 	Contains:          "@>",
 	ContainedBy:       "<@",
 	Existence:         "?",
@@ -396,6 +392,11 @@ func (*ComparisonExpr) operatorExpr() {}
 // Format implements the NodeFormatter interface.
 func (node *ComparisonExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	opStr := node.Operator.String()
+	if node.Operator == IsDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		opStr = "IS NOT"
+	} else if node.Operator == IsNotDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		opStr = "IS"
+	}
 	if node.Operator.hasSubOperator() {
 		binExprFmtWithParenAndSubOp(buf, f, node.Left, node.SubOperator.String(), opStr, node.Right)
 	} else {
@@ -415,7 +416,7 @@ func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
 	switch node.Operator {
-	case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
+	case IsDistinctFrom, IsNotDistinctFrom:
 		// Is and related operators do not memoize a CmpOp.
 		return
 	case Any, Some, All:
