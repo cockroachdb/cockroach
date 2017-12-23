@@ -1,313 +1,323 @@
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 false
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 true
 ----
 [ - ]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1
 ----
 [ - ]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 > 2
 ----
 [/3 - ]
 
-build-scalar,normalize,index-constraints columns=(int desc)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 @1 > 2
 ----
 [ - /3]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 >= 2
 ----
 [/2 - ]
 
-build-scalar,normalize,index-constraints columns=(int desc)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 @1 >= 2
 ----
 [ - /2]
 
-build-scalar,normalize,index-constraints columns=(int not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 != 2
 ----
 [ - /1]
 [/3 - ]
 
-build-scalar,normalize,index-constraints columns=(int desc not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc not null)
 @1 != 2
 ----
 [ - /3]
 [/1 - ]
 
-build-scalar,normalize,index-constraints columns=(int not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 < 2
 ----
 [ - /1]
 
-build-scalar,normalize,index-constraints columns=(int desc not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc not null)
 @1 < 2
 ----
 [/1 - ]
 
-build-scalar,normalize,index-constraints columns=(int not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 = 2
 ----
 [/2 - /2]
 
-build-scalar,normalize,index-constraints columns=(int desc not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc not null)
 @1 = 2
 ----
 [/2 - /2]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 != 2
 ----
 (/NULL - /1]
 [/3 - ]
 
-build-scalar,normalize,index-constraints columns=(int desc)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 @1 != 2
 ----
 [ - /3]
 [/1 - /NULL)
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 < 2
 ----
 (/NULL - /1]
 
-build-scalar,normalize,index-constraints columns=(int desc)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 @1 < 2
 ----
 [/1 - /NULL)
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 = 2
 ----
 [/2 - /2]
 
-build-scalar,normalize,index-constraints columns=(int desc)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 @1 = 2
 ----
 [/2 - /2]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 > NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 < NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 >= NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 >= NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 = NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 != NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1)
+@1 = 1 AND @2 = 2
+----
+[/1 - /1]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@2)
+@1 = 1 AND @2 = 2
+----
+[/2 - /2]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 > NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @2 = 1 AND @1 > NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 > 2 AND @1 < 4
 ----
 [/3 - /3]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 >= 2 AND @1 <= 4
 ----
 [/2 - /4]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 > 2 AND @2 > 5
 ----
 [/3/6 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int desc)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
 @1 > 2 AND @2 < 5
 ----
 [/3/4 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 != 1 AND @2 > 5
 ----
 (/NULL - /0]
 [/2/6 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 != 1 AND @2 < 5
 ----
 (/NULL - /0/4]
 (/2/NULL - ]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 >= 1 AND @1 <= 5 AND @1 != 3
 ----
 [/1 - /2]
 [/4 - /5]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/8 - /2/9]
 
-build-scalar,normalize,index-constraints columns=(int desc, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/2/8 - /1/9]
 
-build-scalar,normalize,index-constraints columns=(int, int desc)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/9 - /2/8]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 > 1 AND @1 < 4 AND @2 > 5 AND @2 < 8
 ----
 [/2/6 - /3/7]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 > 1 AND @1 < 4 AND @2 = 5
 ----
 [/2/5 - /3/5]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 > 3 AND @2 < 5
 ----
 [/1/4 - /1/4]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 > 3 AND @2 < 8
 ----
 [/1/4 - /1/7]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 > 2 AND @1 < 1
 ----
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 != 2
 ----
 (/1/NULL - /1/1]
 [/1/3 - /1]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @1 <= 5 AND @2 != 2
 ----
 (/1/NULL - /5]
 
 # Tests with a type that doesn't support Prev.
-build-scalar,normalize,index-constraints columns=(string)
+build-scalar,normalize,index-constraints vars=(string) index=(@1)
 @1 > 'a' AND @1 < 'z'
 ----
 [/e'a\x00' - /'z')
 
-build-scalar,normalize,index-constraints columns=(string, int)
+build-scalar,normalize,index-constraints vars=(string, int) index=(@1, @2)
 @1 > 'a' AND @1 < 'z' AND @2 = 5
 ----
 [/e'a\x00'/5 - /'z')
 
-build-scalar,normalize,index-constraints columns=(string desc)
+build-scalar,normalize,index-constraints vars=(string) index=(@1 desc)
 @1 > 'a' AND @1 < 'z'
 ----
 (/'z' - /e'a\x00']
 
-build-scalar,normalize,index-constraints columns=(string desc, int)
+build-scalar,normalize,index-constraints vars=(string, int) index=(@1 desc, @2)
 @1 > 'a' AND @1 < 'z' AND @2 = 5
 ----
 (/'z' - /e'a\x00'/5]
 
 # Tests with a type that doesn't support Next or Prev.
-build-scalar,normalize,index-constraints columns=(decimal)
+build-scalar,normalize,index-constraints vars=(decimal) index=(@1)
 @1 > 1.5
 ----
 (/1.5 - ]
 
-build-scalar,normalize,index-constraints columns=(decimal)
+build-scalar,normalize,index-constraints vars=(decimal) index=(@1)
 @1 > 1.5 AND @1 < 2
 ----
 (/1.5 - /2)
 
 # Note the difference here between decimal and int: we
 # can't extend the exclusive start key.
-build-scalar,normalize,index-constraints columns=(decimal, decimal)
+build-scalar,normalize,index-constraints vars=(decimal, decimal) index=(@1, @2)
 @1 > 1.5 AND @2 > 2
 ----
 (/1.5 - ]
 
 # Tests with variable IN tuple.
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 IN (1, 2, 3)
 ----
 [/1 - /1]
 [/2 - /2]
 [/3 - /3]
 
-build-scalar,normalize,index-constraints columns=(int desc)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 @1 IN (1, 2, 3)
 ----
 [/3 - /3]
 [/2 - /2]
 [/1 - /1]
 
-legacy-normalize,build-scalar,index-constraints columns=(int)
+legacy-normalize,build-scalar,index-constraints vars=(int) index=(@1)
 @1 IN (1, 5, 1, 4)
 ----
 [/1 - /1]
 [/4 - /4]
 [/5 - /5]
 
-legacy-normalize,build-scalar,index-constraints columns=(int desc)
+legacy-normalize,build-scalar,index-constraints vars=(int) index=(@1 desc)
 @1 IN (1, 5, 1, 4)
 ----
 [/5 - /5]
 [/4 - /4]
 [/1 - /1]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 IN (1, 2, 3)
 ----
 [/1/1 - /1/1]
 [/1/2 - /1/2]
 [/1/3 - /1/3]
 
-build-scalar,normalize,index-constraints columns=(int, int desc)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
 @1 = 1 AND @2 IN (1, 2, 3)
 ----
 [/1/3 - /1/3]
 [/1/2 - /1/2]
 [/1/1 - /1/1]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 IN (1, 2) AND @2 IN (1, 2, 3)
 ----
 [/1/1 - /1/1]
@@ -317,7 +327,7 @@ build-scalar,normalize,index-constraints columns=(int, int)
 [/2/2 - /2/2]
 [/2/3 - /2/3]
 
-build-scalar,normalize,index-constraints columns=(int desc, int desc)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc)
 @1 IN (1, 2) AND @2 IN (1, 2, 3)
 ----
 [/2/3 - /2/3]
@@ -327,39 +337,39 @@ build-scalar,normalize,index-constraints columns=(int desc, int desc)
 [/1/2 - /1/2]
 [/1/1 - /1/1]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
 ----
 [/2/1 - /4/3]
 
-build-scalar,normalize,index-constraints columns=(int desc, int desc)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc)
 @1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
 ----
 [/4/3 - /2/1]
 
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 IN (1, 2, 3) AND @2 = 4
 ----
 [/1/4 - /1/4]
 [/2/4 - /2/4]
 [/3/4 - /3/4]
 
-build-scalar,normalize,index-constraints columns=(int desc, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2)
 @1 IN (1, 2, 3) AND @2 = 4
 ----
 [/3/4 - /3/4]
 [/2/4 - /2/4]
 [/1/4 - /1/4]
 
-build-scalar,normalize,index-constraints columns=(int, int desc)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
 @1 IN (1, 2, 3) AND @2 = 4
 ----
 [/1/4 - /1/4]
 [/2/4 - /2/4]
 [/3/4 - /3/4]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 IN (1, 2, 3) AND @2 >= 2 AND @2 <= 4
 ----
 [/1/2 - /1/4]
@@ -368,145 +378,156 @@ build-scalar,normalize,index-constraints columns=(int, int)
 
 # Tests with tuple equality.
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) = (1, 2, 3)
 ----
 [/1/2/3 - /1/2/3]
 
-build-scalar,normalize,index-constraints columns=(int, int, int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @3)
+(@1, @2, @3) = (1, 2, 3)
+----
+[/1/3 - /1/3]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@3, @2)
+(@1, @2, @3) = (1, 2, 3)
+----
+[/3/2 - /3/2]
+
+build-scalar,normalize,index-constraints vars=(int, int, int, int, int) index=(@1, @2, @3, @4, @5)
 (@1, @2, 3, (4, @5)) = (1, 2, @3, (@4, 5))
 ----
 [/1/2/3/4/5 - /1/2/3/4/5]
 
-build-scalar,normalize,index-constraints columns=(int, int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
 (@1, @2, @3) = (1, 2, 3) AND @4 > 4
 ----
 [/1/2/3/5 - /1/2/3]
 
-build-scalar,normalize,index-constraints columns=(int, int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/6/2/3/4 - /9/2/3/4]
 
-build-scalar,normalize,index-constraints columns=(int desc, int desc, int desc, int desc)
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1 desc, @2 desc, @3 desc, @4 desc)
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/9/2/3/4 - /6/2/3/4]
 
 # Tests with tuple inequalities.
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) >= (1, 2, 3)
 ----
 [/1/2/3 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) >= (1, 2, @1)
 ----
 [/1/2 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [/1/2/4 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) > (1, 2, @1)
 ----
 [/1/2 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) <= (1, 2, 3)
 ----
 [ - /1/2/3]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) <= (1, 2, @1)
 ----
 [ - /1/2]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, 2, 3)
 ----
 [ - /1/2/2]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, 2, @1)
 ----
 [ - /1/2]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) != (1, 2, 3)
 ----
 [ - /1/2/2]
 [/1/2/4 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) != (1, 2, @1)
 ----
 [ - ]
 
-build-scalar,normalize,index-constraints columns=(int desc, int desc, int desc)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc)
 (@1, @2, @3) >= (1, 2, 3)
 ----
 [ - /1/2/3]
 
-build-scalar,normalize,index-constraints columns=(int desc, int desc, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [ - /1/2]
 
-build-scalar,normalize,index-constraints columns=(int, int, int desc)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 desc)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [/1/2 - ]
 
-build-scalar,normalize,index-constraints columns=(int, int, int desc)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 desc)
 (@2, @3) > (1, 2)
 ----
 [ - ]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) >= (1, 2) AND (@1, @2) <= (3, 4)
 ----
 [/1/2 - /3/4]
 
-legacy-normalize,build-scalar,index-constraints columns=(int, int)
+legacy-normalize,build-scalar,index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) BETWEEN (1, 2) AND (3, 4)
 ----
 [/1/2 - /3/4]
 
-legacy-normalize,build-scalar,index-constraints columns=(int, int, int, int)
+legacy-normalize,build-scalar,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
 (@1, @2, @4) BETWEEN (1, 2, 3) AND (4, 5, 6)
 ----
 [/1/2 - /4/5]
 
 # Tests with tuple IN tuple.
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) IN ((1, 2, 3), (4, 5, 6))
 ----
 [/1/2/3 - /1/2/3]
 [/4/5/6 - /4/5/6]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) IN ((4, 5, 6), (1, 2, 3))
 ----
 [/1/2/3 - /1/2/3]
 [/4/5/6 - /4/5/6]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) IN ((1, 2, 3), (1, 2, 3))
 ----
 [/1/2/3 - /1/2/3]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) IN ((1, 2, 3), (4, 5, 6), (1, 2, 3))
 ----
 [/1/2/3 - /1/2/3]
 [/4/5/6 - /4/5/6]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1+5, @1, @1+@2, @2) IN ((1, 5, 1, 6), (2, 7, 2, 8), (3, 9, 3, 10))
 ----
 [/5/6 - /5/6]
@@ -516,13 +537,19 @@ build-scalar,normalize,index-constraints columns=(int, int, int)
 # Verify that we sort and de-duplicate if we "project" the tuples;
 # in this case the expression becomes:
 #   (@1, @2) IN ((5, 5), (4, 4), (5, 5))
-build-scalar,normalize,index-constraints columns=(int, int)
-(@1+5, @1, @1+@2, @2) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@2, @4)
+(@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
 ----
 [/4/4 - /4/4]
 [/5/5 - /5/5]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@2)
+(@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+----
+[/4 - /4]
+[/5 - /5]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
 ----
 [/1/2 - /1/2]
@@ -530,7 +557,7 @@ build-scalar,normalize,index-constraints columns=(int, int)
 [/4/3 - /4/3]
 [/5/1 - /5/1]
 
-build-scalar,normalize,index-constraints columns=(int desc, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2)
 (@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
 ----
 [/5/1 - /5/1]
@@ -538,7 +565,7 @@ build-scalar,normalize,index-constraints columns=(int desc, int)
 [/1/2 - /1/2]
 [/1/4 - /1/4]
 
-build-scalar,normalize,index-constraints columns=(int, int desc)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
 (@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
 ----
 [/1/4 - /1/4]
@@ -546,7 +573,7 @@ build-scalar,normalize,index-constraints columns=(int, int desc)
 [/4/3 - /4/3]
 [/5/1 - /5/1]
 
-build-scalar,normalize,index-constraints columns=(int desc, int desc)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc)
 (@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
 ----
 [/5/1 - /5/1]
@@ -554,14 +581,14 @@ build-scalar,normalize,index-constraints columns=(int desc, int desc)
 [/1/4 - /1/4]
 [/1/2 - /1/2]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 = 1 AND (@2, @3) IN ((2, 3), (4, 5), (6, 7))
 ----
 [/1/2/3 - /1/2/3]
 [/1/4/5 - /1/4/5]
 [/1/6/7 - /1/6/7]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @3 = 1 AND (@1, @2) IN ((2, 3), (4, 5), (6, 7))
 ----
 [/2/3/1 - /2/3/1]
@@ -570,7 +597,7 @@ build-scalar,normalize,index-constraints columns=(int, int, int)
 
 # Here the best we can do is to effectively break up the IN constraint into
 # constraints on @1 and on @3, which results in more spans than we need.
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @2 = 1 AND (@1, @3) IN ((2, 3), (4, 5), (6, 7))
 ----
 [/2/1/3 - /2/1/3]
@@ -583,95 +610,95 @@ build-scalar,normalize,index-constraints columns=(int, int, int)
 [/6/1/5 - /6/1/5]
 [/6/1/7 - /6/1/7]
 
-build-scalar,normalize,index-constraints columns=(int, int, int)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 > 1 AND (@2, @3) IN ((2, 3), (4, 5), (6, 7))
 ----
 [/2/2/3 - ]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 IS NULL
 ----
 [/NULL - /NULL]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 IS NULL AND @2 = 2
 ----
 [/NULL/2 - /NULL/2]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 IS NULL AND @2 > 2
 ----
 [/NULL/3 - /NULL]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 IS NULL
 ----
 [/1/NULL - /1/NULL]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @2 IS NULL
 ----
 [/1/NULL - ]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 IS NOT DISTINCT FROM NULL
 ----
 [/NULL - /NULL]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 IS NOT NULL
 ----
 (/NULL - ]
 
-build-scalar,normalize,index-constraints columns=(int)
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 IS DISTINCT FROM NULL
 ----
 (/NULL - ]
 
-build-scalar,normalize,index-constraints columns=(int desc)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 @1 IS NOT NULL
 ----
 [ - /NULL)
 
-build-scalar,normalize,index-constraints columns=(int not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 IS NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 IS NOT DISTINCT FROM NULL
 ----
 
-build-scalar,normalize,index-constraints columns=(int not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 IS NOT NULL
 ----
 [ - ]
 
-build-scalar,normalize,index-constraints columns=(int not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 IS DISTINCT FROM NULL
 ----
 [ - ]
 
-build-scalar,normalize,index-constraints columns=(int desc not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc not null)
 @1 IS NOT NULL
 ----
 [ - ]
 
-build-scalar,normalize,index-constraints columns=(int not null)
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 IS NOT DISTINCT FROM 1
 ----
 [/1 - /1]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @2 = @1
 ----
 (/NULL - ]
 
-build-scalar,normalize,index-constraints columns=(int, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @2 < @1
 ----
 (/NULL - ]
 
-build-scalar,normalize,index-constraints columns=(int not null, int)
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 not null, @2)
 @1 = @2
 ----
 [ - ]
