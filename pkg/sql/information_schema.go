@@ -36,6 +36,7 @@ const (
 var informationSchema = virtualSchema{
 	name: informationSchemaName,
 	tables: []virtualSchemaTable{
+		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
 		informationSchemaKeyColumnUsageTable,
 		informationSchemaSchemataTable,
@@ -96,6 +97,46 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 		return tree.NewDInt(tree.DInt(n))
 	}
 	return tree.DNull
+}
+
+var informationSchemaColumnPrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.column_privileges (
+	GRANTOR STRING NOT NULL DEFAULT '',
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	COLUMN_NAME STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE,
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			for _, u := range table.Privileges.Users {
+				for _, p := range privilege.ColumnData {
+					if p.Mask()&u.Privileges != 0 {
+						for _, cd := range table.Columns {
+							if err := addRow(
+								tree.DNull,                  // grantor
+								tree.NewDString(u.User),     // grantee
+								defString,                   // table_catalog
+								tree.NewDString(db.Name),    // table_schema
+								tree.NewDString(table.Name), // table_name
+								tree.NewDString(cd.Name),    // column_name
+								tree.NewDString(p.String()), // privilege_type
+								tree.DNull,                  // is_grantable
+							); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
+			return nil
+		})
+	},
 }
 
 var informationSchemaColumnsTable = virtualSchemaTable{
@@ -259,7 +300,7 @@ CREATE TABLE information_schema.schema_privileges (
 				for _, privilege := range u.Privileges {
 					if err := addRow(
 						tree.NewDString(u.User),    // grantee
-						defString,                  // table_catalog,
+						defString,                  // table_catalog
 						tree.NewDString(db.Name),   // table_schema
 						tree.NewDString(privilege), // privilege_type
 						tree.DNull,                 // is_grantable
@@ -507,14 +548,14 @@ CREATE TABLE information_schema.table_privileges (
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			for _, u := range table.Privileges.Show() {
-				for _, privilege := range u.Privileges {
+				for _, p := range u.Privileges {
 					if err := addRow(
 						tree.DNull,                  // grantor
 						tree.NewDString(u.User),     // grantee
 						defString,                   // table_catalog,
 						tree.NewDString(db.Name),    // table_schema
 						tree.NewDString(table.Name), // table_name
-						tree.NewDString(privilege),  // privilege_type
+						tree.NewDString(p),          // privilege_type
 						tree.DNull,                  // is_grantable
 						tree.DNull,                  // with_hierarchy
 					); err != nil {
