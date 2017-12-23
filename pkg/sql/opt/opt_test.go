@@ -357,6 +357,10 @@ func TestOpt(t *testing.T) {
 						for _, sp := range spans {
 							fmt.Fprintf(&buf, "%s\n", sp)
 						}
+						remainingFilter := SimplifyFilter(e, spans, colInfos, &evalCtx)
+						if remainingFilter != nil {
+							fmt.Fprintf(&buf, "Remaining filter:\n%s", remainingFilter)
+						}
 						return buf.String()
 					default:
 						d.fatalf(t, "unsupported command: %s", cmd)

@@ -90,3 +90,25 @@ func (e *expr) String() string {
 	e.format(tp)
 	return tp.String()
 }
+
+func (e *expr) shallowCopy() *expr {
+	r := &expr{
+		op:          e.op,
+		scalarProps: &scalarProps{},
+		private:     e.private,
+	}
+	*r.scalarProps = *e.scalarProps
+	if len(e.children) > 0 {
+		r.children = append([]*expr(nil), e.children...)
+	}
+	return r
+}
+
+func (e *expr) deepCopy() *expr {
+	// TODO(radu): use something like buildContext to allocate in bulk.
+	e = e.shallowCopy()
+	for i, c := range e.children {
+		e.children[i] = c.deepCopy()
+	}
+	return e
+}
