@@ -43,8 +43,9 @@ const (
 
 // Predefined sets of privileges.
 var (
-	ReadData      = List{GRANT, SELECT}
-	ReadWriteData = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	ReadData        = List{GRANT, SELECT}
+	ReadWriteData   = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	ColumnPrivilege = List{SELECT, INSERT, UPDATE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -136,6 +137,15 @@ func ListFromBitField(m uint32) List {
 		}
 	}
 	return ret
+}
+
+func (ls List) AnyIn(m uint32) bool {
+	for _, p := range ls {
+		if m&p.Mask() != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Lists is a list of privilege lists
