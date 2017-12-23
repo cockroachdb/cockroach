@@ -44,7 +44,7 @@ TESTS := .
 ## Benchmarks to run for use with `make bench`.
 BENCHES :=
 
-## Space delimited list of logic test files to run, for make testlogic.
+## Space delimited list of logic test files to run, for make testlogic and testccllogic.
 FILES :=
 
 ## Regex for matching logic test subtests. This is always matched after "FILES"
@@ -101,7 +101,8 @@ help: ## Print help for targets with comments.
 		"make bench PKG=./pkg/sql/parser BENCHES=BenchmarkParse" "Run the BenchmarkParse benchmark in the ./pkg/sql/parser package." \
 		"make testlogic" "Run all SQL Logic Tests." \
 		"make testlogic FILES=prepare" "Run the logic test with filename prepare." \
-		"make testlogic FILES=fk SUBTESTS='(20042|20045)'" "Run the logic test with filename fk and only subtests 20042 and 20045."
+		"make testlogic FILES=fk SUBTESTS='(20042|20045)'" "Run the logic test with filename fk and only subtests 20042 and 20045." \
+		"make testccllogic" "Run all SQL CCL Logic Tests."
 
 # Possible values:
 # <empty>: use the default toolchain
@@ -744,27 +745,33 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 FIND_RELEVANT := find $(PKG_ROOT) -name node_modules -prune -o
 
 bin/logictest.test: PKG := ./pkg/sql/logictest
-bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
+bin/logictestccl.test: PKG := ./pkg/ccl/sqlccl/logictestccl
+bin/logictest.test bin/logictestccl.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
 	$(MAKE) gotestdashi GOFLAGS='$(GOFLAGS)' TAGS='$(TAGS)' LINKFLAGS='$(LINKFLAGS)' PKG='$(PKG)'
-	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/logictest.test $(PKG)
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o $@ $(PKG)
 
 bench: ## Run benchmarks.
 bench: TESTS := -
 bench: BENCHES := .
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
-.PHONY: check test testshort testrace testlogic bench
+.PHONY: check test testshort testrace testlogic testccllogic bench
 test: ## Run tests.
 check test testshort testrace bench: gotestdashi
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
-# Run make testlogic to run all of the logic tests. Specify test files to run
+# Run make testlogic/testccllogic to run all of the oss/ccl logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
+testlogic testccllogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$$(if $(SUBTESTS),/$(SUBTESTS)),TestLogic)
+testlogic testccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
+
 testlogic: ## Run SQL Logic Tests.
-testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$$(if $(SUBTESTS),/$(SUBTESTS)),TestLogic)
-testlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
 testlogic: bin/logictest.test
 	cd pkg/sql/logictest && logictest.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+
+testccllogic: ## Run SQL CCL Logic Tests.
+testccllogic: bin/logictestccl.test
+	cd pkg/ccl/sqlccl/logictestccl && logictestccl.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
