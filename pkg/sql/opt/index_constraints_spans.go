@@ -19,6 +19,7 @@ package opt
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -422,4 +423,56 @@ func (c *indexConstraintCtx) mergeSpanSets(
 		result = append(result, span)
 	}
 	return result
+}
+
+// isSpanSubset returns true if the spans in a are completely
+// contained in the spans in b.
+func (c *indexConstraintCtx) isSpanSubset(offset int, a LogicalSpans, b LogicalSpans) bool {
+	for _, sp := range a {
+		for len(b) > 0 && c.startsAfter(offset, b[0].End, sp.Start) {
+			// b[0] ends before the first span in a.
+			b = b[1:]
+		}
+		// b[0] is the first span that ends at or after sp.Start.
+		// If a is a subset of b, b[0] must completely contain sp.
+		if len(b) == 0 ||
+			c.compare(offset, sp.Start, b[0].Start, compareStartKeys) < 0 ||
+			c.compare(offset, sp.End, b[0].End, compareEndKeys) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+type logicalSpanSorter struct {
+	c      *indexConstraintCtx
+	offset int
+	spans  []LogicalSpan
+}
+
+var _ sort.Interface = &logicalSpanSorter{}
+
+// Len is part of sort.Interface.
+func (ss *logicalSpanSorter) Len() int {
+	return len(ss.spans)
+}
+
+// Less is part of sort.Interface.
+func (ss *logicalSpanSorter) Less(i, j int) bool {
+	// Compare start keys.
+	return ss.c.compare(ss.offset, ss.spans[i].Start, ss.spans[j].Start, compareStartKeys) < 0
+}
+
+// Swap is part of sort.Interface.
+func (ss *logicalSpanSorter) Swap(i, j int) {
+	ss.spans[i], ss.spans[j] = ss.spans[j], ss.spans[i]
+}
+
+func (c *indexConstraintCtx) sortSpans(offset int, spans LogicalSpans) {
+	ss := logicalSpanSorter{
+		c:      c,
+		offset: offset,
+		spans:  spans,
+	}
+	sort.Sort(&ss)
 }
