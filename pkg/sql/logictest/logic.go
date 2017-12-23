@@ -1772,7 +1772,7 @@ var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", fals
 var logicTestsConfigExclude = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_SKIP_CONFIG", "")
 var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_CONFIG", "")
 
-func TestLogic(t *testing.T) {
+func RunLogicTest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	if testutils.NightlyStress() {

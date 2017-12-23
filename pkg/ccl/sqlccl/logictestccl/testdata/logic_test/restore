@@ -1,0 +1,5 @@
+# LogicTest: default
+
+# Restore is CCL only with a valid license.
+statement error pq: use of RESTORE requires an enterprise license. .*
+RESTORE foo FROM "bar"

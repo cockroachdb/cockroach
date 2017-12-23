@@ -1,0 +1,5 @@
+# LogicTest: default
+
+# Restore is CCL only.
+statement error pq: unknown statement type: \*tree\.Restore
+RESTORE foo FROM "bar"
