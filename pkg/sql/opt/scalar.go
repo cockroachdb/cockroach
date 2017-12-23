@@ -116,6 +116,20 @@ func initConstExpr(e *expr, datum tree.Datum) {
 	e.private = datum
 }
 
+// isConstBool checks whether e is a constOp with a boolean value, in
+// which case it returns the boolean value.
+func isConstBool(e *expr) (ok bool, val bool) {
+	if e.op == constOp {
+		switch e.private {
+		case tree.DBoolTrue:
+			return true, true
+		case tree.DBoolFalse:
+			return true, false
+		}
+	}
+	return false, false
+}
+
 // initFunctionCallExpr initializes a functionCallOp expression node.
 func initFunctionCallExpr(e *expr, def *tree.FunctionDefinition, children []*expr) {
 	e.op = functionCallOp
