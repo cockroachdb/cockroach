@@ -1044,7 +1044,6 @@ func TestClusterAPI(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "reportingOn", func(t *testing.T, reportingOn bool) {
 		testutils.RunTrueAndFalse(t, "enterpriseOn", func(t *testing.T, enterpriseOn bool) {
 			settings := &s.ClusterSettings().SV
-			log.DiagnosticsReportingEnabled.Override(settings, reportingOn)
 
 			// Override server license check.
 			if enterpriseOn {
@@ -1060,6 +1059,10 @@ func TestClusterAPI(t *testing.T) {
 			// We need to retry, because the cluster ID isn't set until after
 			// bootstrapping.
 			testutils.SucceedsSoon(t, func() error {
+				// In particular, we need to repeatedly set this value, as there is
+				// a SQL migration that sets it to true initially.
+				log.DiagnosticsReportingEnabled.Override(settings, reportingOn)
+
 				var resp serverpb.ClusterResponse
 				if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
 					return err
