@@ -907,6 +907,20 @@ func (g *Gossip) GetInfoStatus() InfoStatus {
 	return is
 }
 
+// IterateInfos visits all infos matching the given prefix.
+func (g *Gossip) IterateInfos(prefix string, visit func(k string, info Info) error) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for k, v := range g.mu.is.Infos {
+		if strings.HasPrefix(k, prefix+separator) {
+			if err := visit(k, *(protoutil.Clone(v).(*Info))); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // Callback is a callback method to be invoked on gossip update
 // of info denoted by key.
 type Callback func(string, roachpb.Value)
