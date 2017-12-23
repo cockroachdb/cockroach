@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -88,6 +89,7 @@ type SchemaChanger struct {
 	rangeDescriptorCache *kv.RangeDescriptorCache
 	leaseHolderCache     *kv.LeaseHolderCache
 	clock                *hlc.Clock
+	settings             *cluster.Settings
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -106,6 +108,7 @@ func NewSchemaChangerForTesting(
 		db:          db,
 		leaseMgr:    leaseMgr,
 		jobRegistry: jobRegistry,
+		settings:    cluster.MakeTestingClusterSettings(),
 	}
 }
 
@@ -945,6 +948,7 @@ type SchemaChangeManager struct {
 	distSQLPlanner *DistSQLPlanner
 	clock          *hlc.Clock
 	jobRegistry    *jobs.Registry
+	settings       *cluster.Settings
 	// Caches updated by DistSQL.
 	rangeDescriptorCache *kv.RangeDescriptorCache
 	leaseHolderCache     *kv.LeaseHolderCache
@@ -964,6 +968,7 @@ func NewSchemaChangeManager(
 	clock *hlc.Clock,
 	jobRegistry *jobs.Registry,
 	dsp *DistSQLPlanner,
+	settings *cluster.Settings,
 	rangeDescriptorCache *kv.RangeDescriptorCache,
 	leaseHolderCache *kv.LeaseHolderCache,
 ) *SchemaChangeManager {
@@ -977,6 +982,7 @@ func NewSchemaChangeManager(
 		distSQLPlanner:       dsp,
 		jobRegistry:          jobRegistry,
 		clock:                clock,
+		settings:             settings,
 		rangeDescriptorCache: rangeDescriptorCache,
 		leaseHolderCache:     leaseHolderCache,
 	}
@@ -1031,6 +1037,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					leaseHolderCache:     s.leaseHolderCache,
 					rangeDescriptorCache: s.rangeDescriptorCache,
 					clock:                s.clock,
+					settings:             s.settings,
 				}
 				// Keep track of existing schema changers.
 				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))

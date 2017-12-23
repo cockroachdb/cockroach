@@ -1140,6 +1140,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.clock,
 		s.jobRegistry,
 		distSQLPlanner,
+		s.st,
 		s.distSender.RangeDescriptorCache(),
 		s.distSender.LeaseHolderCache(),
 	).Start(s.stopper)
