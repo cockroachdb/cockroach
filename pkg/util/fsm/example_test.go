@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 
 	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
 )
@@ -40,114 +41,114 @@ func (stateRestartWait) State() {}
 
 /// Events.
 
-type noTopLevelTransitionEvent struct {
+type eventNoTopLevelTransition struct {
 	RetryIntent Bool
 }
-type txnStartEvent struct{}
-type txnFinishEvent struct{}
-type txnRestartEvent struct{}
-type nonRetriableErrEvent struct {
+type eventTxnStart struct{}
+type eventTxnFinish struct{}
+type eventTxnRestart struct{}
+type eventNonRetriableErr struct {
 	IsCommit Bool
 }
-type retriableErrEvent struct {
+type eventRetriableErr struct {
 	CanAutoRetry Bool
 	IsCommit     Bool
 }
 
-func (noTopLevelTransitionEvent) Event() {}
-func (txnStartEvent) Event()             {}
-func (txnFinishEvent) Event()            {}
-func (txnRestartEvent) Event()           {}
-func (nonRetriableErrEvent) Event()      {}
-func (retriableErrEvent) Event()         {}
+func (eventNoTopLevelTransition) Event() {}
+func (eventTxnStart) Event()             {}
+func (eventTxnFinish) Event()            {}
+func (eventTxnRestart) Event()           {}
+func (eventNonRetriableErr) Event()      {}
+func (eventRetriableErr) Event()         {}
 
 /// Transitions.
 
 var txnStateTransitions = Compile(Pattern{
 	stateNoTxn{}: {
-		noTopLevelTransitionEvent{False}: {
+		eventNoTopLevelTransition{False}: {
 			Next:   stateNoTxn{},
 			Action: writeAction("Identity"),
 		},
-		txnStartEvent{}: {
+		eventTxnStart{}: {
 			Next:   stateOpen{False},
 			Action: writeAction("Open..."),
 		},
 	},
 	stateOpen{Var("x")}: {
-		noTopLevelTransitionEvent{False}: {
+		eventNoTopLevelTransition{False}: {
 			Next:   stateOpen{Var("x")},
 			Action: writeAction("Identity"),
 		},
-		txnFinishEvent{}: {
+		eventTxnFinish{}: {
 			Next:   stateNoTxn{},
 			Action: writeAction("Finish..."),
 		},
-		nonRetriableErrEvent{True}: {
+		eventNonRetriableErr{True}: {
 			Next:   stateNoTxn{},
 			Action: writeAction("Error"),
 		},
-		retriableErrEvent{True, Any}: {
+		eventRetriableErr{True, Any}: {
 			Next:   stateOpen{Var("x")},
 			Action: writeAction("Transition 6"),
 		},
-		nonRetriableErrEvent{False}: {
+		eventNonRetriableErr{False}: {
 			Next:   stateAborted{Var("x")},
 			Action: writeAction("Abort"),
 		},
 	},
 	stateOpen{False}: {
-		noTopLevelTransitionEvent{True}: {
+		eventNoTopLevelTransition{True}: {
 			Next:   stateOpen{True},
 			Action: writeAction("Make Open"),
 		},
-		retriableErrEvent{False, Any}: {
+		eventRetriableErr{False, Any}: {
 			Next:   stateAborted{False},
 			Action: writeAction("Abort"),
 		},
 	},
 	stateOpen{True}: {
-		retriableErrEvent{False, False}: {
+		eventRetriableErr{False, False}: {
 			Next:   stateRestartWait{},
 			Action: writeAction("Wait for restart"),
 		},
-		retriableErrEvent{False, True}: {
+		eventRetriableErr{False, True}: {
 			Next:   stateNoTxn{},
 			Action: writeAction("No more"),
 		},
 	},
 	stateAborted{Var("x")}: {
-		noTopLevelTransitionEvent{False}: {
+		eventNoTopLevelTransition{False}: {
 			Next:   stateAborted{Var("x")},
 			Action: writeAction("Identity"),
 		},
-		txnFinishEvent{}: {
+		eventTxnFinish{}: {
 			Next:   stateNoTxn{},
 			Action: writeAction("Abort finished"),
 		},
-		txnStartEvent{}: {
+		eventTxnStart{}: {
 			Next:   stateOpen{Var("x")},
 			Action: writeAction("Open from abort"),
 		},
-		nonRetriableErrEvent{Any}: {
+		eventNonRetriableErr{Any}: {
 			Next:   stateAborted{Var("x")},
 			Action: writeAction("Abort"),
 		},
 	},
 	stateRestartWait{}: {
-		noTopLevelTransitionEvent{False}: {
+		eventNoTopLevelTransition{False}: {
 			Next:   stateRestartWait{},
 			Action: writeAction("Identity"),
 		},
-		txnFinishEvent{}: {
+		eventTxnFinish{}: {
 			Next:   stateNoTxn{},
 			Action: writeAction("No more"),
 		},
-		txnRestartEvent{}: {
+		eventTxnRestart{}: {
 			Next:   stateOpen{True},
 			Action: writeAction("Restarting"),
 		},
-		nonRetriableErrEvent{Any}: {
+		eventNonRetriableErr{Any}: {
 			Next:   stateAborted{True},
 			Action: writeAction("Abort"),
 		},
@@ -175,11 +176,11 @@ func ExampleMachine() {
 
 	var e executor
 	e.m = MakeMachine(txnStateTransitions, stateNoTxn{}, &e)
-	e.m.Apply(ctx, txnStartEvent{})
-	e.m.Apply(ctx, noTopLevelTransitionEvent{True})
-	e.m.Apply(ctx, retriableErrEvent{False, False})
-	e.m.Apply(ctx, txnRestartEvent{})
-	e.m.Apply(ctx, txnFinishEvent{})
+	e.m.Apply(ctx, eventTxnStart{})
+	e.m.Apply(ctx, eventNoTopLevelTransition{True})
+	e.m.Apply(ctx, eventRetriableErr{False, False})
+	e.m.Apply(ctx, eventTxnRestart{})
+	e.m.Apply(ctx, eventTxnFinish{})
 	fmt.Print(e.log.String())
 
 	// Output:
@@ -190,92 +191,141 @@ func ExampleMachine() {
 	// Finish...
 }
 
-func ExampleReport() {
-	txnStateTransitions.PrintReport()
+func ExampleTransitions_WriteReport() {
+	txnStateTransitions.WriteReport(os.Stdout)
 
 	// Output:
-	// fsm_test.stateAborted{RetryIntent:false}
+	// Aborted{RetryIntent:false}
 	// 	handled events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
-	// 		fsm_test.txnFinishEvent{}
-	// 		fsm_test.txnStartEvent{}
+	// 		NoTopLevelTransition{RetryIntent:false}
+	// 		NonRetriableErr{IsCommit:false}
+	// 		NonRetriableErr{IsCommit:true}
+	// 		TxnFinish{}
+	// 		TxnStart{}
 	// 	missing events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
-	// 		fsm_test.txnRestartEvent{}
-	// fsm_test.stateAborted{RetryIntent:true}
+	// 		NoTopLevelTransition{RetryIntent:true}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+	// 		TxnRestart{}
+	// Aborted{RetryIntent:true}
 	// 	handled events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
-	// 		fsm_test.txnFinishEvent{}
-	// 		fsm_test.txnStartEvent{}
+	// 		NoTopLevelTransition{RetryIntent:false}
+	// 		NonRetriableErr{IsCommit:false}
+	// 		NonRetriableErr{IsCommit:true}
+	// 		TxnFinish{}
+	// 		TxnStart{}
 	// 	missing events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
-	// 		fsm_test.txnRestartEvent{}
-	// fsm_test.stateNoTxn{}
+	// 		NoTopLevelTransition{RetryIntent:true}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+	// 		TxnRestart{}
+	// NoTxn{}
 	// 	handled events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
-	// 		fsm_test.txnStartEvent{}
+	// 		NoTopLevelTransition{RetryIntent:false}
+	// 		TxnStart{}
 	// 	missing events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
-	// 		fsm_test.txnFinishEvent{}
-	// 		fsm_test.txnRestartEvent{}
-	// fsm_test.stateOpen{RetryIntent:false}
+	// 		NoTopLevelTransition{RetryIntent:true}
+	// 		NonRetriableErr{IsCommit:false}
+	// 		NonRetriableErr{IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+	// 		TxnFinish{}
+	// 		TxnRestart{}
+	// Open{RetryIntent:false}
 	// 	handled events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
-	// 		fsm_test.txnFinishEvent{}
+	// 		NoTopLevelTransition{RetryIntent:false}
+	// 		NoTopLevelTransition{RetryIntent:true}
+	// 		NonRetriableErr{IsCommit:false}
+	// 		NonRetriableErr{IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+	// 		TxnFinish{}
 	// 	missing events:
-	// 		fsm_test.txnRestartEvent{}
-	// 		fsm_test.txnStartEvent{}
-	// fsm_test.stateOpen{RetryIntent:true}
+	// 		TxnRestart{}
+	// 		TxnStart{}
+	// Open{RetryIntent:true}
 	// 	handled events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
-	// 		fsm_test.txnFinishEvent{}
+	// 		NoTopLevelTransition{RetryIntent:false}
+	// 		NonRetriableErr{IsCommit:false}
+	// 		NonRetriableErr{IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+	// 		TxnFinish{}
 	// 	missing events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
-	// 		fsm_test.txnRestartEvent{}
-	// 		fsm_test.txnStartEvent{}
-	// fsm_test.stateRestartWait{}
+	// 		NoTopLevelTransition{RetryIntent:true}
+	// 		TxnRestart{}
+	// 		TxnStart{}
+	// RestartWait{}
 	// 	handled events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:false}
-	// 		fsm_test.nonRetriableErrEvent{IsCommit:true}
-	// 		fsm_test.txnFinishEvent{}
-	// 		fsm_test.txnRestartEvent{}
+	// 		NoTopLevelTransition{RetryIntent:false}
+	// 		NonRetriableErr{IsCommit:false}
+	// 		NonRetriableErr{IsCommit:true}
+	// 		TxnFinish{}
+	// 		TxnRestart{}
 	// 	missing events:
-	// 		fsm_test.noTopLevelTransitionEvent{RetryIntent:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:false, IsCommit:true}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:false}
-	// 		fsm_test.retriableErrEvent{CanAutoRetry:true, IsCommit:true}
-	// 		fsm_test.txnStartEvent{}
+	// 		NoTopLevelTransition{RetryIntent:true}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:false, IsCommit:true}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:false}
+	// 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+	// 		TxnStart{}
+}
+
+func ExampleTransitions_WriteDotGraph() {
+	txnStateTransitions.WriteDotGraph(os.Stdout, stateNoTxn{})
+
+	// Output:
+	// digraph finite_state_machine {
+	// 	rankdir=LR;
+	//
+	// 	node [shape = doublecircle]; "NoTxn{}";
+	// 	node [shape = point ]; qi
+	// 	qi -> "NoTxn{}";
+	//
+	// 	node [shape = circle];
+	// 	"Aborted{RetryIntent:false}" -> "Aborted{RetryIntent:false}" [label = "NoTopLevelTransition{RetryIntent:false}"]
+	// 	"Aborted{RetryIntent:false}" -> "Aborted{RetryIntent:false}" [label = "NonRetriableErr{IsCommit:false}"]
+	// 	"Aborted{RetryIntent:false}" -> "Aborted{RetryIntent:false}" [label = "NonRetriableErr{IsCommit:true}"]
+	// 	"Aborted{RetryIntent:false}" -> "NoTxn{}" [label = "TxnFinish{}"]
+	// 	"Aborted{RetryIntent:false}" -> "Open{RetryIntent:false}" [label = "TxnStart{}"]
+	// 	"Aborted{RetryIntent:true}" -> "Aborted{RetryIntent:true}" [label = "NoTopLevelTransition{RetryIntent:false}"]
+	// 	"Aborted{RetryIntent:true}" -> "Aborted{RetryIntent:true}" [label = "NonRetriableErr{IsCommit:false}"]
+	// 	"Aborted{RetryIntent:true}" -> "Aborted{RetryIntent:true}" [label = "NonRetriableErr{IsCommit:true}"]
+	// 	"Aborted{RetryIntent:true}" -> "NoTxn{}" [label = "TxnFinish{}"]
+	// 	"Aborted{RetryIntent:true}" -> "Open{RetryIntent:true}" [label = "TxnStart{}"]
+	// 	"NoTxn{}" -> "NoTxn{}" [label = "NoTopLevelTransition{RetryIntent:false}"]
+	// 	"NoTxn{}" -> "Open{RetryIntent:false}" [label = "TxnStart{}"]
+	// 	"Open{RetryIntent:false}" -> "Open{RetryIntent:false}" [label = "NoTopLevelTransition{RetryIntent:false}"]
+	// 	"Open{RetryIntent:false}" -> "Open{RetryIntent:true}" [label = "NoTopLevelTransition{RetryIntent:true}"]
+	// 	"Open{RetryIntent:false}" -> "Aborted{RetryIntent:false}" [label = "NonRetriableErr{IsCommit:false}"]
+	// 	"Open{RetryIntent:false}" -> "NoTxn{}" [label = "NonRetriableErr{IsCommit:true}"]
+	// 	"Open{RetryIntent:false}" -> "Aborted{RetryIntent:false}" [label = "RetriableErr{CanAutoRetry:false, IsCommit:false}"]
+	// 	"Open{RetryIntent:false}" -> "Aborted{RetryIntent:false}" [label = "RetriableErr{CanAutoRetry:false, IsCommit:true}"]
+	// 	"Open{RetryIntent:false}" -> "Open{RetryIntent:false}" [label = "RetriableErr{CanAutoRetry:true, IsCommit:false}"]
+	// 	"Open{RetryIntent:false}" -> "Open{RetryIntent:false}" [label = "RetriableErr{CanAutoRetry:true, IsCommit:true}"]
+	// 	"Open{RetryIntent:false}" -> "NoTxn{}" [label = "TxnFinish{}"]
+	// 	"Open{RetryIntent:true}" -> "Open{RetryIntent:true}" [label = "NoTopLevelTransition{RetryIntent:false}"]
+	// 	"Open{RetryIntent:true}" -> "Aborted{RetryIntent:true}" [label = "NonRetriableErr{IsCommit:false}"]
+	// 	"Open{RetryIntent:true}" -> "NoTxn{}" [label = "NonRetriableErr{IsCommit:true}"]
+	// 	"Open{RetryIntent:true}" -> "RestartWait{}" [label = "RetriableErr{CanAutoRetry:false, IsCommit:false}"]
+	// 	"Open{RetryIntent:true}" -> "NoTxn{}" [label = "RetriableErr{CanAutoRetry:false, IsCommit:true}"]
+	// 	"Open{RetryIntent:true}" -> "Open{RetryIntent:true}" [label = "RetriableErr{CanAutoRetry:true, IsCommit:false}"]
+	// 	"Open{RetryIntent:true}" -> "Open{RetryIntent:true}" [label = "RetriableErr{CanAutoRetry:true, IsCommit:true}"]
+	// 	"Open{RetryIntent:true}" -> "NoTxn{}" [label = "TxnFinish{}"]
+	// 	"RestartWait{}" -> "RestartWait{}" [label = "NoTopLevelTransition{RetryIntent:false}"]
+	// 	"RestartWait{}" -> "Aborted{RetryIntent:true}" [label = "NonRetriableErr{IsCommit:false}"]
+	// 	"RestartWait{}" -> "Aborted{RetryIntent:true}" [label = "NonRetriableErr{IsCommit:true}"]
+	// 	"RestartWait{}" -> "NoTxn{}" [label = "TxnFinish{}"]
+	// 	"RestartWait{}" -> "Open{RetryIntent:true}" [label = "TxnRestart{}"]
+	// }
 }
