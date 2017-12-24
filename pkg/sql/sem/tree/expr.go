@@ -868,6 +868,14 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 	return node.Right.(TypedExpr)
 }
 
+// NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
+func NewTypedBinaryExpr(op BinaryOperator, left, right TypedExpr, typ types.T) *BinaryExpr {
+	node := &BinaryExpr{Operator: op, Left: left, Right: right}
+	node.typ = typ
+	node.memoizeFn()
+	return node
+}
+
 func (*BinaryExpr) operatorExpr() {}
 
 func (node *BinaryExpr) memoizeFn() {
@@ -949,6 +957,21 @@ func (node *UnaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // TypedInnerExpr returns the UnaryExpr's inner expression as a TypedExpr.
 func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
 	return node.Expr.(TypedExpr)
+}
+
+// NewTypedUnaryExpr returns a new UnaryExpr that is well-typed.
+func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ types.T) *UnaryExpr {
+	node := &UnaryExpr{Operator: op, Expr: expr}
+	node.typ = typ
+	innerType := expr.ResolvedType()
+	for _, o := range UnaryOps[op] {
+		o := o.(UnaryOp)
+		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
+			node.fn = o
+			return node
+		}
+	}
+	panic(fmt.Sprintf("invalid TypedExpr with unary op %d: %s", op, expr))
 }
 
 // FuncExpr represents a function call.
