@@ -337,11 +337,11 @@ func updateStatsOnResolve(
 	}
 
 	if sys {
-		ms.SysBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
+		ms.SysBytes += (metaKeySize + metaValSize) - (origMetaValSize + origMetaKeySize)
 	} else {
 		// At orig.Timestamp, the original meta key disappears.
 		if !meta.Deleted {
-			ms.LiveBytes -= origMetaValSize + origMetaKeySize + orig.KeyBytes + meta.ValBytes
+			ms.LiveBytes -= (origMetaKeySize + origMetaValSize) + (orig.KeyBytes + meta.ValBytes)
 		}
 		ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
 		ms.ValBytes -= origMetaValSize + orig.ValBytes
@@ -359,7 +359,7 @@ func updateStatsOnResolve(
 
 		// At meta.Timestamp, the new meta key appears.
 		if !meta.Deleted {
-			ms.LiveBytes += metaKeySize + metaValSize + meta.KeyBytes + meta.ValBytes
+			ms.LiveBytes += (metaKeySize + metaValSize) + (meta.KeyBytes + meta.ValBytes)
 		}
 		ms.KeyBytes += metaKeySize + meta.KeyBytes
 		ms.ValBytes += metaValSize + meta.ValBytes
