@@ -1,5 +1,9 @@
 # LogicTest: default parallel-stmts distsql
 
+query T
+SELECT * FROM GENERATE_SERIES(NULL::INT, 3)
+----
+
 query I colnames
 SELECT * FROM GENERATE_SERIES(1, 3)
 ----
