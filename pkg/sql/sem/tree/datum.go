@@ -66,6 +66,9 @@ var (
 
 	// DZero is the zero-valued integer Datum.
 	DZero = NewDInt(0)
+
+	// DEmptyTable is the zero-row table Datum.
+	DEmptyTable Datum = &DTable{&emptyValueGenerator{}}
 )
 
 // Datum represents a SQL value.
@@ -2790,6 +2793,30 @@ func (*DTable) Min(_ *EvalContext) (Datum, bool) { return nil, false }
 
 // Size implements the Datum interface.
 func (*DTable) Size() uintptr { return unsafe.Sizeof(DTable{}) }
+
+type emptyValueGenerator struct {
+}
+
+var emptyValueGeneratorType = types.TTable{
+	Cols:   types.TTuple{},
+	Labels: []string{},
+}
+
+func (*emptyValueGenerator) ResolvedType() types.TTable { return emptyValueGeneratorType }
+
+func (*emptyValueGenerator) Close() {}
+
+func (*emptyValueGenerator) Start() error {
+	return nil
+}
+
+func (*emptyValueGenerator) Next() (bool, error) {
+	return false, nil
+}
+
+func (*emptyValueGenerator) Values() Datums {
+	return Datums{}
+}
 
 // DOid is the Postgres OID datum. It can represent either an OID type or any
 // of the reg* types, such as regproc or regclass.

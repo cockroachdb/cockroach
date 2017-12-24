@@ -2995,6 +2995,9 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return nil, err
 		}
 		if arg == DNull && !expr.fn.NullableArgs {
+			if expr.fn.Class == GeneratorClass {
+				return DEmptyTable, nil
+			}
 			return DNull, nil
 		}
 		args.D = append(args.D, arg)

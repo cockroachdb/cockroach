@@ -267,6 +267,10 @@ SELECT to_jsonb((1, 2, 'hello', NULL, NULL))
 ## json_array_elements and jsonb_array_elements
 
 query T
+SELECT json_array_elements(NULL::JSON)
+----
+
+query T
 SELECT json_array_elements('[1, 2, 3]'::JSON)
 ----
 1
@@ -342,6 +346,10 @@ SELECT jsonb_array_elements_text('{"1": 2}'::JSON)
 
 
 ## json_object_keys and jsonb_object_keys
+
+query T
+SELECT json_object_keys(NULL::JSON)
+----
 
 query T
 SELECT json_object_keys('{"1": 2, "3": 4}'::JSON)
