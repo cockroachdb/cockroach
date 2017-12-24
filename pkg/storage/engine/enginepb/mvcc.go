@@ -39,7 +39,7 @@ func (ms MVCCStats) AvgIntentAge(nowNanos int64) float64 {
 	}
 	// Advance age by any elapsed time since last computed. Note that
 	// we operate on a copy.
-	ms.AgeTo(nowNanos)
+	ms.ForceAge(nowNanos)
 	return float64(ms.IntentAge) / float64(ms.IntentCount)
 }
 
@@ -48,7 +48,7 @@ func (ms MVCCStats) AvgIntentAge(nowNanos int64) float64 {
 // nowNanos is ignored if it's a past timestamp as seen by
 // rs.LastUpdateNanos.
 func (ms MVCCStats) GCByteAge(nowNanos int64) int64 {
-	ms.AgeTo(nowNanos) // we operate on a copy
+	ms.ForceAge(nowNanos) // we operate on a copy
 	return ms.GCBytesAge
 }
 

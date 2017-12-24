@@ -207,7 +207,7 @@ func updateStatsForInline(
 func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 	sys := isSysLocal(key)
-	ms.AgeTo(nowNanos)
+	ms.ForceAge(nowNanos)
 	ms.ContainsEstimates = true
 	if sys {
 		ms.SysBytes += valSize
@@ -329,7 +329,7 @@ func updateStatsOnResolve(
 
 	// In this case, we're only removing the contribution from having the
 	// meta key around from orig.Timestamp to meta.Timestamp.
-	ms.AgeTo(orig.Timestamp.WallTime)
+	ms.ForceAge(orig.Timestamp.WallTime)
 	sys := isSysLocal(key)
 
 	if orig.Deleted != meta.Deleted {
@@ -339,7 +339,6 @@ func updateStatsOnResolve(
 
 	if sys {
 		ms.SysBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
-		ms.AgeTo(meta.Timestamp.WallTime)
 	} else {
 		// At orig.Timestamp, the original meta key disappears.
 		if !meta.Deleted {
@@ -351,7 +350,7 @@ func updateStatsOnResolve(
 		ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
 		ms.IntentCount--
 
-		ms.AgeTo(meta.Timestamp.WallTime)
+		ms.ForceAge(meta.Timestamp.WallTime)
 
 		if !commit {
 			// If not committing, the intent reappears.
@@ -391,7 +390,7 @@ func updateStatsOnAbort(
 	//    at which we're aborting:
 	//		[orig.Timestamp.WallTime, txnNanos)
 	if restored != nil {
-		ms.AgeTo(restoredNanos)
+		ms.ForceAge(restoredNanos)
 		if sys {
 			ms.SysBytes += restoredMetaKeySize + restoredMetaValSize
 			ms.SysCount++
@@ -409,7 +408,7 @@ func updateStatsOnAbort(
 		}
 	}
 
-	ms.AgeTo(orig.Timestamp.WallTime)
+	ms.ForceAge(orig.Timestamp.WallTime)
 
 	origTotalBytes := orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
 	if sys {
@@ -427,7 +426,7 @@ func updateStatsOnAbort(
 		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 		ms.IntentCount--
 	}
-	ms.AgeTo(txnNanos)
+	ms.ForceAge(txnNanos)
 
 	return ms
 }
@@ -441,7 +440,7 @@ func updateStatsOnGC(
 	key roachpb.Key, keySize, valSize int64, meta *enginepb.MVCCMetadata, fromNS, toNS int64,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
-	ms.AgeTo(fromNS)
+	ms.ForceAge(fromNS)
 	sys := isSysLocal(key)
 	if sys {
 		ms.SysBytes -= (keySize + valSize)
@@ -457,7 +456,7 @@ func updateStatsOnGC(
 			ms.ValCount--
 		}
 	}
-	ms.AgeTo(toNS)
+	ms.ForceAge(toNS)
 	return ms
 }
 
@@ -2269,7 +2268,7 @@ func MVCCGarbageCollect(
 			if ms != nil {
 				if inlinedValue {
 					updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0)
-					ms.AgeTo(timestamp.WallTime)
+					ms.ForceAge(timestamp.WallTime)
 				} else {
 					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize,
 						meta, meta.Timestamp.WallTime, timestamp.WallTime))
