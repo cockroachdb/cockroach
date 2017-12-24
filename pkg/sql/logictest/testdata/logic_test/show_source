@@ -67,7 +67,6 @@ kv.allocator.range_rebalance_threshold             5E-02          f     minimum 
 kv.allocator.stat_based_rebalancing.enabled        false          b     set to enable rebalancing of range replicas based on write load and disk usage
 kv.allocator.stat_rebalance_threshold              2E-01          f     minimum fraction away from the mean a store's stats (like disk usage or writes per second) can be before it is considered overfull or underfull
 kv.bulk_io_write.max_rate                          8.0 EiB        z     the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops
-kv.gc.batch_size                                   100000         i     maximum number of keys in a batch for MVCC garbage collection
 kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
 kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage
 kv.range_descriptor_cache.size                     1000000        i     maximum number of entries in the range descriptor and leaseholder caches
