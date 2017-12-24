@@ -27,6 +27,51 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+func TestStoreKeyEncodeDecode(t *testing.T) {
+	testCases := []struct {
+		key       roachpb.Key
+		expSuffix roachpb.RKey
+		expDetail roachpb.RKey
+	}{
+		{key: StoreIdentKey(), expSuffix: localStoreIdentSuffix, expDetail: nil},
+		{key: StoreGossipKey(), expSuffix: localStoreGossipSuffix, expDetail: nil},
+		{key: StoreClusterVersionKey(), expSuffix: localStoreClusterVersionSuffix, expDetail: nil},
+		{key: StoreLastUpKey(), expSuffix: localStoreLastUpSuffix, expDetail: nil},
+		{
+			key:       StoreSuggestedCompactionKey(roachpb.Key("a"), roachpb.Key("z")),
+			expSuffix: localStoreSuggestedCompactionSuffix,
+			expDetail: encoding.EncodeBytesAscending(encoding.EncodeBytesAscending(nil, roachpb.Key("a")), roachpb.Key("z")),
+		},
+	}
+	for _, test := range testCases {
+		t.Run("", func(t *testing.T) {
+			if suffix, detail, err := DecodeStoreKey(test.key); err != nil {
+				t.Error(err)
+			} else if !suffix.Equal(test.expSuffix) {
+				t.Errorf("expected %s; got %s", test.expSuffix, suffix)
+			} else if !detail.Equal(test.expDetail) {
+				t.Errorf("expected %s; got %s", test.expDetail, detail)
+			}
+		})
+	}
+}
+
+func TestStoreSuggestedCompactionKeyDecode(t *testing.T) {
+	origStart := roachpb.Key("a")
+	origEnd := roachpb.Key("z")
+	key := StoreSuggestedCompactionKey(origStart, origEnd)
+	start, end, err := DecodeStoreSuggestedCompactionKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !start.Equal(origStart) {
+		t.Errorf("expected %s == %s", start, origStart)
+	}
+	if !end.Equal(origEnd) {
+		t.Errorf("expected %s == %s", end, origEnd)
+	}
+}
+
 // TestLocalKeySorting is a sanity check to make sure that
 // the non-replicated part of a store sorts before the meta.
 func TestKeySorting(t *testing.T) {
