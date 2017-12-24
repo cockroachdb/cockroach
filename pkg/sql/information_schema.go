@@ -109,24 +109,25 @@ CREATE TABLE information_schema.column_privileges (
 	TABLE_NAME STRING NOT NULL DEFAULT '',
 	COLUMN_NAME STRING NOT NULL DEFAULT '',
 	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE,
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			ColumnData := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
 			for _, u := range table.Privileges.Users {
-				for _, p := range privilege.ColumnData {
-					if p.Mask()&u.Privileges != 0 {
+				for _, privilege := range privilege.ColumnData {
+					if privilege.Mask()&u.Privileges != 0 {
 						for _, cd := range table.Columns {
 							if err := addRow(
-								tree.DNull,                  // grantor
-								tree.NewDString(u.User),     // grantee
-								defString,                   // table_catalog
-								tree.NewDString(db.Name),    // table_schema
-								tree.NewDString(table.Name), // table_name
-								tree.NewDString(cd.Name),    // column_name
-								tree.NewDString(p.String()), // privilege_type
-								tree.DNull,                  // is_grantable
+								tree.DNull,                          // grantor
+								tree.NewDString(u.User),             // grantee
+								defString,                           // table_catalog
+								tree.NewDString(db.Name),            // table_schema
+								tree.NewDString(table.Name),         // table_name
+								tree.NewDString(cd.Name),            // column_name
+								tree.NewDString(privilege.String()), // privilege_type
+								tree.DNull,                          // is_grantable
 							); err != nil {
 								return err
 							}

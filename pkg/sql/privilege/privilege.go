@@ -45,7 +45,6 @@ const (
 var (
 	ReadData      = List{GRANT, SELECT}
 	ReadWriteData = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
-	ColumnData    = List{SELECT, INSERT, UPDATE} // privileges for column level granularity
 )
 
 // Mask returns the bitmask for a given privilege.
