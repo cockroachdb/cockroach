@@ -296,7 +296,7 @@ func makeGCQueueScoreImpl(
 	// Treat a zero TTL as a one-second TTL, which avoids a priority of infinity
 	// and otherwise behaves indistinguishable given that we can't possibly hope
 	// to GC values faster than that.
-	if r.TTL == 0 {
+	if r.TTL <= time.Second {
 		r.TTL = time.Second
 	}
 
