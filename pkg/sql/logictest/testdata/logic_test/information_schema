@@ -107,6 +107,7 @@ test
 query T
 SHOW TABLES FROM information_schema
 ----
+column_privileges
 columns
 key_column_usage
 schema_privileges
@@ -230,6 +231,7 @@ crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       tables
 crdb_internal       zones
+information_schema  column_privileges
 information_schema  columns
 information_schema  key_column_usage
 information_schema  schema_privileges
@@ -395,6 +397,7 @@ def            crdb_internal       table_columns              SYSTEM VIEW  1
 def            crdb_internal       table_indexes              SYSTEM VIEW  1
 def            crdb_internal       tables                     SYSTEM VIEW  1
 def            crdb_internal       zones                      SYSTEM VIEW  1
+def            information_schema  column_privileges          SYSTEM VIEW  1
 def            information_schema  columns                    SYSTEM VIEW  1
 def            information_schema  key_column_usage           SYSTEM VIEW  1
 def            information_schema  schema_privileges          SYSTEM VIEW  1

@@ -109,7 +109,7 @@ CREATE TABLE information_schema.column_privileges (
 	TABLE_NAME STRING NOT NULL DEFAULT '',
 	COLUMN_NAME STRING NOT NULL DEFAULT '',
 	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE,
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
