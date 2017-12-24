@@ -41,6 +41,11 @@ package opt
 //
 //    Normalizes the expression. If present, must follow build-scalar.
 //
+//  - legacy-expr
+//
+//    Converts the scalar expression to a TypedExpr and prints it.
+//    If present, must follow build-scalar or legacy-normalize.
+//
 //  - index-constraints
 //
 //    Creates index constraints on the assumption that the index is formed by
@@ -285,6 +290,7 @@ func TestOpt(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
 				var e *expr
 				var varTypes []types.T
+				var iVarHelper tree.IndexedVarHelper
 				var colInfos []IndexColumnInfo
 				var typedExpr tree.TypedExpr
 
@@ -305,6 +311,10 @@ func TestOpt(t *testing.T) {
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
+
+						// Set up the indexed var helper.
+						iv := &indexedVars{types: varTypes}
+						iVarHelper = tree.MakeIndexedVarHelper(iv, len(iv.types))
 					case "index":
 						if varTypes == nil {
 							d.fatalf(t, "vars must precede index")
@@ -329,7 +339,7 @@ func TestOpt(t *testing.T) {
 
 				evalCtx := tree.MakeTestingEvalContext()
 				var err error
-				typedExpr, err = parseScalarExpr(d.sql, varTypes)
+				typedExpr, err = parseScalarExpr(d.sql, &iVarHelper)
 				if err != nil {
 					d.fatalf(t, "%v", err)
 				}
@@ -345,6 +355,11 @@ func TestOpt(t *testing.T) {
 						buildScalarFn()
 
 					case "normalize":
+						normalizeExpr(e)
+
+					case "legacy-expr":
+						expr := scalarToTypedExpr(e, &iVarHelper)
+						return fmt.Sprintf("%s%s\n", e.String(), expr)
 						normalizeExpr(e)
 
 					case "index-constraints":
@@ -454,21 +469,17 @@ func (iv *indexedVars) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (*indexedVars) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic("unimplemented")
+	return nil
 }
 
-func parseScalarExpr(sql string, varTypes []types.T) (tree.TypedExpr, error) {
+func parseScalarExpr(sql string, ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		return nil, err
 	}
 
-	// Set up an indexed var helper so we can type-check the expression.
-	iv := &indexedVars{types: varTypes}
-
 	sema := tree.MakeSemaContext(false /* privileged */)
-	iVarHelper := tree.MakeIndexedVarHelper(iv, len(iv.types))
-	sema.IVarHelper = &iVarHelper
+	sema.IVarHelper = ivh
 
 	return expr.TypeCheck(&sema, types.Any)
 }
