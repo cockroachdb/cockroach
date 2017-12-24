@@ -47,6 +47,32 @@ var comparisonOpMap = [...]operator{
 	tree.All:               allOp,
 }
 
+var comparisonOpReverseMap = map[operator]tree.ComparisonOperator{
+	eqOp:           tree.EQ,
+	ltOp:           tree.LT,
+	gtOp:           tree.GT,
+	leOp:           tree.LE,
+	geOp:           tree.GE,
+	neOp:           tree.NE,
+	inOp:           tree.In,
+	notInOp:        tree.NotIn,
+	likeOp:         tree.Like,
+	notLikeOp:      tree.NotLike,
+	iLikeOp:        tree.ILike,
+	notILikeOp:     tree.NotILike,
+	similarToOp:    tree.SimilarTo,
+	notSimilarToOp: tree.NotSimilarTo,
+	regMatchOp:     tree.RegMatch,
+	notRegMatchOp:  tree.NotRegMatch,
+	regIMatchOp:    tree.RegIMatch,
+	notRegIMatchOp: tree.NotRegIMatch,
+	isOp:           tree.IsNotDistinctFrom,
+	isNotOp:        tree.IsDistinctFrom,
+	anyOp:          tree.Any,
+	someOp:         tree.Some,
+	allOp:          tree.All,
+}
+
 // Map from tree.BinaryOperator to operator.
 var binaryOpMap = [...]operator{
 	tree.Bitand:   bitandOp,
@@ -64,11 +90,34 @@ var binaryOpMap = [...]operator{
 	tree.RShift:   rShiftOp,
 }
 
+var binaryOpReverseMap = map[operator]tree.BinaryOperator{
+	bitandOp:   tree.Bitand,
+	bitorOp:    tree.Bitor,
+	bitxorOp:   tree.Bitxor,
+	plusOp:     tree.Plus,
+	minusOp:    tree.Minus,
+	multOp:     tree.Mult,
+	divOp:      tree.Div,
+	floorDivOp: tree.FloorDiv,
+	modOp:      tree.Mod,
+	powOp:      tree.Pow,
+	concatOp:   tree.Concat,
+	lShiftOp:   tree.LShift,
+	rShiftOp:   tree.RShift,
+}
+
 // Map from tree.UnaryOperator to operator.
 var unaryOpMap = [...]operator{
 	tree.UnaryPlus:       unaryPlusOp,
 	tree.UnaryMinus:      unaryMinusOp,
 	tree.UnaryComplement: unaryComplementOp,
+}
+
+// Map from tree.UnaryOperator to operator.
+var unaryOpReverseMap = map[operator]tree.UnaryOperator{
+	unaryPlusOp:       tree.UnaryPlus,
+	unaryMinusOp:      tree.UnaryMinus,
+	unaryComplementOp: tree.UnaryComplement,
 }
 
 // We allocate *scalarProps and *expr in chunks of these sizes.
@@ -172,4 +221,60 @@ func buildScalar(buildCtx *buildContext, pexpr tree.TypedExpr) *expr {
 		panic(fmt.Sprintf("node %T not supported", t))
 	}
 	return e
+}
+
+func scalarToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	children := make([]tree.TypedExpr, len(e.children))
+	for i, c := range e.children {
+		children[i] = scalarToTypedExpr(c, ivh)
+	}
+	switch e.op {
+	case constOp:
+		return e.private.(tree.Datum)
+
+	case variableOp:
+		return ivh.IndexedVar(e.private.(int))
+
+	case andOp:
+		n := children[0]
+		for _, m := range children[1:] {
+			n = tree.NewTypedAndExpr(n, m)
+		}
+		return n
+
+	case notOp:
+		return tree.NewTypedNotExpr(children[0])
+
+	case orOp:
+		n := children[0]
+		for _, m := range children[1:] {
+			n = tree.NewTypedOrExpr(n, m)
+		}
+		return n
+
+	case orderedListOp:
+		if isTupleOfConstants(e) {
+			datums := make(tree.Datums, len(children))
+			for i, c := range children {
+				datums[i] = c.(tree.Datum)
+			}
+			return tree.NewDTuple(datums...)
+		}
+		return tree.NewTypedTuple(children)
+	}
+
+	switch len(children) {
+	case 1:
+		if unaryOp, ok := unaryOpReverseMap[e.op]; ok {
+			return tree.NewTypedUnaryExpr(unaryOp, children[0], e.scalarProps.typ)
+		}
+	case 2:
+		if cmpOp, ok := comparisonOpReverseMap[e.op]; ok {
+			return tree.NewTypedComparisonExpr(cmpOp, children[0], children[1])
+		}
+		if binOp, ok := binaryOpReverseMap[e.op]; ok {
+			return tree.NewTypedBinaryExpr(binOp, children[0], children[1], e.scalarProps.typ)
+		}
+	}
+	panic(fmt.Sprintf("unhandled op %s", e.op))
 }
