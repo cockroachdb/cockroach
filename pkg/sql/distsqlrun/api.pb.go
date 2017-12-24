@@ -61,7 +61,7 @@ import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import time "time"
 
-import context "golang.org/x/net/context"
+import context "context"
 import grpc "google.golang.org/grpc"
 
 import types "github.com/gogo/protobuf/types"

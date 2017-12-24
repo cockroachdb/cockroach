@@ -957,6 +957,8 @@ $(GO_PROTOS_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	$(SED_INPLACE) -E 's!import (fmt|math) "github.com/cockroachdb/cockroach/pkg/(fmt|math)"! !g' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!cockroachdb/cockroach/pkg/(etcd)!coreos/\1!g' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!github.com/cockroachdb/cockroach/pkg/(bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)!\1!g' $(GO_SOURCES)
+	@# TODO(benesch): Remove after https://github.com/grpc/grpc-go/issues/711.
+	$(SED_INPLACE) -E 's!golang.org/x/net/context!context!g' $(GO_SOURCES)
 	gofmt -s -w $(GO_SOURCES)
 	touch $@
 
@@ -964,6 +966,9 @@ $(GW_PROTOS_TARGET): $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) 
 	$(FIND_RELEVANT) -type f -name '*.pb.gw.go' -exec rm {} +
 	build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_SERVER_PROTOS)
 	build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_TS_PROTOS)
+	@# TODO(benesch): Remove after https://github.com/grpc/grpc-go/issues/711.
+	$(SED_INPLACE) -E 's!golang.org/x/net/context!context!g' $(GW_SOURCES)
+	gofmt -s -w $(GW_SOURCES)
 	touch $@
 
 $(CPP_PROTOS_TARGET): $(PROTOC) $(CPP_PROTOS)

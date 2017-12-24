@@ -14,7 +14,7 @@
 
 package tree
 
-import "golang.org/x/net/context"
+import "context"
 
 // AggregateFunc accumulates the result of a function of a Datum.
 type AggregateFunc interface {

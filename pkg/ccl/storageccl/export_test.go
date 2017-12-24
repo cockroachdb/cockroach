@@ -10,12 +10,11 @@ package storageccl
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

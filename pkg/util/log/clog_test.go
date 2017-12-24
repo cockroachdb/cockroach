@@ -20,6 +20,7 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -32,8 +33,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/kr/pretty"
 

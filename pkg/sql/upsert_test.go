@@ -16,10 +16,10 @@ package sql_test
 
 import (
 	"bytes"
+	"context"
 	"sync/atomic"
 	"testing"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

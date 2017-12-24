@@ -15,6 +15,7 @@
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type testTables struct {

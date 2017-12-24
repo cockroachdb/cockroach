@@ -15,14 +15,13 @@
 package stop
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"

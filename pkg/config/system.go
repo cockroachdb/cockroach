@@ -16,10 +16,9 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 

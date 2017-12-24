@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	gosql "database/sql"
@@ -43,7 +44,6 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type ctxI interface {

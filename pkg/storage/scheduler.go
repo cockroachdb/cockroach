@@ -16,10 +16,9 @@ package storage
 
 import (
 	"container/list"
+	"context"
 	"fmt"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

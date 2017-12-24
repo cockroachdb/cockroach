@@ -9,12 +9,11 @@
 package cliccl
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"

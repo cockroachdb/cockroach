@@ -10,12 +10,11 @@ package sampledataccl
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"

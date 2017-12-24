@@ -17,9 +17,8 @@
 package status
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )

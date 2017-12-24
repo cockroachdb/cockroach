@@ -17,6 +17,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"sort"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/rubyist/circuitbreaker"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"

@@ -15,12 +15,12 @@
 package acceptance
 
 import (
+	"context"
 	gosql "database/sql"
 	"encoding/json"
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

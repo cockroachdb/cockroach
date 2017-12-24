@@ -16,6 +16,7 @@ package sqlccl
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
@@ -35,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"

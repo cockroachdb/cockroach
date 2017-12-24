@@ -11,13 +11,13 @@ package sqlccl
 import (
 	"bufio"
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"io"
 	"math/rand"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"

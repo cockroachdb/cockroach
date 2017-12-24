@@ -16,6 +16,7 @@ package kv
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -27,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

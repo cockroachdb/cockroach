@@ -15,11 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	math "math"
 	"math/rand"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"

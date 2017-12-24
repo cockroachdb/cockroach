@@ -15,9 +15,8 @@
 package contextutil
 
 import (
+	"context"
 	"runtime/debug"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )

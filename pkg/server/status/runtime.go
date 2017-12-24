@@ -15,13 +15,13 @@
 package status
 
 import (
+	"context"
 	"os"
 	"runtime"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"

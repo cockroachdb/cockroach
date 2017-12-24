@@ -16,6 +16,7 @@ package gossip
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

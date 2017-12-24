@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // planner is the centerpiece of SQL statement execution combining session

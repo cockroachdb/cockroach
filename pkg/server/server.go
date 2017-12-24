@@ -16,6 +16,7 @@ package server
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -33,8 +34,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-
-	"golang.org/x/net/context"
 
 	"github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"

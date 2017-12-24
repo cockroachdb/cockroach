@@ -16,12 +16,11 @@ package gossip
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"regexp"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 

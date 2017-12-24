@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/text/collate"
 
 	"github.com/cockroachdb/cockroach/pkg/security"

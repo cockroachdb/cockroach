@@ -15,6 +15,7 @@
 package status
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"sort"
@@ -23,8 +24,6 @@ import (
 	"time"
 
 	"github.com/kr/pretty"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

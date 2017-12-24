@@ -16,10 +16,9 @@ package txnwait
 
 import (
 	"bytes"
+	"context"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

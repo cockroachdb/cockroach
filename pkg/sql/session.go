@@ -16,6 +16,7 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"regexp"
@@ -26,7 +27,6 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

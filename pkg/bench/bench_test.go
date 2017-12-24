@@ -16,6 +16,7 @@ package bench
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
@@ -24,8 +25,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"

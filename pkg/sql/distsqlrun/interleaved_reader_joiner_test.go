@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"golang.org/x/net/context"
 )
 
 // min and max are inclusive bounds on the root table's ID.

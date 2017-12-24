@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -24,8 +25,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"

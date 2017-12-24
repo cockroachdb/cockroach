@@ -15,13 +15,13 @@
 package storage_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"encoding/json"
 	"net/url"
 	"testing"
 
 	_ "github.com/lib/pq"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

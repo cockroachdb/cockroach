@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql/driver"
 	"math"
 	"net/url"
@@ -22,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/lib/pq"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"

@@ -15,10 +15,10 @@
 package kv
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 

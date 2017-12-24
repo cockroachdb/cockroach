@@ -15,6 +15,7 @@
 package storage_test
 
 import (
+	"context"
 	"math/rand"
 	"net"
 	"testing"
@@ -23,7 +24,6 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

@@ -15,10 +15,10 @@
 package log
 
 import (
+	"context"
 	"testing"
 
 	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )

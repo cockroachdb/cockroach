@@ -15,6 +15,7 @@
 package tracing
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"regexp"
@@ -25,7 +26,6 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"

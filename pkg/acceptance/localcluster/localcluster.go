@@ -16,12 +16,11 @@ package localcluster
 
 import (
 	"bytes"
+	"context"
 	"net"
 	"os/exec"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/pkg/errors"

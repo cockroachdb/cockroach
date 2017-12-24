@@ -9,6 +9,7 @@
 package cliccl
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"golang.org/x/net/context"
 )
 
 // cliTest is a stripped-down version of package cli's cliTest. It's currently

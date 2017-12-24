@@ -16,6 +16,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -29,7 +30,6 @@ import (
 	version "github.com/hashicorp/go-version"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"

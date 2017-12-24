@@ -15,6 +15,7 @@
 package gossip_test
 
 import (
+	"context"
 	"reflect"
 	"sort"
 	"strings"
@@ -22,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"

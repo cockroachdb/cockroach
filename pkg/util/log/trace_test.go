@@ -15,11 +15,11 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"testing"
 
-	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	opentracing "github.com/opentracing/opentracing-go"

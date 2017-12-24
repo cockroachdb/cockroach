@@ -15,12 +15,12 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
 
 	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"

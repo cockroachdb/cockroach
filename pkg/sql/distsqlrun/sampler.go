@@ -15,9 +15,8 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/pkg/errors"

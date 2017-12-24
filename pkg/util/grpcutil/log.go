@@ -16,13 +16,13 @@
 package grpcutil
 
 import (
+	"context"
 	"math"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/petermattis/goid"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/grpclog"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"

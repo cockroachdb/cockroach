@@ -15,6 +15,7 @@
 package acceptance
 
 import (
+	"context"
 	gosql "database/sql"
 	"os"
 	"os/signal"
@@ -24,7 +25,6 @@ import (
 	"github.com/docker/docker/pkg/namesgenerator"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"

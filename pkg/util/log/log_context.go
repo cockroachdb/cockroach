@@ -15,9 +15,9 @@
 package log
 
 import (
-	otlog "github.com/opentracing/opentracing-go/log"
+	"context"
 
-	"golang.org/x/net/context"
+	otlog "github.com/opentracing/opentracing-go/log"
 )
 
 // logTag contains a tag name and value.

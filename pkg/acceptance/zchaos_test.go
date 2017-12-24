@@ -16,6 +16,7 @@ package acceptance
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"flag"
 	"fmt"
@@ -25,8 +26,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"

@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // algebraicSetOp is a processor for the algebraic set operations,
