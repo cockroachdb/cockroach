@@ -1091,3 +1091,58 @@ SELECT * FROM information_schema.sequences
 
 statement ok
 DROP DATABASE other_db CASCADE
+
+# test infomration_schama.colunm_privileges
+query TTBTT colnames
+SHOW COLUMNS FROM information_schema.column_privileges
+----
+Field           Type    Null   Default      Indices  
+grantor         STRING  false  '':::STRING  {}       
+grantee         STRING  false  '':::STRING  {}       
+table_catalog   STRING  false  '':::STRING  {}       
+table_schema    STRING  false  '':::STRING  {}       
+table_name      STRING  false  '':::STRING  {}       
+column_name     STRING  false  '':::STRING  {}       
+privilege_type  STRING  false  '':::STRING  {}       
+is_grantable    BOOL    false  false        {}       
+
+
+query TTTTTTTT
+SELECT * FROM information_schema.column_privileges WHERE table_name = 'eventlog'
+----
+NULL  admin  def  system  eventlog  timestamp    SELECT  NULL  
+NULL  admin  def  system  eventlog  eventType    SELECT  NULL  
+NULL  admin  def  system  eventlog  targetID     SELECT  NULL  
+NULL  admin  def  system  eventlog  reportingID  SELECT  NULL  
+NULL  admin  def  system  eventlog  info         SELECT  NULL  
+NULL  admin  def  system  eventlog  uniqueID     SELECT  NULL  
+NULL  admin  def  system  eventlog  timestamp    INSERT  NULL  
+NULL  admin  def  system  eventlog  eventType    INSERT  NULL  
+NULL  admin  def  system  eventlog  targetID     INSERT  NULL  
+NULL  admin  def  system  eventlog  reportingID  INSERT  NULL  
+NULL  admin  def  system  eventlog  info         INSERT  NULL  
+NULL  admin  def  system  eventlog  uniqueID     INSERT  NULL  
+NULL  admin  def  system  eventlog  timestamp    UPDATE  NULL  
+NULL  admin  def  system  eventlog  eventType    UPDATE  NULL  
+NULL  admin  def  system  eventlog  targetID     UPDATE  NULL  
+NULL  admin  def  system  eventlog  reportingID  UPDATE  NULL  
+NULL  admin  def  system  eventlog  info         UPDATE  NULL  
+NULL  admin  def  system  eventlog  uniqueID     UPDATE  NULL  
+NULL  root   def  system  eventlog  timestamp    SELECT  NULL  
+NULL  root   def  system  eventlog  eventType    SELECT  NULL  
+NULL  root   def  system  eventlog  targetID     SELECT  NULL  
+NULL  root   def  system  eventlog  reportingID  SELECT  NULL  
+NULL  root   def  system  eventlog  info         SELECT  NULL  
+NULL  root   def  system  eventlog  uniqueID     SELECT  NULL  
+NULL  root   def  system  eventlog  timestamp    INSERT  NULL  
+NULL  root   def  system  eventlog  eventType    INSERT  NULL  
+NULL  root   def  system  eventlog  targetID     INSERT  NULL  
+NULL  root   def  system  eventlog  reportingID  INSERT  NULL  
+NULL  root   def  system  eventlog  info         INSERT  NULL  
+NULL  root   def  system  eventlog  uniqueID     INSERT  NULL  
+NULL  root   def  system  eventlog  timestamp    UPDATE  NULL  
+NULL  root   def  system  eventlog  eventType    UPDATE  NULL  
+NULL  root   def  system  eventlog  targetID     UPDATE  NULL  
+NULL  root   def  system  eventlog  reportingID  UPDATE  NULL  
+NULL  root   def  system  eventlog  info         UPDATE  NULL  
+NULL  root   def  system  eventlog  uniqueID     UPDATE  NULL  

@@ -114,9 +114,9 @@ CREATE TABLE information_schema.column_privileges (
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-			ColumnData := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
+			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
 			for _, u := range table.Privileges.Users {
-				for _, privilege := range privilege.ColumnData {
+				for _, privilege := range columndata {
 					if privilege.Mask()&u.Privileges != 0 {
 						for _, cd := range table.Columns {
 							if err := addRow(
