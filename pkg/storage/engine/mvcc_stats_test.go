@@ -526,7 +526,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 
 	// Delete the value using a transaction.
-	// TODO(tschottdorf): this case is interesting: we write at ts2, bt the timestamp is ts1.
+	// TODO(tschottdorf): this case is interesting: we write at ts2, but the timestamp is ts1.
 	// Need to check whether that's reasonable, and if so, test it more.
 	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: hlc.Timestamp{WallTime: 1 * 1E9}}}
 	ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
