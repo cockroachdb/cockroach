@@ -320,10 +320,10 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 
 	// Replace the intent with an identical one, but we write it at 1s-1 now. If
 	// you're confused, don't worry. There are two timestamps here: the one in
-	// the txn (which is, perhaps surprisingly, only used to read the existing
-	// values), and the timestamp passed directly to MVCCPut (which is where the
-	// intent will actually end up being written at, and which usually
-	// corresponds to txn.OrigTimestamp).
+	// the txn (which is, perhaps surprisingly, only really used when
+	// committing/aborting intents), and the timestamp passed directly to
+	// MVCCPut (which is where the intent will actually end up being written at,
+	// and which usually corresponds to txn.OrigTimestamp).
 	txn.Sequence++
 
 	// Annoyingly, the new meta value is actually a little larger thanks to the
