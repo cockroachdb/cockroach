@@ -132,6 +132,30 @@ func TestZoneConfigSubzones(t *testing.T) {
 	if subzone := zone.GetSubzone(1, "a"); !subzoneA.Equal(subzone) {
 		t.Errorf("expected non-deleted subzone to equal %+v, but got %+v", &subzoneA, subzone)
 	}
+
+	zone.SetSubzone(config.Subzone{IndexID: 2, Config: config.DefaultZoneConfig()})
+	zone.SetSubzone(config.Subzone{IndexID: 2, PartitionName: "a", Config: config.DefaultZoneConfig()})
+	zone.SetSubzone(subzoneB) // interleave a subzone from a different index
+	zone.SetSubzone(config.Subzone{IndexID: 2, PartitionName: "b", Config: config.DefaultZoneConfig()})
+	if e, a := 5, len(zone.Subzones); e != a {
+		t.Fatalf("expected %d subzones, but found %d", e, a)
+	}
+	if err := zone.Validate(); err != nil {
+		t.Errorf("expected zone validation to succeed, but got %s", err)
+	}
+
+	zone.DeleteIndexSubzones(2)
+	if e, a := 2, len(zone.Subzones); e != a {
+		t.Fatalf("expected %d subzones, but found %d", e, a)
+	}
+	for _, subzone := range zone.Subzones {
+		if subzone.IndexID == 2 {
+			t.Fatalf("expected no subzones to refer to index 2, but found %+v", subzone)
+		}
+	}
+	if err := zone.Validate(); err != nil {
+		t.Errorf("expected zone validation to succeed, but got %s", err)
+	}
 }
 
 // TestZoneConfigMarshalYAML makes sure that ZoneConfig is correctly marshaled
