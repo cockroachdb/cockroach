@@ -2219,15 +2219,12 @@ func MVCCResolveWriteIntentRangeUsingIter(
 // keys slice. The engine iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration. The
 // timestamp parameter is used to compute the intent age on GC.
-// Garbage collection stops after clearing maxClears values
-// (to limit the size of the WriteBatch produced).
 func MVCCGarbageCollect(
 	ctx context.Context,
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	keys []roachpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
-	maxClears int64,
 ) error {
 	// We're allowed to use a prefix iterator because we always Seek() the
 	// iterator when handling a new user key.
@@ -2236,7 +2233,7 @@ func MVCCGarbageCollect(
 
 	var count int64
 	defer func(begin time.Time) {
-		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d versions",
+		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
 			len(keys), float64(len(keys))*1E9/float64(timeutil.Since(begin)), count)
 	}(timeutil.Now())
 
@@ -2254,6 +2251,13 @@ func MVCCGarbageCollect(
 		inlinedValue := meta.IsInline()
 		implicitMeta := iter.UnsafeKey().IsValue()
 		// First, check whether all values of the key are being deleted.
+		//
+		// Note that we naively can't terminate GC'ing keys loop early if we
+		// enter this branch, as it will update the stats under the provision
+		// that the (implicit or explicit) meta key (and thus all versions) are
+		// being removed. We had this faulty functionality at some point; it
+		// should no more be necessary since the higher levels already make sure
+		// each individual GCRequest does bounded work.
 		if !gcKey.Timestamp.Less(hlc.Timestamp(meta.Timestamp)) {
 			// For version keys, don't allow GC'ing the meta key if it's
 			// not marked deleted. However, for inline values we allow it;
@@ -2279,9 +2283,6 @@ func MVCCGarbageCollect(
 					return err
 				}
 				count++
-				if count >= maxClears {
-					return nil
-				}
 			}
 		}
 
@@ -2310,12 +2311,9 @@ func MVCCGarbageCollect(
 						int64(len(iter.UnsafeValue())), nil, unsafeIterKey.Timestamp.WallTime,
 						timestamp.WallTime))
 				}
+				count++
 				if err := engine.Clear(unsafeIterKey); err != nil {
 					return err
-				}
-				count++
-				if count >= maxClears {
-					return nil
 				}
 			}
 		}

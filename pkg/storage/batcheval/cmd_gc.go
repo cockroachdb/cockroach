@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -30,11 +29,6 @@ import (
 func init() {
 	RegisterCommand(roachpb.GC, declareKeysGC, GC)
 }
-
-var gcBatchSize = settings.RegisterIntSetting("kv.gc.batch_size",
-	"maximum number of keys in a batch for MVCC garbage collection",
-	100000,
-)
 
 func declareKeysGC(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
@@ -90,7 +84,6 @@ func GC(
 	// Garbage collect the specified keys by expiration timestamps.
 	if err := engine.MVCCGarbageCollect(
 		ctx, batch, cArgs.Stats, keys, h.Timestamp,
-		gcBatchSize.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 	); err != nil {
 		return result.Result{}, err
 	}

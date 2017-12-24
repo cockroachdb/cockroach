@@ -147,6 +147,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "upgrade table descs to interleaved format version",
 		workFn: upgradeTableDescsToInterleavedFormatVersion,
 	},
+	{
+		name:   "remove cluster setting `kv.gc.batch_size`",
+		workFn: purgeClusterSettingKVGCBatchSize,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -918,4 +922,9 @@ func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) 
 		}
 	}
 	return nil
+}
+
+func purgeClusterSettingKVGCBatchSize(ctx context.Context, r runner) error {
+	// This cluster setting has been removed.
+	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.gc.batch_size'`)
 }
