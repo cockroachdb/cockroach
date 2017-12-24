@@ -127,7 +127,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			newStats.SysBytes, newStats.SysCount = 0, 0       // ignore these values
 			cArgs.Stats.SysBytes, cArgs.Stats.SysCount = 0, 0 // these too, as GC threshold is updated
 			newStats.Add(*cArgs.Stats)
-			newStats.ForceAge(0) // pin at LastUpdateNanos==0
+			newStats.AgeTo(0) // pin at LastUpdateNanos==0
 			if !newStats.Equal(enginepb.MVCCStats{}) {
 				t.Errorf("expected stats on original writes to be negated on clear range: %+v vs %+v", stats, *cArgs.Stats)
 			}

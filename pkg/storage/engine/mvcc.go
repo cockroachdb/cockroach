@@ -207,7 +207,7 @@ func updateStatsForInline(
 func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 	sys := isSysLocal(key)
-	ms.ForceAge(nowNanos)
+	ms.AgeTo(nowNanos)
 	ms.ContainsEstimates = true
 	if sys {
 		ms.SysBytes += valSize
@@ -241,7 +241,7 @@ func updateStatsOnPut(
 			// Move the (so far empty) stats to the timestamp at which the
 			// previous entry was created, which is where we wish to reclassify
 			// its contributions.
-			ms.ForceAge(orig.Timestamp.WallTime)
+			ms.AgeTo(orig.Timestamp.WallTime)
 			// If original version value for this key wasn't deleted, subtract
 			// its contribution from live bytes in anticipation of adding in
 			// contribution from new version below.
@@ -275,10 +275,10 @@ func updateStatsOnPut(
 	// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
 	// outside of tests (due to our semantics of txn.OrigTimestamp, which never
 	// decreases) but it sure does happen in randomized testing. An earlier
-	// version of the code used `AgeTo` here, which is incorrect as it would be
+	// version of the code used `Forward` here, which is incorrect as it would be
 	// a no-op and fail to subtract out the intent bytes/GC age incurred due to
 	// removing the meta entry at `orig.Timestamp` (when `orig != nil`).
-	ms.ForceAge(meta.Timestamp.WallTime)
+	ms.AgeTo(meta.Timestamp.WallTime)
 
 	if sys {
 		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
@@ -329,7 +329,7 @@ func updateStatsOnResolve(
 
 	// In this case, we're only removing the contribution from having the
 	// meta key around from orig.Timestamp to meta.Timestamp.
-	ms.ForceAge(orig.Timestamp.WallTime)
+	ms.AgeTo(orig.Timestamp.WallTime)
 	sys := isSysLocal(key)
 
 	if orig.Deleted != meta.Deleted {
@@ -350,7 +350,7 @@ func updateStatsOnResolve(
 		ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
 		ms.IntentCount--
 
-		ms.ForceAge(meta.Timestamp.WallTime)
+		ms.AgeTo(meta.Timestamp.WallTime)
 
 		if !commit {
 			// If not committing, the intent reappears.
@@ -390,7 +390,7 @@ func updateStatsOnAbort(
 	//    at which we're aborting:
 	//		[orig.Timestamp.WallTime, txnNanos)
 	if restored != nil {
-		ms.ForceAge(restoredNanos)
+		ms.AgeTo(restoredNanos)
 		if sys {
 			ms.SysBytes += restoredMetaKeySize + restoredMetaValSize
 			ms.SysCount++
@@ -408,7 +408,7 @@ func updateStatsOnAbort(
 		}
 	}
 
-	ms.ForceAge(orig.Timestamp.WallTime)
+	ms.AgeTo(orig.Timestamp.WallTime)
 
 	origTotalBytes := orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
 	if sys {
@@ -426,7 +426,7 @@ func updateStatsOnAbort(
 		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
 		ms.IntentCount--
 	}
-	ms.ForceAge(txnNanos)
+	ms.AgeTo(txnNanos)
 
 	return ms
 }
@@ -440,7 +440,7 @@ func updateStatsOnGC(
 	key roachpb.Key, keySize, valSize int64, meta *enginepb.MVCCMetadata, fromNS, toNS int64,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
-	ms.ForceAge(fromNS)
+	ms.AgeTo(fromNS)
 	sys := isSysLocal(key)
 	if sys {
 		ms.SysBytes -= (keySize + valSize)
@@ -456,7 +456,7 @@ func updateStatsOnGC(
 			ms.ValCount--
 		}
 	}
-	ms.ForceAge(toNS)
+	ms.AgeTo(toNS)
 	return ms
 }
 
@@ -2268,7 +2268,7 @@ func MVCCGarbageCollect(
 			if ms != nil {
 				if inlinedValue {
 					updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0)
-					ms.ForceAge(timestamp.WallTime)
+					ms.AgeTo(timestamp.WallTime)
 				} else {
 					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize,
 						meta, meta.Timestamp.WallTime, timestamp.WallTime))

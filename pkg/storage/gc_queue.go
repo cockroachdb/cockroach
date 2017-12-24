@@ -289,7 +289,7 @@ func makeGCQueueScore(
 func makeGCQueueScoreImpl(
 	ctx context.Context, fuzzSeed int64, now hlc.Timestamp, ms enginepb.MVCCStats, ttlSeconds int32,
 ) gcQueueScore {
-	ms.AgeTo(now.WallTime)
+	ms.Forward(now.WallTime)
 	var r gcQueueScore
 	r.TTL = time.Duration(ttlSeconds) * time.Second
 
