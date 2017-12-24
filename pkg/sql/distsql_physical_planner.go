@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // DistSQLPlanner is used to generate distributed plans from logical

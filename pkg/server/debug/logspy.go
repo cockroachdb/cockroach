@@ -15,6 +15,7 @@
 package debug
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,8 +25,6 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

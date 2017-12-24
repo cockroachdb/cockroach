@@ -15,12 +15,12 @@
 package storage
 
 import (
+	"context"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -209,7 +209,8 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 
 	// Attempt a few allocations with a context timeout while allocations are
 	// blocked. All attempts should hit a context deadline exceeded error.
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
 	for i := 0; i < routines; i++ {
 		id, err := idAlloc.Allocate(ctx)
 		if id != 0 || err != context.DeadlineExceeded {

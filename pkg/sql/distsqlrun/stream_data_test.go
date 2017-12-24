@@ -15,11 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"

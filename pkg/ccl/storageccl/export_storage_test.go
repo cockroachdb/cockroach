@@ -10,6 +10,7 @@ package storageccl
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -24,7 +25,6 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

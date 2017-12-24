@@ -10,10 +10,9 @@ package storageccl
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha512"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"

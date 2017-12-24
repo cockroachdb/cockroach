@@ -15,12 +15,11 @@
 package acceptance
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-
-	"golang.org/x/net/context"
 )
 
 func TestDockerCSharp(t *testing.T) {

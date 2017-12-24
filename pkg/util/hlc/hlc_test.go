@@ -15,11 +15,10 @@
 package hlc
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )

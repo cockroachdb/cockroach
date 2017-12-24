@@ -17,6 +17,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -26,8 +27,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"

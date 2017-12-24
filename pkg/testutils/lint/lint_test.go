@@ -766,9 +766,9 @@ func TestLint(t *testing.T) {
 
 		// forbiddenImportPkg -> permittedReplacementPkg
 		forbiddenImports := map[string]string{
-			"context": "golang.org/x/net/context",
-			"log":     "util/log",
-			"path":    "path/filepath",
+			"golang.org/x/net/context": "context",
+			"log":  "util/log",
+			"path": "path/filepath",
 			"github.com/golang/protobuf/proto": "github.com/gogo/protobuf/proto",
 			"github.com/satori/go.uuid":        "util/uuid",
 			"golang.org/x/sync/singleflight":   "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",

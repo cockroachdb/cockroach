@@ -15,10 +15,9 @@
 package logictest
 
 import (
+	"context"
 	"os"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"

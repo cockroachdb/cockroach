@@ -15,13 +15,13 @@
 package storage_test
 
 import (
+	"context"
 	"reflect"
 	"sort"
 	"sync/atomic"
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

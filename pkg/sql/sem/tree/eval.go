@@ -16,6 +16,7 @@ package tree
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/big"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"

@@ -15,12 +15,11 @@
 package server
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/kr/pretty"
 

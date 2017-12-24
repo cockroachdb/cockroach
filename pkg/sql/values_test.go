@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"go/constant"
 	"reflect"
@@ -22,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

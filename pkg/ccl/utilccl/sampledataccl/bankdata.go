@@ -10,6 +10,7 @@ package sampledataccl
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"io"
@@ -21,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"

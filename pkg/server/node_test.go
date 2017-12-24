@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"net"
@@ -25,7 +26,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

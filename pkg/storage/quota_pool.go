@@ -28,11 +28,12 @@
 package storage
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"golang.org/x/net/context"
 )
 
 type quotaPool struct {

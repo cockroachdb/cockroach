@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 func setTestEqCols(n *joinNode, colNames []string) error {

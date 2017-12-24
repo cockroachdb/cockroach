@@ -9,6 +9,7 @@
 package sqlccl
 
 import (
+	"context"
 	"math"
 	"runtime"
 	"sort"
@@ -16,7 +17,6 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"

@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"sync"
@@ -24,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // Ideally, we would want upper_bound to have the type of the column the

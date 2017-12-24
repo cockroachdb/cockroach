@@ -10,12 +10,12 @@ package sqlccl
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"sort"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/build"

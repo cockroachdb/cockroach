@@ -15,8 +15,9 @@
 package storage
 
 import (
+	"context"
+
 	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"

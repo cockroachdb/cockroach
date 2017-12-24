@@ -17,13 +17,12 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"

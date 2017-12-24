@@ -16,11 +16,10 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"

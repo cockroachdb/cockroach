@@ -16,12 +16,12 @@ package storage
 
 import (
 	"container/heap"
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"

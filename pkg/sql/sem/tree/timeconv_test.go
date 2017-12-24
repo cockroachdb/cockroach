@@ -15,9 +15,8 @@
 package tree_test
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

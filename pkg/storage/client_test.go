@@ -23,6 +23,7 @@ client_*.go.
 package storage_test
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -37,7 +38,6 @@ import (
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

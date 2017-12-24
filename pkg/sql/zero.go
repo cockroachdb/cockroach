@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"golang.org/x/net/context"
 )
 
 // zeroNode is a planNode with no columns and no rows and is used for nodes that

@@ -15,6 +15,7 @@
 package security
 
 import (
+	"context"
 	"crypto/x509"
 	"io/ioutil"
 	"os"
@@ -22,8 +23,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

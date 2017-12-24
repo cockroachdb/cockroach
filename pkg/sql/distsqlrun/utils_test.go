@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"golang.org/x/net/context"
 )
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to

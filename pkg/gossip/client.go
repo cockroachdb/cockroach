@@ -15,6 +15,7 @@
 package gossip
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"

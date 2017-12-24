@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // statementsValue is an implementation of pflag.Value that appends any

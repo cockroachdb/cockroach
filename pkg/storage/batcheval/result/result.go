@@ -15,7 +15,7 @@
 package result
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"

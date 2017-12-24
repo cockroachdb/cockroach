@@ -16,11 +16,10 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"unsafe"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"

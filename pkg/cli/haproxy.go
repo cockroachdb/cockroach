@@ -15,11 +15,10 @@
 package cli
 
 import (
+	"context"
 	"html/template"
 	"io"
 	"os"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/spf13/cobra"

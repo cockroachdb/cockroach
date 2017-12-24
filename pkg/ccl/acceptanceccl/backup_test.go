@@ -15,14 +15,13 @@ package acceptanceccl
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"os"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"

@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -32,7 +33,6 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"

@@ -16,11 +16,10 @@ package ts
 
 import (
 	"container/heap"
+	"context"
 	"fmt"
 	"sort"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

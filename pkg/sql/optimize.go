@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"golang.org/x/net/context"
 )
 
 // optimizePlan transforms the query plan into its final form.  This
