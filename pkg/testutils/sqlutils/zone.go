@@ -100,3 +100,14 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 	}
 	sqlDB.CheckQueryResults(t, "EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS", expected)
 }
+
+// ZoneConfigExists returns whether a zone config with the provfided
+// cliSpecifier exists.
+func ZoneConfigExists(t testing.TB, sqlDB *SQLRunner, cliSpecifier string) bool {
+	t.Helper()
+	var exists bool
+	sqlDB.QueryRow(
+		t, "SELECT EXISTS (SELECT 1 FROM crdb_internal.zones WHERE cli_specifier = $1)", cliSpecifier,
+	).Scan(&exists)
+	return exists
+}

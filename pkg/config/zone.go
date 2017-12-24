@@ -405,6 +405,19 @@ func (z *ZoneConfig) DeleteSubzone(indexID uint32, partition string) bool {
 	return false
 }
 
+// DeleteIndexSubzones deletes all subzones that refer to the index with the
+// specified ID. This includes subzones for partitions of the index as well as
+// the index subzone itself.
+func (z *ZoneConfig) DeleteIndexSubzones(indexID uint32) {
+	subzones := z.Subzones[:0]
+	for _, s := range z.Subzones {
+		if s.IndexID != indexID {
+			subzones = append(subzones, s)
+		}
+	}
+	z.Subzones = subzones
+}
+
 func (z ZoneConfig) subzoneSplits() []roachpb.RKey {
 	var out []roachpb.RKey
 	for _, span := range z.SubzoneSpans {

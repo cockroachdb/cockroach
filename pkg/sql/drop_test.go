@@ -18,6 +18,7 @@ import (
 	gosql "database/sql"
 	"testing"
 
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -385,6 +386,81 @@ func TestDropIndex(t *testing.T) {
 	}
 	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
 
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
+		t.Fatalf("table descriptor still contains index after index is dropped")
+	}
+}
+
+func TestDropIndexWithZoneConfigOSS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const chunkSize = 200
+	const numRows = 2*chunkSize + 1
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{BackfillChunkSize: chunkSize},
+	}
+	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	defer s.Stopper().Stop(context.Background())
+
+	// Create a test table with a secondary index.
+	if err := tests.CreateKVTable(sqlDB.DB, numRows); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	indexDesc, _, err := tableDesc.FindIndexByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexSpan := tableDesc.IndexSpan(indexDesc.ID)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+
+	// Hack in zone configs for the primary and secondary indexes. (You need a CCL
+	// binary to do this properly.) Dropping the index will thus require
+	// regenerating the zone config's SubzoneSpans, which will fail with a "CCL
+	// required" error.
+	zoneConfig := config.ZoneConfig{
+		Subzones: []config.Subzone{
+			{IndexID: uint32(tableDesc.PrimaryIndex.ID), Config: config.DefaultZoneConfig()},
+			{IndexID: uint32(indexDesc.ID), Config: config.DefaultZoneConfig()},
+		},
+	}
+	zoneConfigBytes, err := protoutil.Marshal(&zoneConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); !exists {
+		t.Fatal("zone config for index does not exist")
+	}
+
+	// Verify that dropping the index fails with a "CCL required" error.
+	_, err = sqlDB.DB.Exec(`DROP INDEX t.kv@foo`)
+	if pqErr, ok := err.(*pq.Error); !ok || pqErr.Code != sqlbase.CodeCCLRequired {
+		t.Fatalf("expected pq error with CCLRequired code, but got %v", err)
+	}
+
+	// Verify that the index and its zone config still exist.
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); !exists {
+		t.Fatal("zone config for index no longer exists")
+	}
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+	// TODO(benesch): Run scrub here. It can't currently handle the way t.kv
+	// declares column families.
+
+	// Manually remove the zone config. (Again, doing this through the normal
+	// channels requires a CCL binary.)
+	sqlDB.Exec(t, `DELETE FROM system.zones WHERE id = $1`, tableDesc.ID)
+
+	// Verify the index can now be properly dropped from an OSS binary.
+	sqlDB.Exec(t, `DROP INDEX t.kv@foo`)
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); exists {
+		t.Fatal("zone config for index still exists after dropping index")
+	}
+	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
