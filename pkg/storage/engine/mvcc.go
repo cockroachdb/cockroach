@@ -240,7 +240,7 @@ func updateStatsOnPut(
 			// Move the (so far empty) stats to the timestamp at which the
 			// previous entry was created, which is where we wish to reclassify
 			// its contributions.
-			ms.AgeTo(orig.Timestamp.WallTime)
+			ms.ForceAge(orig.Timestamp.WallTime)
 			// If original version value for this key wasn't deleted, subtract
 			// its contribution from live bytes in anticipation of adding in
 			// contribution from new version below.
@@ -267,8 +267,18 @@ func updateStatsOnPut(
 	}
 
 	// Move the stats to the new meta's timestamp. If we had an orig meta, this
-	// ages those original stats by the time which the previous version was live.
-	ms.AgeTo(meta.Timestamp.WallTime)
+	// ages those original stats by the time which the previous version was
+	// live.
+	//
+	// Note that there is an interesting special case here: it's possible that
+	// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
+	// outside of tests (due to our semantics of txn.OrigTimestamp, which never
+	// decreases) but it sure does happen in randomized testing. An earlier
+	// version of the code used `AgeTo` here, which is incorrect as it would be
+	// a no-op and fail to subtract out the intent bytes/GC age incurred due to
+	// removing the meta entry at `orig.Timestamp` (when `orig != nil`).
+	ms.ForceAge(meta.Timestamp.WallTime)
+
 	if sys {
 		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
 		ms.SysCount++
@@ -321,26 +331,37 @@ func updateStatsOnResolve(
 	ms.AgeTo(orig.Timestamp.WallTime)
 	sys := isSysLocal(key)
 
+	if orig.Deleted != meta.Deleted {
+		log.Fatalf(context.TODO(), "on resolve, original meta was deleted=%t, but new one is deleted=%t",
+			orig.Deleted, meta.Deleted)
+	}
+
 	if sys {
 		ms.SysBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
 		ms.AgeTo(meta.Timestamp.WallTime)
 	} else {
-		if !meta.Deleted {
-			ms.LiveBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
-		}
 		// At orig.Timestamp, the original meta key disappears.
+		if !meta.Deleted {
+			ms.LiveBytes -= origMetaValSize + origMetaKeySize + orig.KeyBytes + meta.ValBytes
+		}
 		ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
 		ms.ValBytes -= origMetaValSize + orig.ValBytes
 
-		// If committing, subtract out intent counts.
-		if commit {
-			ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
-			ms.IntentCount--
-		}
+		ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
+		ms.IntentCount--
 
 		ms.AgeTo(meta.Timestamp.WallTime)
 
+		if !commit {
+			// If not committing, the intent reappears.
+			ms.IntentBytes += meta.KeyBytes + meta.ValBytes
+			ms.IntentCount++
+		}
+
 		// At meta.Timestamp, the new meta key appears.
+		if !meta.Deleted {
+			ms.LiveBytes += metaKeySize + metaValSize + meta.KeyBytes + meta.ValBytes
+		}
 		ms.KeyBytes += metaKeySize + meta.KeyBytes
 		ms.ValBytes += metaValSize + meta.ValBytes
 	}
