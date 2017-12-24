@@ -25,7 +25,7 @@ package opt
 //
 // The supported commands are:
 //
-//  - legacy-normalize
+//  - semtree-normalize
 //
 //    Builds an expression tree from a scalar SQL expression and runs the
 //    TypedExpr normalization code. It must be followed by build-scalar.
@@ -40,6 +40,11 @@ package opt
 //  - normalize
 //
 //    Normalizes the expression. If present, must follow build-scalar.
+//
+//  - semtree-expr
+//
+//    Converts the scalar expression to a TypedExpr and prints it.
+//    If present, must follow build-scalar or semtree-normalize.
 //
 //  - index-constraints
 //
@@ -285,6 +290,7 @@ func TestOpt(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
 				var e *expr
 				var varTypes []types.T
+				var iVarHelper tree.IndexedVarHelper
 				var colInfos []IndexColumnInfo
 				var typedExpr tree.TypedExpr
 
@@ -305,6 +311,10 @@ func TestOpt(t *testing.T) {
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
+
+						// Set up the indexed var helper.
+						iv := &indexedVars{types: varTypes}
+						iVarHelper = tree.MakeIndexedVarHelper(iv, len(iv.types))
 					case "index":
 						if varTypes == nil {
 							d.fatalf(t, "vars must precede index")
@@ -329,13 +339,13 @@ func TestOpt(t *testing.T) {
 
 				evalCtx := tree.MakeTestingEvalContext()
 				var err error
-				typedExpr, err = parseScalarExpr(d.sql, varTypes)
+				typedExpr, err = parseScalarExpr(d.sql, &iVarHelper)
 				if err != nil {
 					d.fatalf(t, "%v", err)
 				}
 				for _, cmd := range strings.Split(d.cmd, ",") {
 					switch cmd {
-					case "legacy-normalize":
+					case "semtree-normalize":
 						// Apply the TypedExpr normalization and rebuild the expression.
 						typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
 						if err != nil {
@@ -346,6 +356,10 @@ func TestOpt(t *testing.T) {
 
 					case "normalize":
 						normalizeExpr(e)
+
+					case "semtree-expr":
+						expr := scalarToTypedExpr(e, &iVarHelper)
+						return fmt.Sprintf("%s%s\n", e.String(), expr)
 
 					case "index-constraints":
 						if e == nil {
@@ -359,7 +373,8 @@ func TestOpt(t *testing.T) {
 						}
 						remainingFilter := simplifyFilter(e, spans, colInfos, &evalCtx)
 						if remainingFilter != nil {
-							fmt.Fprintf(&buf, "Remaining filter:\n%s", remainingFilter)
+							expr := scalarToTypedExpr(remainingFilter, &iVarHelper)
+							fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
 						}
 						return buf.String()
 					default:
@@ -458,21 +473,17 @@ func (iv *indexedVars) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (*indexedVars) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic("unimplemented")
+	return nil
 }
 
-func parseScalarExpr(sql string, varTypes []types.T) (tree.TypedExpr, error) {
+func parseScalarExpr(sql string, ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		return nil, err
 	}
 
-	// Set up an indexed var helper so we can type-check the expression.
-	iv := &indexedVars{types: varTypes}
-
 	sema := tree.MakeSemaContext(false /* privileged */)
-	iVarHelper := tree.MakeIndexedVarHelper(iv, len(iv.types))
-	sema.IVarHelper = &iVarHelper
+	sema.IVarHelper = ivh
 
 	return expr.TypeCheck(&sema, types.Any)
 }
