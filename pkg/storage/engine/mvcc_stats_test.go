@@ -41,6 +41,9 @@ import (
 func assertEq(t *testing.T, engine Engine, debug string, ms, expMS *enginepb.MVCCStats) {
 	t.Helper()
 
+	msCpy := *ms // shallow copy
+	ms = &msCpy
+	ms.AgeTo(expMS.LastUpdateNanos)
 	if !ms.Equal(expMS) {
 		pretty.Ldiff(t, ms, expMS)
 		t.Errorf("%s: mismatch detected", debug)
@@ -273,6 +276,67 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	}
 
 	assertEq(t, engine, "after pushing", aggMS, &expAggMS)
+}
+
+// TestMVCCStatsDelDelGC prevents regression of a bug in MVCCGarbageCollect
+// that was exercised by running two deletions followed by a specific GC.
+func TestMVCCStatsDelDelGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
+
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+
+	key := roachpb.Key("a")
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2E9}
+
+	// Write tombstones at ts1 and ts2.
+	if err := MVCCDelete(ctx, engine, aggMS, key, ts1, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCDelete(ctx, engine, aggMS, key, ts2, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize()) // 2
+	vKeySize := mvccVersionTimestampSize          // 12
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 2E9,
+		KeyBytes:        mKeySize + 2*vKeySize, // 26
+		KeyCount:        1,
+		ValCount:        2,
+		GCBytesAge:      1 * vKeySize, // first tombstone, aged from ts1 to ts2
+	}
+	assertEq(t, engine, "after two puts", aggMS, &expMS)
+
+	// Run a GC invocation that clears it all. There used to be a bug here when
+	// we allowed limiting the number of deleted keys. Passing zero (i.e. remove
+	// one key and then bail) would mess up the stats, since the implementation
+	// would assume that the (implicit or explicit) meta entry was going to be
+	// removed, but this is only true when all values actually go away.
+	if err := MVCCGarbageCollect(
+		ctx,
+		engine,
+		aggMS,
+		[]roachpb.GCRequest_GCKey{{
+			Key:       key,
+			Timestamp: ts2,
+		}},
+		ts2,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	expAggMS := enginepb.MVCCStats{
+		LastUpdateNanos: 2E9,
+	}
+
+	assertEq(t, engine, "after GC", aggMS, &expAggMS)
 }
 
 // TestMVCCStatsPutIntentTimestampNotPutTimestamp exercises a scenario in which
@@ -666,6 +730,7 @@ type state struct {
 	Txn *roachpb.Transaction
 
 	eng Engine
+	rng *rand.Rand
 	key roachpb.Key
 }
 
@@ -680,21 +745,26 @@ func (s *state) intent(status roachpb.TransactionStatus) roachpb.Intent {
 type randomTest struct {
 	state
 
-	actions     map[string]func(*state)
+	actions     map[string]func(*state) string
 	actionNames []string // auto-populated
 	cycle       int
-	rng         *rand.Rand
 }
 
 func (s *randomTest) step(t *testing.T) {
 	// Jump up to a few seconds into the future. In ~1% of cases, jump
 	// backwards instead (this exercises intactness on WriteTooOld, etc).
-	s.TS = hlc.Timestamp{WallTime: s.TS.WallTime + int64((s.rng.Float32()-0.01)*4E9), Logical: int32(s.rng.Intn(10))}
-	if s.TS.WallTime < 0 {
+	s.TS = hlc.Timestamp{
+		WallTime: s.TS.WallTime + int64((s.state.rng.Float32()-0.01)*4E9),
+		Logical:  int32(s.rng.Intn(10)),
+	}
+	if s.TS.WallTime <= 0 {
 		// See TestMVCCStatsDocumentNegativeWrites. Negative MVCC timestamps
 		// aren't something we're interested in, and besides, they corrupt
 		// everything.
-		s.TS.WallTime = 0
+		//
+		// As a convenience, we also avoid zero itself (because that doesn't
+		// play well with rand.Int63n).
+		s.TS.WallTime = 1
 	}
 	if s.Txn != nil {
 		// TODO(tschottdorf): experiment with s.TS != s.Txn.TS. Which of those
@@ -716,13 +786,17 @@ func (s *randomTest) step(t *testing.T) {
 	actName := s.actionNames[s.rng.Intn(len(s.actionNames))]
 
 	preTxn := s.Txn
-	s.actions[actName](&s.state)
+	info := s.actions[actName](&s.state)
 
 	txnS := "<none>"
 	if preTxn != nil {
 		txnS = preTxn.Timestamp.String()
 	}
-	log.Infof(context.Background(), "%10s %s txn=%s", s.TS, actName, txnS)
+
+	if info != "" {
+		info = "\n\t" + info
+	}
+	log.Infof(context.Background(), "%10s %s txn=%s%s", s.TS, actName, txnS, info)
 
 	// Verify stats agree with recomputations.
 	assertEq(t, s.eng, fmt.Sprintf("cycle %d", s.cycle), s.MS, s.MS)
@@ -742,10 +816,12 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	eng := createTestEngine()
 	defer eng.Close()
 
+	const count = 200
+
 	s := &randomTest{
-		actions: make(map[string]func(*state)),
-		rng:     rand.New(rand.NewSource(seed)),
+		actions: make(map[string]func(*state) string),
 	}
+	s.state.rng = rand.New(rand.NewSource(seed))
 	s.state.eng = eng
 	s.state.key = roachpb.Key("asd")
 	s.state.MS = &enginepb.MVCCStats{}
@@ -754,48 +830,71 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		return roachpb.MakeValueFromBytes(randutil.RandBytes(s.rng, int(s.rng.Int31n(128))))
 	}
 
-	s.actions["Put"] = func(s *state) {
+	s.actions["Put"] = func(s *state) string {
 		if err := MVCCPut(ctx, s.eng, s.MS, s.key, s.TS, rngVal(), s.Txn); err != nil {
-			log.Info(ctx, err)
+			return err.Error()
 		}
+		return ""
 	}
-	s.actions["Del"] = func(s *state) {
+	s.actions["Del"] = func(s *state) string {
 		if err := MVCCDelete(ctx, s.eng, s.MS, s.key, s.TS, s.Txn); err != nil {
-			log.Info(ctx, err)
+			return err.Error()
 		}
+		return ""
 	}
-	s.actions["EnsureTxn"] = func(s *state) {
+	s.actions["EnsureTxn"] = func(s *state) string {
 		if s.Txn == nil {
 			s.Txn = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: s.TS}}
 		}
+		return ""
 	}
-	s.actions["Abort"] = func(s *state) {
+	s.actions["Abort"] = func(s *state) string {
 		if s.Txn != nil {
 			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.ABORTED)); err != nil {
-				log.Info(ctx, err)
-			} else {
-				s.Txn = nil
+				return err.Error()
 			}
+			s.Txn = nil
 		}
+		return ""
 	}
-	s.actions["Commit"] = func(s *state) {
+	s.actions["Commit"] = func(s *state) string {
 		if s.Txn != nil {
 			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.COMMITTED)); err != nil {
-				log.Info(ctx, err)
-			} else {
-				s.Txn = nil
+				return err.Error()
 			}
+			s.Txn = nil
 		}
+		return ""
 	}
-	s.actions["Push"] = func(s *state) {
+	s.actions["Push"] = func(s *state) string {
 		if s.Txn != nil {
 			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.PENDING)); err != nil {
-				log.Info(ctx, err)
+				return err.Error()
 			}
 		}
+		return ""
+	}
+	s.actions["GC"] = func(s *state) string {
+		// Sometimes GC everything, sometimes only older versions.
+		gcTS := hlc.Timestamp{
+			WallTime: s.rng.Int63n(s.TS.WallTime),
+		}
+		if err := MVCCGarbageCollect(
+			ctx,
+			s.eng,
+			s.MS,
+			[]roachpb.GCRequest_GCKey{{
+				Key:       s.key,
+				Timestamp: gcTS,
+			}},
+			s.TS,
+		); err != nil {
+			return err.Error()
+		}
+		return fmt.Sprintf("%s (count %d)", gcTS, count)
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < count; i++ {
 		s.step(t)
 	}
 }

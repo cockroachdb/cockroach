@@ -438,6 +438,33 @@ func (mt *isolatedMigrationTest) close(ctx context.Context) {
 	backwardCompatibleMigrations = mt.oldMigrations
 }
 
+func TestRemoveClusterSettingKVGCBatchSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeIsolatedMigrationTest(ctx, t, "remove cluster setting `kv.gc.batch_size`")
+	defer mt.close(ctx)
+
+	mt.start(t, base.TestServerArgs{})
+
+	mt.sqlDB.Exec(t, `INSERT INTO system.settings (name, "lastUpdated", "valueType", value) `+
+		`values('kv.gc.batch_size', NOW(), 'i', '10000')`)
+
+	if err := mt.runMigration(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := mt.sqlDB.DB.QueryRow(
+		`SELECT COUNT(*) from system.settings WHERE name = 'kv.gc.batch_size'`,
+	).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+
+	if n != 0 {
+		t.Fatalf("migration did not clear out cluster setting, got %d rows", n)
+	}
+}
+
 func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
