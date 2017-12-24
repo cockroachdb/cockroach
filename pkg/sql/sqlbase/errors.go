@@ -119,7 +119,8 @@ func IsCCLRequiredError(err error) bool {
 func IsPermanentSchemaChangeError(err error) bool {
 	return errHasCode(err, pgerror.CodeNotNullViolationError) ||
 		errHasCode(err, pgerror.CodeUniqueViolationError) ||
-		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError)
+		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError) ||
+		errHasCode(err, CodeCCLRequired)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.

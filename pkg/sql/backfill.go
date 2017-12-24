@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -174,6 +175,11 @@ func (sc *SchemaChanger) runBackfill(
 		return err
 	}
 
+	// Remove index zone configs.
+	if err := sc.removeIndexZoneConfigs(ctx, tableDesc.ID, droppedIndexDescs); err != nil {
+		return err
+	}
+
 	// Add and drop columns.
 	if needColumnBackfill {
 		if err := sc.truncateAndBackfillColumns(ctx, evalCtx, lease, version); err != nil {
@@ -202,6 +208,38 @@ func (sc *SchemaChanger) getTableVersion(
 		return nil, errors.Errorf("table version mismatch: %d, expected=%d", tableDesc.Version, version)
 	}
 	return tableDesc, nil
+}
+
+func (sc *SchemaChanger) removeIndexZoneConfigs(
+	ctx context.Context, tableID sqlbase.ID, indexDescs []sqlbase.IndexDescriptor,
+) error {
+	if len(indexDescs) == 0 {
+		return nil
+	}
+
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+
+		zone, err := getZoneConfigRaw(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+
+		for _, indexDesc := range indexDescs {
+			zone.DeleteIndexSubzones(uint32(indexDesc.ID))
+		}
+
+		_, err = writeZoneConfig(ctx, txn, sc.settings, sc.leaseMgr, sc.tableID, tableDesc, zone)
+		if sqlbase.IsCCLRequiredError(err) {
+			return sqlbase.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
+				"because table %q has at least one remaining index or partition with a zone config",
+				tableDesc.Name))
+		}
+		return err
+	})
 }
 
 func (sc *SchemaChanger) truncateIndexes(

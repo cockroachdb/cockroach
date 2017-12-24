@@ -150,32 +150,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
-	if len(zone.Subzones) > 0 {
-		if !params.p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionPartitioning) {
-			return errors.New("cluster version does not support zone configs on indexes or partitions")
-		}
-		zone.SubzoneSpans, err = GenerateSubzoneSpans(table, zone.Subzones)
-		if err != nil {
-			return err
-		}
-	}
-
-	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
-
-	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
-		n.run.numAffected, err = internalExecutor.ExecuteStatementInTransaction(
-			params.ctx, "set zone", params.p.txn,
-			"DELETE FROM system.zones WHERE id = $1", targetID)
-		return err
-	}
-
-	buf, err := protoutil.Marshal(&zone)
-	if err != nil {
-		return fmt.Errorf("could not marshal zone config: %s", err)
-	}
-	n.run.numAffected, err = internalExecutor.ExecuteStatementInTransaction(
-		params.ctx, "set zone", params.p.txn,
-		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", targetID, buf)
+	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
+		params.p.ExecCfg().Settings, params.p.LeaseMgr(), targetID, table, zone)
 	return err
 }
 
@@ -184,6 +160,40 @@ func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
 func (*setZoneConfigNode) Close(context.Context)          {}
 
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
+
+func writeZoneConfig(
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	leaseMgr *LeaseManager,
+	targetID sqlbase.ID,
+	table *sqlbase.TableDescriptor,
+	zone config.ZoneConfig,
+) (numAffected int, err error) {
+	if len(zone.Subzones) > 0 {
+		if !settings.Version.IsMinSupported(cluster.VersionPartitioning) {
+			return 0, errors.New("cluster version does not support zone configs on indexes or partitions")
+		}
+		zone.SubzoneSpans, err = GenerateSubzoneSpans(table, zone.Subzones)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	internalExecutor := InternalExecutor{LeaseManager: leaseMgr}
+
+	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
+		return internalExecutor.ExecuteStatementInTransaction(ctx, "set zone", txn,
+			"DELETE FROM system.zones WHERE id = $1", targetID)
+	}
+
+	buf, err := protoutil.Marshal(&zone)
+	if err != nil {
+		return 0, fmt.Errorf("could not marshal zone config: %s", err)
+	}
+	return internalExecutor.ExecuteStatementInTransaction(ctx, "set zone", txn,
+		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", targetID, buf)
+}
 
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike
 // getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
