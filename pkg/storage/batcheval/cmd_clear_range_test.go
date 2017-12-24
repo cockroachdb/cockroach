@@ -97,7 +97,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			var stats enginepb.MVCCStats
 			for i := 0; i < test.keyCount; i++ {
 				key := roachpb.Key(fmt.Sprintf("%04d", i))
-				if err := engine.MVCCPut(ctx, eng, &stats, key, hlc.Timestamp{}, value, nil); err != nil {
+				if err := engine.MVCCPut(ctx, eng, &stats, key, hlc.Timestamp{WallTime: int64(i % 2)}, value, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -116,21 +116,20 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 					EndKey: endKey,
 				},
 			}
-			var delta enginepb.MVCCStats
-			cArgs.Stats = &delta
+			cArgs.Stats = &enginepb.MVCCStats{}
 
 			if _, err := ClearRange(ctx, batch, cArgs, &roachpb.ClearRangeResponse{}); err != nil {
 				t.Fatal(err)
 			}
 
-			// Verify delta is equal to the stats we wrote.
+			// Verify cArgs.Stats is equal to the stats we wrote.
 			newStats := stats
-			newStats.SysBytes, newStats.SysCount = 0, 0 // ignore these values
-			delta.SysBytes, delta.SysCount = 0, 0       // these too, as GC threshold is updated
-			delta.AgeTo(newStats.LastUpdateNanos)
-			newStats.Add(delta)
+			newStats.SysBytes, newStats.SysCount = 0, 0       // ignore these values
+			cArgs.Stats.SysBytes, cArgs.Stats.SysCount = 0, 0 // these too, as GC threshold is updated
+			newStats.Add(*cArgs.Stats)
+			newStats.ForceAge(0) // pin at LastUpdateNanos==0
 			if !newStats.Equal(enginepb.MVCCStats{}) {
-				t.Errorf("expected stats on original writes to be negated on clear range: %+v vs %+v", stats, delta)
+				t.Errorf("expected stats on original writes to be negated on clear range: %+v vs %+v", stats, *cArgs.Stats)
 			}
 
 			// Verify we see the correct counts for Clear and ClearRange.
