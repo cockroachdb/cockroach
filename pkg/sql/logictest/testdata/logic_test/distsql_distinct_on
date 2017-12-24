@@ -53,6 +53,8 @@ ALTER TABLE abc SPLIT AT VALUES
   ('2', '3', '4'),
   ('3', '4', '5')
 
+retries 3
+
 statement ok
 ALTER TABLE abc TESTING_RELOCATE VALUES
   (ARRAY[1], NULL, NULL, NULL),
