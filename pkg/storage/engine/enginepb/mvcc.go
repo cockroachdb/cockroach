@@ -52,15 +52,21 @@ func (ms MVCCStats) GCByteAge(nowNanos int64) int64 {
 	return ms.GCBytesAge
 }
 
-// AgeTo encapsulates the complexity of computing the increment in age
-// quantities contained in MVCCStats. Two MVCCStats structs only add and
-// subtract meaningfully if their LastUpdateNanos matches, so aging them to
-// the max of their LastUpdateNanos is a prerequisite.
-// If nowNanos is behind ms.LastUpdateNanos, this method is a noop.
+// AgeTo is like ForceAge, but if nowNanos is not ahead of ms.LastUpdateNanos,
+// this method is a noop.
 func (ms *MVCCStats) AgeTo(nowNanos int64) {
 	if ms.LastUpdateNanos >= nowNanos {
 		return
 	}
+	ms.ForceAge(nowNanos)
+}
+
+// ForceAge encapsulates the complexity of computing the increment in age
+// quantities contained in MVCCStats. Two MVCCStats structs only add and
+// subtract meaningfully if their LastUpdateNanos matches, so aging them to
+// the max of their LastUpdateNanos is a prerequisite, though Add() takes
+// care of this internally.
+func (ms *MVCCStats) ForceAge(nowNanos int64) {
 	// Seconds are counted every time each individual nanosecond timestamp
 	// crosses a whole second boundary (i.e. is zero mod 1E9). Thus it would
 	// be a mistake to use the (nonequivalent) expression (a-b)/1E9.
