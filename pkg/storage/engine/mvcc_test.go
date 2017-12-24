@@ -99,7 +99,7 @@ func (n mvccKeys) Len() int           { return len(n) }
 func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 
-func TestMVCCStatsAddSubAgeTo(t *testing.T) {
+func TestMVCCStatsAddSubForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	goldMS := enginepb.MVCCStats{
 		ContainsEstimates: true,
@@ -122,6 +122,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	}
 
 	cmp := func(act, exp enginepb.MVCCStats) {
+		t.Helper()
 		f, l, _ := caller.Lookup(1)
 		if !reflect.DeepEqual(act, exp) {
 			t.Fatalf("%s:%d: wanted %+v back, got %+v", f, l, exp, act)
@@ -148,7 +149,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	ms.Subtract(goldMS)
 	cmp(ms, zeroWithLU)
 
-	// Run some checks for AgeTo.
+	// Run some checks for Forward.
 	goldDelta := enginepb.MVCCStats{
 		KeyBytes:        42,
 		IntentCount:     11,
@@ -182,12 +183,25 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	expDelta.IntentAge += 11
 	cmp(delta, expDelta)
 
+	{
+		// Verify that AgeTo can go backwards in time.
+		// Works on a copy.
+		tmpDelta := delta
+		expDelta := expDelta
+
+		tmpDelta.AgeTo(2E9 - 1)
+		expDelta.LastUpdateNanos = 2E9 - 1
+		expDelta.GCBytesAge -= 42
+		expDelta.IntentAge -= 11
+		cmp(tmpDelta, expDelta)
+	}
+
 	delta.AgeTo(3E9 - 1)
-	delta.AgeTo(5) // should be noop
+	delta.Forward(5) // should be noop
 	expDelta.LastUpdateNanos = 3E9 - 1
 	cmp(delta, expDelta)
 
-	// Check that Add calls AgeTo appropriately.
+	// Check that Add calls Forward appropriately.
 	mss := []enginepb.MVCCStats{goldMS, goldMS}
 
 	mss[0].LastUpdateNanos = 2E9 - 1
@@ -205,7 +219,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 		cmp(ms, expMS)
 	}
 
-	// Finally, check AgeTo with negative counts (can happen).
+	// Finally, check Forward with negative counts (can happen).
 	neg := zeroWithLU
 	neg.Subtract(goldMS)
 	exp := neg

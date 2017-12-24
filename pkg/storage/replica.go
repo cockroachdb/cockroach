@@ -4898,6 +4898,9 @@ func (r *Replica) applyRaftCommand(
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	deltaStats := rResult.Delta.ToStats()
+	// Note that calling ms.Add will never result in ms.LastUpdateNanos
+	// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
+	// across all deltaStats).
 	ms.Add(deltaStats)
 	if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to update MVCCStats")

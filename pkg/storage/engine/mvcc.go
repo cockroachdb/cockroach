@@ -240,7 +240,7 @@ func updateStatsOnPut(
 			// Move the (so far empty) stats to the timestamp at which the
 			// previous entry was created, which is where we wish to reclassify
 			// its contributions.
-			ms.ForceAge(orig.Timestamp.WallTime)
+			ms.AgeTo(orig.Timestamp.WallTime)
 			// If original version value for this key wasn't deleted, subtract
 			// its contribution from live bytes in anticipation of adding in
 			// contribution from new version below.
@@ -274,10 +274,10 @@ func updateStatsOnPut(
 	// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
 	// outside of tests (due to our semantics of txn.OrigTimestamp, which never
 	// decreases) but it sure does happen in randomized testing. An earlier
-	// version of the code used `AgeTo` here, which is incorrect as it would be
+	// version of the code used `Forward` here, which is incorrect as it would be
 	// a no-op and fail to subtract out the intent bytes/GC age incurred due to
 	// removing the meta entry at `orig.Timestamp` (when `orig != nil`).
-	ms.ForceAge(meta.Timestamp.WallTime)
+	ms.AgeTo(meta.Timestamp.WallTime)
 
 	if sys {
 		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
@@ -338,7 +338,6 @@ func updateStatsOnResolve(
 
 	if sys {
 		ms.SysBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
-		ms.AgeTo(meta.Timestamp.WallTime)
 	} else {
 		// At orig.Timestamp, the original meta key disappears.
 		ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
