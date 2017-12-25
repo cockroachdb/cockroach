@@ -15,12 +15,11 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"net"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"

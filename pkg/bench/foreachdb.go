@@ -15,6 +15,7 @@
 package bench
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net"
@@ -23,8 +24,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	_ "github.com/go-sql-driver/mysql" // registers the MySQL driver to gosql
 	_ "github.com/lib/pq"              // registers the pg driver to gosql

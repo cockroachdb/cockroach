@@ -15,10 +15,9 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
-
-	"golang.org/x/net/context"
 
 	"github.com/spf13/cobra"
 

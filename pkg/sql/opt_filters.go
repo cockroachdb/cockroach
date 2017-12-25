@@ -15,10 +15,10 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"golang.org/x/net/context"
 )
 
 // This file contains the functions that perform filter propagation.

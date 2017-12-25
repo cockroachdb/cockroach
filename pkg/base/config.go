@@ -15,6 +15,7 @@
 package base
 
 import (
+	"context"
 	"crypto/tls"
 	"net/http"
 	"net/url"
@@ -22,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"

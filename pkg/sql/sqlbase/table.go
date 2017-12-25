@@ -15,13 +15,13 @@
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

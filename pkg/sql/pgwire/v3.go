@@ -16,6 +16,7 @@ package pgwire
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"math"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"bytes"
 	"io"

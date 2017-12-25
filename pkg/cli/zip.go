@@ -17,13 +17,12 @@ package cli
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"sort"
-
-	"golang.org/x/net/context"
 
 	"github.com/spf13/cobra"
 

@@ -14,7 +14,7 @@
 
 package tree
 
-import "golang.org/x/net/context"
+import "context"
 
 // IndexedRow is a row with a corresponding index.
 type IndexedRow struct {

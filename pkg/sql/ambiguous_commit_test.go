@@ -16,12 +16,12 @@ package sql_test
 
 import (
 	"bytes"
+	"context"
 	"sync/atomic"
 	"testing"
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"

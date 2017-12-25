@@ -18,10 +18,9 @@ package cache
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sync/atomic"
-
-	"golang.org/x/net/context"
 
 	"github.com/biogo/store/llrb"
 

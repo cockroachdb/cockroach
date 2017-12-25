@@ -15,12 +15,12 @@
 package retry
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"golang.org/x/net/context"
 )
 
 // Options provides reusable configuration of Retry objects.

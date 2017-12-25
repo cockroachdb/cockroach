@@ -15,6 +15,7 @@
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"golang.org/x/net/context"
 )
 
 type initFetcherArgs struct {

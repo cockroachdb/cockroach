@@ -15,12 +15,12 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

@@ -16,10 +16,9 @@
 package acceptance
 
 import (
+	"context"
 	gosql "database/sql"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"

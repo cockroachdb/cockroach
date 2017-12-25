@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
@@ -22,8 +23,6 @@ import (
 	"sort"
 	"strconv"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"

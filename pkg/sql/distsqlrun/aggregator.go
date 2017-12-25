@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"unsafe"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // GetAggregateInfo returns the aggregate constructor and the return type for

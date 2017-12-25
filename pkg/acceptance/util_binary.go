@@ -17,6 +17,7 @@ package acceptance
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -25,8 +26,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"

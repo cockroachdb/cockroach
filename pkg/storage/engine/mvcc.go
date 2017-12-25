@@ -16,12 +16,11 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 

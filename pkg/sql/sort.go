@@ -16,10 +16,10 @@ package sql
 
 import (
 	"container/heap"
+	"context"
 	"sort"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

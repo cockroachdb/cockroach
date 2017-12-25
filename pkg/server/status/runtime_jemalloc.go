@@ -84,12 +84,12 @@ package status
 import "C"
 
 import (
+	"context"
 	"math"
 	"reflect"
 	"strings"
 
 	"github.com/dustin/go-humanize"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )

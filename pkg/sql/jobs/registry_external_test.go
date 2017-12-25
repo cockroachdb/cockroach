@@ -15,13 +15,12 @@
 package jobs_test
 
 import (
+	"context"
 	"math"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

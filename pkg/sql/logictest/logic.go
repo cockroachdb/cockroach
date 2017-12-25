@@ -17,6 +17,7 @@ package logictest
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/md5"
 	gosql "database/sql"
 	"flag"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

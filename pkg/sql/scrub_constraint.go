@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"go/constant"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"

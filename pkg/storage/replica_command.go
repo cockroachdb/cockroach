@@ -16,6 +16,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
@@ -28,7 +29,6 @@ import (
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

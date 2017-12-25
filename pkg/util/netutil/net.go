@@ -15,6 +15,7 @@
 package netutil
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net"
@@ -24,7 +25,6 @@ import (
 
 	"google.golang.org/grpc"
 
-	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
 
 	"github.com/cockroachdb/cmux"

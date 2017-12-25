@@ -16,10 +16,9 @@ package tree
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )

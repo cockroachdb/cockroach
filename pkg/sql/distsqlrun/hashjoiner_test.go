@@ -15,13 +15,12 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	math "math"
 	"sort"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

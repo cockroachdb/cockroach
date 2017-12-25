@@ -10,6 +10,7 @@ package sqlccl_test
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -30,7 +31,6 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

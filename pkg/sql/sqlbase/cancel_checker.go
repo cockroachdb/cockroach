@@ -14,9 +14,7 @@
 
 package sqlbase
 
-import (
-	"golang.org/x/net/context"
-)
+import "context"
 
 // Interval of Check() calls to wait between checks for context cancellation.
 const cancelCheckInterval int64 = 1000

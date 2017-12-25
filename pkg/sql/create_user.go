@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"regexp"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"

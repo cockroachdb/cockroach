@@ -15,11 +15,11 @@
 package localtestcluster
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/opentracing/opentracing-go"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"

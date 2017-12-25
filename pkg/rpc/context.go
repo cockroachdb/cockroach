@@ -15,6 +15,7 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net"
@@ -26,7 +27,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/rubyist/circuitbreaker"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

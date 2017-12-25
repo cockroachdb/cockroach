@@ -15,6 +15,7 @@
 package mon
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -23,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-
-	"golang.org/x/net/context"
 )
 
 // randomSize generates a size greater or equal to zero, with a random

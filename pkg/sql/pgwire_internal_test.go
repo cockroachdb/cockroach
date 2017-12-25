@@ -17,13 +17,13 @@
 package sql
 
 import (
+	"context"
 	"database/sql/driver"
 	"net/url"
 	"testing"
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"

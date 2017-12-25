@@ -15,6 +15,7 @@
 package acceptance
 
 import (
+	"context"
 	"encoding/csv"
 	"reflect"
 	"regexp"
@@ -22,8 +23,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	gosql "database/sql"
 

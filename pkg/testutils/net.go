@@ -15,12 +15,12 @@
 package testutils
 
 import (
+	"context"
 	"io"
 	"net"
 	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"

@@ -15,6 +15,7 @@
 package gossip
 
 import (
+	"context"
 	"math"
 	"net"
 	"testing"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

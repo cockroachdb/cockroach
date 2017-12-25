@@ -15,7 +15,7 @@
 package cluster
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/kr/pretty"
 
