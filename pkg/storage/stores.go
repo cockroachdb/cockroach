@@ -15,10 +15,9 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"unsafe"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

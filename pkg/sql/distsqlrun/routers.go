@@ -19,12 +19,11 @@ package distsqlrun
 
 import (
 	"bytes"
+	"context"
 	"hash/crc32"
 	"sort"
 	"sync"
 	"sync/atomic"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 

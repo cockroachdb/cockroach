@@ -15,11 +15,11 @@
 package storage
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"golang.org/x/net/context"
 )
 
 // TestQuotaPoolBasic tests the minimal expected behavior of the quota pool

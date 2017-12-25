@@ -15,11 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"

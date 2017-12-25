@@ -15,6 +15,7 @@
 package distsqlplan
 
 import (
+	"context"
 	"math"
 	"math/rand"
 
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // SpanResolver resolves key spans to their respective ranges and lease holders.

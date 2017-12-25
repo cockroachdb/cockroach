@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -24,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"

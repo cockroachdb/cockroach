@@ -15,13 +15,13 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"golang.org/x/net/context"
 )
 
 func TestStmtBuf(t *testing.T) {

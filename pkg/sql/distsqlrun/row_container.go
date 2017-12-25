@@ -16,8 +16,7 @@ package distsqlrun
 
 import (
 	"container/heap"
-
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"

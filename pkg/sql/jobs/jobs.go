@@ -15,12 +15,12 @@
 package jobs
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

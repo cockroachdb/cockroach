@@ -15,11 +15,11 @@
 package storage
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

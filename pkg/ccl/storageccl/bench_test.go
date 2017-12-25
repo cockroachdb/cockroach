@@ -9,12 +9,11 @@
 package storageccl_test
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strconv"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"

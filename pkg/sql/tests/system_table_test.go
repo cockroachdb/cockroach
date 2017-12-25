@@ -15,12 +15,12 @@
 package tests_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

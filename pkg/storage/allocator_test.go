@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
@@ -28,7 +29,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"

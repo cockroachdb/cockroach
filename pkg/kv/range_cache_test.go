@@ -16,6 +16,7 @@ package kv
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"sync"
@@ -23,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/biogo/store/llrb"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

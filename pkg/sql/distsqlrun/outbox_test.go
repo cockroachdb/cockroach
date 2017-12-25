@@ -15,13 +15,13 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sync"
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

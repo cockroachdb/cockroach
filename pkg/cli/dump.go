@@ -16,6 +16,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -24,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

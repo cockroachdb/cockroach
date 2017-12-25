@@ -16,6 +16,7 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -24,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/build"

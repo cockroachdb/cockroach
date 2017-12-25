@@ -16,13 +16,13 @@ package kv
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"sync"
 
 	"github.com/biogo/store/llrb"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

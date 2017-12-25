@@ -9,6 +9,7 @@
 package storageccl
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"hash/fnv"
@@ -31,7 +32,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

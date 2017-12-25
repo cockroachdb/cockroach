@@ -16,10 +16,9 @@ package builtins
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"

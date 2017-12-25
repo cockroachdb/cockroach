@@ -16,11 +16,11 @@ package stateloader
 
 import (
 	"bytes"
+	"context"
 	"math"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

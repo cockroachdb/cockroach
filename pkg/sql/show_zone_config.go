@@ -15,7 +15,8 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
+
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/config"

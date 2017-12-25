@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	gosql "database/sql"
 	"reflect"
 	"testing"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"golang.org/x/net/context"
 )
 
 func TestSampleAggregator(t *testing.T) {

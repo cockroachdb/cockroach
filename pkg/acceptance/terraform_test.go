@@ -15,14 +15,13 @@
 package acceptance
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-
-	"golang.org/x/net/context"
 )
 
 // TestBuildBabyCluster resizes the cluster to one node. It does not tear down

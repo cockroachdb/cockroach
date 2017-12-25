@@ -16,6 +16,7 @@
 package sql
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
@@ -24,8 +25,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"

@@ -15,6 +15,7 @@
 package sql_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"reflect"
@@ -22,8 +23,6 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

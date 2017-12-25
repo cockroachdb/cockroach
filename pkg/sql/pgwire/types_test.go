@@ -16,11 +16,10 @@ package pgwire
 
 import (
 	"bytes"
+	"context"
 	"reflect"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/lib/pq/oid"
 

@@ -15,6 +15,7 @@
 package sql_test
 
 import (
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"net/url"
@@ -24,7 +25,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
