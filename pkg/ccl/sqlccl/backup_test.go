@@ -48,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -92,12 +94,17 @@ func backupRestoreTestSetupWithParams(
 	if numAccounts == 0 {
 		splits = 0
 	}
-	bankData := sampledataccl.Bank(numAccounts, payloadSize, splits)
+	bankData := bank.FromConfig(numAccounts, payloadSize, splits)
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
-	if err := sampledataccl.Setup(sqlDB.DB, bankData); err != nil {
+	sqlDB.Exec(t, `CREATE DATABASE data`)
+	sqlDB.Exec(t, `USE data`)
+	const insertBatchSize = 1000
+	if _, err := workload.Setup(sqlDB.DB, bankData.Tables(), insertBatchSize); err != nil {
 		t.Fatalf("%+v", err)
 	}
+	// This occasionally flakes, so ignore errors.
+	_ = bank.Split(sqlDB.DB, bankData)
 
 	if err := tc.WaitForFullReplication(); err != nil {
 		t.Fatal(err)
@@ -1788,7 +1795,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 
 	const numAccounts = 10
-	bankData := sampledataccl.BankRows(numAccounts)
+	bankData := bank.FromRows(numAccounts).Tables()[0]
 	if _, err := sampledataccl.ToBackup(t, bankData, filepath.Join(dir, "foo")); err != nil {
 		t.Fatalf("%+v", err)
 	}
