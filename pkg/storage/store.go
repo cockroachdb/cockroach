@@ -411,7 +411,25 @@ type Store struct {
 		syncutil.Mutex
 		heartbeats         map[roachpb.StoreIdent][]RaftHeartbeat
 		heartbeatResponses map[roachpb.StoreIdent][]RaftHeartbeat
+		unquiescedRanges   map[roachpb.StoreIdent][]roachpb.RangeID
+		closedSequences    map[roachpb.StoreIdent]int64
 	}
+
+	minPropMu struct {
+		syncutil.RWMutex
+		cur, last       hlc.Timestamp
+		curRef, lastRef int32 // atomically updated ref counts for cur, last
+	}
+
+	closedMu struct {
+		syncutil.RWMutex
+		// leaseholders provide closed timestamps for follower reads to
+		// ranges with epoch leaseholder matching the map's key and
+		// liveness epoch, and which have committed to the required min
+		// commit index.
+		leaseholders map[roachpb.StoreIdent]*storeClosedTS
+	}
+
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
 	started int32
@@ -833,6 +851,14 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 }
 
+// FollowerReadInterval is an estimated window for use from the
+// distributed KV sender to determine whether a read-only batch has an
+// active timestamp which makes follower reads possible.
+func (sc *StoreConfig) FollowerReadInterval() time.Duration {
+	return time.Duration(ClosedTimestampInterval.Nanoseconds() +
+		int64(sc.RaftHeartbeatIntervalTicks)*sc.RaftTickInterval.Nanoseconds())
+}
+
 // LeaseExpiration returns an int64 to increment a manual clock with to
 // make sure that all active range leases expire.
 func (sc *StoreConfig) LeaseExpiration() int64 {
@@ -877,7 +903,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
 	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.unquiescedRanges = map[roachpb.StoreIdent][]roachpb.RangeID{}
+	s.coalescedMu.closedSequences = map[roachpb.StoreIdent]int64{}
 	s.coalescedMu.Unlock()
+
+	s.closedMu.Lock()
+	s.closedMu.leaseholders = map[roachpb.StoreIdent]*storeClosedTS{}
+	s.closedMu.Unlock()
 
 	s.mu.Lock()
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
@@ -1282,6 +1314,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 		f(ctx, "ran legacy tombstone migration in %s", dur)
 	}
+
+	// Initialize the minimum proposal timestamp.
+	s.minPropMu.Lock()
+	s.minPropMu.cur = now.Add(-ClosedTimestampInterval.Nanoseconds(), 0)
+	s.minPropMu.Unlock()
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
@@ -2032,6 +2069,11 @@ func splitPostApply(
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
+	// Copy the closed timestamp info from the LHS. Since the Raft log
+	// is guaranteed to be empty here, set minIdx to 0.
+	rightRng.mu.closed.Timestamp = r.mu.closed.Timestamp
+	rightRng.mu.closed.confTS = r.mu.closed.confTS
+	rightRng.mu.closed.minIdx = 0
 	rightLease := *rightRng.mu.state.Lease
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
@@ -3023,6 +3065,70 @@ func (s *Store) HandleSnapshot(
 	}
 }
 
+func (s *Store) updateClosedTS(
+	ctx context.Context,
+	beats []RaftHeartbeat,
+	closedSequence int64,
+	closed hlc.Timestamp,
+	epoch int64,
+	unquiescedRanges []roachpb.RangeID,
+	fromReplica roachpb.ReplicaDescriptor,
+) {
+	if log.V(4) {
+		log.Infof(ctx, "updating closed timestamp %s, epoch %d from %s for %d ranges (%+v), unquiesced (%+v)",
+			closed, epoch, fromReplica, len(beats), beats, unquiescedRanges)
+	}
+
+	storeKey := roachpb.StoreIdent{
+		StoreID: fromReplica.StoreID,
+		NodeID:  fromReplica.NodeID,
+	}
+
+	s.closedMu.Lock()
+	defer s.closedMu.Unlock()
+
+	storeCTS, ok := s.closedMu.leaseholders[storeKey]
+	if ok {
+		// If the sequence has not advanced by one, or the epoch has
+		// changed, invalidate our quiesced map.
+		if closedSequence != storeCTS.sequence+1 || epoch != storeCTS.epoch || epoch == 0 {
+			storeCTS.quiesced = map[roachpb.RangeID]struct{}{}
+		} else {
+			// It's OK to clear unquiesced ranges here, as any range heartbeats
+			// we do receive (and process below) will take precedence.
+			for _, rangeID := range unquiescedRanges {
+				delete(storeCTS.quiesced, rangeID)
+			}
+		}
+		storeCTS.sequence = closedSequence
+		storeCTS.epoch = epoch
+	} else {
+		storeCTS = &storeClosedTS{
+			sequence: closedSequence,
+			epoch:    epoch,
+			quiesced: map[roachpb.RangeID]struct{}{},
+		}
+		s.closedMu.leaseholders[storeKey] = storeCTS
+	}
+	storeCTS.Timestamp = closed
+
+	for _, beat := range beats {
+		if beat.ClosedIndex > 0 {
+			if r, err := s.GetReplica(beat.RangeID); err == nil {
+				r.mu.Lock()
+				r.mu.closed.Timestamp = closed
+				r.mu.closed.minIdx = beat.ClosedIndex
+				r.mu.Unlock()
+			}
+		}
+		if beat.Quiesce {
+			storeCTS.quiesced[beat.RangeID] = struct{}{}
+		} else {
+			delete(storeCTS.quiesced, beat.RangeID)
+		}
+	}
+}
+
 func (s *Store) uncoalesceBeats(
 	ctx context.Context,
 	beats []RaftHeartbeat,
@@ -3075,12 +3181,13 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *roachpb.Error {
-	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
+	if len(req.Heartbeats)+len(req.HeartbeatResps)+len(req.UnquiescedRanges) > 0 {
 		if req.RangeID != 0 {
 			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
 		}
 		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeat, respStream)
 		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
+		s.updateClosedTS(ctx, req.Heartbeats, req.ClosedSequence, req.Closed, req.Epoch, req.UnquiescedRanges, req.FromReplica)
 		return nil
 	}
 	return s.HandleRaftUncoalescedRequest(ctx, req, respStream)
@@ -3955,7 +4062,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	}
 }
 
-// Since coalesced heartbeats adds latency to heartbeat messages, it is
+// Since coalesced heartbeats add latency to heartbeat messages, it is
 // beneficial to have it run on a faster cycle than once per tick, so that
 // the delay does not impact latency-sensitive features such as quiescence.
 func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
@@ -3975,20 +4082,15 @@ func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
 // sendQueuedHeartbeatsToNode requires that the s.coalescedMu lock is held. It
 // returns the number of heartbeats that were sent.
 func (s *Store) sendQueuedHeartbeatsToNode(
-	ctx context.Context, beats, resps []RaftHeartbeat, to roachpb.StoreIdent,
+	ctx context.Context,
+	msgType raftpb.MessageType,
+	beats, resps []RaftHeartbeat,
+	to roachpb.StoreIdent,
+	closedSequence int64,
+	closed hlc.Timestamp,
+	epoch int64,
+	unquiescedRanges []roachpb.RangeID,
 ) int {
-	var msgType raftpb.MessageType
-
-	if len(beats) == 0 && len(resps) == 0 {
-		return 0
-	} else if len(resps) == 0 {
-		msgType = raftpb.MsgHeartbeat
-	} else if len(beats) == 0 {
-		msgType = raftpb.MsgHeartbeatResp
-	} else {
-		log.Fatal(ctx, "cannot coalesce both heartbeats and responses")
-	}
-
 	chReq := &RaftMessageRequest{
 		RangeID: 0,
 		ToReplica: roachpb.ReplicaDescriptor{
@@ -4003,8 +4105,12 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		Message: raftpb.Message{
 			Type: msgType,
 		},
-		Heartbeats:     beats,
-		HeartbeatResps: resps,
+		Heartbeats:       beats,
+		HeartbeatResps:   resps,
+		ClosedSequence:   closedSequence,
+		Closed:           closed,
+		Epoch:            epoch,
+		UnquiescedRanges: unquiescedRanges,
 	}
 
 	if log.V(4) {
@@ -4028,22 +4134,150 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 }
 
 func (s *Store) sendQueuedHeartbeats(ctx context.Context) {
+	// Note that we get and update the minimum proposal timestamp before
+	// collecting the heartbeats because it's safe for new proposals and
+	// associated heartbeats to arrive which respect a forwarded min
+	// proposal timestamp. We don't want to be holding the coalescedMu
+	// when we make this call because this may require a sync to disk.
+	closed, epoch := s.getClosedTimestampAndEpoch(ctx)
+
 	s.coalescedMu.Lock()
 	heartbeats := s.coalescedMu.heartbeats
 	heartbeatResponses := s.coalescedMu.heartbeatResponses
+	unquiescedRanges := s.coalescedMu.unquiescedRanges
+	closedSequences := s.coalescedMu.closedSequences
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
 	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.unquiescedRanges = map[roachpb.StoreIdent][]roachpb.RangeID{}
+	s.coalescedMu.closedSequences = map[roachpb.StoreIdent]int64{}
 	s.coalescedMu.Unlock()
 
-	var beatsSent int
-
-	for to, beats := range heartbeats {
-		beatsSent += s.sendQueuedHeartbeatsToNode(ctx, beats, nil, to)
+	// Merge complete set of "to" keys from heartbeat req/resp and
+	// untrusted / acknowledged untrusted ranges.
+	getKeys := func(
+		a map[roachpb.StoreIdent][]RaftHeartbeat, b map[roachpb.StoreIdent][]roachpb.RangeID,
+	) map[roachpb.StoreIdent]struct{} {
+		res := make(map[roachpb.StoreIdent]struct{}, len(a)+len(b))
+		for k, v := range a {
+			if len(v) > 0 {
+				res[k] = struct{}{}
+			}
+		}
+		for k, v := range b {
+			if len(v) > 0 {
+				res[k] = struct{}{}
+			}
+		}
+		return res
 	}
-	for to, resps := range heartbeatResponses {
-		beatsSent += s.sendQueuedHeartbeatsToNode(ctx, nil, resps, to)
+
+	var beatsSent int
+	for to := range getKeys(heartbeats, unquiescedRanges) {
+		if _, ok := closedSequences[to]; !ok {
+			closedSequences[to] = 0
+		}
+		beatsSent += s.sendQueuedHeartbeatsToNode(
+			ctx, raftpb.MsgHeartbeat, heartbeats[to], nil, to, closedSequences[to], closed, epoch, unquiescedRanges[to],
+		)
+	}
+	for to := range heartbeatResponses {
+		beatsSent += s.sendQueuedHeartbeatsToNode(
+			ctx, raftpb.MsgHeartbeatResp, nil, heartbeatResponses[to], to, 0, hlc.Timestamp{}, 0, nil,
+		)
 	}
 	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
+
+	// Increment the values of all closed timestamp sequences. The
+	// sequences allow recipients to realize they've missed a heartbeat.
+	s.coalescedMu.Lock()
+	for k, v := range closedSequences {
+		s.coalescedMu.closedSequences[k] = v + 1
+	}
+	s.coalescedMu.Unlock()
+}
+
+// getMinProposal returns the minimum proposal timestamp, which is the
+// low water mark on new proposals. In addition, it returns a cleanup
+// method to be invoked by the caller *after* the command has been
+// proposed to Raft. This allows the closed timestamp sent to
+// follower replicas to advance only after all commands for which
+// this min proposal timestamp has been enforced have been proposed.
+func (s *Store) getMinProposal(ctx context.Context) (hlc.Timestamp, func()) {
+	s.minPropMu.RLock()
+	defer s.minPropMu.RUnlock()
+	minProp := s.minPropMu.cur
+	atomic.AddInt32(&s.minPropMu.curRef, 1)
+	cleanup := func() {
+		s.minPropMu.RLock()
+		defer s.minPropMu.RUnlock()
+		if minProp == s.minPropMu.cur {
+			val := atomic.AddInt32(&s.minPropMu.curRef, -1)
+			if val < 0 {
+				log.Fatalf(ctx, "min proposal current ref count < 0")
+			}
+		} else if minProp == s.minPropMu.last {
+			val := atomic.AddInt32(&s.minPropMu.lastRef, -1)
+			if val < 0 {
+				log.Fatalf(ctx, "min proposal last ref count < 0")
+			}
+		}
+	}
+	return minProp, cleanup
+}
+
+// getClosedTimestamp returns the closed timestamp for serving a
+// follower read for the specified range. The caller must verify that
+// lh is the valid leaseholder. Returns the closed timestamp, and a
+// boolean indicating whether the follower read is possible, if we've
+// gotten a closed heartbeat from the leaseholder which matches the
+// valid lease's epoch, and the replica is quiescent.
+func (s *Store) getClosedTimestamp(
+	ctx context.Context, lh *roachpb.ReplicaDescriptor, epoch int64, id roachpb.RangeID,
+) (hlc.Timestamp, bool) {
+	s.closedMu.RLock()
+	defer s.closedMu.RUnlock()
+	storeKey := roachpb.StoreIdent{StoreID: lh.StoreID, NodeID: lh.NodeID}
+	if closed, ok := s.closedMu.leaseholders[storeKey]; ok {
+		if _, ok := closed.quiesced[id]; ok && closed.epoch == epoch {
+			return closed.Timestamp, true
+		}
+	}
+	return hlc.Timestamp{}, false
+}
+
+// getClosedTimestampAndEpoch returns the current value of the min
+// proposal timestamp as closed and this node's liveness epoch. The
+// min proposal timestamp is forwarded and persisted. On error,
+// closed is returned as the empty timestamp and epoch as 0, which
+// will disable follower reads for ranges for which this node is the
+// leaseholder.
+func (s *Store) getClosedTimestampAndEpoch(
+	ctx context.Context,
+) (closed hlc.Timestamp, epoch int64) {
+	if s.cfg.NodeLiveness == nil {
+		return
+	}
+	s.minPropMu.Lock()
+	if s.minPropMu.lastRef > 0 {
+		closed = s.minPropMu.last
+	} else {
+		closed = s.minPropMu.cur
+		// We can advance the min proposal if the last min proposal is no longer in use.
+		s.minPropMu.last, s.minPropMu.lastRef = s.minPropMu.cur, s.minPropMu.curRef
+		newMinProposal := s.Clock().Now().Add(-ClosedTimestampInterval.Nanoseconds(), 0)
+		if !s.minPropMu.cur.Forward(newMinProposal) {
+			s.minPropMu.cur = s.minPropMu.cur.Next()
+		}
+	}
+	s.minPropMu.Unlock()
+
+	nl, err := s.cfg.NodeLiveness.Self()
+	if err != nil || !nl.IsLive(s.Clock().Now(), s.Clock().MaxOffset()) {
+		closed = hlc.Timestamp{}
+	} else {
+		epoch = nl.Epoch
+	}
+	return
 }
 
 var errRetry = errors.New("retry: orphaned replica")

@@ -481,6 +481,20 @@ var (
 		Name: "addsstable.copies",
 		Help: "number of SSTable ingestions that required copying files during application",
 	}
+
+	// Follower read metrics.
+	metaFollowerReadSuccess = metric.Metadata{
+		Name: "followerread.success",
+		Help: "Count of follower reads serviced by this store"}
+	metaFollowerReadSkipped = metric.Metadata{
+		Name: "followerread.skipped",
+		Help: "Count of follower reads not serviced by this store because of a lagging replica"}
+	metaFollowerReadEnforceMinProposal = metric.Metadata{
+		Name: "followerread.enforceminproposal",
+		Help: "Number of times the min proposal timestamp was enforced (incl. max txn age counts)"}
+	metaFollowerReadEnforceMaxTxnAge = metric.Metadata{
+		Name: "followerread.enforcemaxtxnage",
+		Help: "Number of times the max transaction age was enforced"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -671,6 +685,12 @@ type StoreMetrics struct {
 	AddSSTableApplications      *metric.Counter
 	AddSSTableApplicationCopies *metric.Counter
 
+	// Follower read stats.
+	FollowerReadSuccess            *metric.Counter
+	FollowerReadSkipped            *metric.Counter
+	FollowerReadEnforceMinProposal *metric.Counter
+	FollowerReadEnforceMaxTxnAge   *metric.Counter
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -856,6 +876,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AddSSTableProposals:         metric.NewCounter(metaAddSSTableProposals),
 		AddSSTableApplications:      metric.NewCounter(metaAddSSTableApplications),
 		AddSSTableApplicationCopies: metric.NewCounter(metaAddSSTableApplicationCopies),
+
+		// Follower read counters.
+		FollowerReadSuccess:            metric.NewCounter(metaFollowerReadSuccess),
+		FollowerReadSkipped:            metric.NewCounter(metaFollowerReadSkipped),
+		FollowerReadEnforceMinProposal: metric.NewCounter(metaFollowerReadEnforceMinProposal),
+		FollowerReadEnforceMaxTxnAge:   metric.NewCounter(metaFollowerReadEnforceMaxTxnAge),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
