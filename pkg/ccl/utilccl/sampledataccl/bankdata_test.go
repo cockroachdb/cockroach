@@ -23,90 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-func TestInsertBatched(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tests := []struct {
-		rows      int
-		batchSize int
-	}{
-		{10, 1},
-		{10, 9},
-		{10, 10},
-		{10, 100},
-	}
-
-	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	for _, test := range tests {
-		t.Run(fmt.Sprintf("rows=%d/batch=%d", test.rows, test.batchSize), func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(db)
-
-			data := Bank(test.rows, 0, bankConfigDefault)
-			sqlDB.Exec(t, `CREATE DATABASE IF NOT EXISTS data`)
-			sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, data.Name()))
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, data.Name(), data.Schema()))
-
-			if err := InsertBatched(sqlDB.DB, data, test.batchSize); err != nil {
-				t.Fatalf("%+v", err)
-			}
-
-			var rowCount int
-			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name())).Scan(&rowCount)
-			if rowCount != test.rows {
-				t.Errorf("got %d rows expected %d", rowCount, test.rows)
-			}
-		})
-	}
-}
-
-func TestSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tests := []struct {
-		rows           int
-		ranges         int
-		expectedRanges int
-	}{
-		{10, 0, 1}, // We always have at least one range.
-		{10, 1, 1},
-		{10, 9, 9},
-		{10, 10, 10},
-		{10, 100, 10}, // Don't make more ranges than rows.
-	}
-
-	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	for _, test := range tests {
-		t.Run(fmt.Sprintf("rows=%d/ranges=%d", test.rows, test.ranges), func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(db)
-
-			data := Bank(test.rows, bankConfigDefault, test.ranges)
-			sqlDB.Exec(t, `CREATE DATABASE IF NOT EXISTS data`)
-			sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, data.Name()))
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, data.Name(), data.Schema()))
-
-			if err := Split(sqlDB.DB, data); err != nil {
-				t.Fatalf("%+v", err)
-			}
-
-			var rangeCount int
-			sqlDB.QueryRow(t,
-				fmt.Sprintf(`SELECT COUNT(*) FROM [SHOW TESTING_RANGES FROM TABLE %s]`, data.Name()),
-			).Scan(&rangeCount)
-			if rangeCount != test.expectedRanges {
-				t.Errorf("got %d ranges expected %d", rangeCount, test.expectedRanges)
-			}
-		})
-	}
-}
 
 func TestToBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -118,7 +37,7 @@ func TestToBackup(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: outerDir})
 	defer s.Stopper().Stop(ctx)
 
-	const payloadBytes = 100
+	const payloadBytes, ranges = 100, 10
 	chunkBytesSizes := []int64{
 		0,                // 0 means default ~32MB
 		3 * payloadBytes, // a number that will not evently divide the number of rows
@@ -128,7 +47,7 @@ func TestToBackup(t *testing.T) {
 		for _, chunkBytes := range chunkBytesSizes {
 			t.Run(fmt.Sprintf("rows=%d/chunk=%d", rows, chunkBytes), func(t *testing.T) {
 				dir := fmt.Sprintf("%d-%d", rows, chunkBytes)
-				data := Bank(rows, payloadBytes, bankConfigDefault)
+				data := bank.FromConfig(rows, payloadBytes, ranges).Tables()[0]
 				backup, err := toBackup(t, data, filepath.Join(outerDir, dir), chunkBytes)
 				if err != nil {
 					t.Fatalf("%+v", err)
@@ -138,10 +57,11 @@ func TestToBackup(t *testing.T) {
 					sqlDB := sqlutils.MakeSQLRunner(db)
 					sqlDB.Exec(t, `DROP DATABASE IF EXISTS data CASCADE`)
 					sqlDB.Exec(t, `CREATE DATABASE data`)
+					sqlDB.Exec(t, `USE data`)
 					sqlDB.Exec(t, `RESTORE data.* FROM $1`, `nodelocal:///`+dir)
 
 					var rowCount int
-					sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name())).Scan(&rowCount)
+					sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name)).Scan(&rowCount)
 					if rowCount != rows {
 						t.Errorf("got %d rows expected %d", rowCount, rows)
 					}
