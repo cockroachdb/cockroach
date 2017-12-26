@@ -234,7 +234,12 @@ func updateStatsOnPut(
 	// Remove current live counts for this key.
 	if orig != nil {
 		if sys {
-			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
+			ms.SysBytes -= origMetaKeySize + origMetaValSize
+			if orig.Txn != nil {
+				// If the original value was an intent, we're replacing the
+				// intent.
+				ms.SysBytes -= orig.KeyBytes + orig.ValBytes
+			}
 			ms.SysCount--
 		} else {
 			// Move the (so far empty) stats to the timestamp at which the
