@@ -402,7 +402,7 @@ func (o *binPackingOracle) ChoosePreferredLeaseHolder(
 	if err != nil {
 		return kv.ReplicaInfo{}, err
 	}
-	replicas.OptimizeReplicaOrder(&o.nodeDesc)
+	replicas.OptimizeReplicaOrder(&o.nodeDesc, nil /* TODO(andrei): plumb rpc context and remote clocks for latency */)
 
 	// Look for a replica that has been assigned some ranges, but it's not yet full.
 	minLoad := int(math.MaxInt32)

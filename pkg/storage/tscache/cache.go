@@ -16,8 +16,8 @@ package tscache
 
 import (
 	"fmt"
-	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,7 +28,7 @@ import (
 // cache before allowing eviction. After this window expires, transactions
 // writing to this node with timestamps lagging by more than MinRetentionWindow
 // will necessarily have to advance their commit timestamp.
-const MinRetentionWindow = 10 * time.Second
+const MinRetentionWindow = base.MaxTransactionAge
 
 // Cache is a bounded in-memory cache that records key ranges and the
 // timestamps at which they were most recently read and written. The structure

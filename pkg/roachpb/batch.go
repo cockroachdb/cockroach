@@ -27,26 +27,36 @@ import (
 
 //go:generate go run -tags gen-batch gen_batch.go
 
-// SetActiveTimestamp sets the correct timestamp at which the request is to be
-// carried out. For transactional requests, ba.Timestamp must be zero initially
-// and it will be set to txn.OrigTimestamp. For non-transactional requests, if
-// no timestamp is specified, nowFn is used to create and set one.
-func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
+// GetActiveTimestamp returns either the batch timestamp or the
+// transaction's original timestamp if the batch is transactional.
+// For transactional requests, ba.Timestamp must be zero or an error
+// is returned. For non-transactional requests, if no timestamp is
+// specified, nowFn() is returned.
+func (ba *BatchRequest) GetActiveTimestamp(nowFn func() hlc.Timestamp) (hlc.Timestamp, error) {
 	if txn := ba.Txn; txn != nil {
 		if ba.Timestamp != (hlc.Timestamp{}) {
-			return errors.New("transactional request must not set batch timestamp")
+			return hlc.Timestamp{}, errors.New("transactional request must not set batch timestamp")
 		}
-
 		// Always use the original timestamp for reads and writes, even
 		// though some intents may be written at higher timestamps in the
 		// event of a WriteTooOldError.
-		ba.Timestamp = txn.OrigTimestamp
-	} else {
-		// When not transactional, allow empty timestamp and use nowFn instead
-		if ba.Timestamp == (hlc.Timestamp{}) {
-			ba.Timestamp = nowFn()
-		}
+		return txn.OrigTimestamp, nil
 	}
+	// When not transactional, allow empty timestamp and use nowFn instead
+	if ba.Timestamp == (hlc.Timestamp{}) {
+		return nowFn(), nil
+	}
+	return ba.Timestamp, nil
+}
+
+// SetActiveTimestamp sets the batch timestamp to the active timestamp.
+// Note this method must only be called once for transactional batches.
+func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
+	at, err := ba.GetActiveTimestamp(nowFn)
+	if err != nil {
+		return err
+	}
+	ba.Timestamp = at
 	return nil
 }
 

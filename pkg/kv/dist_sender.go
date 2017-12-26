@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -64,6 +65,9 @@ var (
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
 		Name: "distsender.errors.notleaseholder",
 		Help: "Number of NotLeaseHolderErrors encountered"}
+	metaDistSenderFollowerReadCount = metric.Metadata{
+		Name: "distsender.followerread.count",
+		Help: "Number of reads only batches treated as follower reads"}
 	metaSlowDistSenderRequests = metric.Metadata{
 		Name: "requests.slow.distsender",
 		Help: "Number of requests that have been stuck for a long time in the dist sender"}
@@ -83,6 +87,7 @@ type DistSenderMetrics struct {
 	LocalSentCount         *metric.Counter
 	NextReplicaErrCount    *metric.Counter
 	NotLeaseHolderErrCount *metric.Counter
+	FollowerReadCount      *metric.Counter
 	SlowRequestsCount      *metric.Gauge
 }
 
@@ -94,6 +99,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		LocalSentCount:         metric.NewCounter(metaTransportLocalSentCount),
 		NextReplicaErrCount:    metric.NewCounter(metaDistSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		FollowerReadCount:      metric.NewCounter(metaDistSenderFollowerReadCount),
 		SlowRequestsCount:      metric.NewGauge(metaSlowDistSenderRequests),
 	}
 }
@@ -133,12 +139,13 @@ type DistSender struct {
 	// rangeCache caches replica metadata for key ranges.
 	rangeCache *RangeDescriptorCache
 	// leaseHolderCache caches range lease holders by range ID.
-	leaseHolderCache *LeaseHolderCache
-	transportFactory TransportFactory
-	rpcContext       *rpc.Context
-	rpcRetryOptions  retry.Options
-	asyncSenderSem   chan struct{}
-	asyncSenderCount int32
+	leaseHolderCache     *LeaseHolderCache
+	transportFactory     TransportFactory
+	rpcContext           *rpc.Context
+	rpcRetryOptions      retry.Options
+	asyncSenderSem       chan struct{}
+	asyncSenderCount     int32
+	followerReadInterval time.Duration
 }
 
 var _ client.Sender = &DistSender{}
@@ -158,7 +165,8 @@ type DistSenderConfig struct {
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 
-	TestingKnobs DistSenderTestingKnobs
+	TestingKnobs         DistSenderTestingKnobs
+	FollowerReadInterval time.Duration
 }
 
 // DistSenderTestingKnobs is a part of the context used to control parts of
@@ -180,10 +188,11 @@ func (*DistSenderTestingKnobs) ModuleTestingKnobs() {}
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds := &DistSender{
-		st:      cfg.Settings,
-		clock:   cfg.Clock,
-		gossip:  g,
-		metrics: makeDistSenderMetrics(),
+		st:                   cfg.Settings,
+		clock:                cfg.Clock,
+		gossip:               g,
+		metrics:              makeDistSenderMetrics(),
+		followerReadInterval: cfg.FollowerReadInterval,
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -421,6 +430,15 @@ func (ds *DistSender) getDescriptor(
 	return desc, returnToken, nil
 }
 
+func (ds *DistSender) maybeCanReadFromFollower(ba roachpb.BatchRequest) bool {
+	estimatedSafeTimestamp := ds.clock.Now().Add(-ds.followerReadInterval.Nanoseconds(), 0)
+	if at, err := ba.GetActiveTimestamp(ds.clock.Now); err == nil && at.Less(estimatedSafeTimestamp) {
+		ds.metrics.FollowerReadCount.Inc(1)
+		return true
+	}
+	return false
+}
+
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
@@ -428,17 +446,25 @@ func (ds *DistSender) sendSingleRange(
 	// Try to send the call.
 	replicas := NewReplicaSlice(ds.gossip, desc)
 
-	// Rearrange the replicas so that those replicas with long common
-	// prefix of attributes end up first. If there's no prefix, this is a
-	// no-op.
-	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor())
+	// Rearrange the replicas so that they're ordered in expectation of
+	// request latency.
+	var latencyFn LatencyFunc
+	if ds.rpcContext != nil {
+		latencyFn = ds.rpcContext.RemoteClocks.Latency
+	}
+	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 
-	// If this request needs to go to a lease holder and we know who that is, move
-	// it to the front.
-	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
-		if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
-			if i := replicas.FindReplica(storeID); i >= 0 {
-				replicas.MoveToFront(i)
+	// If this request needs to go to a lease holder and we know who
+	// that is, possibly move it to the front.
+	readOnly := ba.IsReadOnly()
+	if !(readOnly && ba.ReadConsistency == roachpb.INCONSISTENT) {
+		// We can avoid sending to the leaseholder if the batch qualifies
+		// for being served by follower reads.
+		if !readOnly || !ds.maybeCanReadFromFollower(ba) {
+			if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
+				if i := replicas.FindReplica(storeID); i >= 0 {
+					replicas.MoveToFront(i)
+				}
 			}
 		}
 	}

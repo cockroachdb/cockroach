@@ -47,6 +47,8 @@ func TestPrettyPrint(t *testing.T) {
 		{StoreIdentKey(), "/Local/Store/storeIdent"},
 		{StoreGossipKey(), "/Local/Store/gossipBootstrap"},
 		{StoreClusterVersionKey(), "/Local/Store/clusterVersion"},
+		{StoreLastUpKey(), "/Local/Store/lastUp"},
+		{StoreMinRaftProposalKey(), "/Local/Store/minRaftProposal"},
 		{StoreSuggestedCompactionKey(MinKey, roachpb.Key("b")), `/Local/Store/suggestedCompaction/{/Min-"b"}`},
 		{StoreSuggestedCompactionKey(roachpb.Key("a"), roachpb.Key("b")), `/Local/Store/suggestedCompaction/{"a"-"b"}`},
 		{StoreSuggestedCompactionKey(roachpb.Key("a"), MaxKey), `/Local/Store/suggestedCompaction/{"a"-/Max}`},

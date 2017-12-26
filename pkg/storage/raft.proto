@@ -19,6 +19,7 @@ option go_package = "storage";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "storage/storagebase/state.proto";
+import "util/hlc/timestamp.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -39,6 +40,11 @@ message RaftHeartbeat {
   optional uint64 term = 4 [(gogoproto.nullable) = false];
   optional uint64 commit = 5 [(gogoproto.nullable) = false];
   optional bool quiesce = 6 [(gogoproto.nullable) = false];
+  // safe_index is the maximum log index of proposals made for this
+  // range at the time the heartbeat was generated. Reads may be
+  // served by any replica before the max_safe timestamp so long
+  // as the replica has committed log entries >= safe_index.
+  optional uint64 safe_index = 7 [(gogoproto.nullable) = false];
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
@@ -65,10 +71,35 @@ message RaftMessageRequest {
   // the sender.
   optional bool quiesce = 5 [(gogoproto.nullable) = false];
 
-  // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
-  // heartbeats or heartbeat_resps.
+  // A coalesced heartbeat request is any RaftMessageRequest with a
+  // nonzero number of heartbeats or heartbeat_resps.
   repeated RaftHeartbeat heartbeats = 6 [(gogoproto.nullable) = false];
   repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
+
+  // The following fields support follower reads and are supplied only
+  // on coalesced heartbeats / heartbeat responses.
+
+  // max_safe is the timestamp before which follower replicas being
+  // heartbeat can serve reads as long as they've committed up to the
+  // safe_index specified with the heartbeat. Heartbeats only.
+  optional util.hlc.Timestamp max_safe = 8 [(gogoproto.nullable) = false];
+  // epoch is the node liveness epoch of the sender. If this value
+  // changes between heartbeats, all prior knowledge of safe indexes
+  // learned from the sender must be discarded. Heartbeats only.
+  optional int64 epoch = 9 [(gogoproto.nullable) = false];
+  // unsafe_ranges is a set of ranges for which previously learned
+  // safe indexes can no longer be relied on and should be discarded.
+  // The set includes ranges which have forwarded commands
+  // (leaseholder-not-leader), ranges with new leases, and ranges with
+  // removed replicas. Heartbeats only.
+  repeated uint64 unsafe_ranges = 10 [
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // unsafe_ranges_ackd is a set of ranges acknowledged as marked
+  // unsafe. This prevents lost heartbeats from failing to notify a
+  // follower replica that the max safe timestamp does not apply to a
+  // range anymore. Heartbeat responses only.
+  repeated uint64 unsafe_ranges_ackd = 11 [
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 }
 
 message RaftMessageRequestBatch {

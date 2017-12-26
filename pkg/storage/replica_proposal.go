@@ -280,6 +280,10 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		r.txnWaitQueue.Enable()
 	}
 
+	// Clear the max safe timestamp map for old and new lease owners.
+	r.store.clearMaxSafeTS(r.RangeID, prevLease.Replica)
+	r.store.clearMaxSafeTS(r.RangeID, newLease.Replica)
+
 	// Mark the new lease in the replica's lease history.
 	if r.leaseHistory != nil {
 		r.leaseHistory.add(newLease)

@@ -464,6 +464,23 @@ var (
 	metaAddSSTableApplications = metric.Metadata{
 		Name: "addsstable.applications",
 		Help: "Number of SSTable ingestions applied (i.e. applied by Replicas)"}
+
+	// Follower read metrics.
+	metaFollowerReadSuccess = metric.Metadata{
+		Name: "followerread.success",
+		Help: "Count of follower reads serviced by this store"}
+	metaFollowerReadSkipped = metric.Metadata{
+		Name: "followerread.skipped",
+		Help: "Count of follower reads not serviced by this store because of a lagging replica"}
+	metaFollowerReadEnforceMinProposal = metric.Metadata{
+		Name: "followerread.enforceminproposal",
+		Help: "Number of times the min proposal timestamp was enforced (incl. max txn age counts)"}
+	metaFollowerReadEnforceMaxTxnAgeSnapshot = metric.Metadata{
+		Name: "followerread.enforcemaxtxnage.snapshot",
+		Help: "Number of times the max transaction age was enforced for iso=SNAPSHOT txns"}
+	metaFollowerReadEnforceMaxTxnAgeSerializable = metric.Metadata{
+		Name: "followerread.enforcemaxtxnage.serializable",
+		Help: "Number of times the max transaction age was enforced for iso=SERIALIZABLE txns"}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -651,6 +668,13 @@ type StoreMetrics struct {
 	AddSSTableProposals    *metric.Counter
 	AddSSTableApplications *metric.Counter
 
+	// Follower read stats.
+	FollowerReadSuccess                      *metric.Counter
+	FollowerReadSkipped                      *metric.Counter
+	FollowerReadEnforceMinProposal           *metric.Counter
+	FollowerReadEnforceMaxTxnAgeSnapshot     *metric.Counter
+	FollowerReadEnforceMaxTxnAgeSerializable *metric.Counter
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -833,6 +857,13 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// AddSSTable proposal + applications counters.
 		AddSSTableProposals:    metric.NewCounter(metaAddSSTableProposals),
 		AddSSTableApplications: metric.NewCounter(metaAddSSTableApplications),
+
+		// Follower read counters.
+		FollowerReadSuccess:                      metric.NewCounter(metaFollowerReadSuccess),
+		FollowerReadSkipped:                      metric.NewCounter(metaFollowerReadSkipped),
+		FollowerReadEnforceMinProposal:           metric.NewCounter(metaFollowerReadEnforceMinProposal),
+		FollowerReadEnforceMaxTxnAgeSnapshot:     metric.NewCounter(metaFollowerReadEnforceMaxTxnAgeSnapshot),
+		FollowerReadEnforceMaxTxnAgeSerializable: metric.NewCounter(metaFollowerReadEnforceMaxTxnAgeSerializable),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp

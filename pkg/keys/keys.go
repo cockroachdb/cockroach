@@ -75,6 +75,12 @@ func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
 }
 
+// StoreMinRaftProposalKey returns the key for the store's minimum Raft
+// proposal timeestamp.
+func StoreMinRaftProposalKey() roachpb.Key {
+	return MakeStoreKey(localStoreMinRaftProposalSuffix, nil)
+}
+
 // StoreSuggestedCompactionKey returns a store-local key for a
 // suggested compaction. It combines the specified start and end keys.
 func StoreSuggestedCompactionKey(start, end roachpb.Key) roachpb.Key {
