@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -486,6 +487,141 @@ func TestMVCCStatsDocumentNegativeWrites(t *testing.T) {
 	assertEq(t, engine, "after second deletion", aggMS, &expMS)
 }
 
+// TestMVCCStatsSysTxnPutPut prevents regression of a bug that, when rewriting an intent
+// on a sys key, would lead to overcounting `ms.SysBytes`.
+func TestMVCCStatsTxnSysPutPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
+
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+
+	key := keys.RangeDescriptorKey(roachpb.RKey("a"))
+
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2E9}
+
+	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts1}}
+
+	// Write an intent at ts1.
+	value1 := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, ts1, value1, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 11)
+
+	mValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: hlc.LegacyTimestamp(ts1),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mValSize, 44)
+
+	vKeySize := mvccVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vVal1Size := int64(len(value1.RawBytes))
+	require.EqualValues(t, vVal1Size, 10)
+
+	value2 := roachpb.MakeValueFromString("longvalue")
+	vVal2Size := int64(len(value2.RawBytes))
+	require.EqualValues(t, vVal2Size, 14)
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1E9,
+		SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+44+12+10 = 77
+		SysCount:        1,
+	}
+	assertEq(t, engine, "after first put", aggMS, &expMS)
+
+	// Rewrite the intent to ts2 with a different value.
+	txn.Timestamp.Forward(ts2)
+	txn.Sequence++
+
+	// The new meta value grows because we've bumped `txn.Sequence`.
+	mVal2Size := int64((&enginepb.MVCCMetadata{
+		Timestamp: hlc.LegacyTimestamp(ts2),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mVal2Size, 46)
+
+	if err := MVCCPut(ctx, engine, aggMS, key, ts2, value2, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos: 1E9,
+		SysBytes:        mKeySize + mVal2Size + vKeySize + vVal2Size, // 11+46+12+14 = 83
+		SysCount:        1,
+	}
+
+	assertEq(t, engine, "after intent rewrite", aggMS, &expMS)
+}
+
+// TestMVCCStatsSysPutPut prevents regression of a bug that, when writing a new
+// value on top of an existing system key, would undercount.
+func TestMVCCStatsSysPutPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
+
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+
+	key := keys.RangeDescriptorKey(roachpb.RKey("a"))
+
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2E9}
+
+	// Write a value at ts1.
+	value1 := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, ts1, value1, nil /* txn */); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 11)
+
+	vKeySize := mvccVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vVal1Size := int64(len(value1.RawBytes))
+	require.EqualValues(t, vVal1Size, 10)
+
+	value2 := roachpb.MakeValueFromString("longvalue")
+	vVal2Size := int64(len(value2.RawBytes))
+	require.EqualValues(t, vVal2Size, 14)
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1E9,
+		SysBytes:        mKeySize + vKeySize + vVal1Size, // 11+12+10 = 33
+		SysCount:        1,
+	}
+	assertEq(t, engine, "after first put", aggMS, &expMS)
+
+	// Put another value at ts2.
+
+	if err := MVCCPut(ctx, engine, aggMS, key, ts2, value2, nil /* txn */); err != nil {
+		t.Fatal(err)
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos: 1E9,
+		SysBytes:        mKeySize + 2*vKeySize + vVal1Size + vVal2Size,
+		SysCount:        1,
+	}
+
+	assertEq(t, engine, "after second put", aggMS, &expMS)
+}
+
 // TestMVCCStatsBasic writes a value, then deletes it as an intent via a
 // transaction, then resolves the intent, manually verifying the mvcc stats at
 // each step.
@@ -742,30 +878,37 @@ func (s *state) intent(status roachpb.TransactionStatus) roachpb.Intent {
 	}
 }
 
+func (s *state) rngVal() roachpb.Value {
+	return roachpb.MakeValueFromBytes(randutil.RandBytes(s.rng, int(s.rng.Int31n(128))))
+}
+
 type randomTest struct {
 	state
 
+	inline      bool
 	actions     map[string]func(*state) string
 	actionNames []string // auto-populated
 	cycle       int
 }
 
 func (s *randomTest) step(t *testing.T) {
-	// Jump up to a few seconds into the future. In ~1% of cases, jump
-	// backwards instead (this exercises intactness on WriteTooOld, etc).
-	s.TS = hlc.Timestamp{
-		WallTime: s.TS.WallTime + int64((s.state.rng.Float32()-0.01)*4E9),
-		Logical:  int32(s.rng.Intn(10)),
+	if !s.inline {
+		// Jump up to a few seconds into the future. In ~1% of cases, jump
+		// backwards instead (this exercises intactness on WriteTooOld, etc).
+		s.TS = hlc.Timestamp{
+			WallTime: s.TS.WallTime + int64((s.state.rng.Float32()-0.01)*4E9),
+			Logical:  int32(s.rng.Intn(10)),
+		}
+		if s.TS.WallTime < 0 {
+			// See TestMVCCStatsDocumentNegativeWrites. Negative MVCC timestamps
+			// aren't something we're interested in, and besides, they corrupt
+			// everything.
+			s.TS.WallTime = 0
+		}
+	} else {
+		s.TS = hlc.Timestamp{}
 	}
-	if s.TS.WallTime <= 0 {
-		// See TestMVCCStatsDocumentNegativeWrites. Negative MVCC timestamps
-		// aren't something we're interested in, and besides, they corrupt
-		// everything.
-		//
-		// As a convenience, we also avoid zero itself (because that doesn't
-		// play well with rand.Int63n).
-		s.TS.WallTime = 1
-	}
+
 	if s.Txn != nil {
 		// TODO(tschottdorf): experiment with s.TS != s.Txn.TS. Which of those
 		// cases are reasonable and which should we catch and error out?
@@ -810,39 +953,24 @@ func TestMVCCStatsRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	seed := randutil.NewPseudoSeed()
-	log.Infof(context.Background(), "using pseudo random number generator with seed %d", seed)
-
-	eng := createTestEngine()
-	defer eng.Close()
 
 	const count = 200
 
-	s := &randomTest{
-		actions: make(map[string]func(*state) string),
-	}
-	s.state.rng = rand.New(rand.NewSource(seed))
-	s.state.eng = eng
-	s.state.key = roachpb.Key("asd")
-	s.state.MS = &enginepb.MVCCStats{}
+	actions := make(map[string]func(*state) string)
 
-	rngVal := func() roachpb.Value {
-		return roachpb.MakeValueFromBytes(randutil.RandBytes(s.rng, int(s.rng.Int31n(128))))
-	}
-
-	s.actions["Put"] = func(s *state) string {
-		if err := MVCCPut(ctx, s.eng, s.MS, s.key, s.TS, rngVal(), s.Txn); err != nil {
+	actions["Put"] = func(s *state) string {
+		if err := MVCCPut(ctx, s.eng, s.MS, s.key, s.TS, s.rngVal(), s.Txn); err != nil {
 			return err.Error()
 		}
 		return ""
 	}
-	s.actions["Del"] = func(s *state) string {
+	actions["Del"] = func(s *state) string {
 		if err := MVCCDelete(ctx, s.eng, s.MS, s.key, s.TS, s.Txn); err != nil {
 			return err.Error()
 		}
 		return ""
 	}
-	s.actions["DelRange"] = func(s *state) string {
+	actions["DelRange"] = func(s *state) string {
 		returnKeys := (s.TS.WallTime % 2) == 0
 		max := s.TS.WallTime % 5
 		desc := fmt.Sprintf("returnKeys=%t, max=%d", returnKeys, max)
@@ -851,13 +979,13 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 		return desc
 	}
-	s.actions["EnsureTxn"] = func(s *state) string {
+	actions["EnsureTxn"] = func(s *state) string {
 		if s.Txn == nil {
 			s.Txn = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: s.TS}}
 		}
 		return ""
 	}
-	s.actions["Abort"] = func(s *state) string {
+	actions["Abort"] = func(s *state) string {
 		if s.Txn != nil {
 			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.ABORTED)); err != nil {
 				return err.Error()
@@ -866,7 +994,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 		return ""
 	}
-	s.actions["Commit"] = func(s *state) string {
+	actions["Commit"] = func(s *state) string {
 		if s.Txn != nil {
 			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.COMMITTED)); err != nil {
 				return err.Error()
@@ -875,7 +1003,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 		return ""
 	}
-	s.actions["Push"] = func(s *state) string {
+	actions["Push"] = func(s *state) string {
 		if s.Txn != nil {
 			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.PENDING)); err != nil {
 				return err.Error()
@@ -883,10 +1011,10 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 		return ""
 	}
-	s.actions["GC"] = func(s *state) string {
+	actions["GC"] = func(s *state) string {
 		// Sometimes GC everything, sometimes only older versions.
 		gcTS := hlc.Timestamp{
-			WallTime: s.rng.Int63n(s.TS.WallTime),
+			WallTime: s.rng.Int63n(s.TS.WallTime + 1 /* avoid zero */),
 		}
 		if err := MVCCGarbageCollect(
 			ctx,
@@ -903,8 +1031,45 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		return fmt.Sprintf("%s (count %d)", gcTS, count)
 	}
 
-	for i := 0; i < count; i++ {
-		s.step(t)
+	for _, test := range []struct {
+		name string
+		key  roachpb.Key
+		seed int64
+	}{
+		{
+			name: "userspace",
+			key:  roachpb.Key("foo"),
+			seed: randutil.NewPseudoSeed(),
+		},
+		{
+			name: "sys",
+			key:  keys.RangeDescriptorKey(roachpb.RKey("bar")),
+			seed: randutil.NewPseudoSeed(),
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "inline", func(t *testing.T, inline bool) {
+				t.Run(fmt.Sprintf("seed=%d", test.seed), func(t *testing.T) {
+					eng := createTestEngine()
+					defer eng.Close()
+
+					s := &randomTest{
+						actions: actions,
+						inline:  inline,
+						state: state{
+							rng: rand.New(rand.NewSource(test.seed)),
+							eng: eng,
+							key: test.key,
+							MS:  &enginepb.MVCCStats{},
+						},
+					}
+
+					for i := 0; i < count; i++ {
+						s.step(t)
+					}
+				})
+			})
+		})
 	}
 }
 
