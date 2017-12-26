@@ -976,6 +976,21 @@ func (node *AlterUserSetPassword) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// CreateRole represents a CREATE ROLE statement.
+type CreateRole struct {
+	Name        Expr
+	IfNotExists bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateRole) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CREATE ROLE ")
+	if node.IfNotExists {
+		buf.WriteString("IF NOT EXISTS ")
+	}
+	FormatNode(buf, f, node.Name)
+}
+
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
 	Name        NormalizableTableName

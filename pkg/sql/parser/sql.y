@@ -597,6 +597,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_index_stmt
+%type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_user_stmt
@@ -610,6 +611,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> drop_ddl_stmt
 %type <tree.Statement> drop_database_stmt
 %type <tree.Statement> drop_index_stmt
+%type <tree.Statement> drop_role_stmt
 %type <tree.Statement> drop_table_stmt
 %type <tree.Statement> drop_user_stmt
 %type <tree.Statement> drop_view_stmt
@@ -1642,9 +1644,11 @@ cancel_query_stmt:
 // %Category: Group
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
-// CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS
+// CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS,
+// CREATE ROLE
 create_stmt:
   create_user_stmt     // EXTEND WITH HELP: CREATE USER
+| create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
 | create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | CREATE error         // SHOW HELP: CREATE
@@ -1712,9 +1716,12 @@ discard_stmt:
 
 // %Help: DROP
 // %Category: Group
-// %Text: DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP SEQUENCE, DROP USER
+// %Text:
+// DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP SEQUENCE,
+// DROP USER, DROP ROLE
 drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
+| drop_role_stmt     // EXTEND WITH HELP: DROP ROLE
 | drop_user_stmt     // EXTEND WITH HELP: DROP USER
 | DROP error         // SHOW HELP: DROP
 
@@ -1831,6 +1838,20 @@ drop_user_stmt:
   }
 | DROP USER error // SHOW HELP: DROP USER
 
+// %Help: DROP ROLE - remove a role
+// %Category: Priv
+// %Text: DROP ROLE [IF EXISTS] <role> [, ...]
+drop_role_stmt:
+  DROP ROLE string_or_placeholder_list
+  {
+    $$.val = &tree.DropRole{Names: $3.exprs(), IfExists: false}
+  }
+| DROP ROLE IF EXISTS string_or_placeholder_list
+  {
+    $$.val = &tree.DropRole{Names: $5.exprs(), IfExists: true}
+  }
+| DROP ROLE error // SHOW HELP: DROP ROLE
+
 table_name_list:
   any_name
   {
@@ -1896,7 +1917,9 @@ preparable_stmt:
 | backup_stmt       // EXTEND WITH HELP: BACKUP
 | cancel_stmt       // help texts in sub-rule
 | create_user_stmt  // EXTEND WITH HELP: CREATE USER
+| create_role_stmt  // EXTEND WITH HELP: CREATE ROLE
 | delete_stmt       // EXTEND WITH HELP: DELETE
+| drop_role_stmt    // EXTEND WITH HELP: DROP ROLE
 | drop_user_stmt    // EXTEND WITH HELP: DROP USER
 | import_stmt       // EXTEND WITH HELP: IMPORT
 | insert_stmt       // EXTEND WITH HELP: INSERT
@@ -3511,6 +3534,20 @@ opt_password:
   {
     $$.val = nil
   }
+
+// %Help: CREATE ROLE - define a new role
+// %Category: Priv
+// %Text: CREATE ROLE [IF NOT EXISTS] <name>
+create_role_stmt:
+  CREATE ROLE string_or_placeholder
+  {
+    $$.val = &tree.CreateRole{Name: $3.expr()}
+  }
+| CREATE ROLE IF NOT EXISTS string_or_placeholder
+  {
+    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true}
+  }
+| CREATE ROLE error // SHOW HELP: CREATE ROLE
 
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL

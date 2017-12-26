@@ -49,6 +49,14 @@ type planHookFn func(
 
 var planHooks []planHookFn
 
+// wrappedPlanHookFn is similar to planHookFn but returns an existing plan type.
+// Additionally, it takes a context.
+type wrappedPlanHookFn func(
+	context.Context, tree.Statement, PlanHookState,
+) (planNode, error)
+
+var wrappedPlanHooks []wrappedPlanHookFn
+
 // PlanHookState exposes the subset of planner needed by plan hooks.
 // We pass this as one interface, rather than individually passing each field or
 // interface as we find we need them, to avoid churn in the planHookFn sig and
@@ -64,6 +72,14 @@ type PlanHookState interface {
 	) (func() (map[string]string, error), error)
 	User() string
 	AuthorizationAccessor
+	// The role create/drop call into OSS code to reuse plan nodes.
+	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
+	CreateUserNode(
+		ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
+	) (*CreateUserNode, error)
+	DropUserNode(
+		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
+	) (*DropUserNode, error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
@@ -71,6 +87,12 @@ type PlanHookState interface {
 // construct a planNode that runs that func in a goroutine during Start.
 func AddPlanHook(f planHookFn) {
 	planHooks = append(planHooks, f)
+}
+
+// AddWrappedPlanHook adds a hook used to short-circuit creating a planNode from a
+// tree.Statement. If the returned plan is non-nil, it is used directly by the planner.
+func AddWrappedPlanHook(f wrappedPlanHookFn) {
+	wrappedPlanHooks = append(wrappedPlanHooks, f)
 }
 
 // hookFnRun contains the run-time state of hookFnNode during local execution.
