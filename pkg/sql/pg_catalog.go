@@ -160,9 +160,9 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attislocal BOOL,
 	attinhcount INT,
 	attcollation OID,
-	attacl STRING,
-	attoptions STRING,
-	attfdwoptions STRING
+	attacl STRING[],
+	attoptions STRING[],
+	attfdwoptions STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -259,8 +259,8 @@ CREATE TABLE pg_catalog.pg_class (
 	relhastriggers BOOL,
 	relhassubclass BOOL,
 	relfrozenxid INT,
-	relacl STRING,
-	reloptions STRING
+	relacl STRING[],
+	reloptions STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -432,10 +432,10 @@ CREATE TABLE pg_catalog.pg_constraint (
 	connoinherit BOOL,
 	conkey INT[],
 	confkey INT[],
-	conpfeqop STRING,
-	conppeqop STRING,
-	conffeqop STRING,
-	conexclop STRING,
+	conpfeqop OID[],
+	conppeqop OID[],
+	conffeqop OID[],
+	conexclop OID[],
 	conbin STRING,
 	consrc STRING
 );
@@ -599,7 +599,7 @@ CREATE TABLE pg_catalog.pg_database (
 	datfrozenxid INT,
 	datminmxid INT,
 	dattablespace OID,
-	datacl STRING
+	datacl STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -809,7 +809,7 @@ var pgCatalogForeignTableTable = virtualSchemaTable{
 CREATE TABLE pg_catalog.pg_foreign_table (
   ftrelid OID,
   ftserver OID,
-  ftoptions STRING
+  ftoptions STRING[]
 );
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1006,7 +1006,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 	oid OID,
 	nspname NAME NOT NULL,
 	nspowner OID,
-	nspacl STRING
+	nspacl STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1065,15 +1065,15 @@ CREATE TABLE pg_catalog.pg_proc (
 	pronargdefaults INT,
 	prorettype OID,
 	proargtypes STRING,
-	proallargtypes STRING,
+	proallargtypes STRING[],
 	proargmodes STRING[],
-	proargnames STRING,
+	proargnames STRING[],
 	proargdefaults STRING,
 	protrftypes STRING,
 	prosrc STRING,
 	probin STRING,
-	proconfig STRING,
-	proacl STRING
+	proconfig STRING[],
+	proacl STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1236,7 +1236,7 @@ CREATE TABLE pg_catalog.pg_roles (
 	rolpassword STRING,
 	rolvaliduntil TIMESTAMPTZ,
 	rolbypassrls BOOL,
-	rolconfig STRING
+	rolconfig STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1262,7 +1262,7 @@ CREATE TABLE pg_catalog.pg_roles (
 					tree.NewDString("********"), // rolpassword
 					tree.DNull,                  // rolvaliduntil
 					tree.DBoolFalse,             // rolbypassrls
-					tree.NewDString("{}"),       // rolconfig
+					tree.DNull,                  // rolconfig
 				)
 			})
 	},
@@ -1403,7 +1403,7 @@ CREATE TABLE pg_catalog.pg_tablespace (
   spcname NAME,
   spcowner OID,
   spclocation TEXT,
-  spcacl STRING,
+  spcacl TEXT[],
   spcoptions TEXT
 );
 `,
@@ -1499,7 +1499,7 @@ CREATE TABLE pg_catalog.pg_type (
 	typcollation OID,
 	typdefaultbin STRING,
 	typdefault STRING,
-	typacl STRING
+	typacl STRING[]
 );
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
