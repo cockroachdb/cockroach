@@ -681,7 +681,7 @@ func (v *indexInfo) makeIndexConstraints(
 					// We rewrite "a != x" to "a IS DISTINCT FROM NULL", since this is all that
 					// makeSpans() cares about.
 					// We don't simplify "a != x" to "a IS DISTINCT FROM NULL" in
-					// simplifyExpr because doing so affects other simplifications.
+					// SimplifyExpr because doing so affects other simplifications.
 					if *startDone || *startExpr != nil {
 						continue
 					}
@@ -1657,7 +1657,7 @@ func applyConstraint(
 ) tree.Expr {
 	// Check that both expressions have the same variable on the left.
 	// It is always true for the constraint, and
-	// simplifyExpr() has ensured this is true in most sub-expressions of t.
+	// SimplifyExpr() has ensured this is true in most sub-expressions of t.
 	varLeft := c.Left.(*tree.IndexedVar)
 	if varRight, ok := t.Left.(*tree.IndexedVar); !ok || varLeft.Idx != varRight.Idx {
 		return t
