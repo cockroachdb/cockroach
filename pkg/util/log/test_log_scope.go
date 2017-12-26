@@ -30,7 +30,8 @@ import (
 // test, and asserts that logging output is not written to this
 // directory beyond the lifetime of the scope.
 type TestLogScope struct {
-	logDir string
+	logDir  string
+	cleanup func()
 }
 
 // tShim is the part of testing.T used by TestLogScope.
@@ -72,21 +73,32 @@ func ScopeWithoutShowLogs(t tShim) *TestLogScope {
 	if err := dirTestOverride("", tempDir); err != nil {
 		t.Fatal(err)
 	}
-	if err := enableLogFileOutput(tempDir, Severity_ERROR); err != nil {
+	undo, err := enableLogFileOutput(tempDir, Severity_ERROR)
+	if err != nil {
+		undo()
 		t.Fatal(err)
 	}
 	t.Logf("test logs captured to: %s", tempDir)
-	return &TestLogScope{logDir: tempDir}
+	return &TestLogScope{logDir: tempDir, cleanup: undo}
 }
 
 // enableLogFileOutput turns on logging using the specified directory.
 // For unittesting only.
-func enableLogFileOutput(dir string, stderrSeverity Severity) error {
+func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
+	oldStderrThreshold := logging.stderrThreshold
+	oldNoStderrRedirect := logging.noStderrRedirect
+
+	undo := func() {
+		logging.mu.Lock()
+		defer logging.mu.Unlock()
+		logging.stderrThreshold = oldStderrThreshold
+		logging.noStderrRedirect = oldNoStderrRedirect
+	}
 	logging.stderrThreshold = stderrSeverity
 	logging.noStderrRedirect = true
-	return logDir.Set(dir)
+	return undo, logDir.Set(dir)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
@@ -122,6 +134,8 @@ func (l *TestLogScope) Close(t tShim) {
 			}
 		}
 	}()
+	defer l.cleanup()
+
 	// Flush/Close the log files.
 	if err := dirTestOverride(l.logDir, ""); err != nil {
 		t.Fatal(err)
