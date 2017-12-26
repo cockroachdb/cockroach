@@ -954,7 +954,7 @@ func createPartitionedBy(
 	}
 	var checkConstraint *sqlbase.TableDescriptor_CheckConstraint
 	if checkExpr != nil && checkExpr != tree.DBoolTrue {
-		if e, equiv := simplifyExpr(evalCtx, checkExpr); equiv {
+		if e, equiv := SimplifyExpr(evalCtx, checkExpr); equiv {
 			checkExpr = e
 		}
 		checkExpr, err = evalCtx.NormalizeExpr(checkExpr)
