@@ -218,6 +218,16 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
+func (s *Store) GetMinProposal(ctx context.Context) (hlc.Timestamp, func()) {
+	return s.getMinProposal(ctx)
+}
+
+func (s *Store) GetClosedTimestampAndEpoch(
+	ctx context.Context,
+) (closed hlc.Timestamp, epoch int64) {
+	return s.getClosedTimestampAndEpoch(ctx)
+}
+
 func NewTestStorePool(cfg StoreConfig) *StorePool {
 	TimeUntilStoreDead.Override(&cfg.Settings.SV, TestTimeUntilStoreDeadOff)
 	return NewStorePool(
