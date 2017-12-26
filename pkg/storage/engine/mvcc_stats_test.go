@@ -842,6 +842,15 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 		return ""
 	}
+	s.actions["DelRange"] = func(s *state) string {
+		returnKeys := (s.TS.WallTime % 2) == 0
+		max := s.TS.WallTime % 5
+		desc := fmt.Sprintf("returnKeys=%t, max=%d", returnKeys, max)
+		if _, _, _, err := MVCCDeleteRange(ctx, s.eng, s.MS, roachpb.KeyMin, roachpb.KeyMax, max, s.TS, s.Txn, returnKeys); err != nil {
+			return desc + ": " + err.Error()
+		}
+		return desc
+	}
 	s.actions["EnsureTxn"] = func(s *state) string {
 		if s.Txn == nil {
 			s.Txn = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: s.TS}}
