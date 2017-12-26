@@ -3412,47 +3412,10 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 }
 
 func verifyStats(debug string, ms, expMS *enginepb.MVCCStats, t *testing.T) {
-	if ms.ContainsEstimates != expMS.ContainsEstimates {
-		t.Errorf("%s: mvcc contains estimates %t; expected %t", debug, ms.ContainsEstimates, expMS.ContainsEstimates)
-	}
-	if ms.LiveBytes != expMS.LiveBytes {
-		t.Errorf("%s: mvcc live bytes %d; expected %d", debug, ms.LiveBytes, expMS.LiveBytes)
-	}
-	if ms.KeyBytes != expMS.KeyBytes {
-		t.Errorf("%s: mvcc keyBytes %d; expected %d", debug, ms.KeyBytes, expMS.KeyBytes)
-	}
-	if ms.ValBytes != expMS.ValBytes {
-		t.Errorf("%s: mvcc valBytes %d; expected %d", debug, ms.ValBytes, expMS.ValBytes)
-	}
-	if ms.IntentBytes != expMS.IntentBytes {
-		t.Errorf("%s: mvcc intentBytes %d; expected %d", debug, ms.IntentBytes, expMS.IntentBytes)
-	}
-	if ms.LiveCount != expMS.LiveCount {
-		t.Errorf("%s: mvcc liveCount %d; expected %d", debug, ms.LiveCount, expMS.LiveCount)
-	}
-	if ms.KeyCount != expMS.KeyCount {
-		t.Errorf("%s: mvcc keyCount %d; expected %d", debug, ms.KeyCount, expMS.KeyCount)
-	}
-	if ms.ValCount != expMS.ValCount {
-		t.Errorf("%s: mvcc valCount %d; expected %d", debug, ms.ValCount, expMS.ValCount)
-	}
-	if ms.IntentCount != expMS.IntentCount {
-		t.Errorf("%s: mvcc intentCount %d; expected %d", debug, ms.IntentCount, expMS.IntentCount)
-	}
-	if ms.LastUpdateNanos != expMS.LastUpdateNanos {
-		t.Errorf("%s: mvcc lastUpdateNanos %d; expected %d", debug, ms.LastUpdateNanos, expMS.LastUpdateNanos)
-	}
-	if ms.IntentAge != expMS.IntentAge {
-		t.Errorf("%s: mvcc intentAge %d; expected %d", debug, ms.IntentAge, expMS.IntentAge)
-	}
-	if ms.GCBytesAge != expMS.GCBytesAge {
-		t.Errorf("%s: mvcc gcBytesAge %d; expected %d", debug, ms.GCBytesAge, expMS.GCBytesAge)
-	}
-	if ms.SysBytes != expMS.SysBytes {
-		t.Errorf("%s: mvcc sysBytes %d; expected %d", debug, ms.SysBytes, expMS.SysBytes)
-	}
-	if ms.SysCount != expMS.SysCount {
-		t.Errorf("%s: mvcc sysCount %d; expected %d", debug, ms.SysCount, expMS.SysCount)
+	t.Helper()
+	if !ms.Equal(expMS) {
+		pretty.Ldiff(t, ms, expMS)
+		t.Errorf("%s: mismatch detected", debug)
 	}
 }
 
