@@ -62,9 +62,6 @@ const (
 	regIMatchOp
 	notRegIMatchOp
 
-	isDistinctFromOp
-	isNotDistinctFromOp
-
 	// isOp implements the SQL operator IS, as well as its extended
 	// version IS NOT DISTINCT FROM.
 	isOp
@@ -96,6 +93,10 @@ const (
 	unaryComplementOp
 
 	functionCallOp
+
+	// unsupportedScalarOp is a temporary facility to pass through an unsupported
+	// TypedExpr (like a subquery) through MakeIndexConstraints.
+	unsupportedScalarOp
 
 	// This should be last.
 	numOperators

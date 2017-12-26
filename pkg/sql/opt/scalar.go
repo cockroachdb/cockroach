@@ -52,8 +52,6 @@ func init() {
 		notRegMatchOp:       {name: "not-regmatch"},
 		regIMatchOp:         {name: "regimatch"},
 		notRegIMatchOp:      {name: "not-regimatch"},
-		isDistinctFromOp:    {name: "is-distinct-from"},
-		isNotDistinctFromOp: {name: "is-not-distinct-from"},
 		isOp:                {name: "is"},
 		isNotOp:             {name: "is-not"},
 		anyOp:               {name: "any"},
@@ -76,6 +74,7 @@ func init() {
 		unaryMinusOp:        {name: "unary-minus"},
 		unaryComplementOp:   {name: "complement"},
 		functionCallOp:      {name: "func"},
+		unsupportedScalarOp: {name: "unsupported-scalar"},
 	}
 
 	for op, info := range scalarOpInfos {
@@ -127,6 +126,11 @@ func isConstBool(e *expr) (ok bool, val bool) {
 		}
 	}
 	return false, false
+}
+
+func initUnsupportedExpr(e *expr, typedExpr tree.TypedExpr) {
+	e.op = unsupportedScalarOp
+	e.private = typedExpr
 }
 
 // initFunctionCallExpr initializes a functionCallOp expression node.
