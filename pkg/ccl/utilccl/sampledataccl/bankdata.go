@@ -11,13 +11,10 @@ package sampledataccl
 import (
 	"bytes"
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -32,116 +29,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-// TODO(dan): Once the interface for this has settled a bit, move it out of ccl.
-
-// Data is a representation of a sql table, used for creating test data in
-// various forms (sql rows, kvs, enterprise backup). All data tables live in the
-// `data` database.
-type Data interface {
-	// Name returns the fully-qualified name of the represented table.
-	Name() string
-
-	// Schema returns the schema for the represented table, such that it can be
-	// used in fmt.Sprintf(`CREATE TABLE %s %s`, data.Name(), data.Schema`())`.
-	Schema() string
-
-	// NextRow iterates through the rows in the represented table, returning one
-	// per call. The row is represented as a slice of strings, each string one
-	// of the columns in the row. When no more rows are available, the bool
-	// returned is false.
-	NextRow() ([]string, bool)
-
-	// NextRow iterates through the split points in the represented table,
-	// returning one per call. The split is represented as a slice of strings,
-	// each string one of the columns in the split. When no more splits are
-	// available, the bool returned is false.
-	NextSplit() ([]string, bool)
-}
-
-// InsertBatched inserts all rows represented by `data` into `db` in batches of
-// `batchSize` rows. The table must exist.
-func InsertBatched(db *gosql.DB, data Data, batchSize int) error {
-	var stmt bytes.Buffer
-	for {
-		stmt.Reset()
-		fmt.Fprintf(&stmt, `INSERT INTO %s VALUES `, data.Name())
-		i := 0
-		done := false
-		for ; i < batchSize; i++ {
-			row, ok := data.NextRow()
-			if !ok {
-				done = true
-				break
-			}
-			if i != 0 {
-				stmt.WriteRune(',')
-			}
-			fmt.Fprintf(&stmt, `(%s)`, strings.Join(row, `,`))
-		}
-		if i > 0 {
-			if _, err := db.Exec(stmt.String()); err != nil {
-				return err
-			}
-		}
-		if done {
-			return nil
-		}
-		continue
-	}
-}
-
-// Split creates the configured number of ranges in an already created created
-// version of the table represented by `data`.
-func Split(db *gosql.DB, data Data) error {
-	var stmt bytes.Buffer
-	fmt.Fprintf(&stmt, `ALTER TABLE %s SPLIT AT VALUES `, data.Name())
-	i := 0
-	for ; ; i++ {
-		split, ok := data.NextSplit()
-		if !ok {
-			break
-		}
-		if i != 0 {
-			stmt.WriteRune(',')
-		}
-		fmt.Fprintf(&stmt, `(%s)`, strings.Join(split, `,`))
-	}
-	if i > 0 {
-		if _, err := db.Exec(stmt.String()); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Setup creates a table in `db` with all the rows and splits of `data`.
-func Setup(db *gosql.DB, data Data) error {
-	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS data`); err != nil {
-		return err
-	}
-	if _, err := db.Exec(fmt.Sprintf(`CREATE TABLE %s %s`, data.Name(), data.Schema())); err != nil {
-		return err
-	}
-	const batchSize = 1000
-	if err := InsertBatched(db, data, batchSize); err != nil {
-		return err
-	}
-	// This occasionally flakes, so ignore errors.
-	_ = Split(db, data)
-	return nil
-}
-
 // ToBackup creates an enterprise backup in `dir`.
-func ToBackup(t testing.TB, data Data, dir string) (*Backup, error) {
+func ToBackup(t testing.TB, data workload.Table, dir string) (*Backup, error) {
 	return toBackup(t, data, dir, 0)
 }
 
-func toBackup(t testing.TB, data Data, dir string, chunkBytes int64) (*Backup, error) {
+func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (*Backup, error) {
 	tempDir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
@@ -154,13 +52,10 @@ func toBackup(t testing.TB, data Data, dir string, chunkBytes int64) (*Backup, e
 	}
 
 	var stmts bytes.Buffer
-	fmt.Fprintf(&stmts, "CREATE TABLE %s %s;\n", data.Name(), data.Schema())
-	for {
-		row, ok := data.NextRow()
-		if !ok {
-			break
-		}
-		fmt.Fprintf(&stmts, "INSERT INTO %s VALUES (%s);\n", data.Name(), strings.Join(row, `,`))
+	fmt.Fprintf(&stmts, "CREATE TABLE %s %s;\n", data.Name, data.Schema)
+	for rowIdx := 0; rowIdx < data.InitialRowCount; rowIdx++ {
+		row := data.InitialRowFn(rowIdx)
+		fmt.Fprintf(&stmts, "INSERT INTO %s VALUES (%s);\n", data.Name, strings.Join(row, `,`))
 	}
 
 	// TODO(dan): The csv load will be less overhead, use it when we have it.
@@ -300,90 +195,4 @@ func (b *Backup) NextKeyValues(
 		return kvs, span, io.EOF
 	}
 	return kvs, span, nil
-}
-
-type bankData struct {
-	Rows         int
-	PayloadBytes int
-	Ranges       int
-	Rng          *rand.Rand
-
-	rowIdx   int
-	splitIdx int
-}
-
-var _ Data = &bankData{}
-
-// bankConfigDefault will trigger the default for any of the parameters for
-// `Bank`.
-const bankConfigDefault = -1
-
-// BankRows returns Bank testdata with the given number of rows and default
-// payload size and range count.
-func BankRows(rows int) Data {
-	return Bank(rows, bankConfigDefault, bankConfigDefault)
-}
-
-// Bank returns a bank table with three columns: an `id INT PRIMARY KEY`
-// representing an account number, a `balance` INT, and a `payload` BYTES to pad
-// the size of the rows for various tests.
-func Bank(rows int, payloadBytes int, ranges int) Data {
-	// TODO(dan): This interface is a little wonky, but it's a bit annoying to
-	// replace it with a struct because that would make most of the callsites
-	// wrap. Complicating things is that there needs to be a distinction between
-	// the default value and an explicit 0 for ranges and payloadBytes.
-	if rows == bankConfigDefault {
-		rows = 1000
-	}
-	if payloadBytes == bankConfigDefault {
-		payloadBytes = 100
-	}
-	if ranges == bankConfigDefault {
-		ranges = 10
-	}
-	if ranges > rows {
-		ranges = rows
-	}
-	rng, _ := randutil.NewPseudoRand()
-	return &bankData{Rows: rows, PayloadBytes: payloadBytes, Ranges: ranges, Rng: rng}
-}
-
-// Name implements the Data interface.
-func (d *bankData) Name() string {
-	return `data.bank`
-}
-
-// Schema implements the Data interface.
-func (d *bankData) Schema() string {
-	return `(
-		id INT PRIMARY KEY,
-		balance INT,
-		payload STRING,
-		FAMILY (id, balance, payload)
-	)`
-}
-
-// NextRow implements the Data interface.
-func (d *bankData) NextRow() ([]string, bool) {
-	if d.rowIdx >= d.Rows {
-		return nil, false
-	}
-	payload := fmt.Sprintf(`'initial-%x'`, randutil.RandBytes(d.Rng, d.PayloadBytes))
-	row := []string{
-		strconv.Itoa(d.rowIdx), // id
-		`0`,     // balance
-		payload, // payload
-	}
-	d.rowIdx++
-	return row, true
-}
-
-// NextSplit implements the Data interface.
-func (d *bankData) NextSplit() ([]string, bool) {
-	if d.splitIdx+1 >= d.Ranges {
-		return nil, false
-	}
-	split := []string{strconv.Itoa((d.splitIdx + 1) * (d.Rows / d.Ranges))}
-	d.splitIdx++
-	return split, true
 }
