@@ -73,6 +73,7 @@ pg_tables
 pg_tablespace
 pg_type
 pg_user
+pg_user_mapping
 pg_views
 
 query TT colnames
