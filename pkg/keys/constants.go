@@ -88,6 +88,9 @@ var (
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
+	// localStoreMinRaftProposalSuffix stores a low water timestamp for
+	// Raft proposals which will be made from this store.
+	localStoreMinRaftProposalSuffix = []byte("mrpt")
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")

@@ -33,4 +33,15 @@ const (
 	// SlowRequestThreshold is the amount of time to wait before considering a
 	// request to be "slow".
 	SlowRequestThreshold = 60 * time.Second
+
+	// MaxTransactionAge is the maximum guaranteed age for transactions.
+	// Transactions which are pending longer than this duration may
+	// complete at their original timestamp, but are not guaranteed to
+	// without a restart in the case of SERIALIZABLE or a forwarded
+	// commit timestamp in the case of SNAPSHOT.
+	//
+	// This value is used as the basis for the minimum retention window
+	// for the timestamp cache as well as the maximum safe timestamp
+	// window used for follower reads.
+	MaxTransactionAge = 10 * time.Second
 )

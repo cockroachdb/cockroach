@@ -180,6 +180,8 @@ var constSubKeyDict = []struct {
 	{"/storeIdent", localStoreIdentSuffix},
 	{"/gossipBootstrap", localStoreGossipSuffix},
 	{"/clusterVersion", localStoreClusterVersionSuffix},
+	{"/lastUp", localStoreLastUpSuffix},
+	{"/minRaftProposal", localStoreMinRaftProposalSuffix},
 	{"/suggestedCompaction", localStoreSuggestedCompactionSuffix},
 }
 

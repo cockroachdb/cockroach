@@ -385,7 +385,25 @@ type Store struct {
 		syncutil.Mutex
 		heartbeats         map[roachpb.StoreIdent][]RaftHeartbeat
 		heartbeatResponses map[roachpb.StoreIdent][]RaftHeartbeat
+		unsafeRanges       map[roachpb.StoreIdent][]roachpb.RangeID
+		unsafeRangesAckd   map[roachpb.StoreIdent][]roachpb.RangeID
 	}
+
+	minPropMu struct {
+		syncutil.Mutex
+		cur, last       hlc.Timestamp
+		curRef, lastRef int // ref counts for cur, last
+	}
+
+	maxSafeMu struct {
+		syncutil.Mutex
+		// leaseholders provides a safe timestamp for follower reads to
+		// ranges with epoch leaseholder matching the map's key and
+		// liveness epoch, and which have committed to the required min
+		// commit index.
+		leaseholders map[roachpb.StoreIdent]*maxSafeTS
+	}
+
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
 	started int32
@@ -808,6 +826,14 @@ func (sc *StoreConfig) SetDefaults() {
 	}
 }
 
+// FollowerReadInterval is an estimated window for use from the
+// distributed KV sender to determine whether a read-only batch has an
+// active timestamp which makes follower reads possible.
+func (sc *StoreConfig) FollowerReadInterval() time.Duration {
+	return time.Duration(MaxSafeTimestampInterval.Nanoseconds() +
+		int64(sc.RaftHeartbeatIntervalTicks)*sc.RaftTickInterval.Nanoseconds())
+}
+
 // LeaseExpiration returns an int64 to increment a manual clock with to
 // make sure that all active range leases expire.
 func (sc *StoreConfig) LeaseExpiration() int64 {
@@ -852,7 +878,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
 	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.unsafeRanges = map[roachpb.StoreIdent][]roachpb.RangeID{}
+	s.coalescedMu.unsafeRangesAckd = map[roachpb.StoreIdent][]roachpb.RangeID{}
 	s.coalescedMu.Unlock()
+
+	s.maxSafeMu.Lock()
+	s.maxSafeMu.leaseholders = map[roachpb.StoreIdent]*maxSafeTS{}
+	s.maxSafeMu.Unlock()
 
 	s.mu.Lock()
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
@@ -1102,6 +1134,23 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
+
+	// Read the last-persisted minimum proposal timestamp and
+	// potentially forward the hlc clock.
+	s.minPropMu.Lock()
+	s.minPropMu.cur, err = s.readStoreLocalTimestamp(ctx, keys.StoreMinRaftProposalKey())
+	if err != nil {
+		return errors.Wrapf(err, "unable to read last persisted minimum proposal timestamp")
+	} else if s.minPropMu.cur == (hlc.Timestamp{}) {
+		s.minPropMu.cur = now.Add(-MaxSafeTimestampInterval.Nanoseconds(), 0)
+	} else {
+		minNow := s.minPropMu.cur.Add(MaxSafeTimestampInterval.Nanoseconds(), 0)
+		if now.Less(minNow) {
+			log.Warningf(ctx, "node time appears to have regressed; forwarding clock to %s", minNow)
+			now = s.cfg.Clock.Update(minNow)
+		}
+	}
+	s.minPropMu.Unlock()
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
@@ -1515,21 +1564,36 @@ func (s *Store) Bootstrap(
 	return nil
 }
 
+func (s *Store) writeStoreLocalTimestamp(
+	ctx context.Context, key roachpb.Key, time hlc.Timestamp,
+) error {
+	b := s.engine.NewWriteOnlyBatch()
+	if err := engine.MVCCPutProto(ctx, b, nil, key, hlc.Timestamp{}, nil, &time); err != nil {
+		return err
+	}
+	return b.Commit(true /* sync */)
+}
+
+func (s *Store) readStoreLocalTimestamp(
+	ctx context.Context, key roachpb.Key,
+) (hlc.Timestamp, error) {
+	var timestamp hlc.Timestamp
+	ok, err := engine.MVCCGetProto(ctx, s.Engine(), key, hlc.Timestamp{}, true, nil, &timestamp)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	} else if !ok {
+		return hlc.Timestamp{}, nil
+	}
+	return timestamp, nil
+}
+
 // WriteLastUpTimestamp records the supplied timestamp into the "last up" key
 // on this store. This value should be refreshed whenever this store's node
 // updates its own liveness record; it is used by a restarting store to
 // determine the approximate time that it stopped.
 func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) error {
 	ctx = s.AnnotateCtx(ctx)
-	return engine.MVCCPutProto(
-		ctx,
-		s.engine,
-		nil,
-		keys.StoreLastUpKey(),
-		hlc.Timestamp{},
-		nil,
-		&time,
-	)
+	return s.writeStoreLocalTimestamp(ctx, keys.StoreLastUpKey(), time)
 }
 
 // ReadLastUpTimestamp returns the "last up" timestamp recorded in this store.
@@ -1538,15 +1602,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 // up" timestamp (for example, on a newly bootstrapped store), the zero
 // timestamp is returned instead.
 func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) {
-	var timestamp hlc.Timestamp
-	ok, err := engine.MVCCGetProto(
-		ctx, s.Engine(), keys.StoreLastUpKey(), hlc.Timestamp{}, true, nil, &timestamp)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	} else if !ok {
-		return hlc.Timestamp{}, nil
-	}
-	return timestamp, nil
+	return s.readStoreLocalTimestamp(ctx, keys.StoreLastUpKey())
 }
 
 func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
@@ -2843,6 +2899,108 @@ func (s *Store) HandleSnapshot(
 	}
 }
 
+func (s *Store) clearMaxSafeTS(
+	rangeID roachpb.RangeID, fromReplica roachpb.ReplicaDescriptor,
+) {
+	s.maxSafeMu.Lock()
+	defer s.maxSafeMu.Unlock()
+	storeKey := roachpb.StoreIdent{
+		StoreID: fromReplica.StoreID,
+		NodeID:  fromReplica.NodeID,
+	}
+	if mst, ok := s.maxSafeMu.leaseholders[storeKey]; ok {
+		delete(mst.minCommits, rangeID)
+	}
+}
+
+func (s *Store) updateMaxSafeTS(
+	ctx context.Context,
+	beats []RaftHeartbeat,
+	maxSafe hlc.Timestamp,
+	epoch int64,
+	unsafeRanges []roachpb.RangeID,
+	fromReplica roachpb.ReplicaDescriptor,
+) {
+	if log.V(4) {
+		log.Infof(ctx, "updating max safe %s, epoch %d from %s for %d ranges (%+v), unsafe (%+v)",
+			maxSafe, epoch, fromReplica, len(beats), beats, unsafeRanges)
+	}
+
+	storeKey := roachpb.StoreIdent{
+		StoreID: fromReplica.StoreID,
+		NodeID:  fromReplica.NodeID,
+	}
+
+	s.coalescedMu.Lock()
+	s.coalescedMu.unsafeRangesAckd[storeKey] = append(
+		s.coalescedMu.unsafeRangesAckd[storeKey], unsafeRanges...)
+	s.coalescedMu.Unlock()
+
+	s.maxSafeMu.Lock()
+	defer s.maxSafeMu.Unlock()
+
+	mst, ok := s.maxSafeMu.leaseholders[storeKey]
+	if !ok {
+		mst = &maxSafeTS{}
+		s.maxSafeMu.leaseholders[storeKey] = mst
+	}
+	mst.Timestamp = maxSafe
+	// If the epoch has changed, delete all max safe indexes gleaned
+	// previously from this leaseholder.
+	if mst.epoch != epoch {
+		mst.epoch = epoch
+		mst.minCommits = map[roachpb.RangeID]uint64{}
+	}
+
+	for _, beat := range beats {
+		if beat.SafeIndex == 0 {
+			delete(mst.minCommits, beat.RangeID)
+		} else {
+			mst.minCommits[beat.RangeID] = beat.SafeIndex
+		}
+	}
+
+	// We clear unsafe ranges after processing beats as don't know which
+	// order the changes were made and treating a range as unsafe is
+	// only inefficient, never incorrect. Not always true in reverse.
+	for _, rangeID := range unsafeRanges {
+		delete(mst.minCommits, rangeID)
+	}
+}
+
+func (s *Store) ackUnsafeRanges(
+	ctx context.Context, unsafeRangesAckd []roachpb.RangeID, fromReplica roachpb.ReplicaDescriptor,
+) {
+	if len(unsafeRangesAckd) == 0 {
+		return
+	}
+	if log.V(4) {
+		log.Infof(ctx, "acknowledging %d ranges from %s: %+v", len(unsafeRangesAckd), fromReplica, unsafeRangesAckd)
+	}
+
+	storeKey := roachpb.StoreIdent{
+		StoreID: fromReplica.StoreID,
+		NodeID:  fromReplica.NodeID,
+	}
+
+	s.coalescedMu.Lock()
+	defer s.coalescedMu.Unlock()
+
+	unsafeMap := make(map[roachpb.RangeID]struct{}, len(s.coalescedMu.unsafeRanges[storeKey]))
+	for _, rangeID := range s.coalescedMu.unsafeRanges[storeKey] {
+		unsafeMap[rangeID] = struct{}{}
+	}
+
+	for _, rangeID := range unsafeRangesAckd {
+		delete(unsafeMap, rangeID)
+	}
+
+	s.coalescedMu.unsafeRanges[storeKey] = make([]roachpb.RangeID, 0, len(unsafeMap))
+	for rangeID := range unsafeMap {
+		s.coalescedMu.unsafeRanges[storeKey] = append(s.coalescedMu.unsafeRanges[storeKey], rangeID)
+	}
+}
+
 func (s *Store) uncoalesceBeats(
 	ctx context.Context,
 	beats []RaftHeartbeat,
@@ -2895,12 +3053,14 @@ func (s *Store) uncoalesceBeats(
 func (s *Store) HandleRaftRequest(
 	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *roachpb.Error {
-	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
+	if len(req.Heartbeats)+len(req.HeartbeatResps)+len(req.UnsafeRanges)+len(req.UnsafeRangesAckd) > 0 {
 		if req.RangeID != 0 {
 			log.Fatalf(ctx, "coalesced heartbeats must have rangeID == 0")
 		}
 		s.uncoalesceBeats(ctx, req.Heartbeats, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeat, respStream)
 		s.uncoalesceBeats(ctx, req.HeartbeatResps, req.FromReplica, req.ToReplica, raftpb.MsgHeartbeatResp, respStream)
+		s.updateMaxSafeTS(ctx, req.Heartbeats, req.MaxSafe, req.Epoch, req.UnsafeRanges, req.FromReplica)
+		s.ackUnsafeRanges(ctx, req.UnsafeRangesAckd, req.FromReplica)
 		return nil
 	}
 	return s.HandleRaftUncoalescedRequest(ctx, req, respStream)
@@ -3793,20 +3953,15 @@ func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
 // sendQueuedHeartbeatsToNode requires that the s.coalescedMu lock is held. It
 // returns the number of heartbeats that were sent.
 func (s *Store) sendQueuedHeartbeatsToNode(
-	ctx context.Context, beats, resps []RaftHeartbeat, to roachpb.StoreIdent,
+	ctx context.Context,
+	msgType raftpb.MessageType,
+	beats, resps []RaftHeartbeat,
+	to roachpb.StoreIdent,
+	maxSafe hlc.Timestamp,
+	epoch int64,
+	unsafeRanges []roachpb.RangeID,
+	unsafeRangesAckd []roachpb.RangeID,
 ) int {
-	var msgType raftpb.MessageType
-
-	if len(beats) == 0 && len(resps) == 0 {
-		return 0
-	} else if len(resps) == 0 {
-		msgType = raftpb.MsgHeartbeat
-	} else if len(beats) == 0 {
-		msgType = raftpb.MsgHeartbeatResp
-	} else {
-		log.Fatal(ctx, "cannot coalesce both heartbeats and responses")
-	}
-
 	chReq := &RaftMessageRequest{
 		RangeID: 0,
 		ToReplica: roachpb.ReplicaDescriptor{
@@ -3821,8 +3976,12 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 		Message: raftpb.Message{
 			Type: msgType,
 		},
-		Heartbeats:     beats,
-		HeartbeatResps: resps,
+		Heartbeats:       beats,
+		HeartbeatResps:   resps,
+		MaxSafe:          maxSafe,
+		Epoch:            epoch,
+		UnsafeRanges:     unsafeRanges,
+		UnsafeRangesAckd: unsafeRangesAckd,
 	}
 
 	if log.V(4) {
@@ -3846,22 +4005,148 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 }
 
 func (s *Store) sendQueuedHeartbeats(ctx context.Context) {
+	// Note that we get and update the minimum proposal timestamp before
+	// collecting the heartbeats because it's safe for new proposals and
+	// associated heartbeats to arrive which respect a forwarded min
+	// proposal timestamp. We don't want to be holding the coalescedMu
+	// when we make this call because this may require a sync to disk.
+	maxSafe, epoch := s.getMaxSafeTimestampAndEpoch(ctx)
+
 	s.coalescedMu.Lock()
 	heartbeats := s.coalescedMu.heartbeats
 	heartbeatResponses := s.coalescedMu.heartbeatResponses
+	// Note we copy the unsafe ranges because we never clear any range
+	// from the slice until after we've received an acknowledgement from
+	// the replica that the range has been marked unsafe.
+	unsafeRanges := make(map[roachpb.StoreIdent][]roachpb.RangeID, len(s.coalescedMu.unsafeRanges))
+	for k, v := range s.coalescedMu.unsafeRanges {
+		unsafeRanges[k] = append([]roachpb.RangeID(nil), v...)
+	}
+	unsafeRangesAckd := s.coalescedMu.unsafeRangesAckd
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
 	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.unsafeRangesAckd = map[roachpb.StoreIdent][]roachpb.RangeID{}
 	s.coalescedMu.Unlock()
 
-	var beatsSent int
-
-	for to, beats := range heartbeats {
-		beatsSent += s.sendQueuedHeartbeatsToNode(ctx, beats, nil, to)
+	// Merge complete set of "to" keys from heartbeat req/resp and
+	// untrusted / acknowledged untrusted ranges.
+	getKeys := func(
+		a map[roachpb.StoreIdent][]RaftHeartbeat, b map[roachpb.StoreIdent][]roachpb.RangeID,
+	) map[roachpb.StoreIdent]struct{} {
+		res := make(map[roachpb.StoreIdent]struct{}, len(a)+len(b))
+		for k, v := range a {
+			if len(v) > 0 {
+				res[k] = struct{}{}
+			}
+		}
+		for k, v := range b {
+			if len(v) > 0 {
+				res[k] = struct{}{}
+			}
+		}
+		return res
 	}
-	for to, resps := range heartbeatResponses {
-		beatsSent += s.sendQueuedHeartbeatsToNode(ctx, nil, resps, to)
+
+	var beatsSent int
+	for to := range getKeys(heartbeats, unsafeRanges) {
+		beatsSent += s.sendQueuedHeartbeatsToNode(
+			ctx, raftpb.MsgHeartbeat, heartbeats[to], nil, to, maxSafe, epoch, unsafeRanges[to], nil,
+		)
+	}
+	for to := range getKeys(heartbeatResponses, unsafeRangesAckd) {
+		beatsSent += s.sendQueuedHeartbeatsToNode(
+			ctx, raftpb.MsgHeartbeatResp, nil, heartbeatResponses[to], to, hlc.Timestamp{}, 0, nil, unsafeRangesAckd[to],
+		)
 	}
 	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
+}
+
+// getMinProposal returns the minimum proposal timestamp, which is the
+// low water mark on new proposals. In addition, it returns a cleanup
+// method to be invoked by the caller *after* the command has been
+// proposed to Raft. This allows the max safe timestamp sent to
+// follower replicas to advance only after all commands for which
+// this min proposal timestamp has been enforced have been proposed.
+func (s *Store) getMinProposal(ctx context.Context) (hlc.Timestamp, func()) {
+	s.minPropMu.Lock()
+	defer s.minPropMu.Unlock()
+	minProp := s.minPropMu.cur
+	s.minPropMu.curRef++
+	cleanup := func() {
+		s.minPropMu.Lock()
+		defer s.minPropMu.Unlock()
+		if minProp == s.minPropMu.cur {
+			s.minPropMu.curRef--
+			if s.minPropMu.curRef < 0 {
+				log.Fatalf(ctx, "min proposal current ref count < 0")
+			}
+		} else if minProp == s.minPropMu.last {
+			s.minPropMu.lastRef--
+			if s.minPropMu.lastRef < 0 {
+				log.Fatalf(ctx, "min proposal last ref count < 0")
+			}
+		}
+	}
+	return minProp, cleanup
+}
+
+// getMaxSafe returns requirements for serving a follower read for the
+// specified range. lh must be the valid leaseholder. Returns the max
+// safe timestamp, the corresponding minimum safe committed log index,
+// and a boolean indicating whether the follower read is possible.
+func (s *Store) getMaxSafe(
+	ctx context.Context, lh *roachpb.ReplicaDescriptor, id roachpb.RangeID,
+) (hlc.Timestamp, uint64, bool) {
+	s.maxSafeMu.Lock()
+	defer s.maxSafeMu.Unlock()
+
+	storeKey := roachpb.StoreIdent{StoreID: lh.StoreID, NodeID: lh.NodeID}
+	if mst, ok := s.maxSafeMu.leaseholders[storeKey]; ok {
+		if safeIdx, ok := mst.minCommits[id]; ok {
+			return mst.Timestamp, safeIdx, true
+		}
+	}
+	return hlc.Timestamp{}, 0, false
+}
+
+// getMaxSafeTimestampAndEpoch returns the current value of the min
+// proposal timestamp as maxSafe and this node's liveness epoch. The
+// min proposal timestamp is forwarded and persisted. On error,
+// maxSafe is returned as the empty timestamp and epoch as 0, which
+// will disable follower reads for ranges for which this node is the
+// leaseholder.
+func (s *Store) getMaxSafeTimestampAndEpoch(ctx context.Context) (
+	maxSafe hlc.Timestamp, epoch int64,
+) {
+	if s.cfg.NodeLiveness == nil {
+		return
+	}
+	s.minPropMu.Lock()
+	if s.minPropMu.lastRef > 0 {
+		maxSafe = s.minPropMu.last
+	} else {
+		maxSafe = s.minPropMu.cur
+		// We can advance the min proposal if the last min proposal is no longer in use.
+		s.minPropMu.last, s.minPropMu.lastRef = s.minPropMu.cur, s.minPropMu.curRef
+		newMinProposal := s.Clock().Now().Add(-MaxSafeTimestampInterval.Nanoseconds(), 0)
+		if !s.minPropMu.cur.Forward(newMinProposal) {
+			s.minPropMu.cur = s.minPropMu.cur.Next()
+		}
+		err := s.writeStoreLocalTimestamp(ctx, keys.StoreMinRaftProposalKey(), newMinProposal)
+		if err != nil {
+			log.Errorf(ctx, "unable to write minimum proposal: %s", err)
+			maxSafe = hlc.Timestamp{}
+		}
+	}
+	s.minPropMu.Unlock()
+
+	nl, err := s.cfg.NodeLiveness.Self()
+	if err != nil {
+		maxSafe = hlc.Timestamp{}
+	} else {
+		epoch = nl.Epoch
+	}
+	return
 }
 
 var errRetry = errors.New("retry: orphaned replica")

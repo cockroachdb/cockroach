@@ -559,7 +559,8 @@ func (t *RaftTransport) getQueue(nodeID roachpb.NodeID) (chan *RaftMessageReques
 // returns false if the outgoing queue is full and calls s.onError when the
 // recipient closes the stream.
 func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
-	if req.RangeID == 0 && len(req.Heartbeats) == 0 && len(req.HeartbeatResps) == 0 {
+	if req.RangeID == 0 && len(req.Heartbeats) == 0 && len(req.HeartbeatResps) == 0 &&
+		len(req.UnsafeRanges) == 0 && len(req.UnsafeRangesAckd) == 0 {
 		// Coalesced heartbeats are addressed to range 0; everything else
 		// needs an explicit range ID.
 		panic("only messages with coalesced heartbeats or heartbeat responses may be sent to range ID 0")

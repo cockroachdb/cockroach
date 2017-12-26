@@ -1464,7 +1464,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			return nil, nil
 		}()
 		if pErr != nil {
-			return LeaseStatus{}, pErr
+			// Note that we return the status even on error as an
+			// optimization for serving follower reads.
+			return status, pErr
 		}
 		if llHandle == nil {
 			// We own a valid lease.
@@ -2387,6 +2389,28 @@ func (r *Replica) applyTimestampCache(
 	return bumped, nil
 }
 
+// enforceMinProposal ensures that the batch or transaction timestamp
+// is forwarded so that it is greater than or equal to the store's
+// minimum proposal timestamp. Returns whether the batch or transaction
+// timestamp was moved forward as well as a cleanup function which must
+// be invoked after the command is proposed.
+func (r *Replica) enforceMinProposal(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (bool, func()) {
+	var bumped bool
+	minProp, cleanup := r.store.getMinProposal(ctx)
+	if ba.Txn != nil {
+		if ba.Txn.Timestamp.Less(minProp) {
+			txn := ba.Txn.Clone()
+			bumped = txn.Timestamp.Forward(minProp)
+			ba.Txn = &txn
+		}
+	} else {
+		bumped = ba.Timestamp.Forward(minProp)
+	}
+	return bumped, cleanup
+}
+
 // executeAdminBatch executes the command directly. There is no interaction
 // with the command queue or the timestamp cache, as admin commands
 // are not meant to consistently access or modify the underlying data.
@@ -2480,16 +2504,46 @@ func (r *Replica) executeAdminBatch(
 	return br, nil
 }
 
+// canServiceFollowerRead returns whether the batch request can be
+// serviced by the current replica (a follower), given the current
+// max safe timestamp reported to this replica by the leaseholder.
+func (r *Replica) canServiceFollowerRead(
+	ctx context.Context,
+	status LeaseStatus,
+	leaseholder *roachpb.ReplicaDescriptor,
+	readTS hlc.Timestamp,
+) bool {
+	// The leaseholder must hold a valid epoch lease.
+	if status.State == LeaseState_VALID && status.Liveness != nil && leaseholder != nil {
+		// The read timestamp must be less than the max safe timestamp and
+		// this replica must be committed at least to the safe log index.
+		maxSafe, safeIdx, ok := r.store.getMaxSafe(ctx, leaseholder, r.RangeID)
+		if ok && readTS.Less(maxSafe) {
+			if status := r.RaftStatus(); status.Commit >= safeIdx {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // executeReadOnlyBatch updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the command queue.
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// If the read is consistent, the read requires the range lease.
+	// If the read is consistent, the read may require the range lease
+	// (unless a follower read is possible).
+	var followerRead bool
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
-		if _, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, pErr
+		var status LeaseStatus
+		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
+			if !ok || !r.canServiceFollowerRead(ctx, status, nlhe.LeaseHolder, ba.Timestamp) {
+				return nil, pErr
+			}
+			followerRead = true
 		}
 	}
 
@@ -2498,12 +2552,17 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	// Add the read to the command queue to gate subsequent
-	// overlapping commands until this command completes.
-	log.Event(ctx, "command queue")
-	endCmds, err := r.beginCmds(ctx, &ba, spans)
-	if err != nil {
-		return nil, roachpb.NewError(err)
+	// Add the read to the command queue to gate subsequent overlapping
+	// commands until this command completes. This does not apply for
+	// follower reads - we avoid both the command queue and any updates
+	// to the timestamp cache.
+	var endCmds *endCmds
+	if !followerRead {
+		log.Event(ctx, "command queue")
+		endCmds, err = r.beginCmds(ctx, &ba, spans)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
 	}
 
 	log.Event(ctx, "waiting for read lock")
@@ -2514,9 +2573,11 @@ func (r *Replica) executeReadOnlyBatch(
 	// important that this is inside the readOnlyCmdMu lock so that the
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
-	defer func() {
-		endCmds.done(br, pErr, proposalNoRetry)
-	}()
+	if !followerRead {
+		defer func() {
+			endCmds.done(br, pErr, proposalNoRetry)
+		}()
+	}
 
 	if _, err := r.IsDestroyed(); err != nil {
 		return nil, roachpb.NewError(err)
@@ -2698,9 +2759,14 @@ func (r *Replica) tryExecuteWriteBatch(
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if bumped, pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
+	bumped, pErr := r.applyTimestampCache(ctx, &ba)
+	if pErr != nil {
 		return nil, pErr, proposalNoRetry
-	} else if bumped {
+	}
+	// Enforce the store's min proposal timestamp.
+	enforced, minPropCleanup := r.enforceMinProposal(ctx, &ba)
+
+	if bumped || enforced {
 		// If we bump the transaction's timestamp, we must absolutely
 		// tell the client in a response transaction (for otherwise it
 		// doesn't know about the incremented timestamp). Response
@@ -2722,6 +2788,7 @@ func (r *Replica) tryExecuteWriteBatch(
 	log.Event(ctx, "applied timestamp cache")
 
 	ch, tryAbandon, undoQuotaAcquisition, pErr := r.propose(ctx, lease, ba, endCmds, spans)
+	minPropCleanup() // mandatory cleanup
 	defer func() {
 		// NB: We may be double free-ing here, consider the following cases:
 		//  - The request was evaluated and the command resulted in an error, but a
@@ -3192,8 +3259,13 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		}
 
 		return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-			// We're proposing a command here so there is no need to wake the
-			// leader if we were quiesced.
+			// Always mark a removed replica as unsafe. We must be certain
+			// that when we stop heartbeating it, it has no chance to assume
+			// new max safe timestamps apply to an old log index.
+			if crt.ChangeType == roachpb.REMOVE_REPLICA {
+				r.markRangeUnsafe(p.ctx, crt.Replica)
+			}
+
 			r.unquiesceLocked()
 			return false, /* unquiesceAndWakeLeader */
 				raftGroup.ProposeConfChange(raftpb.ConfChange{
@@ -3215,6 +3287,13 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 			log.Event(p.ctx, "sideloadable proposal detected")
 		}
 
+		// If we're not the leader and are forwarding the proposal, -or-
+		// if this is a lease request, mark the range as unsafe.
+		status := raftGroup.Status()
+		if !isRaftLeader(status) || p.command.ReplicatedEvalResult.IsLeaseRequest {
+			r.markRangeUnsafeForAllReplicas(p.ctx, status)
+		}
+
 		if log.V(4) {
 			log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 		}
@@ -3223,6 +3302,28 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		r.unquiesceLocked()
 		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(encode(p.idKey, data))
 	})
+}
+
+func (r *Replica) markRangeUnsafeForAllReplicas(ctx context.Context, status *raft.Status) {
+	for id := range status.Progress {
+		if roachpb.ReplicaID(id) != r.mu.replicaID {
+			rep, err := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(id), r.mu.lastFromReplica)
+			if err != nil {
+				if log.V(4) {
+					log.Infof(ctx, "failed to mark range unsafe: cannot find to replica (%d)", id)
+				}
+			} else {
+				r.markRangeUnsafe(ctx, rep)
+			}
+		}
+	}
+}
+
+func (r *Replica) markRangeUnsafe(ctx context.Context, replica roachpb.ReplicaDescriptor) {
+	r.store.coalescedMu.Lock()
+	defer r.store.coalescedMu.Unlock()
+	toStore := roachpb.StoreIdent{StoreID: replica.StoreID, NodeID: replica.NodeID}
+	r.store.coalescedMu.unsafeRanges[toStore] = append(r.store.coalescedMu.unsafeRanges[toStore], r.RangeID)
 }
 
 // mark the replica as quiesced. Returns true if the Replica is successfully
@@ -4016,31 +4117,16 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 			r.unquiesceLocked()
 			return false
 		}
-		msg := raftpb.Message{
-			From:   uint64(r.mu.replicaID),
-			To:     id,
-			Type:   raftpb.MsgHeartbeat,
-			Term:   status.Term,
-			Commit: status.Commit,
+		beat := RaftHeartbeat{
+			RangeID:       r.RangeID,
+			ToReplicaID:   toReplica.ReplicaID,
+			FromReplicaID: fromReplica.ReplicaID,
+			Term:          status.Term,
+			Commit:        status.Commit,
+			Quiesce:       true,
+			SafeIndex:     status.Commit,
 		}
-
-		if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, true) {
-			continue
-		}
-
-		req := &RaftMessageRequest{
-			RangeID:     r.RangeID,
-			ToReplica:   toReplica,
-			FromReplica: fromReplica,
-			Message:     msg,
-			Quiesce:     true,
-		}
-		if !r.sendRaftMessageRequest(ctx, req) {
-			r.unquiesceLocked()
-			r.mu.droppedMessages++
-			r.mu.internalRaftGroup.ReportUnreachable(id)
-			return false
-		}
+		r.coalesceHeartbeat(ctx, raftpb.MsgHeartbeat, beat, toReplica)
 	}
 	return true
 }
@@ -4192,16 +4278,16 @@ func (r *Replica) getReplicaDescriptorByIDRLocked(
 		errors.Errorf("replica %d not present in %v, %v", replicaID, fallback, r.mu.state.Desc.Replicas)
 }
 
-// maybeCoalesceHeartbeat returns true if the heartbeat was coalesced and added
-// to the appropriate queue.
-func (r *Replica) maybeCoalesceHeartbeat(
+// coalesceHeartbeat coalesces the supplied heartbeat by adding
+// it to the appropriate queue based on toReplica.
+func (r *Replica) coalesceHeartbeat(
 	ctx context.Context,
-	msg raftpb.Message,
-	toReplica, fromReplica roachpb.ReplicaDescriptor,
-	quiesce bool,
-) bool {
+	msgType raftpb.MessageType,
+	beat RaftHeartbeat,
+	toReplica roachpb.ReplicaDescriptor,
+) {
 	var hbMap map[roachpb.StoreIdent][]RaftHeartbeat
-	switch msg.Type {
+	switch msgType {
 	case raftpb.MsgHeartbeat:
 		r.store.coalescedMu.Lock()
 		hbMap = r.store.coalescedMu.heartbeats
@@ -4209,15 +4295,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		r.store.coalescedMu.Lock()
 		hbMap = r.store.coalescedMu.heartbeatResponses
 	default:
-		return false
-	}
-	beat := RaftHeartbeat{
-		RangeID:       r.RangeID,
-		ToReplicaID:   toReplica.ReplicaID,
-		FromReplicaID: fromReplica.ReplicaID,
-		Term:          msg.Term,
-		Commit:        msg.Commit,
-		Quiesce:       quiesce,
+		log.Fatalf(ctx, "unexpected message type %s", msgType)
 	}
 	if log.V(4) {
 		log.Infof(ctx, "coalescing beat: %+v", beat)
@@ -4228,7 +4306,6 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	}
 	hbMap[toStore] = append(hbMap[toStore], beat)
 	r.store.coalescedMu.Unlock()
-	return true
 }
 
 func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Message) {
@@ -4283,10 +4360,10 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 
 // sendRaftMessage sends a Raft message.
 func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
-	r.mu.Lock()
+	r.mu.RLock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.mu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.mu.lastFromReplica)
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	if fromErr != nil {
 		log.Warningf(ctx, "failed to look up sender replica %d in r%d while sending %s: %s",
@@ -4299,30 +4376,50 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
+	switch msg.Type {
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
-	if msg.Type == raftpb.MsgSnap {
+	case raftpb.MsgSnap:
 		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
 			log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
 		}
-		return
-	}
 
-	if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, false) {
-		return
-	}
+		// Heartbeats and heartbeat responses are coalesced.
+	case raftpb.MsgHeartbeat, raftpb.MsgHeartbeatResp:
+		beat := RaftHeartbeat{
+			RangeID:       r.RangeID,
+			ToReplicaID:   toReplica.ReplicaID,
+			FromReplicaID: fromReplica.ReplicaID,
+			Term:          msg.Term,
+			Commit:        msg.Commit,
+		}
+		// On heartbeat, if this replica owns the lease, send the last
+		// index as the safe index. Leader-not-leaseholder replicas do
+		// not send a safe index, preventing follower reads.
+		if msg.Type == raftpb.MsgHeartbeat {
+			r.mu.RLock()
+			if r.ownsValidLeaseRLocked(r.store.Clock().Now()) {
+				if lastIndex, err := r.raftLastIndexLocked(); err == nil {
+					beat.SafeIndex = lastIndex
+				}
+			}
+			r.mu.RUnlock()
+		}
+		r.coalesceHeartbeat(ctx, msg.Type, beat, toReplica)
 
-	if !r.sendRaftMessageRequest(ctx, &RaftMessageRequest{
-		RangeID:     r.RangeID,
-		ToReplica:   toReplica,
-		FromReplica: fromReplica,
-		Message:     msg,
-	}) {
-		if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-			r.mu.droppedMessages++
-			raftGroup.ReportUnreachable(msg.To)
-			return true, nil
-		}); err != nil {
-			log.Fatal(ctx, err)
+	default:
+		if !r.sendRaftMessageRequest(ctx, &RaftMessageRequest{
+			RangeID:     r.RangeID,
+			ToReplica:   toReplica,
+			FromReplica: fromReplica,
+			Message:     msg,
+		}) {
+			if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+				r.mu.droppedMessages++
+				raftGroup.ReportUnreachable(msg.To)
+				return true, nil
+			}); err != nil {
+				log.Fatal(ctx, err)
+			}
 		}
 	}
 }

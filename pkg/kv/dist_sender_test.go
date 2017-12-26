@@ -185,12 +185,12 @@ func TestSendRPCOrder(t *testing.T) {
 	g, clock := makeGossip(t, stopper)
 	rangeID := roachpb.RangeID(99)
 
-	nodeAttrs := map[int32][]string{
+	nodeTiers := map[int32][]roachpb.Tier{
 		1: {}, // The local node, set in each test case.
-		2: {"us", "west", "gpu"},
-		3: {"eu", "dublin", "pdu2", "gpu"},
-		4: {"us", "east", "gpu"},
-		5: {"us", "east", "gpu", "flaky"},
+		2: {roachpb.Tier{Key: "country", Value: "us"}, roachpb.Tier{Key: "region", Value: "west"}},
+		3: {roachpb.Tier{Key: "country", Value: "eu"}, roachpb.Tier{Key: "city", Value: "dublin"}},
+		4: {roachpb.Tier{Key: "country", Value: "us"}, roachpb.Tier{Key: "region", Value: "east"}, roachpb.Tier{Key: "city", Value: "nyc"}},
+		5: {roachpb.Tier{Key: "country", Value: "us"}, roachpb.Tier{Key: "region", Value: "east"}, roachpb.Tier{Key: "city", Value: "mia"}},
 	}
 
 	// Gets filled below to identify the replica by its address.
@@ -216,7 +216,7 @@ func TestSendRPCOrder(t *testing.T) {
 
 	testCases := []struct {
 		args        roachpb.Request
-		attrs       []string
+		tiers       []roachpb.Tier
 		expReplica  []roachpb.NodeID
 		leaseHolder int32 // 0 for not caching a lease holder.
 		// Naming is somewhat off, as eventually consistent reads usually
@@ -229,7 +229,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// Inconsistent Scan without matching attributes.
 		{
 			args:       &roachpb.ScanRequest{},
-			attrs:      []string{},
+			tiers:      []roachpb.Tier{},
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 		},
 		// Inconsistent Scan with matching attributes.
@@ -237,7 +237,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// go stable.
 		{
 			args:  &roachpb.ScanRequest{},
-			attrs: nodeAttrs[5],
+			tiers: nodeTiers[5],
 			// Compare only the first two resulting addresses.
 			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
@@ -246,7 +246,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// a lease holder.
 		{
 			args:       &roachpb.ScanRequest{},
-			attrs:      []string{},
+			tiers:      []roachpb.Tier{},
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 			consistent: true,
 		},
@@ -254,14 +254,14 @@ func TestSendRPCOrder(t *testing.T) {
 		// Should go random and not change anything.
 		{
 			args:       &roachpb.PutRequest{},
-			attrs:      []string{"nomatch"},
+			tiers:      []roachpb.Tier{roachpb.Tier{Key: "nomatch", Value: ""}},
 			expReplica: []roachpb.NodeID{1, 2, 3, 4, 5},
 		},
 		// Put with matching attributes but no lease holder.
 		// Should move the two nodes matching the attributes to the front.
 		{
 			args:  &roachpb.PutRequest{},
-			attrs: append(nodeAttrs[5], "irrelevant"),
+			tiers: append(nodeTiers[5], roachpb.Tier{Key: "irrelevant", Value: ""}),
 			// Compare only the first two resulting addresses.
 			expReplica: []roachpb.NodeID{5, 4, 0, 0, 0},
 		},
@@ -270,7 +270,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// (the last and second to last) in that order.
 		{
 			args:  &roachpb.PutRequest{},
-			attrs: append(nodeAttrs[5], "irrelevant"),
+			tiers: append(nodeTiers[5], roachpb.Tier{Key: "irrelevant", Value: ""}),
 			// Compare only the first resulting addresses as we have a lease holder
 			// and that means we're only trying to send there.
 			expReplica:  []roachpb.NodeID{2, 5, 4, 0, 0},
@@ -280,7 +280,7 @@ func TestSendRPCOrder(t *testing.T) {
 		// go random as the lease holder does not matter.
 		{
 			args:        &roachpb.GetRequest{},
-			attrs:       []string{},
+			tiers:       []roachpb.Tier{},
 			expReplica:  []roachpb.NodeID{1, 2, 3, 4, 5},
 			leaseHolder: 2,
 		},
@@ -296,8 +296,8 @@ func TestSendRPCOrder(t *testing.T) {
 		nd := &roachpb.NodeDescriptor{
 			NodeID:  roachpb.NodeID(i),
 			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-			Attrs: roachpb.Attributes{
-				Attrs: nodeAttrs[i],
+			Locality: roachpb.Locality{
+				Tiers: nodeTiers[i],
 			},
 		}
 		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
@@ -343,8 +343,8 @@ func TestSendRPCOrder(t *testing.T) {
 			// The local node needs to get its attributes during sendRPC.
 			nd := &roachpb.NodeDescriptor{
 				NodeID: 6,
-				Attrs: roachpb.Attributes{
-					Attrs: tc.attrs,
+				Locality: roachpb.Locality{
+					Tiers: tc.tiers,
 				},
 			}
 			g.NodeID.Reset(nd.NodeID)
