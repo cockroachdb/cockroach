@@ -81,6 +81,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogSequencesTable,
 		pgCatalogSettingsTable,
 		pgCatalogUserTable,
+		pgCatalogUserMappingTable,
 		pgCatalogTablesTable,
 		pgCatalogTablespaceTable,
 		pgCatalogTypeTable,
@@ -1649,6 +1650,23 @@ CREATE TABLE pg_catalog.pg_user (
 					tree.DNull,              // useconfig
 				)
 			})
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/view-pg-user.html
+var pgCatalogUserMappingTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_user_mapping (
+  oid OID,
+  umuser OID,
+  umserver OID,
+  umoptions TEXT[]
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// This table stores the mapping to foreign server users.
+		// Foreign servers are not supported.
+		return nil
 	},
 }
 
