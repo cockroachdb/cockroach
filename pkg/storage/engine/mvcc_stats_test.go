@@ -878,6 +878,14 @@ func (s *state) intent(status roachpb.TransactionStatus) roachpb.Intent {
 	}
 }
 
+func (s *state) intentRange(status roachpb.TransactionStatus) roachpb.Intent {
+	return roachpb.Intent{
+		Span:   roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+		Txn:    s.Txn.TxnMeta,
+		Status: status,
+	}
+}
+
 func (s *state) rngVal() roachpb.Value {
 	return roachpb.MakeValueFromBytes(randutil.RandBytes(s.rng, int(s.rng.Int31n(128))))
 }
@@ -964,6 +972,14 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 		return ""
 	}
+	actions["InitPut"] = func(s *state) string {
+		failOnTombstones := (s.rng.Intn(2) == 0)
+		desc := fmt.Sprintf("failOnTombstones=%t", failOnTombstones)
+		if err := MVCCInitPut(ctx, s.eng, s.MS, s.key, s.TS, s.rngVal(), failOnTombstones, s.Txn); err != nil {
+			return desc + ": " + err.Error()
+		}
+		return desc
+	}
 	actions["Del"] = func(s *state) string {
 		if err := MVCCDelete(ctx, s.eng, s.MS, s.key, s.TS, s.Txn); err != nil {
 			return err.Error()
@@ -971,8 +987,8 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		return ""
 	}
 	actions["DelRange"] = func(s *state) string {
-		returnKeys := (s.TS.WallTime % 2) == 0
-		max := s.TS.WallTime % 5
+		returnKeys := (s.rng.Intn(2) == 0)
+		max := s.rng.Int63n(5)
 		desc := fmt.Sprintf("returnKeys=%t, max=%d", returnKeys, max)
 		if _, _, _, err := MVCCDeleteRange(ctx, s.eng, s.MS, roachpb.KeyMin, roachpb.KeyMax, max, s.TS, s.Txn, returnKeys); err != nil {
 			return desc + ": " + err.Error()
@@ -985,31 +1001,37 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		}
 		return ""
 	}
-	actions["Abort"] = func(s *state) string {
+
+	resolve := func(s *state, status roachpb.TransactionStatus) string {
+		ranged := s.rng.Intn(2) == 0
+		desc := fmt.Sprintf("ranged=%t", ranged)
 		if s.Txn != nil {
-			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.ABORTED)); err != nil {
-				return err.Error()
+			if !ranged {
+				if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(status)); err != nil {
+					return desc + ": " + err.Error()
+				}
+			} else {
+				max := s.rng.Int63n(5)
+				desc += fmt.Sprintf(", max=%d", max)
+				if _, err := MVCCResolveWriteIntentRange(ctx, s.eng, s.MS, s.intentRange(status), max); err != nil {
+					return desc + ": " + err.Error()
+				}
 			}
-			s.Txn = nil
+			if status != roachpb.PENDING {
+				s.Txn = nil
+			}
 		}
-		return ""
+		return desc
+	}
+
+	actions["Abort"] = func(s *state) string {
+		return resolve(s, roachpb.ABORTED)
 	}
 	actions["Commit"] = func(s *state) string {
-		if s.Txn != nil {
-			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.COMMITTED)); err != nil {
-				return err.Error()
-			}
-			s.Txn = nil
-		}
-		return ""
+		return resolve(s, roachpb.COMMITTED)
 	}
 	actions["Push"] = func(s *state) string {
-		if s.Txn != nil {
-			if err := MVCCResolveWriteIntent(ctx, s.eng, s.MS, s.intent(roachpb.PENDING)); err != nil {
-				return err.Error()
-			}
-		}
-		return ""
+		return resolve(s, roachpb.PENDING)
 	}
 	actions["GC"] = func(s *state) string {
 		// Sometimes GC everything, sometimes only older versions.
