@@ -57,6 +57,7 @@ pg_depend
 pg_description
 pg_enum
 pg_extension
+pg_foreign_data_wrapper
 pg_foreign_server
 pg_foreign_table
 pg_index

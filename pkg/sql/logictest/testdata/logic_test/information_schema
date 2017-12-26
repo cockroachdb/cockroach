@@ -252,6 +252,7 @@ pg_catalog          pg_depend
 pg_catalog          pg_description
 pg_catalog          pg_enum
 pg_catalog          pg_extension
+pg_catalog          pg_foreign_data_wrapper
 pg_catalog          pg_foreign_server
 pg_catalog          pg_foreign_table
 pg_catalog          pg_index
@@ -420,6 +421,7 @@ def            pg_catalog          pg_depend                  SYSTEM VIEW  1
 def            pg_catalog          pg_description             SYSTEM VIEW  1
 def            pg_catalog          pg_enum                    SYSTEM VIEW  1
 def            pg_catalog          pg_extension               SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_data_wrapper    SYSTEM VIEW  1
 def            pg_catalog          pg_foreign_server          SYSTEM VIEW  1
 def            pg_catalog          pg_foreign_table           SYSTEM VIEW  1
 def            pg_catalog          pg_index                   SYSTEM VIEW  1
