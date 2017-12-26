@@ -15,62 +15,63 @@
 package binfetcher
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-
-	"golang.org/x/net/context"
 )
 
 func TestDownload(t *testing.T) {
 	if testutils.NightlyStress() {
 		t.Skip()
 	}
+	t.Skip("disabled by default because downloading files in CI is a silly idea")
 
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
 	tests := []Options{
 		// Cockroach.
-		Options{
+		{
 			Binary:  "cockroach",
 			Dir:     dir,
 			Version: "v1.0.4",
 			GOOS:    "linux",
 		},
-		Options{
+		{
 			Binary:  "cockroach",
 			Dir:     dir,
 			Version: "v1.0.6",
 			GOOS:    "darwin",
 		},
-		Options{
+		{
 			Binary:  "cockroach",
 			Dir:     dir,
 			Version: "LATEST",
 			GOOS:    "darwin",
 		},
-		Options{
+		{
 			Binary:  "cockroach",
 			Dir:     dir,
 			Version: "v1.1.3",
 			GOOS:    "windows",
 		},
-		Options{
+		{
 			Binary:  "cockroach",
 			Dir:     dir,
 			Version: "LATEST",
 			GOOS:    "windows",
 		},
-		Options{
-			Binary:  "cockroach",
-			Dir:     dir,
-			Version: "bd828feaa309578142fe7ad2d89ee1b70adbd52d",
-			GOOS:    "linux",
-		},
-		Options{
+		// TODO(tschottdorf): seems like SHAs get removed from edge-binaries.cockroachdb.com?
+		// {
+		// 	Binary:  "cockroach",
+		// 	Dir:     dir,
+		// 	Version: "bd828feaa309578142fe7ad2d89ee1b70adbd52d",
+		// 	GOOS:    "linux",
+		// },
+		{
 			Binary:  "cockroach",
 			Dir:     dir,
 			Version: "LATEST",
@@ -78,19 +79,19 @@ func TestDownload(t *testing.T) {
 		},
 
 		// Load generators.
-		Options{
+		{
 			Binary:  "loadgen/kv",
 			Dir:     dir,
 			Version: "LATEST",
 			GOOS:    "linux",
 		},
-		Options{
+		{
 			Binary:  "loadgen/tpcc",
 			Dir:     dir,
 			Version: "619a768955d5e2cb0b3ae77a8950eec5cd06c041",
 			GOOS:    "linux",
 		},
-		Options{
+		{
 			Component: "loadgen",
 			Binary:    "ycsb",
 			Dir:       dir,

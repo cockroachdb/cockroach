@@ -42,7 +42,7 @@ type Options struct {
 	GOARCH string // empty for build-time GOOS
 
 	// These are optional and rarely need to be set.
-	Component string  // emtpy for auto-inferred; this is the "loadgen" in "loadgen/kv"
+	Component string  // empty for auto-inferred; this is the "loadgen" in "loadgen/kv"
 	Suffix    string  // empty for auto-inferred; either empty, ".zip", or ".tgz"
 	URL       url.URL // empty for auto-inferred
 }
