@@ -31,6 +31,16 @@ import (
 	"github.com/pkg/errors"
 )
 
+//go:generate go run ./internal/cmd/genshfetcher/main.go
+
+// NB: update TestGenerateNoChange when adding/removing anything here.
+
+// OutputFileGeneric is where the generic binary download shell script is generated.
+const OutputFileGeneric = "./get-generic.sh"
+
+// OutputFileCockroach is where the `cockroach` download shell script is generated.
+const OutputFileCockroach = "./get.sh"
+
 // Options are the options to Download().
 type Options struct {
 	Binary  string
@@ -44,20 +54,154 @@ type Options struct {
 	// These are optional and rarely need to be set.
 	Component string  // empty for auto-inferred; this is the "loadgen" in "loadgen/kv"
 	Suffix    string  // empty for auto-inferred; either empty, ".zip", or ".tgz"
-	URL       url.URL // empty for auto-inferred
+	URL       url.URL // empty for auto-inferred; ignored for script
+
+	script []string
+}
+
+// Generated outputs a shell script that implements binary fetching. Panics on error.
+func (opts Options) Generated() string {
+	if err := opts.init(); err != nil {
+		panic(err)
+	}
+
+	s := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+
+# A POSIX variable
+# Reset in case getopts has been used previously in the shell.
+OPTIND=1
+
+binary="%s"
+version="%s"
+os=""
+arch="amd64" # TODO(tschottdorf): how to auto-detect?
+dir="$(pwd)"
+component=""
+suffix=""
+url=""
+
+function errcho() { cat <<< "$@" 1>&2; }
+
+case "${OSTYPE}" in
+    darwin*)
+        os="darwin"
+        ;;
+    linux*)
+        os="linux"
+        ;;
+    cygwin*)
+        os="windows"
+        ;;
+    *)
+        errcho "Unknown \$OSTYPE of ${OSTYPE}"
+        exit 1
+        ;;
+esac
+
+function show_help() {
+    cat<<EOF
+$0 [-o <os>] [-a <arch>] <binary> <version>
+
+<version> is either a CockroachDB release version or LATEST (for the latest bleeding edge).
+When <binary> is not "cockroach", only LATEST or a git commit SHA are valid.
+
+Examples:
+    $0 -o linux -a amd64 cockroach v1.1.3
+    $0 -o windows cockroach v1.1.3
+    $0 -o linux loadgen/kv LATEST
+EOF
+}
+
+OPTARG=""
+while getopts "h?o:a:d:c:s:u:" opt; do
+    case "$opt" in
+    h|\?)
+        show_help
+        exit 0
+        ;;
+    o)  os=$OPTARG
+        ;;
+    a)  arch=$OPTARG
+        ;;
+    d)  dir=$OPTARG
+        ;;
+    c)  component=$OPTARG
+        ;;
+    s)  suffix=$OPTARG
+        ;;
+    u)  url=$OPTARG
+        ;;
+    *)  errcho "Unknown option. This is a bug."
+        exit 1
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+[ "${1-}" = "--" ] && shift
+
+if [ $# -gt 1 ]; then
+    binary=${1}
+    shift
+fi
+
+if [ $# -gt 0 ]; then
+    version=${1}
+    shift
+fi
+
+if [ -z "${binary}" ];
+then
+    errcho "No binary specified."
+    show_help
+    exit 1
+fi
+
+if [ -z "${version}" ]; then
+    errcho "No version specified."
+    show_help
+    exit 1
+fi
+
+
+`, opts.Binary, opts.Version)
+	s += strings.Join(opts.script, "\n") + "\n"
+	s += `echo "${url}"`
+
+	return s
+}
+
+func (opts *Options) addToScript(cmd string) {
+	opts.script = append(opts.script, cmd)
 }
 
 func (opts *Options) init() error {
+	opts.addToScript(`if [ -z "${dir}" ]; then dir=$(mktemp -d); fi`)
 	if opts.Dir == "" {
 		opts.Dir = os.TempDir()
 	}
+
+	opts.addToScript(`if [ -z "${os}" ]; then echo "Unable to detect OS. Please use '-o'."; fi`)
 	if opts.GOOS == "" {
 		opts.GOOS = runtime.GOOS
 	}
+
+	opts.addToScript(`if [ -z "${arch}" ]; then echo "Unable to detect architecture. Please use '-a'."; fi`)
 	if opts.GOARCH == "" {
 		opts.GOARCH = runtime.GOARCH
 	}
-	if opts.Component == "" {
+
+	opts.addToScript(`
+if [ -z "${component}" ] && [ ! -z "${binary}" ]; then
+    if [[ "${binary}" == "cockroach" ]]; then
+        component="cockroach"
+    else
+        component=$(dirname "${binary}")
+        binary=$(basename "${binary}")
+    fi
+fi`)
+	if opts.Component == "" && opts.Binary != "" {
 		switch opts.Binary {
 		case "cockroach":
 			opts.Component = "cockroach"
@@ -67,6 +211,24 @@ func (opts *Options) init() error {
 		}
 	}
 
+	opts.addToScript(`
+autosuffix=""
+case "${os}" in
+    darwin)
+        autosuffix=".tgz"
+        ;;
+    linux)
+        autosuffix=".tgz"
+        ;;
+    windows)
+        autosuffix=".zip"
+        ;;
+    *)
+        echo "Unsupported OS: ${os}."
+        exit 1
+        ;;
+esac
+`)
 	var suffix string // only used when Binary == "cockroach"
 	switch opts.GOOS {
 	case "darwin":
@@ -79,7 +241,51 @@ func (opts *Options) init() error {
 		return errors.Errorf("unsupported GOOS: %s", opts.GOOS)
 	}
 
-	if opts.URL == (url.URL{}) {
+	opts.addToScript(`
+if [ -z "${url}" ]; then
+    case "${version}" in
+        v*)
+            if [ "${binary}" != "cockroach" ]; then
+                echo "Invalid binary ${binary} for version ${version}"
+                exit 1
+            fi
+            urlos="${os}"
+            case "${os}" in
+                darwin)
+                    urlos="${urlos}-10.9"
+                    ;;
+                windows)
+                    urlos="${urlos}-6.2"
+                    ;;
+            esac
+            if [ -z "${suffix}" ]; then
+                suffix="${autosuffix}"
+            fi
+
+            url="https://binaries.cockroachdb.com/${binary}-${version}.${urlos}-${arch}${suffix}"
+            ;;
+        *)
+            urlos="${os}"
+            base=""
+            if [ "${binary}" == "cockroach" ]; then
+                if [ "${os}" == "linux" ]; then
+                    urlos="${urlos}-gnu"
+                fi
+                base="${binary}.${urlos}-${arch}.${version}"
+            else
+                if [ "${os}" != "linux" ]; then
+                    errcho "${binary} version ${version} is not available for ${os}"
+                    exit 1
+                fi
+                base="${binary}.${version}"
+            fi
+            url="https://edge-binaries.cockroachdb.com/${component}/${base}"
+            ;;
+    esac
+    url="${url}?binfetcher=true"
+fi`)
+
+	if opts.URL == (url.URL{}) && len(opts.Version) > 0 {
 		switch opts.Version[0] {
 		case 'v':
 			if opts.Binary != "cockroach" {
@@ -114,7 +320,7 @@ func (opts *Options) init() error {
 				base = fmt.Sprintf("%s.%s-%s.%s", opts.Binary, modGOOS, opts.GOARCH, opts.Version)
 			} else {
 				if opts.GOOS != "linux" {
-					return errors.Errorf("%s is not available for %s", opts.Binary, opts.GOOS)
+					return errors.Errorf("%s version %s is not available for %s", opts.Binary, opts.Version, opts.GOOS)
 				}
 				base = fmt.Sprintf("%s.%s", opts.Binary, opts.Version)
 			}
@@ -126,9 +332,10 @@ func (opts *Options) init() error {
 		}
 
 		v := url.Values{}
-		v.Add("ci", "true")
+		v.Add("binfetcher", "true")
 		opts.URL.RawQuery = v.Encode()
 	}
+
 	return nil
 }
 
