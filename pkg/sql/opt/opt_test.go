@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 var (
@@ -269,6 +270,8 @@ func runTest(t *testing.T, path string, f func(d *testdata) string) {
 }
 
 func TestOpt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	paths, err := filepath.Glob(*logicTestData)
 	if err != nil {
 		t.Fatal(err)

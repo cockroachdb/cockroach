@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
+// indexConstraintCalc calculates index constraints from a
+// conjunction (AND-ed expressions).
 type indexConstraintCalc struct {
 	indexConstraintCtx
 
@@ -34,16 +36,21 @@ type indexConstraintCalc struct {
 }
 
 func makeIndexConstraintCalc(
-	colInfos []IndexColumnInfo, andExprs []*expr, evalCtx *tree.EvalContext,
+	colInfos []IndexColumnInfo, evalCtx *tree.EvalContext, e *expr,
 ) indexConstraintCalc {
-	return indexConstraintCalc{
+	c := indexConstraintCalc{
 		indexConstraintCtx: indexConstraintCtx{
 			colInfos: colInfos,
 			evalCtx:  evalCtx,
 		},
-		andExprs:    andExprs,
 		constraints: make([]LogicalSpans, len(colInfos)),
 	}
+	if e.op == andOp {
+		c.andExprs = e.children
+	} else {
+		c.andExprs = []*expr{e}
+	}
+	return c
 }
 
 // makeEqSpan returns a span that constraints column <offset> to a single value.
@@ -532,13 +539,20 @@ type IndexColumnInfo struct {
 func MakeIndexConstraints(
 	filter *expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
 ) LogicalSpans {
-	var andExprs []*expr
-	if filter.op == andOp {
-		andExprs = filter.children
-	} else {
-		andExprs = []*expr{filter}
+	if filter.op == orOp {
+		var spans LogicalSpans
+		for i, orExpr := range filter.children {
+			c := makeIndexConstraintCalc(colInfos, evalCtx, orExpr)
+			exprSpans := c.calcOffset(0)
+			if i == 0 {
+				spans = exprSpans
+			} else {
+				spans = c.mergeSpanSets(0 /* offset */, spans, exprSpans)
+			}
+		}
+		return spans
 	}
-	c := makeIndexConstraintCalc(colInfos, andExprs, evalCtx)
+	c := makeIndexConstraintCalc(colInfos, evalCtx, filter)
 	return c.calcOffset(0)
 }
 
