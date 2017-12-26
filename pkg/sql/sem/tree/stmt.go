@@ -255,6 +255,14 @@ func (*CreateUser) StatementTag() string { return "CREATE USER" }
 func (*CreateUser) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*CreateRole) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
+
+func (*CreateRole) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*CreateView) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -333,6 +341,12 @@ func (*DropUser) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropUser) StatementTag() string { return "DROP USER" }
+
+// StatementType implements the Statement interface.
+func (*DropRole) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropRole) StatementTag() string { return "DROP ROLE" }
 
 // StatementType implements the Statement interface.
 func (*Execute) StatementType() StatementType { return Unknown }
@@ -786,6 +800,7 @@ func (n *CommitTransaction) String() string         { return AsString(n) }
 func (n *CopyFrom) String() string                  { return AsString(n) }
 func (n *CreateDatabase) String() string            { return AsString(n) }
 func (n *CreateIndex) String() string               { return AsString(n) }
+func (n *CreateRole) String() string                { return AsString(n) }
 func (n *CreateTable) String() string               { return AsString(n) }
 func (n *CreateSequence) String() string            { return AsString(n) }
 func (n *CreateStats) String() string               { return AsString(n) }
@@ -795,6 +810,7 @@ func (n *Deallocate) String() string                { return AsString(n) }
 func (n *Delete) String() string                    { return AsString(n) }
 func (n *DropDatabase) String() string              { return AsString(n) }
 func (n *DropIndex) String() string                 { return AsString(n) }
+func (n *DropRole) String() string                  { return AsString(n) }
 func (n *DropTable) String() string                 { return AsString(n) }
 func (n *DropView) String() string                  { return AsString(n) }
 func (n *DropSequence) String() string              { return AsString(n) }
