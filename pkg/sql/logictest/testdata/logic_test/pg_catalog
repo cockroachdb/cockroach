@@ -81,17 +81,17 @@ pg_catalog.pg_namespace  CREATE TABLE pg_namespace (
                              oid OID NULL,
                              nspname NAME NOT NULL,
                              nspowner OID NULL,
-                             nspacl STRING NULL
+                             nspacl STRING[] NULL
 )
 
 query TTBTT colnames
 SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
-Field     Type    Null   Default Indices
-oid       OID     true   NULL    {}
-nspname   NAME    false  NULL    {}
-nspowner  OID     true   NULL    {}
-nspacl    STRING  true   NULL    {}
+Field     Type      Null   Default Indices
+oid       OID       true   NULL    {}
+nspname   NAME      false  NULL    {}
+nspowner  OID       true   NULL    {}
+nspacl    STRING[]  true   NULL    {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM pg_catalog.pg_namespace
@@ -1070,9 +1070,9 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  rolconfig
-823966177   admin     -1            ********     NULL           false         {}
-2901009604  root      -1            ********     NULL           false         {}
-2499926009  testuser  -1            ********     NULL           false         {}
+823966177   admin     -1            ********     NULL           false         NULL
+2901009604  root      -1            ********     NULL           false         NULL
+2499926009  testuser  -1            ********     NULL           false         NULL
 
 ## pg_catalog.pg_description
 
