@@ -138,7 +138,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   5 columns, 78 rows
+·                      size   5 columns, 79 rows
 
 query TTT
 EXPLAIN SHOW DATABASE
@@ -195,7 +195,7 @@ sort                                       ·         ·
                      ├── render            ·         ·
                      │    └── filter       ·         ·
                      │         └── values  ·         ·
-                     │                     size      16 columns, 652 rows
+                     │                     size      16 columns, 659 rows
                      └── render            ·         ·
                           └── filter       ·         ·
                                └── values  ·         ·

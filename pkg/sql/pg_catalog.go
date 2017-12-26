@@ -68,6 +68,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogDescriptionTable,
 		pgCatalogEnumTable,
 		pgCatalogExtensionTable,
+		pgCatalogForeignDataWrapperTable,
 		pgCatalogForeignServerTable,
 		pgCatalogForeignTableTable,
 		pgCatalogIndexTable,
@@ -803,6 +804,25 @@ CREATE TABLE pg_catalog.pg_extension (
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		// Extensions are not supported.
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-foreign-data-wrapper.html
+var pgCatalogForeignDataWrapperTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
+  oid OID,
+  fdwname NAME,
+  fdwowner OID,
+  fdwhandler OID,
+  fdwvalidator OID,
+  fdwacl STRING[],
+  fdwoptions STRING[]
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// Foreign data wrappers are not supported.
 		return nil
 	},
 }
