@@ -996,7 +996,7 @@ stmt:
 | cancel_stmt     // help texts in sub-rule
 | scrub_stmt
 | copy_from_stmt
-| comment_stmt    // EXTEND WITH HELP: COMMENT
+| comment_stmt
 | create_stmt     // help texts in sub-rule
 | deallocate_stmt // EXTEND WITH HELP: DEALLOCATE
 | delete_stmt     // EXTEND WITH HELP: DELETE
@@ -1643,23 +1643,21 @@ cancel_query_stmt:
   }
 | CANCEL QUERY error // SHOW HELP: CANCEL QUERY
 
-// %Help: COMMENT - add a comment to a database object
-// %Category: Misc
-// %Text:
-// COMMENT ON [ COLUMN | TABLE ] <objname> IS { 'text' | NULL }
 comment_stmt:
+  /* SKIP DOC */
   COMMENT ON TABLE any_name IS comment_text
   {
-    return unimplemented(sqllex, "COMMENT ON TABLE unimplemented")
+    return unimplementedWithIssue(sqllex, 19472)
   }
+  /* SKIP DOC */
 | COMMENT ON COLUMN any_name IS comment_text
   {
-   return unimplemented(sqllex, "COMMENT ON COLUMN unimplemented")
+   return unimplementedWithIssue(sqllex, 19472)
   }
 
 comment_text:
-			SCONST							{ $$ = $1 }
-			| NULL							{ $$ = "" }
+  SCONST    { $$ = $1 }
+  | NULL    { $$ = "" }
 
 // %Help: CREATE
 // %Category: Group
