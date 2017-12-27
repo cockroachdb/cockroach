@@ -67,6 +67,7 @@ pg_namespace
 pg_operator
 pg_proc
 pg_range
+pg_rewrite
 pg_roles
 pg_sequence
 pg_settings

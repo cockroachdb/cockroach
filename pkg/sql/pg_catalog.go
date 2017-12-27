@@ -78,6 +78,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogOperatorTable,
 		pgCatalogProcTable,
 		pgCatalogRangeTable,
+		pgCatalogRewriteTable,
 		pgCatalogRolesTable,
 		pgCatalogSequencesTable,
 		pgCatalogSettingsTable,
@@ -1287,6 +1288,26 @@ CREATE TABLE pg_catalog.pg_range (
 		// We currently do not support any range types, so this table is empty.
 		// This table should be populated when any range types are added to
 		// oidToDatum (and therefore pg_type).
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-rewrite.html.
+var pgCatalogRewriteTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_rewrite (
+  oid OID,
+  rulename NAME,
+  ev_class OID,
+  ev_type TEXT,
+  ev_enabled TEXT,
+  is_instead BOOL,
+  ev_qual TEXT,
+  ev_action TEXT
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// Rewrite rules are not supported.
 		return nil
 	},
 }
