@@ -995,10 +995,13 @@ func TestSelectPartitionExprs(t *testing.T) {
 		// TODO(dan): The expression simplification in this method is all done
 		// by our normal SQL expression simplification code. Seems like it could
 		// use some targeted work to clean these up. Ideally the following would
-		// all simplyify to  `(a, b) IN ((3, 3), (4, 4))`.
+		// all simplyify to  `(a, b) IN ((3, 3), (4, 4))`. Some of them work
+		// because for every requested partition, all descendent partitions are
+		// omitted, which is an optimization to save a little work with the side
+		// benefit of making more of these what we want.
 		{`p335p445,p33dp44d`, `((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR ((((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5))) OR (((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))))`},
-		{`p33p44,p335p445`, `((a, b) IN ((3, 3), (4, 4))) OR ((a, b, c) IN ((3, 3, 5), (4, 4, 5)))`},
-		{`p33p44,p335p445,p33dp44d`, `((a, b) IN ((3, 3), (4, 4))) OR ((((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))) OR (((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR (((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5)))))`},
+		{`p33p44,p335p445`, `(a, b) IN ((3, 3), (4, 4))`},
+		{`p33p44,p335p445,p33dp44d`, `(a, b) IN ((3, 3), (4, 4))`},
 	}
 
 	evalCtx := &tree.EvalContext{}
@@ -1017,6 +1020,13 @@ func TestSelectPartitionExprs(t *testing.T) {
 			}
 		})
 	}
+	t.Run("error", func(t *testing.T) {
+		partNames := tree.NameList{`p33p44`, `nope`}
+		_, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
+		if !testutils.IsError(err, `unknown partition`) {
+			t.Errorf(`expected "unknown partition" error got: %+v`, err)
+		}
+	})
 }
 
 func TestRepartitioning(t *testing.T) {
