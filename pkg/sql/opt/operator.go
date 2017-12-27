@@ -36,11 +36,8 @@ const (
 	// constOp is a leaf expression that has a constant value.
 	constOp
 
-	// listOp is an unordered list of expressions. Currently unused.
-	listOp
-
-	// orderedListOp is an ordered list of expressions. Currently unused.
-	orderedListOp
+	// tupleOp is a list of scalar expressions.
+	tupleOp
 
 	andOp
 	orOp
