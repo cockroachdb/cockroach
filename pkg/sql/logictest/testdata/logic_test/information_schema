@@ -259,6 +259,7 @@ pg_catalog          pg_index
 pg_catalog          pg_indexes
 pg_catalog          pg_inherits
 pg_catalog          pg_namespace
+pg_catalog          pg_operator
 pg_catalog          pg_proc
 pg_catalog          pg_range
 pg_catalog          pg_roles
@@ -429,6 +430,7 @@ def            pg_catalog          pg_index                   SYSTEM VIEW  1
 def            pg_catalog          pg_indexes                 SYSTEM VIEW  1
 def            pg_catalog          pg_inherits                SYSTEM VIEW  1
 def            pg_catalog          pg_namespace               SYSTEM VIEW  1
+def            pg_catalog          pg_operator                SYSTEM VIEW  1
 def            pg_catalog          pg_proc                    SYSTEM VIEW  1
 def            pg_catalog          pg_range                   SYSTEM VIEW  1
 def            pg_catalog          pg_roles                   SYSTEM VIEW  1
