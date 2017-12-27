@@ -64,6 +64,7 @@ pg_index
 pg_indexes
 pg_inherits
 pg_namespace
+pg_operator
 pg_proc
 pg_range
 pg_roles

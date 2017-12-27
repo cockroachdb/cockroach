@@ -75,6 +75,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogIndexesTable,
 		pgCatalogInheritsTable,
 		pgCatalogNamespaceTable,
+		pgCatalogOperatorTable,
 		pgCatalogProcTable,
 		pgCatalogRangeTable,
 		pgCatalogRolesTable,
@@ -1064,6 +1065,32 @@ CREATE TABLE pg_catalog.pg_namespace (
 				tree.DNull,               // nspacl
 			)
 		})
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-operator.html.
+var pgCatalogOperatorTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_operator (
+	oid OID,
+  oprname NAME,
+  oprnamespace OID,
+  oprowner OID,
+  oprkind TEXT,
+  oprcanmerge BOOL,
+  oprcanhash BOOL,
+  oprleft OID,
+  oprright OID,
+  oprresult OID,
+  oprcom OID,
+  oprnegate OID,
+  oprcode OID,
+  oprrest OID,
+  oprjoin OID
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		return nil
 	},
 }
 
