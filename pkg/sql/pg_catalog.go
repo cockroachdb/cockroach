@@ -68,20 +68,25 @@ var pgCatalog = virtualSchema{
 		pgCatalogDescriptionTable,
 		pgCatalogEnumTable,
 		pgCatalogExtensionTable,
+		pgCatalogForeignDataWrapperTable,
 		pgCatalogForeignServerTable,
 		pgCatalogForeignTableTable,
 		pgCatalogIndexTable,
 		pgCatalogIndexesTable,
 		pgCatalogInheritsTable,
 		pgCatalogNamespaceTable,
+		pgCatalogOperatorTable,
 		pgCatalogProcTable,
 		pgCatalogRangeTable,
+		pgCatalogRewriteTable,
 		pgCatalogRolesTable,
 		pgCatalogSequencesTable,
 		pgCatalogSettingsTable,
 		pgCatalogUserTable,
+		pgCatalogUserMappingTable,
 		pgCatalogTablesTable,
 		pgCatalogTablespaceTable,
+		pgCatalogTriggerTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
 	},
@@ -807,6 +812,25 @@ CREATE TABLE pg_catalog.pg_extension (
 	},
 }
 
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-foreign-data-wrapper.html
+var pgCatalogForeignDataWrapperTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
+  oid OID,
+  fdwname NAME,
+  fdwowner OID,
+  fdwhandler OID,
+  fdwvalidator OID,
+  fdwacl STRING[],
+  fdwoptions STRING[]
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// Foreign data wrappers are not supported.
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-server.html.
 var pgCatalogForeignServerTable = virtualSchemaTable{
 	schema: `
@@ -1046,6 +1070,32 @@ CREATE TABLE pg_catalog.pg_namespace (
 	},
 }
 
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-operator.html.
+var pgCatalogOperatorTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_operator (
+	oid OID,
+  oprname NAME,
+  oprnamespace OID,
+  oprowner OID,
+  oprkind TEXT,
+  oprcanmerge BOOL,
+  oprcanhash BOOL,
+  oprleft OID,
+  oprright OID,
+  oprresult OID,
+  oprcom OID,
+  oprnegate OID,
+  oprcode OID,
+  oprrest OID,
+  oprjoin OID
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		return nil
+	},
+}
+
 func newSingletonStringArray(s string) tree.Datum {
 	return &tree.DArray{ParamTyp: types.String, Array: tree.Datums{tree.NewDString(s)}}
 }
@@ -1239,6 +1289,26 @@ CREATE TABLE pg_catalog.pg_range (
 		// We currently do not support any range types, so this table is empty.
 		// This table should be populated when any range types are added to
 		// oidToDatum (and therefore pg_type).
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-rewrite.html.
+var pgCatalogRewriteTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_rewrite (
+  oid OID,
+  rulename NAME,
+  ev_class OID,
+  ev_type TEXT,
+  ev_enabled TEXT,
+  is_instead BOOL,
+  ev_qual TEXT,
+  ev_action TEXT
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// Rewrite rules are not supported.
 		return nil
 	},
 }
@@ -1443,6 +1513,36 @@ CREATE TABLE pg_catalog.pg_tablespace (
 	},
 }
 
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-trigger.html
+var pgCatalogTriggerTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_trigger (
+  oid OID,
+  tgrelid OID,
+  tgname NAME,
+  tgfoid OID,
+  tgtype INT,
+  tgenabled TEXT,
+  tgisinternal BOOL,
+  tgconstrrelid OID,
+  tgconstrindid OID,
+  tgconstraint OID,
+  tgdeferrable BOOL,
+  tginitdeferred BOOL,
+  tgnargs INT,
+  tgattr INT2VECTOR,
+  tgargs BYTEA,
+  tgqual TEXT,
+  tgoldtable NAME,
+  tgnewtable NAME
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		// Triggers are unsupported.
+		return nil
+	},
+}
+
 var (
 	typTypeBase      = tree.NewDString("b")
 	typTypeComposite = tree.NewDString("c")
@@ -1629,6 +1729,23 @@ CREATE TABLE pg_catalog.pg_user (
 					tree.DNull,              // useconfig
 				)
 			})
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/view-pg-user.html
+var pgCatalogUserMappingTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_user_mapping (
+  oid OID,
+  umuser OID,
+  umserver OID,
+  umoptions TEXT[]
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// This table stores the mapping to foreign server users.
+		// Foreign servers are not supported.
+		return nil
 	},
 }
 

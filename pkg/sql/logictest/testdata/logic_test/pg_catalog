@@ -57,21 +57,26 @@ pg_depend
 pg_description
 pg_enum
 pg_extension
+pg_foreign_data_wrapper
 pg_foreign_server
 pg_foreign_table
 pg_index
 pg_indexes
 pg_inherits
 pg_namespace
+pg_operator
 pg_proc
 pg_range
+pg_rewrite
 pg_roles
 pg_sequence
 pg_settings
 pg_tables
 pg_tablespace
+pg_trigger
 pg_type
 pg_user
+pg_user_mapping
 pg_views
 
 query TT colnames
