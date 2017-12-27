@@ -302,32 +302,48 @@ func updateStatsOnResolve(
 	commit bool,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
+
+	// NB: this is logging for ongoing work on #20554.
+	if false {
+		defer func() {
+			log.Infof(context.TODO(), "onResolve\n"+
+				"orig: ts=%d metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
+				"meta: ts=%d metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
+				"%+v",
+				orig.Timestamp.WallTime, origMetaKeySize, origMetaValSize, orig.KeyBytes, orig.ValBytes,
+				meta.Timestamp.WallTime, metaKeySize, metaValSize, meta.KeyBytes, meta.ValBytes,
+				&ms)
+		}()
+	}
+
 	// In this case, we're only removing the contribution from having the
 	// meta key around from orig.Timestamp to meta.Timestamp.
 	ms.AgeTo(orig.Timestamp.WallTime)
 	sys := isSysLocal(key)
 
-	// Always zero.
-	keyDiff := metaKeySize - origMetaKeySize
-	// This is going to be nonpositive: the old meta key was
-	// real, the new one is implicit.
-	valDiff := metaValSize - origMetaValSize
-
 	if sys {
-		ms.SysBytes += keyDiff + valDiff
+		ms.SysBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
+		ms.AgeTo(meta.Timestamp.WallTime)
 	} else {
 		if !meta.Deleted {
-			ms.LiveBytes += keyDiff + valDiff
+			ms.LiveBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
 		}
-		ms.KeyBytes += keyDiff
-		ms.ValBytes += valDiff
+		// At orig.Timestamp, the original meta key disappears.
+		ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
+		ms.ValBytes -= origMetaValSize + orig.ValBytes
+
 		// If committing, subtract out intent counts.
 		if commit {
 			ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
 			ms.IntentCount--
 		}
+
+		ms.AgeTo(meta.Timestamp.WallTime)
+
+		// At meta.Timestamp, the new meta key appears.
+		ms.KeyBytes += metaKeySize + meta.KeyBytes
+		ms.ValBytes += metaValSize + meta.ValBytes
 	}
-	ms.AgeTo(meta.Timestamp.WallTime)
 	return ms
 }
 
