@@ -24,22 +24,37 @@ type State interface {
 	State()
 }
 
+// ExtendedState is extra state in a Machine that does not contribute to state
+// transition decisions, but that can be affected by a state transition.
+type ExtendedState interface{}
+
 // Event is something that happens to a Machine which may or may not trigger a
 // state transition.
 type Event interface {
 	Event()
 }
 
-// ExtendedState is extra state in a Machine that does not contribute to state
+// EventBaggage is extra baggage on an Event that does not contribute to state
 // transition decisions, but that can be affected by a state transition.
-type ExtendedState interface{}
+type EventBaggage interface{}
+
+// Args is a structure containing the arguments passed to Transition.Action.
+type Args struct {
+	Ctx context.Context
+
+	Prev     State
+	Extended ExtendedState
+
+	Event   Event
+	Baggage EventBaggage
+}
 
 // Transition is a Machine's response to an Event applied to a State. It may
 // transition the machine to a new State and it may also perform an action on
 // the Machine's ExtendedState.
 type Transition struct {
 	Next   State
-	Action func(context.Context, ExtendedState)
+	Action func(Args)
 }
 
 // Transitions is a set of expanded state transitions generated from a Pattern,
@@ -61,17 +76,17 @@ func Compile(p Pattern) Transitions {
 	return Transitions{expanded: expandPattern(p)}
 }
 
-func (t Transitions) apply(ctx context.Context, s State, e Event, es ExtendedState) State {
-	sm, ok := t.expanded[s]
+func (t Transitions) apply(a Args) State {
+	sm, ok := t.expanded[a.Prev]
 	if !ok {
-		panic(fmt.Sprintf("unknown state %#v", s))
+		panic(fmt.Sprintf("unknown state %#v", a.Prev))
 	}
-	tr, ok := sm[e]
+	tr, ok := sm[a.Event]
 	if !ok {
-		panic(fmt.Sprintf("unknown state transition %#v(%#v)", s, e))
+		panic(fmt.Sprintf("unknown state transition %#v(%#v)", a.Prev, a.Event))
 	}
 	if tr.Action != nil {
-		tr.Action(ctx, es)
+		tr.Action(a)
 	}
 	return tr.Next
 }
@@ -92,5 +107,17 @@ func MakeMachine(t Transitions, start State, es ExtendedState) Machine {
 
 // Apply applies the Event to the state Machine.
 func (m *Machine) Apply(ctx context.Context, e Event) {
-	m.cur = m.t.apply(ctx, m.cur, e, m.es)
+	m.ApplyWithBaggage(ctx, e, nil)
+}
+
+// ApplyWithBaggage applies the Event to the state Machine, passing along the
+// EventBaggage to the state transition's Action function.
+func (m *Machine) ApplyWithBaggage(ctx context.Context, e Event, b EventBaggage) {
+	m.cur = m.t.apply(Args{
+		Ctx:      ctx,
+		Prev:     m.cur,
+		Extended: m.es,
+		Event:    e,
+		Baggage:  b,
+	})
 }
