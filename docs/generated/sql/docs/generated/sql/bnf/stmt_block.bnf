@@ -584,6 +584,7 @@ unreserved_keyword ::=
 	| 'CASCADE'
 	| 'CLUSTER'
 	| 'COLUMNS'
+	| 'COMMENT'
 	| 'COMMIT'
 	| 'COMMITTED'
 	| 'COMPACT'
