@@ -197,7 +197,7 @@ type randSpans struct {
 
 const randSpansBitmapSize = 1000
 
-func makeRandSpans(rng *rand.Rand) randSpans {
+func makeRandSpans(rng *rand.Rand, allowExclusive bool) randSpans {
 	spans := make(LogicalSpans, rng.Intn(5))
 	bitmap := make([]bool, randSpansBitmapSize)
 	last := 0
@@ -217,11 +217,11 @@ func makeRandSpans(rng *rand.Rand) randSpans {
 		*sp = MakeFullSpan()
 		// Randomly make the endpoints inclusive or exclusive (while
 		// effectively indicating the same interval).
-		if rng.Intn(2) == 0 {
+		if allowExclusive && rng.Intn(2) == 0 {
 			sp.Start.Inclusive = false
 			start--
 		}
-		if rng.Intn(2) == 0 {
+		if allowExclusive && rng.Intn(2) == 0 {
 			sp.End.Inclusive = false
 			end++
 		}
@@ -247,6 +247,15 @@ func mergeRandSpans(a randSpans, b randSpans) [][2]int {
 		result = append(result, [2]int{start, end})
 	}
 	return result
+}
+
+func isRandSpanSubset(a randSpans, b randSpans) bool {
+	for i := 0; i < randSpansBitmapSize; i++ {
+		if a.bitmap[i] && !b.bitmap[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestMergeSpanSets(t *testing.T) {
@@ -326,11 +335,11 @@ func TestMergeSpanSets(t *testing.T) {
 
 	t.Run("rand", func(t *testing.T) {
 		rng, _ := randutil.NewPseudoRand()
-		for n := 0; n < 100; n++ {
+		for n := 0; n < 500; n++ {
 			// We generate two random sets of intervals with small integer values and
 			// cross-check mergeSpanSets with a simple bitmap-based implementation.
-			a := makeRandSpans(rng)
-			b := makeRandSpans(rng)
+			a := makeRandSpans(rng, true /* allowExclusive */)
+			b := makeRandSpans(rng, true /* allowExclusive */)
 			c := indexConstraintCtx{
 				colInfos: []IndexColumnInfo{{Direction: encoding.Ascending}},
 				evalCtx:  &evalCtx,
@@ -362,4 +371,38 @@ expected: %v
 			}
 		}
 	})
+}
+
+func TestIsSpanSubset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	evalCtx := tree.MakeTestingEvalContext()
+
+	rng, _ := randutil.NewPseudoRand()
+	for n := 0; n < 500; n++ {
+		// We generate two random sets of intervals with small integer values and
+		// cross-check mergeSpanSets with a simple bitmap-based implementation.
+		// We don't allow exclusive spans because of cases like:
+		//  (/5 - /10]
+		//  [/6 - /20]
+		// which doesn't look like a subset but it is according to the bitmap.
+		a := makeRandSpans(rng, false /* allowExclusive */)
+		b := makeRandSpans(rng, false /* allowExclusive */)
+		c := indexConstraintCtx{
+			colInfos: []IndexColumnInfo{{Direction: encoding.Ascending}},
+			evalCtx:  &evalCtx,
+		}
+		result := c.isSpanSubset(0 /* offset */, a.spans, b.spans)
+		expected := isRandSpanSubset(a, b)
+
+		if result != expected {
+			t.Errorf(`
+a: %v
+b: %v
+result: %t
+`,
+				a.spans, b.spans, result,
+			)
+		}
+	}
 }

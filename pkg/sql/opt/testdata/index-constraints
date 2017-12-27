@@ -15,6 +15,8 @@ build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1
 ----
 [ - ]
+Remaining filter:
+variable (0) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 > 2
@@ -132,11 +134,19 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1)
 @1 = 1 AND @2 = 2
 ----
 [/1 - /1]
+Remaining filter:
+eq (type: bool)
+ ├── variable (1) (type: int)
+ └── const (2) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@2)
 @1 = 1 AND @2 = 2
 ----
 [/2 - /2]
+Remaining filter:
+eq (type: bool)
+ ├── variable (0) (type: int)
+ └── const (1) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 > NULL
@@ -160,23 +170,39 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 > 2 AND @2 > 5
 ----
 [/3/6 - ]
+Remaining filter:
+gt (type: bool)
+ ├── variable (1) (type: int)
+ └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
 @1 > 2 AND @2 < 5
 ----
 [/3/4 - ]
+Remaining filter:
+lt (type: bool)
+ ├── variable (1) (type: int)
+ └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 != 1 AND @2 > 5
 ----
 (/NULL - /0]
 [/2/6 - ]
+Remaining filter:
+gt (type: bool)
+ ├── variable (1) (type: int)
+ └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 != 1 AND @2 < 5
 ----
 (/NULL - /0/4]
 (/2/NULL - ]
+Remaining filter:
+lt (type: bool)
+ ├── variable (1) (type: int)
+ └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 >= 1 AND @1 <= 5 AND @1 != 3
@@ -188,26 +214,62 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/8 - /2/9]
+Remaining filter:
+and (type: bool)
+ ├── ge (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (8) (type: int)
+ └── le (type: bool)
+      ├── variable (1) (type: int)
+      └── const (9) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/2/8 - /1/9]
+Remaining filter:
+and (type: bool)
+ ├── ge (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (8) (type: int)
+ └── le (type: bool)
+      ├── variable (1) (type: int)
+      └── const (9) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/9 - /2/8]
+Remaining filter:
+and (type: bool)
+ ├── ge (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (8) (type: int)
+ └── le (type: bool)
+      ├── variable (1) (type: int)
+      └── const (9) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 > 1 AND @1 < 4 AND @2 > 5 AND @2 < 8
 ----
 [/2/6 - /3/7]
+Remaining filter:
+and (type: bool)
+ ├── gt (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (5) (type: int)
+ └── lt (type: bool)
+      ├── variable (1) (type: int)
+      └── const (8) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 > 1 AND @1 < 4 AND @2 = 5
 ----
 [/2/5 - /3/5]
+Remaining filter:
+eq (type: bool)
+ ├── variable (1) (type: int)
+ └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 > 3 AND @2 < 5
@@ -233,6 +295,10 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @1 <= 5 AND @2 != 2
 ----
 (/1/NULL - /5]
+Remaining filter:
+ne (type: bool)
+ ├── variable (1) (type: int)
+ └── const (2) (type: int)
 
 # Tests with a type that doesn't support Prev.
 build-scalar,normalize,index-constraints vars=(string) index=(@1)
@@ -244,6 +310,10 @@ build-scalar,normalize,index-constraints vars=(string, int) index=(@1, @2)
 @1 > 'a' AND @1 < 'z' AND @2 = 5
 ----
 [/e'a\x00'/5 - /'z')
+Remaining filter:
+eq (type: bool)
+ ├── variable (1) (type: int)
+ └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(string) index=(@1 desc)
 @1 > 'a' AND @1 < 'z'
@@ -254,6 +324,10 @@ build-scalar,normalize,index-constraints vars=(string, int) index=(@1 desc, @2)
 @1 > 'a' AND @1 < 'z' AND @2 = 5
 ----
 (/'z' - /e'a\x00'/5]
+Remaining filter:
+eq (type: bool)
+ ├── variable (1) (type: int)
+ └── const (5) (type: int)
 
 # Tests with a type that doesn't support Next or Prev.
 build-scalar,normalize,index-constraints vars=(decimal) index=(@1)
@@ -272,6 +346,10 @@ build-scalar,normalize,index-constraints vars=(decimal, decimal) index=(@1, @2)
 @1 > 1.5 AND @2 > 2
 ----
 (/1.5 - ]
+Remaining filter:
+gt (type: bool)
+ ├── variable (1) (type: decimal)
+ └── const (2) (type: decimal)
 
 # Tests with variable IN tuple.
 
@@ -326,6 +404,13 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 [/2/1 - /2/1]
 [/2/2 - /2/2]
 [/2/3 - /2/3]
+Remaining filter:
+in (type: bool)
+ ├── variable (1) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── const (3) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc)
 @1 IN (1, 2) AND @2 IN (1, 2, 3)
@@ -336,16 +421,37 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc
 [/1/3 - /1/3]
 [/1/2 - /1/2]
 [/1/1 - /1/1]
+Remaining filter:
+in (type: bool)
+ ├── variable (1) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── const (3) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
 ----
 [/2/1 - /4/3]
+Remaining filter:
+in (type: bool)
+ ├── variable (1) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── const (3) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc)
 @1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
 ----
 [/4/3 - /2/1]
+Remaining filter:
+in (type: bool)
+ ├── variable (1) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── const (3) (type: int)
 
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
@@ -387,11 +493,19 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @3)
 (@1, @2, @3) = (1, 2, 3)
 ----
 [/1/3 - /1/3]
+Remaining filter:
+eq (type: bool)
+ ├── variable (1) (type: int)
+ └── const (2) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@3, @2)
 (@1, @2, @3) = (1, 2, 3)
 ----
 [/3/2 - /3/2]
+Remaining filter:
+eq (type: bool)
+ ├── variable (0) (type: int)
+ └── const (1) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int, int, int) index=(@1, @2, @3, @4, @5)
 (@1, @2, 3, (4, @5)) = (1, 2, @3, (@4, 5))
@@ -407,11 +521,33 @@ build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1, @2
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/6/2/3/4 - /9/2/3/4]
+Remaining filter:
+and (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (2) (type: int)
+ ├── eq (type: bool)
+ │    ├── variable (2) (type: int)
+ │    └── const (3) (type: int)
+ └── eq (type: bool)
+      ├── variable (3) (type: int)
+      └── const (4) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1 desc, @2 desc, @3 desc, @4 desc)
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/9/2/3/4 - /6/2/3/4]
+Remaining filter:
+and (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (2) (type: int)
+ ├── eq (type: bool)
+ │    ├── variable (2) (type: int)
+ │    └── const (3) (type: int)
+ └── eq (type: bool)
+      ├── variable (3) (type: int)
+      └── const (4) (type: int)
 
 # Tests with tuple inequalities.
 
@@ -424,6 +560,16 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) >= (1, 2, @1)
 ----
 [/1/2 - ]
+Remaining filter:
+ge (type: bool)
+ ├── ordered-list (type: tuple{int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── variable (0) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) > (1, 2, 3)
@@ -434,6 +580,16 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) > (1, 2, @1)
 ----
 [/1/2 - ]
+Remaining filter:
+gt (type: bool)
+ ├── ordered-list (type: tuple{int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── variable (0) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) <= (1, 2, 3)
@@ -444,6 +600,16 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) <= (1, 2, @1)
 ----
 [ - /1/2]
+Remaining filter:
+le (type: bool)
+ ├── ordered-list (type: tuple{int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── variable (0) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, 2, 3)
@@ -454,6 +620,16 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, 2, @1)
 ----
 [ - /1/2]
+Remaining filter:
+lt (type: bool)
+ ├── ordered-list (type: tuple{int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── variable (0) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) != (1, 2, 3)
@@ -465,6 +641,16 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) != (1, 2, @1)
 ----
 [ - ]
+Remaining filter:
+ne (type: bool)
+ ├── ordered-list (type: tuple{int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── variable (0) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc)
 (@1, @2, @3) >= (1, 2, 3)
@@ -475,16 +661,44 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2
 (@1, @2, @3) > (1, 2, 3)
 ----
 [ - /1/2]
+Remaining filter:
+gt (type: bool)
+ ├── ordered-list (type: tuple{int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── const (3) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 desc)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [/1/2 - ]
+Remaining filter:
+gt (type: bool)
+ ├── ordered-list (type: tuple{int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{int, int, int})
+      ├── const (1) (type: int)
+      ├── const (2) (type: int)
+      └── const (3) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 desc)
 (@2, @3) > (1, 2)
 ----
 [ - ]
+Remaining filter:
+gt (type: bool)
+ ├── ordered-list (type: tuple{int, int})
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{int, int})
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) >= (1, 2) AND (@1, @2) <= (3, 4)
@@ -500,6 +714,26 @@ legacy-normalize,build-scalar,index-constraints vars=(int, int, int, int) index=
 (@1, @2, @4) BETWEEN (1, 2, 3) AND (4, 5, 6)
 ----
 [/1/2 - /4/5]
+Remaining filter:
+and (type: bool)
+ ├── ge (type: bool)
+ │    ├── ordered-list (type: tuple{int, int, int})
+ │    │    ├── variable (0) (type: int)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── variable (3) (type: int)
+ │    └── ordered-list (type: tuple{int, int, int})
+ │         ├── const (1) (type: int)
+ │         ├── const (2) (type: int)
+ │         └── const (3) (type: int)
+ └── le (type: bool)
+      ├── ordered-list (type: tuple{int, int, int})
+      │    ├── variable (0) (type: int)
+      │    ├── variable (1) (type: int)
+      │    └── variable (3) (type: int)
+      └── ordered-list (type: tuple{int, int, int})
+           ├── const (4) (type: int)
+           ├── const (5) (type: int)
+           └── const (6) (type: int)
 
 # Tests with tuple IN tuple.
 
@@ -533,6 +767,33 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/5/6 - /5/6]
 [/7/8 - /7/8]
 [/9/10 - /9/10]
+Remaining filter:
+in (type: bool)
+ ├── ordered-list (type: tuple{int, int, int, int})
+ │    ├── plus (type: int)
+ │    │    ├── variable (0) (type: int)
+ │    │    └── const (5) (type: int)
+ │    ├── variable (0) (type: int)
+ │    ├── plus (type: int)
+ │    │    ├── variable (0) (type: int)
+ │    │    └── variable (1) (type: int)
+ │    └── variable (1) (type: int)
+ └── ordered-list (type: tuple{tuple{int, int, int, int}, tuple{int, int, int, int}, tuple{int, int, int, int}})
+      ├── ordered-list (type: tuple{int, int, int, int})
+      │    ├── const (1) (type: int)
+      │    ├── const (5) (type: int)
+      │    ├── const (1) (type: int)
+      │    └── const (6) (type: int)
+      ├── ordered-list (type: tuple{int, int, int, int})
+      │    ├── const (2) (type: int)
+      │    ├── const (7) (type: int)
+      │    ├── const (2) (type: int)
+      │    └── const (8) (type: int)
+      └── ordered-list (type: tuple{int, int, int, int})
+           ├── const (3) (type: int)
+           ├── const (9) (type: int)
+           ├── const (3) (type: int)
+           └── const (10) (type: int)
 
 # Verify that we sort and de-duplicate if we "project" the tuples;
 # in this case the expression becomes:
@@ -542,12 +803,58 @@ build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@2, @4
 ----
 [/4/4 - /4/4]
 [/5/5 - /5/5]
+Remaining filter:
+in (type: bool)
+ ├── ordered-list (type: tuple{int, int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    ├── variable (2) (type: int)
+ │    └── variable (3) (type: int)
+ └── ordered-list (type: tuple{tuple{int, int, int, int}, tuple{int, int, int, int}, tuple{int, int, int, int}})
+      ├── ordered-list (type: tuple{int, int, int, int})
+      │    ├── const (1) (type: int)
+      │    ├── const (5) (type: int)
+      │    ├── const (1) (type: int)
+      │    └── const (5) (type: int)
+      ├── ordered-list (type: tuple{int, int, int, int})
+      │    ├── const (2) (type: int)
+      │    ├── const (4) (type: int)
+      │    ├── const (2) (type: int)
+      │    └── const (4) (type: int)
+      └── ordered-list (type: tuple{int, int, int, int})
+           ├── const (3) (type: int)
+           ├── const (5) (type: int)
+           ├── const (3) (type: int)
+           └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@2)
 (@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
 ----
 [/4 - /4]
 [/5 - /5]
+Remaining filter:
+in (type: bool)
+ ├── ordered-list (type: tuple{int, int, int, int})
+ │    ├── variable (0) (type: int)
+ │    ├── variable (1) (type: int)
+ │    ├── variable (2) (type: int)
+ │    └── variable (3) (type: int)
+ └── ordered-list (type: tuple{tuple{int, int, int, int}, tuple{int, int, int, int}, tuple{int, int, int, int}})
+      ├── ordered-list (type: tuple{int, int, int, int})
+      │    ├── const (1) (type: int)
+      │    ├── const (5) (type: int)
+      │    ├── const (1) (type: int)
+      │    └── const (5) (type: int)
+      ├── ordered-list (type: tuple{int, int, int, int})
+      │    ├── const (2) (type: int)
+      │    ├── const (4) (type: int)
+      │    ├── const (2) (type: int)
+      │    └── const (4) (type: int)
+      └── ordered-list (type: tuple{int, int, int, int})
+           ├── const (3) (type: int)
+           ├── const (5) (type: int)
+           ├── const (3) (type: int)
+           └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
@@ -609,11 +916,41 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/6/1/3 - /6/1/3]
 [/6/1/5 - /6/1/5]
 [/6/1/7 - /6/1/7]
+Remaining filter:
+in (type: bool)
+ ├── ordered-list (type: tuple{int, int})
+ │    ├── variable (0) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}})
+      ├── ordered-list (type: tuple{int, int})
+      │    ├── const (2) (type: int)
+      │    └── const (3) (type: int)
+      ├── ordered-list (type: tuple{int, int})
+      │    ├── const (4) (type: int)
+      │    └── const (5) (type: int)
+      └── ordered-list (type: tuple{int, int})
+           ├── const (6) (type: int)
+           └── const (7) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 > 1 AND (@2, @3) IN ((2, 3), (4, 5), (6, 7))
 ----
 [/2/2/3 - ]
+Remaining filter:
+in (type: bool)
+ ├── ordered-list (type: tuple{int, int})
+ │    ├── variable (1) (type: int)
+ │    └── variable (2) (type: int)
+ └── ordered-list (type: tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}})
+      ├── ordered-list (type: tuple{int, int})
+      │    ├── const (2) (type: int)
+      │    └── const (3) (type: int)
+      ├── ordered-list (type: tuple{int, int})
+      │    ├── const (4) (type: int)
+      │    └── const (5) (type: int)
+      └── ordered-list (type: tuple{int, int})
+           ├── const (6) (type: int)
+           └── const (7) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 IS NULL
@@ -639,6 +976,10 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @2 IS NULL
 ----
 [/1/NULL - ]
+Remaining filter:
+is (type: bool)
+ ├── variable (1) (type: int)
+ └── const (NULL) (type: NULL)
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 IS NOT DISTINCT FROM NULL
@@ -692,16 +1033,28 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @2 = @1
 ----
 (/NULL - ]
+Remaining filter:
+eq (type: bool)
+ ├── variable (1) (type: int)
+ └── variable (0) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @2 < @1
 ----
 (/NULL - ]
+Remaining filter:
+lt (type: bool)
+ ├── variable (1) (type: int)
+ └── variable (0) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1 not null, @2)
 @1 = @2
 ----
 [ - ]
+Remaining filter:
+eq (type: bool)
+ ├── variable (0) (type: int)
+ └── variable (1) (type: int)
 
 # Tests with top-level OR.
 
@@ -710,40 +1063,112 @@ build-scalar,normalize,index-constraints vars=(int) index=(@1)
 ----
 [/1 - /1]
 [/2 - /2]
+Remaining filter:
+or (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (1) (type: int)
+ └── eq (type: bool)
+      ├── variable (0) (type: int)
+      └── const (2) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 IS NULL OR @1 = 1
 ----
 [/NULL - /NULL]
 [/1 - /1]
+Remaining filter:
+or (type: bool)
+ ├── is (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (NULL) (type: NULL)
+ └── eq (type: bool)
+      ├── variable (0) (type: int)
+      └── const (1) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 (@1 >= 1 AND @1 <= 5) OR (@1 >= 2 AND @1 <= 8)
 ----
 [/1 - /8]
+Remaining filter:
+or (type: bool)
+ ├── le (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ └── ge (type: bool)
+      ├── variable (0) (type: int)
+      └── const (2) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 (@1 >= 1 AND @1 <= 3) OR (@1 >= 5 AND @1 <= 8)
 ----
 [/1 - /3]
 [/5 - /8]
+Remaining filter:
+or (type: bool)
+ ├── le (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (3) (type: int)
+ └── ge (type: bool)
+      ├── variable (0) (type: int)
+      └── const (5) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1)
 (@1 = 1 AND @2 = 5) OR (@1 = 2 and @2 = 6)
 ----
 [/1 - /1]
 [/2 - /2]
+Remaining filter:
+or (type: bool)
+ ├── and (type: bool)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (0) (type: int)
+ │    │    └── const (1) (type: int)
+ │    └── eq (type: bool)
+ │         ├── variable (1) (type: int)
+ │         └── const (5) (type: int)
+ └── and (type: bool)
+      ├── eq (type: bool)
+      │    ├── variable (0) (type: int)
+      │    └── const (2) (type: int)
+      └── eq (type: bool)
+           ├── variable (1) (type: int)
+           └── const (6) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@2)
 (@1 = 1 AND @2 = 5) OR (@1 = 2 and @2 = 6)
 ----
 [/5 - /5]
 [/6 - /6]
+Remaining filter:
+or (type: bool)
+ ├── and (type: bool)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (0) (type: int)
+ │    │    └── const (1) (type: int)
+ │    └── eq (type: bool)
+ │         ├── variable (1) (type: int)
+ │         └── const (5) (type: int)
+ └── and (type: bool)
+      ├── eq (type: bool)
+      │    ├── variable (0) (type: int)
+      │    └── const (2) (type: int)
+      └── eq (type: bool)
+           ├── variable (1) (type: int)
+           └── const (6) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@2)
 @1 = 1 OR @2 = 2
 ----
 [ - ]
+Remaining filter:
+or (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (1) (type: int)
+ └── eq (type: bool)
+      ├── variable (1) (type: int)
+      └── const (2) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 = 1 OR (@1, @2, @3) IN ((4, 5, 6), (7, 8, 9))
@@ -751,6 +1176,25 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/1 - /1]
 [/4/5/6 - /4/5/6]
 [/7/8/9 - /7/8/9]
+Remaining filter:
+or (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (1) (type: int)
+ └── in (type: bool)
+      ├── ordered-list (type: tuple{int, int, int})
+      │    ├── variable (0) (type: int)
+      │    ├── variable (1) (type: int)
+      │    └── variable (2) (type: int)
+      └── ordered-list (type: tuple{tuple{int, int, int}, tuple{int, int, int}})
+           ├── ordered-list (type: tuple{int, int, int})
+           │    ├── const (4) (type: int)
+           │    ├── const (5) (type: int)
+           │    └── const (6) (type: int)
+           └── ordered-list (type: tuple{int, int, int})
+                ├── const (7) (type: int)
+                ├── const (8) (type: int)
+                └── const (9) (type: int)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 = 1 OR (@1 = 2 AND (@2, @3) IN ((4, 5), (6, 7))) OR (@1 = 3)
@@ -759,3 +1203,26 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/2/4/5 - /2/4/5]
 [/2/6/7 - /2/6/7]
 [/3 - /3]
+Remaining filter:
+or (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (1) (type: int)
+ ├── and (type: bool)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (0) (type: int)
+ │    │    └── const (2) (type: int)
+ │    └── in (type: bool)
+ │         ├── ordered-list (type: tuple{int, int})
+ │         │    ├── variable (1) (type: int)
+ │         │    └── variable (2) (type: int)
+ │         └── ordered-list (type: tuple{tuple{int, int}, tuple{int, int}})
+ │              ├── ordered-list (type: tuple{int, int})
+ │              │    ├── const (4) (type: int)
+ │              │    └── const (5) (type: int)
+ │              └── ordered-list (type: tuple{int, int})
+ │                   ├── const (6) (type: int)
+ │                   └── const (7) (type: int)
+ └── eq (type: bool)
+      ├── variable (0) (type: int)
+      └── const (3) (type: int)
