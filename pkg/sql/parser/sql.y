@@ -1250,17 +1250,6 @@ alter_zone_index_stmt:
       YAMLConfig: $7.expr(),
     }
   }
-| ALTER PARTITION unrestricted_name OF INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr_const
-  {
-    /* SKIP DOC */
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: $6.tableWithIdx(),
-        Partition: tree.Name($3),
-      },
-      YAMLConfig: $10.expr(),
-    }
-  }
 
 alter_scatter_stmt:
   ALTER TABLE qualified_name SCATTER
@@ -2870,14 +2859,6 @@ show_zone_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
       TableOrIndex: $7.tableWithIdx(),
-    }}
-  }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION unrestricted_name OF INDEX table_name_with_index
-  {
-    /* SKIP DOC */
-    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-      TableOrIndex: $10.tableWithIdx(),
-      Partition: tree.Name($7),
     }}
   }
 | EXPERIMENTAL SHOW ZONE CONFIGURATIONS
