@@ -7,6 +7,22 @@ Tree         Field  Description
 render       ·      ·
  └── norows  ·      ·
 
+query TTT colnames
+EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
+----
+Tree         Field  Description
+render       ·      ·
+ └── norows  ·      ·
+
+query TTT colnames
+EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
+----
+Tree       Field  Description
+render     ·      ·
+└── scan  ·      ·
+·          table  jobs@primary
+·          spans  ALL
+
 query TITTTTT colnames
 EXPLAIN (PLAN, METADATA) SELECT 1
 ----
