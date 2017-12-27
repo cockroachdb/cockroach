@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"net"
 	"net/url"
 	"os"
@@ -29,14 +28,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
 
-	humanize "github.com/dustin/go-humanize"
-	"github.com/elastic/gosigar"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -263,145 +259,12 @@ func initBlockProfile() {
 	runtime.SetBlockProfileRate(int(d))
 }
 
-type percentResolverFunc func(percent int) (int64, error)
-
-// bytesOrPercentageValue is a flag that accepts an integer value, an integer
-// plus a unit (e.g. 32GB or 32GiB) or a percentage (e.g. 32%). In all these
-// cases, it transforms the string flag input into an int64 value.
-//
-// Since it accepts a percentage, instances need to be configured with
-// instructions on how to resolve a percentage to a number (i.e. the answer to
-// the question "a percentage of what?"). This is done by taking in a
-// percentResolverFunc. There are predefined ones: memoryPercentResolver and
-// diskPercentResolverFactory.
-//
-// bytesOrPercentageValue can be used in two ways:
-// 1. Upon flag parsing, it can write an int64 value through a pointer specified
-// by the caller.
-// 2. It can store the flag value as a string and only convert it to an int64 on
-// a subsequent Resolve() call. Input validation still happens at flag parsing
-// time.
-//
-// Option 2 is useful when percentages cannot be resolved at flag parsing time.
-// For example, we have flags that can be expressed as percentages of the
-// capacity of storage device. Which storage device is in question might only be
-// known once other flags are parsed (e.g. --max-disk-temp-storage=10% depends
-// on --store).
-type bytesOrPercentageValue struct {
-	val  *int64
-	bval *humanizeutil.BytesValue
-
-	origVal string
-
-	// percentResolver is used to turn a percent string into a value. See
-	// memoryPercentResolver() and diskPercentResolverFactory().
-	percentResolver percentResolverFunc
-}
-
-// memoryPercentResolver turns a percent into the respective fraction of the
-// system's internal memory.
-func memoryPercentResolver(percent int) (int64, error) {
-	sizeBytes, err := server.GetTotalMemory(context.TODO())
-	if err != nil {
-		return 0, err
-	}
-	return (sizeBytes * int64(percent)) / 100, nil
-}
-
-// diskPercentResolverFactory takes in a path and produces a percentResolverFunc
-// bound to the respective storage device.
-//
-// An error is returned if dir does not exist.
-func diskPercentResolverFactory(dir string) (percentResolverFunc, error) {
-	fileSystemUsage := gosigar.FileSystemUsage{}
-	if err := fileSystemUsage.Get(dir); err != nil {
-		return nil, err
-	}
-	if fileSystemUsage.Total > math.MaxInt64 {
-		return nil, fmt.Errorf("unsupported disk size %s, max supported size is %s",
-			humanize.IBytes(fileSystemUsage.Total), humanizeutil.IBytes(math.MaxInt64))
-	}
-	deviceCapacity := int64(fileSystemUsage.Total)
-
-	return func(percent int) (int64, error) {
-		return (deviceCapacity * int64(percent)) / 100, nil
-	}, nil
-}
-
-// newBytesOrPercentageValue creates a bytesOrPercentageValue.
-//
-// v and percentResolver can be nil (either they're both specified or they're
-// both nil). If they're nil, then Resolve() has to be called later to get the
-// passed-in value.
-func newBytesOrPercentageValue(
-	v *int64, percentResolver func(percent int) (int64, error),
-) *bytesOrPercentageValue {
-	if v == nil {
-		v = new(int64)
-	}
-	return &bytesOrPercentageValue{
-		val:             v,
-		bval:            humanizeutil.NewBytesValue(v),
-		percentResolver: percentResolver,
-	}
-}
-
-func (b *bytesOrPercentageValue) Set(s string) error {
-	b.origVal = s
-	if strings.HasSuffix(s, "%") {
-		percent, err := strconv.Atoi(s[:len(s)-1])
-		if err != nil {
-			return err
-		}
-		if percent < 0 || percent > 99 {
-			return fmt.Errorf("percentage %s out of range 0%% - 99%%", s)
-		}
-
-		if b.percentResolver == nil {
-			// percentResolver not set means that this flag is not yet supposed to set
-			// any value.
-			return nil
-		}
-
-		absVal, err := b.percentResolver(percent)
-		if err != nil {
-			return err
-		}
-		s = fmt.Sprint(absVal)
-	}
-	return b.bval.Set(s)
-}
-
-// Resolve can be called to get the flag's value (if any). If the flag had been
-// previously set, *v will be written.
-func (b *bytesOrPercentageValue) Resolve(v *int64, percentResolver percentResolverFunc) error {
-	// The flag was not passed on the command line.
-	if b.origVal == "" {
-		return nil
-	}
-	b.percentResolver = percentResolver
-	b.val = v
-	b.bval = humanizeutil.NewBytesValue(v)
-	return b.Set(b.origVal)
-}
-
-func (b *bytesOrPercentageValue) Type() string {
-	return b.bval.Type()
-}
-
-func (b *bytesOrPercentageValue) String() string {
-	return b.bval.String()
-}
-
-func (b *bytesOrPercentageValue) IsSet() bool {
-	return b.bval.IsSet()
-}
-
 var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
 func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
+	externalIODir := startCtx.externalIODir
 	if externalIODir == "" && !firstStore.InMemory {
 		externalIODir = filepath.Join(firstStore.Path, "extern")
 	}
@@ -459,7 +322,7 @@ func initTempStorageConfig(
 		// The default temp storage size is different when the temp
 		// storage is in memory (which occurs when no temp directory
 		// is specified and the first store is in memory).
-		if tempDir == "" && firstStore.InMemory {
+		if startCtx.tempDir == "" && firstStore.InMemory {
 			tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
 		} else {
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
@@ -471,12 +334,13 @@ func initTempStorageConfig(
 	tempStorageConfig := base.TempStorageConfigFromEnv(
 		ctx,
 		firstStore,
-		tempDir,
+		startCtx.tempDir,
 		tempStorageMaxSizeBytes,
 	)
 
 	// Set temp directory to first store's path if the temp storage is not
 	// in memory.
+	tempDir := startCtx.tempDir
 	if tempDir == "" && !tempStorageConfig.InMemory {
 		tempDir = firstStore.Path
 	}
@@ -619,7 +483,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				s.PeriodicallyCheckForUpdates()
 			}
 
-			pgURL, err := serverCfg.PGURL(url.User(sqlConnUser))
+			pgURL, err := serverCfg.PGURL(url.User(cliCtx.sqlConnUser))
 			if err != nil {
 				return err
 			}
@@ -878,7 +742,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 	if startCtx.serverInsecure {
 		// Use a non-annotated context here since the annotation just looks funny,
 		// particularly to new users (made worse by it always printing as [n?]).
-		addr := serverConnHost
+		addr := startCtx.serverConnHost
 		if addr == "" {
 			addr = "<all your IP addresses>"
 		}
