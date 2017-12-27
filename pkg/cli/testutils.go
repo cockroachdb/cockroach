@@ -17,18 +17,6 @@ package cli
 // TestingReset resets global mutable state so that Run can be called multiple
 // times from the same test process. It is public for cliccl.
 func TestingReset() {
-	// Reset the client context for each test. We don't reset the
-	// pointers (because they are tied into the flags), but instead
-	// overwrite the existing structs' values.
-	baseCfg.InitDefaults()
-	cliCtx.isInteractive = false
-	cliCtx.tableDisplayFormat = tableDisplayTSV
-	cliCtx.showTimes = false
-	dumpCtx.dumpMode = dumpBoth
-	dumpCtx.asOf = ""
-	sqlCtx.echo = false
-	sqlCtx.execStmts = nil
-	zoneCtx.zoneConfig = ""
-	zoneCtx.zoneDisableReplication = false
-	cmdTimeout = defaultCmdTimeout
+	// Reset the client contexts for each test.
+	initCLIDefaults()
 }
