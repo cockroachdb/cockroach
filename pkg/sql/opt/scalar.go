@@ -30,8 +30,7 @@ func init() {
 	scalarOpInfos := map[operator]operatorInfo{
 		variableOp:          {name: "variable"},
 		constOp:             {name: "const"},
-		listOp:              {name: "list"},
-		orderedListOp:       {name: "ordered-list"},
+		tupleOp:             {name: "tuple"},
 		andOp:               {name: "and", normalizeFn: normalizeAndOrOp},
 		orOp:                {name: "or", normalizeFn: normalizeAndOrOp},
 		notOp:               {name: "not"},
@@ -167,12 +166,12 @@ func initTupleExpr(e *expr, children []*expr) {
 	// operator. In some cases (IN) the order doesn't matter; we could convert
 	// those to listOp during normalization, but there doesn't seem to be a
 	// benefit at this time.
-	e.op = orderedListOp
+	e.op = tupleOp
 	e.children = children
 }
 
 func isTupleOfConstants(e *expr) bool {
-	if e.op != orderedListOp {
+	if e.op != tupleOp {
 		return false
 	}
 	for _, c := range e.children {
@@ -221,7 +220,7 @@ func normalizeEqOp(e *expr) {
 		panic(fmt.Sprintf("invalid call on %s", e))
 	}
 	lhs, rhs := e.children[0], e.children[1]
-	if lhs.op == orderedListOp && rhs.op == orderedListOp {
+	if lhs.op == tupleOp && rhs.op == tupleOp {
 		// Break up expressions like
 		//   (a, b, c) = (x, y, z)
 		// into
