@@ -155,10 +155,8 @@ var txnStateTransitions = Compile(Pattern{
 	},
 })
 
-func writeAction(s string) func(ctx context.Context, es ExtendedState) {
-	return func(ctx context.Context, es ExtendedState) {
-		es.(*executor).write(s)
-	}
+func writeAction(s string) func(Args) {
+	return func(a Args) { a.Extended.(*executor).write(s) }
 }
 
 type executor struct {
