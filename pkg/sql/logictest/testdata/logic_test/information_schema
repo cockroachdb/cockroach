@@ -252,21 +252,26 @@ pg_catalog          pg_depend
 pg_catalog          pg_description
 pg_catalog          pg_enum
 pg_catalog          pg_extension
+pg_catalog          pg_foreign_data_wrapper
 pg_catalog          pg_foreign_server
 pg_catalog          pg_foreign_table
 pg_catalog          pg_index
 pg_catalog          pg_indexes
 pg_catalog          pg_inherits
 pg_catalog          pg_namespace
+pg_catalog          pg_operator
 pg_catalog          pg_proc
 pg_catalog          pg_range
+pg_catalog          pg_rewrite
 pg_catalog          pg_roles
 pg_catalog          pg_sequence
 pg_catalog          pg_settings
 pg_catalog          pg_tables
 pg_catalog          pg_tablespace
+pg_catalog          pg_trigger
 pg_catalog          pg_type
 pg_catalog          pg_user
+pg_catalog          pg_user_mapping
 pg_catalog          pg_views
 system              descriptor
 system              eventlog
@@ -420,21 +425,26 @@ def            pg_catalog          pg_depend                  SYSTEM VIEW  1
 def            pg_catalog          pg_description             SYSTEM VIEW  1
 def            pg_catalog          pg_enum                    SYSTEM VIEW  1
 def            pg_catalog          pg_extension               SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_data_wrapper    SYSTEM VIEW  1
 def            pg_catalog          pg_foreign_server          SYSTEM VIEW  1
 def            pg_catalog          pg_foreign_table           SYSTEM VIEW  1
 def            pg_catalog          pg_index                   SYSTEM VIEW  1
 def            pg_catalog          pg_indexes                 SYSTEM VIEW  1
 def            pg_catalog          pg_inherits                SYSTEM VIEW  1
 def            pg_catalog          pg_namespace               SYSTEM VIEW  1
+def            pg_catalog          pg_operator                SYSTEM VIEW  1
 def            pg_catalog          pg_proc                    SYSTEM VIEW  1
 def            pg_catalog          pg_range                   SYSTEM VIEW  1
+def            pg_catalog          pg_rewrite                 SYSTEM VIEW  1
 def            pg_catalog          pg_roles                   SYSTEM VIEW  1
 def            pg_catalog          pg_sequence                SYSTEM VIEW  1
 def            pg_catalog          pg_settings                SYSTEM VIEW  1
 def            pg_catalog          pg_tables                  SYSTEM VIEW  1
 def            pg_catalog          pg_tablespace              SYSTEM VIEW  1
+def            pg_catalog          pg_trigger                 SYSTEM VIEW  1
 def            pg_catalog          pg_type                    SYSTEM VIEW  1
 def            pg_catalog          pg_user                    SYSTEM VIEW  1
+def            pg_catalog          pg_user_mapping            SYSTEM VIEW  1
 def            pg_catalog          pg_views                   SYSTEM VIEW  1
 def            system              descriptor                 BASE TABLE   1
 def            system              eventlog                   BASE TABLE   2
