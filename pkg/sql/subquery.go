@@ -339,18 +339,59 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 			return false, expr
 		}
 
-		if wantedNumColumns == 1 && execMode != execModeAllRowsNormalized {
-			// This seems hokey, but if we don't do this then the subquery expands
-			// to a tuple of tuples instead of a tuple of values and an expression
-			// like "k IN (SELECT foo FROM bar)" will fail because we're comparing
-			// a single value against a tuple.
+		wrap := true
+		if len(cols) == 1 {
+			if execMode != execModeAllRowsNormalized {
+				// The subquery has only a single column and is not in a table context, we
+				// don't want to wrap the type in a tuple. For example:
+				//
+				//   SELECT (SELECT 1)
+				//
+				// and
+				//
+				//   SELECT (SELECT (1, 2))
+				//
+				// This will result in the types "int" and "tuple{int,int}" respectively.
+				wrap = false
+			} else if !types.FamTuple.FamilyEqual(cols[0].Typ) {
+				// The subquery has only a single column and is in a table context. We
+				// only wrap if the type of the result column is not a tuple. For
+				// example:
+				//
+				//   SELECT 1 IN (SELECT 1)
+				//
+				// The type of the subquery will be "tuple{int}". Now consider:
+				//
+				//   SELECT (1, 2) IN (SELECT (1, 2))
+				//
+				// We want the type of subquery to be "tuple{tuple{tuple{int,int}}}" in
+				// order to distinguish it from:
+				//
+				//   SELECT (1, 2) IN (SELECT 1, 2)
+				//
+				// Note that this query is semantically valid (the subquery has type
+				// "tuple{tuple{int,int}}"), while the previous query was not.
+				wrap = false
+			}
+		}
+
+		if !wrap {
 			result.typ = cols[0].Typ
 		} else {
-			colTypes := make(types.TTuple, wantedNumColumns)
+			colTypes := make(types.TTuple, len(cols))
 			for i, col := range cols {
 				colTypes[i] = col.Typ
 			}
 			result.typ = colTypes
+		}
+
+		if execMode == execModeAllRowsNormalized {
+			// The subquery is in a "table" context. For example:
+			//
+			//   SELECT 1 IN (SELECT * FROM t)
+			//
+			// Wrap the type in a tuple.
+			result.typ = types.TTuple{result.typ}
 		}
 	}
 
