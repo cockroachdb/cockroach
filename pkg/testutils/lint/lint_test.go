@@ -599,6 +599,7 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`.*\.lock`),
+			stream.GrepNot(`^storage\/engine\/rocksdb_error_dict\.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkg.Dir, s)
 			}),
