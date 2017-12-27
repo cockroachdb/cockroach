@@ -954,6 +954,71 @@ func TestInitialPartitioning(t *testing.T) {
 	}
 }
 
+func TestSelectPartitionExprs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(dan): PartitionExprs for range partitions is waiting on the new
+	// range partitioning syntax.
+	testData := partitioningTest{
+		name: `partition exprs`,
+		schema: `CREATE TABLE %s (
+			a INT, b INT, c INT, PRIMARY KEY (a, b, c)
+		) PARTITION BY LIST (a, b) (
+			PARTITION p33p44 VALUES IN ((3, 3), (4, 4)) PARTITION BY LIST (c) (
+				PARTITION p335p445 VALUES IN (5),
+				PARTITION p33dp44d VALUES IN (DEFAULT)
+			),
+			PARTITION p6d VALUES IN ((6, DEFAULT)),
+			PARTITION pdd VALUES IN ((DEFAULT, DEFAULT))
+		)`,
+	}
+	if err := testData.parse(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	tests := []struct {
+		// partitions is a comma-separated list of input partitions
+		partitions string
+		// expr is the expected output
+		expr string
+	}{
+		{`p33p44`, `(a, b) IN ((3, 3), (4, 4))`},
+		{`p335p445`, `(a, b, c) IN ((3, 3, 5), (4, 4, 5))`},
+		{`p33dp44d`, `(((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))) OR (((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5)))`},
+		// NB See the TODO in the impl for why this next case has some clearly
+		// unrelated `!=`s.
+		{`p6d`, `((a) IN ((6))) AND (((a, b) != (3, 3)) AND ((a, b) != (4, 4)))`},
+		{`pdd`, `((a, b) != (3, 3)) AND (((a, b) != (4, 4)) AND ((a) != (6)))`},
+
+		{`p335p445,p6d`, `((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR (((a) IN ((6))) AND (((a, b) != (3, 3)) AND ((a, b) != (4, 4))))`},
+
+		// TODO(dan): The expression simplification in this method is all done
+		// by our normal SQL expression simplification code. Seems like it could
+		// use some targeted work to clean these up. Ideally the following would
+		// all simplyify to  `(a, b) IN ((3, 3), (4, 4))`.
+		{`p335p445,p33dp44d`, `((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR ((((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5))) OR (((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))))`},
+		{`p33p44,p335p445`, `((a, b) IN ((3, 3), (4, 4))) OR ((a, b, c) IN ((3, 3, 5), (4, 4, 5)))`},
+		{`p33p44,p335p445,p33dp44d`, `((a, b) IN ((3, 3), (4, 4))) OR ((((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))) OR (((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR (((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5)))))`},
+	}
+
+	evalCtx := &tree.EvalContext{}
+	for _, test := range tests {
+		t.Run(test.partitions, func(t *testing.T) {
+			var partNames tree.NameList
+			for _, p := range strings.Split(test.partitions, `,`) {
+				partNames = append(partNames, tree.Name(p))
+			}
+			expr, err := selectPartitionExprs(evalCtx, testData.parsed.tableDesc, partNames)
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if exprStr := expr.String(); exprStr != test.expr {
+				t.Errorf("got\n%s\nexpected\n%s", exprStr, test.expr)
+			}
+		})
+	}
+}
+
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
