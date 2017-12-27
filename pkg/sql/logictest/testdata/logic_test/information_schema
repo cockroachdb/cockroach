@@ -262,6 +262,7 @@ pg_catalog          pg_namespace
 pg_catalog          pg_operator
 pg_catalog          pg_proc
 pg_catalog          pg_range
+pg_catalog          pg_rewrite
 pg_catalog          pg_roles
 pg_catalog          pg_sequence
 pg_catalog          pg_settings
@@ -433,6 +434,7 @@ def            pg_catalog          pg_namespace               SYSTEM VIEW  1
 def            pg_catalog          pg_operator                SYSTEM VIEW  1
 def            pg_catalog          pg_proc                    SYSTEM VIEW  1
 def            pg_catalog          pg_range                   SYSTEM VIEW  1
+def            pg_catalog          pg_rewrite                 SYSTEM VIEW  1
 def            pg_catalog          pg_roles                   SYSTEM VIEW  1
 def            pg_catalog          pg_sequence                SYSTEM VIEW  1
 def            pg_catalog          pg_settings                SYSTEM VIEW  1
