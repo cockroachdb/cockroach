@@ -345,7 +345,12 @@ func (t TTuple) Equivalent(other T) bool {
 
 // FamilyEqual implements the T interface.
 func (TTuple) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TTuple)
+	unwrapped := UnwrapType(other)
+	_, ok := unwrapped.(TTuple)
+	if !ok {
+		// TTuple and TVarTuple are considered part of the same type family.
+		_, ok = unwrapped.(TVarTuple)
+	}
 	return ok
 }
 
@@ -363,6 +368,45 @@ func (t TTuple) IsAmbiguous() bool {
 		}
 	}
 	return false
+}
+
+// TVarTuple is the type of variable length tuple where each element has the
+// same type.
+type TVarTuple struct{ Typ T }
+
+func (v TVarTuple) String() string { return fmt.Sprintf("vtuple{%s}", v.Typ.String()) }
+
+// Equivalent implements the T interface.
+func (v TVarTuple) Equivalent(other T) bool {
+	if other == Any {
+		return true
+	}
+	if u, ok := UnwrapType(other).(TVarTuple); ok {
+		return v.Typ.Equivalent(u.Typ)
+	}
+	return false
+}
+
+// FamilyEqual implements the T interface.
+func (TVarTuple) FamilyEqual(other T) bool {
+	unwrapped := UnwrapType(other)
+	_, ok := unwrapped.(TVarTuple)
+	if !ok {
+		// TTuple and TVarTuple are considered part of the same type family.
+		_, ok = unwrapped.(TTuple)
+	}
+	return ok
+}
+
+// Oid implements the T interface.
+func (TVarTuple) Oid() oid.Oid { return oid.T_record }
+
+// SQLName implements the T interface.
+func (TVarTuple) SQLName() string { return "record" }
+
+// IsAmbiguous implements the T interface.
+func (v TVarTuple) IsAmbiguous() bool {
+	return v.Typ == nil || v.Typ.IsAmbiguous()
 }
 
 // TPlaceholder is the type of a placeholder.
