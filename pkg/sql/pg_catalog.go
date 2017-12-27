@@ -29,6 +29,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
 
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,6 +42,8 @@ var (
 	oidZero   = tree.NewDOid(0)
 	zeroVal   = tree.DZero
 	negOneVal = tree.NewDInt(-1)
+
+	passwdStarString = tree.NewDString("********")
 )
 
 const (
@@ -75,6 +79,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogRolesTable,
 		pgCatalogSequencesTable,
 		pgCatalogSettingsTable,
+		pgCatalogUserTable,
 		pgCatalogTablesTable,
 		pgCatalogTablespaceTable,
 		pgCatalogTypeTable,
@@ -437,7 +442,10 @@ CREATE TABLE pg_catalog.pg_constraint (
 	conffeqop OID[],
 	conexclop OID[],
 	conbin STRING,
-	consrc STRING
+	consrc STRING,
+	-- condef is a CockroachDB extension that provides a SHOW CREATE CONSTRAINT
+	-- style string, for use by pg_get_constraintdef().
+	condef STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -463,6 +471,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 				conkey := tree.DNull
 				confkey := tree.DNull
 				consrc := tree.DNull
+				conbin := tree.DNull
+				condef := tree.DNull
 
 				// Determine constraint kind-specific fields.
 				switch c.Kind {
@@ -476,6 +486,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					condef = tree.NewDString(table.PrimaryKeyString())
 
 				case sqlbase.ConstraintTypeFK:
 					referencedDB, _ := tableLookup(c.ReferencedTable.ID)
@@ -499,6 +510,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					var buf bytes.Buffer
+					if err := p.printForeignKeyConstraint(ctx, &buf, db.Name, *c.Index); err != nil {
+						return err
+					}
+					condef = tree.NewDString(buf.String())
 
 				case sqlbase.ConstraintTypeUnique:
 					oid = h.UniqueConstraintOid(db, table, c.Index)
@@ -509,6 +525,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					var buf bytes.Buffer
+					buf.WriteString("UNIQUE (")
+					c.Index.ColNamesFormat(&buf)
+					buf.WriteByte(')')
+					condef = tree.NewDString(buf.String())
 
 				case sqlbase.ConstraintTypeCheck:
 					oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
@@ -517,6 +538,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 					// constraint. We should add an array of column indexes to
 					// sqlbase.TableDescriptor_CheckConstraint and use that here.
 					consrc = tree.NewDString(c.Details)
+					conbin = consrc
+					condef = tree.NewDString(fmt.Sprintf("CHECK (%s)", c.Details))
 				}
 
 				if err := addRow(
@@ -543,8 +566,9 @@ CREATE TABLE pg_catalog.pg_constraint (
 					tree.DNull,                                 // conppeqop
 					tree.DNull,                                 // conffeqop
 					tree.DNull,                                 // conexclop
-					consrc,                                     // conbin
+					conbin,                                     // conbin
 					consrc,                                     // consrc
+					condef,                                     // condef
 				); err != nil {
 					return err
 				}
@@ -1249,20 +1273,20 @@ CREATE TABLE pg_catalog.pg_roles (
 			func(username string, isRole tree.DBool) error {
 				isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
 				return addRow(
-					h.UserOid(username),         // oid
-					tree.NewDName(username),     // rolname
-					tree.MakeDBool(isRoot),      // rolsuper
-					tree.MakeDBool(isRole),      // rolinherit. Roles inherit by default.
-					tree.MakeDBool(isRoot),      // rolcreaterole
-					tree.MakeDBool(isRoot),      // rolcreatedb
-					tree.DBoolFalse,             // rolcatupdate
-					tree.MakeDBool(!isRole),     // rolcanlogin. Only users can login.
-					tree.DBoolFalse,             // rolreplication
-					negOneVal,                   // rolconnlimit
-					tree.NewDString("********"), // rolpassword
-					tree.DNull,                  // rolvaliduntil
-					tree.DBoolFalse,             // rolbypassrls
-					tree.DNull,                  // rolconfig
+					h.UserOid(username),     // oid
+					tree.NewDName(username), // rolname
+					tree.MakeDBool(isRoot),  // rolsuper
+					tree.MakeDBool(isRole),  // rolinherit. Roles inherit by default.
+					tree.MakeDBool(isRoot),  // rolcreaterole
+					tree.MakeDBool(isRoot),  // rolcreatedb
+					tree.DBoolFalse,         // rolcatupdate
+					tree.MakeDBool(!isRole), // rolcanlogin. Only users can login.
+					tree.DBoolFalse,         // rolreplication
+					negOneVal,               // rolconnlimit
+					passwdStarString,        // rolpassword
+					tree.DNull,              // rolvaliduntil
+					tree.DBoolFalse,         // rolbypassrls
+					tree.DNull,              // rolconfig
 				)
 			})
 	},
@@ -1567,6 +1591,44 @@ CREATE TABLE pg_catalog.pg_type (
 			}
 		}
 		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/view-pg-user.html
+var pgCatalogUserTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_user (
+  usename NAME,
+  usesysid OID,
+  usecreatedb BOOL,
+  usesuper BOOL,
+  userepl  BOOL,
+  usebypassrls BOOL,
+  passwd TEXT,
+  valuntil TIMESTAMP,
+  useconfig TEXT[]
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachRole(ctx, p,
+			func(username string, isRole tree.DBool) error {
+				if isRole {
+					return nil
+				}
+				isRoot := tree.DBool(username == security.RootUser)
+				return addRow(
+					tree.NewDName(username), // usename
+					h.UserOid(username),     // usesysid
+					tree.MakeDBool(isRoot),  // usecreatedb
+					tree.MakeDBool(isRoot),  // usesuper
+					tree.DBoolFalse,         // userepl
+					tree.DBoolFalse,         // usebypassrls
+					passwdStarString,        // passwd
+					tree.DNull,              // valuntil
+					tree.DNull,              // useconfig
+				)
+			})
 	},
 }
 
