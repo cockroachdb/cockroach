@@ -44,6 +44,21 @@ const (
 	teamcityBuildBranchKey = "TC_BUILD_BRANCH"
 )
 
+type s3putter interface {
+	PutObject(*s3.PutObjectInput) (*s3.PutObjectOutput, error)
+}
+
+// Overridden in testing.
+var testableS3 = func() (s3putter, error) {
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String("us-east-1"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s3.New(sess), nil
+}
+
 var libsRe = func() *regexp.Regexp {
 	libs := strings.Join([]string{
 		regexp.QuoteMeta("linux-vdso.so."),
@@ -106,13 +121,10 @@ func main() {
 		versionStr = string(bytes.TrimSpace(out))
 	}
 
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String("us-east-1"),
-	})
+	svc, err := testableS3()
 	if err != nil {
-		log.Fatalf("AWS session: %s", err)
+		log.Fatalf("Creating AWS S3 session: %s", err)
 	}
-	svc := s3.New(sess)
 
 	var bucketName string
 	if len(*destBucket) > 0 {
@@ -201,13 +213,17 @@ func main() {
 			// {suffix: ".deadlock", tags: "deadlock"},
 			{suffix: ".race", goflags: "-race"},
 		} {
+			log.Printf("considering %v %v %v", buildType, baseSuffix, extraArgs)
+
 			// TODO(tamird): build deadlock,race binaries for all targets?
 			if i > 0 && (*isRelease || !strings.HasSuffix(target.buildType, "linux-gnu")) {
+				log.Printf("not building race build for this configuration; skipping")
 				continue
 			}
 			// race doesn't work without glibc on Linux. See
 			// https://github.com/golang/go/issues/14481.
 			if strings.HasSuffix(target.buildType, "linux-musl") && strings.Contains(extraArgs.goflags, "-race") {
+				log.Printf("not building race build for this configuration; skipping")
 				continue
 			}
 
