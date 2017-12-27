@@ -36,6 +36,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	version "github.com/hashicorp/go-version"
+	"github.com/kr/pretty"
 )
 
 const (
@@ -77,6 +78,16 @@ var osVersionRe = regexp.MustCompile(`\d+(\.\d+)*-`)
 
 var isRelease = flag.Bool("release", false, "build in release mode instead of bleeding-edge mode")
 var destBucket = flag.String("bucket", "", "override default bucket")
+
+var (
+	noCache = "no-cache"
+	// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
+	// rather than a full key. This means that the actual artifact will no
+	// longer be named "-latest".
+	latestStr = "latest"
+)
+
+const dotExe = ".exe"
 
 func main() {
 	flag.Parse()
@@ -136,17 +147,11 @@ func main() {
 	}
 	log.Printf("Using S3 bucket: %s", bucketName)
 
-	// TODO(tamird,benesch,bdarnell): make "latest" a website-redirect
-	// rather than a full key. This means that the actual artifact will no
-	// longer be named "-latest".
-	latestStr := "latest"
 	releaseVersionStrs := []string{versionStr}
 	// Only build `latest` tarballs for stable releases.
 	if isStableRelease {
 		releaseVersionStrs = append(releaseVersionStrs, latestStr)
 	}
-
-	noCache := "no-cache"
 
 	if *isRelease {
 		for _, releaseVersionStr := range releaseVersionStrs {
@@ -213,213 +218,265 @@ func main() {
 			// {suffix: ".deadlock", tags: "deadlock"},
 			{suffix: ".race", goflags: "-race"},
 		} {
-			log.Printf("considering %v %v %v", buildType, baseSuffix, extraArgs)
+			var o opts
+			o.ReleaseVersionStrs = releaseVersionStrs
+			o.PkgDir = pkg.Dir
+			o.Branch = branch
+			o.VersionStr = versionStr
+			o.BucketName = bucketName
+			o.Branch = branch
+			o.BuildType = target.buildType
+			o.BaseSuffix = target.baseSuffix
+			o.GoFlags = extraArgs.goflags
+			o.Suffix = extraArgs.suffix
+			o.Tags = extraArgs.tags
+
+			log.Printf("building %s", pretty.Sprint(o))
 
 			// TODO(tamird): build deadlock,race binaries for all targets?
-			if i > 0 && (*isRelease || !strings.HasSuffix(target.buildType, "linux-gnu")) {
-				log.Printf("not building race build for this configuration; skipping")
+			if i > 0 && (*isRelease || !strings.HasSuffix(o.BuildType, "linux-gnu")) {
+				log.Printf("skipping auxiliary build")
 				continue
 			}
 			// race doesn't work without glibc on Linux. See
 			// https://github.com/golang/go/issues/14481.
-			if strings.HasSuffix(target.buildType, "linux-musl") && strings.Contains(extraArgs.goflags, "-race") {
-				log.Printf("not building race build for this configuration; skipping")
+			if strings.HasSuffix(o.BuildType, "linux-musl") && strings.Contains(o.GoFlags, "-race") {
+				log.Printf("skipping race build for this configuration")
 				continue
 			}
 
-			{
-				recipe := "build"
-				args := []string{recipe}
-				args = append(args, fmt.Sprintf("%s=%s", "TYPE", target.buildType))
-				args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", extraArgs.goflags))
-				args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", extraArgs.suffix))
-				args = append(args, fmt.Sprintf("%s=%s", "TAGS", extraArgs.tags))
-				cmd := exec.Command("make", args...)
-				cmd.Dir = pkg.Dir
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				log.Printf("%s %s", cmd.Env, cmd.Args)
-				if err := cmd.Run(); err != nil {
-					log.Fatalf("%s: %s", cmd.Args, err)
-				}
-			}
+			buildOne(svc, o)
+		}
+	}
+}
 
-			if strings.Contains(target.buildType, "linux") {
-				binaryName := fmt.Sprintf("./cockroach%s-%s", extraArgs.suffix, target.baseSuffix)
+func buildOne(svc s3putter, o opts) {
+	defer func() {
+		log.Printf("done building: %s", pretty.Sprint(o))
+	}()
 
-				cmd := exec.Command(binaryName, "version")
-				cmd.Dir = pkg.Dir
-				cmd.Env = append(cmd.Env, "MALLOC_CONF=prof:true")
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				log.Printf("%s %s", cmd.Env, cmd.Args)
-				if err := cmd.Run(); err != nil {
-					log.Fatalf("%s %s: %s", cmd.Env, cmd.Args, err)
-				}
+	{
+		recipe := "build"
+		args := []string{recipe}
+		args = append(args, fmt.Sprintf("%s=%s", "TYPE", o.BuildType))
+		args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", o.GoFlags))
+		args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", o.Suffix))
+		args = append(args, fmt.Sprintf("%s=%s", "TAGS", o.Tags))
+		cmd := exec.Command("make", args...)
+		cmd.Dir = o.PkgDir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Printf("%s %s", cmd.Env, cmd.Args)
+		if err := cmd.Run(); err != nil {
+			log.Fatalf("%s: %s", cmd.Args, err)
+		}
+	}
 
-				// ldd only works on binaries built for the host. "linux-musl"
-				// produces fully static binaries, which cause ldd to exit
-				// non-zero.
-				//
-				// TODO(tamird): implement this for all targets.
-				if !strings.HasSuffix(target.buildType, "linux-musl") {
-					cmd := exec.Command("ldd", binaryName)
-					cmd.Dir = pkg.Dir
-					log.Printf("%s %s", cmd.Env, cmd.Args)
-					out, err := cmd.Output()
-					if err != nil {
-						log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
-					}
-					scanner := bufio.NewScanner(bytes.NewReader(out))
-					for scanner.Scan() {
-						if line := scanner.Text(); !libsRe.MatchString(line) {
-							log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
-						}
-					}
-					if err := scanner.Err(); err != nil {
-						log.Fatal(err)
-					}
-				}
-			}
+	if strings.Contains(o.BuildType, "linux") {
+		binaryName := fmt.Sprintf("./cockroach%s-%s", o.Suffix, o.BaseSuffix)
 
-			base := fmt.Sprintf("cockroach%s-%s", extraArgs.suffix, target.baseSuffix)
+		cmd := exec.Command(binaryName, "version")
+		cmd.Dir = o.PkgDir
+		cmd.Env = append(cmd.Env, "MALLOC_CONF=prof:true")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Printf("%s %s", cmd.Env, cmd.Args)
+		if err := cmd.Run(); err != nil {
+			log.Fatalf("%s %s: %s", cmd.Env, cmd.Args, err)
+		}
 
-			absolutePath := filepath.Join(pkg.Dir, base)
-			binary, err := os.Open(absolutePath)
+		// ldd only works on binaries built for the host. "linux-musl"
+		// produces fully static binaries, which cause ldd to exit
+		// non-zero.
+		//
+		// TODO(tamird): implement this for all targets.
+		if !strings.HasSuffix(o.BuildType, "linux-musl") {
+			cmd := exec.Command("ldd", binaryName)
+			cmd.Dir = o.PkgDir
+			log.Printf("%s %s", cmd.Env, cmd.Args)
+			out, err := cmd.Output()
 			if err != nil {
-				log.Fatalf("os.Open(%s): %s", absolutePath, err)
+				log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
 			}
-
-			const dotExe = ".exe"
-			hasExe := strings.HasSuffix(base, dotExe)
-
-			if !*isRelease {
-				const repoName = "cockroach"
-
-				remoteName := strings.TrimSuffix(base, dotExe)
-				// Replace cockroach{suffix}-{target suffix} with
-				// cockroach{suffix}.{target suffix}.
-				remoteName = strings.Replace(remoteName, "-", ".", 1)
-				// TODO(tamird): do we want to keep doing this? No longer
-				// doing so requires updating cockroachlabs/production, and
-				// possibly cockroachdb/cockroach-go.
-				remoteName = osVersionRe.ReplaceAllLiteralString(remoteName, "")
-
-				fileName := fmt.Sprintf("%s.%s", remoteName, versionStr)
-				if hasExe {
-					fileName += dotExe
-				}
-				disposition := mime.FormatMediaType("attachment", map[string]string{"filename": fileName})
-
-				// NB: The leading slash is required to make redirects work
-				// correctly since we reuse this key as the redirect location.
-				versionKey := fmt.Sprintf("/%s/%s", repoName, fileName)
-				if _, err := svc.PutObject(&s3.PutObjectInput{
-					Bucket:             &bucketName,
-					ContentDisposition: &disposition,
-					Key:                &versionKey,
-					Body:               binary,
-				}); err != nil {
-					log.Fatalf("s3 upload %s: %s", absolutePath, err)
-				}
-				latestSuffix := branch
-				if latestSuffix == "master" {
-					latestSuffix = "LATEST"
-				}
-				latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, latestSuffix)
-				if _, err := svc.PutObject(&s3.PutObjectInput{
-					Bucket:       &bucketName,
-					CacheControl: &noCache,
-					Key:          &latestKey,
-					WebsiteRedirectLocation: &versionKey,
-				}); err != nil {
-					log.Fatalf("s3 redirect to %s: %s", versionKey, err)
-				}
-			} else {
-				targetSuffix := strings.TrimSuffix(target.baseSuffix, dotExe)
-				// TODO(tamird): remove this weirdness. Requires updating
-				// "users" e.g. docs, cockroachdb/cockroach-go, maybe others.
-				if strings.Contains(target.buildType, "linux") {
-					targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
-					targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
-				}
-
-				// Stat the binary. Info is needed for archive headers.
-				binaryInfo, err := binary.Stat()
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				for _, releaseVersionStr := range releaseVersionStrs {
-					archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
-					targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
-					var targetArchive string
-					var body bytes.Buffer
-					if hasExe {
-						targetArchive = targetArchiveBase + ".zip"
-						zw := zip.NewWriter(&body)
-
-						// Set the zip header from the file info. Overwrite name.
-						zipHeader, err := zip.FileInfoHeader(binaryInfo)
-						if err != nil {
-							log.Fatal(err)
-						}
-						zipHeader.Name = filepath.Join(targetArchiveBase, "cockroach.exe")
-
-						zfw, err := zw.CreateHeader(zipHeader)
-						if err != nil {
-							log.Fatal(err)
-						}
-						if _, err := io.Copy(zfw, binary); err != nil {
-							log.Fatal(err)
-						}
-						if err := zw.Close(); err != nil {
-							log.Fatal(err)
-						}
-					} else {
-						targetArchive = targetArchiveBase + ".tgz"
-						gzw := gzip.NewWriter(&body)
-						tw := tar.NewWriter(gzw)
-
-						// Set the tar header from the file info. Overwrite name.
-						tarHeader, err := tar.FileInfoHeader(binaryInfo, "")
-						if err != nil {
-							log.Fatal(err)
-						}
-						tarHeader.Name = filepath.Join(targetArchiveBase, "cockroach")
-						if err := tw.WriteHeader(tarHeader); err != nil {
-							log.Fatal(err)
-						}
-
-						if _, err := io.Copy(tw, binary); err != nil {
-							log.Fatal(err)
-						}
-						if err := tw.Close(); err != nil {
-							log.Fatal(err)
-						}
-						if err := gzw.Close(); err != nil {
-							log.Fatal(err)
-						}
-					}
-					if _, err := binary.Seek(0, 0); err != nil {
-						log.Fatal(err)
-					}
-					putObjectInput := s3.PutObjectInput{
-						Bucket: &bucketName,
-						Key:    &targetArchive,
-						Body:   bytes.NewReader(body.Bytes()),
-					}
-					if releaseVersionStr == latestStr {
-						putObjectInput.CacheControl = &noCache
-					}
-					if _, err := svc.PutObject(&putObjectInput); err != nil {
-						log.Fatalf("s3 upload %s: %s", targetArchive, err)
-					}
+			scanner := bufio.NewScanner(bytes.NewReader(out))
+			for scanner.Scan() {
+				if line := scanner.Text(); !libsRe.MatchString(line) {
+					log.Fatalf("%s is not properly statically linked:\n%s", binaryName, out)
 				}
 			}
-			if err := binary.Close(); err != nil {
+			if err := scanner.Err(); err != nil {
 				log.Fatal(err)
 			}
+		}
+	}
+
+	o.Base = fmt.Sprintf("cockroach%s-%s", o.Suffix, o.BaseSuffix)
+	o.AbsolutePath = filepath.Join(o.PkgDir, o.Base)
+	{
+		var err error
+		o.Binary, err = os.Open(o.AbsolutePath)
+
+		if err != nil {
+			log.Fatalf("os.Open(%s): %s", o.AbsolutePath, err)
+		}
+	}
+
+	if !*isRelease {
+		putNonRelease(svc, o)
+	} else {
+		putRelease(svc, o)
+	}
+	if err := o.Binary.Close(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+type opts struct {
+	VersionStr         string
+	Branch             string
+	ReleaseVersionStrs []string
+
+	BuildType  string
+	BaseSuffix string
+	GoFlags    string
+	Suffix     string
+	Tags       string
+
+	Base         string
+	BucketName   string
+	Binary       *os.File
+	AbsolutePath string
+	PkgDir       string
+}
+
+// TrimDotExe trims '.exe. from `name` and returns the result (and whether any
+// trimming has occurred).
+func TrimDotExe(name string) (string, bool) {
+	return strings.TrimSuffix(name, dotExe), strings.HasSuffix(name, dotExe)
+}
+
+func putNonRelease(svc s3putter, o opts) {
+	const repoName = "cockroach"
+	remoteName, hasExe := TrimDotExe(o.Base)
+	// Replace cockroach{suffix}-{target suffix} with
+	// cockroach{suffix}.{target suffix}.
+	remoteName = strings.Replace(remoteName, "-", ".", 1)
+	// TODO(tamird): do we want to keep doing this? No longer
+	// doing so requires updating cockroachlabs/production, and
+	// possibly cockroachdb/cockroach-go.
+	remoteName = osVersionRe.ReplaceAllLiteralString(remoteName, "")
+
+	fileName := fmt.Sprintf("%s.%s", remoteName, o.VersionStr)
+	if hasExe {
+		fileName += ".exe"
+	}
+	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": fileName})
+
+	// NB: The leading slash is required to make redirects work
+	// correctly since we reuse this key as the redirect location.
+	versionKey := fmt.Sprintf("/%s/%s", repoName, fileName)
+	if _, err := svc.PutObject(&s3.PutObjectInput{
+		Bucket:             &o.BucketName,
+		ContentDisposition: &disposition,
+		Key:                &versionKey,
+		Body:               o.Binary,
+	}); err != nil {
+		log.Fatalf("s3 upload %s: %s", o.AbsolutePath, err)
+	}
+	latestSuffix := o.Branch
+	if latestSuffix == "master" {
+		latestSuffix = "LATEST"
+	}
+	latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, latestSuffix)
+	if _, err := svc.PutObject(&s3.PutObjectInput{
+		Bucket:       &o.BucketName,
+		CacheControl: &noCache,
+		Key:          &latestKey,
+		WebsiteRedirectLocation: &versionKey,
+	}); err != nil {
+		log.Fatalf("s3 redirect to %s: %s", versionKey, err)
+	}
+}
+
+func putRelease(svc s3putter, o opts) {
+	targetSuffix, hasExe := TrimDotExe(o.BaseSuffix)
+	// TODO(tamird): remove this weirdness. Requires updating
+	// "users" e.g. docs, cockroachdb/cockroach-go, maybe others.
+	if strings.Contains(o.BuildType, "linux") {
+		targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
+		targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
+	}
+
+	// Stat the binary. Info is needed for archive headers.
+	binaryInfo, err := o.Binary.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, releaseVersionStr := range o.ReleaseVersionStrs {
+		archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
+		targetArchiveBase := fmt.Sprintf("%s.%s", archiveBase, targetSuffix)
+		var targetArchive string
+		var body bytes.Buffer
+		if hasExe {
+			targetArchive = targetArchiveBase + ".zip"
+			zw := zip.NewWriter(&body)
+
+			// Set the zip header from the file info. Overwrite name.
+			zipHeader, err := zip.FileInfoHeader(binaryInfo)
+			if err != nil {
+				log.Fatal(err)
+			}
+			zipHeader.Name = filepath.Join(targetArchiveBase, "cockroach.exe")
+
+			zfw, err := zw.CreateHeader(zipHeader)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if _, err := io.Copy(zfw, o.Binary); err != nil {
+				log.Fatal(err)
+			}
+			if err := zw.Close(); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			targetArchive = targetArchiveBase + ".tgz"
+			gzw := gzip.NewWriter(&body)
+			tw := tar.NewWriter(gzw)
+
+			// Set the tar header from the file info. Overwrite name.
+			tarHeader, err := tar.FileInfoHeader(binaryInfo, "")
+			if err != nil {
+				log.Fatal(err)
+			}
+			tarHeader.Name = filepath.Join(targetArchiveBase, "cockroach")
+			if err := tw.WriteHeader(tarHeader); err != nil {
+				log.Fatal(err)
+			}
+
+			if _, err := io.Copy(tw, o.Binary); err != nil {
+				log.Fatal(err)
+			}
+			if err := tw.Close(); err != nil {
+				log.Fatal(err)
+			}
+			if err := gzw.Close(); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if _, err := o.Binary.Seek(0, 0); err != nil {
+			log.Fatal(err)
+		}
+		putObjectInput := s3.PutObjectInput{
+			Bucket: &o.BucketName,
+			Key:    &targetArchive,
+			Body:   bytes.NewReader(body.Bytes()),
+		}
+		if releaseVersionStr == latestStr {
+			putObjectInput.CacheControl = &noCache
+		}
+		if _, err := svc.PutObject(&putObjectInput); err != nil {
+			log.Fatalf("s3 upload %s: %s", targetArchive, err)
 		}
 	}
 }
