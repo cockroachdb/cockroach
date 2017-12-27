@@ -366,10 +366,14 @@ func TestOpt(t *testing.T) {
 							d.fatalf(t, "no expression for index-constraints")
 						}
 
-						spans := MakeIndexConstraints(e, colInfos, &evalCtx)
 						var buf bytes.Buffer
-						for _, sp := range spans {
-							fmt.Fprintf(&buf, "%s\n", sp)
+						spans, ok := MakeIndexConstraints(e, colInfos, &evalCtx)
+						if ok {
+							for _, sp := range spans {
+								fmt.Fprintf(&buf, "%s\n", sp)
+							}
+						} else {
+							fmt.Fprintf(&buf, "[ - ]\n")
 						}
 						remainingFilter := simplifyFilter(e, spans, colInfos, &evalCtx)
 						if remainingFilter != nil {
