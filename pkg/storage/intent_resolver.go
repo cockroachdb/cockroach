@@ -326,7 +326,7 @@ func (ir *intentResolver) processIntents(
 	} else { // EndTransaction
 		if locked, release := ir.lockInFlightTxnCleanup(ctx, item.Intents[0].Txn.ID); locked {
 			defer release()
-			if err := ir.cleanupFinishedTxnIntents(ctx, item.Intents, now); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(ctx, item.Intents[0].Txn, item.Intents, now); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
@@ -458,7 +458,7 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 				}
 			}
 
-			if err := ir.cleanupFinishedTxnIntents(ctx, intents, now); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(ctx, txn.TxnMeta, intents, now); err != nil {
 				log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
 			} else {
 				ir.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
@@ -471,7 +471,7 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 // single transaction and when all intents have been successfully
 // resolved, the transaction record is GC'ed.
 func (ir *intentResolver) cleanupFinishedTxnIntents(
-	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp,
+	ctx context.Context, txn enginepb.TxnMeta, intents []roachpb.Intent, now hlc.Timestamp,
 ) error {
 	// Resolve intents.
 	if err := ir.resolveIntents(ctx, intents, ResolveOptions{Wait: true, Poison: false}); err != nil {
@@ -481,7 +481,6 @@ func (ir *intentResolver) cleanupFinishedTxnIntents(
 	// We successfully resolved the intents, so we're able to GC from
 	// the txn span directly.
 	b := &client.Batch{}
-	txn := intents[0].Txn
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
 
 	// This is pretty tricky. Transaction keys are range-local and
