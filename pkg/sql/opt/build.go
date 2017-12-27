@@ -278,7 +278,7 @@ func init() {
 		lShiftOp:   binaryOpToTypedExpr,
 		rShiftOp:   binaryOpToTypedExpr,
 
-		orderedListOp: orderedListOpToTypedExpr,
+		tupleOp: tupleOpToTypedExpr,
 	}
 }
 
@@ -311,7 +311,7 @@ func boolOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	}
 }
 
-func orderedListOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func tupleOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	if isTupleOfConstants(e) {
 		datums := make(tree.Datums, len(e.children))
 		for i, child := range e.children {

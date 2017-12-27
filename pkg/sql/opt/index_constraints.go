@@ -296,7 +296,7 @@ Outer:
 	// Create a span for each (tuple) value inside the right-hand side tuple.
 	spans := make(LogicalSpans, len(rhs.children))
 	for i, valTuple := range rhs.children {
-		if valTuple.op != orderedListOp {
+		if valTuple.op != tupleOp {
 			return nil, false, false
 		}
 		vals := make(tree.Datums, len(tuplePos))
@@ -352,7 +352,7 @@ func (c *indexConstraintCalc) makeSpansForExpr(
 		return c.makeSpansForSingleColumn(offset, e.op, e.children[1])
 	}
 	// Check for tuple operations.
-	if e.children[0].op == orderedListOp && e.children[1].op == orderedListOp {
+	if e.children[0].op == tupleOp && e.children[1].op == tupleOp {
 		switch e.op {
 		case ltOp, leOp, gtOp, geOp, neOp:
 			// Tuple inequality.
