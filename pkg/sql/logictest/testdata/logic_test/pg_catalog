@@ -73,6 +73,7 @@ pg_sequence
 pg_settings
 pg_tables
 pg_tablespace
+pg_trigger
 pg_type
 pg_user
 pg_user_mapping

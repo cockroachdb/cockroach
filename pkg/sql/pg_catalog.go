@@ -86,6 +86,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogUserMappingTable,
 		pgCatalogTablesTable,
 		pgCatalogTablespaceTable,
+		pgCatalogTriggerTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
 	},
@@ -1509,6 +1510,36 @@ CREATE TABLE pg_catalog.pg_tablespace (
 			tree.DNull,                    // spcacl
 			tree.DNull,                    // spcoptions
 		)
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-trigger.html
+var pgCatalogTriggerTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_trigger (
+  oid OID,
+  tgrelid OID,
+  tgname NAME,
+  tgfoid OID,
+  tgtype INT,
+  tgenabled TEXT,
+  tgisinternal BOOL,
+  tgconstrrelid OID,
+  tgconstrindid OID,
+  tgconstraint OID,
+  tgdeferrable BOOL,
+  tginitdeferred BOOL,
+  tgnargs INT,
+  tgattr INT2VECTOR,
+  tgargs BYTEA,
+  tgqual TEXT,
+  tgoldtable NAME,
+  tgnewtable NAME
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		// Triggers are unsupported.
+		return nil
 	},
 }
 
