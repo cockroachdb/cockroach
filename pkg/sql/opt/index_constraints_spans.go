@@ -142,6 +142,15 @@ type indexConstraintCtx struct {
 	evalCtx *tree.EvalContext
 }
 
+func makeIndexConstraintCtx(
+	colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
+) indexConstraintCtx {
+	return indexConstraintCtx{
+		colInfos: colInfos,
+		evalCtx:  evalCtx,
+	}
+}
+
 // isIndexColumn returns true if e is an indexed var that corresponds
 // to index column <offset>.
 func (c *indexConstraintCtx) isIndexColumn(e *expr, index int) bool {
