@@ -318,6 +318,18 @@ EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 render       ·  ·
  └── norows  ·  ·
 
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
+----
+render       ·  ·
+ └── norows  ·  ·
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
+----
+render       ·  ·
+ └── norows  ·  ·
+
 # Make sure that mixed type comparison operations are not used
 # for selecting indexes.
 

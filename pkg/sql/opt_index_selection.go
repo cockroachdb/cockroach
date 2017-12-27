@@ -240,10 +240,10 @@ func (p *planner) selectIndex(
 		if err != nil {
 			return nil, err
 		}
-		if s.filter == tree.DBoolFalse {
+		switch s.filter {
+		case tree.DBoolFalse, tree.DNull:
 			return &zeroNode{}, nil
-		}
-		if s.filter == tree.DBoolTrue {
+		case tree.DBoolTrue:
 			s.filter = nil
 		}
 	}
