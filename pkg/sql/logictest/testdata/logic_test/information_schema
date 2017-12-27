@@ -266,6 +266,7 @@ pg_catalog          pg_settings
 pg_catalog          pg_tables
 pg_catalog          pg_tablespace
 pg_catalog          pg_type
+pg_catalog          pg_user
 pg_catalog          pg_views
 system              descriptor
 system              eventlog
@@ -433,6 +434,7 @@ def            pg_catalog          pg_settings                SYSTEM VIEW  1
 def            pg_catalog          pg_tables                  SYSTEM VIEW  1
 def            pg_catalog          pg_tablespace              SYSTEM VIEW  1
 def            pg_catalog          pg_type                    SYSTEM VIEW  1
+def            pg_catalog          pg_user                    SYSTEM VIEW  1
 def            pg_catalog          pg_views                   SYSTEM VIEW  1
 def            system              descriptor                 BASE TABLE   1
 def            system              eventlog                   BASE TABLE   2

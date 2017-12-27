@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 )
 
 // This file contains builtin functions that we implement primarily for
@@ -151,6 +152,27 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Builtin {
 	}
 }
 
+// Make a pg_get_constraintdef function with the given arguments.
+func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Builtin {
+	return tree.Builtin{
+		Types:            argTypes,
+		DistsqlBlacklist: true,
+		ReturnType:       tree.FixedReturnType(types.String),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			r, err := ctx.Planner.QueryRow(
+				ctx.Ctx(), "SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1", args[0])
+			if err != nil {
+				return nil, err
+			}
+			if len(r) == 0 {
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown constraint (OID=%s)", args[0])
+			}
+			return r[0], nil
+		},
+		Info: notUsableInfo,
+	}
+}
+
 var pgBuiltins = map[string][]tree.Builtin{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": {
@@ -211,6 +233,14 @@ var pgBuiltins = map[string][]tree.Builtin{
 			},
 			Info: notUsableInfo,
 		},
+	},
+
+	// pg_get_constraintdef functions like SHOW CREATE CONSTRAINT would if we
+	// supported that statement.
+	"pg_get_constraintdef": {
+		makePGGetConstraintDef(tree.ArgTypes{
+			{"constraint_oid", types.Oid}, {"pretty_bool", types.Bool}}),
+		makePGGetConstraintDef(tree.ArgTypes{{"constraint_oid", types.Oid}}),
 	},
 
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
@@ -386,6 +416,58 @@ var pgBuiltins = map[string][]tree.Builtin{
 					return nil, err
 				}
 				return tree.MakeDBool(tree.DBool(t != nil)), nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+
+	// inet_{client,server}_{addr,port} return either an INet address or integer
+	// port that corresponds to either the client or server side of the current
+	// session's connection.
+	//
+	// They're currently trivially implemented by always returning 0, to prevent
+	// tools that expect them to exist from failing. The output of these builtins
+	// is used in an advisory capacity for displaying in a UI, and is therefore
+	// okay to fake for the time being. Implementing these properly requires
+	// plumbing these values into the EvalContext.
+	//
+	// See https://www.postgresql.org/docs/10/static/functions-info.html
+	"inet_client_addr": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.INet),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+	"inet_client_port": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DZero, nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+	"inet_server_addr": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.INet),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{}}), nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+	"inet_server_port": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DZero, nil
 			},
 			Info: notUsableInfo,
 		},
