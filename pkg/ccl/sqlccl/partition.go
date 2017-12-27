@@ -174,12 +174,16 @@ func selectPartitionExprs(
 	evalCtx *tree.EvalContext, tableDesc *sqlbase.TableDescriptor, partNames tree.NameList,
 ) (tree.Expr, error) {
 	exprsByPartName := make(map[string]tree.TypedExpr)
+	for _, partName := range partNames {
+		exprsByPartName[string(partName)] = nil
+	}
 
 	a := &sqlbase.DatumAlloc{}
 	var prefixDatums []tree.Datum
 	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *sqlbase.IndexDescriptor) error {
+		genExpr := true
 		return selectPartitionExprsByName(
-			a, tableDesc, idxDesc, &idxDesc.Partitioning, prefixDatums, exprsByPartName)
+			a, tableDesc, idxDesc, &idxDesc.Partitioning, prefixDatums, exprsByPartName, genExpr)
 	}); err != nil {
 		return nil, err
 	}
@@ -223,7 +227,14 @@ func selectPartitionExprs(
 //
 // NB Subpartitions do not affect the expression for their parent partitions. So
 // if a partition foo (a=3) is then subpartitiond by (b=5) and no DEFAULT, the
-// expression for foo is still `a=3`, not `a=3 AND b=5`.
+// expression for foo is still `a=3`, not `a=3 AND b=5`. This means that if some
+// partition is requested, we can omit all of the subpartitions, because they'll
+// also necessarily select subsets of the rows it will. "requested" here is
+// indicated by the caller by setting the corresponding name in the
+// `exprsByPartName` map to nil. In this case, `genExpr` is then set to false
+// for subpartitions of this call, which causes each subpartition to only
+// register itself in the map with a placeholder entry (so we can still verify
+// that the requested partitions are all valid).
 func selectPartitionExprsByName(
 	a *sqlbase.DatumAlloc,
 	tableDesc *sqlbase.TableDescriptor,
@@ -231,8 +242,27 @@ func selectPartitionExprsByName(
 	partDesc *sqlbase.PartitioningDescriptor,
 	prefixDatums tree.Datums,
 	exprsByPartName map[string]tree.TypedExpr,
+	genExpr bool,
 ) error {
 	if partDesc.NumColumns == 0 {
+		return nil
+	}
+
+	// Setting genExpr to false skips the expression generation and only
+	// registers each descendent partition in the map with a placeholder entry.
+	if !genExpr {
+		for _, l := range partDesc.List {
+			exprsByPartName[l.Name] = tree.DBoolFalse
+			var fakeDatums tree.Datums
+			if err := selectPartitionExprsByName(
+				a, tableDesc, idxDesc, &l.Subpartitioning, fakeDatums, exprsByPartName, genExpr,
+			); err != nil {
+				return err
+			}
+		}
+		for _, r := range partDesc.Range {
+			exprsByPartName[r.Name] = tree.DBoolFalse
+		}
 		return nil
 	}
 
@@ -280,8 +310,20 @@ func selectPartitionExprsByName(
 					name: l.Name,
 				})
 
+				genExpr := true
+				if _, ok := exprsByPartName[l.Name]; ok {
+					// Presence of a partition name in the exprsByPartName map
+					// means the caller has expressed an interested in this
+					// partition, which means any subpartitions can be skipped
+					// (because they must by definition be a subset of this
+					// partition). This saves us a little work and also helps
+					// out the normalization & simplification of the resulting
+					// expression, since it doesn't have to account for which
+					// partitions overlap.
+					genExpr = false
+				}
 				if err := selectPartitionExprsByName(
-					a, tableDesc, idxDesc, &l.Subpartitioning, allDatums, exprsByPartName,
+					a, tableDesc, idxDesc, &l.Subpartitioning, allDatums, exprsByPartName, genExpr,
 				); err != nil {
 					return err
 				}
