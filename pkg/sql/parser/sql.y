@@ -435,7 +435,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 
 %token <str>   CACHE CANCEL CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK
-%token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
+%token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
 %token <str>   COMMITTED COMPACT CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str>   CONFLICT CONSTRAINT CONSTRAINTS CONTAINS COPY COVERING CREATE
 %token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
@@ -590,6 +590,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.ScrubOptions> scrub_option_list
 %type <tree.ScrubOption> scrub_option
 
+%type <tree.Statement> comment_stmt
 %type <tree.Statement> commit_stmt
 %type <tree.Statement> copy_from_stmt
 
@@ -671,6 +672,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> show_zone_stmt
 
 %type <str> session_var
+%type <str> comment_text
 
 %type <tree.Statement> transaction_stmt
 %type <tree.Statement> truncate_stmt
@@ -994,6 +996,7 @@ stmt:
 | cancel_stmt     // help texts in sub-rule
 | scrub_stmt
 | copy_from_stmt
+| comment_stmt
 | create_stmt     // help texts in sub-rule
 | deallocate_stmt // EXTEND WITH HELP: DEALLOCATE
 | delete_stmt     // EXTEND WITH HELP: DELETE
@@ -1639,6 +1642,22 @@ cancel_query_stmt:
     $$.val = &tree.CancelQuery{ID: $3.expr()}
   }
 | CANCEL QUERY error // SHOW HELP: CANCEL QUERY
+
+comment_stmt:
+  COMMENT ON TABLE any_name IS comment_text
+  {
+    /* SKIP DOC */
+    return unimplementedWithIssue(sqllex, 19472)
+  }
+| COMMENT ON COLUMN any_name IS comment_text
+  {
+    /* SKIP DOC */
+    return unimplementedWithIssue(sqllex, 19472)
+  }
+
+comment_text:
+  SCONST    { $$ = $1 }
+  | NULL    { $$ = "" }
 
 // %Help: CREATE
 // %Category: Group
@@ -7068,6 +7087,7 @@ unreserved_keyword:
 | CASCADE
 | CLUSTER
 | COLUMNS
+| COMMENT
 | COMMIT
 | COMMITTED
 | COMPACT
