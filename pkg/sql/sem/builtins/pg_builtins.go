@@ -311,6 +311,37 @@ var pgBuiltins = map[string][]tree.Builtin{
 			Info: notUsableInfo,
 		},
 	},
+	"pg_sequence_parameters": {
+		// pg_sequence_parameters is an undocumented Postgres builtin that returns
+		// information about a sequence given its OID. It's nevertheless used by
+		// at least one UI tool, so we provide an implementation for compatibility.
+		// The real implementation returns a record; we fake it by returning a
+		// comma-delimited string enclosed by parentheses.
+		// TODO(jordan): convert this to return a record type once we support that.
+		tree.Builtin{
+			Types:            tree.ArgTypes{{"sequence_oid", types.Oid}},
+			DistsqlBlacklist: true,
+			ReturnType:       tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				r, err := ctx.Planner.QueryRow(
+					ctx.Ctx(), `SELECT seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid
+FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "unknown sequence (OID=%s)", args[0])
+				}
+				seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid := r[0], r[1], r[2], r[3], r[4], r[5], r[6]
+				seqcycleStr := "t"
+				if seqcycle.(*tree.DBool) == tree.DBoolFalse {
+					seqcycleStr = "f"
+				}
+				return tree.NewDString(fmt.Sprintf("(%s,%s,%s,%s,%s,%s,%s)", seqstart, seqmin, seqmax, seqincrement, seqcycleStr, seqcache, seqtypid)), nil
+			},
+			Info: notUsableInfo,
+		},
+	},
 	"format_type": {
 		tree.Builtin{
 			Types:        tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
