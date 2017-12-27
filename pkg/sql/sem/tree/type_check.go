@@ -1131,21 +1131,15 @@ func subOpCompError(leftType, rightType types.T, subOp, op ComparisonOperator) *
 // expression is a subquery.
 func typeCheckSubqueryWithIn(left, right types.T) error {
 	if rTuple, ok := right.(types.TTuple); ok {
-		if lTuple, ok := left.(types.TTuple); ok {
-			if len(lTuple) != len(rTuple) {
-				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
-			}
-			for i := range rTuple {
-				if rTuple[i] != lTuple[i] {
-					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
-				}
-			}
-		} else {
-			// Subqueries returning a single column come through as a tuple{T}, so
-			// T IN tuple{T} should be accepted.
-			if len(rTuple) != 1 || rTuple[0] != left {
-				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
-			}
+		// Subqueries come through as a tuple{T}, so T IN tuple{T} should be
+		// accepted.
+		if len(rTuple) != 1 {
+			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
+		}
+		if !left.Equivalent(rTuple[0]) {
+			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
 	}
 	return nil
