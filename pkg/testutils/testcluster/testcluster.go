@@ -524,7 +524,8 @@ func (tc *TestCluster) WaitForFullReplication() error {
 				if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
 					return err
 				}
-				if s.Metrics().UnderReplicatedRangeCount.Value() > 0 {
+				if n := s.Metrics().UnderReplicatedRangeCount.Value(); n > 0 {
+					log.Infof(context.TODO(), "%s has %d underreplicated ranges", s, n)
 					notReplicated = true
 				}
 				return nil
