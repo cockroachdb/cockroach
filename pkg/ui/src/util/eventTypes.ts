@@ -20,6 +20,8 @@ export const ALTER_TABLE = "alter_table";
 export const CREATE_INDEX = "create_index";
 // Recorded when an index is dropped.
 export const DROP_INDEX = "drop_index";
+// Recorded when an index is altered.
+export const ALTER_INDEX = "alter_index";
 // Recorded when a view is created.
 export const CREATE_VIEW = "create_view";
 // Recorded when a view is dropped.
@@ -46,7 +48,7 @@ export const SET_CLUSTER_SETTING = "set_cluster_setting";
 export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
 export const tableEvents = [
-  CREATE_TABLE, DROP_TABLE, ALTER_TABLE, CREATE_INDEX,
+  CREATE_TABLE, DROP_TABLE, ALTER_TABLE, CREATE_INDEX, ALTER_INDEX,
   DROP_INDEX, CREATE_VIEW, DROP_VIEW, REVERSE_SCHEMA_CHANGE, FINISH_SCHEMA_CHANGE,
   FINISH_SCHEMA_CHANGE_ROLLBACK,
 ];
