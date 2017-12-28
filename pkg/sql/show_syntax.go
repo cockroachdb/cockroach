@@ -32,13 +32,10 @@ func (p *planner) ShowSyntax(ctx context.Context, n *tree.ShowSyntax) (planNode,
 	var query bytes.Buffer
 	query.WriteString("SELECT @1 AS field, @2 AS text FROM (VALUES ")
 
-	first := true
+	comma := ""
 	if err := runShowSyntax(ctx, n.Statement, func(ctx context.Context, field, msg string) error {
-		if !first {
-			query.WriteString(", ")
-		}
-		first = false
-		fmt.Fprintf(&query, "('%s', %s)", field, lex.EscapeSQLString(msg))
+		fmt.Fprintf(&query, "%s('%s', %s)", comma, field, lex.EscapeSQLString(msg))
+		comma = ", "
 		return nil
 	}); err != nil {
 		return nil, err
