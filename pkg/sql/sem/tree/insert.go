@@ -27,6 +27,7 @@ import "bytes"
 
 // Insert represents an INSERT statement.
 type Insert struct {
+	With       *With
 	Table      TableExpr
 	Columns    UnresolvedNames
 	Rows       *Select
@@ -36,6 +37,7 @@ type Insert struct {
 
 // Format implements the NodeFormatter interface.
 func (node *Insert) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.With)
 	if node.OnConflict.IsUpsertAlias() {
 		buf.WriteString("UPSERT")
 	} else {

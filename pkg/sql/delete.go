@@ -48,6 +48,14 @@ type deleteNode struct {
 func (p *planner) Delete(
 	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
 ) (planNode, error) {
+	resetter, err := p.initWith(ctx, n.With)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
+	}
+
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
 	}
@@ -91,7 +99,7 @@ func (p *planner) Delete(
 		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, n.OrderBy, n.Limit, nil, publicAndNonPublicColumns)
+	}, n.OrderBy, n.Limit, nil, nil, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
