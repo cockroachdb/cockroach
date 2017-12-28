@@ -465,6 +465,7 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 	// to break up a span into multiple spans (otherwise spans is modified in
 	// place).
 	var newSpans LogicalSpans
+Loop:
 	for i := 0; i < len(spans); i++ {
 		start, end := spans[i].Start, spans[i].End
 		startLen, endLen := len(start.Vals), len(end.Vals)
@@ -496,6 +497,9 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 			}
 			switch len(s) {
 			case 0:
+				// We found a contradiction.
+				newSpans = LogicalSpans{}
+				break Loop
 			case 1:
 				spans[i].Start.extend(s[0].Start)
 				spans[i].End.extend(s[0].End)

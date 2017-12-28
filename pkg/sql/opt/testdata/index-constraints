@@ -863,3 +863,7 @@ build-scalar,index-constraints vars=(string, string, string, string, string, str
 [/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts']
 [/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts2' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts2']
 [/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts3' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts3']
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1 = 1) AND (@2 > 5) AND (@2 < 1)
+----
