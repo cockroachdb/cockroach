@@ -30,18 +30,46 @@ func NewOpts(raw map[string]string) *Opts {
 // Int parses an int from the option with the given name, falling back to the
 // given default if it's not present.
 func (o *Opts) Int(name string, defaultValue int) int {
-	i := int64(defaultValue)
+	x := int64(defaultValue)
 	if opt, ok := o.raw[name]; ok {
 		var err error
-		i, err = strconv.ParseInt(opt, 0, 64)
+		x, err = strconv.ParseInt(opt, 0, 64)
 		if err != nil && o.err == nil {
-			o.err = errors.Wrapf(err, "parsing '%s' option: %s", name, opt)
+			o.err = errors.Wrapf(err, "parsing int '%s' option: %s", name, opt)
 		}
 	}
 	if int64(int(x)) != x && o.err == nil {
 		o.err = errors.Errorf("parsing int '%s' option overflowed: %d", name, x)
 	}
 	return int(x)
+}
+
+// Int64 parses an int64 from the option with the given name, falling back to
+// the given default if it's not present.
+func (o *Opts) Int64(name string, defaultValue int64) int64 {
+	x := defaultValue
+	if opt, ok := o.raw[name]; ok {
+		var err error
+		x, err = strconv.ParseInt(opt, 0, 64)
+		if err != nil && o.err == nil {
+			o.err = errors.Wrapf(err, "parsing int64 '%s' option: %s", name, opt)
+		}
+	}
+	return x
+}
+
+// Bool parses a bool from the option with the given name, falling back to the
+// given default if it's not present.
+func (o *Opts) Bool(name string, defaultValue bool) bool {
+	x := defaultValue
+	if opt, ok := o.raw[name]; ok {
+		var err error
+		x, err = strconv.ParseBool(opt)
+		if err != nil && o.err == nil {
+			o.err = errors.Wrapf(err, "parsing bool '%s' option: %s", name, opt)
+		}
+	}
+	return x
 }
 
 // Err returns the first error encountered during options parsing, if any.
