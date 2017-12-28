@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/pkg/errors"
 )
 
 // ShowSyntax implements the plan for SHOW SYNTAX. This statement is
@@ -49,7 +50,10 @@ func runShowSyntax(
 ) error {
 	stmts, err := parser.Parse(stmt)
 	if err != nil {
-		pqErr, _ := pgerror.GetPGCause(err)
+		pqErr, ok := pgerror.GetPGCause(err)
+		if !ok {
+			return errors.Wrapf(err, "unknown parser error")
+		}
 		if err := report(ctx, "error", pqErr.Message); err != nil {
 			return err
 		}
