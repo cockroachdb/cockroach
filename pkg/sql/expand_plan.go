@@ -216,6 +216,7 @@ func doExpandPlan(
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
 	case *valuesNode:
+	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
@@ -600,6 +601,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.rows = p.simplifyOrderings(n.rows, nil)
 
 	case *valuesNode:
+	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:

@@ -509,7 +509,8 @@ alter_table_stmt ::=
 	| alter_rename_table_stmt
 
 alter_index_stmt ::=
-	alter_split_index_stmt
+	alter_oneindex_stmt
+	| alter_split_index_stmt
 	| alter_scatter_index_stmt
 	| alter_rename_index_stmt
 
@@ -1027,6 +1028,10 @@ alter_rename_table_stmt ::=
 	| 'ALTER' 'TABLE' relation_expr 'RENAME' opt_column name 'TO' name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' opt_column name 'TO' name
 
+alter_oneindex_stmt ::=
+	'ALTER' 'INDEX' table_name_with_index alter_index_cmds
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name_with_index alter_index_cmds
+
 alter_split_index_stmt ::=
 	'ALTER' 'INDEX' table_name_with_index 'SPLIT' 'AT' select_stmt
 
@@ -1430,6 +1435,9 @@ table_name_with_index ::=
 	qualified_name '@' unrestricted_name
 	| qualified_name
 
+alter_index_cmds ::=
+	( alter_index_cmd ) ( ( ',' alter_index_cmd ) )*
+
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
 
@@ -1651,6 +1659,9 @@ alter_table_cmd ::=
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' name opt_drop_behavior
 	| 'DROP' 'CONSTRAINT' name opt_drop_behavior
 	| partition_by
+
+alter_index_cmd ::=
+	partition_by
 
 sequence_option_elem ::=
 	'INCREMENT' signed_iconst64

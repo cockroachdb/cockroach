@@ -338,6 +338,12 @@ func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
 func (u *sqlSymUnion) alterTableCmds() tree.AlterTableCmds {
     return u.val.(tree.AlterTableCmds)
 }
+func (u *sqlSymUnion) alterIndexCmd() tree.AlterIndexCmd {
+    return u.val.(tree.AlterIndexCmd)
+}
+func (u *sqlSymUnion) alterIndexCmds() tree.AlterIndexCmds {
+    return u.val.(tree.AlterIndexCmds)
+}
 func (u *sqlSymUnion) isoLevel() tree.IsolationLevel {
     return u.val.(tree.IsolationLevel)
 }
@@ -577,6 +583,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> alter_user_password_stmt
 
 // ALTER INDEX
+%type <tree.Statement> alter_oneindex_stmt
 %type <tree.Statement> alter_scatter_index_stmt
 %type <tree.Statement> alter_split_index_stmt
 %type <tree.Statement> alter_rename_index_stmt
@@ -708,6 +715,8 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 
 %type <tree.AlterTableCmd> alter_table_cmd
 %type <tree.AlterTableCmds> alter_table_cmds
+%type <tree.AlterIndexCmd> alter_index_cmd
+%type <tree.AlterIndexCmds> alter_index_cmds
 
 %type <empty> opt_collate_clause
 
@@ -1167,7 +1176,8 @@ alter_range_stmt:
 //
 // %SeeAlso: WEBDOCS/alter-index.html
 alter_index_stmt:
-  alter_split_index_stmt
+  alter_oneindex_stmt
+| alter_split_index_stmt
 | alter_testing_relocate_index_stmt
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
@@ -1184,6 +1194,16 @@ alter_onetable_stmt:
 | ALTER TABLE IF EXISTS relation_expr alter_table_cmds
   {
     $$.val = &tree.AlterTable{Table: $5.normalizableTableName(), IfExists: true, Cmds: $6.alterTableCmds()}
+  }
+
+alter_oneindex_stmt:
+  ALTER INDEX table_name_with_index alter_index_cmds
+  {
+    $$.val = &tree.AlterIndex{Index: $3.newTableWithIdx(), IfExists: false, Cmds: $4.alterIndexCmds()}
+  }
+| ALTER INDEX IF EXISTS table_name_with_index alter_index_cmds
+  {
+    $$.val = &tree.AlterIndex{Index: $5.newTableWithIdx(), IfExists: true, Cmds: $6.alterIndexCmds()}
   }
 
 alter_split_stmt:
@@ -1391,6 +1411,24 @@ alter_table_cmd:
 | partition_by
   {
     $$.val = &tree.AlterTablePartitionBy{
+      PartitionBy: $1.partitionBy(),
+    }
+  }
+
+alter_index_cmds:
+  alter_index_cmd
+  {
+    $$.val = tree.AlterIndexCmds{$1.alterIndexCmd()}
+  }
+| alter_index_cmds ',' alter_index_cmd
+  {
+    $$.val = append($1.alterIndexCmds(), $3.alterIndexCmd())
+  }
+
+alter_index_cmd:
+  partition_by
+  {
+    $$.val = &tree.AlterIndexPartitionBy{
       PartitionBy: $1.partitionBy(),
     }
   }
