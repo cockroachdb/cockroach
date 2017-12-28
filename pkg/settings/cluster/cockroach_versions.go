@@ -39,6 +39,7 @@ const (
 	VersionRPCVersionCheck
 	VersionClearRange
 	VersionPartitioning
+	VersionLeaseSequence
 
 	// Add new versions here (step one of two).
 
@@ -134,6 +135,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// be wiped after every v1.1-X upgrade.
 		Key:     VersionPartitioning,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 7},
+	},
+	{
+		// VersionLeaseSequence is https://github.com/cockroachdb/cockroach/pull/20953.
+		Key:     VersionLeaseSequence,
+		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 8},
 	},
 
 	// Add new versions here (step two of two).

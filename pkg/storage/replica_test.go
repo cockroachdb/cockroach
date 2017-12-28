@@ -714,8 +714,8 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	invalidLease.Replica.StoreID += 12345
 
 	raftCmd := storagebase.RaftCommand{
-		ProposerLease:   lease,
-		ProposerReplica: invalidLease.Replica,
+		ProposerLeaseSequence: lease.Sequence,
+		ProposerReplica:       invalidLease.Replica,
 		ReplicatedEvalResult: storagebase.ReplicatedEvalResult{
 			IsLeaseRequest: true,
 			State: &storagebase.ReplicaState{
@@ -5690,7 +5690,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// The initial stats contain no lease, but there will be an initial
 	// nontrivial lease requested with the first write below.
 	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 22,
+		SysBytes: 24,
 	})
 
 	// Our clock might not be set to zero.
@@ -6647,7 +6647,7 @@ func TestProposalOverhead(t *testing.T) {
 	// NB: the expected overhead reflects the space overhead currently present in
 	// Raft commands. This test will fail if that overhead changes. Try to make
 	// this number go down and not up.
-	const expectedOverhead = 105
+	const expectedOverhead = 59
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
