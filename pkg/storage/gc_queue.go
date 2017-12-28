@@ -71,7 +71,7 @@ const (
 
 	// gcKeyVersionChunkBytes is the threshold size for splitting
 	// GCRequests into multiple batches.
-	gcKeyVersionChunkBytes = 256 * 1000
+	gcKeyVersionChunkBytes = base.ChunkRaftCommandThresholdBytes
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their

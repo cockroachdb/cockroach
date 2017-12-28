@@ -311,7 +311,7 @@ func evalEndTransaction(
 			}
 			// Use alwaysReturn==true because the transaction is definitely
 			// aborted, no matter what happens to this command.
-			return result.FromIntents(externalIntents, args, true /* alwaysReturn */), nil
+			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */), nil
 		}
 		// If the transaction was previously aborted by a concurrent writer's
 		// push, any intents written are still open. It's only now that we know
@@ -321,9 +321,8 @@ func evalEndTransaction(
 		// Similarly to above, use alwaysReturn==true. The caller isn't trying
 		// to abort, but the transaction is definitely aborted and its intents
 		// can go.
-		return result.FromIntents(roachpb.AsIntents(
-			args.IntentSpans, reply.Txn), args, true, /* alwaysReturn */
-		), roachpb.NewTransactionAbortedError()
+		reply.Txn.Intents = args.IntentSpans
+		return result.FromEndTxn(reply.Txn, true /* alwaysReturn */), roachpb.NewTransactionAbortedError()
 
 	case roachpb.PENDING:
 		if h.Txn.Epoch < reply.Txn.Epoch {
@@ -432,7 +431,7 @@ func evalEndTransaction(
 	// We specify alwaysReturn==false because if the commit fails below Raft, we
 	// don't want the intents to be up for resolution. That should happen only
 	// if the commit actually happens; otherwise, we risk losing writes.
-	intentsResult := result.FromIntents(externalIntents, args, false /* alwaysReturn */)
+	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */)
 	intentsResult.Local.UpdatedTxns = &[]*roachpb.Transaction{reply.Txn}
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
@@ -478,7 +477,11 @@ func isEndTransactionTriggeringRetryError(
 // resolveLocalIntents synchronously resolves any intents that are
 // local to this range in the same batch. The remainder are collected
 // and returned so that they can be handed off to asynchronous
-// processing.
+// processing. Note that there is a maximum intent resolution
+// allowance of intentResolverBatchSize meant to avoid creating a
+// batch which is too large for Raft. Any local intents which exceed
+// the allowance are treated as external and are resolved
+// asynchronously with the external intents.
 func resolveLocalIntents(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -487,7 +490,7 @@ func resolveLocalIntents(
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 	knobs batcheval.TestingKnobs,
-) []roachpb.Intent {
+) []roachpb.Span {
 	var preMergeDesc *roachpb.RangeDescriptor
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
@@ -497,18 +500,25 @@ func resolveLocalIntents(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	iterAndBuf := engine.GetIterAndBuf(batch)
+	min, max := txn.TimeBounds()
+	iter := batch.NewTimeBoundIterator(min, max)
+	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
-	var externalIntents []roachpb.Intent
+	var externalIntents []roachpb.Span
+	var resolveAllowance int64 = intentResolverBatchSize
 	for _, span := range args.IntentSpans {
 		if err := func() error {
+			if resolveAllowance == 0 {
+				externalIntents = append(externalIntents, span)
+				return nil
+			}
 			intent := roachpb.Intent{Span: span, Txn: txn.TxnMeta, Status: txn.Status}
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
 				if !containsKey(*desc, span.Key) {
-					externalIntents = append(externalIntents, intent)
+					externalIntents = append(externalIntents, span)
 					return nil
 				}
 				resolveMS := ms
@@ -519,6 +529,7 @@ func resolveLocalIntents(
 					// merge trigger.
 					resolveMS = nil
 				}
+				resolveAllowance--
 				return engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMS, intent)
 			}
 			// For intent ranges, cut into parts inside and outside our key
@@ -526,15 +537,20 @@ func resolveLocalIntents(
 			// an intent range for range-local data is correctly considered local.
 			inSpan, outSpans := intersectSpan(span, *desc)
 			for _, span := range outSpans {
-				outIntent := intent
-				outIntent.Span = span
-				externalIntents = append(externalIntents, outIntent)
+				externalIntents = append(externalIntents, span)
 			}
 			if inSpan != nil {
 				intent.Span = *inSpan
-				num, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, math.MaxInt64)
+				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, resolveAllowance)
 				if knobs.NumKeysEvaluatedForRangeIntentResolution != nil {
 					atomic.AddInt64(knobs.NumKeysEvaluatedForRangeIntentResolution, num)
+				}
+				resolveAllowance -= num
+				if resumeSpan != nil {
+					if resolveAllowance != 0 {
+						log.Fatalf(ctx, "expected resolve allowance to be exactly 0 resolving %s; got %d", intent.Span, resolveAllowance)
+					}
+					externalIntents = append(externalIntents, *resumeSpan)
 				}
 				return err
 			}
@@ -559,7 +575,7 @@ func updateTxnWithExternalIntents(
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
-	externalIntents []roachpb.Intent,
+	externalIntents []roachpb.Span,
 ) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
 	if txnAutoGC && len(externalIntents) == 0 {
@@ -568,10 +584,7 @@ func updateTxnWithExternalIntents(
 		}
 		return engine.MVCCDelete(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
-	txn.Intents = make([]roachpb.Span, len(externalIntents))
-	for i := range externalIntents {
-		txn.Intents[i] = externalIntents[i].Span
-	}
+	txn.Intents = externalIntents
 	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, txn)
 }
 

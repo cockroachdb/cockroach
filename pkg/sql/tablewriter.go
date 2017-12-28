@@ -728,7 +728,7 @@ func (td *tableDeleter) fastDelete(
 		if traceKV {
 			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
 		}
-		td.b.DelRange(span.Key, span.EndKey, true)
+		td.b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 	}
 
 	_, err = td.finalize(ctx, traceKV)

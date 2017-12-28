@@ -689,11 +689,11 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 	// ======================
 
 	// The caller is required to detach and handle intents.
-	if lResult.IntentsAlways != nil {
-		log.Fatalf(ctx, "LocalEvalResult.IntentsAlways should be nil: %+v", lResult.IntentsAlways)
-	}
 	if lResult.Intents != nil {
-		log.Fatalf(ctx, "LocalEvalResult.intents should be nil: %+v", lResult.Intents)
+		log.Fatalf(ctx, "LocalEvalResult.Intents should be nil: %+v", lResult.Intents)
+	}
+	if lResult.EndTxns != nil {
+		log.Fatalf(ctx, "LocalEvalResult.EndTxns should be nil: %+v", lResult.EndTxns)
 	}
 
 	if lResult.GossipFirstRange {
