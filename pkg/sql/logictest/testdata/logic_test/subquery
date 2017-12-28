@@ -98,13 +98,19 @@ SELECT (SELECT (1, 2)) IN ((1, 2))
 ----
 true
 
-query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{tuple{int, int}}}>
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) in (select (1, 2));
+#                  ^
+query B
 SELECT (SELECT 1, 2) IN (SELECT (1, 2))
+----
+true
 
-# Postgres successfully handles this query (returning true), even
-# though doing so seems at odds with other rules.
-query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{tuple{int, int}}}>
+query B
 SELECT (SELECT (1, 2)) IN (SELECT (1, 2))
+----
+true
 
 query B
 SELECT 1 = ANY(SELECT 1)

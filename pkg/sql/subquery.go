@@ -378,44 +378,59 @@ func (v *subqueryVisitor) replaceSubquery(
 
 	result := &subquery{subquery: sub, plan: plan}
 
-	wrap := true
-	if len(cols) == 1 {
-		if !multiRow {
-			// The subquery has only a single column and is not in a multi-row
-			// context, we don't want to wrap the type in a tuple. For example:
-			//
-			//   SELECT (SELECT 1)
-			//
-			// and
-			//
-			//   SELECT (SELECT (1, 2))
-			//
-			// This will result in the types "int" and "tuple{int,int}" respectively.
-			wrap = false
-		} else if !types.FamTuple.FamilyEqual(cols[0].Typ) {
-			// The subquery has only a single column and is in a multi-row
-			// context. We only wrap if the type of the result column is not a
-			// tuple. For example:
-			//
-			//   SELECT 1 IN (SELECT 1)
-			//
-			// The type of the subquery will be "tuple{int}". Now consider this
-			// invalid query:
-			//
-			//   SELECT (1, 2) IN (SELECT (1, 2))
-			//
-			// We want the type of the subquery to be "tuple{tuple{tuple{int,int}}}"
-			// in order to distinguish it from this semantically valid query:
-			//
-			//   SELECT (1, 2) IN (SELECT 1, 2)
-			//
-			// In this query, the subquery has the type "tuple{tuple{int,int}}"
-			// making the IN expression valid.
-			wrap = false
-		}
-	}
+	// The typing for subqueries is complex, but regular.
+	//
+	// * If the subquery is used in a single-row context:
+	//
+	//   - If the subquery returns a single column with type "U", the type of the
+	//     subquery is the type of the column "U". For example:
+	//
+	//       SELECT 1 = (SELECT 1)
+	//
+	//     The type of the subquery is "int".
+	//
+	//   - If the subquery returns multiple columns, the type of the subquery is
+	//     "tuple{C}" where "C" expands to all of the types of the columns of the
+	//     subquery. For example:
+	//
+	//       SELECT (1, 'a') = (SELECT 1, 'a')
+	//
+	//     The type of the subquery is "tuple{int,string}"
+	//
+	// * If the subquery is used in a multi-row context:
+	//
+	//   - If the subquery returns a single column with type "U", the type of the
+	//     subquery is the singleton tuple of type "U": "tuple{U}". For example:
+	//
+	//       SELECT 1 IN (SELECT 1)
+	//
+	//     The type of the subquery's columns is "int" and the type of the
+	//     subquery is "tuple{int}".
+	//
+	//   - If the subquery returns multiple columns, the type of the subquery is
+	//     "tuple{tuple{C}}" where "C expands to all of the types of the columns
+	//     of the subquery. For example:
+	//
+	//       SELECT (1, 'a') IN (SELECT 1, 'a')
+	//
+	//     The types of the subquery's columns are "int" and "string". These are
+	//     wrapped into "tuple{int,string}" to form the row type. And these are
+	//     wrapped again to form the subquery type "tuple{tuple{int,string}}".
+	//
+	// Note that these rules produce a somewhat surprising equivalence:
+	//
+	//   SELECT (SELECT 1, 2) = (SELECT (1, 2))
+	//
+	// A subquery which returns a single column tuple is equivalent to a subquery
+	// which returns the elements of the tuple as individual columns. While
+	// surprising, this is necessary for regularity and in order to handle:
+	//
+	//   SELECT 1 IN (SELECT 1)
+	//
+	// Without that auto-unwrapping of single-column subqueries, this query would
+	// type check as "<int> IN <tuple{tuple{int}}>" which would fail.
 
-	if !wrap {
+	if len(cols) == 1 {
 		result.typ = cols[0].Typ
 	} else {
 		colTypes := make(types.TTuple, len(cols))
