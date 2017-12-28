@@ -155,8 +155,11 @@ var txnStateTransitions = Compile(Pattern{
 	},
 })
 
-func writeAction(s string) func(Args) {
-	return func(a Args) { a.Extended.(*executor).write(s) }
+func writeAction(s string) func(Args) error {
+	return func(a Args) error {
+		a.Extended.(*executor).write(s)
+		return nil
+	}
 }
 
 type executor struct {
@@ -174,11 +177,11 @@ func ExampleMachine() {
 
 	var e executor
 	e.m = MakeMachine(txnStateTransitions, stateNoTxn{}, &e)
-	e.m.Apply(ctx, eventTxnStart{})
-	e.m.Apply(ctx, eventNoTopLevelTransition{True})
-	e.m.Apply(ctx, eventRetriableErr{False, False})
-	e.m.Apply(ctx, eventTxnRestart{})
-	e.m.Apply(ctx, eventTxnFinish{})
+	_ = e.m.Apply(ctx, eventTxnStart{})
+	_ = e.m.Apply(ctx, eventNoTopLevelTransition{True})
+	_ = e.m.Apply(ctx, eventRetriableErr{False, False})
+	_ = e.m.Apply(ctx, eventTxnRestart{})
+	_ = e.m.Apply(ctx, eventTxnFinish{})
 	fmt.Print(e.log.String())
 
 	// Output:
