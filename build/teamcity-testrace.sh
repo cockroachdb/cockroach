@@ -15,9 +15,18 @@ build/builder.sh env \
 	TARGET=stressrace \
 	github-pull-request-make
 
+if [[ "${TEAMCITY_BUILD_BRANCH}" == master ]] || [[ "${TEAMCITY_BUILD_BRANCH}" == release* ]] ; then
+	PKGSPEC="./pkg/..."
+else
+	git fetch origin master
+	PKGSPEC=$(git diff --name-only $(merge-base HEAD origin/master) | grep ^pkg | xargs -n1 dirname | sort | uniq | sed 's/^/.\//' | paste -sd " " -)
+fi
+
+
 build/builder.sh env \
 	COCKROACH_LOGIC_TESTS_SKIP=true \
 	make testrace \
+	PKG="${PKGSPEC}" \
 	TESTFLAGS='-v' \
 	2>&1 \
 	| tee artifacts/testrace.log \
