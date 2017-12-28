@@ -105,6 +105,7 @@ func evalNewLease(
 				Message:   "sequence number should not be set",
 			}
 	}
+
 	// Set the lease's sequence number once VersionLeaseSequence is the minimum
 	// version. We don't want to do it once VersionLeaseSequence IsActive but
 	// not IsMinSupported because that means that the cluster could be
@@ -119,15 +120,27 @@ func evalNewLease(
 	// never stop setting lease sequences once a range has started to.
 	if prevLease.Sequence != 0 ||
 		rec.ClusterSettings().Version.IsMinSupported(cluster.VersionLeaseSequence) {
-		// We set the new lease sequence to one more than the previous lease
-		// sequence. This is safe and will never result in repeated lease
-		// sequences because the sequence check beneath Raft acts as an atomic
-		// compare-and-swap of sorts. If two lease requests are proposed in
-		// parallel, both with the same previous lease, only one will be
-		// accepted and the other will get a LeaseRejectedError and need to
-		// retry with a different sequence number. This is actually exactly what
-		// the sequence number is used to enforce!
-		lease.Sequence = prevLease.Sequence + 1
+
+		if prevLease.Equivalent(lease) {
+			// If the proposed lease is equivalent to the previous lease, it is
+			// given the same sequence number. This is subtle, but is important
+			// to ensure that leases which are meant to be considered the same
+			// lease for the purpose of matching leases during command execution
+			// (see Lease.Equivalent) will be considered so. For example, an
+			// extension to an expiration-based lease will result in a new lease
+			// with the same sequence number.
+			lease.Sequence = prevLease.Sequence
+		} else {
+			// We set the new lease sequence to one more than the previous lease
+			// sequence. This is safe and will never result in repeated lease
+			// sequences because the sequence check beneath Raft acts as an atomic
+			// compare-and-swap of sorts. If two lease requests are proposed in
+			// parallel, both with the same previous lease, only one will be
+			// accepted and the other will get a LeaseRejectedError and need to
+			// retry with a different sequence number. This is actually exactly what
+			// the sequence number is used to enforce!
+			lease.Sequence = prevLease.Sequence + 1
+		}
 	}
 
 	// Store the lease to disk & in-memory.

@@ -462,10 +462,14 @@ type Lease struct {
 	// The epoch of the lease holder's node liveness entry. If this value
 	// is non-zero, the start and expiration values are ignored.
 	Epoch int64 `protobuf:"varint,6,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	// A zero-indexed sequence number which is increased on each new range lease
-	// acquisition. The sequence number is used to detect lease changes between
-	// command proposal and application without requiring that we send the entire
-	// Lease through Raft.
+	// A zero-indexed sequence number which is incremented during the acquisition
+	// of each new range lease that not equivalent to the previous range lease.
+	// The sequence number is used to detect lease changes between command
+	// proposal and application without requiring that we send the entire lease
+	// through Raft. Lease sequence numbers are a reflection of the "lease
+	// equivalency" property (see Lease.Equivalent). Two leases that are
+	// equivalent will have the same sequence number and two leases that are
+	// not equivalent will have different sequence numbers.
 	Sequence LeaseSequence `protobuf:"varint,7,opt,name=sequence,proto3,casttype=LeaseSequence" json:"sequence,omitempty"`
 }
 

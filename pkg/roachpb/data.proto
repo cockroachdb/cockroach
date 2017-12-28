@@ -360,10 +360,14 @@ message Lease {
   // is non-zero, the start and expiration values are ignored.
   int64 epoch = 6;
 
-  // A zero-indexed sequence number which is increased on each new range lease
-  // acquisition. The sequence number is used to detect lease changes between
-  // command proposal and application without requiring that we send the entire
-  // Lease through Raft.
+  // A zero-indexed sequence number which is incremented during the acquisition
+  // of each new range lease that not equivalent to the previous range lease.
+  // The sequence number is used to detect lease changes between command
+  // proposal and application without requiring that we send the entire lease
+  // through Raft. Lease sequence numbers are a reflection of the "lease
+  // equivalency" property (see Lease.Equivalent). Two leases that are
+  // equivalent will have the same sequence number and two leases that are
+  // not equivalent will have different sequence numbers.
   int64 sequence = 7 [(gogoproto.casttype) = "LeaseSequence"];
 }
 
