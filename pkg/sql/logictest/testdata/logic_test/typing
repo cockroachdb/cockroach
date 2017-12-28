@@ -177,5 +177,5 @@ SELECT (1, 2) IN (SELECT 1, 2)
 ----
 true
 
-statement error subquery must return 2 columns, found 1
+statement error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{tuple{int, int}}}>
 SELECT (1, 2) IN (SELECT (1, 2))
