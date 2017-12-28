@@ -218,7 +218,7 @@ func buildScalar(buildCtx *buildContext, pexpr tree.TypedExpr) *expr {
 		initConstExpr(e, t)
 
 	default:
-		panic(fmt.Sprintf("node %T not supported", t))
+		initUnsupportedExpr(e, t)
 	}
 	return e
 }
@@ -279,6 +279,8 @@ func init() {
 		rShiftOp:   binaryOpToTypedExpr,
 
 		tupleOp: tupleOpToTypedExpr,
+
+		unsupportedScalarOp: unsupportedScalarOpToTypedExpr,
 	}
 }
 
@@ -349,6 +351,10 @@ func binaryOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 		scalarToTypedExpr(e.children[1], ivh),
 		e.scalarProps.typ,
 	)
+}
+
+func unsupportedScalarOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	return e.private.(tree.TypedExpr)
 }
 
 func scalarToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {

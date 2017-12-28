@@ -376,3 +376,9 @@ plus (type: int)
  └── unary-minus (type: int)
       └── variable (1) (type: int)
 (+@1) + (-@2)
+
+build-scalar,semtree-expr vars=(int, int)
+CASE WHEN @1 = 2 THEN 1 ELSE 2 END
+----
+unsupported-scalar (CASE WHEN @1 = 2 THEN 1 ELSE 2 END) (type: int)
+CASE WHEN @1 = 2 THEN 1 ELSE 2 END
