@@ -56,10 +56,12 @@ message ResponseHeader {
     option (gogoproto.goproto_enum_prefix) = false;
     // Zero value; no resume.
     RESUME_UNKNOWN = 0;
-    // The scan didn't finish because the key limit was hit for the batch.
+    // The spanning operation didn't finish because the key limit was
+    // exceeded.
     RESUME_KEY_LIMIT = 1;
-    // The scan didn't finish because a range boundary was hit and the batch
-    // asked to be stopped at range boundaries.
+    // The spanning operation didn't finish because a range boundary
+    // was encountered and the command was configured to stop at range
+    // boundaries.
     RESUME_RANGE_BOUNDARY = 2;
   }
 
@@ -414,7 +416,11 @@ message EndTransactionRequest {
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
   InternalCommitTrigger internal_commit_trigger = 4;
-  // List of intents written by the transaction.
+  // List of intents written by the transaction. These are spans where
+  // write intents have been written which must be resolved on txn
+  // completion. Note that these spans may be condensed to cover
+  // aggregate spans if the keys written by the transaction exceeded
+  // a size threshold.
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
   // Requires that the transaction completes as a 1 phase commit. This
   // guarantees that all writes are to the same range and that no
@@ -746,6 +752,10 @@ message ResolveIntentRangeRequest {
   // Optionally poison the sequence cache for the transaction on all ranges
   // on which the intents reside.
   bool poison = 4;
+  // The minimum timestamp for any intents written by this
+  // transaction. If present, this value can be used to optimize the
+  // iteration over the span to find intents to resolve.
+  util.hlc.Timestamp min_timestamp = 5 [(gogoproto.nullable) = false];
 }
 
 // A NoopResponse is the return value from a no-op operation.

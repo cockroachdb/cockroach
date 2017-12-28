@@ -531,6 +531,9 @@ func (ds *DistSender) initAndVerifyBatch(
 					return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
 				}
 
+			case *roachpb.ResolveIntentRangeRequest:
+				continue
+
 			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
 				continue
 
