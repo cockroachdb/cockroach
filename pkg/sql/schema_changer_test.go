@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -554,7 +555,16 @@ func TestRaceWithBackfill(t *testing.T) {
 	var mu syncutil.Mutex
 	var backfillNotification chan struct{}
 
-	const numNodes, chunkSize, maxValue = 5, 100, 4000
+	const numNodes = 5
+	var chunkSize int64 = 100
+	var maxValue = 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows and a
+		// correspondingly smaller chunk size.
+		chunkSize = 5
+		maxValue = 200
+	}
+
 	params, _ := tests.CreateTestServerParams()
 	initBackfillNotification := func() chan struct{} {
 		mu.Lock()
