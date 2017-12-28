@@ -13,10 +13,10 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package driver
+package main
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"database/sql/driver"
 	"strings"
 	"sync/atomic"
@@ -43,5 +43,5 @@ func (d *cockroachDriver) Open(name string) (driver.Conn, error) {
 }
 
 func init() {
-	sql.Register("cockroach", &cockroachDriver{})
+	gosql.Register("cockroach", &cockroachDriver{})
 }
