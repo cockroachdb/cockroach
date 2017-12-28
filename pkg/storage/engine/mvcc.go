@@ -2130,6 +2130,13 @@ func GetBufUsingIter(iter Iterator) IterAndBuf {
 	}
 }
 
+func GetBufUsingIter(iter Iterator) IterAndBuf {
+	return IterAndBuf{
+		buf:  newPutBuffer(),
+		iter: iter,
+	}
+}
+
 // Cleanup must be called to release the resources when done.
 func (b IterAndBuf) Cleanup() {
 	b.buf.release()
