@@ -496,12 +496,22 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 			}
 			switch len(s) {
 			case 0:
+				// We found a contradiction.
+				spans = LogicalSpans{}
+				c.results[offset] = calcOffsetResult{
+					visited:        true,
+					spansPopulated: true,
+					spans:          spans,
+				}
+				return spans, true
+
 			case 1:
 				spans[i].Start.extend(s[0].Start)
 				spans[i].End.extend(s[0].End)
 				if newSpans != nil {
 					newSpans = append(newSpans, spans[i])
 				}
+
 			default:
 				if newSpans == nil {
 					newSpans = make(LogicalSpans, 0, len(spans)-1+len(s))
