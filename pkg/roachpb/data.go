@@ -858,7 +858,24 @@ func (t *Transaction) Restart(
 // restart. This invalidates all write intents previously written at lower
 // epochs.
 func (t *Transaction) BumpEpoch() {
+	if t.EpochZeroTimestamp == (hlc.Timestamp{}) {
+		t.EpochZeroTimestamp = t.OrigTimestamp
+	}
 	t.Epoch++
+}
+
+// TimeBounds returns the start and end timestamps which inclusively
+// cover all intents which were written as part of this transaction.
+func (t *Transaction) TimeBounds() (hlc.Timestamp, hlc.Timestamp) {
+	min := t.OrigTimestamp
+	max := t.Timestamp
+	if t.EpochZeroTimestamp != (hlc.Timestamp{}) {
+		if min.Less(t.EpochZeroTimestamp) {
+			panic(fmt.Sprintf("orig timestamp %s less than epoch zero %s", min, t.EpochZeroTimestamp))
+		}
+		min = t.EpochZeroTimestamp
+	}
+	return min, max.Next() // Next() makes the end of the interval closed
 }
 
 // Update ratchets priority, timestamp and original timestamp values (among
@@ -908,6 +925,12 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	if len(o.Intents) > 0 {
 		t.Intents = o.Intents
+	}
+	// On update, set epoch zero timestamp to the minimum seen by either txn.
+	if o.EpochZeroTimestamp != (hlc.Timestamp{}) {
+		if t.EpochZeroTimestamp == (hlc.Timestamp{}) || o.EpochZeroTimestamp.Less(t.EpochZeroTimestamp) {
+			t.EpochZeroTimestamp = o.EpochZeroTimestamp
+		}
 	}
 }
 
@@ -1275,6 +1298,38 @@ func (s Span) Overlaps(o Span) bool {
 		return bytes.Compare(o.Key, s.Key) >= 0 && bytes.Compare(o.Key, s.EndKey) < 0
 	}
 	return bytes.Compare(s.EndKey, o.Key) > 0 && bytes.Compare(s.Key, o.EndKey) < 0
+}
+
+// Combine creates a new span containing the full union of the key
+// space covered by the two spans. This includes any key space not
+// covered by either span, but between them if the spans are disjoint.
+// Warning: using this method to combine local and non-local spans is
+// not recommended and will result in potentially database-wide
+// spans being returned. Use with caution.
+func (s Span) Combine(o Span) Span {
+	if !s.Valid() || !o.Valid() {
+		return Span{}
+	}
+
+	min := s.Key
+	max := s.Key
+	if len(s.EndKey) > 0 {
+		max = s.EndKey
+	}
+	if o.Key.Compare(min) < 0 {
+		min = o.Key
+	} else if o.Key.Compare(max) > 0 {
+		max = o.Key
+	}
+	if len(o.EndKey) > 0 && o.EndKey.Compare(max) > 0 {
+		max = o.EndKey
+	}
+	if min.Equal(max) {
+		return Span{Key: min}
+	} else if s.Key.Equal(max) || o.Key.Equal(max) {
+		return Span{Key: min, EndKey: max.Next()}
+	}
+	return Span{Key: min, EndKey: max}
 }
 
 // Contains returns whether the receiver contains the given span.

@@ -174,6 +174,7 @@ type proposalResult struct {
 	Err           *roachpb.Error
 	ProposalRetry proposalRetryReason
 	Intents       []result.IntentsWithArg
+	EndTxns       []result.EndTxnIntents
 }
 
 // ReplicaChecksum contains progress on a replica checksum computation.
@@ -2540,7 +2541,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
 
-	if intents := result.Local.DetachIntents(pErr != nil); len(intents) > 0 {
+	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// Do not allow synchronous intent resolution for RangeLookup requests as
 		// doing so can deadlock if the request originated from the local node
@@ -2749,18 +2750,22 @@ func (r *Replica) tryExecuteWriteBatch(
 	for {
 		select {
 		case propResult := <-ch:
+			// Semi-synchronously process any intents that need resolving here in
+			// order to apply back pressure on the client which generated them. The
+			// resolution is semi-synchronous in that there is a limited number of
+			// outstanding asynchronous resolution tasks allowed after which
+			// further calls will block.
 			if len(propResult.Intents) > 0 {
-				// Semi-synchronously process any intents that need resolving here in
-				// order to apply back pressure on the client which generated them. The
-				// resolution is semi-synchronous in that there is a limited number of
-				// outstanding asynchronous resolution tasks allowed after which
-				// further calls will block.
-				//
 				// TODO(peter): Re-proposed and canceled (but executed) commands can
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
 				if err := r.store.intentResolver.processIntentsAsync(ctx, r, propResult.Intents, true /* allowSync*/); err != nil {
+					log.Warning(ctx, err)
+				}
+			}
+			if len(propResult.EndTxns) > 0 {
+				if err := r.store.intentResolver.cleanupTxnIntentsAsync(ctx, r, propResult.EndTxns, true /* allowSync */); err != nil {
 					log.Warning(ctx, err)
 				}
 			}
@@ -2868,8 +2873,11 @@ func (r *Replica) evaluateProposal(
 	if res.Local.Err != nil {
 		// Failed proposals (whether they're failfast or not) can't have any
 		// Result except what's whitelisted here.
+		intents := res.Local.DetachIntents()
+		endTxns := res.Local.DetachEndTxns(true /* alwaysOnly */)
 		res.Local = result.LocalResult{
-			IntentsAlways:      res.Local.IntentsAlways,
+			Intents:            &intents,
+			EndTxns:            &endTxns,
 			Err:                r.maybeSetCorrupt(ctx, res.Local.Err),
 			LeaseMetricsResult: res.Local.LeaseMetricsResult,
 		}
@@ -3016,7 +3024,8 @@ func (r *Replica) propose(
 			return nil, nil, noop, roachpb.NewError(errors.Errorf(
 				"requestToProposal returned error %s without eval results", pErr))
 		}
-		intents := proposal.Local.DetachIntents(true /* hasError */)
+		intents := proposal.Local.DetachIntents()
+		endTxns := proposal.Local.DetachEndTxns(true /* alwaysOnly */)
 		if proposal.Local != nil {
 			r.handleLocalEvalResult(ctx, *proposal.Local)
 		}
@@ -3024,7 +3033,7 @@ func (r *Replica) propose(
 			endCmds.done(nil, pErr, proposalNoRetry)
 		}
 		ch := make(chan proposalResult, 1)
-		ch <- proposalResult{Err: pErr, Intents: intents}
+		ch <- proposalResult{Err: pErr, Intents: intents, EndTxns: endTxns}
 		close(ch)
 		return ch, func() bool { return false }, noop, nil
 	}
@@ -4731,7 +4740,8 @@ func (r *Replica) processRaftCommand(
 			} else {
 				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", proposal)
 			}
-			response.Intents = proposal.Local.DetachIntents(response.Err != nil)
+			response.Intents = proposal.Local.DetachIntents()
+			response.EndTxns = proposal.Local.DetachEndTxns(response.Err != nil)
 			lResult = proposal.Local
 		}
 
@@ -5681,7 +5691,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	if pErr != nil {
 		return config.SystemConfig{}, pErr.GoError()
 	}
-	if intents := result.Local.DetachIntents(false /* hasError */); len(intents) > 0 {
+	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.

@@ -2811,7 +2811,7 @@ func TestMVCCResolveWithDiffEpochs(t *testing.T) {
 	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{Logical: 1}, value2, txn1e2); err != nil {
 		t.Fatal(err)
 	}
-	num, err := MVCCResolveWriteIntentRange(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}, Txn: txn1e2Commit.TxnMeta, Status: txn1e2Commit.Status}, 2)
+	num, _, err := MVCCResolveWriteIntentRange(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1, EndKey: testKey2.Next()}, Txn: txn1e2Commit.TxnMeta, Status: txn1e2Commit.Status}, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2968,12 +2968,12 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	num, err := MVCCResolveWriteIntentRange(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1, EndKey: testKey4.Next()}, Txn: txn1Commit.TxnMeta, Status: txn1Commit.Status}, 3)
+	num, resumeSpan, err := MVCCResolveWriteIntentRange(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: testKey1, EndKey: testKey4.Next()}, Txn: txn1Commit.TxnMeta, Status: txn1Commit.Status}, math.MaxInt64)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if num != 3 {
-		t.Fatalf("expected all keys to process for resolution, even though 2 are noops; got %d", num)
+	if num != 2 || resumeSpan != nil {
+		t.Fatalf("expected all keys to process for resolution, even though 2 are noops; got %d, resume=%s", num, resumeSpan)
 	}
 
 	{
@@ -2986,7 +2986,6 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 				value1.RawBytes, value.RawBytes)
 		}
 	}
-
 	{
 		value, _, err := MVCCGet(context.Background(), engine, testKey2, hlc.Timestamp{Logical: 1}, true, nil)
 		if err != nil {
@@ -2997,7 +2996,6 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 				value2.RawBytes, value.RawBytes)
 		}
 	}
-
 	{
 		value, _, err := MVCCGet(context.Background(), engine, testKey3, hlc.Timestamp{Logical: 1}, true, txn2)
 		if err != nil {
@@ -3008,13 +3006,47 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 				value3.RawBytes, value.RawBytes)
 		}
 	}
-
-	// The fourth key is unresolved.
 	{
-		_, _, err := MVCCGet(context.Background(), engine, testKey4, hlc.Timestamp{Logical: 1}, true, nil)
-		if !testutils.IsError(err, "conflicting intents on") {
+		value, _, err := MVCCGet(context.Background(), engine, testKey4, hlc.Timestamp{Logical: 1}, true, nil)
+		if err != nil {
 			t.Fatal(err)
 		}
+		if !bytes.Equal(value4.RawBytes, value.RawBytes) {
+			t.Fatalf("the value %s in get result does not match the value %s in request",
+				value1.RawBytes, value.RawBytes)
+		}
+	}
+}
+
+func TestMVCCResolveTxnRangeResume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	// Write 10 keys from txn1, 10 from txn2, and 10 with no txn, interleaved.
+	for i := 0; i < 30; i += 3 {
+		if err := MVCCPut(context.Background(), engine, nil, roachpb.Key(fmt.Sprintf("%02d", i+0)), hlc.Timestamp{Logical: 1}, value1, txn1); err != nil {
+			t.Fatal(err)
+		}
+		if err := MVCCPut(context.Background(), engine, nil, roachpb.Key(fmt.Sprintf("%02d", i+1)), hlc.Timestamp{Logical: 2}, value2, txn2); err != nil {
+			t.Fatal(err)
+		}
+		if err := MVCCPut(context.Background(), engine, nil, roachpb.Key(fmt.Sprintf("%02d", i+2)), hlc.Timestamp{Logical: 3}, value3, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Resolve up to 5 intents.
+	num, resumeSpan, err := MVCCResolveWriteIntentRange(context.Background(), engine, nil, roachpb.Intent{Span: roachpb.Span{Key: roachpb.Key("00"), EndKey: roachpb.Key("30")}, Txn: txn1Commit.TxnMeta, Status: txn1Commit.Status}, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if num != 5 || resumeSpan == nil {
+		t.Errorf("expected resolution for only 5 keys; got %d, resume=%s", num, resumeSpan)
+	}
+	expResumeSpan := &roachpb.Span{Key: roachpb.Key("12").Next(), EndKey: roachpb.Key("30")}
+	if !resumeSpan.Equal(expResumeSpan) {
+		t.Errorf("expected resume span %s; got %s", expResumeSpan, resumeSpan)
 	}
 }
 
