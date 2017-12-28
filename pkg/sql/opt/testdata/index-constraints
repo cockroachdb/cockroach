@@ -847,3 +847,19 @@ build-scalar,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 ----
 [/1 - /1]
 Remaining filter: @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
+
+build-scalar,normalize,index-constraints vars=(string, string, string, string, string, string, string, string, string, string) index=(@2, @4, @6, @7, @10, @3, @1)
+(((((@6 = 'MT') AND (@7 = 'xxx')) AND (@2 = 'GAME')) AND (@4 = 'web')) AND (@10 = 'en_GB')) AND (@3 IN ('ts', 'ts2', 'ts3'))
+----
+[/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts']
+[/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts2' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts2']
+[/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts3' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts3']
+
+# Don't normalize the expression, which leads to a deep tree of ANDs (and much
+# more complex path to extend the spans).
+build-scalar,index-constraints vars=(string, string, string, string, string, string, string, string, string, string) index=(@2, @4, @6, @7, @10, @3, @1)
+(((((@6 = 'MT') AND (@7 = 'xxx')) AND (@2 = 'GAME')) AND (@4 = 'web')) AND (@10 = 'en_GB')) AND (@3 IN ('ts', 'ts2', 'ts3'))
+----
+[/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts']
+[/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts2' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts2']
+[/'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts3' - /'GAME'/'web'/'MT'/'xxx'/'en_GB'/'ts3']
