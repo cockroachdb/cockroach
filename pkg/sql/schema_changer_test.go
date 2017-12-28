@@ -554,6 +554,8 @@ func TestRaceWithBackfill(t *testing.T) {
 	var mu syncutil.Mutex
 	var backfillNotification chan struct{}
 
+	t.Skip("#21082")
+
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := tests.CreateTestServerParams()
 	initBackfillNotification := func() chan struct{} {
