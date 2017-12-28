@@ -114,6 +114,11 @@ func initConstExpr(e *expr, datum tree.Datum) {
 	e.private = datum
 }
 
+// isConstNull returns true if a constOp with a NULL value.
+func isConstNull(e *expr) bool {
+	return e.op == constOp && e.private == tree.DNull
+}
+
 // isConstBool checks whether e is a constOp with a boolean value, in
 // which case it returns the boolean value.
 func isConstBool(e *expr) (ok bool, val bool) {
