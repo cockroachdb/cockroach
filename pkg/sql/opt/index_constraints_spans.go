@@ -303,7 +303,13 @@ func (c *indexConstraintCtx) nextDatum(
 	d tree.Datum, direction encoding.Direction,
 ) (tree.Datum, bool) {
 	if direction == encoding.Descending {
+		if d.IsMin(c.evalCtx) {
+			return nil, false
+		}
 		return d.Prev(c.evalCtx)
+	}
+	if d.IsMax(c.evalCtx) {
+		return nil, false
 	}
 	return d.Next(c.evalCtx)
 }
