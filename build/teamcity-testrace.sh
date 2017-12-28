@@ -19,7 +19,7 @@ if [[ "${TC_BUILD_BRANCH}" == master ]] || [[ "${TC_BUILD_BRANCH}" == release* ]
 	PKGSPEC="./pkg/..."
 else
 	git fetch origin master
-	PKGSPEC=$(git diff --name-only $(git merge-base HEAD origin/master) | grep "^pkg*.go" || true)
+	PKGSPEC=$(git diff --name-only $(git merge-base HEAD origin/master) | grep "^pkg.*\.go" || true)
 	if [ -z "${PKGSPEC}" ]; then
 		echo "No changed packages; skipping race detector tests"
 		exit 0
