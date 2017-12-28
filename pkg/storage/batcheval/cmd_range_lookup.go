@@ -311,5 +311,5 @@ func RangeLookup(
 		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
 	}
 
-	return result.FromIntents(intents, args, true /* alwaysReturn */), nil
+	return result.FromIntents(intents, args), nil
 }

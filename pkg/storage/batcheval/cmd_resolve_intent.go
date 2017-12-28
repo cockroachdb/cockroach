@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func init() {
@@ -32,17 +33,18 @@ func declareKeysResolveIntentCombined(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
-	var args *roachpb.ResolveIntentRequest
+	var status roachpb.TransactionStatus
+	var txnID uuid.UUID
 	switch t := req.(type) {
 	case *roachpb.ResolveIntentRequest:
-		args = t
+		status = t.Status
+		txnID = t.IntentTxn.ID
 	case *roachpb.ResolveIntentRangeRequest:
-		// Ranged and point requests only differ in whether the header's EndKey
-		// is used, so we can convert them.
-		args = (*roachpb.ResolveIntentRequest)(t)
+		status = t.Status
+		txnID = t.IntentTxn.ID
 	}
-	if WriteAbortSpanOnResolve(args.Status) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, args.IntentTxn.ID)})
+	if WriteAbortSpanOnResolve(status) {
+		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, txnID)})
 	}
 }
 
