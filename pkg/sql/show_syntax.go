@@ -59,7 +59,10 @@ func runShowSyntax(
 ) error {
 	stmts, err := parser.Parse(stmt)
 	if err != nil {
-		pqErr, _ := pgerror.GetPGCause(err)
+		pqErr, ok := pgerror.GetPGCause(err)
+		if !ok {
+			return pgerror.NewErrorf(pgerror.CodeInternalError, "unknown parser error: %v", err)
+		}
 		if err := report(ctx, "error", pqErr.Message); err != nil {
 			return err
 		}
