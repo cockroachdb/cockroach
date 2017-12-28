@@ -809,3 +809,9 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/2/6/7 - /2/6/7]
 [/3 - /3]
 Remaining filter: ((@1 = 1) OR ((@1 = 2) AND ((@2, @3) IN ((4, 5), (6, 7))))) OR (@1 = 3)
+
+build-scalar,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
+----
+[/1 - /1]
+Remaining filter: @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
