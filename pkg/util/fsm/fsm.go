@@ -54,7 +54,7 @@ type Args struct {
 // the Machine's ExtendedState.
 type Transition struct {
 	Next   State
-	Action func(Args)
+	Action func(Args) error
 }
 
 // Transitions is a set of expanded state transitions generated from a Pattern,
@@ -76,7 +76,7 @@ func Compile(p Pattern) Transitions {
 	return Transitions{expanded: expandPattern(p)}
 }
 
-func (t Transitions) apply(a Args) State {
+func (t Transitions) apply(a Args) (State, error) {
 	sm, ok := t.expanded[a.Prev]
 	if !ok {
 		panic(fmt.Sprintf("unknown state %#v", a.Prev))
@@ -86,9 +86,11 @@ func (t Transitions) apply(a Args) State {
 		panic(fmt.Sprintf("unknown state transition %#v(%#v)", a.Prev, a.Event))
 	}
 	if tr.Action != nil {
-		tr.Action(a)
+		if err := tr.Action(a); err != nil {
+			return a.Prev, err
+		}
 	}
-	return tr.Next
+	return tr.Next, nil
 }
 
 // Machine encapsulates a State with a set of State transitions. It reacts to
@@ -106,18 +108,19 @@ func MakeMachine(t Transitions, start State, es ExtendedState) Machine {
 }
 
 // Apply applies the Event to the state Machine.
-func (m *Machine) Apply(ctx context.Context, e Event) {
-	m.ApplyWithBaggage(ctx, e, nil)
+func (m *Machine) Apply(ctx context.Context, e Event) error {
+	return m.ApplyWithBaggage(ctx, e, nil)
 }
 
 // ApplyWithBaggage applies the Event to the state Machine, passing along the
 // EventBaggage to the state transition's Action function.
-func (m *Machine) ApplyWithBaggage(ctx context.Context, e Event, b EventBaggage) {
-	m.cur = m.t.apply(Args{
+func (m *Machine) ApplyWithBaggage(ctx context.Context, e Event, b EventBaggage) (err error) {
+	m.cur, err = m.t.apply(Args{
 		Ctx:      ctx,
 		Prev:     m.cur,
 		Extended: m.es,
 		Event:    e,
 		Baggage:  b,
 	})
+	return
 }

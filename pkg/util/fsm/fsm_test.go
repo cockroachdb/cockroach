@@ -51,7 +51,17 @@ func (event2) Event() {}
 func (event3) Event() {}
 func (event4) Event() {}
 
-var noAction func(Args)
+var noAction func(Args) error
+
+func noErr(f func(Args)) func(Args) error {
+	return func(a Args) error { f(a); return nil }
+}
+
+func (tr Transitions) applyWithoutErr(t *testing.T, a Args) State {
+	s, err := tr.apply(a)
+	require.Nil(t, err)
+	return s
+}
 
 func TestBasicTransitions(t *testing.T) {
 	trans := Compile(Pattern{
@@ -66,39 +76,39 @@ func TestBasicTransitions(t *testing.T) {
 	})
 
 	// Valid transitions.
-	require.Equal(t, trans.apply(Args{Prev: state1{}, Event: event1{}}), state2{})
-	require.Equal(t, trans.apply(Args{Prev: state1{}, Event: event2{}}), state1{})
-	require.Equal(t, trans.apply(Args{Prev: state2{}, Event: event1{}}), state1{})
-	require.Equal(t, trans.apply(Args{Prev: state2{}, Event: event2{}}), state2{})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state1{}, Event: event1{}}), state2{})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state1{}, Event: event2{}}), state1{})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state2{}, Event: event1{}}), state1{})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state2{}, Event: event2{}}), state2{})
 
 	// Invalid transitions.
-	require.Panics(t, func() { trans.apply(Args{Prev: state3{}, Event: event1{}}) })
-	require.Panics(t, func() { trans.apply(Args{Prev: state1{}, Event: event3{}}) })
+	require.Panics(t, func() { trans.applyWithoutErr(t, Args{Prev: state3{}, Event: event1{}}) })
+	require.Panics(t, func() { trans.applyWithoutErr(t, Args{Prev: state1{}, Event: event3{}}) })
 }
 
 func TestTransitionActions(t *testing.T) {
 	var extendedState int
 	trans := Compile(Pattern{
 		state1{}: {
-			event1{}: {state2{}, func(a Args) { *a.Extended.(*int) = 1 }},
-			event2{}: {state1{}, func(a Args) { *a.Extended.(*int) = 2 }},
+			event1{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 1 })},
+			event2{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 2 })},
 		},
 		state2{}: {
-			event1{}: {state1{}, func(a Args) { *a.Extended.(*int) = 3 }},
-			event2{}: {state2{}, func(a Args) { *a.Extended.(*int) = 4 }},
+			event1{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 3 })},
+			event2{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 4 })},
 		},
 	})
 
-	trans.apply(Args{Prev: state1{}, Event: event1{}, Extended: &extendedState})
+	trans.applyWithoutErr(t, Args{Prev: state1{}, Event: event1{}, Extended: &extendedState})
 	require.Equal(t, extendedState, 1)
 
-	trans.apply(Args{Prev: state1{}, Event: event2{}, Extended: &extendedState})
+	trans.applyWithoutErr(t, Args{Prev: state1{}, Event: event2{}, Extended: &extendedState})
 	require.Equal(t, extendedState, 2)
 
-	trans.apply(Args{Prev: state2{}, Event: event1{}, Extended: &extendedState})
+	trans.applyWithoutErr(t, Args{Prev: state2{}, Event: event1{}, Extended: &extendedState})
 	require.Equal(t, extendedState, 3)
 
-	trans.apply(Args{Prev: state2{}, Event: event2{}, Extended: &extendedState})
+	trans.applyWithoutErr(t, Args{Prev: state2{}, Event: event2{}, Extended: &extendedState})
 	require.Equal(t, extendedState, 4)
 }
 
@@ -109,10 +119,10 @@ func TestTransitionsWithWildcards(t *testing.T) {
 		},
 	})
 
-	require.Equal(t, trans.apply(Args{Prev: state3{True}, Event: event3{True}}), state1{})
-	require.Equal(t, trans.apply(Args{Prev: state3{True}, Event: event3{False}}), state1{})
-	require.Equal(t, trans.apply(Args{Prev: state3{False}, Event: event3{True}}), state1{})
-	require.Equal(t, trans.apply(Args{Prev: state3{False}, Event: event3{False}}), state1{})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{True}, Event: event3{True}}), state1{})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{True}, Event: event3{False}}), state1{})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{False}, Event: event3{True}}), state1{})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{False}, Event: event3{False}}), state1{})
 }
 
 func TestTransitionsWithVarBindings(t *testing.T) {
@@ -122,10 +132,10 @@ func TestTransitionsWithVarBindings(t *testing.T) {
 		},
 	})
 
-	require.Equal(t, trans.apply(Args{Prev: state3{True}, Event: event3{True}}), state4{True, True})
-	require.Equal(t, trans.apply(Args{Prev: state3{True}, Event: event3{False}}), state4{False, True})
-	require.Equal(t, trans.apply(Args{Prev: state3{False}, Event: event3{True}}), state4{True, False})
-	require.Equal(t, trans.apply(Args{Prev: state3{False}, Event: event3{False}}), state4{False, False})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{True}, Event: event3{True}}), state4{True, True})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{True}, Event: event3{False}}), state4{False, True})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{False}, Event: event3{True}}), state4{True, False})
+	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{False}, Event: event3{False}}), state4{False, False})
 }
 
 func BenchmarkPatternCompilation(b *testing.B) {
@@ -160,12 +170,12 @@ func BenchmarkStateTransition(b *testing.B) {
 	ctx := context.Background()
 	trans := Compile(Pattern{
 		state1{}: {
-			event1{}: {state2{}, func(a Args) { *a.Extended.(*int) = 1 }},
-			event2{}: {state1{}, func(a Args) { *a.Extended.(*int) = 2 }},
+			event1{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 1 })},
+			event2{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 2 })},
 		},
 		state2{}: {
-			event1{}: {state1{}, func(a Args) { *a.Extended.(*int) = 3 }},
-			event2{}: {state2{}, func(a Args) { *a.Extended.(*int) = 4 }},
+			event1{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 3 })},
+			event2{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 4 })},
 		},
 		// Unused, but complicates transition graph. Demonstrates that a more
 		// complicated graph does not hurt runtime performance.
@@ -191,6 +201,6 @@ func BenchmarkStateTransition(b *testing.B) {
 		if i%2 == 1 {
 			e = event2{}
 		}
-		m.ApplyWithBaggage(ctx, e, 12)
+		_ = m.ApplyWithBaggage(ctx, e, 12)
 	}
 }
