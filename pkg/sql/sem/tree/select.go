@@ -41,6 +41,7 @@ func (*ValuesClause) selectStatement() {}
 
 // Select represents a SelectStatement with an ORDER and/or LIMIT.
 type Select struct {
+	With    *With
 	Select  SelectStatement
 	OrderBy OrderBy
 	Limit   *Limit
@@ -48,6 +49,7 @@ type Select struct {
 
 // Format implements the NodeFormatter interface.
 func (node *Select) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.With)
 	FormatNode(buf, f, node.Select)
 	FormatNode(buf, f, node.OrderBy)
 	FormatNode(buf, f, node.Limit)

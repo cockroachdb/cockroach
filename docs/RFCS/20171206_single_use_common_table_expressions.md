@@ -1,5 +1,5 @@
 - Single-Use Common Table Expressions
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-11-30
 - Authors: Jordan Lewis
 - RFC PR: #20374

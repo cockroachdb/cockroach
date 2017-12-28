@@ -104,6 +104,10 @@ type planner struct {
 	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
 	planDeps planDependencies
 
+	// cteNameEnvironment collects the mapping from common table expression alias
+	// to the planNodes that represent their source.
+	cteNameEnvironment cteNameEnvironment
+
 	// hasStar collects whether any star expansion has occurred during
 	// logical plan construction. This is used by CREATE VIEW until
 	// #10028 is addressed.

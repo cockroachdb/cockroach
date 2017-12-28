@@ -57,6 +57,13 @@ func (p *planner) Update(
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
 	}
+	resetter, err := p.initWith(ctx, n.With)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
+	}
 
 	tracing.AnnotateTrace()
 
@@ -124,7 +131,7 @@ func (p *planner) Update(
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, n.OrderBy, n.Limit, nil /*desiredTypes*/, publicAndNonPublicColumns)
+	}, n.OrderBy, n.Limit, nil /* with */, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}

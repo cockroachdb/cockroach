@@ -27,6 +27,7 @@ import "bytes"
 
 // Update represents an UPDATE statement.
 type Update struct {
+	With      *With
 	Table     TableExpr
 	Exprs     UpdateExprs
 	Where     *Where
@@ -37,6 +38,7 @@ type Update struct {
 
 // Format implements the NodeFormatter interface.
 func (node *Update) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.With)
 	buf.WriteString("UPDATE ")
 	FormatNode(buf, f, node.Table)
 	buf.WriteString(" SET ")
