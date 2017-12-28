@@ -964,6 +964,8 @@ $(GW_PROTOS_TARGET): $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) 
 	@# TODO(benesch): Remove after https://github.com/grpc/grpc-go/issues/711.
 	$(SED_INPLACE) -E 's!golang.org/x/net/context!context!g' $(GW_SOURCES)
 	gofmt -s -w $(GW_SOURCES)
+	@# TODO(jordan,benesch) This can be removed along with the above TODO.
+	goimports -w $(GW_SOURCES)
 	touch $@
 
 $(CPP_PROTOS_TARGET): $(PROTOC) $(CPP_PROTOS)
