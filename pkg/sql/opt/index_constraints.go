@@ -146,7 +146,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	dir := c.colInfos[offset].Direction
 	nullVal := false
 	for i := range lhs.children {
-		if !c.isIndexColumn(lhs.children[i], offset+i) {
+		if !(offset+i < len(c.colInfos) && c.isIndexColumn(lhs.children[i], offset+i)) {
 			// Variable doesn't refer to the right column.
 			break
 		}
@@ -243,11 +243,31 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		less = !less
 	}
 
-	sp := MakeFullSpan()
+	sp := c.makeNotNullSpan(offset)
 	if less {
 		sp.End = LogicalKey{Vals: datums, Inclusive: inclusive}
 	} else {
 		sp.Start = LogicalKey{Vals: datums, Inclusive: inclusive}
+	}
+
+	// Consider (a, b, c) <= (1, 2, 3).
+	//
+	// If the columns are not null, the condition is equivalent to
+	// the span [ - /1/2/3].
+	//
+	// If column a is nullable, the condition is equivalent to the
+	// span (/NULL - /1/2/3].
+	//
+	// However, if column b or c is nullable, we still have to
+	// filter out the NULLs on those columns, so whatever span we
+	// generate is not "tight".
+	if tight {
+		for i := 1; i < prefixLen; i++ {
+			if c.colInfos[i].Nullable {
+				tight = false
+				break
+			}
+		}
 	}
 	c.preferInclusive(offset, &sp)
 	return LogicalSpans{sp}, true, tight
