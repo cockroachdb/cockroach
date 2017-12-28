@@ -748,7 +748,7 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 FIND_RELEVANT := find $(PKG_ROOT) -name node_modules -prune -o
 
 pkg/%.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
-	$(MAKE) testbuild GOFLAGS='$(GOFLAGS)' TAGS='$(TAGS)' LINKFLAGS='$(LINKFLAGS)' PKG='./pkg/$(*D)'
+	$(MAKE) testbuild PKG='./pkg/$(*D)'
 
 bench: ## Run benchmarks.
 bench: TESTS := -
