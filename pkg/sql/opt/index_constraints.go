@@ -144,6 +144,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	// same direction) starting at <offset>.
 	prefixLen := 0
 	dir := c.colInfos[offset].Direction
+	nullVal := false
 	for i := range lhs.children {
 		if !c.isIndexColumn(lhs.children[i], offset+i) {
 			// Variable doesn't refer to the right column.
@@ -151,6 +152,12 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		}
 		if rhs.children[i].op != constOp {
 			// Right-hand value is not a constant.
+			break
+		}
+		if isConstNull(rhs.children[i]) {
+			// NULLs are tricky and require special handling; see
+			// nullVal related code below.
+			nullVal = true
 			break
 		}
 		if c.colInfos[offset+i].Direction != dir {
@@ -208,7 +215,22 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		panic(fmt.Sprintf("unsupported op %s", e.op))
 	}
 
-	if prefixLen < len(lhs.children) {
+	// The spans are "tight" unless we used just a prefix.
+	tight = (prefixLen == len(lhs.children))
+
+	if nullVal {
+		// NULL is treated semantically as "unknown value", so
+		//   (1, 2) > (1, NULL) is NULL,
+		// but
+		//   (2, 2) > (1, NULL) is true.
+		//
+		// So either of these constraints:
+		//   (a, b) > (1, NULL)
+		//   (a, b) >= (1, NULL)
+		// is true if and only if a > 1.
+		inclusive = false
+		tight = true
+	} else if prefixLen < len(lhs.children) {
 		// If we only keep a prefix, exclusive inequalities become exclusive.
 		// For example:
 		//   (a, b, c) > (1, 2, 3) becomes (a, b) >= (1, 2)
@@ -227,8 +249,6 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		sp.Start = LogicalKey{Vals: datums, Inclusive: inclusive}
 	}
 	c.preferInclusive(offset, &sp)
-	// The spans are "tight" unless we used just a prefix.
-	tight = (prefixLen == len(lhs.children))
 	return LogicalSpans{sp}, true, tight
 }
 
