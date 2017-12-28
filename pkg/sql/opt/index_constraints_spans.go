@@ -51,22 +51,15 @@ func (k LogicalKey) String() string {
 	return buf.String()
 }
 
-// Returns a copy that can be extended independently.
-func (k LogicalKey) clone() LogicalKey {
-	// Since the only modification we allow is extension, it's ok
-	// to alias the slice as long as we limit the capacity.
-	return LogicalKey{
-		Vals:      k.Vals[:len(k.Vals):len(k.Vals)],
-		Inclusive: k.Inclusive,
-	}
-}
-
 // extend appends the given key.
 func (k *LogicalKey) extend(l LogicalKey) {
 	if !k.Inclusive {
 		panic("extending exclusive logicalKey")
 	}
-	k.Vals = append(k.Vals, l.Vals...)
+	// We allow aliasing between the Vals of different LogicalKeys. This is safe
+	// as long as we never modify the slices in-place (which is why we limit the
+	// capacity here).
+	k.Vals = append(k.Vals[:len(k.Vals):len(k.Vals)], l.Vals...)
 	k.Inclusive = l.Inclusive
 }
 
@@ -362,7 +355,7 @@ func (c *indexConstraintCtx) intersectSpan(
 	if changed == 1 && !c.isSpanValid(offset, &res) {
 		return LogicalSpan{}, false
 	}
-	return LogicalSpan{Start: res.Start.clone(), End: res.End.clone()}, true
+	return res, true
 }
 
 // intersectSpanSet intersects a span with (the union of) a set of spans. The
