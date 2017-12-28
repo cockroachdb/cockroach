@@ -471,8 +471,9 @@ LIBROACH_DIR := $(BUILD_DIR)/libroach
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
-C_LIBS_OSS = $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb libroach
-C_LIBS_CCL = $(C_LIBS_OSS) libcryptopp libroachccl
+C_LIBS_COMMON = $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb
+C_LIBS_OSS = $(C_LIBS_COMMON) libroach
+C_LIBS_CCL = $(C_LIBS_COMMON) libcryptopp libroachccl
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
 NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
@@ -505,7 +506,6 @@ CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 $(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
 
 $(CGO_FLAGS_FILES): Makefile
-	@echo 'GEN $@'
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
 	@echo '// +build $(if $(findstring $(NATIVE_SPECIFIER_TAG),$@),$(NATIVE_SPECIFIER_TAG),!make)' >> $@
@@ -637,7 +637,7 @@ libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
-libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET) libroach
+libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
@@ -677,6 +677,9 @@ CPP_PROTOS_CCL_TARGET := $(LOCAL_BIN)/.cpp_ccl_protobuf_sources
 
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
+
+.PHONY: c-deps
+c-deps: $(C_LIBS_CCL)
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 buildoss: $(C_LIBS_OSS) $(UI_ROOT)/distoss/bindata.go
