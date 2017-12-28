@@ -467,32 +467,40 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 ----
 [/1/2/4 - ]
 
-build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
-(@1, @2, @3) > (1, 2, @1)
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2)
+(@1, @2, @3) > (1, 2, 3)
 ----
 [/1/2 - ]
-Remaining filter: (@1, @2, @3) > (1, 2, @1)
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2)
+(@1, @2, @3) < (1, 2, 3)
+----
+(/NULL - /1/2]
+Remaining filter: (@1, @2, @3) < (1, 2, 3)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) <= (1, 2, 3)
 ----
-[ - /1/2/3]
+(/NULL - /1/2/3]
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) <= (1, 2, @1)
 ----
-[ - /1/2]
+(/NULL - /1/2]
 Remaining filter: (@1, @2, @3) <= (1, 2, @1)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, 2, 3)
 ----
-[ - /1/2/2]
+(/NULL - /1/2/2]
+Remaining filter: (@1, @2, @3) < (1, 2, 3)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, 2, @1)
 ----
-[ - /1/2]
+(/NULL - /1/2]
 Remaining filter: (@1, @2, @3) < (1, 2, @1)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
@@ -511,6 +519,7 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2
 (@1, @2, @3) >= (1, 2, 3)
 ----
 [ - /1/2/3]
+Remaining filter: (@1, @2, @3) >= (1, 2, 3)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3)
 (@1, @2, @3) > (1, 2, 3)
@@ -534,11 +543,13 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) >= (1, 2) AND (@1, @2) <= (3, 4)
 ----
 [/1/2 - /3/4]
+Remaining filter: (@1, @2) <= (3, 4)
 
 semtree-normalize,build-scalar,index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) BETWEEN (1, 2) AND (3, 4)
 ----
 [/1/2 - /3/4]
+Remaining filter: (@1, @2) <= (3, 4)
 
 semtree-normalize,build-scalar,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
 (@1, @2, @4) BETWEEN (1, 2, 3) AND (4, 5, 6)
@@ -554,7 +565,80 @@ build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
 build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
 (@1, @2) < (1, false)
 ----
-[ - /1/false)
+(/NULL - /1/false)
+Remaining filter: (@1, @2) < (1, false)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) <= (1, 2, 3)
+----
+[ - /1/2/3]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) >= (1, 2, 3)
+----
+[/1/2/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) < (1, 2, 3)
+----
+[ - /1/2/2]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2/4 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2 not null, @3 not null)
+(@1, @2, @3) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2 not null, @3)
+(@1, @2, @3) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 not null)
+(@1, @2, @3) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc not null, @2 desc not null, @3 desc not null)
+(@1, @2, @3) > (1, 2, 3)
+----
+[ - /1/2/4]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc not null, @3 desc)
+(@1, @2, @3) > (1, 2, 3)
+----
+[ - /1/2/4]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc not null)
+(@1, @2, @3) > (1, 2, 3)
+----
+[ - /1/2/4]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @3, @2) != (1, NULL, 2)
+----
+[ - ]
+Remaining filter: (@1, @3, @2) != (1, NULL, 2)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2 - ]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null)
+(@1, @2, @3) <= (1, 2, 3)
+----
+[ - /1/2]
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
 
 # Cases with NULLs in tuple inequalities. These conditions are true only when
 # they don't depend on the NULL value, i.e. when the inequality holds true for
@@ -573,17 +657,22 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) < (1, NULL)
 ----
+(/NULL - /0]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 not null, @2)
+(@1, @2) < (1, NULL)
+----
 [ - /0]
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) <= (1, NULL)
 ----
-[ - /0]
+(/NULL - /0]
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, NULL, 1)
 ----
-[ - /0]
+(/NULL - /0]
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) >= (1, NULL, 1)
@@ -925,4 +1014,3 @@ build-scalar,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@1 = 1) AND (@2 > 5) AND (@2 < 1)
 ----
-
