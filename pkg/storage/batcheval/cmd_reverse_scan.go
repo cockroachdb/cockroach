@@ -52,5 +52,5 @@ func ReverseScan(
 	if args.ReturnIntents {
 		reply.IntentRows, err = CollectIntentRows(ctx, batch, cArgs, intents)
 	}
-	return result.FromIntents(intents, args, true /* alwaysReturn */), err
+	return result.FromIntents(intents, args), err
 }

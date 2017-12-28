@@ -36,5 +36,5 @@ func Get(
 
 	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	reply.Value = val
-	return result.FromIntents(intents, args, true /* alwaysReturn */), err
+	return result.FromIntents(intents, args), err
 }

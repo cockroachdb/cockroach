@@ -16,12 +16,12 @@ package batcheval
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func init() {
@@ -53,8 +53,28 @@ func ResolveIntentRange(
 		Status: args.Status,
 	}
 
-	if _, err := engine.MVCCResolveWriteIntentRange(ctx, batch, ms, intent, math.MaxInt64); err != nil {
+	// Use a time-bounded iterator as an optimization if indicated.
+	var iterAndBuf engine.IterAndBuf
+	if args.MinTimestamp != (hlc.Timestamp{}) /*&& false*/ {
+		//log.Infof(ctx, "creating a time bounded iterator from %s to %s to locate intents", args.MinTimestamp, args.IntentTxn.Timestamp.Next())
+		iter := batch.NewTimeBoundIterator(args.MinTimestamp, args.IntentTxn.Timestamp.Next())
+		iterAndBuf = engine.GetBufUsingIter(iter)
+	} else {
+		iterAndBuf = engine.GetIterAndBuf(batch)
+	}
+	defer iterAndBuf.Cleanup()
+
+	numKeys, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(
+		ctx, batch, iterAndBuf, ms, intent, cArgs.MaxKeys,
+	)
+	if err != nil {
 		return result.Result{}, err
+	}
+	reply := resp.(*roachpb.ResolveIntentRangeResponse)
+	reply.NumKeys = numKeys
+	if resumeSpan != nil {
+		reply.ResumeSpan = resumeSpan
+		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 	if WriteAbortSpanOnResolve(args.Status) {
 		return result.Result{}, SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)

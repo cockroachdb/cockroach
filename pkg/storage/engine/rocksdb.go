@@ -1535,7 +1535,23 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
 func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
-	panic("not implemented")
+	if r.writeOnly {
+		panic("write-only batch")
+	}
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	// Used the cached iterator, creating it on first access.
+	iter := &r.normalIter
+	if iter.iter.iter == nil {
+		r.ensureBatch()
+		iter.iter.initTimeBound(r.batch, start, end, r)
+	}
+	if iter.batch != nil {
+		panic("iterator already in use")
+	}
+	iter.batch = r
+	return iter
 }
 
 func (r *rocksDBBatch) Commit(syncCommit bool) error {

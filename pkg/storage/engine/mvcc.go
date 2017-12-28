@@ -1042,6 +1042,11 @@ func mvccPutInternal(
 	if err != nil {
 		return err
 	}
+	/*
+		if txn != nil {
+			log.Infof(ctx, "writing key %s from txn %s @%s", key, txn, timestamp)
+		}
+	*/
 
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp == (hlc.Timestamp{})
@@ -1913,7 +1918,7 @@ func mvccResolveWriteIntent(
 			// has false positives, but such false positives should be very rare. See
 			// #9399 for details.
 			//
-			// Note that we hit this code path relatively frequently when during end
+			// Note that we hit this code path relatively frequently when doing end
 			// transaction processing for locally resolved intents. In those cases,
 			// meta.Txn == nil but the subsequent call to mvccGetInternal will avoid
 			// any additional seeks because the iterator is already positioned
@@ -1930,8 +1935,8 @@ func mvccResolveWriteIntent(
 			} else if !v.IsPresent() {
 				// NB: This shouldn't happen as mvccGetMetadata returned ok=true above,
 				// but best to check.
-				log.Warningf(ctx, "unable to find value for %s @ %s",
-					intent.Key, intent.Txn.Timestamp)
+				log.Warningf(ctx, "unable to find value for %s @ %s (%+v vs %+v)",
+					intent.Key, intent.Txn.Timestamp, meta.Txn, intent.Txn)
 			} else if v.Timestamp != intent.Txn.Timestamp {
 				log.Warningf(ctx, "unable to find value for %s @ %s: %s",
 					intent.Key, intent.Txn.Timestamp, v.Timestamp)
@@ -2116,6 +2121,13 @@ func GetIterAndBuf(engine Reader) IterAndBuf {
 	}
 }
 
+func GetBufUsingIter(iter Iterator) IterAndBuf {
+	return IterAndBuf{
+		buf:  newPutBuffer(),
+		iter: iter,
+	}
+}
+
 // Cleanup must be called to release the resources when done.
 func (b IterAndBuf) Cleanup() {
 	b.buf.release()
@@ -2125,20 +2137,21 @@ func (b IterAndBuf) Cleanup() {
 // MVCCResolveWriteIntentRange commits or aborts (rolls back) the
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
-// txns.
+// txns. Returns the number of intents resolved and a resume span if
+// the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
 	ctx context.Context, engine ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent, max int64,
-) (int64, error) {
+) (int64, *roachpb.Span, error) {
 	iterAndBuf := GetIterAndBuf(engine)
 	defer iterAndBuf.Cleanup()
-
 	return MVCCResolveWriteIntentRangeUsingIter(ctx, engine, iterAndBuf, ms, intent, max)
 }
 
-// MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back) the
-// range of write intents specified by start and end keys for a given
-// txn. ResolveWriteIntentRange will skip write intents of other
-// txns.
+// MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back)
+// the range of write intents specified by start and end keys for a
+// given txn. ResolveWriteIntentRange will skip write intents of other
+// txns. Returns the number of intents resolved and a resume span if
+// the max keys limit was exceeded.
 func MVCCResolveWriteIntentRangeUsingIter(
 	ctx context.Context,
 	engine ReadWriter,
@@ -2146,7 +2159,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	ms *enginepb.MVCCStats,
 	intent roachpb.Intent,
 	max int64,
-) (int64, error) {
+) (int64, *roachpb.Span, error) {
 	encKey := MakeMVCCMetadataKey(intent.Key)
 	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
 	nextKey := encKey
@@ -2155,10 +2168,14 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	num := int64(0)
 	intent.EndKey = nil
 
-	for num < max {
+	for {
+		if num == max {
+			return num, &roachpb.Span{Key: nextKey.Key, EndKey: encEndKey.Key}, nil
+		}
+
 		iterAndBuf.iter.Seek(nextKey)
 		if ok, err := iterAndBuf.iter.Valid(); err != nil {
-			return 0, err
+			return 0, nil, err
 		} else if !ok || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
 			// No more keys exists in the given range.
 			break
@@ -2190,7 +2207,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 		}
 	}
 
-	return num, nil
+	return num, nil, nil
 }
 
 // MVCCGarbageCollect creates an iterator on the engine. In parallel
