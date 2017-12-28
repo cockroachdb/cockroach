@@ -91,6 +91,11 @@ func MakeFullSpan() LogicalSpan {
 	}
 }
 
+// IsFullSpan returns true if the given span is unconstrained.
+func (sp LogicalSpan) IsFullSpan() bool {
+	return len(sp.Start.Vals) == 0 && len(sp.End.Vals) == 0
+}
+
 // String formats a LogicalSpan. Inclusivity/exclusivity is shown using
 // brackets/parens. Some examples:
 //   [/1 - /2]

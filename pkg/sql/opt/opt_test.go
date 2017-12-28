@@ -329,12 +329,11 @@ func TestOpt(t *testing.T) {
 					}
 				}
 				buildScalarFn := func() {
-					defer func() {
-						if r := recover(); r != nil {
-							d.fatalf(t, "buildScalar: %v", r)
-						}
-					}()
-					e = buildScalar(&buildContext{}, typedExpr)
+					var err error
+					e, err = buildScalar(typedExpr)
+					if err != nil {
+						t.Fatal(err)
+					}
 				}
 
 				evalCtx := tree.MakeTestingEvalContext()
@@ -365,19 +364,21 @@ func TestOpt(t *testing.T) {
 						if e == nil {
 							d.fatalf(t, "no expression for index-constraints")
 						}
+						var ic IndexConstraints
+
+						ic.initWithExpr(e, colInfos, &evalCtx)
+						spans, ok := ic.Spans()
 
 						var buf bytes.Buffer
-						spans, ok := MakeIndexConstraints(e, colInfos, &evalCtx)
 						if !ok {
 							spans = LogicalSpans{MakeFullSpan()}
 						}
 						for _, sp := range spans {
 							fmt.Fprintf(&buf, "%s\n", sp)
 						}
-						remainingFilter := simplifyFilter(e, spans, colInfos, &evalCtx)
+						remainingFilter := ic.RemainingFilter(&iVarHelper)
 						if remainingFilter != nil {
-							expr := scalarToTypedExpr(remainingFilter, &iVarHelper)
-							fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
+							fmt.Fprintf(&buf, "Remaining filter: %s\n", remainingFilter)
 						}
 						return buf.String()
 					default:
