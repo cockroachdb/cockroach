@@ -505,7 +505,6 @@ CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 $(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
 
 $(CGO_FLAGS_FILES): Makefile
-	@echo 'GEN $@'
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
 	@echo '// +build $(if $(findstring $(NATIVE_SPECIFIER_TAG),$@),$(NATIVE_SPECIFIER_TAG),!make)' >> $@
