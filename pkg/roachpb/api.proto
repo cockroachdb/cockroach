@@ -56,10 +56,12 @@ message ResponseHeader {
     option (gogoproto.goproto_enum_prefix) = false;
     // Zero value; no resume.
     RESUME_UNKNOWN = 0;
-    // The scan didn't finish because the key limit was hit for the batch.
+    // The spanning operation didn't finish because the key limit was
+    // exceeded.
     RESUME_KEY_LIMIT = 1;
-    // The scan didn't finish because a range boundary was hit and the batch
-    // asked to be stopped at range boundaries.
+    // The spanning operation didn't finish because a range boundary
+    // was encountered and the command was configured to stop at range
+    // boundaries.
     RESUME_RANGE_BOUNDARY = 2;
   }
 
@@ -746,6 +748,10 @@ message ResolveIntentRangeRequest {
   // Optionally poison the sequence cache for the transaction on all ranges
   // on which the intents reside.
   bool poison = 4;
+  // The minimum timestamp for any intents written by this
+  // transaction. If present, this value can be used to optimize the
+  // iteration over the span to find intents to resolve.
+  util.hlc.Timestamp min_timestamp = 5 [(gogoproto.nullable) = false];
 }
 
 // A NoopResponse is the return value from a no-op operation.

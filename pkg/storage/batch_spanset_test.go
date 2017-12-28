@@ -233,7 +233,9 @@ func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 		Status: roachpb.PENDING,
 	}
 
-	if _, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, nil /* ms */, intent, math.MaxInt64); err != nil {
+	if _, _, err := engine.MVCCResolveWriteIntentRangeUsingIter(
+		ctx, batch, iterAndBuf, nil /* ms */, intent, math.MaxInt64,
+	); err != nil {
 		t.Fatal(err)
 	}
 }

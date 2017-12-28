@@ -2116,6 +2116,13 @@ func GetIterAndBuf(engine Reader) IterAndBuf {
 	}
 }
 
+func GetBufUsingIter(iter Iterator) IterAndBuf {
+	return IterAndBuf{
+		buf:  newPutBuffer(),
+		iter: iter,
+	}
+}
+
 // Cleanup must be called to release the resources when done.
 func (b IterAndBuf) Cleanup() {
 	b.buf.release()
@@ -2125,20 +2132,21 @@ func (b IterAndBuf) Cleanup() {
 // MVCCResolveWriteIntentRange commits or aborts (rolls back) the
 // range of write intents specified by start and end keys for a given
 // txn. ResolveWriteIntentRange will skip write intents of other
-// txns.
+// txns. Returns the number of intents resolved and a resume span if
+// the max keys limit was exceeded.
 func MVCCResolveWriteIntentRange(
 	ctx context.Context, engine ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent, max int64,
-) (int64, error) {
+) (int64, *roachpb.Span, error) {
 	iterAndBuf := GetIterAndBuf(engine)
 	defer iterAndBuf.Cleanup()
-
 	return MVCCResolveWriteIntentRangeUsingIter(ctx, engine, iterAndBuf, ms, intent, max)
 }
 
-// MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back) the
-// range of write intents specified by start and end keys for a given
-// txn. ResolveWriteIntentRange will skip write intents of other
-// txns.
+// MVCCResolveWriteIntentRangeUsingIter commits or aborts (rolls back)
+// the range of write intents specified by start and end keys for a
+// given txn. ResolveWriteIntentRange will skip write intents of other
+// txns. Returns the number of intents resolved and a resume span if
+// the max keys limit was exceeded.
 func MVCCResolveWriteIntentRangeUsingIter(
 	ctx context.Context,
 	engine ReadWriter,
@@ -2146,7 +2154,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	ms *enginepb.MVCCStats,
 	intent roachpb.Intent,
 	max int64,
-) (int64, error) {
+) (int64, *roachpb.Span, error) {
 	encKey := MakeMVCCMetadataKey(intent.Key)
 	encEndKey := MakeMVCCMetadataKey(intent.EndKey)
 	nextKey := encKey
@@ -2155,10 +2163,14 @@ func MVCCResolveWriteIntentRangeUsingIter(
 	num := int64(0)
 	intent.EndKey = nil
 
-	for num < max {
+	for {
+		if num == max {
+			return num, &roachpb.Span{Key: nextKey.Key, EndKey: intent.EndKey}, nil
+		}
+
 		iterAndBuf.iter.Seek(nextKey)
 		if ok, err := iterAndBuf.iter.Valid(); err != nil {
-			return 0, err
+			return 0, nil, err
 		} else if !ok || !iterAndBuf.iter.UnsafeKey().Less(encEndKey) {
 			// No more keys exists in the given range.
 			break
@@ -2190,7 +2202,7 @@ func MVCCResolveWriteIntentRangeUsingIter(
 		}
 	}
 
-	return num, nil
+	return num, nil, nil
 }
 
 // MVCCGarbageCollect creates an iterator on the engine. In parallel

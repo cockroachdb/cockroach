@@ -739,7 +739,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		}
 		// Set a high Timestamp to make sure it does not matter. Only
 		// OrigTimestamp (and heartbeat) are used for GC decisions.
-		txn.Timestamp.Forward(hlc.MaxTimestamp)
+		txn.Timestamp.Forward(hlc.MaxTimestamp.Prev() /* can't use hlc.MaxTimestamp due to Transaction.TimeBound() */)
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
