@@ -204,7 +204,7 @@ func (t Transitions) WriteDotGraph(w io.Writer, start State) {
 }
 
 // WriteDotGraphString is like WriteDotGraph, but takes the string
-// representation of the start State. Used by write_reports.go.tmpl.
+// representation of the start State.
 func (t Transitions) WriteDotGraphString(w io.Writer, start string) {
 	start = trimState(start)
 	if !strings.Contains(start, "{") {
@@ -212,3 +212,7 @@ func (t Transitions) WriteDotGraphString(w io.Writer, start string) {
 	}
 	genDot(w, t, start)
 }
+
+// Silence unused warning for Transitions.WriteDotGraphString. The method
+// is used by write_reports.go.tmpl.
+var _ = (Transitions).WriteDotGraphString
