@@ -1042,6 +1042,11 @@ func mvccPutInternal(
 	if err != nil {
 		return err
 	}
+	/*
+		if txn != nil {
+			log.Infof(ctx, "writing key %s from txn %s @%s", key, txn, timestamp)
+		}
+	*/
 
 	// Verify we're not mixing inline and non-inline values.
 	putIsInline := timestamp == (hlc.Timestamp{})
