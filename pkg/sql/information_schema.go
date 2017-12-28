@@ -549,14 +549,14 @@ CREATE TABLE information_schema.table_privileges (
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			for _, u := range table.Privileges.Show() {
-				for _, p := range u.Privileges {
+				for _, priv := range u.Privileges {
 					if err := addRow(
 						tree.DNull,                  // grantor
 						tree.NewDString(u.User),     // grantee
-						defString,                   // table_catalog,
+						defString,                   // table_catalog
 						tree.NewDString(db.Name),    // table_schema
 						tree.NewDString(table.Name), // table_name
-						tree.NewDString(p),          // privilege_type
+						tree.NewDString(priv),       // privilege_type
 						tree.DNull,                  // is_grantable
 						tree.DNull,                  // with_hierarchy
 					); err != nil {
