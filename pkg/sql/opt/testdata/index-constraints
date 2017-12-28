@@ -549,7 +549,6 @@ Remaining filter: ((@1, @2, @4) >= (1, 2, 3)) AND ((@1, @2, @4) <= (4, 5, 6))
 build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
 (@1, @2) > (1, NULL)
 ----
-(/1/NULL - ]
 
 build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
 (@1, @2) > (1, true)

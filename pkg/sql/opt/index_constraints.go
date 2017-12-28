@@ -140,6 +140,14 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 ) (_ LogicalSpans, ok bool, tight bool) {
 	lhs, rhs := e.children[0], e.children[1]
 
+	// Check for NULL values in the tuple.
+	for _, child := range rhs.children {
+		if child.op == constOp && child.private.(tree.Datum) == tree.DNull {
+			// This condition is never true; return no spans.
+			return LogicalSpans{}, true, true
+		}
+	}
+
 	// Find the longest prefix of the tuple that maps to index columns (with the
 	// same direction) starting at <offset>.
 	prefixLen := 0
