@@ -44,7 +44,9 @@ func (p *planner) ShowSyntax(ctx context.Context, n *tree.ShowSyntax) (planNode,
 
 	comma := ""
 	if err := runShowSyntax(ctx, n.Statement, func(ctx context.Context, field, msg string) error {
-		fmt.Fprintf(&query, "%s('%s', %s)", comma, field, lex.EscapeSQLString(msg))
+		fmt.Fprintf(&query, "%s('%s', ", comma, field)
+		lex.EncodeSQLString(&query, msg)
+		query.WriteByte(')')
 		comma = ", "
 		return nil
 	}); err != nil {
