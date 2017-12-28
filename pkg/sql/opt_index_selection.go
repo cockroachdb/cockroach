@@ -515,9 +515,9 @@ func (v *indexInfo) makeOrConstraints(evalCtx *tree.EvalContext, orExprs []tree.
 }
 
 // TODO(radu): we will change makeIndexConstraints to use
-// opt.MakeIndexConstraints. For now, just make sure the linter doesn't
-// complain about unused packages.
-var _ = opt.MakeIndexConstraints
+// opt.IndexConstraints. For now, just make sure the linter doesn't complain
+// about unused packages.
+var _ = (*opt.IndexConstraints).Init
 
 // makeIndexConstraints generates constraints for a set of conjunctions (AND
 // expressions). These expressions can be the entire filter, or they can be one

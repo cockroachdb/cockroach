@@ -579,6 +579,9 @@ func (c *indexConstraintCtx) makeSpansForOrExprs(
 			spans = exprSpans
 		} else {
 			spans = c.mergeSpanSets(offset, spans, exprSpans)
+			if len(spans) == 1 && spans[0].IsFullSpan() {
+				return nil, false
+			}
 		}
 	}
 	return spans, true
@@ -652,30 +655,7 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(spans LogicalSpans) int {
 	return maxOffset
 }
 
-// IndexColumnInfo encompasses the information for index columns, needed for
-// index constraints.
-type IndexColumnInfo struct {
-	// VarIdx identifies the indexed var that corresponds to this column.
-	VarIdx    int
-	Typ       types.T
-	Direction encoding.Direction
-	// Nullable should be set to false if this column cannot store NULLs; used
-	// to keep the spans simple, e.g. [ - /5] instead of (/NULL - /5].
-	Nullable bool
-}
-
-// MakeIndexConstraints generates constraints from a scalar boolean filter
-// expression. See LogicalSpans for more information on how constraints are
-// represented.
-func MakeIndexConstraints(
-	filter *expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
-) (_ LogicalSpans, ok bool) {
-	c := makeIndexConstraintCtx(colInfos, evalCtx)
-	spans, ok, _ := c.makeSpansForExpr(0 /* offset */, filter)
-	return spans, ok
-}
-
-// simplifyFilter is the internal implementation of SimplifyFilter.
+// simplifyFilterImpl is the internal (recursive) implementation of simplifyFilter.
 // <maxSimplifyPrefix> must be the result of getMaxSimplifyPrefix(spans); see that
 // function for more information.
 // Can return true (as a constOp).
@@ -714,7 +694,7 @@ func MakeIndexConstraints(
 //    An example where this doesn't work well is with disjunctions:
 //    `@1 <= 1 OR @1 >= 4` has spans `[ - /1], [/1 - ]` but in separation neither
 //    sub-expression is always true inside these spans.
-func (c *indexConstraintCtx) simplifyFilter(
+func (c *indexConstraintCtx) simplifyFilterImpl(
 	e *expr, spans LogicalSpans, maxSimplifyPrefix int,
 ) *expr {
 	// Special handling for AND and OR.
@@ -726,7 +706,7 @@ func (c *indexConstraintCtx) simplifyFilter(
 
 		var children []*expr
 		for i, child := range e.children {
-			simplified := c.simplifyFilter(child, spans, maxSimplifyPrefix)
+			simplified := c.simplifyFilterImpl(child, spans, maxSimplifyPrefix)
 			if ok, val := isConstBool(simplified); ok {
 				if val == shortcircuitValue {
 					return constBoolExpr(shortcircuitValue)
@@ -786,13 +766,94 @@ func (c *indexConstraintCtx) simplifyFilter(
 
 // simplifyFilter removes parts of the filter that are satisfied by the spans. It
 // is best-effort. Returns nil if there is no remaining filter.
-func simplifyFilter(
-	filter *expr, spans LogicalSpans, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
-) *expr {
-	c := makeIndexConstraintCtx(colInfos, evalCtx)
-	remainingFilter := c.simplifyFilter(filter, spans, c.getMaxSimplifyPrefix(spans))
+func (c *indexConstraintCtx) simplifyFilter(filter *expr, spans LogicalSpans) *expr {
+	remainingFilter := c.simplifyFilterImpl(filter, spans, c.getMaxSimplifyPrefix(spans))
 	if ok, val := isConstBool(remainingFilter); ok && val {
 		return nil
 	}
 	return remainingFilter
+}
+
+// IndexColumnInfo encompasses the information for index columns, needed for
+// index constraints.
+type IndexColumnInfo struct {
+	// VarIdx identifies the indexed var that corresponds to this column.
+	VarIdx    int
+	Typ       types.T
+	Direction encoding.Direction
+	// Nullable should be set to false if this column cannot store NULLs; used
+	// to keep the spans simple, e.g. [ - /5] instead of (/NULL - /5].
+	Nullable bool
+}
+
+// IndexConstraints is used to generate index constraints from a scalar boolean
+// filter expression.
+//
+// Sample usage:
+//   var ic IndexConstraints
+//   if err := ic.Init(filter, colInfos, evalCtx); err != nil {
+//     ..
+//   }
+//   spans, ok := ic.Spans()
+//   remainingFilter := ic.RemainingFilter(&iVarHelper)
+type IndexConstraints struct {
+	indexConstraintCtx
+
+	filter *expr
+
+	spansPopulated bool
+	spans          LogicalSpans
+}
+
+// Init processes the filter and calculates the spans.
+func (ic *IndexConstraints) Init(
+	filter tree.TypedExpr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
+) (err error) {
+	e, err := buildScalar(filter)
+	if err != nil {
+		return err
+	}
+	if e != nil {
+		normalizeExpr(e)
+	}
+
+	ic.initWithExpr(e, colInfos, evalCtx)
+	return nil
+}
+
+func (ic *IndexConstraints) initWithExpr(
+	filter *expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
+) {
+	*ic = IndexConstraints{
+		filter:             filter,
+		indexConstraintCtx: makeIndexConstraintCtx(colInfos, evalCtx),
+	}
+	ic.spans, ic.spansPopulated, _ = ic.makeSpansForExpr(0 /* offset */, ic.filter)
+}
+
+// Spans returns the spans created by Init. If ok is false, no constraints
+// could be generated.
+func (ic *IndexConstraints) Spans() (_ LogicalSpans, ok bool) {
+	if !ic.spansPopulated || (len(ic.spans) == 1 && ic.spans[0].IsFullSpan()) {
+		return nil, false
+	}
+	return ic.spans, true
+}
+
+// RemainingFilter calculates a simplified filter that needs to be applied
+// within the returned Spans.
+func (ic *IndexConstraints) RemainingFilter(ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	var res *expr
+	if !ic.spansPopulated {
+		if ok, val := isConstBool(ic.filter); ok && val {
+			return nil
+		}
+		res = ic.filter
+	} else {
+		res = ic.simplifyFilter(ic.filter, ic.spans)
+	}
+	if res == nil {
+		return nil
+	}
+	return scalarToTypedExpr(res, ivh)
 }
