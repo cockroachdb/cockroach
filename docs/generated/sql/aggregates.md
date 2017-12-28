@@ -29,6 +29,36 @@
 </span></td></tr>
 <tr><td><code>final_variance(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>, arg3: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the variance from the selected locally-computed squared difference values.</p>
 </span></td></tr>
+<tr><td><code>first(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="date.html">date</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="inet.html">inet</a>) &rarr; <a href="inet.html">inet</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: <a href="uuid.html">uuid</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
+<tr><td><code>first(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the first selected value.</p>
+</span></td></tr>
 <tr><td><code>max(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><code>max(arg1: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>

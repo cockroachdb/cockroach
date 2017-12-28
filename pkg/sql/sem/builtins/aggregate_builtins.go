@@ -145,6 +145,11 @@ var Aggregates = map[string][]tree.Builtin{
 			"Identifies the minimum selected value.")
 	}, types.AnyNonArray...),
 
+	"first": collectBuiltins(func(t types.T) tree.Builtin {
+		return makeAggBuiltin([]types.T{t}, t, newFirstAggregate,
+			"Identifies the first selected value.")
+	}, types.AnyNonArray...),
+
 	"sum_int": {
 		makeAggBuiltin([]types.T{types.Int}, types.Int, newSmallIntSumAggregate,
 			"Calculates the sum of the selected values."),
@@ -270,6 +275,7 @@ var _ tree.AggregateFunc = &identAggregate{}
 var _ tree.AggregateFunc = &concatAggregate{}
 var _ tree.AggregateFunc = &bytesXorAggregate{}
 var _ tree.AggregateFunc = &intXorAggregate{}
+var _ tree.AggregateFunc = &firstAggregate{}
 
 // In order to render the unaggregated (i.e. grouped) fields, during aggregation,
 // the values for those fields have to be stored for each bucket.
@@ -1409,3 +1415,32 @@ func (a *intXorAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *intXorAggregate) Close(context.Context) {}
+
+type firstAggregate struct {
+	first tree.Datum
+}
+
+func newFirstAggregate(_ []types.T, _ *tree.EvalContext) tree.AggregateFunc {
+	return &firstAggregate{}
+}
+
+// Add memoizes the first datum it sees; otherwise it does nothing.
+func (a *firstAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if a.first == nil {
+		a.first = datum
+	}
+
+	return nil
+}
+
+// Result returns the first datum added (and DNull if no datums are added).
+func (a *firstAggregate) Result() (tree.Datum, error) {
+	if a.first == nil {
+		return tree.DNull, nil
+	}
+
+	return a.first, nil
+}
+
+// Close is part of the tree.AggregateFunc interface.
+func (a *firstAggregate) Close(context.Context) {}

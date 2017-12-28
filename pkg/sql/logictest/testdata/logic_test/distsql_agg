@@ -614,3 +614,37 @@ query II
 SELECT c, COUNT(*) FROM nullables GROUP BY c;
 ----
 1 2
+
+# Verify the FIRST execution plan does not use local-final aggregation and
+# preserves any explicit ordering.
+# Note: we should not elide sort processors before aggregators naively here.
+# This is because FIRST is an aggregation that depends on the ordering of its
+# child plan tree.
+# In general, we can elide sorters before aggregations except for MIN, MAX, and
+# FIRST. All other aggregations by nature do not care about and do not need to
+# propagate ordering information.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT FIRST(a) FROM (SELECT * FROM data ORDER BY b)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzE1EFrszAYB_D7-yle_qeN5dBE23We3GXQyzra3oaHzDyI0BpJImwUv_tQD11dGwvt8JjEf37PE0P2KLSiV7kji-gdHAwCDAEYQjBMkTCURqdkrTbNJ11goT4RTRjyoqxcM50wpNoQoj1c7raECBv5saUVSUUGDIqczLctUpp8J81XrKSTYFhWLvofcxYLJDWDrtxhT-tkRoh4zS5319q4PhmLh8skcVY6ANooMqR-C0l9opznLDOUSad7Jb0sVuvNXczvz9YSHNXCRzrtAfeGpy1G6nDAvWGHwUgdDrg37DAcqcMB94_ehBPSimypC0tH1rmdJ82DQSqj7oGxujIpvRmdtkw3XLa5dkKRdd0q7waLoltqCvwZ5t6wOArzflj45QE68KZDfzi8pu6pNzzzy7Nr5EdveO6X59fIT_5_NRm4Jv5L1reT-t93AAAA__-Ptqje
+
+# Since FIRST is non-deterministic by definition, we need to add a filter.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT FIRST(a) FROM data WHERE a >= 10]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkT1rwzAQhvf-ivJOLahgOXTR5C4FL0lxsxUPqnUYg-MT0hlagv97sTU0CcRtxvt43kecjhjY0dYeKMJ8QEPhGbWCD9xQjBzmdloq3RdMptANfpS5XSs0HAjmCOmkJxhs-Yk9FByJ7fplaVLgUX6RKLYlmM2kTmL1euzefvZUkXUUzsLhQ3ew4btwViwUdqOY-0LjmlTfIn1p20CtFb5wvpbV-_6h0I9XNfmZ5o-TVRQ9D5H-dbVsqhXItZS-JfIYGnoL3CyaVO4Wbmk4ipKmm1SUQxrNDzyF9Sqcr8P5KpxdwPV09xMAAP__IqXPcg==
+
+query I
+SELECT FIRST(a) FROM data WHERE a >= 10
+----
+10
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT FIRST(b) FROM data WHERE b <= 1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMk8Fqg0AQhu99ivCfWpiDq0kPC4X0EvCSlDS31sPWHUQwrsyu0BJ896Ie0oSkpeTicWb8_D-WmQNqZ3lt9uyh36BAiEFIQJiDsEBGaMTl7L2T_pMRSO0ndEQo66YNfTsj5E4Y-oBQhoqhsTMfFW_ZWBYQLAdTVkNII-XeyNfSmmBAWJVVYNGzZTx7b6MoyZ9mSmudrncgbNrQT5B1BNeGY5oPpmBo1dEVo6NIWzuxLGxPNLLugvNzUQgXJrgz5VW6fd3dL9XDVZH4RERN7mniyRklkzOaT87ojxPbsm9c7flssS__OeoXnm3B43V410rOL-LyIWYsNwM3NCz7ME7VWKT1MBoEf8LqV_jxBI7O4fiW5OQWeH4LvPgXnHV33wEAAP__-0e_Cg==
+
+query I
+SELECT FIRST(b) FROM data WHERE b <= 1
+----
+1
