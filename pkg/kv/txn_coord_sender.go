@@ -17,6 +17,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -25,8 +26,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,18 +43,14 @@ const (
 	statusLogInterval = 5 * time.Second
 	opTxnCoordSender  = "txn coordinator"
 	opHeartbeatLoop   = "heartbeat"
-)
-
-// maxIntents is the limit for the number of intents that can be
-// written in a single transaction. All intents used by a transaction
-// must be included in the EndTransactionRequest, and processing a
-// large EndTransactionRequest currently consumes a large amount of
-// memory. Limit the number of intents to keep this from causing the
-// server to run out of memory.
-var maxIntents = settings.RegisterIntSetting(
-	"kv.transaction.max_intents",
-	"maximum number of write intents allowed for a KV transaction",
-	100000,
+	// maxTxnIntentsBytes is a threshold in bytes for intent spans stored
+	// on the coordinator during the lifetime of a transaction. Intents
+	// are included with a transaction on commit or abort, to be cleaned
+	// up asynchronously. If they exceed this threshold, they're condensed
+	// to avoid memory blowup both on the coordinator and (critically) on
+	// the EndTransaction command at the Raft group responsible for the
+	// transaction record.
+	maxTxnIntentsBytes = base.ChunkRaftCommandThresholdBytes
 )
 
 // txnMetadata holds information about an ongoing transaction, as
@@ -68,6 +65,10 @@ type txnMetadata struct {
 	// coordinator. By keeping this record, the coordinator will be able
 	// to update the write intent when the transaction is committed.
 	keys []roachpb.Span
+
+	// keysSize is the total size in bytes of the key spans written
+	// during this transaction.
+	keysSize int64
 
 	// lastUpdateNanos is the latest wall time in nanos the client sent
 	// transaction operations to this coordinator. Accessed and updated
@@ -188,12 +189,13 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 type TxnCoordSender struct {
 	log.AmbientContext
 
-	st                *cluster.Settings
-	wrapped           client.Sender
-	clock             *hlc.Clock
-	heartbeatInterval time.Duration
-	clientTimeout     time.Duration
-	txnMu             struct {
+	st                 *cluster.Settings
+	wrapped            client.Sender
+	clock              *hlc.Clock
+	heartbeatInterval  time.Duration
+	maxTxnIntentsBytes int64
+	clientTimeout      time.Duration
+	txnMu              struct {
 		syncutil.Mutex
 		txns map[uuid.UUID]*txnMetadata // txn key to metadata
 	}
@@ -220,15 +222,16 @@ func NewTxnCoordSender(
 	txnMetrics TxnMetrics,
 ) *TxnCoordSender {
 	tc := &TxnCoordSender{
-		AmbientContext:    ambient,
-		st:                st,
-		wrapped:           wrapped,
-		clock:             clock,
-		heartbeatInterval: base.DefaultHeartbeatInterval,
-		clientTimeout:     defaultClientTimeout,
-		linearizable:      linearizable,
-		stopper:           stopper,
-		metrics:           txnMetrics,
+		AmbientContext:     ambient,
+		st:                 st,
+		wrapped:            wrapped,
+		clock:              clock,
+		heartbeatInterval:  base.DefaultHeartbeatInterval,
+		maxTxnIntentsBytes: maxTxnIntentsBytes,
+		clientTimeout:      defaultClientTimeout,
+		linearizable:       linearizable,
+		stopper:            stopper,
+		metrics:            txnMetrics,
 	}
 	tc.txnMu.txns = map[uuid.UUID]*txnMetadata{}
 
@@ -377,16 +380,18 @@ func (tc *TxnCoordSender) Send(
 			if !hasET {
 				return nil
 			}
-			// Everything below is carried out only when trying to commit.
+			// Everything below is carried out only when trying to finish a txn.
 
 			// Populate et.IntentSpans, taking into account both any existing
 			// and new writes, and taking care to perform proper deduplication.
 			txnMeta := tc.txnMu.txns[txnID]
 			distinctSpans := true
+			var keysSize int64
 			if txnMeta != nil {
 				et.IntentSpans = txnMeta.keys
+				keysSize = txnMeta.keysSize
 				// Defensively set distinctSpans to false if we had any previous
-				// requests in this transaction. This effectively limits the distinct
+				// writes in this transaction. This effectively limits the distinct
 				// spans optimization to 1pc transactions.
 				distinctSpans = len(txnMeta.keys) == 0
 			}
@@ -400,13 +405,21 @@ func (tc *TxnCoordSender) Send(
 					Key:    key,
 					EndKey: endKey,
 				})
+				keysSize += int64(len(key) + len(endKey))
 			})
+			// The request might already be used by an outgoing goroutine,
+			// so we can't safely mutate anything in-place (as
+			// maybeCondenseIntentSpans and MergeSpans do).
+			et.IntentSpans = append([]roachpb.Span(nil), et.IntentSpans...)
+			var err error
+			if et.IntentSpans, keysSize, err = tc.maybeCondenseIntentSpans(
+				ctx, et.IntentSpans, keysSize,
+			); err != nil {
+				return roachpb.NewError(err)
+			}
 			// TODO(peter): Populate DistinctSpans on all batches, not just batches
 			// which contain an EndTransactionRequest.
 			var distinct bool
-			// The request might already be used by an outgoing goroutine, so
-			// we can't safely mutate anything in-place (as MergeSpans does).
-			et.IntentSpans = append([]roachpb.Span(nil), et.IntentSpans...)
 			et.IntentSpans, distinct = roachpb.MergeSpans(et.IntentSpans)
 			ba.Header.DistinctSpans = distinct && distinctSpans
 			if len(et.IntentSpans) == 0 {
@@ -415,14 +428,9 @@ func (tc *TxnCoordSender) Send(
 				// in the client.
 				return roachpb.NewErrorf("cannot commit a read-only transaction")
 			}
-			if int64(len(et.IntentSpans)) > maxIntents.Get(&tc.st.SV) {
-				// This check prevents us from sending a very large command to
-				// the server that would consume a lot of memory at evaluation
-				// time.
-				return roachpb.NewErrorf("transaction is too large to commit: %d intents", len(et.IntentSpans))
-			}
 			if txnMeta != nil {
 				txnMeta.keys = et.IntentSpans
+				txnMeta.keysSize = keysSize
 			}
 			return nil
 		}(); pErr != nil {
@@ -490,6 +498,84 @@ func (tc *TxnCoordSender) Send(
 		tc.txnMu.Unlock()
 	}
 	return br, nil
+}
+
+type spanBucket struct {
+	rangeID roachpb.RangeID
+	size    int64
+	spans   []roachpb.Span
+}
+
+// maybeCondenseIntentSpans avoids sending massive EndTransaction
+// requests which can consume excessive memory at evaluation time and
+// in the txn coordinator sender itself. Spans are condensed based on
+// current range boundaries. Returns the condensed set of spans and
+// the new total spans size.
+func (tc *TxnCoordSender) maybeCondenseIntentSpans(
+	ctx context.Context, spans []roachpb.Span, spansSize int64,
+) ([]roachpb.Span, int64, error) {
+	if spansSize < tc.maxTxnIntentsBytes {
+		return spans, spansSize, nil
+	}
+	// Only condense if the wrapped sender is a distributed sender.
+	ds, ok := tc.wrapped.(*DistSender)
+	if !ok {
+		return spans, spansSize, nil
+	}
+	// Sort the spans by start key.
+	sort.Slice(spans, func(i, j int) bool { return spans[i].Key.Compare(spans[j].Key) < 0 })
+
+	// Divide them by range boundaries and condense. Iterate over spans
+	// using a range iterator and add each to a bucket keyed by range
+	// ID. Local keys are kept in a new slice and not added to buckets.
+	buckets := []*spanBucket{}
+	localSpans := []roachpb.Span{}
+	ri := NewRangeIterator(ds)
+	for _, s := range spans {
+		if keys.IsLocal(s.Key) {
+			localSpans = append(localSpans, s)
+			continue
+		}
+		ri.Seek(ctx, roachpb.RKey(s.Key), Ascending)
+		if !ri.Valid() {
+			return nil, 0, ri.Error().GoError()
+		}
+		rangeID := ri.Desc().RangeID
+		if l := len(buckets); l > 0 && buckets[l-1].rangeID == rangeID {
+			buckets[l-1].spans = append(buckets[l-1].spans, s)
+		} else {
+			buckets = append(buckets, &spanBucket{rangeID: rangeID, spans: []roachpb.Span{s}})
+		}
+		buckets[len(buckets)-1].size += int64(len(s.Key) + len(s.EndKey))
+	}
+
+	// Sort the buckets by size and collapse from largest to smallest
+	// until total size of uncondensed spans no longer exceeds threshold.
+	sort.Slice(buckets, func(i, j int) bool { return buckets[i].size > buckets[j].size })
+	spans = localSpans // reset to hold just the local spans; will add newly condensed and remainder
+	for _, bucket := range buckets {
+		// Condense until we get to half the threshold.
+		if spansSize <= tc.maxTxnIntentsBytes/2 {
+			// Collect remaining spans from each bucket into uncondensed slice.
+			spans = append(spans, bucket.spans...)
+			continue
+		}
+		spansSize -= bucket.size
+		// TODO(spencer): consider further optimizations here to create
+		// more than one span out of a bucket to avoid overly broad span
+		// combinations.
+		cs := bucket.spans[0]
+		for _, s := range bucket.spans[1:] {
+			cs = cs.Combine(s)
+			if !cs.Valid() {
+				return nil, 0, errors.Errorf("combining span %s yielded invalid result", s)
+			}
+		}
+		spansSize += int64(len(cs.Key) + len(cs.EndKey))
+		spans = append(spans, cs)
+	}
+
+	return spans, spansSize, nil
 }
 
 // maybeRejectClientLocked checks whether the (transactional) request is in a
@@ -685,6 +771,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	// Clone the intents and the txn to avoid data races.
 	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), txnMeta.keys...))
 	txnMeta.keys = nil
+	txnMeta.keysSize = 0
 	txn := txnMeta.txn.Clone()
 	tc.txnMu.Unlock()
 
@@ -920,26 +1007,24 @@ func (tc *TxnCoordSender) updateState(
 		// intents blocking concurrent writers for extended periods of time.
 		// See #3346.
 		var keys []roachpb.Span
+		var keysSize int64
 		if txnMeta != nil {
 			keys = txnMeta.keys
+			keysSize = txnMeta.keysSize
 		}
 		ba.IntentSpanIterate(br, func(key, endKey roachpb.Key) {
-			keys = append(keys, roachpb.Span{
-				Key:    key,
-				EndKey: endKey,
-			})
+			keys = append(keys, roachpb.Span{Key: key, EndKey: endKey})
+			keysSize += int64(len(key) + len(endKey))
 		})
-
-		if int64(len(keys)) > maxIntents.Get(&tc.st.SV) {
-			// This check comes after the new intents have already been
-			// written, but allows us to exit early from transactions that
-			// have gotten too large to ever commit because of the other
-			// "transaction too large" check.
-			return roachpb.NewErrorf("transaction is too large to commit: %d intents", len(keys))
+		if condensedKeys, condensedKeysSize, err := tc.maybeCondenseIntentSpans(ctx, keys, keysSize); err != nil {
+			log.ErrEventf(ctx, "failed to condense intent spans (%s); skipping", err)
+		} else {
+			keys, keysSize = condensedKeys, condensedKeysSize
 		}
 
 		if txnMeta != nil {
 			txnMeta.keys = keys
+			txnMeta.keysSize = keysSize
 		} else if len(keys) > 0 {
 			// If the transaction is already over, there's no point in
 			// launching a one-off coordinator which will shut down right
@@ -952,6 +1037,7 @@ func (tc *TxnCoordSender) updateState(
 				txnMeta = &txnMetadata{
 					txn:              newTxn,
 					keys:             keys,
+					keysSize:         keysSize,
 					firstUpdateNanos: startNS,
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
 					timeoutDuration:  tc.clientTimeout,

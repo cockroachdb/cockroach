@@ -150,6 +150,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "remove cluster setting `kv.gc.batch_size`",
 		workFn: purgeClusterSettingKVGCBatchSize,
 	},
+	{
+		name:   "remove cluster setting `kv.transaction.max_intents`",
+		workFn: purgeClusterSettingKVTransactionMaxIntents,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -926,4 +930,9 @@ func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) 
 func purgeClusterSettingKVGCBatchSize(ctx context.Context, r runner) error {
 	// This cluster setting has been removed.
 	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.gc.batch_size'`)
+}
+
+func purgeClusterSettingKVTransactionMaxIntents(ctx context.Context, r runner) error {
+	// This cluster setting has been removed.
+	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.transaction.max_intents'`)
 }

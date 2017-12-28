@@ -26,15 +26,30 @@ type IntentsWithArg struct {
 
 // FromIntents creates a Result communicating that the intents were encountered
 // by the given request and should be handled.
-func FromIntents(intents []roachpb.Intent, args roachpb.Request, alwaysReturn bool) Result {
+func FromIntents(intents []roachpb.Intent, args roachpb.Request) Result {
 	var pd Result
 	if len(intents) == 0 {
 		return pd
 	}
-	if alwaysReturn {
-		pd.Local.IntentsAlways = &[]IntentsWithArg{{Arg: args, Intents: intents}}
-	} else {
-		pd.Local.Intents = &[]IntentsWithArg{{Arg: args, Intents: intents}}
+	pd.Local.Intents = &[]IntentsWithArg{{Arg: args, Intents: intents}}
+	return pd
+}
+
+// EndTxnIntents contains a finished transaction and a bool (Always),
+// which indicates whether the intents should be resolved whether or
+// not the command succeeds through Raft.
+type EndTxnIntents struct {
+	Txn    roachpb.Transaction
+	Always bool
+}
+
+// FromEndTxn creates a Result communicating that a transaction was
+// completed and its intents should be resolved.
+func FromEndTxn(txn *roachpb.Transaction, alwaysReturn bool) Result {
+	var pd Result
+	if len(txn.Intents) == 0 {
+		return pd
 	}
+	pd.Local.EndTxns = &[]EndTxnIntents{{Txn: *txn, Always: alwaysReturn}}
 	return pd
 }
