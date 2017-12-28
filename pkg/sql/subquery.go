@@ -378,44 +378,30 @@ func (v *subqueryVisitor) replaceSubquery(
 
 	result := &subquery{subquery: sub, plan: plan}
 
-	wrap := true
 	if len(cols) == 1 {
-		if !multiRow {
-			// The subquery has only a single column and is not in a multi-row
-			// context, we don't want to wrap the type in a tuple. For example:
-			//
-			//   SELECT (SELECT 1)
-			//
-			// and
-			//
-			//   SELECT (SELECT (1, 2))
-			//
-			// This will result in the types "int" and "tuple{int,int}" respectively.
-			wrap = false
-		} else if !types.FamTuple.FamilyEqual(cols[0].Typ) {
-			// The subquery has only a single column and is in a multi-row
-			// context. We only wrap if the type of the result column is not a
-			// tuple. For example:
-			//
-			//   SELECT 1 IN (SELECT 1)
-			//
-			// The type of the subquery will be "tuple{int}". Now consider this
-			// invalid query:
-			//
-			//   SELECT (1, 2) IN (SELECT (1, 2))
-			//
-			// We want the type of the subquery to be "tuple{tuple{tuple{int,int}}}"
-			// in order to distinguish it from this semantically valid query:
-			//
-			//   SELECT (1, 2) IN (SELECT 1, 2)
-			//
-			// In this query, the subquery has the type "tuple{tuple{int,int}}"
-			// making the IN expression valid.
-			wrap = false
-		}
-	}
-
-	if !wrap {
+		// Whenever the subquery returns a single column we don't wrap the type in
+		// a tuple. This differs from Postgres's behavior. For example:
+		//
+		//   SELECT (1, 2) IN (SELECT (1, 2))
+		//
+		// Postgres thinks this query is not valid, but Cockroach does and treats
+		// it the same as:
+		//
+		//   SELECT (1, 2) IN (SELECT 1, 2)
+		//
+		// And:
+		//
+		//   SELECT (1, 2) IN ((1, 2))
+		//
+		// The Postgres rules are somewhat complex. The following works in both
+		// Postgres and Cockroach:
+		//
+		//   SELECT (SELECT (1, 2)) IN (SELECT (1, 2))
+		//
+		// What rule allows that to work in Postgres, but not the first query
+		// above? The Cockroach rule is simple: if the subquery returns on a single
+		// column, use the type of that column as the type for the subquery. If the
+		// subquery returns multiple rows, wrap the type in a tuple.
 		result.typ = cols[0].Typ
 	} else {
 		colTypes := make(types.TTuple, len(cols))
