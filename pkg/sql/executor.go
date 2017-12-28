@@ -319,7 +319,7 @@ type ExecutorTestingKnobs struct {
 	// gives access to the planner that will be used to do the prepare. If any of
 	// the return values are not nil, the values are used as the prepare results
 	// and normal preparation is short-circuited.
-	BeforePrepare func(ctx context.Context, stmt string, planner *planner) (*PreparedStatement, error)
+	BeforePrepare func(ctx context.Context, stmt string, planner *Planner) (*PreparedStatement, error)
 
 	// BeforeExecute is called by the Executor before plan execution. It is useful
 	// for synchronizing statement execution, such as with parallel statemets.
@@ -1763,7 +1763,7 @@ func (e *Executor) execStmtInOpenTxn(
 		stmt.AnonymizedStr = ps.AnonymizedStr
 	}
 
-	var p *planner
+	var p *Planner
 	runInParallel := parallelize && !txnState.implicitTxn
 	if runInParallel {
 		// Create a new planner from the Session to execute the statement, since
@@ -1972,7 +1972,7 @@ func commitSQLTransaction(
 // exectDistSQL converts a classic plan to a distributed SQL physical plan and
 // runs it.
 func (e *Executor) execDistSQL(
-	planner *planner, tree planNode, rowResultWriter StatementResult,
+	planner *Planner, tree planNode, rowResultWriter StatementResult,
 ) error {
 	ctx := planner.session.Ctx()
 	recv := makeDistSQLReceiver(
@@ -1997,7 +1997,7 @@ func (e *Executor) execDistSQL(
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(
-	planner *planner, plan planNode, rowResultWriter StatementResult,
+	planner *Planner, plan planNode, rowResultWriter StatementResult,
 ) error {
 	ctx := planner.session.Ctx()
 
@@ -2081,7 +2081,7 @@ func shouldUseDistSQL(
 	ctx context.Context,
 	distSQLMode DistSQLExecMode,
 	dp *DistSQLPlanner,
-	planner *planner,
+	planner *Planner,
 	plan planNode,
 ) (bool, error) {
 	if distSQLMode == DistSQLOff {
@@ -2147,7 +2147,7 @@ func initStatementResult(res StatementResult, stmt Statement, cols sqlbase.Resul
 // execStmt executes the statement synchronously and writes the result to
 // res.
 func (e *Executor) execStmt(
-	stmt Statement, planner *planner, automaticRetryCount int, res StatementResult,
+	stmt Statement, planner *Planner, automaticRetryCount int, res StatementResult,
 ) error {
 	session := planner.session
 	ctx := session.Ctx()
@@ -2213,7 +2213,7 @@ func (e *Executor) execStmt(
 // TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
 // queries, so this method can only be used with classical SQL.
 func (e *Executor) execStmtInParallel(
-	stmt Statement, planner *planner,
+	stmt Statement, planner *Planner,
 ) (sqlbase.ResultColumns, error) {
 	session := planner.session
 	ctx := session.Ctx()

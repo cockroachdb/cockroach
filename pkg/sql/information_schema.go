@@ -119,7 +119,7 @@ CREATE TABLE information_schema.columns (
 	CHARACTER_SET_NAME STRING
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			// Table descriptors already holds columns in-order.
 			visible := 0
@@ -182,7 +182,7 @@ CREATE TABLE information_schema.key_column_usage (
 	ORDINAL_POSITION INT NOT NULL DEFAULT 0,
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 			db *sqlbase.DatabaseDescriptor,
 			table *sqlbase.TableDescriptor,
@@ -237,7 +237,7 @@ CREATE TABLE information_schema.schemata (
 	DEFAULT_CHARACTER_SET_NAME STRING NOT NULL DEFAULT '',
 	SQL_PATH STRING
 );`,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, _ string, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
 				defString,                // catalog_name
@@ -259,7 +259,7 @@ CREATE TABLE information_schema.schema_privileges (
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, _ string, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.Privileges.Show() {
 				for _, privilege := range u.Privileges {
@@ -312,7 +312,7 @@ CREATE TABLE information_schema.sequences (
     INCREMENT STRING NOT NULL DEFAULT '',
     CYCLE_OPTION STRING NOT NULL DEFAULT 'NO'
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			if !table.IsSequence() {
 				return nil
@@ -352,7 +352,7 @@ CREATE TABLE information_schema.statistics (
 	STORING BOOL NOT NULL DEFAULT FALSE,
 	IMPLICIT BOOL NOT NULL DEFAULT FALSE
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			appendRow := func(index *sqlbase.IndexDescriptor, colName string, sequence int,
 				direction tree.Datum, isStored, isImplicit bool,
@@ -440,7 +440,7 @@ CREATE TABLE information_schema.table_constraints (
 	IS_DEFERRABLE STRING NOT NULL DEFAULT '',
 	INITIALLY_DEFERRED STRING NOT NULL DEFAULT ''
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 			db *sqlbase.DatabaseDescriptor,
 			table *sqlbase.TableDescriptor,
@@ -479,7 +479,7 @@ CREATE TABLE information_schema.user_privileges (
 	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );`,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
 			grantee := tree.NewDString(u)
 			for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
@@ -510,7 +510,7 @@ CREATE TABLE information_schema.table_privileges (
 	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			for _, u := range table.Privileges.Show() {
 				for _, privilege := range u.Privileges {
@@ -548,7 +548,7 @@ CREATE TABLE information_schema.tables (
 	TABLE_TYPE STRING NOT NULL DEFAULT '',
 	VERSION INT
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			if table.IsSequence() {
 				return nil
@@ -584,7 +584,7 @@ CREATE TABLE information_schema.views (
     IS_TRIGGER_DELETABLE BOOL NOT NULL DEFAULT FALSE,
     IS_TRIGGER_INSERTABLE_INTO BOOL NOT NULL DEFAULT FALSE
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			if !table.IsView() {
 				return nil
@@ -625,7 +625,7 @@ func (dbs sortedDBDescs) Less(i, j int) bool { return dbs[i].Name < dbs[j].Name 
 // lexicographical order with respect to their name. For each database, the function
 // will call fn with its descriptor.
 func forEachDatabaseDesc(
-	ctx context.Context, p *planner, fn func(*sqlbase.DatabaseDescriptor) error,
+	ctx context.Context, p *Planner, fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
 	// Handle real schemas
 	dbDescs, err := getAllDatabaseDescs(ctx, p.txn)
@@ -661,7 +661,7 @@ func forEachDatabaseDesc(
 // database are visible.
 func forEachTableDesc(
 	ctx context.Context,
-	p *planner,
+	p *Planner,
 	prefix string,
 	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
@@ -678,7 +678,7 @@ func forEachTableDesc(
 // includes newly added non-public descriptors.
 func forEachTableDescAll(
 	ctx context.Context,
-	p *planner,
+	p *Planner,
 	prefix string,
 	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
 ) error {
@@ -727,7 +727,7 @@ func isSystemDatabaseName(name string) bool {
 // database are visible.
 func forEachTableDescWithTableLookup(
 	ctx context.Context,
-	p *planner,
+	p *Planner,
 	prefix string,
 	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
 ) error {
@@ -741,7 +741,7 @@ func forEachTableDescWithTableLookup(
 // are not yet public.
 func forEachTableDescWithTableLookupInternal(
 	ctx context.Context,
-	p *planner,
+	p *Planner,
 	prefix string,
 	allowAdding bool,
 	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
@@ -895,7 +895,7 @@ func forEachColumnInIndex(
 }
 
 func forEachRole(
-	ctx context.Context, origPlanner *planner, fn func(username string, isRole tree.DBool) error,
+	ctx context.Context, origPlanner *Planner, fn func(username string, isRole tree.DBool) error,
 ) error {
 	query := `SELECT username, "isRole" FROM system.users`
 	p := makeInternalPlanner("for-each-role", origPlanner.txn, security.RootUser, origPlanner.session.memMetrics)
@@ -919,11 +919,11 @@ func forEachRole(
 	return nil
 }
 
-func userCanSeeDatabase(p *planner, db *sqlbase.DatabaseDescriptor) bool {
+func userCanSeeDatabase(p *Planner, db *sqlbase.DatabaseDescriptor) bool {
 	return p.CheckAnyPrivilege(db) == nil
 }
 
-func userCanSeeTable(p *planner, table *sqlbase.TableDescriptor, allowAdding bool) bool {
+func userCanSeeTable(p *Planner, table *sqlbase.TableDescriptor, allowAdding bool) bool {
 	if !(table.State == sqlbase.TableDescriptor_PUBLIC ||
 		(allowAdding && table.State == sqlbase.TableDescriptor_ADD)) {
 		return false

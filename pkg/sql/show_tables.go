@@ -26,7 +26,7 @@ import (
 // Privileges: None.
 //   Notes: postgres does not have a SHOW TABLES statement.
 //          mysql only returns tables you have privileges on.
-func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode, error) {
+func (p *Planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode, error) {
 	name := p.session.Database
 	if n.Database != "" {
 		name = string(n.Database)

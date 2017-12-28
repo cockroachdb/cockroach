@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func makeTestPlanner() *planner {
+func makeTestPlanner() *Planner {
 	return makeInternalPlanner("test", nil /* txn */, security.RootUser, &MemoryMetrics{})
 }
 

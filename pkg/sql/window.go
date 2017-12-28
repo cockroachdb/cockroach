@@ -91,7 +91,7 @@ type windowNode struct {
 //                                                           ^^^^^^^^^^^^^^^^^
 //     Ex. overridden: SELECT avg(x) OVER (w PARTITION BY z) FROM y WINDOW w AS (ORDER BY z)
 //                                                                         ^^^^^^^^^^^^^^^^^
-func (p *planner) window(
+func (p *Planner) window(
 	ctx context.Context, n *tree.SelectClause, s *renderNode,
 ) (*windowNode, error) {
 	// Determine if a window function is being applied. We use the renderNode's
@@ -265,7 +265,7 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 // function application by combining specific window definition from a
 // given window function application with referenced window specifications
 // on the SelectClause.
-func (p *planner) constructWindowDefinitions(
+func (p *Planner) constructWindowDefinitions(
 	ctx context.Context, n *windowNode, sc *tree.SelectClause, s *renderNode,
 ) error {
 	// Process each named window specification on the select clause.

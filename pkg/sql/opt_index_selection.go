@@ -81,7 +81,7 @@ type analyzeOrderingFn func(indexProps physicalProps) (matchingCols, totalCols i
 //
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
-func (p *planner) selectIndex(
+func (p *Planner) selectIndex(
 	ctx context.Context, s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) (planNode, error) {
 	if s.desc.IsEmpty() {
@@ -273,7 +273,7 @@ func (p *planner) selectIndex(
 }
 
 // Removes any unnecessary IS DISTINCT FROM NULL filters on non-nullable columns.
-func trimUselessIsDistinctFromNullFilter(sn *scanNode, p *planner) tree.TypedExpr {
+func trimUselessIsDistinctFromNullFilter(sn *scanNode, p *Planner) tree.TypedExpr {
 	var newFilter tree.TypedExpr = tree.DBoolTrue
 	andExprs := splitAndExpr(&p.evalCtx, sn.filter, nil)
 	for _, e := range andExprs {

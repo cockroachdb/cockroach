@@ -39,7 +39,7 @@ type setClusterSettingNode struct {
 
 // SetClusterSetting sets session variables.
 // Privileges: super user.
-func (p *planner) SetClusterSetting(
+func (p *Planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
@@ -142,7 +142,7 @@ func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, 
 func (n *setClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *setClusterSettingNode) Close(_ context.Context)        {}
 
-func (p *planner) toSettingString(
+func (p *Planner) toSettingString(
 	ctx context.Context,
 	ie InternalExecutor,
 	st *cluster.Settings,

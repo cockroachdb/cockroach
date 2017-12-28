@@ -23,7 +23,7 @@ import (
 
 // Deallocate implements the DEALLOCATE statement.
 // See https://www.postgresql.org/docs/current/static/sql-deallocate.html for details.
-func (p *planner) Deallocate(ctx context.Context, s *tree.Deallocate) (planNode, error) {
+func (p *Planner) Deallocate(ctx context.Context, s *tree.Deallocate) (planNode, error) {
 	if s.Name == "" {
 		p.session.PreparedStatements.DeleteAll(ctx)
 	} else {

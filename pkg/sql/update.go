@@ -51,7 +51,7 @@ type updateNode struct {
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
-func (p *planner) Update(
+func (p *Planner) Update(
 	ctx context.Context, n *tree.Update, desiredTypes []types.T,
 ) (planNode, error) {
 	if n.Where == nil && p.session.SafeUpdates {
@@ -353,12 +353,12 @@ func (u *updateNode) Close(ctx context.Context) {
 // editNodeBase holds the common (prepare+execute) state needed to run
 // row-modifying statements.
 type editNodeBase struct {
-	p         *planner
+	p         *Planner
 	rh        *returningHelper
 	tableDesc *sqlbase.TableDescriptor
 }
 
-func (p *planner) makeEditNode(
+func (p *Planner) makeEditNode(
 	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
 ) (editNodeBase, error) {
 	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
@@ -475,7 +475,7 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.Placehold
 // addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse
 // previous renders if possible by using render.addOrMergeRender, returning the
 // column index at which the rendered value can be accessed.
-func (p *planner) addOrMergeExpr(
+func (p *Planner) addOrMergeExpr(
 	ctx context.Context,
 	e tree.Expr,
 	currentUpdateIdx int,
@@ -496,7 +496,7 @@ func (p *planner) addOrMergeExpr(
 }
 
 // namesForExprs expands names in the tuples and subqueries in exprs.
-func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.UnresolvedNames, error) {
+func (p *Planner) namesForExprs(exprs tree.UpdateExprs) (tree.UnresolvedNames, error) {
 	var names tree.UnresolvedNames
 	for _, expr := range exprs {
 		if expr.Tuple {

@@ -91,7 +91,7 @@ type renderNode struct {
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
-func (p *planner) Select(
+func (p *Planner) Select(
 	ctx context.Context, n *tree.Select, desiredTypes []types.T,
 ) (planNode, error) {
 	wrapped := n.Select
@@ -167,7 +167,7 @@ func (p *planner) Select(
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
-func (p *planner) SelectClause(
+func (p *Planner) SelectClause(
 	ctx context.Context,
 	parsed *tree.SelectClause,
 	orderBy tree.OrderBy,
@@ -350,7 +350,7 @@ func (r *renderNode) Values() tree.Datums       { return r.run.row }
 func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
 
 // initFrom initializes the table node, given the parsed select expression
-func (p *planner) initFrom(
+func (p *Planner) initFrom(
 	ctx context.Context, r *renderNode, parsed *tree.SelectClause, scanVisibility scanVisibility,
 ) error {
 	_, _, err := p.getTimestamp(parsed.From.AsOf)
@@ -367,7 +367,7 @@ func (p *planner) initFrom(
 	return nil
 }
 
-func (p *planner) initTargets(
+func (p *Planner) initTargets(
 	ctx context.Context, r *renderNode, targets tree.SelectExprs, desiredTypes []types.T,
 ) error {
 	// Loop over the select expressions and expand them into the expressions
@@ -415,7 +415,7 @@ func (p *planner) initTargets(
 
 // insertRender creates a new renderNode that renders exactly its
 // source plan.
-func (p *planner) insertRender(
+func (p *Planner) insertRender(
 	ctx context.Context, plan planNode, tn *tree.TableName,
 ) (*renderNode, error) {
 	src := planDataSource{info: newSourceInfoForSingleTable(*tn, planColumns(plan)), plan: plan}
@@ -435,7 +435,7 @@ func (p *planner) insertRender(
 // makeTupleRender creates a new renderNode which makes a single tuple
 // columns from all the columns in its source. Used by
 // getDataSourceAsOneColumn().
-func (p *planner) makeTupleRender(
+func (p *Planner) makeTupleRender(
 	ctx context.Context, src planDataSource, name string,
 ) (*renderNode, error) {
 	// Make a simple renderNode that renders all the columns in its
@@ -464,7 +464,7 @@ func (p *planner) makeTupleRender(
 // specified in any part of the query, then it must be consistent with
 // what is known to the Executor. If the AsOfClause contains a
 // timestamp, then true will be returned.
-func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error) {
+func (p *Planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error) {
 	if asOf.Expr != nil {
 		// At this point, the executor only knows how to recognize AS OF
 		// SYSTEM TIME at the top level. When it finds it there,
@@ -547,7 +547,7 @@ func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
 // Expressions with more than one SRF require lateral correlated subqueries,
 // which are not yet supported. For now, this function returns an error if more
 // than one SRF is present in the render expression.
-func (p *planner) rewriteSRFs(
+func (p *Planner) rewriteSRFs(
 	ctx context.Context, r *renderNode, target tree.SelectExpr,
 ) (tree.SelectExpr, error) {
 	// Walk the render expression looking for SRFs.
@@ -597,7 +597,7 @@ func isUnarySource(src planDataSource) bool {
 	return ok && len(src.info.sourceColumns) == 0
 }
 
-func (p *planner) initWhere(
+func (p *Planner) initWhere(
 	ctx context.Context, r *renderNode, whereExpr tree.Expr,
 ) (*filterNode, error) {
 	f := &filterNode{source: r.source}
@@ -731,7 +731,7 @@ func (r *renderNode) renderRow(evalCtx *tree.EvalContext) error {
 //      first by column 0 (a), then by column 1.
 //
 // The planner is necessary to perform name resolution while detecting constant columns.
-func (p *planner) computePhysicalPropsForRender(r *renderNode, fromOrder physicalProps) {
+func (p *Planner) computePhysicalPropsForRender(r *renderNode, fromOrder physicalProps) {
 	// See physicalProps.project for a description of the projection map.
 	projMap := make([]int, len(r.render))
 	for i, expr := range r.render {

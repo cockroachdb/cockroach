@@ -80,7 +80,7 @@ type unionNode struct {
 }
 
 // Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) Union(
+func (p *Planner) Union(
 	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
 ) (planNode, error) {
 	var emitAll = false

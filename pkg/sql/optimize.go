@@ -28,7 +28,7 @@ import (
 // The plan returned by optimizePlan *must* be Close()d, even in case
 // of error, because it may contain memory-registered data structures
 // and other things that need clean up.
-func (p *planner) optimizePlan(
+func (p *Planner) optimizePlan(
 	ctx context.Context, plan planNode, needed []bool,
 ) (planNode, error) {
 	// We propagate the needed columns a first time. This will remove
@@ -68,7 +68,7 @@ func (p *planner) optimizePlan(
 // optimizeFilters() is called on the planNodes of all sub-query
 // expressions.
 type subqueryInitializer struct {
-	p *planner
+	p *Planner
 }
 
 // subqueryNode implements the planObserver interface.

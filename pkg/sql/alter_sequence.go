@@ -30,7 +30,7 @@ type alterSequenceNode struct {
 }
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
-func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
+func (p *Planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
 	tn, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err

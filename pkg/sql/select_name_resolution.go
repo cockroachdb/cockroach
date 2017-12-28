@@ -200,7 +200,7 @@ func (*nameResolutionVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr 
 
 // resolveNamesForRender resolves the names in expr using the naming
 // context of the given renderNode (FROM clause).
-func (p *planner) resolveNamesForRender(
+func (p *Planner) resolveNamesForRender(
 	expr tree.Expr, s *renderNode,
 ) (tree.Expr, bool, bool, error) {
 	return p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
@@ -212,7 +212,7 @@ func (p *planner) resolveNamesForRender(
 // etc) is encountered, or a function that may change value for every
 // row in a table, the 2nd return value is true.
 // If any star is expanded, the 3rd return value is true.
-func (p *planner) resolveNames(
+func (p *Planner) resolveNames(
 	expr tree.Expr, sources multiSourceInfo, ivarHelper tree.IndexedVarHelper,
 ) (tree.Expr, bool, bool, error) {
 	if expr == nil {

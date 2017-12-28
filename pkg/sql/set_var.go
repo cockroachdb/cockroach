@@ -38,7 +38,7 @@ type setVarNode struct {
 // SetVar sets session variables.
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
-func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) {
+func (p *Planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) {
 	if n.Name == nil {
 		// A client has sent the reserved internal syntax SET ROW ...
 		// Reject it.

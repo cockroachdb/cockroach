@@ -30,7 +30,7 @@ func readOnlyError(s string) error {
 }
 
 // IncrementSequence implements the tree.SequenceAccessor interface.
-func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
+func (p *Planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
 	if p.session.TxnState.readOnly {
 		return 0, readOnlyError("nextval()")
 	}
@@ -54,7 +54,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 }
 
 // GetLastSequenceValue implements the tree.SequenceAccessor interface.
-func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
+func (p *Planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
 	p.session.mu.RLock()
 	defer p.session.mu.RUnlock()
 
@@ -69,7 +69,7 @@ func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
 }
 
 // GetLatestValueInSessionForSequence implements the tree.SequenceAccessor interface.
-func (p *planner) GetLatestValueInSessionForSequence(
+func (p *Planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
@@ -91,7 +91,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 }
 
 // SetSequenceValue implements the tree.SequenceAccessor interface.
-func (p *planner) SetSequenceValue(
+func (p *Planner) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64,
 ) error {
 	if p.session.TxnState.readOnly {

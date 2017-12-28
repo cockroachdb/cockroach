@@ -40,12 +40,12 @@ type DropUserNode struct {
 
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.
-func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
+func (p *Planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
 	return p.DropUserNode(ctx, n.Names, n.IfExists, false /* isRole */, "DROP USER")
 }
 
 // DropUserNode creates a "drop user" plan node. This can be called from DROP USER or DROP ROLE.
-func (p *planner) DropUserNode(
+func (p *Planner) DropUserNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropUserNode, error) {
 	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})

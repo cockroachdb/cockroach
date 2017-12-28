@@ -33,7 +33,7 @@ type dropIndexNode struct {
 // Privileges: CREATE on table.
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
-func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
+func (p *Planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
 	// Keep a track of the indexes that exist to check. When the IF EXISTS
 	// options are provided, we will simply not include any indexes that
 	// don't exist and continue execution.
@@ -113,7 +113,7 @@ const (
 	ignoreIdxConstraint dropIndexConstraintBehavior = false
 )
 
-func (p *planner) dropIndexByName(
+func (p *Planner) dropIndexByName(
 	ctx context.Context,
 	idxName tree.UnrestrictedName,
 	tableDesc *sqlbase.TableDescriptor,

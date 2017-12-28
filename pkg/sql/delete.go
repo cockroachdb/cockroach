@@ -45,7 +45,7 @@ type deleteNode struct {
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
-func (p *planner) Delete(
+func (p *Planner) Delete(
 	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
 ) (planNode, error) {
 	resetter, err := p.initWith(ctx, n.With)

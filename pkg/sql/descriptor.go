@@ -51,7 +51,7 @@ type DescriptorAccessor interface {
 	) (bool, error)
 }
 
-var _ DescriptorAccessor = &planner{}
+var _ DescriptorAccessor = &Planner{}
 
 type descriptorAlreadyExistsErr struct {
 	desc sqlbase.DescriptorProto
@@ -75,7 +75,7 @@ func GenerateUniqueDescID(ctx context.Context, db *client.DB) (sqlbase.ID, error
 }
 
 // createDescriptor implements the DescriptorAccessor interface.
-func (p *planner) createDescriptor(
+func (p *Planner) createDescriptor(
 	ctx context.Context,
 	plainKey sqlbase.DescriptorKey,
 	descriptor sqlbase.DescriptorProto,
@@ -118,7 +118,7 @@ func descExists(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (bool, 
 	return gr.Exists(), nil
 }
 
-func (p *planner) createDescriptorWithID(
+func (p *Planner) createDescriptorWithID(
 	ctx context.Context, idKey roachpb.Key, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
 ) error {
 	descriptor.SetID(id)

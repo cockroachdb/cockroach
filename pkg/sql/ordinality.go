@@ -47,7 +47,7 @@ type ordinalityNode struct {
 	run ordinalityRun
 }
 
-func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
+func (p *Planner) wrapOrdinality(ds planDataSource) planDataSource {
 	src := ds.plan
 	srcColumns := planColumns(src)
 

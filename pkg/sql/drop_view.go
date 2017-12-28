@@ -35,7 +35,7 @@ type dropViewNode struct {
 // Privileges: DROP on view.
 //   Notes: postgres allows only the view owner to DROP a view.
 //          mysql requires the DROP privilege on the view.
-func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
+func (p *Planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()
@@ -131,7 +131,7 @@ func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
 	return false
 }
 
-func (p *planner) canRemoveDependentView(
+func (p *Planner) canRemoveDependentView(
 	ctx context.Context,
 	from *sqlbase.TableDescriptor,
 	ref sqlbase.TableDescriptor_Reference,
@@ -140,7 +140,7 @@ func (p *planner) canRemoveDependentView(
 	return p.canRemoveDependentViewGeneric(ctx, from.TypeName(), from.Name, from.ParentID, ref, behavior)
 }
 
-func (p *planner) canRemoveDependentViewGeneric(
+func (p *Planner) canRemoveDependentViewGeneric(
 	ctx context.Context,
 	typeName string,
 	objName string,
@@ -167,7 +167,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 // Drops the view and any additional views that depend on it.
 // Returns the names of any additional views that were also dropped
 // due to `cascade` behavior.
-func (p *planner) removeDependentView(
+func (p *Planner) removeDependentView(
 	ctx context.Context, tableDesc, viewDesc *sqlbase.TableDescriptor,
 ) ([]string, error) {
 	// In the table whose index is being removed, filter out all back-references
@@ -180,7 +180,7 @@ func (p *planner) removeDependentView(
 // dropViewImpl does the work of dropping a view (and views that depend on it
 // if `cascade is specified`). Returns the names of any additional views that
 // were also dropped due to `cascade` behavior.
-func (p *planner) dropViewImpl(
+func (p *Planner) dropViewImpl(
 	ctx context.Context, viewDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
 ) ([]string, error) {
 	var cascadeDroppedViews []string
@@ -231,7 +231,7 @@ func (p *planner) dropViewImpl(
 	return cascadeDroppedViews, nil
 }
 
-func (p *planner) getViewDescForCascade(
+func (p *Planner) getViewDescForCascade(
 	ctx context.Context,
 	typeName string,
 	objName string,

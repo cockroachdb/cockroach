@@ -166,7 +166,7 @@ import (
 // recursions that propagate filters and merge renderNodes, in which
 // case perhaps propagateFilter and propagateOrWrapFilter can merge,
 // but we are not there yet.
-func (p *planner) propagateFilters(
+func (p *Planner) propagateFilters(
 	ctx context.Context, plan planNode, info *dataSourceInfo, extraFilter tree.TypedExpr,
 ) (newPlan planNode, remainingFilter tree.TypedExpr, err error) {
 	remainingFilter = extraFilter
@@ -348,7 +348,7 @@ func (p *planner) propagateFilters(
 }
 
 // triggerFilterPropagation initiates filter propagation on the given plan.
-func (p *planner) triggerFilterPropagation(ctx context.Context, plan planNode) (planNode, error) {
+func (p *Planner) triggerFilterPropagation(ctx context.Context, plan planNode) (planNode, error) {
 	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, nil, tree.DBoolTrue)
 	if err != nil {
 		return plan, err
@@ -365,7 +365,7 @@ func (p *planner) triggerFilterPropagation(ctx context.Context, plan planNode) (
 // propagateOrWrapFilters triggers filter propagation on the given
 // node, and creates a new filterNode if there is any remaining filter
 // after the propagation.
-func (p *planner) propagateOrWrapFilters(
+func (p *Planner) propagateOrWrapFilters(
 	ctx context.Context, plan planNode, info *dataSourceInfo, filter tree.TypedExpr,
 ) (planNode, error) {
 	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, info, filter)
@@ -394,7 +394,7 @@ func (p *planner) propagateOrWrapFilters(
 // addGroupFilter attempts to add the extraFilter to the groupNode.
 // The part of the filter that depends only on GROUP BY expressions is
 // propagated to the source.
-func (p *planner) addGroupFilter(
+func (p *Planner) addGroupFilter(
 	ctx context.Context, g *groupNode, info *dataSourceInfo, extraFilter tree.TypedExpr,
 ) (planNode, tree.TypedExpr, error) {
 	// innerFilter is the passed-through filter on the source planNode.
@@ -436,7 +436,7 @@ func (p *planner) addGroupFilter(
 // The filter is only propagated to the sub-plan if it is expressed
 // using renders that are either simple datums or simple column
 // references to the source.
-func (p *planner) addRenderFilter(
+func (p *Planner) addRenderFilter(
 	ctx context.Context, s *renderNode, extraFilter tree.TypedExpr,
 ) (planNode, tree.TypedExpr, error) {
 	// innerFilter is the passed-through filter on the source planNode.
@@ -717,7 +717,7 @@ func splitJoinFilterRight(
 }
 
 // addJoinFilter propagates the given filter to a joinNode.
-func (p *planner) addJoinFilter(
+func (p *Planner) addJoinFilter(
 	ctx context.Context, n *joinNode, extraFilter tree.TypedExpr,
 ) (planNode, tree.TypedExpr, error) {
 

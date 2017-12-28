@@ -36,7 +36,7 @@ const TableTruncateChunkSize = indexTruncateChunkSize
 // Privileges: DROP on table.
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
-func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, error) {
+func (p *Planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, error) {
 	// Since truncation may cascade to a given table any number of times, start by
 	// building the unique set (by ID) of tables to truncate.
 	toTruncate := make(map[sqlbase.ID]struct{}, len(n.Tables))
@@ -123,7 +123,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 // truncateTable truncates the data of a table in a single transaction. It
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchronous schema change.
-func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool) error {
+func (p *Planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
@@ -228,7 +228,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 }
 
 // For all the references from a table
-func (p *planner) findAllReferences(
+func (p *Planner) findAllReferences(
 	ctx context.Context, table sqlbase.TableDescriptor,
 ) ([]*sqlbase.TableDescriptor, error) {
 	refs := map[sqlbase.ID]struct{}{}

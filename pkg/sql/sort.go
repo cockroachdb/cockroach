@@ -54,7 +54,7 @@ type sortNode struct {
 // TODO(dan): SQL also allows sorting a VALUES or UNION by an expression.
 // Support this. It will reduce some of the special casing below, but requires a
 // generalization of how to add derived columns to a SelectStatement.
-func (p *planner) orderBy(
+func (p *Planner) orderBy(
 	ctx context.Context, orderBy tree.OrderBy, n planNode,
 ) (*sortNode, error) {
 	if orderBy == nil {
@@ -358,7 +358,7 @@ func flattenTuple(
 // With an index foo(a DESC, b ASC):
 //   ORDER BY INDEX t@foo ASC -> ORDER BY t.a DESC, t.a ASC
 //   ORDER BY INDEX t@foo DESC -> ORDER BY t.a ASC, t.b DESC
-func (p *planner) rewriteIndexOrderings(
+func (p *Planner) rewriteIndexOrderings(
 	ctx context.Context, orderBy tree.OrderBy,
 ) (tree.OrderBy, error) {
 	// The loop above *may* allocate a new slice, but this is only
@@ -443,7 +443,7 @@ func chooseDirection(invert bool, idxDir sqlbase.IndexDescriptor_Direction) tree
 // valid render target and returns the corresponding column index. For example:
 //    SELECT a from T ORDER by 1
 // Here "1" refers to the first render target "a". The returned index is 0.
-func (p *planner) colIndex(numOriginalCols int, expr tree.Expr, context string) (int, error) {
+func (p *Planner) colIndex(numOriginalCols int, expr tree.Expr, context string) (int, error) {
 	ord := int64(-1)
 	switch i := expr.(type) {
 	case *tree.NumVal:
@@ -689,7 +689,7 @@ var _ valueIterator = &sortValues{}
 var _ sort.Interface = &sortValues{}
 var _ heap.Interface = &sortValues{}
 
-func (p *planner) newSortValues(
+func (p *Planner) newSortValues(
 	ordering sqlbase.ColumnOrdering, columns sqlbase.ResultColumns, capacity int,
 ) *sortValues {
 	return &sortValues{

@@ -245,7 +245,7 @@ type Session struct {
 	// during serial execution. Since planners are not threadsafe, this is only
 	// safe to use when a statement is not being parallelized. It must be reset
 	// before using.
-	planner planner
+	planner Planner
 
 	//
 	// Run-time state.
@@ -626,7 +626,7 @@ func (s *Session) Ctx() context.Context {
 	return s.context
 }
 
-func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
+func (s *Session) resetPlanner(p *Planner, e *Executor, txn *client.Txn) {
 	p.session = s
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
 	p.phaseTimes = s.phaseTimes
@@ -674,8 +674,8 @@ func (s *Session) FinishPlan() {
 // newPlanner creates a planner inside the scope of the given Session. The
 // statement executed by the planner will be executed in txn. The planner
 // should only be used to execute one statement.
-func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
-	p := &planner{}
+func (s *Session) newPlanner(e *Executor, txn *client.Txn) *Planner {
+	p := &Planner{}
 	s.resetPlanner(p, e, txn)
 	return p
 }

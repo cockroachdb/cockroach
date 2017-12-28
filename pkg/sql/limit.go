@@ -37,7 +37,7 @@ type limitNode struct {
 }
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) {
+func (p *Planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) {
 	if n == nil || (n.Count == nil && n.Offset == nil) {
 		// No LIMIT nor OFFSET; there is nothing special to do.
 		return nil, nil

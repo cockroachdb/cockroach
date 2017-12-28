@@ -51,7 +51,7 @@ type namespaceKey struct {
 
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
-func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey, error) {
+func (p *Planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey, error) {
 	namespace := map[sqlbase.ID]namespaceKey{}
 	rows, err := p.queryRows(ctx, `SELECT id, "parentID", name FROM system.namespace`)
 	if err != nil {
@@ -110,9 +110,9 @@ type SchemaAccessor interface {
 	writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error
 }
 
-var _ SchemaAccessor = &planner{}
+var _ SchemaAccessor = &Planner{}
 
-func (p *planner) getVirtualTabler() VirtualTabler {
+func (p *Planner) getVirtualTabler() VirtualTabler {
 	return &p.session.virtualSchemas
 }
 
@@ -579,7 +579,7 @@ func getTableNames(
 // could be either an alias or a normal table name. It also returns the original
 // table name, which will be equal to the alias name if the input is an alias,
 // or identical to the table name if the input is a normal table name.
-func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName, error) {
+func (p *Planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName, error) {
 	var alias *tree.TableName
 	if ate, ok := n.(*tree.AliasedTableExpr); ok {
 		n = ate.Expr
@@ -605,7 +605,7 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 // descriptor and creates a schema change job in the system.jobs table.
 // The identifiers of the mutations and newly-created job are written to a new
 // MutationJob in the table descriptor.
-func (p *planner) createSchemaChangeJob(
+func (p *Planner) createSchemaChangeJob(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, stmt string,
 ) (sqlbase.MutationID, error) {
 	span := tableDesc.PrimaryIndexSpan()
@@ -639,7 +639,7 @@ func (p *planner) createSchemaChangeJob(
 }
 
 // notifySchemaChange implements the SchemaAccessor interface.
-func (p *planner) notifySchemaChange(
+func (p *Planner) notifySchemaChange(
 	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) {
 	sc := SchemaChanger{
@@ -656,7 +656,7 @@ func (p *planner) notifySchemaChange(
 }
 
 // writeTableDesc implements the SchemaAccessor interface.
-func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
+func (p *Planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
 	if isVirtualDescriptor(tableDesc) {
 		panic(fmt.Sprintf("Virtual Descriptors cannot be stored, found: %v", tableDesc))
 	}
@@ -716,7 +716,7 @@ func expandTableGlob(
 // provided TableName is modified in-place in case of success, and
 // left unchanged otherwise.
 // The table name must not be qualified already.
-func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableName) error {
+func (p *Planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableName) error {
 	t := *tn
 
 	descFunc := p.session.tables.getTableVersion
@@ -758,7 +758,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableNa
 
 // getQualifiedTableName returns the database-qualified name of the table
 // or view represented by the provided descriptor.
-func (p *planner) getQualifiedTableName(
+func (p *Planner) getQualifiedTableName(
 	ctx context.Context, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, desc.ParentID)
@@ -777,7 +777,7 @@ func (p *planner) getQualifiedTableName(
 // ambiguous (i.e. exists in multiple tables). If no table is found and
 // requireTable is true, an error will be returned, otherwise the
 // TableName returned will be nil.
-func (p *planner) findTableContainingIndex(
+func (p *Planner) findTableContainingIndex(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
@@ -825,7 +825,7 @@ func (p *planner) findTableContainingIndex(
 // the TableName of the underlying table for convenience. If no table is
 // found and requireTable is true an error will be returned, otherwise
 // the TableName returned will be nil.
-func (p *planner) expandIndexName(
+func (p *Planner) expandIndexName(
 	ctx context.Context, index *tree.TableNameWithIndex, requireTable bool,
 ) (*tree.TableName, error) {
 	tn, err := index.Table.NormalizeWithDatabaseName(p.session.Database)
@@ -868,7 +868,7 @@ func (p *planner) expandIndexName(
 // be set.  This is useful for statements that have both table and index
 // variants (like `ALTER TABLE/INDEX ... SPLIT AT ...`).
 // It can return indexes that are being rolled out.
-func (p *planner) getTableAndIndex(
+func (p *Planner) getTableAndIndex(
 	ctx context.Context,
 	table *tree.NormalizableTableName,
 	tableWithIndex *tree.TableNameWithIndex,
@@ -935,7 +935,7 @@ func resolveTableNameFromID(
 }
 
 // ParseQualifiedTableName implements the tree.EvalPlanner interface.
-func (p *planner) ParseQualifiedTableName(
+func (p *Planner) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
 	parsedNameWithIndex, err := p.ParseTableNameWithIndex(sql)

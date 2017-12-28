@@ -44,7 +44,7 @@ type showTraceNode struct {
 
 // ShowTrace shows the current stored session trace.
 // Privileges: None.
-func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
+func (p *Planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
 	const fullSelection = `
        timestamp,
        timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
@@ -171,7 +171,7 @@ WHERE message LIKE 'fetched: %'
 // kvTrancingEnabled: If set, the trace will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the
 //   messages are per-row.
-func (p *planner) makeShowTraceNode(plan planNode, kvTracingEnabled bool) (planNode, error) {
+func (p *Planner) makeShowTraceNode(plan planNode, kvTracingEnabled bool) (planNode, error) {
 	desc, err := p.getVirtualTabler().getVirtualTableDesc(&sessionTraceTableName)
 	if err != nil {
 		return nil, err

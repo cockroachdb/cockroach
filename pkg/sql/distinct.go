@@ -46,7 +46,7 @@ type distinctNode struct {
 }
 
 // distinct constructs a distinctNode.
-func (p *planner) distinct(
+func (p *Planner) distinct(
 	ctx context.Context, n *tree.SelectClause, r *renderNode,
 ) (planNode, *distinctNode, error) {
 	if !n.Distinct {

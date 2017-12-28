@@ -39,7 +39,7 @@ type dropTableNode struct {
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
-func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
+func (p *Planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()
@@ -152,7 +152,7 @@ func (*dropTableNode) Close(context.Context)        {}
 // the deleted bit set, meaning the lease manager will not hand out
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
-func (p *planner) dropTableOrViewPrepare(
+func (p *Planner) dropTableOrViewPrepare(
 	ctx context.Context, name *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	tableDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), name)
@@ -169,7 +169,7 @@ func (p *planner) dropTableOrViewPrepare(
 	return tableDesc, nil
 }
 
-func (p *planner) canRemoveFK(
+func (p *Planner) canRemoveFK(
 	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
 	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
@@ -185,7 +185,7 @@ func (p *planner) canRemoveFK(
 	return table, nil
 }
 
-func (p *planner) canRemoveInterleave(
+func (p *Planner) canRemoveInterleave(
 	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
 ) error {
 	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
@@ -205,7 +205,7 @@ func (p *planner) canRemoveInterleave(
 	return p.CheckPrivilege(table, privilege.CREATE)
 }
 
-func (p *planner) removeFK(
+func (p *Planner) removeFK(
 	ctx context.Context, ref sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor,
 ) error {
 	if table == nil {
@@ -227,7 +227,7 @@ func (p *planner) removeFK(
 	return p.saveNonmutationAndNotify(ctx, table)
 }
 
-func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
+func (p *Planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
 	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 	if err != nil {
 		return err
@@ -247,7 +247,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 // dropTableImpl does the work of dropping a table (and everything that depends
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
-func (p *planner) dropTableImpl(
+func (p *Planner) dropTableImpl(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor,
 ) ([]string, error) {
 	var droppedViews []string
@@ -308,7 +308,7 @@ func (p *planner) dropTableImpl(
 	return droppedViews, nil
 }
 
-func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
+func (p *Planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return err
 	}
@@ -352,7 +352,7 @@ func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.Tabl
 	return nil
 }
 
-func (p *planner) removeFKBackReference(
+func (p *Planner) removeFKBackReference(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
 	var t *sqlbase.TableDescriptor
@@ -382,7 +382,7 @@ func (p *planner) removeFKBackReference(
 	return p.saveNonmutationAndNotify(ctx, t)
 }
 
-func (p *planner) removeInterleaveBackReference(
+func (p *Planner) removeInterleaveBackReference(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {

@@ -69,7 +69,7 @@ const (
 // makeJoin constructs a planDataSource for a JOIN.
 // The source might be a joinNode, or it could be a renderNode on top of a
 // joinNode (in the case of outer natural joins).
-func (p *planner) makeJoin(
+func (p *Planner) makeJoin(
 	ctx context.Context,
 	astJoinType string,
 	left planDataSource,

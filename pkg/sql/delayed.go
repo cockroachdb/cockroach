@@ -31,7 +31,7 @@ type delayedNode struct {
 	plan        planNode
 }
 
-type nodeConstructor func(context.Context, *planner) (planNode, error)
+type nodeConstructor func(context.Context, *Planner) (planNode, error)
 
 func (d *delayedNode) Next(params runParams) (bool, error) { return d.plan.Next(params) }
 func (d *delayedNode) Values() tree.Datums                 { return d.plan.Values() }

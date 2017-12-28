@@ -110,7 +110,7 @@ type DatabaseAccessor interface {
 	renameDatabase(ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string) error
 }
 
-var _ DatabaseAccessor = &planner{}
+var _ DatabaseAccessor = &Planner{}
 
 // getDatabaseDesc looks up the database descriptor given its name,
 // returning nil if the descriptor is not found. If you want the "not
@@ -304,7 +304,7 @@ func (dc *databaseCache) getDatabaseID(
 }
 
 // createDatabase implements the DatabaseAccessor interface.
-func (p *planner) createDatabase(
+func (p *Planner) createDatabase(
 	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
 ) (bool, error) {
 	if p.session.virtualSchemas.isVirtualDatabase(desc.Name) {
@@ -318,7 +318,7 @@ func (p *planner) createDatabase(
 }
 
 // renameDatabase implements the DatabaseAccessor interface.
-func (p *planner) renameDatabase(
+func (p *Planner) renameDatabase(
 	ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string,
 ) error {
 	onAlreadyExists := func() error {

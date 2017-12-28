@@ -37,7 +37,7 @@ type AuthorizationAccessor interface {
 	RequireSuperUser(action string) error
 }
 
-var _ AuthorizationAccessor = &planner{}
+var _ AuthorizationAccessor = &Planner{}
 
 // CheckPrivilegeForUser verifies that `user`` has `privilege` on `descriptor`.
 func CheckPrivilegeForUser(
@@ -51,14 +51,14 @@ func CheckPrivilegeForUser(
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) CheckPrivilege(
+func (p *Planner) CheckPrivilege(
 	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
 	return CheckPrivilegeForUser(p.session.User, descriptor, privilege)
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
+func (p *Planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
 	if isVirtualDescriptor(descriptor) {
 		return nil
 	}
@@ -71,7 +71,7 @@ func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
 }
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
-func (p *planner) RequireSuperUser(action string) error {
+func (p *Planner) RequireSuperUser(action string) error {
 	if p.session.User != security.RootUser && p.session.User != security.NodeUser {
 		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)
 	}

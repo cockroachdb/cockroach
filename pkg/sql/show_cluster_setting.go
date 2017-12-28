@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
-func (p *planner) ShowClusterSetting(
+func (p *Planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
 
@@ -68,7 +68,7 @@ func (p *planner) ShowClusterSetting(
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *Planner) (planNode, error) {
 			d := tree.DNull
 			switch s := val.(type) {
 			case *settings.IntSetting:

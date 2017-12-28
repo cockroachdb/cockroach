@@ -33,7 +33,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// planner is the centerpiece of SQL statement execution combining session
+// Planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution. It is logically
 // scoped to the execution of a single statement, and should not be used to
 // execute multiple statements. It is not safe to use the same planner from
@@ -41,7 +41,7 @@ import (
 //
 // planners are usually created by using the newPlanner method on a Session.
 // If one needs to be created outside of a Session, use makeInternalPlanner().
-type planner struct {
+type Planner struct {
 	txn *client.Txn
 
 	// As the planner executes statements, it may change the current user session.
@@ -133,7 +133,7 @@ type planner struct {
 	alloc sqlbase.DatumAlloc
 }
 
-var emptyPlanner planner
+var emptyPlanner Planner
 
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
 // internal SQL pool before the pool starts explicitly logging overall usage
@@ -143,7 +143,7 @@ var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NO
 // makePlanner creates a new planner instance, referencing a dummy session.
 func makeInternalPlanner(
 	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
-) *planner {
+) *Planner {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
@@ -191,40 +191,40 @@ func makeInternalPlanner(
 	return p
 }
 
-func finishInternalPlanner(p *planner) {
+func finishInternalPlanner(p *Planner) {
 	p.session.TxnState.mon.Stop(p.session.context)
 	p.session.sessionMon.Stop(p.session.context)
 	p.session.mon.Stop(p.session.context)
 }
 
 // ExecCfg implements the PlanHookState interface.
-func (p *planner) ExecCfg() *ExecutorConfig {
+func (p *Planner) ExecCfg() *ExecutorConfig {
 	return p.session.execCfg
 }
 
-func (p *planner) LeaseMgr() *LeaseManager {
+func (p *Planner) LeaseMgr() *LeaseManager {
 	return p.session.tables.leaseMgr
 }
 
-func (p *planner) User() string {
+func (p *Planner) User() string {
 	return p.session.User
 }
 
-func (p *planner) EvalContext() tree.EvalContext {
+func (p *Planner) EvalContext() tree.EvalContext {
 	return p.evalCtx
 }
 
 // TODO(dan): This is here to implement PlanHookState, but it's not clear that
 // this is the right abstraction. We could also export DistSQLPlanner, for
 // example. Revisit.
-func (p *planner) DistLoader() *DistLoader {
+func (p *Planner) DistLoader() *DistLoader {
 	return &DistLoader{distSQLPlanner: p.session.distSQLPlanner}
 }
 
 // setTxn resets the current transaction in the planner and
 // initializes the timestamps used by SQL built-in functions from
 // the new txn object, if any.
-func (p *planner) setTxn(txn *client.Txn) {
+func (p *Planner) setTxn(txn *client.Txn) {
 	p.txn = txn
 	p.evalCtx.Txn = txn
 	if txn != nil {
@@ -242,8 +242,8 @@ func (p *planner) setTxn(txn *client.Txn) {
 // responsibility to save and restore the old map if desired.
 // This function is not suitable for use in the planNode constructors directly:
 // the returned planNode has already been optimized.
-// Consider also (*planner).delegateQuery(...).
-func (p *planner) makeInternalPlan(
+// Consider also (*Planner).delegateQuery(...).
+func (p *Planner) makeInternalPlan(
 	ctx context.Context, sql string, args ...interface{},
 ) (planNode, error) {
 	if log.V(2) {
@@ -263,18 +263,18 @@ func (p *planner) makeInternalPlan(
 
 // ParseType implements the parser.EvalPlanner interface.
 // We define this here to break the dependency from eval.go to the parser.
-func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
+func (p *Planner) ParseType(sql string) (coltypes.CastTargetType, error) {
 	return parser.ParseType(sql)
 }
 
 // ParseTableNameWithIndex implements the parser.EvalPlanner interface.
 // We define this here to break the dependency from builtins.go to the parser.
-func (p *planner) ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
+func (p *Planner) ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
 	return parser.ParseTableNameWithIndex(sql)
 }
 
 // QueryRow implements the parser.EvalPlanner interface.
-func (p *planner) QueryRow(
+func (p *Planner) QueryRow(
 	ctx context.Context, sql string, args ...interface{},
 ) (tree.Datums, error) {
 	rows, err := p.queryRows(ctx, sql, args...)
@@ -292,7 +292,7 @@ func (p *planner) QueryRow(
 }
 
 // queryRows executes a SQL query string where multiple result rows are returned.
-func (p *planner) queryRows(
+func (p *Planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
 ) ([]tree.Datums, error) {
 	oldPlaceholders := p.semaCtx.Placeholders
@@ -327,7 +327,7 @@ func (p *planner) queryRows(
 
 // exec executes a SQL query string and returns the number of rows
 // affected.
-func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
+func (p *Planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
 	oldPlaceholders := p.semaCtx.Placeholders
 	defer func() { p.semaCtx.Placeholders = oldPlaceholders }()
 	plan, err := p.makeInternalPlan(ctx, sql, args...)
@@ -347,7 +347,7 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 	return countRowsAffected(params, plan)
 }
 
-func (p *planner) lookupFKTable(
+func (p *Planner) lookupFKTable(
 	ctx context.Context, tableID sqlbase.ID,
 ) (sqlbase.TableLookup, error) {
 	table, err := p.session.tables.getTableVersionByID(ctx, p.txn, tableID)
@@ -379,7 +379,7 @@ func isDatabaseVisible(dbName, prefix, user string) bool {
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
-func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), error) {
+func (p *Planner) TypeAsString(e tree.Expr, op string) (func() (string, error), error) {
 	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
 	if err != nil {
 		return nil, err
@@ -401,7 +401,7 @@ func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 // TypeAsStringOpts enforces (not hints) that the given expressions
 // typecheck as strings, and returns a function that can be called to
 // get the string value during (planNode).Start.
-func (p *planner) TypeAsStringOpts(
+func (p *Planner) TypeAsStringOpts(
 	opts tree.KVOptions, expectValues map[string]bool,
 ) (func() (map[string]string, error), error) {
 	typed := make(map[string]tree.TypedExpr, len(opts))
@@ -453,7 +453,7 @@ func (p *planner) TypeAsStringOpts(
 // TypeAsStringArray enforces (not hints) that the given expressions all typecheck as
 // strings and returns a function that can be called to get the string values
 // during (planNode).Start.
-func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]string, error), error) {
+func (p *Planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]string, error), error) {
 	typedExprs := make([]tree.TypedExpr, len(exprs))
 	for i := range exprs {
 		typedE, err := tree.TypeCheckAndRequire(exprs[i], &p.semaCtx, types.String, op)

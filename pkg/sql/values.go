@@ -41,7 +41,7 @@ type valuesNode struct {
 }
 
 // Values implements the VALUES clause.
-func (p *planner) Values(
+func (p *Planner) Values(
 	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
@@ -110,7 +110,7 @@ func (p *planner) Values(
 	return v, nil
 }
 
-func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
+func (p *Planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
 		columns: columns,
 		isConst: true,

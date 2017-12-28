@@ -114,7 +114,7 @@ const (
 	publicAndNonPublicColumns scanVisibility = 1
 )
 
-func (p *planner) Scan() *scanNode {
+func (p *Planner) Scan() *scanNode {
 	n := scanNodePool.Get().(*scanNode)
 	return n
 }
@@ -249,7 +249,7 @@ func (n *scanNode) limitHint() int64 {
 // Initializes a scanNode with a table descriptor.
 // wantedColumns is optional.
 func (n *scanNode) initTable(
-	p *planner,
+	p *Planner,
 	desc *sqlbase.TableDescriptor,
 	indexHints *tree.IndexHints,
 	scanVisibility scanVisibility,

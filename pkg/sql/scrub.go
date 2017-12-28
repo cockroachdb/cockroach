@@ -74,7 +74,7 @@ type checkOperation interface {
 
 // Scrub checks the database.
 // Privileges: superuser.
-func (p *planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
+func (p *Planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
 	if err := p.RequireSuperUser("SCRUB"); err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 
 // startScrubDatabase prepares a scrub check for each of the tables in
 // the database. Views are skipped without errors.
-func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
+func (n *scrubNode) startScrubDatabase(ctx context.Context, p *Planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
 	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), database)
@@ -205,7 +205,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 }
 
 func (n *scrubNode) startScrubTable(
-	ctx context.Context, p *planner, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+	ctx context.Context, p *Planner, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
 ) error {
 	ts, hasTS, err := p.getTimestamp(n.n.AsOf)
 	if err != nil {
@@ -482,7 +482,7 @@ func createIndexCheckOperations(
 // implemented.
 func createConstraintCheckOperations(
 	ctx context.Context,
-	p *planner,
+	p *Planner,
 	constraintNames tree.NameList,
 	tableDesc *sqlbase.TableDescriptor,
 	tableName *tree.TableName,
@@ -532,7 +532,7 @@ func createConstraintCheckOperations(
 
 // scrubPlanDistSQL will prepare and run the plan in distSQL.
 func scrubPlanDistSQL(
-	ctx context.Context, planCtx *planningCtx, p *planner, plan planNode,
+	ctx context.Context, planCtx *planningCtx, p *Planner, plan planNode,
 ) (*physicalPlan, error) {
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 	physPlan, err := p.session.distSQLPlanner.createPlanForNode(planCtx, plan)
@@ -548,7 +548,7 @@ func scrubPlanDistSQL(
 func scrubRunDistSQL(
 	ctx context.Context,
 	planCtx *planningCtx,
-	p *planner,
+	p *Planner,
 	plan *physicalPlan,
 	columnTypes []sqlbase.ColumnType,
 ) (*sqlbase.RowContainer, error) {

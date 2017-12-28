@@ -23,7 +23,7 @@ import (
 
 // Discard implements the DISCARD statement.
 // See https://www.postgresql.org/docs/9.6/static/sql-discard.html for details.
-func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error) {
+func (p *Planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error) {
 	switch s.Mode {
 	case tree.DiscardModeAll:
 		if !p.autoCommit {

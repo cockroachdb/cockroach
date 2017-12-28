@@ -24,7 +24,7 @@ import (
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
-func (p *planner) ShowIndex(ctx context.Context, n *tree.ShowIndex) (planNode, error) {
+func (p *Planner) ShowIndex(ctx context.Context, n *tree.ShowIndex) (planNode, error) {
 	const getIndexes = `
 				SELECT
 					TABLE_NAME AS "Table",

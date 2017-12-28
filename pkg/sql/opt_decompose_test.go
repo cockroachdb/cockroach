@@ -58,7 +58,7 @@ func testTableDesc() *sqlbase.TableDescriptor {
 	}
 }
 
-func makeSelectNode(t *testing.T, p *planner) *renderNode {
+func makeSelectNode(t *testing.T, p *Planner) *renderNode {
 	desc := testTableDesc()
 	sel := testInitDummySelectNode(p, desc)
 	if err := desc.AllocateIDs(); err != nil {
@@ -71,7 +71,7 @@ func makeSelectNode(t *testing.T, p *planner) *renderNode {
 	return sel
 }
 
-func parseAndNormalizeExpr(t *testing.T, p *planner, sql string, sel *renderNode) tree.TypedExpr {
+func parseAndNormalizeExpr(t *testing.T, p *Planner, sql string, sel *renderNode) tree.TypedExpr {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)

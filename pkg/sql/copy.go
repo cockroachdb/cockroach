@@ -53,7 +53,7 @@ type copyNode struct {
 
 // Copy begins a COPY.
 // Privileges: INSERT on table.
-func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) {
+func (p *Planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) {
 	cn := &copyNode{
 		table:   &n.Table,
 		columns: n.Columns,
@@ -312,7 +312,7 @@ var decodeMap = map[byte]byte{
 // CopyData is the statement type after a block of COPY data has been
 // received. There may be additional rows ready to insert. If so, return an
 // insertNode, otherwise emptyNode.
-func (p *planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, error) {
+func (p *Planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, error) {
 	// When this many rows are in the copy buffer, they are inserted.
 	const copyRowSize = 100
 

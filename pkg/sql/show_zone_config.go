@@ -34,7 +34,7 @@ type showZoneConfigNode struct {
 	run showZoneConfigRun
 }
 
-func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
+func (p *Planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
 	if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
 		return p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS", "TABLE crdb_internal.zones", nil, nil)
 	}

@@ -30,7 +30,7 @@ import (
 func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 	desc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
-	p := planner{}
+	p := Planner{}
 	scan := p.Scan()
 	scan.desc = desc
 	err := scan.initDescDefaults(p.planDeps, publicColumns, nil)

@@ -26,7 +26,7 @@ import (
 const autoGenerateRenderOutputName = ""
 
 // computeRender expands a target expression into a result column.
-func (p *planner) computeRender(
+func (p *Planner) computeRender(
 	ctx context.Context,
 	target tree.SelectExpr,
 	desiredType types.T,
@@ -55,7 +55,7 @@ func (p *planner) computeRender(
 // computeRenderAllowingStars expands a target expression into a result column (or more
 // than one, in case there is a star). Whether star expansion occurred
 // is indicated by the third return value.
-func (p *planner) computeRenderAllowingStars(
+func (p *Planner) computeRenderAllowingStars(
 	ctx context.Context,
 	target tree.SelectExpr,
 	desiredType types.T,

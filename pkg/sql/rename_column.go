@@ -31,7 +31,7 @@ var errEmptyColumnName = errors.New("empty column name")
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
+func (p *Planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
 	// Check if table exists.
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {

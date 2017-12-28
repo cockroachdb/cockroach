@@ -28,7 +28,7 @@ import (
 // Privileges: superuser, DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
-func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
+func (p *Planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
 	}

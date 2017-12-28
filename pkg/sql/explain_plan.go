@@ -68,7 +68,7 @@ var explainPlanVerboseColumns = sqlbase.ResultColumns{
 }
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
-func (p *planner) makeExplainPlanNode(
+func (p *Planner) makeExplainPlanNode(
 	explainer explainer, expanded, optimized bool, origStmt tree.Statement, plan planNode,
 ) planNode {
 	columns := explainPlanColumns
@@ -164,7 +164,7 @@ type explainer struct {
 var emptyString = tree.NewDString("")
 
 // populateExplain walks the plan and generates rows in a valuesNode.
-func (p *planner) populateExplain(
+func (p *Planner) populateExplain(
 	ctx context.Context, e *explainer, v *valuesNode, plan planNode,
 ) error {
 	e.entries = nil

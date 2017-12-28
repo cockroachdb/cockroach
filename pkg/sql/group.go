@@ -97,7 +97,7 @@ type groupNode struct {
 //
 // This function returns both the consumer-side planNode and the main groupNode; if there
 // is no grouping, both are nil.
-func (p *planner) groupBy(
+func (p *Planner) groupBy(
 	ctx context.Context, n *tree.SelectClause, r *renderNode,
 ) (planNode, *groupNode, error) {
 	// Determine if aggregation is being performed. This check is done on the raw
@@ -515,7 +515,7 @@ func (n *groupNode) desiredAggregateOrdering(evalCtx *tree.EvalContext) sqlbase.
 // as a data source - namely a renderNode or a filterNode (for HAVING).
 type extractAggregatesVisitor struct {
 	ctx       context.Context
-	planner   *planner
+	planner   *Planner
 	groupNode *groupNode
 	// preRender is the render node that feeds its output into the groupNode.
 	preRender *renderNode

@@ -65,7 +65,7 @@ func (e cteNameEnvironment) pop() cteNameEnvironment {
 	return e[:len(e)-1]
 }
 
-func popCteNameEnvironment(p *planner) {
+func popCteNameEnvironment(p *Planner) {
 	p.cteNameEnvironment = p.cteNameEnvironment.pop()
 }
 
@@ -73,7 +73,7 @@ func popCteNameEnvironment(p *planner) {
 // environment, with all of the CTE clauses defined in the given tree.With.
 // It returns a resetter function that must be called once the enclosing scope
 // is finished resolving names, which pops the environment frame.
-func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planner), error) {
+func (p *Planner) initWith(ctx context.Context, with *tree.With) (func(p *Planner), error) {
 	if with != nil {
 		frame := make(cteNameEnvironmentFrame)
 		p.cteNameEnvironment = p.cteNameEnvironment.push(frame)
@@ -98,7 +98,7 @@ func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planne
 // getCTEDataSource looks up the table name in the planner's CTE name
 // environment, returning the planDataSource corresponding to the CTE if it was
 // found. The second return parameter returns true if a CTE was found.
-func (p *planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSource, bool, error) {
+func (p *Planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSource, bool, error) {
 	if p.cteNameEnvironment == nil {
 		return planDataSource{}, false, nil
 	}

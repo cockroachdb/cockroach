@@ -29,7 +29,7 @@ type createStatsNode struct {
 	columns   []sqlbase.ColumnID
 }
 
-func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
+func (p *Planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
 	tn, err := p.QualifyWithDatabase(ctx, &n.Table)
 	if err != nil {
 		return nil, err

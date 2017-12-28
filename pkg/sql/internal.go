@@ -93,13 +93,13 @@ func (ie InternalExecutor) GetTableSpan(
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}, nil
 }
 
-func (ie InternalExecutor) initSession(p *planner) {
+func (ie InternalExecutor) initSession(p *Planner) {
 	p.evalCtx.NodeID = ie.LeaseManager.LeaseStore.nodeID.Get()
 	p.session.tables.leaseMgr = ie.LeaseManager
 }
 
 // getTableID retrieves the table ID for the specified table.
-func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID, error) {
+func getTableID(ctx context.Context, p *Planner, tn *tree.TableName) (sqlbase.ID, error) {
 	if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
 		return 0, err
 	}

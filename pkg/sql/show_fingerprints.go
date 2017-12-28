@@ -51,7 +51,7 @@ type showFingerprintsNode struct {
 // To extract the fingerprints at some point in the past, the following
 // query can be used:
 //    SELECT * FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE foo] AS OF SYSTEM TIME xxx
-func (p *planner) ShowFingerprints(
+func (p *Planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)

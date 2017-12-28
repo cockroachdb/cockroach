@@ -30,7 +30,7 @@ import (
 // %[2]s the unqualified table name as SQL string literal.
 // %[3]s the given table name as SQL string literal.
 // %[4]s the database name as SQL identifier.
-func (p *planner) showTableDetails(
+func (p *Planner) showTableDetails(
 	ctx context.Context, showType string, t tree.NormalizableTableName, query string,
 ) (planNode, error) {
 	tn, err := t.NormalizeWithDatabaseName(p.session.Database)
@@ -60,7 +60,7 @@ func (p *planner) showTableDetails(
 }
 
 // checkDBExists checks if the database exists by using the security.RootUser.
-func checkDBExists(ctx context.Context, p *planner, db string) error {
+func checkDBExists(ctx context.Context, p *Planner, db string) error {
 	if _, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), db); err != nil {
 		return sqlbase.NewUndefinedDatabaseError(db)
 	}

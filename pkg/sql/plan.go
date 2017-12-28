@@ -69,7 +69,7 @@ type planMaker interface {
 	prepare(ctx context.Context, stmt tree.Statement) (planNode, error)
 }
 
-var _ planMaker = &planner{}
+var _ planMaker = &Planner{}
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
 // planNode.Start().
@@ -83,7 +83,7 @@ type runParams struct {
 
 	// planner associated with this execution. Only used during local
 	// execution.
-	p *planner
+	p *Planner
 }
 
 // planNode defines the interface for executing a query or portion of a query.
@@ -197,7 +197,7 @@ var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
 
 // makePlan implements the Planner interface.
-func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
+func (p *Planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
 	plan, err := p.newPlan(ctx, stmt.AST, nil)
 	if err != nil {
 		return nil, err
@@ -291,7 +291,7 @@ func startExec(params runParams, plan planNode) error {
 	return walkPlan(params.ctx, plan, o)
 }
 
-func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planNode, error) {
+func (p *Planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planNode, error) {
 	// TODO(dan): This iteration makes the plan dispatch no longer constant
 	// time. We could fix that with a map of `reflect.Type` but including
 	// reflection in such a primary codepath is unfortunate. Instead, the
@@ -320,7 +320,7 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 // function (initialCheck) that will be ran and checked for errors
 // during plan optimization. This is meant for checks that cannot be
 // run during a SQL prepare operation.
-func (p *planner) delegateQuery(
+func (p *Planner) delegateQuery(
 	ctx context.Context,
 	name string,
 	sql string,
@@ -351,7 +351,7 @@ func (p *planner) delegateQuery(
 
 		// The delayed constructor's only responsibility is to call
 		// initialCheck() - the plan is already constructed.
-		constructor: func(ctx context.Context, _ *planner) (planNode, error) {
+		constructor: func(ctx context.Context, _ *Planner) (planNode, error) {
 			if err := initialCheck(ctx); err != nil {
 				return nil, err
 			}
@@ -371,7 +371,7 @@ func (p *planner) delegateQuery(
 
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
-func (p *planner) newPlan(
+func (p *Planner) newPlan(
 	ctx context.Context, stmt tree.Statement, desiredTypes []types.T,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
@@ -562,7 +562,7 @@ func (p *planner) newPlan(
 // needed both to type placeholders and to inform pgwire of the types
 // of the result columns. All statements that either support
 // placeholders or have result columns must be handled here.
-func (p *planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, error) {
+func (p *Planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, error) {
 	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
 		return plan, err
 	}

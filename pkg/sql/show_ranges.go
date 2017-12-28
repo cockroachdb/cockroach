@@ -43,7 +43,7 @@ type showRangesNode struct {
 	run showRangesRun
 }
 
-func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode, error) {
+func (p *Planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.SELECT)
 
 	if err != nil {

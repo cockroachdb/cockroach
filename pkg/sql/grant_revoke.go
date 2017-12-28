@@ -32,7 +32,7 @@ import (
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
+func (p *Planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 		privDesc.Grant(grantee, n.Privileges)
 	})
@@ -47,13 +47,13 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
+func (p *Planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
 	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 		privDesc.Revoke(grantee, n.Privileges)
 	})
 }
 
-func (p *planner) changePrivileges(
+func (p *Planner) changePrivileges(
 	ctx context.Context,
 	targets tree.TargetList,
 	grantees tree.NameList,

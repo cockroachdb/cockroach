@@ -43,7 +43,7 @@ type createViewNode struct {
 //   notes: postgres requires CREATE on database plus SELECT on all the
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
-func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
+func (p *Planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
 	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err

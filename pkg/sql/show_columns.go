@@ -24,7 +24,7 @@ import (
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
-func (p *planner) ShowColumns(ctx context.Context, n *tree.ShowColumns) (planNode, error) {
+func (p *Planner) ShowColumns(ctx context.Context, n *tree.ShowColumns) (planNode, error) {
 	const getColumnsQuery = `
 				SELECT
 					COLUMN_NAME AS "Field",

@@ -25,7 +25,7 @@ import (
 
 func TestTypeAsString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p := planner{}
+	p := Planner{}
 	testData := []struct {
 		expr        tree.Expr
 		expected    string
