@@ -76,13 +76,15 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 	case ColumnType_BOOL:
 		return tree.MakeDBool(rng.Intn(2) == 1)
 	case ColumnType_INT:
-		return tree.NewDInt(tree.DInt(rng.Int63()))
+		// int64(rng.Uint64()) to get negative numbers, too
+		return tree.NewDInt(tree.DInt(int64(rng.Uint64())))
 	case ColumnType_FLOAT:
 		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
 	case ColumnType_DECIMAL:
 		d := &tree.DDecimal{}
 		d.Decimal.SetExponent(int32(rng.Intn(40) - 20))
-		d.Decimal.SetCoefficient(rng.Int63())
+		// int64(rng.Uint64()) to get negative numbers, too
+		d.Decimal.SetCoefficient(int64(rng.Uint64()))
 		return d
 	case ColumnType_DATE:
 		return tree.NewDDate(tree.DDate(rng.Intn(10000)))
@@ -147,7 +149,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 		}
 		return tree.NewDName(string(p))
 	case ColumnType_OID:
-		return tree.NewDOid(tree.DInt(rng.Int63()))
+		// int64(rng.Uint64()) to get negative numbers, too
+		return tree.NewDOid(tree.DInt(int64(rng.Uint64())))
 	case ColumnType_NULL:
 		return tree.DNull
 	case ColumnType_ARRAY:
