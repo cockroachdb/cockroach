@@ -22,41 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// indexConstraintCalc calculates index constraints from a
-// conjunction (AND-ed expressions).
-type indexConstraintCalc struct {
-	indexConstraintCtx
-
-	// andExprs is a set of conjuncts that make up the filter.
-	andExprs []*expr
-
-	// constraints[] is used as the memoization data structure for calcOffset.
-	constraints []LogicalSpans
-}
-
-func makeIndexConstraintCalc(
-	colInfos []IndexColumnInfo, evalCtx *tree.EvalContext, e *expr,
-) indexConstraintCalc {
-	c := indexConstraintCalc{
-		indexConstraintCtx: indexConstraintCtx{
-			colInfos: colInfos,
-			evalCtx:  evalCtx,
-		},
-		constraints: make([]LogicalSpans, len(colInfos)),
-	}
-	if e != nil {
-		if e.op == andOp {
-			c.andExprs = e.children
-		} else {
-			c.andExprs = []*expr{e}
-		}
-	}
-	return c
-}
-
 // makeEqSpan returns a span that constraints column <offset> to a single value.
 // The value can be NULL.
-func (c *indexConstraintCalc) makeEqSpan(offset int, value tree.Datum) LogicalSpan {
+func (c *indexConstraintCtx) makeEqSpan(offset int, value tree.Datum) LogicalSpan {
 	return LogicalSpan{
 		Start: LogicalKey{Vals: tree.Datums{value}, Inclusive: true},
 		End:   LogicalKey{Vals: tree.Datums{value}, Inclusive: true},
@@ -65,7 +33,7 @@ func (c *indexConstraintCalc) makeEqSpan(offset int, value tree.Datum) LogicalSp
 
 // makeNotNullSpan returns a span that constrains the column to non-NULL values.
 // If the column is not nullable, returns a full span.
-func (c *indexConstraintCalc) makeNotNullSpan(offset int) LogicalSpan {
+func (c *indexConstraintCtx) makeNotNullSpan(offset int) LogicalSpan {
 	sp := MakeFullSpan()
 	if !c.colInfos[offset].Nullable {
 		// The column is not nullable; not-null constraints aren't useful.
@@ -84,7 +52,7 @@ func (c *indexConstraintCalc) makeNotNullSpan(offset int) LogicalSpan {
 // simple comparison expression. The arguments are the operator and right
 // operand. The <tight> return value indicates if the spans are exactly
 // equivalent to the expression (and not weaker).
-func (c *indexConstraintCalc) makeSpansForSingleColumn(
+func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	offset int, op operator, val *expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	if op == inOp && isTupleOfConstants(val) {
@@ -167,7 +135,7 @@ func (c *indexConstraintCalc) makeSpansForSingleColumn(
 // Assumes that e.op is an inequality and both sides are tuples.
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
-func (c *indexConstraintCalc) makeSpansForTupleInequality(
+func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	offset int, e *expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	lhs, rhs := e.children[0], e.children[1]
@@ -270,7 +238,7 @@ func (c *indexConstraintCalc) makeSpansForTupleInequality(
 // Assumes that both sides are tuples.
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
-func (c *indexConstraintCalc) makeSpansForTupleIn(
+func (c *indexConstraintCtx) makeSpansForTupleIn(
 	offset int, e *expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	lhs, rhs := e.children[0], e.children[1]
@@ -332,17 +300,32 @@ Outer:
 
 // makeSpansForExpr creates spans for index columns starting at <offset>
 // from the given expression.
-func (c *indexConstraintCalc) makeSpansForExpr(
+//
+// The <tight> return value indicates if the spans are exactly equivalent to the
+// expression (and not weaker). See simplifyFilter for more information.
+func (c *indexConstraintCtx) makeSpansForExpr(
 	offset int, e *expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
-	if e.op == constOp {
+	switch e.op {
+	case constOp:
 		datum := e.private.(tree.Datum)
 		if datum == tree.DBoolFalse || datum == tree.DNull {
 			// Condition is never true, return no spans.
 			return LogicalSpans{}, true, true
 		}
 		return nil, false, false
+
+	case andOp:
+		spans, ok := c.makeSpansForAndExprs(offset, e.children)
+		// We don't have enough information to know if the spans are "tight".
+		return spans, ok, false
+
+	case orOp:
+		spans, ok := c.makeSpansForOrExprs(offset, e.children)
+		// We don't have enough information to know if the spans are "tight".
+		return spans, ok, false
 	}
+
 	if len(e.children) < 2 {
 		return nil, false, false
 	}
@@ -375,6 +358,39 @@ func (c *indexConstraintCalc) makeSpansForExpr(
 	return nil, false, false
 }
 
+// indexConstraintConjunctionCtx stores the context for an index constraint
+// calculation on a conjunction (AND-ed expressions).
+type indexConstraintConjunctionCtx struct {
+	*indexConstraintCtx
+
+	// andExprs is a set of conjuncts that make up the filter.
+	andExprs []*expr
+
+	// Memoization data structure for calcOffset.
+	results []calcOffsetResult
+}
+
+// calcOffsetResult stores the result of calcOffset for a given offset.
+type calcOffsetResult struct {
+	// visited indicates if calcOffset was already called for this given offset,
+	// in which case the other fields are populated.
+	visited        bool
+	spansPopulated bool
+	spans          LogicalSpans
+}
+
+// makeSpansForAndExprs calculates spans for a conjunction.
+func (c *indexConstraintCtx) makeSpansForAndExprs(
+	offset int, andExprs []*expr,
+) (_ LogicalSpans, ok bool) {
+	conjCtx := indexConstraintConjunctionCtx{
+		indexConstraintCtx: c,
+		andExprs:           andExprs,
+		results:            make([]calcOffsetResult, len(c.colInfos)),
+	}
+	return conjCtx.calcOffset(offset)
+}
+
 // calcOffset calculates constraints for the sequence of index columns starting
 // at <offset>.
 //
@@ -398,20 +414,26 @@ func (c *indexConstraintCalc) makeSpansForExpr(
 //     (/5/2/1 - /10/2].
 //
 // TODO(radu): add an example with tuple constraints once they are supported.
-func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
-	if c.constraints[offset] != nil {
+func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, ok bool) {
+	if c.results[offset].visited {
 		// The results of this function are memoized.
-		return c.constraints[offset]
+		return c.results[offset].spans, c.results[offset].spansPopulated
 	}
 
 	// Start with a span with no boundaries.
-	spans := LogicalSpans{MakeFullSpan()}
+	var spans LogicalSpans
+	var spansPopulated bool
 
 	// TODO(radu): sorting the expressions by the variable index, or pre-building
 	// a map could help here.
 	for _, e := range c.andExprs {
 		exprSpans, ok, _ := c.makeSpansForExpr(offset, e)
 		if !ok {
+			continue
+		}
+		if !spansPopulated {
+			spans = exprSpans
+			spansPopulated = true
 			continue
 		}
 
@@ -431,6 +453,10 @@ func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
 			}
 			spans = newSpans
 		}
+	}
+	if !spansPopulated {
+		c.results[offset] = calcOffsetResult{visited: true}
+		return nil, false
 	}
 
 	// Try to extend the spans with constraints on more columns.
@@ -464,7 +490,10 @@ func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
 			//    [/1/3 - /1/3]
 			//    [/1/4 - /1/4]
 			//    [/1/5 - /1/5]
-			s := c.calcOffset(offset + startLen)
+			s, ok := c.calcOffset(offset + startLen)
+			if !ok {
+				continue
+			}
 			switch len(s) {
 			case 0:
 			case 1:
@@ -491,8 +520,7 @@ func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
 		if startLen > 0 && offset+startLen < len(c.colInfos) && spans[i].Start.Inclusive {
 			// We can advance the starting boundary. Calculate constraints for the
 			// column that follows.
-			s := c.calcOffset(offset + startLen)
-			if len(s) > 0 {
+			if s, ok := c.calcOffset(offset + startLen); ok && len(s) > 0 {
 				// If we have multiple constraints, we can only use the start of the
 				// first one to tighten the span.
 				// For example:
@@ -512,8 +540,7 @@ func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
 		if endLen > 0 && offset+endLen < len(c.colInfos) && spans[i].End.Inclusive {
 			// We can restrict the ending boundary. Calculate constraints for the
 			// column that follows.
-			s := c.calcOffset(offset + endLen)
-			if len(s) > 0 {
+			if s, ok := c.calcOffset(offset + endLen); ok && len(s) > 0 {
 				// If we have multiple constraints, we can only use the end of the
 				// last one to tighten the span.
 				spans[i].End.extend(s[len(s)-1].End)
@@ -527,8 +554,34 @@ func (c *indexConstraintCalc) calcOffset(offset int) LogicalSpans {
 		spans = newSpans
 	}
 	c.checkSpans(offset, spans)
-	c.constraints[offset] = spans
-	return spans
+	c.results[offset] = calcOffsetResult{
+		visited:        true,
+		spansPopulated: true,
+		spans:          spans,
+	}
+	return spans, true
+}
+
+// makeSpansForOrExprs calculates spans for a disjunction.
+func (c *indexConstraintCtx) makeSpansForOrExprs(
+	offset int, orExprs []*expr,
+) (_ LogicalSpans, ok bool) {
+	var spans LogicalSpans
+
+	for i, orExpr := range orExprs {
+		exprSpans, ok, _ := c.makeSpansForExpr(offset, orExpr)
+		if !ok {
+			// If we can't generate spans for a disjunct, exit early (this is
+			// equivalent to a full span).
+			return nil, false
+		}
+		if i == 0 {
+			spans = exprSpans
+		} else {
+			spans = c.mergeSpanSets(offset, spans, exprSpans)
+		}
+	}
+	return spans, true
 }
 
 var constTrueExpr = &expr{
@@ -616,22 +669,10 @@ type IndexColumnInfo struct {
 // represented.
 func MakeIndexConstraints(
 	filter *expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
-) LogicalSpans {
-	if filter.op == orOp {
-		var spans LogicalSpans
-		for i, orExpr := range filter.children {
-			c := makeIndexConstraintCalc(colInfos, evalCtx, orExpr)
-			exprSpans := c.calcOffset(0)
-			if i == 0 {
-				spans = exprSpans
-			} else {
-				spans = c.mergeSpanSets(0 /* offset */, spans, exprSpans)
-			}
-		}
-		return spans
-	}
-	c := makeIndexConstraintCalc(colInfos, evalCtx, filter)
-	return c.calcOffset(0)
+) (_ LogicalSpans, ok bool) {
+	c := makeIndexConstraintCtx(colInfos, evalCtx)
+	spans, ok, _ := c.makeSpansForExpr(0 /* offset */, filter)
+	return spans, ok
 }
 
 // simplifyFilter is the internal implementation of SimplifyFilter.
@@ -673,7 +714,7 @@ func MakeIndexConstraints(
 //    An example where this doesn't work well is with disjunctions:
 //    `@1 <= 1 OR @1 >= 4` has spans `[ - /1], [/1 - ]` but in separation neither
 //    sub-expression is always true inside these spans.
-func (c *indexConstraintCalc) simplifyFilter(
+func (c *indexConstraintCtx) simplifyFilter(
 	e *expr, spans LogicalSpans, maxSimplifyPrefix int,
 ) *expr {
 	// Special handling for AND and OR.
@@ -748,7 +789,7 @@ func (c *indexConstraintCalc) simplifyFilter(
 func simplifyFilter(
 	filter *expr, spans LogicalSpans, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
 ) *expr {
-	c := makeIndexConstraintCalc(colInfos, evalCtx, nil /* expr */)
+	c := makeIndexConstraintCtx(colInfos, evalCtx)
 	remainingFilter := c.simplifyFilter(filter, spans, c.getMaxSimplifyPrefix(spans))
 	if ok, val := isConstBool(remainingFilter); ok && val {
 		return nil
