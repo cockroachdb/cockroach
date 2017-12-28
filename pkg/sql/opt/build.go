@@ -150,50 +150,50 @@ func (bc *buildContext) newExpr() *expr {
 }
 
 // buildScalar converts a tree.TypedExpr to an expr tree.
-func buildScalar(buildCtx *buildContext, pexpr tree.TypedExpr) *expr {
+func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *expr {
 	switch t := pexpr.(type) {
 	case *tree.ParenExpr:
-		return buildScalar(buildCtx, t.TypedInnerExpr())
+		return bc.buildScalar(t.TypedInnerExpr())
 	}
 
-	e := buildCtx.newExpr()
+	e := bc.newExpr()
 	e.scalarProps.typ = pexpr.ResolvedType()
 
 	switch t := pexpr.(type) {
 	case *tree.AndExpr:
 		initBinaryExpr(
 			e, andOp,
-			buildScalar(buildCtx, t.TypedLeft()),
-			buildScalar(buildCtx, t.TypedRight()),
+			bc.buildScalar(t.TypedLeft()),
+			bc.buildScalar(t.TypedRight()),
 		)
 	case *tree.OrExpr:
 		initBinaryExpr(
 			e, orOp,
-			buildScalar(buildCtx, t.TypedLeft()),
-			buildScalar(buildCtx, t.TypedRight()),
+			bc.buildScalar(t.TypedLeft()),
+			bc.buildScalar(t.TypedRight()),
 		)
 	case *tree.NotExpr:
-		initUnaryExpr(e, notOp, buildScalar(buildCtx, t.TypedInnerExpr()))
+		initUnaryExpr(e, notOp, bc.buildScalar(t.TypedInnerExpr()))
 
 	case *tree.BinaryExpr:
 		initBinaryExpr(
 			e, binaryOpMap[t.Operator],
-			buildScalar(buildCtx, t.TypedLeft()),
-			buildScalar(buildCtx, t.TypedRight()),
+			bc.buildScalar(t.TypedLeft()),
+			bc.buildScalar(t.TypedRight()),
 		)
 	case *tree.ComparisonExpr:
 		initBinaryExpr(
 			e, comparisonOpMap[t.Operator],
-			buildScalar(buildCtx, t.TypedLeft()),
-			buildScalar(buildCtx, t.TypedRight()),
+			bc.buildScalar(t.TypedLeft()),
+			bc.buildScalar(t.TypedRight()),
 		)
 	case *tree.UnaryExpr:
-		initUnaryExpr(e, unaryOpMap[t.Operator], buildScalar(buildCtx, t.TypedInnerExpr()))
+		initUnaryExpr(e, unaryOpMap[t.Operator], bc.buildScalar(t.TypedInnerExpr()))
 
 	case *tree.FuncExpr:
 		children := make([]*expr, len(t.Exprs))
 		for i, pexpr := range t.Exprs {
-			children[i] = buildScalar(buildCtx, pexpr.(tree.TypedExpr))
+			children[i] = bc.buildScalar(pexpr.(tree.TypedExpr))
 		}
 		initFunctionCallExpr(e, t.ResolvedFunc(), children)
 
@@ -203,14 +203,14 @@ func buildScalar(buildCtx *buildContext, pexpr tree.TypedExpr) *expr {
 	case *tree.Tuple:
 		children := make([]*expr, len(t.Exprs))
 		for i, e := range t.Exprs {
-			children[i] = buildScalar(buildCtx, e.(tree.TypedExpr))
+			children[i] = bc.buildScalar(e.(tree.TypedExpr))
 		}
 		initTupleExpr(e, children)
 
 	case *tree.DTuple:
 		children := make([]*expr, len(t.D))
 		for i, d := range t.D {
-			children[i] = buildScalar(buildCtx, d)
+			children[i] = bc.buildScalar(d)
 		}
 		initTupleExpr(e, children)
 
@@ -221,6 +221,17 @@ func buildScalar(buildCtx *buildContext, pexpr tree.TypedExpr) *expr {
 		initUnsupportedExpr(e, t)
 	}
 	return e
+}
+
+// buildScalar converts a tree.TypedExpr to an expr tree.
+func buildScalar(pexpr tree.TypedExpr) (_ *expr, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+	buildCtx := buildContext{}
+	return buildCtx.buildScalar(pexpr), nil
 }
 
 var typedExprConvMap [numOperators]func(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr
