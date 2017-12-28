@@ -1137,6 +1137,9 @@ func (l Lease) Equivalent(ol Lease) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, ol.ProposedTS = nil, nil
 	l.DeprecatedStartStasis, ol.DeprecatedStartStasis = nil, nil
+	// Ignore sequence numbers, they are simply a reflection of
+	// the equivalency of other fields.
+	l.Sequence, ol.Sequence = 0, 0
 	// If both leases are epoch-based, we must dereference the epochs
 	// and then set to nil.
 	switch l.Type() {
