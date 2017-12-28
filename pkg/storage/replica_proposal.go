@@ -229,8 +229,9 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s", prevLease, newLease)
 		case s2 == s1:
 			// If the sequence numbers are the same, make sure they're actually
-			// the same lease. This can happen when callers are using leasePostApply
-			// for some of its side effects, like with splitPostApply.
+			// the same lease. This can happen when callers are using
+			// leasePostApply for some of its side effects, like with
+			// splitPostApply. It can also happen during lease extensions.
 			if !prevLease.Equivalent(newLease) {
 				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
 					prevLease, newLease)
