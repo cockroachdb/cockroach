@@ -316,6 +316,11 @@ message Transaction {
   // for SNAPSHOT transactions.
   bool retry_on_push = 13;
   repeated Span intents = 11 [(gogoproto.nullable) = false];
+  // Epoch zero timestamp is used to keep track of the earliest timestamp
+  // that any epoch of the transaction used. This is set only if the
+  // transaction is restarted and the epoch is bumped. It is used during
+  // intent resolution to more efficiently scan for intents.
+  util.hlc.Timestamp epoch_zero_timestamp = 14 [(gogoproto.nullable) = false];
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.

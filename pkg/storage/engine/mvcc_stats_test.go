@@ -1013,7 +1013,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			} else {
 				max := s.rng.Int63n(5)
 				desc += fmt.Sprintf(", max=%d", max)
-				if _, err := MVCCResolveWriteIntentRange(ctx, s.eng, s.MS, s.intentRange(status), max); err != nil {
+				if _, _, err := MVCCResolveWriteIntentRange(ctx, s.eng, s.MS, s.intentRange(status), max); err != nil {
 					return desc + ": " + err.Error()
 				}
 			}

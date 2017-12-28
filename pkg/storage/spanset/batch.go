@@ -214,7 +214,7 @@ func (s spanSetReader) NewIterator(prefix bool) engine.Iterator {
 }
 
 func (s spanSetReader) NewTimeBoundIterator(start, end hlc.Timestamp) engine.Iterator {
-	panic("not implemented")
+	return &Iterator{s.r.NewTimeBoundIterator(start, end), s.spans, nil, false}
 }
 
 type spanSetWriter struct {

@@ -39,20 +39,22 @@ type LocalResult struct {
 	Err   *roachpb.Error
 	Reply *roachpb.BatchResponse
 
-	// IntentsAlways stores any intents encountered but not conflicted with.
+	// Intents stores any intents encountered but not conflicted with.
 	// They should be handed off to asynchronous intent processing on the
-	// proposer, so that an attempt to resolve them is made. In particular, this
-	// is the pathway used by EndTransaction to communicate its non-local
-	// intents up the stack.
+	// proposer, so that an attempt to resolve them is made.
 	//
 	// This is a pointer to allow the zero (and as an unwelcome side effect,
 	// all) values to be compared.
-	IntentsAlways *[]IntentsWithArg
-	// Like IntentsAlways, but specifies intents that must be left alone if the
-	// corresponding command/proposal didn't succeed. For example, resolving
-	// intents of a committing txn should not happen if the commit fails, or
-	// we may accidentally make uncommitted values live.
 	Intents *[]IntentsWithArg
+	// EndTxns stores completed transactions. If the transaction
+	// contains unresolved intents, they should be handed off for
+	// asynchronous intent resolution. A bool in each EndTxnIntents
+	// indicates whether or not the intents must be left alone if the
+	// corresponding command/proposal didn't succeed. For example,
+	// resolving intents of a committing txn should not happen if the
+	// commit fails, or we may accidentally make uncommitted values
+	// live.
+	EndTxns *[]EndTxnIntents
 	// Whether we successfully or non-successfully requested a lease.
 	//
 	// TODO(tschottdorf): Update this counter correctly with prop-eval'ed KV
@@ -78,27 +80,38 @@ type LocalResult struct {
 	UpdatedTxns *[]*roachpb.Transaction
 }
 
-// DetachIntents returns (and removes) those intents from the LocalEvalResult
-// which are supposed to be handled. When hasError is false, returns all
-// intents. When it is true, returns only a subset of intents for which it is
-// known that it is safe to handle them even if the command that discovered them
-// has failed (e.g. omitting intents associated to a committing EndTransaction).
-func (lResult *LocalResult) DetachIntents(hasError bool) []IntentsWithArg {
+// DetachIntents returns (and removes) those intents from the
+// LocalEvalResult which are supposed to be handled.
+func (lResult *LocalResult) DetachIntents() []IntentsWithArg {
 	if lResult == nil {
 		return nil
 	}
 	var r []IntentsWithArg
-	if !hasError && lResult.Intents != nil {
+	if lResult.Intents != nil {
 		r = *lResult.Intents
 	}
-	if lResult.IntentsAlways != nil {
-		if r == nil {
-			r = *lResult.IntentsAlways
-		} else {
-			r = append(r, *lResult.IntentsAlways...)
+	lResult.Intents = nil
+	return r
+}
+
+// DetachEndTxns returns (and removes) the EndTxnIntent objects from
+// the local result. If alwaysOnly is true, the slice is filtered to
+// include only those which have specified returnAlways=true, meaning
+// the intents should be resolved regardless of whether the
+// EndTransaction command succeeded.
+func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
+	if lResult == nil {
+		return nil
+	}
+	var r []EndTxnIntents
+	if lResult.EndTxns != nil {
+		for _, eti := range *lResult.EndTxns {
+			if !alwaysOnly || eti.Always {
+				r = append(r, eti)
+			}
 		}
 	}
-	lResult.Intents, lResult.IntentsAlways = nil, nil
+	lResult.EndTxns = nil
 	return r
 }
 
@@ -255,15 +268,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.SuggestedCompactions = nil
 
-	if q.Local.IntentsAlways != nil {
-		if p.Local.IntentsAlways == nil {
-			p.Local.IntentsAlways = q.Local.IntentsAlways
-		} else {
-			*p.Local.IntentsAlways = append(*p.Local.IntentsAlways, *q.Local.IntentsAlways...)
-		}
-	}
-	q.Local.IntentsAlways = nil
-
 	if q.Local.Intents != nil {
 		if p.Local.Intents == nil {
 			p.Local.Intents = q.Local.Intents
@@ -272,6 +276,15 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		}
 	}
 	q.Local.Intents = nil
+
+	if q.Local.EndTxns != nil {
+		if p.Local.EndTxns == nil {
+			p.Local.EndTxns = q.Local.EndTxns
+		} else {
+			*p.Local.EndTxns = append(*p.Local.EndTxns, *q.Local.EndTxns...)
+		}
+	}
+	q.Local.EndTxns = nil
 
 	if p.Local.LeaseMetricsResult == nil {
 		p.Local.LeaseMetricsResult = q.Local.LeaseMetricsResult
