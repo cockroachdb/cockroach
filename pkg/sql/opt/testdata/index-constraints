@@ -281,6 +281,18 @@ build-scalar,normalize,index-constraints vars=(decimal) index=(@1)
 ----
 (/1.5 - /2)
 
+# Tests with a type that supports Next/Prev but we have a maximal/minimal value.
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1 > true
+----
+(/true - ]
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1 < false
+----
+(/NULL - /false)
+
 # Note the difference here between decimal and int: we
 # can't extend the exclusive start key.
 build-scalar,normalize,index-constraints vars=(decimal, decimal) index=(@1, @2)
@@ -533,6 +545,21 @@ semtree-normalize,build-scalar,index-constraints vars=(int, int, int, int) index
 ----
 [/1/2 - /4/5]
 Remaining filter: ((@1, @2, @4) >= (1, 2, 3)) AND ((@1, @2, @4) <= (4, 5, 6))
+
+build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
+(@1, @2) > (1, NULL)
+----
+(/1/NULL - ]
+
+build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
+(@1, @2) > (1, true)
+----
+(/1/true - ]
+
+build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
+(@1, @2) < (1, false)
+----
+[ - /1/false)
 
 # Tests with tuple IN tuple.
 
