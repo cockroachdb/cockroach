@@ -28,6 +28,7 @@ type debugInfo struct {
 	sortedEventNames []string
 	stateNameMap     map[string]State
 	eventNameMap     map[string]Event
+	reachableStates  map[string]struct{}
 }
 
 // eventAppliedToState returns the State resulting from applying the specified
@@ -39,26 +40,36 @@ func (di debugInfo) eventAppliedToState(sName, eName string) (State, bool) {
 	return tr.Next, ok
 }
 
-func nameStr(i interface{}, strip string) string {
+func (di debugInfo) reachable(sName string) bool {
+	_, ok := di.reachableStates[sName]
+	return ok
+}
+
+func typeName(i interface{}) string {
 	s := fmt.Sprintf("%#v", i)
 	parts := strings.Split(s, ".")
-	last := parts[len(parts)-1]
-	return strings.Replace(last, strip, "", -1)
+	return parts[len(parts)-1]
 }
-func stateName(s State) string { return nameStr(s, "state") }
-func eventName(e Event) string { return nameStr(e, "event") }
+func trimState(s string) string { return strings.TrimPrefix(s, "state") }
+func trimEvent(s string) string { return strings.TrimPrefix(s, "event") }
+func stateName(s State) string  { return trimState(typeName(s)) }
+func eventName(e Event) string  { return trimEvent(typeName(e)) }
 
 func makeDebugInfo(t Transitions) debugInfo {
 	di := debugInfo{
-		t:            t,
-		stateNameMap: make(map[string]State),
-		eventNameMap: make(map[string]Event),
+		t:               t,
+		stateNameMap:    make(map[string]State),
+		eventNameMap:    make(map[string]Event),
+		reachableStates: make(map[string]struct{}),
 	}
-	maybeAddState := func(s State) {
+	maybeAddState := func(s State, markReachable bool) {
 		sName := stateName(s)
 		if _, ok := di.stateNameMap[sName]; !ok {
 			di.sortedStateNames = append(di.sortedStateNames, sName)
 			di.stateNameMap[sName] = s
+		}
+		if markReachable {
+			di.reachableStates[sName] = struct{}{}
 		}
 	}
 	maybeAddEvent := func(e Event) {
@@ -70,10 +81,13 @@ func makeDebugInfo(t Transitions) debugInfo {
 	}
 
 	for s, sm := range di.t.expanded {
-		maybeAddState(s)
+		maybeAddState(s, false)
 		for e, tr := range sm {
 			maybeAddEvent(e)
-			maybeAddState(tr.Next)
+
+			// markReachable if this isn't a self-loop.
+			markReachable := s != tr.Next
+			maybeAddState(tr.Next, markReachable)
 		}
 	}
 
@@ -112,6 +126,9 @@ func genReport(w io.Writer, t Transitions) {
 		}
 
 		fmt.Fprintf(w, "%s\n", sName)
+		if !di.reachable(sName) {
+			fmt.Fprintf(w, "\tunreachable!\n")
+		}
 		fmt.Fprintf(w, "\thandled events:\n")
 		_, _ = io.Copy(w, &present)
 		fmt.Fprintf(w, "\tmissing events:\n")
@@ -119,7 +136,7 @@ func genReport(w io.Writer, t Transitions) {
 	}
 }
 
-func genDot(w io.Writer, t Transitions, start State) {
+func genDot(w io.Writer, t Transitions, start string) {
 	dw := dotWriter{w: &panicWriter{w: w}, di: makeDebugInfo(t)}
 	dw.Write(start)
 }
@@ -130,27 +147,36 @@ type dotWriter struct {
 	di debugInfo
 }
 
-func (dw dotWriter) Write(start State) {
+func (dw dotWriter) Write(start string) {
 	dw.writeHeader(start)
-	dw.writeEdges()
+	dw.writeEdges(start)
 	dw.writeFooter()
 }
 
-func (dw dotWriter) writeHeader(start State) {
+func (dw dotWriter) writeHeader(start string) {
 	fmt.Fprintf(dw.w, "digraph finite_state_machine {\n")
 	fmt.Fprintf(dw.w, "\trankdir=LR;\n\n")
-	if start != nil {
-		startName := stateName(start)
-		fmt.Fprintf(dw.w, "\tnode [shape = doublecircle]; %q;\n", startName)
+	if start != "" {
+		if _, ok := dw.di.stateNameMap[start]; !ok {
+			panic(fmt.Sprintf("unknown state %q", start))
+		}
+		fmt.Fprintf(dw.w, "\tnode [shape = doublecircle]; %q;\n", start)
 		fmt.Fprintf(dw.w, "\tnode [shape = point ]; qi\n")
-		fmt.Fprintf(dw.w, "\tqi -> %q;\n\n", startName)
+		fmt.Fprintf(dw.w, "\tqi -> %q;\n\n", start)
 	}
 	fmt.Fprintf(dw.w, "\tnode [shape = circle];\n")
 }
 
-func (dw dotWriter) writeEdges() {
+func (dw dotWriter) writeEdges(start string) {
 	di := dw.di
 	for _, sName := range di.sortedStateNames {
+		if start != "" && start != sName {
+			if !di.reachable(sName) {
+				// If the state isn't reachable and it's not the starting state,
+				// don't include it in the graph.
+				continue
+			}
+		}
 		for _, eName := range di.sortedEventNames {
 			if next, ok := di.eventAppliedToState(sName, eName); ok {
 				fmt.Fprintf(dw.w, "\t%q -> %q [label = %q]\n",
@@ -170,9 +196,19 @@ func (t Transitions) WriteReport(w io.Writer) {
 	genReport(w, t)
 }
 
-// WriteDotGraph writes a representation of the Transitions graph in the
+// WriteDotGraph writes a representaWriteDotGraphStringtion of the Transitions graph in the
 // graphviz dot format. It accepts a starting State that will be expressed as
 // such in the graph, if provided.
 func (t Transitions) WriteDotGraph(w io.Writer, start State) {
+	genDot(w, t, stateName(start))
+}
+
+// WriteDotGraphString is like WriteDotGraph, but takes the string
+// representation of the start State. Used by write_reports.go.tmpl.
+func (t Transitions) WriteDotGraphString(w io.Writer, start string) {
+	start = trimState(start)
+	if !strings.Contains(start, "{") {
+		start += "{}"
+	}
 	genDot(w, t, start)
 }
