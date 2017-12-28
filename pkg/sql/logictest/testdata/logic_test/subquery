@@ -60,24 +60,49 @@ SELECT (SELECT 1) IN (1)
 ----
 true
 
+# NB: Cockroach has different behavior from Postgres on a few esoteric
+# subqueries. The Cockroach behavior seems more sensical and
+# supporting the specific Postgres behavior appears onerous. Fingers
+# crossed this doesn't bite us down the road.
+
+# Postgres cannot handle this query (but MySQL can), even though it
+# seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) IN (select 1, 2);
+#                  ^
 query B
 SELECT (SELECT 1, 2) IN (SELECT 1, 2)
 ----
 true
 
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery must return only one column
+#   LINE 1: select (select 1, 2) IN ((1, 2));
+#                  ^
 query B
 SELECT (SELECT 1, 2) IN ((1, 2))
 ----
 true
 
+# Postgres cannot handle this query, even though it seems sensical:
+#   ERROR:  subquery has too many columns
+#   LINE 1: select (select (1, 2)) IN (select 1, 2);
+#                                  ^
 query B
 SELECT (SELECT (1, 2)) IN (SELECT 1, 2)
+----
+true
+
+query B
+SELECT (SELECT (1, 2)) IN ((1, 2))
 ----
 true
 
 query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{tuple{int, int}}}>
 SELECT (SELECT 1, 2) IN (SELECT (1, 2))
 
+# Postgres successfully handles this query (returning true), even
+# though doing so seems at odds with other rules.
 query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{tuple{int, int}}}>
 SELECT (SELECT (1, 2)) IN (SELECT (1, 2))
 
