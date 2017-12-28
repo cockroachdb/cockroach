@@ -13,6 +13,24 @@ SELECT 1 IN (SELECT 1)
 true
 
 query B
+SELECT 1 IN ((((SELECT 1))))
+----
+true
+
+query I
+SELECT ARRAY(((((VALUES (1), (2))))))[2]
+----
+2
+
+query I
+SELECT 1 + (SELECT 1)
+----
+2
+
+query error unsupported binary operator: <int> \+ <tuple{int, int}>
+SELECT 1 + (SELECT 1, 2)
+
+query B
 SELECT (1, 2, 3) IN (SELECT 1, 2, 3)
 ----
 true
@@ -27,13 +45,79 @@ SELECT (1, 2, 3) != (SELECT 1, 2, 3)
 ----
 false
 
+query B
+SELECT (SELECT 1, 2, 3) = (SELECT 1, 2, 3)
+----
+true
+
+query B
+SELECT (SELECT 1) IN (SELECT 1)
+----
+true
+
+query B
+SELECT (SELECT 1) IN (1)
+----
+true
+
+query B
+SELECT (SELECT 1, 2) IN (SELECT 1, 2)
+----
+true
+
+query B
+SELECT (SELECT 1, 2) IN ((1, 2))
+----
+true
+
+query B
+SELECT (SELECT (1, 2)) IN (SELECT 1, 2)
+----
+true
+
+query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{tuple{int, int}}}>
+SELECT (SELECT 1, 2) IN (SELECT (1, 2))
+
+query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{tuple{int, int}}}>
+SELECT (SELECT (1, 2)) IN (SELECT (1, 2))
+
+query B
+SELECT 1 = ANY(SELECT 1)
+----
+true
+
+query B
+SELECT (1, 2) = ANY(SELECT 1, 2)
+----
+true
+
+query B
+SELECT 1 = SOME(SELECT 1)
+----
+true
+
+query B
+SELECT (1, 2) = SOME(SELECT 1, 2)
+----
+true
+
+query B
+SELECT 1 = ALL(SELECT 1)
+----
+true
+
+query B
+SELECT (1, 2) = ALL(SELECT 1, 2)
+----
+true
+
 query error subquery must return only one column, found 2
 SELECT (SELECT 1, 2)
 
-query error subquery must return only one column, found 2
+query error unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>
 SELECT 1 IN (SELECT 1, 2)
 
-query error subquery must return 2 columns, found 1
+query error unsupported comparison operator: <tuple{int, int}> IN <tuple{int}>
 SELECT (1, 2) IN (SELECT 1)
 
 statement ok
@@ -56,7 +140,7 @@ split                         ·           ·
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
 
-query error subquery must return 2 columns
+query error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int, int, int}}>
 SELECT (1, 2) IN (SELECT * FROM abc)
 
 query B
