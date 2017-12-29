@@ -1047,6 +1047,35 @@ func IterateRangeDescriptors(
 	return err
 }
 
+func migrateLegacyTombstone(ctx context.Context, eng engine.Engine, rangeID roachpb.RangeID) error {
+	// NB: this is the only remaining usage of RaftTombstoneIncorrectLegacyKey. It can be removed completely
+	// in any cockroach binary version > v2.0.
+	oldTombstoneKey := keys.RaftTombstoneIncorrectLegacyKey(rangeID)
+	var tombstone roachpb.RaftTombstone
+	ok, err := engine.MVCCGetProto(
+		ctx, eng, oldTombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
+	)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+
+	}
+	batch := eng.NewBatch()
+	defer batch.Close()
+
+	tombstoneKey := keys.RaftTombstoneKey(rangeID)
+	if err := engine.MVCCPutProto(ctx, batch, nil, tombstoneKey,
+		hlc.Timestamp{}, nil, &tombstone); err != nil {
+		return errors.Wrap(err, "while migrating legacy tombstone")
+	}
+	if err := engine.MVCCDelete(ctx, batch, nil, oldTombstoneKey, hlc.Timestamp{}, nil); err != nil {
+		return errors.Wrap(err, "while removing legacy tombstone")
+	}
+	return batch.Commit(true /* sync */)
+}
+
 // ReadStoreIdent reads the StoreIdent from the store.
 // It returns *NotBootstrappedError if the ident is missing (meaning that the
 // store needs to be bootstrapped).
@@ -1117,6 +1146,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		func(desc roachpb.RangeDescriptor) (bool, error) {
 			if !desc.IsInitialized() {
 				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
+			}
+
+			if err := migrateLegacyTombstone(ctx, s.engine, desc.RangeID); err != nil {
+				return false, errors.Wrapf(err, "while migrating legacy tombstone for r%d", desc.RangeID)
 			}
 
 			rep, err := NewReplica(&desc, s, 0)

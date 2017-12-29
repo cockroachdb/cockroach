@@ -40,6 +40,7 @@ const (
 	VersionClearRange
 	VersionPartitioning
 	VersionLeaseSequence
+	VersionRaftTombstoneKey
 
 	// Add new versions here (step one of two).
 

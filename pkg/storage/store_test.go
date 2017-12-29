@@ -189,6 +189,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	legacyTombstoneKey := keys.RaftTombstoneIncorrectLegacyKey(1 /* rangeID */)
 
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
@@ -219,6 +220,14 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		if err := store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
 			t.Errorf("failure to create first range: %s", err)
 		}
+
+		// Put down a fake legacy tombstone (#12154) to jog `migrateLegacyTombstone`.
+		tombstone := roachpb.RaftTombstone{NextReplicaID: 0}
+		if err := engine.MVCCPutProto(
+			ctx, store.engine, nil /* ms */, legacyTombstoneKey, hlc.Timestamp{}, nil /* txn */, &tombstone,
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
@@ -227,6 +236,26 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		if err := store.Start(ctx, stopper); err != nil {
 			t.Fatalf("failure initializing bootstrapped store: %s", err)
 		}
+
+		// Check that `migrateLegacyTombstone` did what it was supposed to.
+		{
+			if ok, err := engine.MVCCGetProto(
+				ctx, store.engine, legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, nil, /* msg */
+			); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Fatal("unexpectedly found legacy tombstone key")
+			}
+
+			if ok, err := engine.MVCCGetProto(
+				ctx, store.engine, keys.RaftTombstoneKey(1), hlc.Timestamp{}, true /* consistent */, nil /* txn */, nil, /* msg */
+			); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				t.Fatal("unexpectedly did not find migrated tombstone key")
+			}
+		}
+
 		// 1st range should be available.
 		r, err := store.GetReplica(1)
 		if err != nil {
