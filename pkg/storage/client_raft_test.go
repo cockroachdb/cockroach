@@ -3357,9 +3357,10 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	}, &checkArgs); err != nil {
 		t.Fatal(err)
 	}
+
 }
 
-func TestCheckInconsistent(t *testing.T) {
+func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := storage.TestStoreConfig(nil)
