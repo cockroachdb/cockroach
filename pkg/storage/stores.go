@@ -525,10 +525,45 @@ func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (cluster.Cluster
 // WriteClusterVersion makes no attempt to validate the supplied version.
 func (ls *Stores) WriteClusterVersion(ctx context.Context, cv cluster.ClusterVersion) error {
 	// Update all stores.
-	var engines []engine.Engine
+	engines := ls.engines()
 	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
 		engines = append(engines, (*Store)(v).Engine())
 		return true // want more
 	})
 	return WriteClusterVersionToEngines(ctx, engines, cv)
+}
+
+func (ls *Stores) engines() []engine.Engine {
+	var engines []engine.Engine
+	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
+		engines = append(engines, (*Store)(v).Engine())
+		return true // want more
+	})
+	return engines
+}
+
+// OnClusterVersionChange is invoked when the running node receives a notification
+// indicating that the cluster version has changed.
+func (ls *Stores) OnClusterVersionChange(ctx context.Context, cv cluster.ClusterVersion) error {
+	lastCV, err := ls.SynthesizeClusterVersion(ctx)
+	if err != nil {
+		return errors.Wrap(err, "reading cluster version")
+	}
+
+	if cv != lastCV && cv.IsMinSupported(cluster.VersionUnreplicatedTombstoneKey) {
+		// NB: we could let this run only once when the above version first becomes active,
+		// but we want it to run again in v2.1 to clear out any stragglers. The migration can
+		// be removed after that.
+		engines := ls.engines()
+		for _, eng := range engines {
+			if err := migrateLegacyTombstones(ctx, eng); err != nil {
+				return errors.Wrapf(err, "migrating legacy tombstones for %v", eng)
+			}
+		}
+	}
+	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
+		return errors.Wrap(err, "writing cluster version")
+	}
+
+	return nil
 }

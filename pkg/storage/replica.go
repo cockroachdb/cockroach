@@ -842,7 +842,11 @@ func (r *Replica) setTombstoneKey(
 	nextReplicaID := r.nextReplicaIDLocked(desc)
 	r.mu.minReplicaID = nextReplicaID
 	r.mu.Unlock()
+
 	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
+	if !r.store.cfg.Settings.Version.IsMinSupported(cluster.VersionUnreplicatedTombstoneKey) {
+		tombstoneKey = keys.RaftTombstoneIncorrectLegacyKey(desc.RangeID)
+	}
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: nextReplicaID,
 	}

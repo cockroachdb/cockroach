@@ -376,8 +376,8 @@ func (n *Node) start(
 	n.initDescriptor(addr, attrs, locality)
 
 	n.storeCfg.Settings.Version.OnChange(func(cv cluster.ClusterVersion) {
-		if err := n.stores.WriteClusterVersion(ctx, cv); err != nil {
-			log.Fatalf(ctx, "error updating persisted cluster version: %s", err)
+		if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
+			log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %s", cv))
 		}
 	})
 
