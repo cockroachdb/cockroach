@@ -57,8 +57,8 @@ func NewRepeatableRowSource(
 	return &RepeatableRowSource{rows: rows, types: types}
 }
 
-// Types is part of the RowSource interface.
-func (r *RepeatableRowSource) Types() []sqlbase.ColumnType {
+// OutputTypes is part of the RowSource interface.
+func (r *RepeatableRowSource) OutputTypes() []sqlbase.ColumnType {
 	return r.types
 }
 

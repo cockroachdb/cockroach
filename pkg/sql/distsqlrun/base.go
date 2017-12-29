@@ -105,8 +105,8 @@ type CancellableRowReceiver interface {
 // RowSource is any component of a flow that produces rows that cam be consumed
 // by another component.
 type RowSource interface {
-	// Types returns the schema for the rows in this source.
-	Types() []sqlbase.ColumnType
+	// OutputTypes returns the schema for the rows in this source.
+	OutputTypes() []sqlbase.ColumnType
 
 	// Next returns the next record from the source. At most one of the return
 	// values will be non-empty. Both of them can be empty when the RowSource has
@@ -200,7 +200,7 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 		if row != nil {
 			log.Fatalf(
 				ctx, "both row data and metadata in the same record. row: %s meta: %+v",
-				row.String(src.Types()), meta,
+				row.String(src.OutputTypes()), meta,
 			)
 		}
 
@@ -278,9 +278,9 @@ func MakeNoMetadataRowSource(src RowSource, sink RowReceiver) NoMetadataRowSourc
 	return NoMetadataRowSource{src: src, metadataSink: sink}
 }
 
-// Types returns the source types.
-func (rs *NoMetadataRowSource) Types() []sqlbase.ColumnType {
-	return rs.src.Types()
+// OutputTypes returns the source types.
+func (rs *NoMetadataRowSource) OutputTypes() []sqlbase.ColumnType {
+	return rs.src.OutputTypes()
 }
 
 // NextRow is analogous to RowSource.Next. If the producer sends an error, we
@@ -384,8 +384,8 @@ func (rc *RowChannel) ProducerDone() {
 	close(rc.dataChan)
 }
 
-// Types is part of the RowSource interface.
-func (rc *RowChannel) Types() []sqlbase.ColumnType {
+// OutputTypes is part of the RowSource interface.
+func (rc *RowChannel) OutputTypes() []sqlbase.ColumnType {
 	return rc.types
 }
 
@@ -461,8 +461,8 @@ func (mrc *MultiplexedRowChannel) ProducerDone() {
 	}
 }
 
-// Types is part of the RowSource interface.
-func (mrc *MultiplexedRowChannel) Types() []sqlbase.ColumnType {
+// OutputTypes is part of the RowSource interface.
+func (mrc *MultiplexedRowChannel) OutputTypes() []sqlbase.ColumnType {
 	return mrc.rowChan.types
 }
 
@@ -609,8 +609,8 @@ func (rb *RowBuffer) ProducerDone() {
 	rb.ProducerClosed = true
 }
 
-// Types is part of the RowSource interface.
-func (rb *RowBuffer) Types() []sqlbase.ColumnType {
+// OutputTypes is part of the RowSource interface.
+func (rb *RowBuffer) OutputTypes() []sqlbase.ColumnType {
 	if rb.types == nil {
 		panic("not initialized")
 	}

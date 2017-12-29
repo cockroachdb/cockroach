@@ -91,7 +91,7 @@ func newSamplerProcessor(
 
 	s.sr.Init(int(spec.SampleSize))
 
-	inTypes := input.Types()
+	inTypes := input.OutputTypes()
 	outTypes := make([]sqlbase.ColumnType, 0, len(inTypes)+5)
 
 	// First columns are the same as the input.

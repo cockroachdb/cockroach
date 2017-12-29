@@ -1427,7 +1427,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	err := func() error {
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
-		types := sp.input.Types()
+		types := sp.input.OutputTypes()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
 		store := engine.NewRocksDBMultiMap(sp.tempStorage)

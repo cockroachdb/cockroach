@@ -93,8 +93,8 @@ type orderedSynchronizer struct {
 
 var _ RowSource = &orderedSynchronizer{}
 
-// Types is part of the RowSource interface.
-func (s *orderedSynchronizer) Types() []sqlbase.ColumnType {
+// OutputTypes is part of the RowSource interface.
+func (s *orderedSynchronizer) OutputTypes() []sqlbase.ColumnType {
 	return s.types
 }
 
@@ -346,7 +346,7 @@ func makeOrderedSync(
 	s := &orderedSynchronizer{
 		state:    notInitialized,
 		sources:  make([]srcInfo, len(sources)),
-		types:    sources[0].Types(),
+		types:    sources[0].OutputTypes(),
 		heap:     make([]srcIdx, 0, len(sources)),
 		ordering: ordering,
 		evalCtx:  evalCtx,

@@ -41,7 +41,7 @@ func makeStreamGroupAccumulator(
 ) streamGroupAccumulator {
 	return streamGroupAccumulator{
 		src:      src,
-		types:    src.Types(),
+		types:    src.OutputTypes(),
 		ordering: ordering,
 	}
 }

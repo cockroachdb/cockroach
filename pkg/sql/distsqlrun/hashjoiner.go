@@ -132,8 +132,8 @@ func newHashJoiner(
 	}
 	if err := h.joinerBase.init(
 		flowCtx,
-		leftSource.Types(),
-		rightSource.Types(),
+		leftSource.OutputTypes(),
+		rightSource.OutputTypes(),
 		spec.Type,
 		spec.OnExpr,
 		spec.LeftEqColumns,
@@ -189,8 +189,10 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	evalCtx := h.flowCtx.NewEvalCtx()
-	h.rows[leftSide].initWithMon(nil /* ordering */, h.leftSource.Types(), evalCtx, rowContainerMon)
-	h.rows[rightSide].initWithMon(nil /* ordering */, h.rightSource.Types(), evalCtx, rowContainerMon)
+	h.rows[leftSide].initWithMon(
+		nil /* ordering */, h.leftSource.OutputTypes(), evalCtx, rowContainerMon)
+	h.rows[rightSide].initWithMon(
+		nil /* ordering */, h.rightSource.OutputTypes(), evalCtx, rowContainerMon)
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 

@@ -65,7 +65,7 @@ func newJoinReader(
 		flowCtx:    flowCtx,
 		desc:       spec.Table,
 		input:      input,
-		inputTypes: input.Types(),
+		inputTypes: input.OutputTypes(),
 	}
 
 	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
