@@ -516,6 +516,68 @@ func TestEval(t *testing.T) {
 		{`(1+1, (2+2, (3+3))) = (2, (4, (6)))`, `true`},
 		{`(1, 'a') != (1, 'a')`, `false`},
 		{`(1, 'a') != (1, 'b')`, `true`},
+		{`(1, 2, 3) = (1, 2, 3)`, `true`},
+		{`(1, 2, 3) != (1, 2, 3)`, `false`},
+		{`(1, 2, 3) > (1, 2, 3)`, `false`},
+		{`(1, 2, 3) >= (1, 2, 3)`, `true`},
+		{`(1, 2, 3) < (1, 2, 3)`, `false`},
+		{`(1, 2, 3) <= (1, 2, 3)`, `true`},
+		{`(1, 2, 3) = (1, 2, 4)`, `false`},
+		{`(1, 2, 3) != (1, 2, 4)`, `true`},
+		{`(1, 2, 3) > (1, 2, 4)`, `false`},
+		{`(1, 2, 3) >= (1, 2, 4)`, `false`},
+		{`(1, 2, 4) = (1, 2, 3)`, `false`},
+		{`(1, 2, 4) != (1, 2, 3)`, `true`},
+		{`(1, 2, 4) > (1, 2, 3)`, `true`},
+		{`(1, 2, 4) >= (1, 2, 3)`, `true`},
+		// Row (tuple) comparisons with NULLs.
+		{`(1, 2, 3) = (1, NULL, 3)`, `NULL`},
+		{`(1, 2, 3) != (1, NULL, 3)`, `NULL`},
+		{`(1, 2, 3) > (1, NULL, 3)`, `NULL`},
+		{`(1, 2, 3) >= (1, NULL, 3)`, `NULL`},
+		{`(1, 2, 3) = (0, NULL, 3)`, `false`},
+		{`(1, 2, 3) != (0, NULL, 3)`, `true`},
+		{`(1, 2, 3) > (0, NULL, 3)`, `true`},
+		{`(1, 2, 3) >= (0, NULL, 3)`, `true`},
+		{`(1, 2, 3) = (2, NULL, 3)`, `false`},
+		{`(1, 2, 3) != (2, NULL, 3)`, `true`},
+		{`(1, 2, 3) > (2, NULL, 3)`, `false`},
+		{`(1, 2, 3) >= (2, NULL, 3)`, `false`},
+		{`(1, 2, 3) = (1, NULL, 4)`, `false`},
+		{`(1, 2, 3) != (1, NULL, 4)`, `true`},
+		{`(1, 2, 3) > (1, NULL, 4)`, `NULL`},
+		{`(1, 2, 3) >= (1, NULL, 4)`, `NULL`},
+		{`(1, NULL, 3) = (1, 2, 3)`, `NULL`},
+		{`(1, NULL, 3) != (1, 2, 3)`, `NULL`},
+		{`(1, NULL, 3) > (1, 2, 3)`, `NULL`},
+		{`(1, NULL, 3) >= (1, 2, 3)`, `NULL`},
+		{`(1, NULL, 3) = (0, 2, 3)`, `false`},
+		{`(1, NULL, 3) != (0, 2, 3)`, `true`},
+		{`(1, NULL, 3) > (0, 2, 3)`, `true`},
+		{`(1, NULL, 3) >= (0, 2, 3)`, `true`},
+		{`(1, NULL, 3) = (2, 2, 3)`, `false`},
+		{`(1, NULL, 3) != (2, 2, 3)`, `true`},
+		{`(1, NULL, 3) > (2, 2, 3)`, `false`},
+		{`(1, NULL, 3) >= (2, 2, 3)`, `false`},
+		{`(1, NULL, 3) = (1, 2, 4)`, `false`},
+		{`(1, NULL, 3) != (1, 2, 4)`, `true`},
+		{`(1, NULL, 3) > (1, 2, 4)`, `NULL`},
+		{`(1, NULL, 3) >= (1, 2, 4)`, `NULL`},
+		// Tuple equality is equivalent to conjunctive equality.
+		{`(1, 2, 3) = (1, 2, 3)`, `true`},
+		{`1 = 1 AND 2 = 2 AND 3 = 3`, `true`},
+		{`(1, 2, 3) = (2, 2, 3)`, `false`},
+		{`1 = 2 AND 2 = 2 AND 3 = 3`, `false`},
+		{`(1, 2, 4) = (1, 2, 3)`, `false`},
+		{`1 = 1 AND 2 = 2 AND 4 = 3`, `false`},
+		{`(NULL, 2, 3) = (1, 2, 3)`, `NULL`},
+		{`NULL = 1 AND 2 = 2 AND 3 = 3`, `NULL`},
+		{`(NULL, 2, 3) = (NULL, 2, 3)`, `NULL`},
+		{`NULL = NULL AND 2 = 2 AND 3 = 3`, `NULL`},
+		{`(NULL, 2, 3) = (NULL, 3, 3)`, `false`},
+		{`NULL = NULL AND 2 = 3 AND 3 = 3`, `false`},
+		{`(NULL, 2, 3) = (1, 2, NULL)`, `NULL`},
+		{`NULL = 1 AND 2 = 2 AND 3 = NULL`, `NULL`},
 		// IN and NOT IN expressions.
 		{`1 NOT IN (2, 3, 4)`, `true`},
 		{`1+1 IN (2, 3, 4)`, `true`},
@@ -921,6 +983,8 @@ func TestEval(t *testing.T) {
 		{`'NaN'::decimal::float`, `NaN`},
 		{`'NaN'::float::decimal`, `NaN`},
 	}
+	// We have to manually close this account because we're doing the evaluations
+	// ourselves.
 	ctx := NewTestingEvalContext()
 	defer ctx.Mon.Stop(context.Background())
 	defer ctx.ActiveMemAcc.Close(context.Background())
@@ -935,8 +999,6 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			// We have to manually close this account because we're doing the evaluations
-			// ourselves.
 			if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
