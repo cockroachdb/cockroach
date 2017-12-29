@@ -692,6 +692,36 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 			scans: map[string]string{`b < 4`: `n1`, `b = 4`: `n2`, `b = 5`: `n3`, `b > 5`: `n1`},
 		},
+
+		{
+			name: `scans`,
+			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT) PARTITION BY LIST (a) (
+				PARTITION p3p5 VALUES IN ((3), (5)),
+				PARTITION p4 VALUES IN (4),
+				PARTITION pd VALUES IN (DEFAULT)
+			)`,
+			configs: []string{`@primary:+n1`, `.p3p5:+n2`, `.p4:+n3`, `.pd:+n1`},
+			generatedSpans: []string{
+				`  .pd /1-/1/3`,
+				`.p3p5 /1/3-/1/4`,
+				`  .p4 /1/4-/1/5`,
+				`.p3p5 /1/5-/1/6`,
+				`  .pd /1/6-/2`,
+			},
+			scans: map[string]string{
+				`a < 3`: `n1`,
+				`a = 3`: `n2`,
+				`a = 4`: `n3`,
+				`a = 5`: `n2`,
+				`a > 5`: `n1`,
+
+				`a = 3 OR a = 5`:     `n2`,
+				`a IN ((3), (5))`:    `n2`,
+				`(a, b) IN ((3, 7))`: `n2`,
+				`a IN (3) AND a > 2`: `n2`,
+				`a IN (3) AND a < 2`: `n2`,
+			},
+		},
 	}
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
@@ -722,9 +752,10 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			schema:  fmt.Sprintf(schemaFmt, colType, escapedDatum),
 			configs: []string{`@primary:+n1`, `.p:+n2`},
 			scans: map[string]string{
-				fmt.Sprintf(`a < %s`, serializedDatum): `n1`,
-				fmt.Sprintf(`a = %s`, serializedDatum): `n2`,
-				fmt.Sprintf(`a > %s`, serializedDatum): `n1`,
+				fmt.Sprintf(`a < %s`, serializedDatum):    `n1`,
+				fmt.Sprintf(`a = %s`, serializedDatum):    `n2`,
+				fmt.Sprintf(`a IN (%s)`, serializedDatum): `n2`,
+				fmt.Sprintf(`a > %s`, serializedDatum):    `n1`,
 			},
 		}
 		tests = append(tests, test)
