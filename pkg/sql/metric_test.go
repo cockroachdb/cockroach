@@ -78,6 +78,7 @@ func TestQueryCounts(t *testing.T) {
 	accum := queryCounter{
 		selectCount: 2, // non-zero due to migrations
 		insertCount: 6, // non-zero due to migrations
+		deleteCount: 1, // non-zero due to migrations
 		ddlCount:    s.MustGetSQLCounter(sql.MetaDdl.Name),
 		miscCount:   s.MustGetSQLCounter(sql.MetaMisc.Name),
 	}

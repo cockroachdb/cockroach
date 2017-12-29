@@ -786,7 +786,7 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 
 			b.StartTimer()
 			if err := MVCCGarbageCollect(
-				ctx, engine, &enginepb.MVCCStats{}, gcKeys, now, math.MaxInt64,
+				ctx, engine, &enginepb.MVCCStats{}, gcKeys, now,
 			); err != nil {
 				b.Fatal(err)
 			}
