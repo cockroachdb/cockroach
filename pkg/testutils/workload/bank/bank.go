@@ -23,6 +23,7 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -36,23 +37,23 @@ const (
 )
 
 type bank struct {
+	flags *pflag.FlagSet
+
 	seed                       int64
 	rows, payloadBytes, ranges int
 }
 
 func init() {
-	workload.Register(fromOpts)
+	workload.Register(newBank)
 }
 
-func fromOpts(opts map[string]string) (workload.Generator, error) {
-	o := workload.NewOpts(opts)
-	b := &bank{
-		seed:         int64(o.Int(`seed`, 1)),
-		rows:         o.Int(`rows`, defaultRows),
-		payloadBytes: o.Int(`payload-bytes`, defaultPayloadBytes),
-		ranges:       o.Int(`ranges`, defaultRanges),
-	}
-	return b, o.Err()
+func newBank() workload.Generator {
+	g := &bank{flags: pflag.NewFlagSet(`kv`, pflag.ContinueOnError)}
+	g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+	g.flags.IntVar(&g.rows, `rows`, defaultRows, `Initial number of accounts in bank table.`)
+	g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
+	g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
+	return g
 }
 
 // FromRows returns Bank testdata with the given number of rows and default
@@ -77,12 +78,25 @@ func FromConfig(rows int, payloadBytes int, ranges int) workload.Generator {
 }
 
 // Name implements the Generator interface.
-func (b bank) Name() string {
+func (*bank) Name() string {
 	return `bank`
 }
 
+// Flags implements the Generator interface.
+func (b *bank) Flags() *pflag.FlagSet {
+	return b.flags
+}
+
+// Configure implements the Generator interface.
+func (b *bank) Configure(flags []string) error {
+	if b.flags.Parsed() {
+		return errors.New("Configure was already called")
+	}
+	return b.flags.Parse(flags)
+}
+
 // Tables implements the Generator interface.
-func (b bank) Tables() []workload.Table {
+func (b *bank) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(b.seed))
 	table := workload.Table{
 		Name: `bank`,
@@ -101,7 +115,7 @@ func (b bank) Tables() []workload.Table {
 			return []string{
 				strconv.Itoa(rowIdx), // id
 				`0`,                  // balance
-				fmt.Sprintf(`'%s%s'`, initialPrefix, bytes), // payload
+				`'` + initialPrefix + bytes + `'`, // payload
 			}
 		},
 	}
@@ -109,7 +123,7 @@ func (b bank) Tables() []workload.Table {
 }
 
 // Tables implements the Generator interface.
-func (b bank) Ops() []workload.Operation {
+func (*bank) Ops() []workload.Operation {
 	// TODO(dan): Move the various queries in the backup/restore tests here.
 	return nil
 }

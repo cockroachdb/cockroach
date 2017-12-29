@@ -27,6 +27,8 @@ import (
 	"math/rand"
 	"sync/atomic"
 
+	"github.com/spf13/pflag"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/pkg/errors"
 )
@@ -34,6 +36,8 @@ import (
 const kvSchema = `(k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`
 
 type kv struct {
+	flags *pflag.FlagSet
+
 	batchSize                            int
 	minBlockSizeBytes, maxBlockSizeBytes int
 	cycleLength                          int64
@@ -43,40 +47,51 @@ type kv struct {
 }
 
 func init() {
-	workload.Register(fromOpts)
+	workload.Register(newKV)
 }
 
-func fromOpts(opts map[string]string) (workload.Generator, error) {
-	o := workload.NewOpts(opts)
-	g := &kv{
-		batchSize:         o.Int(`batch`, 1),
-		minBlockSizeBytes: o.Int(`min-block-bytes`, 1),
-		maxBlockSizeBytes: o.Int(`max-block-bytes`, 2),
-		cycleLength:       o.Int64(`cycle-length`, math.MaxInt64),
-		readPercent:       o.Int(`read-percent`, 0),
-		writeSeq:          o.Int64(`write-seq`, 0),
-		seed:              o.Int64(`seed`, 1),
-		sequential:        o.Bool(`sequential`, false),
-	}
-	if err := o.Err(); err != nil {
-		return nil, err
-	}
-	if g.maxBlockSizeBytes < g.minBlockSizeBytes {
-		return nil, errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
-			g.maxBlockSizeBytes, g.minBlockSizeBytes)
-	}
-	// TODO(dan): Re-enable this check once splits are supported.
-	// if g.sequential && g.splits > 0 {
-	// 	log.Fatalf("'sequential' and 'splits' cannot both be enabled")
-	// }
-	return g, nil
+func newKV() workload.Generator {
+	g := &kv{flags: pflag.NewFlagSet(`kv`, pflag.ContinueOnError)}
+	g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to insert in a single SQL statement`)
+	g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1, `Minimum amount of raw data written with each insertion`)
+	g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2, `Maximum amount of raw data written with each insertion`)
+	g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64, `Number of keys repeatedly accessed by each writer`)
+	g.flags.IntVar(&g.readPercent, `read-percent`, 0, `Percent (0-100) of operations that are reads of existing keys`)
+	g.flags.Int64Var(&g.writeSeq, `write-seq`, 0, `Initial write sequence value.`)
+	g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+	g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
+	return g
 }
 
 // Name implements the Generator interface.
-func (w kv) Name() string { return `kv` }
+func (*kv) Name() string { return `kv` }
+
+// Flags implements the Generator interface.
+func (w *kv) Flags() *pflag.FlagSet {
+	return w.flags
+}
+
+// Configure implements the Generator interface.
+func (w *kv) Configure(flags []string) error {
+	if w.flags.Parsed() {
+		return errors.New("Configure was already called")
+	}
+	if err := w.flags.Parse(flags); err != nil {
+		return err
+	}
+	if w.maxBlockSizeBytes < w.minBlockSizeBytes {
+		return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
+			w.maxBlockSizeBytes, w.minBlockSizeBytes)
+	}
+	// TODO(dan): Re-enable this check once splits are supported.
+	// if w.sequential && w.splits > 0 {
+	// 	log.Fatalf("'sequential' and 'splits' cannot both be enabled")
+	// }
+	return nil
+}
 
 // Tables implements the Generator interface.
-func (w kv) Tables() []workload.Table {
+func (*kv) Tables() []workload.Table {
 	table := workload.Table{
 		Name:            `kv`,
 		Schema:          kvSchema,
@@ -87,7 +102,7 @@ func (w kv) Tables() []workload.Table {
 }
 
 // Ops implements the Generator interface.
-func (w kv) Ops() []workload.Operation {
+func (w *kv) Ops() []workload.Operation {
 	opFn := func(db *gosql.DB) (func(context.Context) error, error) {
 		var buf bytes.Buffer
 		buf.WriteString(`SELECT k, v FROM test.kv WHERE k IN (`)
@@ -141,7 +156,7 @@ func (w kv) Ops() []workload.Operation {
 }
 
 type kvOp struct {
-	config    kv
+	config    *kv
 	db        *gosql.DB
 	readStmt  *gosql.Stmt
 	writeStmt *gosql.Stmt
@@ -174,7 +189,7 @@ func (o *kvOp) run(ctx context.Context) error {
 }
 
 type sequence struct {
-	config kv
+	config *kv
 	val    int64
 }
 
@@ -265,7 +280,7 @@ func (g *sequentialGenerator) rand() *rand.Rand {
 	return g.random
 }
 
-func randomBlock(config kv, r *rand.Rand) []byte {
+func randomBlock(config *kv, r *rand.Rand) []byte {
 	blockSize := r.Intn(config.maxBlockSizeBytes-config.minBlockSizeBytes) + config.minBlockSizeBytes
 	blockData := make([]byte, blockSize)
 	for i := range blockData {

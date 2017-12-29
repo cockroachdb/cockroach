@@ -24,19 +24,27 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 )
 
 // Generator represents one or more sql query loads and associated initial data.
 //
-// A set of options are used to configure this Generator. Any randomness must be
-// deterministic from these options so that table data initialization, query
-// work, etc can be distributed by serialization only this options map.
+// A slice of string flags are used to configure this Generator. Any randomness
+// must be deterministic from these options so that table data initialization,
+// query work, etc can be distributed by sending only these flags.
 //
 // TODO(dan): To support persisted test fixtures, we'll need versioning of
 // Generators.
 type Generator interface {
 	// Name returns a unique and descriptive name for this generator.
 	Name() string
+
+	// Flags returns the flags this Generator is configured with.
+	Flags() *pflag.FlagSet
+
+	// Configure parses the provided flags, which are only allowed to be the
+	// ones in Flags(). Configure may only be called once.
+	Configure(flags []string) error
 
 	// Tables returns the set of tables for this generator, including schemas
 	// and initial data.
@@ -47,9 +55,9 @@ type Generator interface {
 	Ops() []Operation
 }
 
-// GeneratorFn is used to register a Generator at init time. A map of string to
-// string options are used for configuration, see Generator for details.
-type GeneratorFn func(opts map[string]string) (Generator, error)
+// GeneratorFn is used to register a Generator at init time. A slice of string
+// flags are used for configuration, see Generator for details.
+type GeneratorFn func() Generator
 
 // Table represents a single table in a Generator. Included is a name, schema,
 // and initial data.
@@ -86,10 +94,7 @@ var registered = make(map[string]GeneratorFn)
 // Register is a hook for init-time registration of Generator implementations.
 // This allows only the necessary generators to be compiled into a given binary.
 func Register(fn GeneratorFn) {
-	g, err := fn(map[string]string{})
-	if err != nil {
-		panic(errors.Wrapf(err, "could not register: %T", fn))
-	}
+	g := fn()
 	name := g.Name()
 	if _, ok := registered[name]; ok {
 		panic(name + " is already registered")
@@ -106,8 +111,18 @@ func Get(name string) (GeneratorFn, error) {
 	return g, nil
 }
 
+// Registered returns all registered Generators.
+func Registered() []GeneratorFn {
+	gens := make([]GeneratorFn, 0, len(registered))
+	for _, gen := range registered {
+		gens = append(gens, gen)
+	}
+	return gens
+}
+
 // Setup creates the given tables and fills them with initial data via batched
-// INSERTs.
+// INSERTs. batchSize will only be used when positive (but INSERTs are batched
+// either way).
 //
 // The size of the loaded data is returned in bytes, suitable for use with
 // SetBytes of benchmarks. This size is defined as the sum of lengths of the

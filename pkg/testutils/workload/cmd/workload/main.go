@@ -18,13 +18,11 @@ package main
 import (
 	"context"
 	gosql "database/sql"
-	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,6 +33,9 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/codahale/hdrhistogram"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/tylertreat/hdrhistogram-writer"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
@@ -44,25 +45,71 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var generator = flag.String("generator", "", "")
-var optsRaw = flag.String("opts", "", "")
+var rootCmd = &cobra.Command{
+	Use: `workload`,
+}
 
 // concurrency = number of concurrent insertion processes.
-var concurrency = flag.Int("concurrency", 2*runtime.NumCPU(), "Number of concurrent writers inserting blocks")
+var concurrency = rootCmd.PersistentFlags().Int(
+	"concurrency", 2*runtime.NumCPU(), "Number of concurrent writers inserting blocks")
 
 // batch = number of blocks to insert in a single SQL statement.
-var batch = flag.Int("batch", 1, "Number of blocks to insert in a single SQL statement")
+var batch = rootCmd.PersistentFlags().Int(
+	"batch", 1, "Number of blocks to insert in a single SQL statement")
 
-var tolerateErrors = flag.Bool("tolerate-errors", false, "Keep running on error")
+var tolerateErrors = rootCmd.PersistentFlags().Bool(
+	"tolerate-errors", false, "Keep running on error")
 
-var maxRate = flag.Float64("max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
+var maxRate = rootCmd.PersistentFlags().Float64(
+	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
 
-var maxOps = flag.Uint64("max-ops", 0, "Maximum number of blocks to read/write")
-var duration = flag.Duration("duration", 0, "The duration to run. If 0, run forever.")
-var drop = flag.Bool("drop", false, "Clear the existing data before starting.")
+var maxOps = rootCmd.PersistentFlags().Uint64(
+	"max-ops", 0, "Maximum number of blocks to read/write")
+var duration = rootCmd.PersistentFlags().Duration(
+	"duration", 0, "The duration to run. If 0, run forever.")
+var drop = rootCmd.PersistentFlags().Bool(
+	"drop", false, "Clear the existing data before starting.")
 
-// Output in HdrHistogram Plotter format. See https://hdrhistogram.github.io/HdrHistogram/plotFiles.html
-var histFile = flag.String("hist-file", "", "Write histogram data to file for HdrHistogram Plotter, or stdout if - is specified.")
+// Output in HdrHistogram Plotter format. See
+// https://hdrhistogram.github.io/HdrHistogram/plotFiles.html
+var histFile = rootCmd.PersistentFlags().String(
+	"hist-file", "",
+	"Write histogram data to file for HdrHistogram Plotter, or stdout if - is specified.")
+
+func main() {
+	_ = rootCmd.Execute()
+}
+
+func init() {
+	for _, genFn := range workload.Registered() {
+		gen := genFn()
+		genFlags := gen.Flags()
+
+		genCmd := &cobra.Command{Use: gen.Name()}
+		genCmd.Flags().AddFlagSet(genFlags)
+		genCmd.RunE = func(cmd *cobra.Command, args []string) error {
+			// The is a little awkward, but grab the strings back from the
+			// flags so we can use them to configure the Generator.
+			var flags []string
+			cmd.Flags().Visit(func(f *pflag.Flag) {
+				if genFlags.Lookup(f.Name) == nil {
+					// This flag is not in the Generator's set, so it must
+					// be from rootCmd.
+					return
+				}
+				flags = append(flags, fmt.Sprintf(`--%s=%s`, f.Name, f.Value))
+			})
+
+			gen := genFn()
+			if err := gen.Configure(flags); err != nil {
+				return err
+			}
+			return runRoot(gen, args)
+		}
+
+		rootCmd.AddCommand(genCmd)
+	}
+}
 
 // numOps keeps a global count of successful operations.
 var numOps uint64
@@ -82,7 +129,7 @@ func clampLatency(d, min, max time.Duration) time.Duration {
 	return d
 }
 
-type blocker struct {
+type worker struct {
 	db      *gosql.DB
 	op      func(context.Context) error
 	latency struct {
@@ -91,19 +138,19 @@ type blocker struct {
 	}
 }
 
-func newBlocker(db *gosql.DB, op func(context.Context) error) *blocker {
-	b := &blocker{
+func newWorker(db *gosql.DB, op func(context.Context) error) *worker {
+	w := &worker{
 		db: db,
 		op: op,
 	}
-	b.latency.WindowedHistogram = hdrhistogram.NewWindowed(1,
+	w.latency.WindowedHistogram = hdrhistogram.NewWindowed(1,
 		minLatency.Nanoseconds(), maxLatency.Nanoseconds(), 1)
-	return b
+	return w
 }
 
-// run is an infinite loop in which the blocker continuously attempts to
+// run is an infinite loop in which the worker continuously attempts to
 // read / write blocks of random data into a table in cockroach DB.
-func (b *blocker) run(
+func (w *worker) run(
 	ctx context.Context, errCh chan<- error, wg *sync.WaitGroup, limiter *rate.Limiter,
 ) {
 	defer wg.Done()
@@ -117,16 +164,16 @@ func (b *blocker) run(
 		}
 
 		start := timeutil.Now()
-		if err := b.op(ctx); err != nil {
+		if err := w.op(ctx); err != nil {
 			errCh <- err
 			continue
 		}
 		elapsed := clampLatency(timeutil.Since(start), minLatency, maxLatency)
-		b.latency.Lock()
-		if err := b.latency.Current.RecordValue(elapsed.Nanoseconds()); err != nil {
+		w.latency.Lock()
+		if err := w.latency.Current.RecordValue(elapsed.Nanoseconds()); err != nil {
 			log.Fatal(ctx, err)
 		}
-		b.latency.Unlock()
+		w.latency.Unlock()
 		v := atomic.AddUint64(&numOps, uint64(*batch))
 		if *maxOps > 0 && v >= *maxOps {
 			return
@@ -178,49 +225,17 @@ func setupDatabase(dbURLs []string) (*gosql.DB, error) {
 	}
 }
 
-var usage = func() {
-	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s [<db URL> ...]\n\n", os.Args[0])
-	flag.PrintDefaults()
-}
-
-func main() {
+func runRoot(gen workload.Generator, args []string) error {
 	ctx := context.Background()
-	flag.Usage = usage
-	flag.Parse()
-
-	genFn, err := workload.Get(*generator)
-	if err != nil {
-		log.Fatal(ctx, err)
-	}
-	opts := map[string]string{
-		// TODO(dan): Once the workload runner gets moved into generator, then
-		// batch should be just another option.
-		`batch`: strconv.Itoa(*batch),
-	}
-	for _, opt := range strings.Split(*optsRaw, `,`) {
-		if len(opt) == 0 {
-			continue
-		}
-		optParts := strings.SplitN(opt, `=`, 2)
-		if len(optParts) != 2 {
-			log.Fatalf(ctx, `invalid opt: %s`, opt)
-		}
-		opts[optParts[0]] = optParts[1]
-	}
-
-	gen, err := genFn(opts)
-	if err != nil {
-		log.Fatal(ctx, err)
-	}
 
 	dbURLs := []string{"postgres://root@localhost:26257/test?sslmode=disable"}
-	if args := flag.Args(); len(args) >= 1 {
+	if len(args) >= 1 {
 		dbURLs = args
 	}
 
 	if *concurrency < 1 {
-		log.Fatalf(ctx, "Value of 'concurrency' flag (%d) must be greater than or equal to 1", *concurrency)
+		return errors.Errorf(
+			"Value of 'concurrency' flag (%d) must be greater than or equal to 1", *concurrency)
 	}
 
 	var db *gosql.DB
@@ -232,13 +247,13 @@ func main() {
 				break
 			}
 			if !*tolerateErrors {
-				log.Fatal(ctx, err)
+				return err
 			}
 		}
 	}
 	const batchSize = -1
 	if _, err := workload.Setup(db, gen.Tables(), batchSize); err != nil {
-		log.Fatalf(ctx, "loading: %+v", err)
+		return err
 	}
 
 	var limiter *rate.Limiter
@@ -250,25 +265,25 @@ func main() {
 
 	ops := gen.Ops()
 	if len(ops) != 1 {
-		log.Fatal(ctx, `generators with more than one operation are not yet supported`)
+		return errors.Errorf(`generators with more than one operation are not yet supported`)
 	}
 	op := ops[0]
 
 	lastNow := timeutil.Now()
 	start := lastNow
 	var lastOps uint64
-	writers := make([]*blocker, *concurrency)
+	workers := make([]*worker, *concurrency)
 
 	errCh := make(chan error)
 	var wg sync.WaitGroup
-	for i := range writers {
+	for i := range workers {
 		wg.Add(1)
 		opFn, err := op.Fn(db)
 		if err != nil {
-			log.Fatal(ctx, err)
+			return err
 		}
-		writers[i] = newBlocker(db, opFn)
-		go writers[i].run(ctx, errCh, &wg, limiter)
+		workers[i] = newWorker(db, opFn)
+		go workers[i].run(ctx, errCh, &wg, limiter)
 	}
 
 	var numErr int
@@ -296,15 +311,10 @@ func main() {
 			fmt.Sprintf("concurrency=%d", *concurrency),
 			fmt.Sprintf("duration=%s", *duration),
 		}, "/")
-		// TODO(dan): What order should these be output in? The order the user
-		// specified? Sorted order? Should they be given some ordering by the
-		// generator?
-		for _, opt := range strings.Split(*optsRaw, `,`) {
-			if len(opt) == 0 {
-				continue
-			}
-			benchmarkName += `/` + opt
-		}
+		// NB: This visits in a deterministic order.
+		gen.Flags().Visit(func(f *pflag.Flag) {
+			benchmarkName += fmt.Sprintf(`/%s=%s`, f.Name, f.Value)
+		})
 
 		result := testing.BenchmarkResult{
 			N: int(numOps),
@@ -319,16 +329,15 @@ func main() {
 		select {
 		case err := <-errCh:
 			numErr++
-			if !*tolerateErrors {
-				log.Fatal(ctx, err)
-			} else {
+			if *tolerateErrors {
 				log.Error(ctx, err)
+				continue
 			}
-			continue
+			return err
 
 		case <-tick:
 			var h *hdrhistogram.Histogram
-			for _, w := range writers {
+			for _, w := range workers {
 				w.latency.Lock()
 				m := w.latency.Merge()
 				w.latency.Rotate()
@@ -366,7 +375,7 @@ func main() {
 			lastNow = now
 
 		case <-done:
-			for _, w := range writers {
+			for _, w := range workers {
 				w.latency.Lock()
 				m := w.latency.Merge()
 				w.latency.Rotate()
@@ -396,11 +405,13 @@ func main() {
 					fmt.Printf("failed to write histogram to stdout: %v\n", err)
 				}
 			} else if *histFile != "" {
-				if err := histwriter.WriteDistributionFile(cumLatency, nil, 1, *histFile); err != nil {
+				if err := histwriter.WriteDistributionFile(
+					cumLatency, nil, 1, *histFile,
+				); err != nil {
 					fmt.Printf("failed to write histogram file: %v\n", err)
 				}
 			}
-			return
+			return nil
 		}
 	}
 }
