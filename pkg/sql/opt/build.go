@@ -190,12 +190,14 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *expr {
 	case *tree.UnaryExpr:
 		initUnaryExpr(e, unaryOpMap[t.Operator], bc.buildScalar(t.TypedInnerExpr()))
 
-	case *tree.FuncExpr:
-		children := make([]*expr, len(t.Exprs))
-		for i, pexpr := range t.Exprs {
-			children[i] = bc.buildScalar(pexpr.(tree.TypedExpr))
-		}
-		initFunctionCallExpr(e, t.ResolvedFunc(), children)
+	// TODO(radu): for now, we pass through FuncExprs as unsupported
+	// expressions.
+	//case *tree.FuncExpr:
+	//	children := make([]*expr, len(t.Exprs))
+	//	for i, pexpr := range t.Exprs {
+	//		children[i] = bc.buildScalar(pexpr.(tree.TypedExpr))
+	//	}
+	//	initFunctionCallExpr(e, t.ResolvedFunc(), children)
 
 	case *tree.IndexedVar:
 		initVariableExpr(e, t.Idx)

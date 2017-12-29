@@ -133,6 +133,10 @@ func initUnsupportedExpr(e *expr, typedExpr tree.TypedExpr) {
 	e.private = typedExpr
 }
 
+// TODO(radu): remove this once we support function calls.
+var _ = initFunctionCallExpr
+var _ = (*tree.FuncExpr).ResolvedFunc
+
 // initFunctionCallExpr initializes a functionCallOp expression node.
 func initFunctionCallExpr(e *expr, def *tree.FunctionDefinition, children []*expr) {
 	e.op = functionCallOp
