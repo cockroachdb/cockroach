@@ -1028,10 +1028,10 @@ func runWithAutoRetry(
 			state := txnState.State()
 			if err == nil && (state == Aborted || state == RestartWait) {
 				crash := true
-				// SHOW TRANSACTION STATUS statements are always allowed regardless of
+				// Observer statements are always allowed regardless of
 				// the transaction state.
 				if len(stmtsToExec) > 0 {
-					if _, ok := stmtsToExec[0].AST.(*tree.ShowTransactionStatus); ok {
+					if _, ok := stmtsToExec[0].AST.(tree.ObserverStatement); ok {
 						crash = false
 					}
 				}
@@ -1308,10 +1308,10 @@ func (e *Executor) execSingleStatement(
 	}
 
 	var err error
-	// Run SHOW TRANSACTION STATUS in a separate code path so it is
+	// Run observer statements in a separate code path so they are
 	// always guaranteed to execute regardless of the current transaction state.
-	if _, ok := stmt.AST.(*tree.ShowTransactionStatus); ok {
-		err = runShowTransactionState(session, res)
+	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
+		err = runObserverStatement(session, res, stmt)
 	} else {
 		switch txnState.State() {
 		case Open, AutoRetry:
@@ -1372,15 +1372,35 @@ func getTransactionState(txnState *txnState) string {
 	return state.String()
 }
 
-// runShowTransactionState returns the state of current transaction.
-func runShowTransactionState(session *Session, res StatementResult) error {
-	res.BeginResult((*tree.ShowTransactionStatus)(nil))
-	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
+// runObserverStatement executes the given observer statement.
+func runObserverStatement(session *Session, res StatementResult, stmt Statement) error {
+	res.BeginResult(stmt.AST)
 
-	state := getTransactionState(&session.TxnState)
-	if err := res.AddRow(session.Ctx(), tree.Datums{tree.NewDString(state)}); err != nil {
-		return err
+	switch sqlStmt := stmt.AST.(type) {
+	case *tree.ShowTransactionStatus:
+		res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
+		state := getTransactionState(&session.TxnState)
+		if err := res.AddRow(session.Ctx(), tree.Datums{tree.NewDString(state)}); err != nil {
+			return err
+		}
+
+	case *tree.ShowSyntax:
+		res.SetColumns(sqlbase.ResultColumns{
+			{Name: "field", Typ: types.String},
+			{Name: "message", Typ: types.String},
+		})
+		if err := runShowSyntax(session.Ctx(), sqlStmt.Statement,
+			func(ctx context.Context, field, msg string) error {
+				return res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
+			}); err != nil {
+			return err
+		}
+
+	default:
+		return pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: unrecognized observer statement type %T", stmt.AST)
 	}
+
 	return res.CloseResult()
 }
 
