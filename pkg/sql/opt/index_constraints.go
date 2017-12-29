@@ -48,6 +48,13 @@ func (c *indexConstraintCtx) makeNotNullSpan(offset int) LogicalSpan {
 	return sp
 }
 
+// verifyType checks that the type of the index column <offset> matches the
+// given type. We disallow mixed-type comparisons because it would result in
+// incorrect encodings (#4313).
+func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
+	return typ == types.Null || c.colInfos[offset].Typ.Equivalent(typ)
+}
+
 // makeSpansForSingleColumn creates spans for a single index column from a
 // simple comparison expression. The arguments are the operator and right
 // operand. The <tight> return value indicates if the spans are exactly
@@ -60,6 +67,9 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 		spans := make(LogicalSpans, len(val.children))
 		for i, v := range val.children {
 			datum := v.private.(tree.Datum)
+			if !c.verifyType(offset, datum.ResolvedType()) {
+				return nil, false, false
+			}
 			spans[i].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
 			spans[i].End = spans[i].Start
 		}
@@ -77,6 +87,9 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 		return nil, false, true
 	}
 	datum := val.private.(tree.Datum)
+	if !c.verifyType(offset, datum.ResolvedType()) {
+		return nil, false, false
+	}
 	if datum == tree.DNull {
 		switch op {
 		case eqOp, ltOp, gtOp, leOp, geOp, neOp:
@@ -152,6 +165,11 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		}
 		if rhs.children[i].op != constOp {
 			// Right-hand value is not a constant.
+			break
+		}
+		if !c.verifyType(offset+i, rhs.children[i].scalarProps.typ) {
+			// We have a mixed-type comparison; we can't encode this in a span
+			// (see #4313).
 			break
 		}
 		if isConstNull(rhs.children[i]) {
@@ -318,12 +336,15 @@ Outer:
 			return nil, false, false
 		}
 		vals := make(tree.Datums, len(tuplePos))
-		for j, c := range tuplePos {
-			val := valTuple.children[c]
+		for j, pos := range tuplePos {
+			val := valTuple.children[pos]
 			if val.op != constOp {
 				return nil, false, false
 			}
 			vals[j] = val.private.(tree.Datum)
+			if !c.verifyType(offset+j, vals[j].ResolvedType()) {
+				return nil, false, false
+			}
 		}
 		spans[i].Start = LogicalKey{Vals: vals, Inclusive: true}
 		spans[i].End = spans[i].Start
