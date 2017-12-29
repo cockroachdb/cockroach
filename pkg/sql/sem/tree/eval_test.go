@@ -554,6 +554,53 @@ func TestEval(t *testing.T) {
 		{`(1+1, (2+2, (3+3))) = (2, (4, (6)))`, `true`},
 		{`(1, 'a') != (1, 'a')`, `false`},
 		{`(1, 'a') != (1, 'b')`, `true`},
+		{`(1, 2, 3) = (1, 2, 3)`, `true`},
+		{`(1, 2, 3) != (1, 2, 3)`, `false`},
+		{`(1, 2, 3) > (1, 2, 3)`, `false`},
+		{`(1, 2, 3) >= (1, 2, 3)`, `true`},
+		{`(1, 2, 3) < (1, 2, 3)`, `false`},
+		{`(1, 2, 3) <= (1, 2, 3)`, `true`},
+		{`(1, 2, 3) = (1, 2, 4)`, `false`},
+		{`(1, 2, 3) != (1, 2, 4)`, `true`},
+		{`(1, 2, 3) > (1, 2, 4)`, `false`},
+		{`(1, 2, 3) >= (1, 2, 4)`, `false`},
+		{`(1, 2, 4) = (1, 2, 3)`, `false`},
+		{`(1, 2, 4) != (1, 2, 3)`, `true`},
+		{`(1, 2, 4) > (1, 2, 3)`, `true`},
+		{`(1, 2, 4) >= (1, 2, 3)`, `true`},
+		// Row (tuple) comparisons with NULLs.
+		{`(1, 2, 3) = (1, NULL, 3)`, `NULL`},
+		{`(1, 2, 3) != (1, NULL, 3)`, `NULL`},
+		{`(1, 2, 3) > (1, NULL, 3)`, `NULL`},
+		{`(1, 2, 3) >= (1, NULL, 3)`, `NULL`},
+		{`(1, 2, 3) = (0, NULL, 3)`, `false`},
+		{`(1, 2, 3) != (0, NULL, 3)`, `true`},
+		{`(1, 2, 3) > (0, NULL, 3)`, `true`},
+		{`(1, 2, 3) >= (0, NULL, 3)`, `true`},
+		{`(1, 2, 3) = (2, NULL, 3)`, `false`},
+		{`(1, 2, 3) != (2, NULL, 3)`, `true`},
+		{`(1, 2, 3) > (2, NULL, 3)`, `false`},
+		{`(1, 2, 3) >= (2, NULL, 3)`, `false`},
+		{`(1, 2, 3) = (1, NULL, 4)`, `false`},
+		{`(1, 2, 3) != (1, NULL, 4)`, `true`},
+		{`(1, 2, 3) > (1, NULL, 4)`, `NULL`},
+		{`(1, 2, 3) >= (1, NULL, 4)`, `NULL`},
+		{`(1, NULL, 3) = (1, 2, 3)`, `NULL`},
+		{`(1, NULL, 3) != (1, 2, 3)`, `NULL`},
+		{`(1, NULL, 3) > (1, 2, 3)`, `NULL`},
+		{`(1, NULL, 3) >= (1, 2, 3)`, `NULL`},
+		{`(1, NULL, 3) = (0, 2, 3)`, `false`},
+		{`(1, NULL, 3) != (0, 2, 3)`, `true`},
+		{`(1, NULL, 3) > (0, 2, 3)`, `true`},
+		{`(1, NULL, 3) >= (0, 2, 3)`, `true`},
+		{`(1, NULL, 3) = (2, 2, 3)`, `false`},
+		{`(1, NULL, 3) != (2, 2, 3)`, `true`},
+		{`(1, NULL, 3) > (2, 2, 3)`, `false`},
+		{`(1, NULL, 3) >= (2, 2, 3)`, `false`},
+		{`(1, NULL, 3) = (1, 2, 4)`, `false`},
+		{`(1, NULL, 3) != (1, 2, 4)`, `true`},
+		{`(1, NULL, 3) > (1, 2, 4)`, `NULL`},
+		{`(1, NULL, 3) >= (1, 2, 4)`, `NULL`},
 		// IN and NOT IN expressions.
 		{`1 NOT IN (2, 3, 4)`, `true`},
 		{`1+1 IN (2, 3, 4)`, `true`},
@@ -975,6 +1022,8 @@ func TestEval(t *testing.T) {
 		{`'NaN'::float::decimal`, `NaN`},
 	}
 	ctx := tree.NewTestingEvalContext()
+	// We have to manually close this account because we're doing the evaluations
+	// ourselves.
 	defer ctx.Mon.Stop(context.Background())
 	defer ctx.ActiveMemAcc.Close(context.Background())
 	for _, d := range testData {
@@ -988,8 +1037,6 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			// We have to manually close this account because we're doing the evaluations
-			// ourselves.
 			if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
@@ -999,6 +1046,121 @@ func TestEval(t *testing.T) {
 			}
 			if s := r.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+		})
+	}
+}
+
+// TestTupleEquality tests that tuple equality, like (a, b) = (c, d), as
+// equivalent to conjunctive equality, a = c AND b = d, in all cases.
+func TestTupleEquality(t *testing.T) {
+	tests := []struct {
+		lElems, rElems []string
+		expected       string
+	}{
+		{
+			lElems:   []string{"1", "2", "3"},
+			rElems:   []string{"1", "2", "3"},
+			expected: "true",
+		},
+		{
+			lElems:   []string{"1", "2", "3"},
+			rElems:   []string{"2", "2", "3"},
+			expected: "false",
+		},
+		{
+			lElems:   []string{"1", "2", "4"},
+			rElems:   []string{"1", "2", "3"},
+			expected: "false",
+		},
+		{
+			lElems:   []string{"NULL", "2", "3"},
+			rElems:   []string{"1", "2", "3"},
+			expected: "NULL",
+		},
+		{
+			lElems:   []string{"NULL", "2", "3"},
+			rElems:   []string{"NULL", "2", "3"},
+			expected: "NULL",
+		},
+		{
+			lElems:   []string{"NULL", "2", "3"},
+			rElems:   []string{"1", "3", "3"},
+			expected: "false",
+		},
+		{
+			lElems:   []string{"NULL", "2", "3"},
+			rElems:   []string{"1", "2", "NULL"},
+			expected: "NULL",
+		},
+	}
+	ctx := tree.NewTestingEvalContext()
+	// We have to manually close this account because we're doing the evaluations
+	// ourselves.
+	defer ctx.Mon.Stop(context.Background())
+	defer ctx.ActiveMemAcc.Close(context.Background())
+	for _, test := range tests {
+		l := len(test.lElems)
+		if l != len(test.rElems) {
+			t.Fatalf("unequal datum lengths; %v vs. %v", test.lElems, test.rElems)
+		}
+
+		// Parse each element.
+		lExprs, rExprs := make(tree.Exprs, l), make(tree.Exprs, l)
+		fillExprs := func(exprs tree.Exprs, elems []string) {
+			for i, e := range elems {
+				expr, err := parser.ParseExpr(e)
+				if err != nil {
+					t.Fatalf("%s: %v", e, err)
+				}
+				exprs[i] = expr
+			}
+		}
+		fillExprs(lExprs, test.lElems)
+		fillExprs(rExprs, test.rElems)
+
+		// Build tuple equality expression.
+		lTuple, rTuple := &tree.Tuple{Exprs: lExprs}, &tree.Tuple{Exprs: rExprs}
+		tupleExpr := &tree.ComparisonExpr{Operator: tree.EQ, Left: lTuple, Right: rTuple}
+
+		// Build conjunctive equality expression.
+		conjExpr := tree.Expr(&tree.ComparisonExpr{Operator: tree.EQ, Left: lExprs[0], Right: rExprs[0]})
+		for i := 1; i < l; i++ {
+			andExpr := &tree.ComparisonExpr{Operator: tree.EQ, Left: lExprs[i], Right: rExprs[i]}
+			conjExpr = &tree.AndExpr{Left: conjExpr, Right: andExpr}
+		}
+
+		// Build expr for test name.
+		nameExpr := &tree.ComparisonExpr{
+			Operator: tree.EQ,
+			Left:     &tree.ParenExpr{Expr: tupleExpr},
+			Right:    &tree.ParenExpr{Expr: conjExpr},
+		}
+		t.Run(nameExpr.String(), func(t *testing.T) {
+			// Eval expressions and compare results.
+			eval := func(expr tree.Expr) tree.Datum {
+				typedExpr, err := expr.TypeCheck(nil, types.Any)
+				if err != nil {
+					t.Fatalf("%s: %v", expr.String(), err)
+				}
+				if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
+					t.Fatalf("%s: %v", expr.String(), err)
+				}
+				r, err := typedExpr.Eval(ctx)
+				if err != nil {
+					t.Fatalf("%s: %v", expr.String(), err)
+				}
+				return r
+			}
+			tupleRes := eval(tupleExpr)
+			conjRes := eval(conjExpr)
+
+			tupleResStr := tupleRes.String()
+			if s := conjRes.String(); tupleResStr != s {
+				t.Errorf("(%s)->%s, but (%s)->%s", tupleExpr.String(), tupleResStr, conjExpr.String(), s)
+			}
+			if s := test.expected; tupleResStr != s {
+				t.Errorf("(%s)->%s, expected %s", tupleExpr.String(), tupleResStr, s)
 			}
 		})
 	}
