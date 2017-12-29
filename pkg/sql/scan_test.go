@@ -207,7 +207,7 @@ func TestKVLimitHint(t *testing.T) {
 		{hardLimit: 1, softLimit: 23, filter: tree.DBoolFalse, expected: 2},
 	}
 	for _, tc := range testCases {
-		sn := scanNode{hardLimit: tc.hardLimit, softLimit: tc.softLimit, filter: tc.filter}
+		sn := ScanNode{hardLimit: tc.hardLimit, softLimit: tc.softLimit, filter: tc.filter}
 		if limitHint := sn.limitHint(); limitHint != tc.expected {
 			t.Errorf("%+v: got %d", tc, limitHint)
 		}

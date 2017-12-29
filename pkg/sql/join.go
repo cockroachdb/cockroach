@@ -832,9 +832,9 @@ func (n *joinNode) joinOrdering() physicalProps {
 // TODO(richardwu): For prefix/subset joins, this ancestor will be the furthest
 // ancestor down the interleaved hierarchy which contains all the columns of
 // the maximal join prefix (see maximalJoinPrefix in distsql_join.go).
-func (n *joinNode) interleavedNodes() (ancestor *scanNode, descendant *scanNode) {
-	leftScan, leftOk := n.left.plan.(*scanNode)
-	rightScan, rightOk := n.right.plan.(*scanNode)
+func (n *joinNode) interleavedNodes() (ancestor *ScanNode, descendant *ScanNode) {
+	leftScan, leftOk := n.left.plan.(*ScanNode)
+	rightScan, rightOk := n.right.plan.(*ScanNode)
 
 	if !leftOk || !rightOk {
 		return nil, nil

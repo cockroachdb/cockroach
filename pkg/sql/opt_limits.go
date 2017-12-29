@@ -32,18 +32,18 @@ import (
 //
 // The action of calling this method triggers limit-based query plan
 // optimizations, e.g. in expandSelectNode(). The primary user is
-// limitNode.Start(params) after it has fully evaluated the limit and
+// LimitNode.Start(params) after it has fully evaluated the limit and
 // offset expressions. EXPLAIN also does this, see expandPlan() for
 // explainPlanNode.
 //
 // TODO(radu): Arguably, this interface has room for improvement.  A
-// limitNode may have a hard limit locally which is larger than the
+// LimitNode may have a hard limit locally which is larger than the
 // soft limit propagated up by nodes downstream. We may want to
 // improve this API to pass both the soft and hard limit.
 func (p *Planner) applyLimit(plan PlanNode, numRows int64, soft bool) {
 	switch n := plan.(type) {
-	case *scanNode:
-		// Either a limitNode or EXPLAIN is pushing a limit down onto this
+	case *ScanNode:
+		// Either a LimitNode or EXPLAIN is pushing a limit down onto this
 		// node. The special value math.MaxInt64 means "no limit".
 		if !n.disableBatchLimits && numRows != math.MaxInt64 {
 			if soft {
@@ -55,8 +55,8 @@ func (p *Planner) applyLimit(plan PlanNode, numRows int64, soft bool) {
 			}
 		}
 
-	case *limitNode:
-		// A higher-level limitNode or EXPLAIN is pushing a limit down onto
+	case *LimitNode:
+		// A higher-level LimitNode or EXPLAIN is pushing a limit down onto
 		// this node. Prefer the local "hard" limit, unless the limit pushed
 		// down is "hard" and smaller than the local limit.
 		//

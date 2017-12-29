@@ -187,7 +187,7 @@ func (p *Planner) propagateFilters(
 		}
 		return newPlan, tree.DBoolTrue, nil
 
-	case *scanNode:
+	case *ScanNode:
 		n.filter = mergeConj(n.filter, n.filterVars.Rebind(extraFilter, true, false))
 		return plan, tree.DBoolTrue, nil
 
@@ -238,7 +238,7 @@ func (p *Planner) propagateFilters(
 	case *groupNode:
 		return p.addGroupFilter(ctx, n, info, extraFilter)
 
-	case *limitNode:
+	case *LimitNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}

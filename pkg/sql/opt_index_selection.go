@@ -66,7 +66,7 @@ const nonCoveringIndexPenalty = 10
 //    value, matches the desired ordering; matchingCols is 2.
 type analyzeOrderingFn func(indexProps physicalProps) (matchingCols, totalCols int)
 
-// selectIndex analyzes the scanNode to determine if there is an index
+// selectIndex analyzes the ScanNode to determine if there is an index
 // available that can fulfill the query with a more restrictive scan.
 //
 // Analysis currently consists of a simplification of the filter expression,
@@ -82,7 +82,7 @@ type analyzeOrderingFn func(indexProps physicalProps) (matchingCols, totalCols i
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
 func (p *Planner) selectIndex(
-	ctx context.Context, s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
+	ctx context.Context, s *ScanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) (PlanNode, error) {
 	if s.desc.IsEmpty() {
 		// No table.
@@ -214,7 +214,7 @@ func (p *Planner) selectIndex(
 	}
 
 	// After sorting, candidates[0] contains the best index. Copy its info into
-	// the scanNode.
+	// the ScanNode.
 	c := candidates[0]
 	s.index = c.index
 	s.specifiedIndex = nil
@@ -273,7 +273,7 @@ func (p *Planner) selectIndex(
 }
 
 // Removes any unnecessary IS DISTINCT FROM NULL filters on non-nullable columns.
-func trimUselessIsDistinctFromNullFilter(sn *scanNode, p *Planner) tree.TypedExpr {
+func trimUselessIsDistinctFromNullFilter(sn *ScanNode, p *Planner) tree.TypedExpr {
 	var newFilter tree.TypedExpr = tree.DBoolTrue
 	andExprs := splitAndExpr(&p.evalCtx, sn.filter, nil)
 	for _, e := range andExprs {
@@ -374,7 +374,7 @@ type indexInfo struct {
 	exactPrefix int
 }
 
-func (v *indexInfo) init(s *scanNode) {
+func (v *indexInfo) init(s *ScanNode) {
 	v.covering = v.isCoveringIndex(s)
 
 	// The base cost is the number of keys per row.
@@ -438,7 +438,7 @@ func (v *indexInfo) analyzeExprs(evalCtx *tree.EvalContext, exprs []tree.TypedEx
 // ordering completely, even if it is not a covering index.
 func (v *indexInfo) analyzeOrdering(
 	ctx context.Context,
-	scan *scanNode,
+	scan *ScanNode,
 	analyzeOrdering analyzeOrderingFn,
 	preferOrderMatching bool,
 	evalCtx *tree.EvalContext,
@@ -829,10 +829,10 @@ func (v *indexInfo) makeIndexConstraints(
 	return constraints, nil
 }
 
-// isCoveringIndex returns true if all of the columns needed from the scanNode are contained within
+// isCoveringIndex returns true if all of the columns needed from the ScanNode are contained within
 // the index. This allows a scan of only the index to be performed without requiring subsequent
 // lookup of the full row.
-func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
+func (v *indexInfo) isCoveringIndex(scan *ScanNode) bool {
 	if v.index == &v.desc.PrimaryIndex {
 		// The primary key index always covers all of the columns.
 		return true

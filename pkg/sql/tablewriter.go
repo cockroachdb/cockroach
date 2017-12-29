@@ -720,7 +720,7 @@ func (td *tableDeleter) fastPathAvailable(ctx context.Context) bool {
 // without knowing the values that are currently present. fastDelete calls
 // finalize, so it should not be called after.
 func (td *tableDeleter) fastDelete(
-	ctx context.Context, scan *scanNode, traceKV bool,
+	ctx context.Context, scan *ScanNode, traceKV bool,
 ) (rowCount int, err error) {
 
 	for _, span := range scan.spans {

@@ -31,7 +31,7 @@ func planPhysicalProps(plan PlanNode) physicalProps {
 	switch n := plan.(type) {
 	case *explainPlanNode:
 		return planPhysicalProps(n.run.results)
-	case *limitNode:
+	case *LimitNode:
 		return planPhysicalProps(n.plan)
 	case *indexJoinNode:
 		return planPhysicalProps(n.index)
@@ -56,7 +56,7 @@ func planPhysicalProps(plan PlanNode) physicalProps {
 	case *updateNode:
 		// TODO(knz): RETURNING is ordered by the PK.
 
-	case *scanNode:
+	case *ScanNode:
 		return n.props
 	case *ordinalityNode:
 		return n.props

@@ -24,7 +24,7 @@ import (
 )
 
 func testInitDummySelectNode(p *Planner, desc *sqlbase.TableDescriptor) *renderNode {
-	scan := &scanNode{}
+	scan := &ScanNode{}
 	scan.desc = desc
 	// Note: scan.initDescDefaults only returns an error if its 2nd argument is not nil.
 	_ = scan.initDescDefaults(p.planDeps, publicColumns, nil)

@@ -54,7 +54,7 @@ import (
 //    ordering and on the mapping PlanNode columns to columns in the result
 //    streams (all result routers output streams with the same schema).
 //
-//    The physicalPlan for a scanNode leaf consists of TableReaders, one for each node
+//    The physicalPlan for a ScanNode leaf consists of TableReaders, one for each node
 //    that has one or more ranges.
 //
 //  - for each an internal PlanNode we start with the plan of the child node(s)
@@ -303,7 +303,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node PlanNode) (distRecommendatio
 		}
 		return rec, nil
 
-	case *scanNode:
+	case *ScanNode:
 		rec := canDistribute
 		if n.hardLimit != 0 || n.softLimit != 0 {
 			// We don't yet recommend distributing plans where limits propagate
@@ -348,7 +348,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node PlanNode) (distRecommendatio
 		// Distribute aggregations if possible.
 		return rec.compose(shouldDistribute), nil
 
-	case *limitNode:
+	case *LimitNode:
 		if err := dsp.checkExpr(n.countExpr); err != nil {
 			return 0, err
 		}
@@ -434,7 +434,7 @@ type physicalPlan struct {
 	// configurable to output only certain columns and will be fixed).
 	//
 	// Conversely, in some cases not all PlanNode columns have a corresponding
-	// result stream column (these map to index -1); this is the case for scanNode
+	// result stream column (these map to index -1); this is the case for ScanNode
 	// and indexJoinNode where not all columns in the table are actually used in
 	// the plan.
 	planToStreamColMap []int
@@ -653,9 +653,9 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 }
 
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
-// corresponds to a scanNode, except for the Spans and OutputColumns.
+// corresponds to a ScanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode, evalCtx *tree.EvalContext,
+	n *ScanNode, evalCtx *tree.EvalContext,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
 		Table:   *n.desc,
@@ -671,7 +671,7 @@ func initTableReaderSpec(
 			}
 		}
 		if s.IndexIdx == 0 {
-			err := errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
+			err := errors.Errorf("invalid ScanNode index %v (table %s)", n.index, n.desc.Name)
 			return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
 		}
 	}
@@ -696,8 +696,8 @@ func initTableReaderSpec(
 }
 
 // getOutputColumnsFromScanNode returns the indices of the columns that are
-// returned by a scanNode.
-func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
+// returned by a ScanNode.
+func getOutputColumnsFromScanNode(n *ScanNode) []uint32 {
 	var outputColumns []uint32
 	// TODO(radu): if we have a scan with a filter, valNeededForCol will include
 	// the columns needed for the filter, even if they aren't needed for the
@@ -749,7 +749,7 @@ func (dsp *DistSQLPlanner) convertOrdering(
 // one for each node that has spans that we are reading.
 // overridesResultColumns is optional.
 func (dsp *DistSQLPlanner) createTableReaders(
-	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
+	planCtx *planningCtx, n *ScanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
 	spec, post, err := initTableReaderSpec(n, planCtx.evalCtx)
 	if err != nil {
@@ -1700,7 +1700,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	planCtx *planningCtx, node PlanNode,
 ) (physicalPlan, error) {
 	switch n := node.(type) {
-	case *scanNode:
+	case *ScanNode:
 		return dsp.createTableReaders(planCtx, n, nil)
 
 	case *indexJoinNode:
@@ -1749,7 +1749,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 		return plan, nil
 
-	case *limitNode:
+	case *LimitNode:
 		plan, err := dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err

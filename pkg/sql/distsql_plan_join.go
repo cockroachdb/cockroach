@@ -43,8 +43,8 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		return physicalPlan{}, false, nil
 	}
 
-	leftScan, leftOk := n.left.plan.(*scanNode)
-	rightScan, rightOk := n.right.plan.(*scanNode)
+	leftScan, leftOk := n.left.plan.(*ScanNode)
+	rightScan, rightOk := n.right.plan.(*ScanNode)
 
 	// We know they are scan nodes from useInterleaveJoin, but we add
 	// this check to prevent future panics.
@@ -61,7 +61,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	plans := make([]physicalPlan, 2)
 	var totalLimitHint int64
 	for i, t := range []struct {
-		scan      *scanNode
+		scan      *ScanNode
 		eqIndices []int
 	}{
 		{
@@ -353,7 +353,7 @@ func useInterleavedJoin(n *joinNode) bool {
 	var ancestorEqIndices []int
 	// We are guaranteed that both of the sources are scan nodes from
 	// n.interleavedNodes().
-	if ancestor == n.left.plan.(*scanNode) {
+	if ancestor == n.left.plan.(*ScanNode) {
 		ancestorEqIndices = n.pred.leftEqualityIndices
 	} else {
 		ancestorEqIndices = n.pred.rightEqualityIndices
@@ -378,7 +378,7 @@ func useInterleavedJoin(n *joinNode) bool {
 		colID := ancestor.index.ColumnIDs[i]
 		// info.ColIdx refers to i in ancestorEqIndices[i], which refers
 		// to the index of the source row. This corresponds to
-		// the index in scanNode.resultColumns. To convert the colID
+		// the index in ScanNode.resultColumns. To convert the colID
 		// from the index descriptor, we can use the map provided by
 		// colIdxMap.
 		if ancestorEqIndices[info.ColIdx] != ancestor.colIdxMap[colID] {
@@ -395,8 +395,8 @@ func useInterleavedJoin(n *joinNode) bool {
 	return true
 }
 
-// maximalJoinPrefix takes the common ancestor scanNode that the join is
-// defined on, the target scanNode that the index key belongs to and the index
+// maximalJoinPrefix takes the common ancestor ScanNode that the join is
+// defined on, the target ScanNode that the index key belongs to and the index
 // key itself, and returns the maximal prefix of the key which is also a prefix
 // of all keys that need to be joined together.
 //
@@ -437,9 +437,9 @@ func useInterleavedJoin(n *joinNode) bool {
 //
 // This logic can also be extended in the general case to joins between sibling
 // joins with a common ancestor: the maximal join prefix will be applied to
-// both tables where each sibling scan is passed as the target scanNode.
+// both tables where each sibling scan is passed as the target ScanNode.
 func maximalJoinPrefix(
-	ancestor *scanNode, target *scanNode, key roachpb.Key,
+	ancestor *ScanNode, target *ScanNode, key roachpb.Key,
 ) (roachpb.Key, bool, error) {
 	// To calculate how long this prefix is, we take a look at the actual
 	// encoding of an interleaved table's key

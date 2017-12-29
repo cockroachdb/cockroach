@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
+func newTestScanNode(kvDB *client.DB, tableName string) (*ScanNode, error) {
 	desc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 	p := Planner{}

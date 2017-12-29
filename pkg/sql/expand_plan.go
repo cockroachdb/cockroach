@@ -90,7 +90,7 @@ func doExpandPlan(
 		}
 
 	case *indexJoinNode:
-		// We ignore the return value because we know the scanNode is preserved.
+		// We ignore the return value because we know the ScanNode is preserved.
 		_, err = doExpandPlan(ctx, p, params, n.index)
 		if err != nil {
 			return plan, err
@@ -141,7 +141,7 @@ func doExpandPlan(
 		// ordinality ordering accordingly.
 		n.optimizeOrdering()
 
-	case *limitNode:
+	case *LimitNode:
 		// Estimate the limit parameters. We can't full eval them just yet,
 		// because evaluation requires running potential sub-queries, which
 		// cannot occur during expand.
@@ -191,7 +191,7 @@ func doExpandPlan(
 	case *distinctNode:
 		plan, err = expandDistinctNode(ctx, p, params, n)
 
-	case *scanNode:
+	case *ScanNode:
 		plan, err = expandScanNode(ctx, p, params, n)
 
 	case *renderNode:
@@ -319,7 +319,7 @@ func expandDistinctNode(
 }
 
 func expandScanNode(
-	ctx context.Context, p *Planner, params expandParameters, s *scanNode,
+	ctx context.Context, p *Planner, params expandParameters, s *ScanNode,
 ) (PlanNode, error) {
 	var analyzeOrdering analyzeOrderingFn
 	if len(params.desiredOrdering) > 0 {
@@ -515,7 +515,7 @@ func (p *Planner) simplifyOrderings(plan PlanNode, usefulOrdering sqlbase.Column
 		n.props.trim(usefulOrdering)
 		n.source = p.simplifyOrderings(n.source, n.restrictOrdering(usefulOrdering))
 
-	case *limitNode:
+	case *LimitNode:
 		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
 
 	case *groupNode:
@@ -580,7 +580,7 @@ func (p *Planner) simplifyOrderings(plan PlanNode, usefulOrdering sqlbase.Column
 		sourceOrdering := n.projectChildPropsToOnExprs()
 		n.plan = p.simplifyOrderings(n.plan, sourceOrdering.ordering)
 
-	case *scanNode:
+	case *ScanNode:
 		n.props.trim(usefulOrdering)
 
 	case *renderNode:

@@ -34,8 +34,8 @@ const histogramBuckets = 200
 func (dsp *DistSQLPlanner) createStatsPlan(
 	planCtx *planningCtx, desc *sqlbase.TableDescriptor, stats []requestedStat,
 ) (physicalPlan, error) {
-	// Create the table readers; for this we initialize a dummy scanNode.
-	scan := scanNode{desc: desc}
+	// Create the table readers; for this we initialize a dummy ScanNode.
+	scan := ScanNode{desc: desc}
 	err := scan.initDescDefaults(nil /* planDependencies */, publicColumns, nil /* wantedColumns */)
 	if err != nil {
 		return physicalPlan{}, err

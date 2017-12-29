@@ -83,7 +83,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		needed[i] = true
 	}
 
-	// Optimize the plan. This is required in order to populate scanNode
+	// Optimize the plan. This is required in order to populate ScanNode
 	// spans.
 	plan, err = params.p.optimizePlan(ctx, plan, needed)
 	if err != nil {

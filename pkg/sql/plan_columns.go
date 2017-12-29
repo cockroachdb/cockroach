@@ -63,7 +63,7 @@ func getPlanColumns(plan PlanNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *renderNode:
 		return n.columns
-	case *scanNode:
+	case *ScanNode:
 		return n.resultColumns
 	case *sortNode:
 		return n.columns
@@ -112,7 +112,7 @@ func getPlanColumns(plan PlanNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.source.plan, mut)
 	case *indexJoinNode:
 		return getPlanColumns(n.table, mut)
-	case *limitNode:
+	case *LimitNode:
 		return getPlanColumns(n.plan, mut)
 	case *unionNode:
 		if n.inverted {

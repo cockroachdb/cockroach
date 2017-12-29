@@ -39,7 +39,7 @@ func collectSpans(params runParams, plan PlanNode) (reads, writes roachpb.Spans,
 		*unaryNode:
 		return nil, nil, nil
 
-	case *scanNode:
+	case *ScanNode:
 		return n.spans, nil, nil
 
 	case *updateNode:
@@ -66,7 +66,7 @@ func collectSpans(params runParams, plan PlanNode) (reads, writes roachpb.Spans,
 		return collectSpans(params, n.plan)
 	case *showTraceNode:
 		return collectSpans(params, n.plan)
-	case *limitNode:
+	case *LimitNode:
 		return collectSpans(params, n.plan)
 	case *sortNode:
 		return collectSpans(params, n.plan)

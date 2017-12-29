@@ -121,7 +121,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		neededColumns[colIDToIdx[sqlbase.ColumnID(id)]] = true
 	}
 
-	// Optimize the plan. This is required in order to populate scanNode
+	// Optimize the plan. This is required in order to populate ScanNode
 	// spans.
 	plan, err = params.p.optimizePlan(ctx, plan, neededColumns)
 	if err != nil {
@@ -130,7 +130,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 	defer plan.Close(ctx)
 
-	scan = plan.(*scanNode)
+	scan = plan.(*ScanNode)
 
 	span := o.tableDesc.IndexSpan(o.indexDesc.ID)
 	spans := []roachpb.Span{span}

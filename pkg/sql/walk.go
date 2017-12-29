@@ -138,7 +138,7 @@ func (v *planVisitor) visit(plan PlanNode) {
 		subplans := v.expr(name, "expr", -1, n.expr, nil)
 		v.subqueries(name, subplans)
 
-	case *scanNode:
+	case *ScanNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name))
 			if n.noIndexJoin {
@@ -223,7 +223,7 @@ func (v *planVisitor) visit(plan PlanNode) {
 		v.visit(n.left.plan)
 		v.visit(n.right.plan)
 
-	case *limitNode:
+	case *LimitNode:
 		subplans := v.expr(name, "count", -1, n.countExpr, nil)
 		subplans = v.expr(name, "offset", -1, n.offsetExpr, subplans)
 		v.subqueries(name, subplans)
@@ -521,7 +521,7 @@ func nodeName(plan PlanNode) string {
 		if !n.needSort {
 			return "nosort"
 		}
-	case *scanNode:
+	case *ScanNode:
 		if n.reverse {
 			return "revscan"
 		}
@@ -576,11 +576,11 @@ var PlanNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&indexJoinNode{}):            "index-join",
 	reflect.TypeOf(&insertNode{}):               "insert",
 	reflect.TypeOf(&joinNode{}):                 "join",
-	reflect.TypeOf(&limitNode{}):                "limit",
+	reflect.TypeOf(&LimitNode{}):                "limit",
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
 	reflect.TypeOf(&testingRelocateNode{}):      "testingRelocate",
 	reflect.TypeOf(&renderNode{}):               "render",
-	reflect.TypeOf(&scanNode{}):                 "scan",
+	reflect.TypeOf(&ScanNode{}):                 "scan",
 	reflect.TypeOf(&scatterNode{}):              "scatter",
 	reflect.TypeOf(&scrubNode{}):                "scrub",
 	reflect.TypeOf(&setVarNode{}):               "set",

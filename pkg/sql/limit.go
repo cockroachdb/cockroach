@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// limitNode represents a node that limits the number of rows
+// LimitNode represents a node that limits the number of rows
 // returned or only return them past a given number (offset).
-type limitNode struct {
+type LimitNode struct {
 	plan       PlanNode
 	countExpr  tree.TypedExpr
 	offsetExpr tree.TypedExpr
@@ -36,14 +36,14 @@ type limitNode struct {
 	run limitRun
 }
 
-// limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *Planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) {
+// limit constructs a LimitNode based on the LIMIT and OFFSET clauses.
+func (p *Planner) Limit(ctx context.Context, n *tree.Limit) (*LimitNode, error) {
 	if n == nil || (n.Count == nil && n.Offset == nil) {
 		// No LIMIT nor OFFSET; there is nothing special to do.
 		return nil, nil
 	}
 
-	res := limitNode{}
+	res := LimitNode{}
 
 	data := []struct {
 		name string
@@ -72,16 +72,16 @@ func (p *Planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) 
 	return &res, nil
 }
 
-// limitRun contains the state of limitNode during local execution.
+// limitRun contains the state of LimitNode during local execution.
 type limitRun struct {
 	rowIndex int64
 }
 
-func (n *limitNode) startExec(params runParams) error {
+func (n *LimitNode) startExec(params runParams) error {
 	return n.evalLimit(params.evalCtx)
 }
 
-func (n *limitNode) Next(params runParams) (bool, error) {
+func (n *LimitNode) Next(params runParams) (bool, error) {
 	// n.rowIndex is the 0-based index of the next row.
 	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
 	if n.run.rowIndex-n.offset >= n.count {
@@ -104,16 +104,16 @@ func (n *limitNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *limitNode) Values() tree.Datums { return n.plan.Values() }
+func (n *LimitNode) Values() tree.Datums { return n.plan.Values() }
 
-func (n *limitNode) Close(ctx context.Context) {
+func (n *LimitNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 }
 
 // estimateLimit pre-computes the count and offset fields if they are constants,
 // otherwise predefines them to be MaxInt64, 0. Used by index selection.
 // This must be called after type checking and constant folding.
-func (n *limitNode) estimateLimit() {
+func (n *LimitNode) estimateLimit() {
 	n.count = math.MaxInt64
 	n.offset = 0
 
@@ -136,7 +136,7 @@ func (n *limitNode) estimateLimit() {
 
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the
 // value is MaxInt64. If Offset is missing, the value is 0
-func (n *limitNode) evalLimit(evalCtx *tree.EvalContext) error {
+func (n *LimitNode) evalLimit(evalCtx *tree.EvalContext) error {
 	n.count = math.MaxInt64
 	n.offset = 0
 

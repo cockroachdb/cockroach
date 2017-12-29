@@ -83,7 +83,7 @@ func (i *subqueryInitializer) subqueryNode(ctx context.Context, sq *subquery) er
 				numRows = 2
 			}
 
-			sq.plan = &limitNode{plan: sq.plan, countExpr: tree.NewDInt(numRows)}
+			sq.plan = &LimitNode{plan: sq.plan, countExpr: tree.NewDInt(numRows)}
 		}
 
 		needed := make([]bool, len(planColumns(sq.plan)))
