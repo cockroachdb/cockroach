@@ -70,13 +70,13 @@ func (*backfiller) OutputTypes() []sqlbase.ColumnType {
 }
 
 // Run is part of the processor interface.
-func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (b *backfiller) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
 	opName := fmt.Sprintf("%sBackfiller", b.name)
-	ctx = log.WithLogTagInt(ctx, opName, int(b.spec.Table.ID))
+	ctx := log.WithLogTagInt(b.flowCtx.Ctx, opName, int(b.spec.Table.ID))
 	ctx, span := processorSpan(ctx, opName)
 	defer tracing.FinishSpan(span)
 

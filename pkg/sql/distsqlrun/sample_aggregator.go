@@ -109,11 +109,11 @@ func newSampleAggregator(
 }
 
 // Run is part of the Processor interface.
-func (s *sampleAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (s *sampleAggregator) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := processorSpan(ctx, "sample aggregator")
+	ctx, span := processorSpan(s.flowCtx.Ctx, "sample aggregator")
 	defer tracing.FinishSpan(span)
 
 	earlyExit, err := s.mainLoop(ctx)

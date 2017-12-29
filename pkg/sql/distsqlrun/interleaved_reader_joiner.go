@@ -226,7 +226,7 @@ func (irj *interleavedReaderJoiner) sendMisplannedRangesMetadata(ctx context.Con
 }
 
 // Run is part of the processor interface.
-func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
@@ -235,7 +235,7 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 	for i := range tableIDs {
 		tableIDs[i] = irj.tables[i].tableID
 	}
-	ctx = log.WithLogTag(ctx, "InterleaveReaderJoiner", tableIDs)
+	ctx := log.WithLogTag(irj.flowCtx.Ctx, "InterleaveReaderJoiner", tableIDs)
 	ctx, span := processorSpan(ctx, "interleaved reader joiner")
 	defer tracing.FinishSpan(span)
 

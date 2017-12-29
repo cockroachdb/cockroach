@@ -173,10 +173,11 @@ func newAggregator(
 }
 
 // Run is part of the processor interface.
-func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (ag *aggregator) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
+	ctx := ag.flowCtx.Ctx
 	defer ag.bucketsAcc.Close(ctx)
 	defer func() {
 		for _, f := range ag.funcs {

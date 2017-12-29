@@ -202,12 +202,12 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 }
 
 // Run is part of the processor interface.
-func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (jr *joinReader) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTagInt(ctx, "JoinReader", int(jr.desc.ID))
+	ctx := log.WithLogTagInt(jr.flowCtx.Ctx, "JoinReader", int(jr.desc.ID))
 	ctx, span := processorSpan(ctx, "join reader")
 	defer tracing.FinishSpan(span)
 

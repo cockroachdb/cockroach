@@ -203,6 +203,7 @@ func TestSorter(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
+		Ctx:         ctx,
 		EvalCtx:     evalCtx,
 		Settings:    cluster.MakeTestingClusterSettings(),
 		TempStorage: tempEngine,
@@ -231,7 +232,7 @@ func TestSorter(t *testing.T) {
 				// a memory row container which will hit this limit and fall
 				// back to using a disk row container.
 				s.flowCtx.testingKnobs.MemoryLimitBytes = memLimit
-				s.Run(ctx, nil)
+				s.Run(nil)
 				if !out.ProducerClosed {
 					t.Fatalf("output RowReceiver not closed")
 				}
@@ -262,6 +263,7 @@ func BenchmarkSortAll(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
+		Ctx:      ctx,
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
@@ -291,7 +293,7 @@ func BenchmarkSortAll(b *testing.B) {
 			}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				s.Run(ctx, nil)
+				s.Run(nil)
 				rowSource.Reset()
 			}
 		})
@@ -305,6 +307,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
+		Ctx:      ctx,
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
@@ -338,7 +341,7 @@ func BenchmarkSortLimit(b *testing.B) {
 				}
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					s.Run(ctx, nil)
+					s.Run(nil)
 					rowSource.Reset()
 				}
 			})

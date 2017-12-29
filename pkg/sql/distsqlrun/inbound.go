@@ -70,7 +70,7 @@ func processInboundStreamHelper(
 		} else {
 			// Check for context cancellation before recv()ing the next message.
 			select {
-			case <-f.ctx.Done():
+			case <-f.Ctx.Done():
 				// This will error out the FlowStream(), and also cancel
 				// the flow context on the producer.
 				return sqlbase.NewQueryCanceledError()
