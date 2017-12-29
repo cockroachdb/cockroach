@@ -234,7 +234,13 @@ func updateStatsOnPut(
 	// Remove current live counts for this key.
 	if orig != nil {
 		if sys {
-			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
+			ms.SysBytes -= origMetaKeySize + origMetaValSize
+			if orig.Txn != nil {
+				// If the original value was an intent, we're replacing the
+				// intent. Note that since it's a system key, it doesn't affect
+				// IntentByte, IntentCount, and correspondingly, IntentAge.
+				ms.SysBytes -= orig.KeyBytes + orig.ValBytes
+			}
 			ms.SysCount--
 		} else {
 			// Move the (so far empty) stats to the timestamp at which the
@@ -267,8 +273,18 @@ func updateStatsOnPut(
 	}
 
 	// Move the stats to the new meta's timestamp. If we had an orig meta, this
-	// ages those original stats by the time which the previous version was live.
+	// ages those original stats by the time which the previous version was
+	// live.
+	//
+	// Note that there is an interesting special case here: it's possible that
+	// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
+	// outside of tests (due to our semantics of txn.OrigTimestamp, which never
+	// decreases) but it sure does happen in randomized testing. An earlier
+	// version of the code used `Forward` here, which is incorrect as it would be
+	// a no-op and fail to subtract out the intent bytes/GC age incurred due to
+	// removing the meta entry at `orig.Timestamp` (when `orig != nil`).
 	ms.AgeTo(meta.Timestamp.WallTime)
+
 	if sys {
 		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
 		ms.SysCount++
@@ -321,21 +337,28 @@ func updateStatsOnResolve(
 	ms.AgeTo(orig.Timestamp.WallTime)
 	sys := isSysLocal(key)
 
+	if orig.Deleted != meta.Deleted {
+		log.Fatalf(context.TODO(), "on resolve, original meta was deleted=%t, but new one is deleted=%t",
+			orig.Deleted, meta.Deleted)
+	}
+
 	if sys {
-		ms.SysBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
-		ms.AgeTo(meta.Timestamp.WallTime)
+		ms.SysBytes += (metaKeySize + metaValSize) - (origMetaValSize + origMetaKeySize)
 	} else {
-		if !meta.Deleted {
-			ms.LiveBytes += metaKeySize + metaValSize - origMetaValSize - origMetaKeySize
-		}
 		// At orig.Timestamp, the original meta key disappears.
 		ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
 		ms.ValBytes -= origMetaValSize + orig.ValBytes
 
-		// If committing, subtract out intent counts.
-		if commit {
-			ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
-			ms.IntentCount--
+		ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
+		ms.IntentCount--
+
+		// If the old intent is a deletion, then the key already isn't tracked
+		// in LiveBytes any more (and the new intent/value is also a deletion).
+		// If we're looking at a non-deletion intent/value, update the live
+		// bytes to account for the difference between the previous intent and
+		// the new intent/value.
+		if !meta.Deleted {
+			ms.LiveBytes -= (origMetaKeySize + origMetaValSize) + (orig.KeyBytes + meta.ValBytes)
 		}
 
 		ms.AgeTo(meta.Timestamp.WallTime)
@@ -343,6 +366,20 @@ func updateStatsOnResolve(
 		// At meta.Timestamp, the new meta key appears.
 		ms.KeyBytes += metaKeySize + meta.KeyBytes
 		ms.ValBytes += metaValSize + meta.ValBytes
+
+		if !commit {
+			// If not committing, the intent reappears (but at meta.Timestamp).
+			//
+			// This is the case in which an intent is pushed (a similar case
+			// happens when an intent is overwritten, but that's handled in
+			// updateStatsOnPut, not this method).
+			ms.IntentBytes += meta.KeyBytes + meta.ValBytes
+			ms.IntentCount++
+		}
+
+		if !meta.Deleted {
+			ms.LiveBytes += (metaKeySize + metaValSize) + (meta.KeyBytes + meta.ValBytes)
+		}
 	}
 	return ms
 }
@@ -2198,15 +2235,12 @@ func MVCCResolveWriteIntentRangeUsingIter(
 // keys slice. The engine iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration. The
 // timestamp parameter is used to compute the intent age on GC.
-// Garbage collection stops after clearing maxClears values
-// (to limit the size of the WriteBatch produced).
 func MVCCGarbageCollect(
 	ctx context.Context,
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	keys []roachpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
-	maxClears int64,
 ) error {
 	// We're allowed to use a prefix iterator because we always Seek() the
 	// iterator when handling a new user key.
@@ -2215,7 +2249,7 @@ func MVCCGarbageCollect(
 
 	var count int64
 	defer func(begin time.Time) {
-		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d versions",
+		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
 			len(keys), float64(len(keys))*1E9/float64(timeutil.Since(begin)), count)
 	}(timeutil.Now())
 
@@ -2233,6 +2267,13 @@ func MVCCGarbageCollect(
 		inlinedValue := meta.IsInline()
 		implicitMeta := iter.UnsafeKey().IsValue()
 		// First, check whether all values of the key are being deleted.
+		//
+		// Note that we naively can't terminate GC'ing keys loop early if we
+		// enter this branch, as it will update the stats under the provision
+		// that the (implicit or explicit) meta key (and thus all versions) are
+		// being removed. We had this faulty functionality at some point; it
+		// should no longer be necessary since the higher levels already make
+		// sure each individual GCRequest does bounded work.
 		if !gcKey.Timestamp.Less(hlc.Timestamp(meta.Timestamp)) {
 			// For version keys, don't allow GC'ing the meta key if it's
 			// not marked deleted. However, for inline values we allow it;
@@ -2258,9 +2299,6 @@ func MVCCGarbageCollect(
 					return err
 				}
 				count++
-				if count >= maxClears {
-					return nil
-				}
 			}
 		}
 
@@ -2289,12 +2327,9 @@ func MVCCGarbageCollect(
 						int64(len(iter.UnsafeValue())), nil, unsafeIterKey.Timestamp.WallTime,
 						timestamp.WallTime))
 				}
+				count++
 				if err := engine.Clear(unsafeIterKey); err != nil {
 					return err
-				}
-				count++
-				if count >= maxClears {
-					return nil
 				}
 			}
 		}
