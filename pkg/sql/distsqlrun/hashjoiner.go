@@ -148,12 +148,12 @@ func newHashJoiner(
 }
 
 // Run is part of the processor interface.
-func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTag(ctx, "HashJoiner", nil)
+	ctx := log.WithLogTag(h.flowCtx.Ctx, "HashJoiner", nil)
 	ctx, span := processorSpan(ctx, "hash joiner")
 	defer tracing.FinishSpan(span)
 

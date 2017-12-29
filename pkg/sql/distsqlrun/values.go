@@ -67,14 +67,11 @@ func newValuesProcessor(
 }
 
 // Run is part of the processor interface.
-func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (v *valuesProcessor) Run(wg *sync.WaitGroup) {
 	if v.out.output == nil {
 		panic("valuesProcessor output not initialized for emitting rows")
 	}
-	if ctx != v.flowCtx.ctx {
-		panic("unexpected context")
-	}
-	Run(ctx, v, v.out.output)
+	Run(v.flowCtx.Ctx, v, v.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -113,7 +110,7 @@ func (v *valuesProcessor) producerMeta(err error) ProducerMetadata {
 func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 	if !v.started {
 		v.started = true
-		v.ctx, v.span = processorSpan(v.flowCtx.ctx, "values")
+		v.ctx, v.span = processorSpan(v.flowCtx.Ctx, "values")
 
 		// Add a bogus header to apease the StreamDecoder, which wants to receive a
 		// header before any data.

@@ -1234,6 +1234,7 @@ func newReadCSVProcessor(
 	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readCSVProcessor{
+		flowCtx:    flowCtx,
 		csvOptions: spec.Options,
 		sampleSize: spec.SampleSize,
 		tableDesc:  spec.TableDesc,
@@ -1248,6 +1249,7 @@ func newReadCSVProcessor(
 }
 
 type readCSVProcessor struct {
+	flowCtx    *distsqlrun.FlowCtx
 	csvOptions roachpb.CSVOptions
 	sampleSize int32
 	tableDesc  sqlbase.TableDescriptor
@@ -1263,8 +1265,8 @@ func (cp *readCSVProcessor) OutputTypes() []sqlbase.ColumnType {
 	return csvOutputTypes
 }
 
-func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(ctx, "readCSVProcessor")
+func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(cp.flowCtx.Ctx, "readCSVProcessor")
 	defer tracing.FinishSpan(span)
 
 	if wg != nil {
@@ -1388,6 +1390,7 @@ func newSSTWriterProcessor(
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	sp := &sstWriter{
+		flowCtx:     flowCtx,
 		spec:        spec,
 		input:       input,
 		output:      output,
@@ -1401,6 +1404,7 @@ func newSSTWriterProcessor(
 }
 
 type sstWriter struct {
+	flowCtx     *distsqlrun.FlowCtx
 	spec        distsqlrun.SSTWriterSpec
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper
@@ -1415,8 +1419,8 @@ func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
 	return sstOutputTypes
 }
 
-func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(ctx, "sstWriter")
+func (sp *sstWriter) Run(wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(sp.flowCtx.Ctx, "sstWriter")
 	defer tracing.FinishSpan(span)
 
 	if wg != nil {

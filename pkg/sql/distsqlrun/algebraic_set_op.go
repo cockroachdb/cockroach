@@ -89,12 +89,12 @@ func newAlgebraicSetOp(
 	return e, nil
 }
 
-func (e *algebraicSetOp) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (e *algebraicSetOp) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTag(ctx, "ExceptAll", nil)
+	ctx := log.WithLogTag(e.flowCtx.Ctx, "ExceptAll", nil)
 	ctx, span := processorSpan(ctx, "exceptAll")
 	defer tracing.FinishSpan(span)
 

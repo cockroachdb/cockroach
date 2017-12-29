@@ -85,12 +85,12 @@ func newMergeJoiner(
 }
 
 // Run is part of the processor interface.
-func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTag(ctx, "MergeJoiner", nil)
+	ctx := log.WithLogTag(m.flowCtx.Ctx, "MergeJoiner", nil)
 	ctx, span := processorSpan(ctx, "merge joiner")
 	defer tracing.FinishSpan(span)
 	log.VEventf(ctx, 2, "starting merge joiner run")
