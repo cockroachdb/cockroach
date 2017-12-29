@@ -1747,20 +1747,36 @@ func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
 
 func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
 	cmp := 0
+	sawNull := false
 	for i, leftElem := range left.D {
 		rightElem := right.D[i]
 		// Like with cmpOpScalarFn, check for values that need to be handled
 		// differently than when ordering Datums.
 		if leftElem == DNull || rightElem == DNull {
-			// If either Datum is NULL, the result of the comparison is NULL.
-			return DNull
+			if op == EQ {
+				// If either Datum is NULL and the op is EQ, we continue the
+				// comparison and the result is only NULL if the other (non-NULL)
+				// elements are equal.
+				sawNull = true
+				continue
+			} else {
+				// If either Datum is NULL and the op is not EQ, we short-circuit
+				// the evaluation and the result of the comparison is NULL.
+				return DNull
+			}
 		}
 		cmp = leftElem.Compare(ctx, rightElem)
 		if cmp != 0 {
 			break
 		}
 	}
-	return boolFromCmp(cmp, op)
+	b := boolFromCmp(cmp, op)
+	if b == DBoolTrue && sawNull {
+		// The op is EQ and all non-NULL elements are equal, but we saw at least
+		// one NULL element. The result of the comparison is NULL.
+		return DNull
+	}
+	return b
 }
 
 func makeEvalTupleIn(typ types.T) CmpOp {
