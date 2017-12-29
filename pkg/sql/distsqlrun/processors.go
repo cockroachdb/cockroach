@@ -37,7 +37,7 @@ type Processor interface {
 
 	// Run is the main loop of the processor.
 	// If wg is non-nil, wg.Done is called before exiting.
-	Run(ctx context.Context, wg *sync.WaitGroup)
+	Run(wg *sync.WaitGroup)
 }
 
 // ProcOutputHelper is a helper type that performs filtering and projection on
@@ -403,11 +403,11 @@ func processorSpan(ctx context.Context, name string) (context.Context, opentraci
 }
 
 // Run is part of the processor interface.
-func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (n *noopProcessor) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := processorSpan(ctx, "noop")
+	ctx, span := processorSpan(n.flowCtx.Ctx, "noop")
 	defer tracing.FinishSpan(span)
 
 	for {

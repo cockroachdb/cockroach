@@ -15,7 +15,6 @@
 package distsqlrun
 
 import (
-	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -75,12 +74,12 @@ func newSorter(
 }
 
 // Run is part of the processor interface.
-func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (s *sorter) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTag(ctx, "Sorter", nil)
+	ctx := log.WithLogTag(s.flowCtx.Ctx, "Sorter", nil)
 	ctx, span := processorSpan(ctx, "sorter")
 	defer tracing.FinishSpan(span)
 

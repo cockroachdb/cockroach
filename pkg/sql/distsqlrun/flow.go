@@ -54,7 +54,7 @@ type FlowCtx struct {
 
 	// Context used for all execution within the flow.
 	// Created in Start(), canceled in Cleanup().
-	ctx context.Context
+	Ctx context.Context
 
 	Settings *cluster.Settings
 
@@ -389,7 +389,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	)
 	f.status = FlowRunning
 
-	f.ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	f.Ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
@@ -398,7 +398,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	f.waitGroup.Add(len(f.inboundStreams))
 
 	if err := f.flowRegistry.RegisterFlow(
-		f.ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout,
+		f.Ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout,
 	); err != nil {
 		if f.syncFlowConsumer != nil {
 			// For sync flows, the error goes to the consumer.
@@ -409,14 +409,14 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 		return err
 	}
 	if log.V(1) {
-		log.Infof(f.ctx, "registered flow %s", f.id.Short())
+		log.Infof(f.Ctx, "registered flow %s", f.id.Short())
 	}
 	for _, s := range f.startables {
-		s.start(f.ctx, &f.waitGroup, f.ctxCancel)
+		s.start(f.Ctx, &f.waitGroup, f.ctxCancel)
 	}
 	f.waitGroup.Add(len(f.processors))
 	for _, p := range f.processors {
-		go p.Run(f.ctx, &f.waitGroup)
+		go p.Run(&f.waitGroup)
 	}
 	return nil
 }
@@ -432,7 +432,7 @@ func (f *Flow) Wait() {
 	}()
 
 	select {
-	case <-f.ctx.Done():
+	case <-f.Ctx.Done():
 		f.cancel()
 		<-waitChan
 	case <-waitChan:
@@ -467,7 +467,7 @@ func (f *Flow) Cleanup(ctx context.Context) {
 // context (no goroutines are spawned).
 func (f *Flow) RunSync(ctx context.Context) {
 	for _, p := range f.processors {
-		p.Run(ctx, nil)
+		p.Run(nil)
 	}
 	f.Cleanup(ctx)
 }

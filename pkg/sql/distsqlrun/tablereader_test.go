@@ -123,7 +123,7 @@ func TestTableReader(t *testing.T) {
 					evalCtx := tree.MakeTestingEvalContext()
 					defer evalCtx.Stop(context.Background())
 					flowCtx := FlowCtx{
-						ctx:      context.Background(),
+						Ctx:      context.Background(),
 						EvalCtx:  evalCtx,
 						Settings: s.ClusterSettings(),
 						// Pass a DB without a TxnCoordSender.
@@ -202,7 +202,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	defer evalCtx.Stop(context.Background())
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
-		ctx:      context.Background(),
+		Ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: tc.Server(0).ClusterSettings(),
 		// Pass a DB without a TxnCoordSender.
@@ -291,7 +291,7 @@ func BenchmarkTableReader(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		ctx:      context.Background(),
+		Ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
 		// Pass a DB without a TxnCoordSender.

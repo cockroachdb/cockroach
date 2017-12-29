@@ -126,11 +126,11 @@ func newSamplerProcessor(
 }
 
 // Run is part of the Processor interface.
-func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (s *samplerProcessor) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := processorSpan(ctx, "sampler")
+	ctx, span := processorSpan(s.flowCtx.Ctx, "sampler")
 	defer tracing.FinishSpan(span)
 
 	earlyExit, err := s.mainLoop(ctx)
