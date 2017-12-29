@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -232,12 +233,15 @@ func (c *cliState) invalidOptionChange(nextState cliStateEnum, opt string) cliSt
 }
 
 var options = map[string]struct {
+	description               string
 	numExpectedArgs           int
 	validDuringMultilineEntry bool
 	set                       func(c *cliState, args []string) error
 	unset                     func(c *cliState) error
+	display                   func(c *cliState) string
 }{
 	`display_format`: {
+		"the output format for tabular data (pretty, csv, tsv, html, sql, records, raw)",
 		1,
 		true,
 		func(_ *cliState, args []string) error {
@@ -251,52 +255,71 @@ var options = map[string]struct {
 			cliCtx.tableDisplayFormat = displayFormat
 			return nil
 		},
+		func(_ *cliState) string { return cliCtx.tableDisplayFormat.String() },
 	},
 	`echo`: {
+		"show SQL queries before they are sent to the server",
 		0,
 		false,
-		func(c *cliState, _ []string) error { sqlCtx.echo = true; return nil },
-		func(c *cliState) error { sqlCtx.echo = false; return nil },
+		func(_ *cliState, _ []string) error { sqlCtx.echo = true; return nil },
+		func(_ *cliState) error { sqlCtx.echo = false; return nil },
+		func(_ *cliState) string { return strconv.FormatBool(sqlCtx.echo) },
 	},
 	`errexit`: {
+		"exit the shell upon a query error",
 		0,
 		true,
 		func(c *cliState, _ []string) error { c.errExit = true; return nil },
 		func(c *cliState) error { c.errExit = false; return nil },
+		func(c *cliState) string { return strconv.FormatBool(c.errExit) },
 	},
 	`check_syntax`: {
+		"check the SQL syntax before running a query",
 		0,
 		false,
 		func(c *cliState, _ []string) error { c.checkSyntax = true; return nil },
 		func(c *cliState) error { c.checkSyntax = false; return nil },
+		func(c *cliState) string { return strconv.FormatBool(c.checkSyntax) },
 	},
 	`show_times`: {
+		"display the execution time after each query",
 		0,
 		true,
-		func(c *cliState, _ []string) error { cliCtx.showTimes = true; return nil },
-		func(c *cliState) error { cliCtx.showTimes = false; return nil },
+		func(_ *cliState, _ []string) error { cliCtx.showTimes = true; return nil },
+		func(_ *cliState) error { cliCtx.showTimes = false; return nil },
+		func(_ *cliState) string { return strconv.FormatBool(cliCtx.showTimes) },
 	},
 	`smart_prompt`: {
+		"print connection and session metadata in the prompt",
 		0,
 		true,
 		func(c *cliState, _ []string) error { c.smartPrompt = true; return nil },
 		func(c *cliState) error { c.smartPrompt = false; return nil },
+		func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
 	},
 }
+
+// optionNames retains the names of every option in the map above in sorted
+// order. We want them sorted to ensure the output of \? is deterministic.
+var optionNames = func() []string {
+	names := make([]string, 0, len(options))
+	for k := range options {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
+}()
 
 // handleSet supports the \set client-side command.
 func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cliStateEnum {
 	if len(args) == 0 {
+		optData := make([][]string, 0, len(options))
+		for _, n := range optionNames {
+			optData = append(optData, []string{n, options[n].display(c), options[n].description})
+		}
 		err := printQueryOutput(os.Stdout,
-			[]string{"Option", "Value"},
-			newRowSliceIter([][]string{
-				{"display_format", cliCtx.tableDisplayFormat.String()},
-				{"errexit", strconv.FormatBool(c.errExit)},
-				{"echo", strconv.FormatBool(sqlCtx.echo)},
-				{"check_syntax", strconv.FormatBool(c.checkSyntax)},
-				{"show_times", strconv.FormatBool(cliCtx.showTimes)},
-				{"smart_prompt", strconv.FormatBool(c.smartPrompt)},
-			}))
+			[]string{"Option", "Value", "Description"},
+			newRowSliceIter(optData))
 		if err != nil {
 			panic(err)
 		}
