@@ -24,11 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type distinct struct {
 	processorBase
 
+	ctx          context.Context
+	span         opentracing.Span
 	flowCtx      *FlowCtx
 	evalCtx      *tree.EvalContext
 	input        RowSource
@@ -39,9 +43,16 @@ type distinct struct {
 	distinctCols util.FastIntSet
 	memAcc       mon.BoundAccount
 	datumAlloc   sqlbase.DatumAlloc
+	started      bool
+	closed       bool
+	scratch      []byte
+	// consumerStatus is used by the RowSource interface to signal that the
+	// consumer is done accepting rows or is no longer accepting data.
+	consumerStatus ConsumerStatus
 }
 
 var _ Processor = &distinct{}
+var _ RowSource = &distinct{}
 
 func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
@@ -66,85 +77,15 @@ func newDistinct(
 
 // Run is part of the processor interface.
 func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
+	if d.out.output == nil {
+		panic("distinct output not initialized for emitting rows")
+	}
+	if ctx != d.flowCtx.ctx {
+		panic("unexpected context")
+	}
+	Run(ctx, d, d.out.output)
 	if wg != nil {
-		defer wg.Done()
-	}
-	defer d.memAcc.Close(ctx)
-
-	ctx = log.WithLogTag(ctx, "Evaluator", nil)
-	ctx, span := processorSpan(ctx, "distinct")
-	defer tracing.FinishSpan(span)
-
-	if log.V(2) {
-		log.Infof(ctx, "starting distinct process")
-		defer log.Infof(ctx, "exiting distinct")
-	}
-
-	earlyExit, err := d.mainLoop(ctx)
-	if err != nil {
-		DrainAndClose(ctx, d.out.output, err, d.input)
-	} else if !earlyExit {
-		sendTraceData(ctx, d.out.output)
-		d.input.ConsumerClosed()
-		d.out.Close()
-	}
-}
-
-func (d *distinct) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
-	d.evalCtx = d.flowCtx.NewEvalCtx()
-	var scratch []byte
-
-	for {
-		row, meta := d.input.Next()
-		if !meta.Empty() {
-			if meta.Err != nil {
-				return false, meta.Err
-			}
-			if !emitHelper(ctx, &d.out, nil /* row */, meta, d.input) {
-				// No cleanup required; emitHelper() took care of it.
-				return true, nil
-			}
-			continue
-		}
-		if row == nil {
-			return false, nil
-		}
-
-		// If we are processing DISTINCT(x, y) and the input stream is ordered
-		// by x, we define x to be our group key. Our seen set at any given time
-		// is only the set of all rows with the same group key. The encoding of
-		// the row is the key we use in our 'seen' set.
-		encoding, err := d.encode(scratch, row)
-		if err != nil {
-			return false, err
-		}
-		scratch = encoding[:0]
-
-		// The 'seen' set is reset whenever we find consecutive rows differing on the
-		// group key thus avoiding the need to store encodings of all rows.
-		matched, err := d.matchLastGroupKey(row)
-		if err != nil {
-			return false, err
-		}
-
-		if !matched {
-			d.lastGroupKey = row
-			d.seen = make(map[string]struct{})
-			d.memAcc.Clear(ctx)
-		}
-
-		if _, ok := d.seen[string(encoding)]; !ok {
-			if len(encoding) > 0 {
-				if err := d.memAcc.Grow(ctx, int64(len(encoding))); err != nil {
-					return false, err
-				}
-				d.seen[string(encoding)] = struct{}{}
-			}
-			if !emitHelper(ctx, &d.out, row, ProducerMetadata{}, d.input) {
-				// No cleanup required; emitHelper() took care of it.
-				return true, nil
-			}
-		}
+		wg.Done()
 	}
 }
 
@@ -188,4 +129,131 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 		}
 	}
 	return appendTo, nil
+}
+
+func (d *distinct) close() {
+	if !d.closed {
+		d.closed = true
+		d.input.ConsumerClosed()
+		d.memAcc.Close(d.ctx)
+		tracing.FinishSpan(d.span)
+		d.span = nil
+	}
+	// This prevents Next() from returning more rows.
+	d.out.consumerClosed()
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// valuesProcessor ran out of rows or encountered an error. It is ok for err to
+// be nil indicating that we're done producing rows even though no error
+// occurred.
+func (d *distinct) producerMeta(err error) ProducerMetadata {
+	var meta ProducerMetadata
+	if !d.closed {
+		meta = ProducerMetadata{Err: err}
+		if err == nil {
+			meta.TraceData = getTraceData(d.ctx)
+		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		d.close()
+	}
+	return meta
+}
+
+// Types is part of the RowSource interface.
+func (d *distinct) Types() []sqlbase.ColumnType {
+	return d.OutputTypes()
+}
+
+// Next is part of the RowSource interface.
+func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+	if !d.started {
+		d.started = true
+		d.ctx = log.WithLogTag(d.flowCtx.ctx, "Evaluator", nil)
+		d.ctx, d.span = processorSpan(d.ctx, "distinct")
+		d.evalCtx = d.flowCtx.NewEvalCtx()
+	}
+
+	for {
+		row, meta := d.input.Next()
+		if d.ctx == nil || !meta.Empty() {
+			return nil, meta
+		}
+		if row == nil {
+			return nil, d.producerMeta(nil /* err */)
+		}
+		if d.consumerStatus != NeedMoreRows {
+			continue
+		}
+
+		// If we are processing DISTINCT(x, y) and the input stream is ordered
+		// by x, we define x to be our group key. Our seen set at any given time
+		// is only the set of all rows with the same group key. The encoding of
+		// the row is the key we use in our 'seen' set.
+		encoding, err := d.encode(d.scratch, row)
+		if err != nil {
+			return nil, d.producerMeta(err)
+		}
+		d.scratch = encoding[:0]
+
+		// The 'seen' set is reset whenever we find consecutive rows differing on the
+		// group key thus avoiding the need to store encodings of all rows.
+		matched, err := d.matchLastGroupKey(row)
+		if err != nil {
+			return nil, d.producerMeta(err)
+		}
+
+		if !matched {
+			d.lastGroupKey = row
+			d.seen = make(map[string]struct{})
+			d.memAcc.Clear(d.ctx)
+		}
+
+		if _, ok := d.seen[string(encoding)]; !ok {
+			if len(encoding) > 0 {
+				if err := d.memAcc.Grow(d.ctx, int64(len(encoding))); err != nil {
+					return nil, d.producerMeta(err)
+				}
+				d.seen[string(encoding)] = struct{}{}
+			}
+
+			outRow, status, err := d.out.ProcessRow(d.ctx, row)
+			if err != nil {
+				return nil, d.producerMeta(err)
+			}
+			switch status {
+			case NeedMoreRows:
+				if outRow == nil && err == nil {
+					continue
+				}
+			case DrainRequested:
+				d.input.ConsumerDone()
+				continue
+			}
+
+			return outRow, ProducerMetadata{}
+		}
+	}
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (d *distinct) ConsumerDone() {
+	d.input.ConsumerDone()
+	if d.consumerStatus != NeedMoreRows {
+		log.Fatalf(context.Background(), "distinct already done or closed: %d",
+			d.consumerStatus)
+	}
+	d.consumerStatus = DrainRequested
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (d *distinct) ConsumerClosed() {
+	if d.consumerStatus == ConsumerClosed {
+		log.Fatalf(context.Background(), "distinct already closed")
+	}
+	d.consumerStatus = ConsumerClosed
+	// The consumer is done, Next() will not be called again.
+	d.close()
 }
