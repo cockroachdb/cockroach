@@ -140,6 +140,7 @@ func TestDistinct(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
+				ctx:      context.Background(),
 				Settings: cluster.MakeTestingClusterSettings(),
 				EvalCtx:  evalCtx,
 			}

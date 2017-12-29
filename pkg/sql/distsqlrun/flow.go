@@ -52,6 +52,10 @@ type FlowID struct {
 type FlowCtx struct {
 	log.AmbientContext
 
+	// Context used for all execution within the flow.
+	// Created in Start(), canceled in Cleanup().
+	ctx context.Context
+
 	Settings *cluster.Settings
 
 	stopper *stop.Stopper
@@ -146,10 +150,6 @@ type Flow struct {
 	doneFn func()
 
 	status flowStatus
-
-	// Context used for all execution within the flow.
-	// Created in Start(), canceled in Cleanup().
-	ctx context.Context
 
 	// Cancel function for ctx. Call this to cancel the flow (safe to be called
 	// multiple times).
