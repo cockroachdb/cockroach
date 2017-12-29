@@ -68,7 +68,7 @@ func newSorter(
 		count:       count,
 		tempStorage: flowCtx.TempStorage,
 	}
-	if err := s.init(post, input.Types(), flowCtx, output); err != nil {
+	if err := s.init(post, input.OutputTypes(), flowCtx, output); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -113,7 +113,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 		rowContainerMon = &limitedMon
 	}
-	sv.initWithMon(s.ordering, s.rawInput.Types(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+	sv.initWithMon(s.ordering, s.rawInput.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
 	// Construct the optimal sorterStrategy.
 	var ss sorterStrategy
 	if s.matchLen == 0 {
