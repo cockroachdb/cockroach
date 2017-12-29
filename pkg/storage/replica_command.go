@@ -914,26 +914,29 @@ func (r *Replica) sha512(
 		} else if !ok {
 			break
 		}
-		// TODO(tschottdorf): looks like we'd want to use Unsafe{Key,Value} here when `snapshot == nil` (the common case).
-		key := iter.Key()
-		value := iter.Value()
+		unsafeKey := iter.UnsafeKey()
+		unsafeValue := iter.UnsafeValue()
 
 		if snapshot != nil {
-			// Add the k:v into the debug message.
-			snapshot.KV = append(snapshot.KV, roachpb.RaftSnapshotData_KeyValue{Key: key.Key, Value: value, Timestamp: key.Timestamp})
+			// Add the (copy of the) k:v into the debug message.
+			snapshot.KV = append(snapshot.KV, roachpb.RaftSnapshotData_KeyValue{
+				Key:       iter.Key().Key,
+				Value:     iter.Value(),
+				Timestamp: unsafeKey.Timestamp,
+			})
 		}
 
-		// Encode the length of the key and value.
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(key.Key))); err != nil {
+		// Encode the length of the unsafeKey and unsafeValue.
+		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeKey.Key))); err != nil {
 			return nil, err
 		}
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(value))); err != nil {
+		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeValue))); err != nil {
 			return nil, err
 		}
-		if _, err := hasher.Write(key.Key); err != nil {
+		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return nil, err
 		}
-		legacyTimestamp = hlc.LegacyTimestamp(key.Timestamp)
+		legacyTimestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
 		timestamp, err := protoutil.Marshal(&legacyTimestamp)
 		if err != nil {
 			return nil, err
@@ -941,7 +944,7 @@ func (r *Replica) sha512(
 		if _, err := hasher.Write(timestamp); err != nil {
 			return nil, err
 		}
-		if _, err := hasher.Write(value); err != nil {
+		if _, err := hasher.Write(unsafeValue); err != nil {
 			return nil, err
 		}
 	}
