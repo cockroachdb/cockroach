@@ -295,7 +295,7 @@ a method to the planner.  That's where the centralized statement dispatch takes
 place, so that's the place to add semantics.
 
 Look for the source of the error we're seeing.  You'll find that it's at the end
-of a long type switch statement.  Let's add a case to that:
+of a long type switch statement in `/pkg/sql/plan.go`.  Let's add a case to that:
 
 ```go
 case *tree.Frobnicate:
