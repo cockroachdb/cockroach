@@ -20,9 +20,13 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"golang.org/x/net/context"
 )
+
+// TODO(asubiotto): Add test and benchmark for RowChannel juggling batches.
 
 // Benchmark a pipeline of RowChannels.
 func BenchmarkRowChannelPipeline(b *testing.B) {
@@ -69,5 +73,179 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			rc[0].ProducerDone()
 			wg.Wait()
 		})
+
 	}
+}
+
+type callbackFn func(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus
+
+type CallbackReceiver struct {
+	fn callbackFn
+}
+
+func NewCallbackReceiver(fn callbackFn) *CallbackReceiver {
+	return &CallbackReceiver{fn: fn}
+}
+
+func (c *CallbackReceiver) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+	return c.fn(row, meta)
+}
+
+func (c *CallbackReceiver) ProducerDone() {}
+
+var _ RowReceiver = &CallbackReceiver{}
+
+func BenchmarkJoinAndCount(b *testing.B) {
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+	flowCtx := FlowCtx{
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
+
+	spec := HashJoinerSpec{
+		LeftEqColumns:  []uint32{0},
+		RightEqColumns: []uint32{0},
+		Type:           JoinType_INNER,
+	}
+	//post := PostProcessSpec{Projection: true, OutputColumns: []uint32{0}}
+	// TODO(asubiotto): I think this should be right.
+	post := PostProcessSpec{}
+
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+
+	// Input will serve as both left and right inputs. Every row will have the
+	// same column value, thus producing inputSize^2 rows.
+	const inputSize = 1000
+	input := make(sqlbase.EncDatumRows, inputSize)
+	for i := range input {
+		input[i] = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(1)))}
+	}
+
+	types := []sqlbase.ColumnType{columnTypeInt}
+
+	leftInput := NewRepeatableRowSource(types, input)
+	rightInput := NewRepeatableRowSource(types, input)
+
+	b.Run("Normal", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			leftInput.Reset()
+			rightInput.Reset()
+			conn := &RowChannel{}
+			conn.Init(types)
+			ag, err := newAggregator(
+				&flowCtx,
+				&AggregatorSpec{
+					Aggregations: []AggregatorSpec_Aggregation{{Func: AggregatorSpec_COUNT_ROWS}},
+				},
+				conn,
+				&post,
+				&RowDisposer{},
+			)
+			if err != nil {
+				b.Fatal(err)
+			}
+			var wg sync.WaitGroup
+			go func() {
+				wg.Add(1)
+				ag.Run(ctx, &wg)
+			}()
+			h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, conn)
+			if err != nil {
+				b.Fatal(err)
+			}
+			h.Run(ctx, nil)
+
+			wg.Wait()
+		}
+	})
+
+	b.Run("ElideRowChan", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			leftInput.Reset()
+			rightInput.Reset()
+			ag, err := newAggregator(
+				&flowCtx,
+				&AggregatorSpec{
+					Aggregations: []AggregatorSpec_Aggregation{{Func: AggregatorSpec_COUNT_ROWS}},
+				},
+				// This doesn't matter as we're not reading from input.
+				&RepeatableRowSource{},
+				&post,
+				&RowDisposer{},
+			)
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer ag.Close(ctx)
+			var scratch []byte
+			out := NewCallbackReceiver(func(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+				if _, err := ag.NextRow(ctx, scratch, row, meta); err != nil {
+					b.Fatal(err)
+				}
+				return NeedMoreRows
+			})
+			h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
+			if err != nil {
+				b.Fatal(err)
+			}
+			h.Run(ctx, nil)
+			ag.RenderResults(ctx)
+		}
+	})
+
+	b.Run("RowBatching", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			leftInput.Reset()
+			rightInput.Reset()
+			conn := &RowChannel{}
+			conn.Init(types)
+			ag, err := newAggregator(
+				&flowCtx,
+				&AggregatorSpec{
+					Aggregations: []AggregatorSpec_Aggregation{{Func: AggregatorSpec_COUNT_ROWS}},
+				},
+				conn,
+				&post,
+				&RowDisposer{},
+			)
+			if err != nil {
+				b.Fatal(err)
+			}
+			ag.Batching = true
+			var wg sync.WaitGroup
+			go func() {
+				wg.Add(1)
+				ag.Run(ctx, &wg)
+			}()
+			batch := make(RowBatch, 0, RowBatchSize)
+			h, err := newHashJoiner(
+				&flowCtx,
+				&spec,
+				leftInput,
+				rightInput,
+				&post,
+				NewCallbackReceiver(func(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+					if row != nil {
+						batch = append(batch, row)
+						if len(batch) == RowBatchSize {
+							status := conn.PushBatch(batch)
+							batch = make(RowBatch, 0, RowBatchSize)
+							return status
+						}
+						return NeedMoreRows
+					}
+					return conn.Push(row, meta)
+				}),
+			)
+			if err != nil {
+				b.Fatal(err)
+			}
+			h.Run(ctx, nil)
+			conn.ProducerDone()
+
+			wg.Wait()
+		}
+	})
 }

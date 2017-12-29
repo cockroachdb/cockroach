@@ -91,6 +91,12 @@ type RowReceiver interface {
 	ProducerDone()
 }
 
+type RowBatchReceiver interface {
+	RowReceiver
+	// TODO(asubiotto): Comment. Same semantics as RowReceiver.Push
+	PushBatch(batch RowBatch) ConsumerStatus
+}
+
 // CancellableRowReceiver is a special type of a RowReceiver that can be set to
 // canceled asynchronously (i.e. concurrently or after Push()es and ProducerDone()s).
 // Once canceled, subsequent Push()es return ConsumerClosed. Implemented by distSQLReceiver
@@ -145,6 +151,12 @@ type RowSource interface {
 	// ConsumerClosed() must be called; it is a no-op to call these methods after
 	// all the rows were consumed (i.e. after Next() returned an empty row).
 	ConsumerClosed()
+}
+
+type RowBatchSource interface {
+	RowSource
+	// TODO(asubiotto): Comment. Should be same semantics as Next()
+	NextBatch() (RowBatch, ProducerMetadata)
 }
 
 // DrainAndForwardMetadata calls src.ConsumerDone() (thus asking src for
@@ -278,6 +290,8 @@ type RowChannelMsg struct {
 	// Only one of these fields will be set.
 	Row  sqlbase.EncDatumRow
 	Meta ProducerMetadata
+	// TODO(asubiotto): Eventually Batch will replace Row.
+	Batch RowBatch
 }
 
 // ProducerMetadata represents a metadata record flowing through a DistSQL flow.
@@ -291,6 +305,24 @@ type ProducerMetadata struct {
 	// TraceData is sent if snowball tracing is enabled.
 	TraceData []tracing.RecordedSpan
 }
+
+// RowBatchSize is the maximum size of a RowBatch. This number is based on the
+// batch size of the kv fetcher.
+const RowBatchSize = 10000
+
+// TODO(asubiotto): Would this make more sense in pkg/sql/sqlbase?
+// TODO(asubiotto): Inefficient representation for now. Might be better to
+// be a [][]byte field  or a []byte with row offsets stored alongside and a map
+// of index to any special (non-value) encodings.
+type RowBatch []sqlbase.EncDatumRow
+
+// TODO(asubiotto): For processors that don't work on batches of rows and will
+// be calling Next(), we will want to "unbatch" the rows in the RowSource.
+// CAREFUL: We might be breaking ordering guarantees.
+
+// TODO(asubiotto): Write a RowBatchIterator. It kind of bugs me how similar
+// this is to the memRowContainer. It's probably too heavyweight for this. Might
+// want to investigate this.
 
 // Empty returns true if none of the fields in metadata are populated.
 func (meta ProducerMetadata) Empty() bool {
@@ -311,10 +343,17 @@ type RowChannel struct {
 	// consumerStatus is an atomic that signals whether the RowChannel is only
 	// accepting draining metadata or is no longer accepting any rows via Push.
 	consumerStatus ConsumerStatus
+
+	// pendingBatch is a RowBatch that has been read from the channel but not
+	// yet read through Next() or NextBatch(). It is only used when a consumer
+	// calls Next() instead of NextBatch() when the RowChannel's producer is
+	// pushing RowBatches and the consumer needs to be fed one row at a time.
+	// TODO(asubiotto): Remove once rows are no longer sent one by one.
+	pendingBatch RowBatch
 }
 
-var _ RowReceiver = &RowChannel{}
-var _ RowSource = &RowChannel{}
+var _ RowBatchReceiver = &RowChannel{}
+var _ RowBatchSource = &RowChannel{}
 
 // InitWithBufSize initializes the RowChannel with a given buffer size.
 func (rc *RowChannel) InitWithBufSize(types []sqlbase.ColumnType, chanBufSize int) {
@@ -330,15 +369,29 @@ func (rc *RowChannel) Init(types []sqlbase.ColumnType) {
 
 // Push is part of the RowReceiver interface.
 func (rc *RowChannel) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+	return rc.pushMsg(RowChannelMsg{Row: row, Meta: meta})
+}
+
+// Push is part of the RowBatchReceiver interface.
+func (rc *RowChannel) PushBatch(batch RowBatch) ConsumerStatus {
+	return rc.pushMsg(RowChannelMsg{Batch: batch})
+}
+
+func (rc *RowChannel) pushMsg(msg RowChannelMsg) ConsumerStatus {
 	consumerStatus := ConsumerStatus(
 		atomic.LoadUint32((*uint32)(&rc.consumerStatus)))
 	switch consumerStatus {
 	case NeedMoreRows:
-		rc.dataChan <- RowChannelMsg{Row: row, Meta: meta}
+		rc.dataChan <- msg
 	case DrainRequested:
 		// If we're draining, only forward metadata.
-		if !meta.Empty() {
-			rc.dataChan <- RowChannelMsg{Meta: meta}
+		if msg.Row != nil {
+			msg.Row = nil
+		} else if msg.Batch != nil {
+			msg.Batch = nil
+		}
+		if !msg.Meta.Empty() {
+			rc.dataChan <- msg
 		}
 	case ConsumerClosed:
 		// If the consumer is gone, swallow all the rows.
@@ -356,14 +409,46 @@ func (rc *RowChannel) Types() []sqlbase.ColumnType {
 	return rc.types
 }
 
-// Next is part of the RowSource interface.
+// Next is part of the RowSource interface. This implementation of Next() is not
+// threadsafe.
 func (rc *RowChannel) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+	if len(rc.pendingBatch) != 0 {
+		result := rc.pendingBatch[0]
+		rc.pendingBatch = rc.pendingBatch[1:]
+		return result, ProducerMetadata{}
+	}
+	d := rc.nextMsg()
+	if d.Batch != nil {
+		rc.pendingBatch = d.Batch
+		return rc.Next()
+	}
+	return d.Row, d.Meta
+}
+
+// NextBatch is part of the RowBatchSource interface.
+func (rc *RowChannel) NextBatch() (RowBatch, ProducerMetadata) {
+	if len(rc.pendingBatch) != 0 {
+		result := rc.pendingBatch
+		rc.pendingBatch = nil
+		return result, ProducerMetadata{}
+	}
+	d := rc.nextMsg()
+	if d.Batch != nil {
+		return d.Batch, d.Meta
+	}
+	if d.Row != nil {
+		return RowBatch{d.Row}, d.Meta
+	}
+	return nil, d.Meta
+}
+
+func (rc *RowChannel) nextMsg() RowChannelMsg {
 	d, ok := <-rc.C
 	if !ok {
 		// No more rows.
-		return nil, ProducerMetadata{}
+		return RowChannelMsg{Meta: ProducerMetadata{}}
 	}
-	return d.Row, d.Meta
+	return d
 }
 
 // ConsumerDone is part of the RowSource interface.

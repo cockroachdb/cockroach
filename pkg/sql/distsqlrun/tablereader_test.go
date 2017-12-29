@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func TestTableReader(t *testing.T) {
@@ -293,4 +294,110 @@ func BenchmarkTableReader(b *testing.B) {
 			}
 		}
 	}
+}
+
+func BenchmarkNextSteps(b *testing.B) {
+	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTable(
+		b, sqlDB, "t",
+		"k INT PRIMARY KEY, v INT",
+		10000,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
+	)
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+	flowCtx := FlowCtx{
+		EvalCtx:  evalCtx,
+		Settings: s.ClusterSettings(),
+		// Pass a DB without a TxnCoordSender.
+		txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
+		nodeID: s.NodeID(),
+	}
+	spec := TableReaderSpec{
+		Table: *tableDesc,
+		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+	}
+	post := PostProcessSpec{}
+	types := make([]sqlbase.ColumnType, len(tableDesc.Columns))
+	for i := range types {
+		types[i] = tableDesc.Columns[i].Type
+	}
+	b.Run("Normal", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			out := &RowChannel{}
+			out.Init(types)
+			errChan := make(chan error)
+			go func() {
+				for {
+					row, meta := out.Next()
+					if !meta.Empty() {
+						errChan <- errors.Errorf("unexpected metadata: %+v", meta)
+					}
+					if row == nil {
+						break
+					}
+				}
+				errChan <- nil
+			}()
+			tr, err := newTableReader(&flowCtx, &spec, &post, out)
+			if err != nil {
+				b.Fatal(err)
+			}
+			tr.Run(context.Background(), nil)
+
+			if err := <-errChan; err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("ElideRowChan", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			// Out doesn't matter
+			out := &RowBuffer{}
+			tr, err := newTableReader(&flowCtx, &spec, &post, out)
+			if err != nil {
+				b.Fatal(err)
+			}
+			tr.ReadyForFetch()
+			for {
+				row, meta := tr.NextRow()
+				if !meta.Empty() {
+					b.Fatalf("unexpected metadata: %+v", meta)
+				}
+				if row == nil {
+					break
+				}
+			}
+		}
+	})
+	b.Run("RowBatch", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			out := &RowChannel{}
+			out.Init(types)
+			errChan := make(chan error)
+			go func() {
+				for {
+					batch, meta := out.NextBatch()
+					if !meta.Empty() {
+						errChan <- errors.Errorf("unexpected metadata: %+v", meta)
+					}
+					if batch == nil {
+						break
+					}
+				}
+				errChan <- nil
+			}()
+			tr, err := newTableReader(&flowCtx, &spec, &post, out)
+			if err != nil {
+				b.Fatal(err)
+			}
+			tr.Batching = true
+			tr.Run(context.Background(), nil)
+		}
+	})
 }
