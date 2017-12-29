@@ -1014,3 +1014,30 @@ build-scalar,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@1 = 1) AND (@2 > 5) AND (@2 < 1)
 ----
+
+# Verify that we ignore mixed-type comparisons (they would result in incorrect
+# encodings, see #4313). We don't have testcases for IN because those error
+# out early (during type-checking).
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 = 1.5
+----
+[ - ]
+Remaining filter: @1 = 1.5
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 > 1.5
+----
+[ - ]
+Remaining filter: @1 > 1.5
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) = (1, 2.5)
+----
+[/1 - /1]
+Remaining filter: @2 = 2.5
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) >= (1, 2.5)
+----
+[/1 - ]
+Remaining filter: (@1, @2) >= (1, 2.5)
