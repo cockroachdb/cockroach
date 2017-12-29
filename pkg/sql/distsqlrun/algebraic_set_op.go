@@ -65,8 +65,8 @@ func newAlgebraicSetOp(
 		return nil, errors.Errorf("cannot create algebraicSetOp for unsupported algebraicSetOpType %v", e.opType)
 	}
 
-	lt := leftSource.Types()
-	rt := rightSource.Types()
+	lt := leftSource.OutputTypes()
+	rt := rightSource.OutputTypes()
 	if len(lt) != len(rt) {
 		return nil, errors.Errorf(
 			"Non union compatible: left and right have different numbers of columns %d and %d",

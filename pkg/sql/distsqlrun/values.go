@@ -109,11 +109,6 @@ func (v *valuesProcessor) producerMeta(err error) ProducerMetadata {
 	return meta
 }
 
-// Types is part of the RowSource interface.
-func (v *valuesProcessor) Types() []sqlbase.ColumnType {
-	return v.OutputTypes()
-}
-
 // Next is part of the RowSource interface.
 func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 	if !v.started {

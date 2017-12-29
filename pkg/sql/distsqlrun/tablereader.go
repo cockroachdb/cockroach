@@ -328,11 +328,6 @@ func (tr *tableReader) producerMeta(err error) ProducerMetadata {
 	return ProducerMetadata{}
 }
 
-// Types is part of the RowSource interface.
-func (tr *tableReader) Types() []sqlbase.ColumnType {
-	return tr.OutputTypes()
-}
-
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 	if !tr.started {

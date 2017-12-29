@@ -67,7 +67,7 @@ func newDistinct(
 		d.distinctCols.Add(int(col))
 	}
 
-	d.types = input.Types()
+	d.types = input.OutputTypes()
 	if err := d.init(post, d.types, flowCtx, output); err != nil {
 		return nil, err
 	}
@@ -160,11 +160,6 @@ func (d *distinct) producerMeta(err error) ProducerMetadata {
 		d.close()
 	}
 	return meta
-}
-
-// Types is part of the RowSource interface.
-func (d *distinct) Types() []sqlbase.ColumnType {
-	return d.OutputTypes()
 }
 
 // Next is part of the RowSource interface.
