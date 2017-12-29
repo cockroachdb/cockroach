@@ -495,6 +495,8 @@ render     0  render  ·         ·                       (u, v, w)  +u,+v,+w
 query III
 SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
 ----
+1  NULL  1
+1  NULL  2
 1  1     NULL
 1  1     1
 1  1     2
