@@ -902,7 +902,6 @@ func (r *Replica) sha512(
 	desc roachpb.RangeDescriptor, snap engine.Reader, snapshot *roachpb.RaftSnapshotData,
 ) ([]byte, error) {
 	hasher := sha512.New()
-	tombstoneKey := engine.MakeMVCCMetadataKey(keys.RaftTombstoneKey(desc.RangeID))
 
 	// Iterate over all the data in the range.
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
@@ -915,15 +914,8 @@ func (r *Replica) sha512(
 		} else if !ok {
 			break
 		}
+		// TODO(tschottdorf): looks like we'd want to use Unsafe{Key,Value} here when `snapshot == nil` (the common case).
 		key := iter.Key()
-		if key.Equal(tombstoneKey) {
-			// Skip the tombstone key which is marked as replicated even though it
-			// isn't.
-			//
-			// TODO(peter): Figure out a way to migrate this key to the unreplicated
-			// key space.
-			continue
-		}
 		value := iter.Value()
 
 		if snapshot != nil {
