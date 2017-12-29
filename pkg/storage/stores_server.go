@@ -64,12 +64,16 @@ func (is Server) CollectChecksum(
 			if err != nil {
 				return err
 			}
-			resp.Checksum = c.checksum
-			if !bytes.Equal(req.Checksum, c.checksum) {
+			ccr := c.CollectChecksumResponse
+			if !bytes.Equal(req.Checksum, ccr.Checksum) {
 				log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
-					req.RangeID, req.Checksum, c.checksum)
-				resp.Snapshot = c.snapshot
+					req.RangeID, req.Checksum, ccr.Checksum)
+				// Leave resp.Snapshot alone so that the caller will receive what's
+				// in it (if anything).
+			} else {
+				ccr.Snapshot = nil
 			}
+			resp = &ccr
 			return nil
 		})
 	return resp, err

@@ -83,6 +83,9 @@ type CollectChecksumResponse struct {
 	Checksum []byte `protobuf:"bytes,1,opt,name=checksum,proto3" json:"checksum,omitempty"`
 	// snapshot is set if the roachpb.ComputeChecksumRequest had snapshot = true
 	// and the response checksum is different from the request checksum.
+	//
+	// TODO(tschottdorf): with larger ranges, this is no longer tenable.
+	// See https://github.com/cockroachdb/cockroach/issues/21128.
 	Snapshot *cockroach_roachpb1.RaftSnapshotData `protobuf:"bytes,2,opt,name=snapshot" json:"snapshot,omitempty"`
 }
 

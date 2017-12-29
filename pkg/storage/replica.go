@@ -178,18 +178,15 @@ type proposalResult struct {
 
 // ReplicaChecksum contains progress on a replica checksum computation.
 type ReplicaChecksum struct {
+	CollectChecksumResponse
 	// started is true if the checksum computation has started.
 	started bool
-	// Computed checksum. This is set to nil on error.
-	checksum []byte
 	// If gcTimestamp is nonzero, GC this checksum after gcTimestamp. gcTimestamp
 	// is zero if and only if the checksum computation is in progress.
 	gcTimestamp time.Time
 	// This channel is closed after the checksum is computed, and is used
 	// as a notification.
 	notify chan struct{}
-	// Some debug output that can be added to the CollectChecksumResponse.
-	snapshot *roachpb.RaftSnapshotData
 }
 
 type atomicDescString struct {
