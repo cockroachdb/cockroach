@@ -776,6 +776,16 @@ func (r *Replica) applySnapshot(
 		}
 	}
 
+	// Nodes before v2.0 may send an incorrect Raft tombstone (see #12154) that was supposed
+	// to be unreplicated. Simply remove it.
+	//
+	// NB: this can be removed in v2.1. This is because when we are running a binary at
+	// v2.1, we know that peers are at least running v2.0, which will never send out these
+	// snapshots.
+	if err := clearLegacyTombstone(batch, r.RangeID); err != nil {
+		return errors.Wrap(err, "while clearing legacy tombstone key")
+	}
+
 	// The log entries are all written to distinct keys so we can use a
 	// distinct batch.
 	distinctBatch := batch.Distinct()

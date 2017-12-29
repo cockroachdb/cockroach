@@ -19,7 +19,9 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -178,6 +181,136 @@ func createTestStoreWithConfig(t testing.TB, stopper *stop.Stopper, cfg *StoreCo
 	return store
 }
 
+// TestIterateIDPrefixKeys lays down a number of tombstones (at keys.RaftTombstoneKey) interspersed
+// with other irrelevant keys (both chosen randomly). It then verifies that IterateIDPrefixKeys
+// correctly returns only the relevant keys and values.
+func TestIterateIDPrefixKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
+
+	seed := randutil.NewPseudoSeed()
+	//const seed = -1666367124291055473
+	t.Logf("seed is %d", seed)
+	rng := rand.New(rand.NewSource(seed))
+
+	ops := []func(rangeID roachpb.RangeID) roachpb.Key{
+		keys.RaftAppliedIndexKey, // replicated; sorts before tombstone
+		keys.RaftHardStateKey,    // unreplicated; sorts after tombstone
+		// Replicated key-anchored local key (i.e. not one we should care about).
+		// Will be written at zero timestamp, but that's ok.
+		func(rangeID roachpb.RangeID) roachpb.Key {
+			return keys.RangeDescriptorKey([]byte(fmt.Sprintf("fakerange%d", rangeID)))
+		},
+		func(rangeID roachpb.RangeID) roachpb.Key {
+			return roachpb.Key(fmt.Sprintf("fakeuserkey%d", rangeID))
+		},
+	}
+
+	const rangeCount = 10
+	rangeIDFn := func() roachpb.RangeID {
+		return 1 + roachpb.RangeID(rng.Intn(10*rangeCount)) // spread rangeIDs out
+	}
+
+	// Write a number of keys that should be irrelevant to the iteration in this test.
+	for i := 0; i < rangeCount; i++ {
+		rangeID := rangeIDFn()
+
+		// Grab between one and all ops, randomly.
+		for _, opIdx := range rng.Perm(len(ops))[:rng.Intn(1+len(ops))] {
+			key := ops[opIdx](rangeID)
+			t.Logf("writing op=%d rangeID=%d", opIdx, rangeID)
+			if err := engine.MVCCPut(
+				ctx,
+				eng,
+				nil, /* ms */
+				key,
+				hlc.Timestamp{},
+				roachpb.MakeValueFromString("fake value for "+key.String()),
+				nil, /* txn */
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	type seenT struct {
+		rangeID   roachpb.RangeID
+		tombstone roachpb.RaftTombstone
+	}
+
+	// Next, write the keys we're planning to see again.
+	var wanted []seenT
+	{
+		used := make(map[roachpb.RangeID]struct{})
+		for {
+			rangeID := rangeIDFn()
+			if _, ok := used[rangeID]; ok {
+				// We already wrote this key, so roll the dice again.
+				continue
+			}
+
+			tombstone := roachpb.RaftTombstone{
+				NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
+			}
+
+			used[rangeID] = struct{}{}
+			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
+
+			t.Logf("writing tombstone at rangeID=%d", rangeID)
+			if err := engine.MVCCPutProto(
+				ctx, eng, nil /* ms */, keys.RaftTombstoneKey(rangeID), hlc.Timestamp{}, nil /* txn */, &tombstone,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			if len(wanted) >= rangeCount {
+				break
+			}
+		}
+	}
+
+	sort.Slice(wanted, func(i, j int) bool {
+		return wanted[i].rangeID < wanted[j].rangeID
+	})
+
+	var seen []seenT
+	var tombstone roachpb.RaftTombstone
+
+	handleTombstone := func(rangeID roachpb.RangeID) (more bool, _ error) {
+		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
+		return true, nil
+	}
+
+	if err := IterateIDPrefixKeys(ctx, eng, keys.RaftTombstoneKey, &tombstone, handleTombstone); err != nil {
+		t.Fatal(err)
+	}
+	placeholder := seenT{
+		rangeID: roachpb.RangeID(9999),
+	}
+
+	if len(wanted) != len(seen) {
+		t.Errorf("wanted %d results, got %d", len(wanted), len(seen))
+	}
+
+	for len(wanted) < len(seen) {
+		wanted = append(wanted, placeholder)
+	}
+	for len(seen) < len(wanted) {
+		seen = append(seen, placeholder)
+	}
+
+	if diff := pretty.Diff(wanted, seen); len(diff) > 0 {
+		pretty.Ldiff(t, wanted, seen)
+		t.Fatal("diff(wanted, seen) is nonempty")
+	}
+}
+
 // TestStoreInitAndBootstrap verifies store initialization and bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -189,6 +322,13 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	legacyTombstoneKeys := []roachpb.Key{
+		// Range 1 actually exists (since we will bootstrap it).
+		keys.RaftTombstoneIncorrectLegacyKey(1 /* rangeID */),
+		// These ranges don't exist.
+		keys.RaftTombstoneIncorrectLegacyKey(2 /* rangeID */),
+		keys.RaftTombstoneIncorrectLegacyKey(3 /* rangeID */),
+	}
 
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
@@ -219,6 +359,18 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		if err := store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
 			t.Errorf("failure to create first range: %s", err)
 		}
+
+		// Put down a few fake legacy tombstones (#12154) to jog `migrateLegacyTombstones`, including
+		// one for the existing range, but also some for non-existing ones.
+
+		tombstone := roachpb.RaftTombstone{NextReplicaID: 0}
+		for _, legacyTombstoneKey := range legacyTombstoneKeys {
+			if err := engine.MVCCPutProto(
+				ctx, store.engine, nil /* ms */, legacyTombstoneKey, hlc.Timestamp{}, nil /* txn */, &tombstone,
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
@@ -227,6 +379,26 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		if err := store.Start(ctx, stopper); err != nil {
 			t.Fatalf("failure initializing bootstrapped store: %s", err)
 		}
+
+		// Check that `migrateLegacyTombstone` did what it was supposed to.
+		for _, legacyTombstoneKey := range legacyTombstoneKeys {
+			if ok, err := engine.MVCCGetProto(
+				ctx, store.engine, legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, nil, /* msg */
+			); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Fatalf("unexpectedly found legacy tombstone key at %s", legacyTombstoneKey)
+			}
+
+			if ok, err := engine.MVCCGetProto(
+				ctx, store.engine, keys.RaftTombstoneKey(1), hlc.Timestamp{}, true /* consistent */, nil /* txn */, nil, /* msg */
+			); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				t.Fatalf("unexpectedly did not find migrated tombstone key at %s", legacyTombstoneKey)
+			}
+		}
+
 		// 1st range should be available.
 		r, err := store.GetReplica(1)
 		if err != nil {

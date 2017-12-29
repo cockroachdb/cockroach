@@ -1007,6 +1007,82 @@ func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
 }
 
+// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing ( such as
+// RaftHardStateKey, RaftTombstoneKey, and many others). Such keys could in principle exist at any
+// RangeID, and this helper efficiently discovers all the keys of the desired type (as specified by
+// the supplied `keyFn`) and, for each key-value pair discovered, unmarshals it into `msg` and then
+// invokes `f`.
+//
+// Iteration stops on the first error (and will pass through that error).
+func IterateIDPrefixKeys(
+	ctx context.Context,
+	eng engine.Reader,
+	keyFn func(roachpb.RangeID) roachpb.Key,
+	msg protoutil.Message,
+	f func(_ roachpb.RangeID) (more bool, _ error),
+) error {
+	rangeID := roachpb.RangeID(1)
+	iter := eng.NewIterator(false /* prefix */)
+
+	for {
+		bumped := false
+		mvccKey := engine.MakeMVCCMetadataKey(keyFn(rangeID))
+		iter.Seek(mvccKey)
+
+		if ok, err := iter.Valid(); !ok {
+			return err
+		}
+
+		unsafeKey := iter.UnsafeKey()
+
+		if !bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
+			// Left the local keyspace, so we're done.
+			return nil
+		}
+
+		curRangeID, _, _, _, err := keys.DecodeRangeIDKey(unsafeKey.Key)
+		if err != nil {
+			return err
+		}
+
+		if curRangeID > rangeID {
+			// `bumped` is always `false` here, but let's be explicit.
+			if !bumped {
+				rangeID = curRangeID
+				bumped = true
+			}
+			mvccKey = engine.MakeMVCCMetadataKey(keyFn(rangeID))
+		}
+
+		if !unsafeKey.Key.Equal(mvccKey.Key) {
+			if !bumped {
+				// Don't increment the rangeID if it has already been incremented
+				// above, or we could skip past a value we ought to see.
+				rangeID++
+				bumped = true // for completeness' sake; continuing below anyway
+			}
+			continue
+		}
+
+		ok, err := engine.MVCCGetProto(
+			ctx, eng, unsafeKey.Key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, msg,
+		)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey.Key, msg)
+		}
+
+		log.Infof(ctx, "visiting for %d", rangeID)
+		more, err := f(rangeID)
+		if !more || err != nil {
+			return err
+		}
+		rangeID++
+	}
+}
+
 // IterateRangeDescriptors calls the provided function with each descriptor
 // from the provided Engine. The return values of this method and fn have
 // semantics similar to engine.MVCCIterate.
@@ -1045,6 +1121,50 @@ func IterateRangeDescriptors(
 	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
 		allCount, matchCount, bySuffix)
 	return err
+}
+
+// clearLegacyTombstone removes the legacy tombstone for the given rangeID, taking
+// care to do this without reading from the engine (as is required by one of the
+// callers).
+func clearLegacyTombstone(eng engine.Writer, rangeID roachpb.RangeID) error {
+	return eng.Clear(engine.MakeMVCCMetadataKey(keys.RaftTombstoneIncorrectLegacyKey(rangeID)))
+}
+
+// migrateLegacyTombstones rewrites all legacy tombstones into the correct key.
+// It can be removed in binaries post v2.0.
+func migrateLegacyTombstones(ctx context.Context, eng engine.Engine) error {
+	var tombstone roachpb.RaftTombstone
+	handleTombstone := func(rangeID roachpb.RangeID) (more bool, _ error) {
+		batch := eng.NewBatch()
+		defer batch.Close()
+
+		tombstoneKey := keys.RaftTombstoneKey(rangeID)
+		if err := engine.MVCCPutProto(ctx, batch, nil, tombstoneKey,
+			hlc.Timestamp{}, nil, &tombstone); err != nil {
+			return false, err
+		}
+		if err := clearLegacyTombstone(batch, rangeID); err != nil {
+			return false, err
+		}
+		// Specify sync==false because we don't want to sync individually,
+		// but see the end of the surrounding method where we sync explicitly.
+		err := batch.Commit(false /* sync */)
+		return err == nil, err
+	}
+	err := IterateIDPrefixKeys(ctx, eng, keys.RaftTombstoneIncorrectLegacyKey, &tombstone, handleTombstone)
+	if err != nil {
+		return err
+	}
+
+	// Write a final bogus batch so that we get to do a sync commit, which
+	// implicitly also syncs everything written before.
+	batch := eng.NewBatch()
+	defer batch.Close()
+
+	if err := clearLegacyTombstone(batch, 1 /* rangeID */); err != nil {
+		return err
+	}
+	return batch.Commit(true /* sync */)
 }
 
 // ReadStoreIdent reads the StoreIdent from the store.
@@ -1102,6 +1222,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
+
+	if err := migrateLegacyTombstones(ctx, s.engine); err != nil {
+		return errors.Wrap(err, "migrating legacy tombstones")
+	}
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
