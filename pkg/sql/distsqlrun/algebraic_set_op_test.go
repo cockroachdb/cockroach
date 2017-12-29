@@ -85,14 +85,17 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 	inR := NewRowBuffer(types, tc.inputRight, RowBufferArgs{})
 	out := NewRowBuffer(types, nil /* rows */, RowBufferArgs{})
 
-	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings()}
+	flowCtx := FlowCtx{
+		Ctx:      context.Background(),
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
 
 	s, err := newAlgebraicSetOp(&flowCtx, &tc.spec, inL, inR, &PostProcessSpec{}, out)
 	if err != nil {
 		return nil, err
 	}
 
-	s.Run(context.Background(), nil)
+	s.Run(nil)
 	if !out.ProducerClosed {
 		return nil, errors.Errorf("output RowReceiver not closed")
 	}

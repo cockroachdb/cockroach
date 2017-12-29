@@ -76,14 +76,11 @@ func newDistinct(
 }
 
 // Run is part of the processor interface.
-func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (d *distinct) Run(wg *sync.WaitGroup) {
 	if d.out.output == nil {
 		panic("distinct output not initialized for emitting rows")
 	}
-	if ctx != d.flowCtx.ctx {
-		panic("unexpected context")
-	}
-	Run(ctx, d, d.out.output)
+	Run(d.flowCtx.Ctx, d, d.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -166,7 +163,7 @@ func (d *distinct) producerMeta(err error) ProducerMetadata {
 func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 	if !d.started {
 		d.started = true
-		d.ctx = log.WithLogTag(d.flowCtx.ctx, "Evaluator", nil)
+		d.ctx = log.WithLogTag(d.flowCtx.Ctx, "Evaluator", nil)
 		d.ctx, d.span = processorSpan(d.ctx, "distinct")
 		d.evalCtx = d.flowCtx.NewEvalCtx()
 	}

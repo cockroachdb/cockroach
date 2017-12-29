@@ -55,7 +55,7 @@ type tableReader struct {
 	processorBase
 
 	// ctx and span contain the tracing state while the processor is active
-	// (i.e. hasn't been closed). Initialized using flowCtx.ctx (which should not
+	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not
 	// be otherwise used).
 	ctx  context.Context
 	span opentracing.Span
@@ -205,14 +205,11 @@ func initRowFetcher(
 }
 
 // Run is part of the processor interface.
-func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (tr *tableReader) Run(wg *sync.WaitGroup) {
 	if tr.out.output == nil {
 		panic("tableReader output not initialized for emitting rows")
 	}
-	if ctx != tr.flowCtx.ctx {
-		panic("unexpected context")
-	}
-	Run(ctx, tr, tr.out.output)
+	Run(tr.flowCtx.Ctx, tr, tr.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -337,7 +334,7 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 			log.Fatalf(tr.ctx, "tableReader outside of txn")
 		}
 
-		tr.ctx = log.WithLogTagInt(tr.flowCtx.ctx, "TableReader", int(tr.tableDesc.ID))
+		tr.ctx = log.WithLogTagInt(tr.flowCtx.Ctx, "TableReader", int(tr.tableDesc.ID))
 		tr.ctx, tr.span = processorSpan(tr.ctx, "table reader")
 		log.VEventf(tr.ctx, 1, "starting")
 

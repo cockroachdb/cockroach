@@ -396,6 +396,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
+				Ctx:      context.Background(),
 				EvalCtx:  evalCtx,
 				Settings: s.ClusterSettings(),
 				// Pass a DB without a TxnCoordSender.
@@ -408,7 +409,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			irj.Run(context.Background(), nil)
+			irj.Run(nil)
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}

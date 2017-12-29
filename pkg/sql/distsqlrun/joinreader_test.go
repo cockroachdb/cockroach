@@ -103,6 +103,7 @@ func TestJoinReader(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
+				Ctx:      context.Background(),
 				EvalCtx:  evalCtx,
 				Settings: cluster.MakeTestingClusterSettings(),
 				// Pass a DB without a TxnCoordSender.
@@ -125,7 +126,7 @@ func TestJoinReader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			jr.Run(context.Background(), nil)
+			jr.Run(nil)
 
 			if !in.Done {
 				t.Fatal("joinReader didn't consume all the rows")
@@ -171,6 +172,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
+		Ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
 		// Pass a DB without a TxnCoordSender.
@@ -179,8 +181,6 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	encRow := make(sqlbase.EncDatumRow, 1)
 	encRow[0] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(1))
-
-	ctx := context.Background()
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
@@ -193,7 +193,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(ctx, nil)
+		jr.Run(nil)
 	})
 
 	// ConsumerDone verifies that the producer drains properly by checking that
@@ -212,7 +212,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(ctx, nil)
+		jr.Run(nil)
 		row, meta := out.Next()
 		if row != nil {
 			t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))

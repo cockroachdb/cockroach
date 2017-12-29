@@ -46,6 +46,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
+		Ctx:      context.Background(),
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
@@ -55,7 +56,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Run(context.Background(), nil)
+	p.Run(nil)
 
 	// Verify we have numSamples distinct rows.
 	res := make([]int, 0, numSamples)
@@ -150,6 +151,7 @@ func TestSamplerSketch(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
+		Ctx:      context.Background(),
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
@@ -171,7 +173,7 @@ func TestSamplerSketch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Run(context.Background(), nil)
+	p.Run(nil)
 
 	rows = out.GetRowsNoMeta(t)
 	// We expect one sampled row and two sketch rows.
