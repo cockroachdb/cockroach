@@ -132,9 +132,21 @@ func (ri *ReplicaDataIterator) Valid() (bool, error) {
 	return ri.iterator.Valid()
 }
 
+// UnsafeKey returns the current key, backed by memory that may be reused with
+// the next operation on the iterator.
+func (ri *ReplicaDataIterator) UnsafeKey() engine.MVCCKey {
+	return ri.iterator.UnsafeKey()
+}
+
 // Key returns the current key.
 func (ri *ReplicaDataIterator) Key() engine.MVCCKey {
 	return ri.iterator.Key()
+}
+
+// UnsafeValue returns the current value, backed by memory that may be reused
+// with the next operation on the iterator.
+func (ri *ReplicaDataIterator) UnsafeValue() []byte {
+	return ri.iterator.UnsafeValue()
 }
 
 // Value returns the current value.
