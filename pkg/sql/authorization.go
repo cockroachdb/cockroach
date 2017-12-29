@@ -22,23 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// AuthorizationAccessor for checking authorization (e.g. desc privileges).
-type AuthorizationAccessor interface {
-	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
-	CheckPrivilege(
-		descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
-	) error
-
-	// CheckAnyPrivilege returns nil if user has any privileges at all.
-	CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error
-
-	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
-	// or node). Includes the named action in the error message.
-	RequireSuperUser(action string) error
-}
-
-var _ AuthorizationAccessor = &Planner{}
-
 // CheckPrivilegeForUser verifies that `user`` has `privilege` on `descriptor`.
 func CheckPrivilegeForUser(
 	user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,

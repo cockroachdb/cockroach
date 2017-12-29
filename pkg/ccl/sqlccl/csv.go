@@ -876,7 +876,7 @@ var importCSVEnabled = settings.RegisterBoolSetting(
 )
 
 func importPlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	stmt tree.Statement, p *sql.Planner,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
@@ -1133,7 +1133,7 @@ func doDistributedCSVTransform(
 	ctx context.Context,
 	job *jobs.Job,
 	files []string,
-	p sql.PlanHookState,
+	p *sql.Planner,
 	tableDesc *sqlbase.TableDescriptor,
 	temp string,
 	comma, comment rune,

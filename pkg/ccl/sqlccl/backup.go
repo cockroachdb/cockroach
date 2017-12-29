@@ -364,7 +364,7 @@ func writeBackupDescriptor(
 }
 
 func resolveTargetsToDescriptors(
-	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets tree.TargetList,
+	ctx context.Context, p *sql.Planner, endTime hlc.Timestamp, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
 	var err error
 
@@ -614,7 +614,7 @@ func verifyUsableExportTarget(
 }
 
 func backupPlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	stmt tree.Statement, p *sql.Planner,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	backupStmt, ok := stmt.(*tree.Backup)
 	if !ok {
@@ -881,7 +881,7 @@ func backupResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
 }
 
 func showBackupPlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	stmt tree.Statement, p *sql.Planner,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {

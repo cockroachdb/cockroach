@@ -218,9 +218,7 @@ func (p *Planner) EvalContext() tree.EvalContext {
 }
 
 // DistLoader returns a distributed loader.
-// TODO(dan): This is here to implement PlanHookState, but it's not clear that
-// this is the right abstraction. We could also export DistSQLPlanner, for
-// example. Revisit.
+// TODO(dan): We could also export DistSQLPlanner. Revisit.
 func (p *Planner) DistLoader() *DistLoader {
 	return &DistLoader{distSQLPlanner: p.session.distSQLPlanner}
 }

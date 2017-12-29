@@ -72,7 +72,7 @@ func loadBackupDescs(
 }
 
 func selectTargets(
-	p sql.PlanHookState, backupDescs []BackupDescriptor, targets tree.TargetList,
+	p *sql.Planner, backupDescs []BackupDescriptor, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	sessionDatabase := p.EvalContext().Database
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
@@ -108,7 +108,7 @@ func selectTargets(
 // leaking table IDs if we can be sure the restore would fail.
 func allocateTableRewrites(
 	ctx context.Context,
-	p sql.PlanHookState,
+	p *sql.Planner,
 	sqlDescs []sqlbase.Descriptor,
 	restoreDBs []*sqlbase.DatabaseDescriptor,
 	opts map[string]string,
@@ -1004,7 +1004,7 @@ var restoreHeader = sqlbase.ResultColumns{
 }
 
 func restorePlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	stmt tree.Statement, p *sql.Planner,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
@@ -1062,7 +1062,7 @@ func restorePlanHook(
 func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
-	p sql.PlanHookState,
+	p *sql.Planner,
 	from []string,
 	endTime hlc.Timestamp,
 	opts map[string]string,

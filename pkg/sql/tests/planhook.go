@@ -28,7 +28,7 @@ import (
 // 'planhook'.
 func init() {
 	testingPlanHook := func(
-		stmt tree.Statement, state sql.PlanHookState,
+		stmt tree.Statement, _ *sql.Planner,
 	) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 		show, ok := stmt.(*tree.ShowVar)
 		if !ok || show.Name != "planhook" {
