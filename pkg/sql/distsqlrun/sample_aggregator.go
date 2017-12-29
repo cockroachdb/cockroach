@@ -80,7 +80,7 @@ func newSampleAggregator(
 	s := &sampleAggregator{
 		flowCtx:      flowCtx,
 		input:        input,
-		inTypes:      input.Types(),
+		inTypes:      input.OutputTypes(),
 		tableID:      spec.TableID,
 		sampledCols:  spec.SampledColumnIDs,
 		sketches:     make([]sketchInfo, len(spec.Sketches)),
