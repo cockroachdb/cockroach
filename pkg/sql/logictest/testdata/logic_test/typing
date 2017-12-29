@@ -169,7 +169,7 @@ true
 statement error unsupported comparison operator: <int> IN <tuple{string}>
 SELECT 1 IN (SELECT 'a')
 
-statement error unsupported comparison operator: <int> IN <tuple{tuple{tuple{int, int}}}>
+statement error unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>
 SELECT 1 IN (SELECT (1, 2))
 
 query B
@@ -177,5 +177,7 @@ SELECT (1, 2) IN (SELECT 1, 2)
 ----
 true
 
-statement error unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{tuple{int, int}}}>
+query B
 SELECT (1, 2) IN (SELECT (1, 2))
+----
+true
