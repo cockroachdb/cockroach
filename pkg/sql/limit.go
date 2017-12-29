@@ -36,7 +36,7 @@ type LimitNode struct {
 	run limitRun
 }
 
-// limit constructs a LimitNode based on the LIMIT and OFFSET clauses.
+// Limit constructs a LimitNode based on the LIMIT and OFFSET clauses.
 func (p *Planner) Limit(ctx context.Context, n *tree.Limit) (*LimitNode, error) {
 	if n == nil || (n.Count == nil && n.Offset == nil) {
 		// No LIMIT nor OFFSET; there is nothing special to do.
@@ -81,6 +81,7 @@ func (n *LimitNode) startExec(params runParams) error {
 	return n.evalLimit(params.evalCtx)
 }
 
+// Next steps through the results.
 func (n *LimitNode) Next(params runParams) (bool, error) {
 	// n.rowIndex is the 0-based index of the next row.
 	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
@@ -104,8 +105,10 @@ func (n *LimitNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
+// Values returns the list of values.
 func (n *LimitNode) Values() tree.Datums { return n.plan.Values() }
 
+// Close closes the plan node.
 func (n *LimitNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 }

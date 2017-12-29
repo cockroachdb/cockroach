@@ -27,6 +27,7 @@ type dropSequenceNode struct {
 	td []*sqlbase.TableDescriptor
 }
 
+// DropSequence builds a drop sequence plan node.
 func (p *Planner) DropSequence(ctx context.Context, n *tree.DropSequence) (PlanNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
+// SetSessionCharacteristics sets various session attributes.
 func (p *Planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (PlanNode, error) {
 	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... ' above.
 	// Ensure both versions stay in sync.

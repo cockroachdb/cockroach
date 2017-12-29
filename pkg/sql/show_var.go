@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// Show a session-local variable name.
+// ShowVar shows a session-local variable name.
 func (p *Planner) ShowVar(ctx context.Context, n *tree.ShowVar) (PlanNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)

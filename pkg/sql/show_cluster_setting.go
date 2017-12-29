@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
+// ShowClusterSetting shows the cluster settings.
 func (p *Planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (PlanNode, error) {

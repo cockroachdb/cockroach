@@ -30,13 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+// ScanNodePool is a pool of scan nodes.
 var ScanNodePool = sync.Pool{
 	New: func() interface{} {
 		return &ScanNode{}
 	},
 }
 
-// A ScanNode handles scanning over the key/value pairs for a table and
+// ScanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type ScanNode struct {
 	desc  *sqlbase.TableDescriptor
@@ -114,6 +115,7 @@ const (
 	publicAndNonPublicColumns scanVisibility = 1
 )
 
+// Scan perform the actual scan.
 func (p *Planner) Scan() *ScanNode {
 	n := ScanNodePool.Get().(*ScanNode)
 	return n
@@ -122,14 +124,17 @@ func (p *Planner) Scan() *ScanNode {
 // ScanNode implements tree.IndexedVarContainer.
 var _ tree.IndexedVarContainer = &ScanNode{}
 
+// IndexedVarEval evaluates at the specified index.
 func (n *ScanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return n.run.row[idx].Eval(ctx)
 }
 
+// IndexedVarResolvedType returns the type at the specified index.
 func (n *ScanNode) IndexedVarResolvedType(idx int) types.T {
 	return n.resultColumns[idx].Typ
 }
 
+// IndexedVarNodeFormatter returns the formatted name at the specified index.
 func (n *ScanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return tree.Name(n.resultColumns[idx].Name)
 }
@@ -166,11 +171,13 @@ func (n *ScanNode) startExec(params runParams) error {
 		false /* isCheck */, &params.p.alloc, tableArgs)
 }
 
+// Close closes a scan node.
 func (n *ScanNode) Close(context.Context) {
 	*n = ScanNode{}
 	ScanNodePool.Put(n)
 }
 
+// Next steps the scan.
 func (n *ScanNode) Next(params runParams) (bool, error) {
 	tracing.AnnotateTrace()
 	if !n.run.scanInitialized {
@@ -199,6 +206,7 @@ func (n *ScanNode) Next(params runParams) (bool, error) {
 	return false, nil
 }
 
+// Values returns the scanned values.
 func (n *ScanNode) Values() tree.Datums {
 	return n.run.row
 }

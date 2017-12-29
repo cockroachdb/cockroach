@@ -458,6 +458,7 @@ func (p *Planner) getDataSource(
 	}
 }
 
+// QualifyWithDatabase returns a qualified table name including database name.
 func (p *Planner) QualifyWithDatabase(
 	ctx context.Context, t *tree.NormalizableTableName,
 ) (*tree.TableName, error) {

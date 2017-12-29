@@ -197,23 +197,27 @@ func finishInternalPlanner(p *Planner) {
 	p.session.mon.Stop(p.session.context)
 }
 
-// ExecCfg implements the PlanHookState interface.
+// ExecCfg returns the executor config.
 func (p *Planner) ExecCfg() *ExecutorConfig {
 	return p.session.execCfg
 }
 
+// LeaseMgr returns the lease manager.
 func (p *Planner) LeaseMgr() *LeaseManager {
 	return p.session.tables.leaseMgr
 }
 
+// User returns the session user.
 func (p *Planner) User() string {
 	return p.session.User
 }
 
+// EvalContext returns the planner's context.
 func (p *Planner) EvalContext() tree.EvalContext {
 	return p.evalCtx
 }
 
+// DistLoader returns a distributed loader.
 // TODO(dan): This is here to implement PlanHookState, but it's not clear that
 // this is the right abstraction. We could also export DistSQLPlanner, for
 // example. Revisit.
