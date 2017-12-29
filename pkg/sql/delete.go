@@ -47,7 +47,7 @@ type deleteNode struct {
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *Planner) Delete(
 	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	resetter, err := p.initWith(ctx, n.With)
 	if err != nil {
 		return nil, err

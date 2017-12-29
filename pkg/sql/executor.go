@@ -189,7 +189,7 @@ type Result struct {
 	Columns sqlbase.ResultColumns
 	// Rows will be populated if the statement type is "Rows". It will contain
 	// the result set of the result.
-	// TODO(nvanbenschoten): Can this be streamed from the planNode?
+	// TODO(nvanbenschoten): Can this be streamed from the PlanNode?
 	Rows *sqlbase.RowContainer
 }
 
@@ -1054,7 +1054,7 @@ func runWithAutoRetry(
 				}
 
 				// We were told to autoCommit. The KV txn might already be committed
-				// (planNodes are free to do that when running an implicit transaction,
+				// (PlanNodes are free to do that when running an implicit transaction,
 				// and some try to do it to take advantage of 1-PC txns). If it is, then
 				// there's nothing to do. If it isn't, then we commit it here.
 				//
@@ -1671,7 +1671,7 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 
 	case *tree.CommitTransaction:
-		// CommitTransaction is executed fully here; there's no planNode for it
+		// CommitTransaction is executed fully here; there's no PlanNode for it
 		// and a planner is not involved at all.
 		transition = commitSQLTransaction(txnState, commit, res)
 		explicitStateTransition = true
@@ -1681,7 +1681,7 @@ func (e *Executor) execStmtInOpenTxn(
 		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
 			return err
 		}
-		// ReleaseSavepoint is executed fully here; there's no planNode for it
+		// ReleaseSavepoint is executed fully here; there's no PlanNode for it
 		// and a planner is not involved at all.
 		transition = commitSQLTransaction(txnState, release, res)
 		explicitStateTransition = true
@@ -1691,7 +1691,7 @@ func (e *Executor) execStmtInOpenTxn(
 		// Turn off test verification of metadata changes made by the
 		// transaction.
 		session.testingVerifyMetadataFn = nil
-		// RollbackTransaction is executed fully here; there's no planNode for it
+		// RollbackTransaction is executed fully here; there's no PlanNode for it
 		// and a planner is not involved at all.
 		transition = rollbackSQLTransaction(txnState, res)
 		explicitStateTransition = true
@@ -1972,7 +1972,7 @@ func commitSQLTransaction(
 // exectDistSQL converts a classic plan to a distributed SQL physical plan and
 // runs it.
 func (e *Executor) execDistSQL(
-	planner *Planner, tree planNode, rowResultWriter StatementResult,
+	planner *Planner, tree PlanNode, rowResultWriter StatementResult,
 ) error {
 	ctx := planner.session.Ctx()
 	recv := makeDistSQLReceiver(
@@ -1997,7 +1997,7 @@ func (e *Executor) execDistSQL(
 // execClassic runs a plan using the classic (non-distributed) SQL
 // implementation.
 func (e *Executor) execClassic(
-	planner *Planner, plan planNode, rowResultWriter StatementResult,
+	planner *Planner, plan PlanNode, rowResultWriter StatementResult,
 ) error {
 	ctx := planner.session.Ctx()
 
@@ -2041,9 +2041,9 @@ func (e *Executor) execClassic(
 }
 
 // forEachRow calls the provided closure for each successful call to
-// planNode.Next with planNode.Values, making sure to properly track memory
+// PlanNode.Next with PlanNode.Values, making sure to properly track memory
 // usage.
-func forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
+func forEachRow(params runParams, p PlanNode, f func(tree.Datums) error) error {
 	next, err := p.Next(params)
 	for ; next; next, err = p.Next(params) {
 		// If we're tracking memory, clear the previous row's memory account.
@@ -2060,8 +2060,8 @@ func forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
 
 // If the plan has a fast path we attempt to query that,
 // otherwise we fall back to counting via plan.Next().
-func countRowsAffected(params runParams, p planNode) (int, error) {
-	if a, ok := p.(planNodeFastPath); ok {
+func countRowsAffected(params runParams, p PlanNode) (int, error) {
+	if a, ok := p.(PlanNodeFastPath); ok {
 		if count, res := a.FastPathResults(); res {
 			return count, nil
 		}
@@ -2082,7 +2082,7 @@ func shouldUseDistSQL(
 	distSQLMode DistSQLExecMode,
 	dp *DistSQLPlanner,
 	planner *Planner,
-	plan planNode,
+	plan PlanNode,
 ) (bool, error) {
 	if distSQLMode == DistSQLOff {
 		return false, nil
@@ -2236,7 +2236,7 @@ func (e *Executor) execStmtInParallel(
 	// send the mock result back to the client.
 	session.setQueryExecutionMode(stmt.queryID, false /* isDistributed */, true /* isParallel */)
 
-	if err := session.parallelizeQueue.Add(params, plan, func(plan planNode) error {
+	if err := session.parallelizeQueue.Add(params, plan, func(plan PlanNode) error {
 		// TODO(andrei): this should really be a result writer implementation that
 		// does nothing.
 		bufferedWriter := newBufferedWriter(session.makeBoundAccount())

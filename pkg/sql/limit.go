@@ -26,7 +26,7 @@ import (
 // limitNode represents a node that limits the number of rows
 // returned or only return them past a given number (offset).
 type limitNode struct {
-	plan       planNode
+	plan       PlanNode
 	countExpr  tree.TypedExpr
 	offsetExpr tree.TypedExpr
 	evaluated  bool

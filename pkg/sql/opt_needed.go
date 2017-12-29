@@ -24,7 +24,7 @@ import (
 
 // setNeededColumns informs the node about which columns are
 // effectively needed by the consumer of its result rows.
-func setNeededColumns(plan planNode, needed []bool) {
+func setNeededColumns(plan PlanNode, needed []bool) {
 	switch n := plan.(type) {
 	case *createTableNode:
 		if n.n.As() {
@@ -225,7 +225,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 }
 
 // allColumns returns true for every column produced by the plan.
-func allColumns(plan planNode) []bool {
+func allColumns(plan PlanNode) []bool {
 	needed := make([]bool, len(planColumns(plan)))
 	for i := range needed {
 		needed[i] = true

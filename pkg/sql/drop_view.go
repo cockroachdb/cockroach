@@ -35,7 +35,7 @@ type dropViewNode struct {
 // Privileges: DROP on view.
 //   Notes: postgres allows only the view owner to DROP a view.
 //          mysql requires the DROP privilege on the view.
-func (p *Planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
+func (p *Planner) DropView(ctx context.Context, n *tree.DropView) (PlanNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()

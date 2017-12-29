@@ -23,6 +23,6 @@ import (
 // ShowTransactionStatus implements the plan for SHOW TRANSACTION STATUS.
 // This statement is usually handled as a special case in Executor,
 // but for FROM [SHOW TRANSACTION STATUS] we will arrive here too.
-func (p *Planner) ShowTransactionStatus(ctx context.Context) (planNode, error) {
+func (p *Planner) ShowTransactionStatus(ctx context.Context) (PlanNode, error) {
 	return p.ShowVar(ctx, &tree.ShowVar{Name: "transaction_status"})
 }

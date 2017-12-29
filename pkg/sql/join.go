@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// joinNode is a planNode whose rows are the result of an inner or
+// joinNode is a PlanNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
 	joinType joinType
@@ -418,7 +418,7 @@ func (n *joinNode) hashJoinStart(params runParams) error {
 	return nil
 }
 
-// Next implements the planNode interface.
+// Next implements the PlanNode interface.
 func (n *joinNode) Next(params runParams) (res bool, err error) {
 	// If results available from from previously computed results, we just
 	// return true.
@@ -599,12 +599,12 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 	return n.run.buffer.Next(), nil
 }
 
-// Values implements the planNode interface.
+// Values implements the PlanNode interface.
 func (n *joinNode) Values() tree.Datums {
 	return n.run.buffer.Values()
 }
 
-// Close implements the planNode interface.
+// Close implements the PlanNode interface.
 func (n *joinNode) Close(ctx context.Context) {
 	n.run.buffer.Close(ctx)
 	n.run.buffer = nil

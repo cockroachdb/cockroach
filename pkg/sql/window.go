@@ -31,11 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// A windowNode implements the planNode interface and handles windowing logic.
-// It "wraps" a planNode which is used to retrieve the un-windowed results.
+// A windowNode implements the PlanNode interface and handles windowing logic.
+// It "wraps" a PlanNode which is used to retrieve the un-windowed results.
 type windowNode struct {
 	// The "wrapped" node (which returns un-windowed results).
-	plan planNode
+	plan PlanNode
 
 	sourceCols int
 
@@ -765,12 +765,12 @@ func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalConte
 		for j := range row {
 			if curWindowRender := n.windowRender[j]; curWindowRender == nil {
 				// If the windowRender at this index is nil, propagate the datum
-				// directly from the wrapped planNode. It wasn't changed by windowNode.
+				// directly from the wrapped PlanNode. It wasn't changed by windowNode.
 				row[j] = wrappedRow[curColIdx]
 				curColIdx++
 			} else {
 				// If the windowRender is not nil, ignore 0 or more columns from the wrapped
-				// planNode. These were used as arguments to window functions all beneath
+				// PlanNode. These were used as arguments to window functions all beneath
 				// a single windowRender.
 				// SELECT rank() over () from t; -> ignore 0 from wrapped values
 				// SELECT (rank() over () + avg(b) over ()) from t; -> ignore 1 from wrapped values

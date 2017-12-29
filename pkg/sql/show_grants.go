@@ -37,7 +37,7 @@ func checkTableExists(ctx context.Context, p *Planner, tn *tree.TableName) error
 // Privileges: None.
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
-func (p *Planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode, error) {
+func (p *Planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (PlanNode, error) {
 	var params []string
 	var initCheck func(context.Context) error
 

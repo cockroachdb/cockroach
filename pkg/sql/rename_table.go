@@ -32,7 +32,7 @@ import (
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
-func (p *Planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
+func (p *Planner) RenameTable(ctx context.Context, n *tree.RenameTable) (PlanNode, error) {
 	oldTn, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err

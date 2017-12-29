@@ -29,8 +29,8 @@ import (
 // of error, because it may contain memory-registered data structures
 // and other things that need clean up.
 func (p *Planner) optimizePlan(
-	ctx context.Context, plan planNode, needed []bool,
-) (planNode, error) {
+	ctx context.Context, plan PlanNode, needed []bool,
+) (PlanNode, error) {
 	// We propagate the needed columns a first time. This will remove
 	// any unused renders, which in turn may simplify expansion (remove
 	// sub-expressions).
@@ -65,7 +65,7 @@ func (p *Planner) optimizePlan(
 }
 
 // subqueryInitializer ensures that initNeededColumns() and
-// optimizeFilters() is called on the planNodes of all sub-query
+// optimizeFilters() is called on the PlanNodes of all sub-query
 // expressions.
 type subqueryInitializer struct {
 	p *Planner
@@ -104,6 +104,6 @@ func (i *subqueryInitializer) subqueryNode(ctx context.Context, sq *subquery) er
 	return nil
 }
 
-func (i *subqueryInitializer) enterNode(_ context.Context, _ string, _ planNode) (bool, error) {
+func (i *subqueryInitializer) enterNode(_ context.Context, _ string, _ PlanNode) (bool, error) {
 	return true, nil
 }

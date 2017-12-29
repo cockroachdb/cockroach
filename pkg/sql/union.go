@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// unionNode is a planNode whose rows are the result of one of three set
+// unionNode is a PlanNode whose rows are the result of one of three set
 // operations (UNION, INTERSECT, or EXCEPT) on left and right. There are two
 // variations of each set operation: distinct, which always returns unique
 // results, and all, which does no uniqueing.
@@ -65,7 +65,7 @@ import (
 type unionNode struct {
 	// right and left are the data source operands.
 	// right is read first, to populate the `emit` field.
-	right, left planNode
+	right, left PlanNode
 	// inverted, when true, indicates that the right plan corresponds to
 	// the left operand in the input SQL syntax, and vice-versa.
 	inverted bool
@@ -79,10 +79,10 @@ type unionNode struct {
 	run unionRun
 }
 
-// Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
+// Union constructs a PlanNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *Planner) Union(
 	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit
 	switch n.Type {

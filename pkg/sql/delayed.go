@@ -21,17 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// delayedNode wraps a planNode in cases where the planNode
+// delayedNode wraps a PlanNode in cases where the PlanNode
 // constructor must be delayed during query execution (as opposed to
 // SQL prepare) for resource tracking purposes.
 type delayedNode struct {
 	name        string
 	columns     sqlbase.ResultColumns
 	constructor nodeConstructor
-	plan        planNode
+	plan        PlanNode
 }
 
-type nodeConstructor func(context.Context, *Planner) (planNode, error)
+type nodeConstructor func(context.Context, *Planner) (PlanNode, error)
 
 func (d *delayedNode) Next(params runParams) (bool, error) { return d.plan.Next(params) }
 func (d *delayedNode) Values() tree.Datums                 { return d.plan.Values() }

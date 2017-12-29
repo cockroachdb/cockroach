@@ -1011,7 +1011,7 @@ type txnState struct {
 	readOnly bool
 
 	// mon tracks txn-bound objects like the running state of
-	// planNode in the midst of performing a computation. We
+	// PlanNode in the midst of performing a computation. We
 	// host this here instead of TxnState because TxnState is
 	// fully reset upon each call to resetForNewSQLTxn().
 	mon mon.BytesMonitor

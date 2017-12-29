@@ -40,7 +40,7 @@ import (
 // common SQL optimizations*. Its use should be limited in clients to
 // situations where the corresponding performance cost is affordable.
 type ordinalityNode struct {
-	source  planNode
+	source  PlanNode
 	props   physicalProps
 	columns sqlbase.ResultColumns
 

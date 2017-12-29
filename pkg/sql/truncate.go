@@ -36,7 +36,7 @@ const TableTruncateChunkSize = indexTruncateChunkSize
 // Privileges: DROP on table.
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
-func (p *Planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, error) {
+func (p *Planner) Truncate(ctx context.Context, n *tree.Truncate) (PlanNode, error) {
 	// Since truncation may cascade to a given table any number of times, start by
 	// building the unique set (by ID) of tables to truncate.
 	toTruncate := make(map[sqlbase.ID]struct{}, len(n.Tables))

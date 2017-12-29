@@ -32,7 +32,7 @@ import (
 // sortNode represents a node that sorts the rows returned by its
 // sub-node.
 type sortNode struct {
-	plan     planNode
+	plan     PlanNode
 	columns  sqlbase.ResultColumns
 	ordering sqlbase.ColumnOrdering
 
@@ -55,7 +55,7 @@ type sortNode struct {
 // Support this. It will reduce some of the special casing below, but requires a
 // generalization of how to add derived columns to a SelectStatement.
 func (p *Planner) orderBy(
-	ctx context.Context, orderBy tree.OrderBy, n planNode,
+	ctx context.Context, orderBy tree.OrderBy, n PlanNode,
 ) (*sortNode, error) {
 	if orderBy == nil {
 		return nil, nil
@@ -475,8 +475,8 @@ func (p *Planner) colIndex(numOriginalCols int, expr tree.Expr, context string) 
 }
 
 // valueIterator provides iterative access to a value source's values and
-// debug values. It is a subset of the planNode interface, so all methods
-// should conform to the comments expressed in the planNode definition.
+// debug values. It is a subset of the PlanNode interface, so all methods
+// should conform to the comments expressed in the PlanNode definition.
 type valueIterator interface {
 	Next(runParams) (bool, error)
 	Values() tree.Datums

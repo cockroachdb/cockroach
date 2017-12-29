@@ -93,7 +93,7 @@ type renderNode struct {
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *Planner) Select(
 	ctx context.Context, n *tree.Select, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
@@ -160,7 +160,7 @@ func (p *Planner) Select(
 // used to satisfy the where-clause. scanVisibility controls which columns are
 // visible to the select.
 //
-// NB: This is passed directly to planNode only when there is no ORDER BY,
+// NB: This is passed directly to PlanNode only when there is no ORDER BY,
 // LIMIT, or parenthesis in the parsed SELECT. See `sql/tree.Select` and
 // `sql/tree.SelectStatement`.
 //
@@ -175,7 +175,7 @@ func (p *Planner) SelectClause(
 	with *tree.With,
 	desiredTypes []types.T,
 	scanVisibility scanVisibility,
-) (planNode, error) {
+) (PlanNode, error) {
 	r := &renderNode{}
 
 	resetter, err := p.initWith(ctx, with)
@@ -285,7 +285,7 @@ func (p *Planner) SelectClause(
 		return nil, err
 	}
 
-	result := planNode(r)
+	result := PlanNode(r)
 	if groupComplex != nil {
 		// group.plan is already r.
 		result = groupComplex
@@ -416,7 +416,7 @@ func (p *Planner) initTargets(
 // insertRender creates a new renderNode that renders exactly its
 // source plan.
 func (p *Planner) insertRender(
-	ctx context.Context, plan planNode, tn *tree.TableName,
+	ctx context.Context, plan PlanNode, tn *tree.TableName,
 ) (*renderNode, error) {
 	src := planDataSource{info: newSourceInfoForSingleTable(*tn, planColumns(plan)), plan: plan}
 	render := &renderNode{

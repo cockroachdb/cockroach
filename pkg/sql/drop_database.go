@@ -43,7 +43,7 @@ type dropDatabaseNode struct {
 // (cockroach database == postgres schema). the postgres default of not
 // dropping the schema if there are dependent objects is more sensible
 // (see the RESTRICT and CASCADE options).
-func (p *Planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
+func (p *Planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (PlanNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}

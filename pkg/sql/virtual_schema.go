@@ -98,7 +98,7 @@ type virtualTableEntry struct {
 	desc     *sqlbase.TableDescriptor
 }
 
-type virtualTableConstructor func(context.Context, *Planner, string) (planNode, error)
+type virtualTableConstructor func(context.Context, *Planner, string) (PlanNode, error)
 
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
@@ -115,7 +115,7 @@ func (e virtualTableEntry) getPlanInfo(
 		})
 	}
 
-	constructor := func(ctx context.Context, p *Planner, prefix string) (planNode, error) {
+	constructor := func(ctx context.Context, p *Planner, prefix string) (PlanNode, error) {
 		v := p.newContainerValuesNode(columns, 0)
 
 		err := e.tableDef.populate(ctx, p, prefix, func(datums ...tree.Datum) error {

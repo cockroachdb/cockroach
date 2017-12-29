@@ -30,7 +30,7 @@ import (
 
 func (p *Planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
-) (planNode, error) {
+) (PlanNode, error) {
 
 	if err := p.RequireSuperUser("SHOW CLUSTER SETTINGS"); err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (p *Planner) ShowClusterSetting(
 	return &delayedNode{
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,
-		constructor: func(ctx context.Context, p *Planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *Planner) (PlanNode, error) {
 			d := tree.DNull
 			switch s := val.(type) {
 			case *settings.IntSetting:

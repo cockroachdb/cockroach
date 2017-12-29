@@ -23,12 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// explainDistSQLNode is a planNode that wraps a plan and returns
+// explainDistSQLNode is a PlanNode that wraps a plan and returns
 // information related to running that plan under DistSQL.
 type explainDistSQLNode struct {
 	optColumnsSlot
 
-	plan planNode
+	plan PlanNode
 
 	run explainDistSQLRun
 }

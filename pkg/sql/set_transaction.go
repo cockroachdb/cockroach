@@ -22,7 +22,7 @@ import (
 )
 
 // SetTransaction sets a transaction's isolation level
-func (p *Planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {
+func (p *Planner) SetTransaction(n *tree.SetTransaction) (PlanNode, error) {
 	return &zeroNode{}, p.setTransactionModes(n.Modes)
 }
 

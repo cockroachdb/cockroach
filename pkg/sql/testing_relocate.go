@@ -36,7 +36,7 @@ type testingRelocateNode struct {
 
 	tableDesc *sqlbase.TableDescriptor
 	index     *sqlbase.IndexDescriptor
-	rows      planNode
+	rows      PlanNode
 
 	run testingRelocateRun
 }
@@ -44,7 +44,7 @@ type testingRelocateNode struct {
 // TestingRelocate moves ranges to specific stores
 // (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
 // Privileges: INSERT on table.
-func (p *Planner) TestingRelocate(ctx context.Context, n *tree.TestingRelocate) (planNode, error) {
+func (p *Planner) TestingRelocate(ctx context.Context, n *tree.TestingRelocate) (PlanNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err

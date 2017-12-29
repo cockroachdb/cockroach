@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// hookFnNode is a planNode implemented in terms of a function. It begins the
+// hookFnNode is a PlanNode implemented in terms of a function. It begins the
 // provided function during Start and serves the results it returns over the
 // channel.
 type hookFnNode struct {
@@ -53,7 +53,7 @@ var planHooks []planHookFn
 // Additionally, it takes a context.
 type wrappedPlanHookFn func(
 	context.Context, tree.Statement, PlanHookState,
-) (planNode, error)
+) (PlanNode, error)
 
 var wrappedPlanHooks []wrappedPlanHookFn
 
@@ -82,14 +82,14 @@ type PlanHookState interface {
 	) (*DropUserNode, error)
 }
 
-// AddPlanHook adds a hook used to short-circuit creating a planNode from a
+// AddPlanHook adds a hook used to short-circuit creating a PlanNode from a
 // tree.Statement. If the func returned by the hook is non-nil, it is used to
-// construct a planNode that runs that func in a goroutine during Start.
+// construct a PlanNode that runs that func in a goroutine during Start.
 func AddPlanHook(f planHookFn) {
 	planHooks = append(planHooks, f)
 }
 
-// AddWrappedPlanHook adds a hook used to short-circuit creating a planNode from a
+// AddWrappedPlanHook adds a hook used to short-circuit creating a PlanNode from a
 // tree.Statement. If the returned plan is non-nil, it is used directly by the planner.
 func AddWrappedPlanHook(f wrappedPlanHookFn) {
 	wrappedPlanHooks = append(wrappedPlanHooks, f)

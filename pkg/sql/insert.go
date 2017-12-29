@@ -65,7 +65,7 @@ type insertNode struct {
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *Planner) Insert(
 	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	resetter, err := p.initWith(ctx, n.With)
 	if err != nil {
 		return nil, err

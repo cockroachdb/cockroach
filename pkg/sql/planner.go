@@ -93,19 +93,19 @@ type Planner struct {
 	// See executor_statement_metrics.go for details.
 	phaseTimes phaseTimes
 
-	// cancelChecker is used by planNodes to check for cancellation of the associated
+	// cancelChecker is used by PlanNodes to check for cancellation of the associated
 	// query.
 	cancelChecker *sqlbase.CancelChecker
 
 	// planDeps, if non-nil, collects the table/view dependencies for this query.
-	// Any planNode constructors that resolves a table name or reference in the query
+	// Any PlanNode constructors that resolves a table name or reference in the query
 	// to a descriptor must register this descriptor into planDeps.
 	// This is (currently) used by CREATE VIEW.
 	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
 	planDeps planDependencies
 
 	// cteNameEnvironment collects the mapping from common table expression alias
-	// to the planNodes that represent their source.
+	// to the PlanNodes that represent their source.
 	cteNameEnvironment cteNameEnvironment
 
 	// hasStar collects whether any star expansion has occurred during
@@ -236,16 +236,16 @@ func (p *Planner) setTxn(txn *client.Txn) {
 	}
 }
 
-// makeInternalPlan initializes a planNode from a SQL statement string.
-// Close() must be called on the returned planNode after use.
+// makeInternalPlan initializes a PlanNode from a SQL statement string.
+// Close() must be called on the returned PlanNode after use.
 // This function changes the planner's placeholder map. It is the caller's
 // responsibility to save and restore the old map if desired.
-// This function is not suitable for use in the planNode constructors directly:
-// the returned planNode has already been optimized.
+// This function is not suitable for use in the PlanNode constructors directly:
+// the returned PlanNode has already been optimized.
 // Consider also (*Planner).delegateQuery(...).
 func (p *Planner) makeInternalPlan(
 	ctx context.Context, sql string, args ...interface{},
-) (planNode, error) {
+) (PlanNode, error) {
 	if log.V(2) {
 		log.Infof(ctx, "internal query: %s", sql)
 		if len(args) > 0 {
@@ -378,7 +378,7 @@ func isDatabaseVisible(dbName, prefix, user string) bool {
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
-// during (planNode).Start.
+// during (PlanNode).Start.
 func (p *Planner) TypeAsString(e tree.Expr, op string) (func() (string, error), error) {
 	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
 	if err != nil {
@@ -400,7 +400,7 @@ func (p *Planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 
 // TypeAsStringOpts enforces (not hints) that the given expressions
 // typecheck as strings, and returns a function that can be called to
-// get the string value during (planNode).Start.
+// get the string value during (PlanNode).Start.
 func (p *Planner) TypeAsStringOpts(
 	opts tree.KVOptions, expectValues map[string]bool,
 ) (func() (map[string]string, error), error) {
@@ -452,7 +452,7 @@ func (p *Planner) TypeAsStringOpts(
 
 // TypeAsStringArray enforces (not hints) that the given expressions all typecheck as
 // strings and returns a function that can be called to get the string values
-// during (planNode).Start.
+// during (PlanNode).Start.
 func (p *Planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]string, error), error) {
 	typedExprs := make([]tree.TypedExpr, len(exprs))
 	for i := range exprs {

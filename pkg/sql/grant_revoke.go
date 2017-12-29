@@ -32,7 +32,7 @@ import (
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *Planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
+func (p *Planner) Grant(ctx context.Context, n *tree.Grant) (PlanNode, error) {
 	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 		privDesc.Grant(grantee, n.Privileges)
 	})
@@ -47,7 +47,7 @@ func (p *Planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *Planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
+func (p *Planner) Revoke(ctx context.Context, n *tree.Revoke) (PlanNode, error) {
 	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 		privDesc.Revoke(grantee, n.Privileges)
 	})
@@ -58,7 +58,7 @@ func (p *Planner) changePrivileges(
 	targets tree.TargetList,
 	grantees tree.NameList,
 	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
-) (planNode, error) {
+) (PlanNode, error) {
 	// Check whether grantees exists
 	users, err := GetAllUsers(ctx, p)
 	if err != nil {

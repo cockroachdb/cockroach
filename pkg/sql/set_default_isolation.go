@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
-func (p *Planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (planNode, error) {
+func (p *Planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (PlanNode, error) {
 	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... ' above.
 	// Ensure both versions stay in sync.
 	switch n.Modes.Isolation {

@@ -135,13 +135,13 @@ type dataSourceInfo struct {
 }
 
 // planDataSource contains the data source information for data
-// produced by a planNode.
+// produced by a PlanNode.
 type planDataSource struct {
 	// info which describe the columns.
 	info *dataSourceInfo
 
 	// plan which can be used to retrieve the data.
-	plan planNode
+	plan PlanNode
 }
 
 // sourceAlias associates a table name (alias) to a set of columns in the result
@@ -316,7 +316,7 @@ func (p *Planner) getVirtualDataSource(
 			plan: &delayedNode{
 				name:    sourceName.String(),
 				columns: columns,
-				constructor: func(ctx context.Context, p *Planner) (planNode, error) {
+				constructor: func(ctx context.Context, p *Planner) (PlanNode, error) {
 					return constructor(ctx, p, prefix)
 				},
 			},

@@ -24,7 +24,7 @@ import (
 )
 
 // Show a session-local variable name.
-func (p *Planner) ShowVar(ctx context.Context, n *tree.ShowVar) (planNode, error) {
+func (p *Planner) ShowVar(ctx context.Context, n *tree.ShowVar) (PlanNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 

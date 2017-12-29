@@ -40,7 +40,7 @@ import (
 // limitNode may have a hard limit locally which is larger than the
 // soft limit propagated up by nodes downstream. We may want to
 // improve this API to pass both the soft and hard limit.
-func (p *Planner) applyLimit(plan planNode, numRows int64, soft bool) {
+func (p *Planner) applyLimit(plan PlanNode, numRows int64, soft bool) {
 	switch n := plan.(type) {
 	case *scanNode:
 		// Either a limitNode or EXPLAIN is pushing a limit down onto this
@@ -199,7 +199,7 @@ func (p *Planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	}
 }
 
-func (p *Planner) setUnlimited(plan planNode) {
+func (p *Planner) setUnlimited(plan PlanNode) {
 	p.applyLimit(plan, math.MaxInt64, true)
 }
 

@@ -116,7 +116,7 @@ func TestValues(t *testing.T) {
 	ctx := context.TODO()
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			plan, err := func() (_ planNode, err error) {
+			plan, err := func() (_ PlanNode, err error) {
 				defer func() {
 					if r := recover(); r != nil {
 						err = errors.Errorf("%v", r)

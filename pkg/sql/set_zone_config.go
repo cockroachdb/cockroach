@@ -39,7 +39,7 @@ type setZoneConfigNode struct {
 	run setZoneConfigRun
 }
 
-func (p *Planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
+func (p *Planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (PlanNode, error) {
 	yamlConfig, err := p.analyzeExpr(
 		ctx, n.YAMLConfig, nil, tree.IndexedVarHelper{}, types.String, false, "configure zone")
 	if err != nil {

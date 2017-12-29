@@ -39,7 +39,7 @@ import (
 type createTableNode struct {
 	n          *tree.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
-	sourcePlan planNode
+	sourcePlan PlanNode
 
 	run createTableRun
 }
@@ -47,7 +47,7 @@ type createTableNode struct {
 // CreateTable creates a table.
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
-func (p *Planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNode, error) {
+func (p *Planner) CreateTable(ctx context.Context, n *tree.CreateTable) (PlanNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (p *Planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		}
 	}
 
-	var sourcePlan planNode
+	var sourcePlan PlanNode
 	if n.As() {
 		// The sourcePlan is needed to determine the set of columns to use
 		// to populate the new table descriptor in Start() below. We

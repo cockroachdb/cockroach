@@ -74,7 +74,7 @@ type checkOperation interface {
 
 // Scrub checks the database.
 // Privileges: superuser.
-func (p *Planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
+func (p *Planner) Scrub(ctx context.Context, n *tree.Scrub) (PlanNode, error) {
 	if err := p.RequireSuperUser("SCRUB"); err != nil {
 		return nil, err
 	}
@@ -532,7 +532,7 @@ func createConstraintCheckOperations(
 
 // scrubPlanDistSQL will prepare and run the plan in distSQL.
 func scrubPlanDistSQL(
-	ctx context.Context, planCtx *planningCtx, p *Planner, plan planNode,
+	ctx context.Context, planCtx *planningCtx, p *Planner, plan PlanNode,
 ) (*physicalPlan, error) {
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 	physPlan, err := p.session.distSQLPlanner.createPlanForNode(planCtx, plan)

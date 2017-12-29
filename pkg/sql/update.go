@@ -53,7 +53,7 @@ type updateNode struct {
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *Planner) Update(
 	ctx context.Context, n *tree.Update, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
 	}
@@ -387,7 +387,7 @@ func (p *Planner) makeEditNode(
 // editNodeRun holds the runtime (execute) state needed to run
 // row-modifying statements.
 type editNodeRun struct {
-	rows      planNode
+	rows      PlanNode
 	tw        tableWriter
 	resultRow tree.Datums
 }
@@ -395,7 +395,7 @@ type editNodeRun struct {
 func (r *editNodeRun) initEditNode(
 	ctx context.Context,
 	en *editNodeBase,
-	rows planNode,
+	rows PlanNode,
 	tw tableWriter,
 	tn *tree.TableName,
 	re tree.ReturningClause,

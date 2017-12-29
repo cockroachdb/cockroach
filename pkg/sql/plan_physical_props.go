@@ -27,7 +27,7 @@ import (
 // Stable after optimizePlan() (or makePlan).
 // Available after newPlan(), but may change on intermediate plan
 // nodes during optimizePlan() due to index selection.
-func planPhysicalProps(plan planNode) physicalProps {
+func planPhysicalProps(plan PlanNode) physicalProps {
 	switch n := plan.(type) {
 	case *explainPlanNode:
 		return planPhysicalProps(n.run.results)

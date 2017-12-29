@@ -41,7 +41,7 @@ type setClusterSettingNode struct {
 // Privileges: super user.
 func (p *Planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
-) (planNode, error) {
+) (PlanNode, error) {
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}

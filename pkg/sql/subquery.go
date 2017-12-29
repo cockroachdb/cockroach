@@ -38,7 +38,7 @@ type subquery struct {
 	execMode subqueryExecMode
 	expanded bool
 	started  bool
-	plan     planNode
+	plan     PlanNode
 	result   tree.Datum
 }
 
@@ -254,7 +254,7 @@ func (v *subquerySpanCollector) subqueryNode(ctx context.Context, sq *subquery) 
 	return nil
 }
 
-func collectSubquerySpans(params runParams, plan planNode) (roachpb.Spans, error) {
+func collectSubquerySpans(params runParams, plan PlanNode) (roachpb.Spans, error) {
 	v := subquerySpanCollector{params: params}
 	po := planObserver{subqueryNode: v.subqueryNode}
 	if err := walkPlan(params.ctx, plan, po); err != nil {

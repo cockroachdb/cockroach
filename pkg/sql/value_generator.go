@@ -42,7 +42,7 @@ type valueGenerator struct {
 
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
-func (p *Planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode, error) {
+func (p *Planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (PlanNode, error) {
 	if err := p.txCtx.AssertNoAggregationOrWindowing(t, "FROM", p.session.SearchPath); err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (p *Planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode
 // during local execution.
 type valueGeneratorRun struct {
 	// gen is a reference to the generator object that produces the row
-	// for this planNode.
+	// for this PlanNode.
 	gen tree.ValueGenerator
 }
 

@@ -27,7 +27,7 @@ import (
 // the query plan to its final form, including index selection and
 // expansion of sub-queries. Returns an error if the initialization
 // fails.
-func (p *Planner) expandPlan(ctx context.Context, plan planNode) (planNode, error) {
+func (p *Planner) expandPlan(ctx context.Context, plan PlanNode) (PlanNode, error) {
 	var err error
 	plan, err = doExpandPlan(ctx, p, noParams, plan)
 	if err != nil {
@@ -48,8 +48,8 @@ var noParams = expandParameters{numRowsHint: math.MaxInt64, desiredOrdering: nil
 
 // doExpandPlan is the algorithm that supports expandPlan().
 func doExpandPlan(
-	ctx context.Context, p *Planner, params expandParameters, plan planNode,
-) (planNode, error) {
+	ctx context.Context, p *Planner, params expandParameters, plan PlanNode,
+) (PlanNode, error) {
 	var err error
 	switch n := plan.(type) {
 	case *createTableNode:
@@ -198,7 +198,7 @@ func doExpandPlan(
 		plan, err = expandRenderNode(ctx, p, params, n)
 
 	case *delayedNode:
-		var newPlan planNode
+		var newPlan PlanNode
 		newPlan, err = n.constructor(ctx, p)
 		if err != nil {
 			return plan, err
@@ -268,7 +268,7 @@ func elideDoubleSort(parent, source *sortNode) {
 
 func expandDistinctNode(
 	ctx context.Context, p *Planner, params expandParameters, d *distinctNode,
-) (planNode, error) {
+) (PlanNode, error) {
 	// TODO(radu/knz): perhaps we can propagate the DISTINCT
 	// clause as desired ordering for the source node.
 	var err error
@@ -320,7 +320,7 @@ func expandDistinctNode(
 
 func expandScanNode(
 	ctx context.Context, p *Planner, params expandParameters, s *scanNode,
-) (planNode, error) {
+) (PlanNode, error) {
 	var analyzeOrdering analyzeOrderingFn
 	if len(params.desiredOrdering) > 0 {
 		analyzeOrdering = func(indexProps physicalProps) (matchingCols, totalCols int) {
@@ -345,7 +345,7 @@ func expandScanNode(
 
 func expandRenderNode(
 	ctx context.Context, p *Planner, params expandParameters, r *renderNode,
-) (planNode, error) {
+) (PlanNode, error) {
 	params.desiredOrdering = translateOrdering(params.desiredOrdering, r)
 
 	var err error
@@ -450,7 +450,7 @@ func translateOrdering(desiredDown sqlbase.ColumnOrdering, r *renderNode) sqlbas
 // This determination cannot be done directly as part of the doExpandPlan
 // recursion (using desiredOrdering) because some nodes (distinctNode) make use
 // of whatever ordering the underlying node happens to provide.
-func (p *Planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) planNode {
+func (p *Planner) simplifyOrderings(plan PlanNode, usefulOrdering sqlbase.ColumnOrdering) PlanNode {
 	if plan == nil {
 		return nil
 	}

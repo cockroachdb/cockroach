@@ -47,7 +47,7 @@ type cteNameEnvironmentFrame map[tree.Name]cteSource
 // cteSource is the value part of an entry in an environment frame. It holds
 // the plan that will be used to retrieve the data that's named by the CTE.
 type cteSource struct {
-	plan planNode
+	plan PlanNode
 	// used is set to true if this CTE has been used as a statement source. It's
 	// only around to prevent multiple use of a CTE, which is currently not
 	// supported.

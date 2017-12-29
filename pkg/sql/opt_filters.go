@@ -167,8 +167,8 @@ import (
 // case perhaps propagateFilter and propagateOrWrapFilter can merge,
 // but we are not there yet.
 func (p *Planner) propagateFilters(
-	ctx context.Context, plan planNode, info *dataSourceInfo, extraFilter tree.TypedExpr,
-) (newPlan planNode, remainingFilter tree.TypedExpr, err error) {
+	ctx context.Context, plan PlanNode, info *dataSourceInfo, extraFilter tree.TypedExpr,
+) (newPlan PlanNode, remainingFilter tree.TypedExpr, err error) {
 	remainingFilter = extraFilter
 	switch n := plan.(type) {
 	case *zeroNode:
@@ -348,7 +348,7 @@ func (p *Planner) propagateFilters(
 }
 
 // triggerFilterPropagation initiates filter propagation on the given plan.
-func (p *Planner) triggerFilterPropagation(ctx context.Context, plan planNode) (planNode, error) {
+func (p *Planner) triggerFilterPropagation(ctx context.Context, plan PlanNode) (PlanNode, error) {
 	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, nil, tree.DBoolTrue)
 	if err != nil {
 		return plan, err
@@ -366,8 +366,8 @@ func (p *Planner) triggerFilterPropagation(ctx context.Context, plan planNode) (
 // node, and creates a new filterNode if there is any remaining filter
 // after the propagation.
 func (p *Planner) propagateOrWrapFilters(
-	ctx context.Context, plan planNode, info *dataSourceInfo, filter tree.TypedExpr,
-) (planNode, error) {
+	ctx context.Context, plan PlanNode, info *dataSourceInfo, filter tree.TypedExpr,
+) (PlanNode, error) {
 	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, info, filter)
 	if err != nil {
 		return plan, err
@@ -396,8 +396,8 @@ func (p *Planner) propagateOrWrapFilters(
 // propagated to the source.
 func (p *Planner) addGroupFilter(
 	ctx context.Context, g *groupNode, info *dataSourceInfo, extraFilter tree.TypedExpr,
-) (planNode, tree.TypedExpr, error) {
-	// innerFilter is the passed-through filter on the source planNode.
+) (PlanNode, tree.TypedExpr, error) {
+	// innerFilter is the passed-through filter on the source PlanNode.
 	var innerFilter tree.TypedExpr = tree.DBoolTrue
 
 	if !isFilterTrue(extraFilter) {
@@ -438,8 +438,8 @@ func (p *Planner) addGroupFilter(
 // references to the source.
 func (p *Planner) addRenderFilter(
 	ctx context.Context, s *renderNode, extraFilter tree.TypedExpr,
-) (planNode, tree.TypedExpr, error) {
-	// innerFilter is the passed-through filter on the source planNode.
+) (PlanNode, tree.TypedExpr, error) {
+	// innerFilter is the passed-through filter on the source PlanNode.
 	var innerFilter tree.TypedExpr = tree.DBoolTrue
 
 	if !isFilterTrue(extraFilter) {
@@ -719,7 +719,7 @@ func splitJoinFilterRight(
 // addJoinFilter propagates the given filter to a joinNode.
 func (p *Planner) addJoinFilter(
 	ctx context.Context, n *joinNode, extraFilter tree.TypedExpr,
-) (planNode, tree.TypedExpr, error) {
+) (PlanNode, tree.TypedExpr, error) {
 
 	// There are four steps to the transformation below:
 	//  1. For inner joins, incorporate the extra filter into the ON condition.

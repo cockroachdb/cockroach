@@ -83,7 +83,7 @@ type analyzeOrderingFn func(indexProps physicalProps) (matchingCols, totalCols i
 // ordering completely, even if it is not a covering index.
 func (p *Planner) selectIndex(
 	ctx context.Context, s *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
-) (planNode, error) {
+) (PlanNode, error) {
 	if s.desc.IsEmpty() {
 		// No table.
 		s.initOrdering(0, &p.evalCtx)
@@ -251,7 +251,7 @@ func (p *Planner) selectIndex(
 
 	s.reverse = c.reverse
 
-	var plan planNode
+	var plan PlanNode
 	if c.covering {
 		s.initOrdering(c.exactPrefix, &p.evalCtx)
 		plan = s

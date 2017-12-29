@@ -27,7 +27,7 @@ type dropSequenceNode struct {
 	td []*sqlbase.TableDescriptor
 }
 
-func (p *Planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
+func (p *Planner) DropSequence(ctx context.Context, n *tree.DropSequence) (PlanNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()

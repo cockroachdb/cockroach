@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func (p *Planner) ShowQueries(ctx context.Context, n *tree.ShowQueries) (planNode, error) {
+func (p *Planner) ShowQueries(ctx context.Context, n *tree.ShowQueries) (PlanNode, error) {
 	query := `TABLE crdb_internal.node_queries`
 	if n.Cluster {
 		query = `TABLE crdb_internal.cluster_queries`

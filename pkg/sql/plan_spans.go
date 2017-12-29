@@ -24,13 +24,13 @@ import (
 )
 
 // collectSpans collects the upper bound set of read and write spans that the
-// planNode expects to touch when executed. The two sets do not need to be
+// PlanNode expects to touch when executed. The two sets do not need to be
 // disjoint, and any span in the write set will be implicitly considered in
 // the read set as well. There is also no guarantee that Spans within either
-// set are disjoint. It is an error for a planNode to touch any span outside
-// those that it reports from this method, but a planNode is not required to
+// set are disjoint. It is an error for a PlanNode to touch any span outside
+// those that it reports from this method, but a PlanNode is not required to
 // touch all spans that it reports.
-func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans, err error) {
+func collectSpans(params runParams, plan PlanNode) (reads, writes roachpb.Spans, err error) {
 	switch n := plan.(type) {
 	case
 		*valueGenerator,
@@ -208,7 +208,7 @@ func indexJoinSpans(params runParams, n *indexJoinNode) (reads, writes roachpb.S
 	return append(indexReads, primaryReads), nil, nil
 }
 
-func concatSpans(params runParams, left, right planNode) (reads, writes roachpb.Spans, err error) {
+func concatSpans(params runParams, left, right PlanNode) (reads, writes roachpb.Spans, err error) {
 	leftReads, leftWrites, err := collectSpans(params, left)
 	if err != nil {
 		return nil, nil, err

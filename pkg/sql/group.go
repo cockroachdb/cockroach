@@ -30,8 +30,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// A groupNode implements the planNode interface and handles the grouping logic.
-// It "wraps" a planNode which is used to retrieve the ungrouped results.
+// A groupNode implements the PlanNode interface and handles the grouping logic.
+// It "wraps" a PlanNode which is used to retrieve the ungrouped results.
 type groupNode struct {
 	// The schema for this groupNode.
 	columns sqlbase.ResultColumns
@@ -46,7 +46,7 @@ type groupNode struct {
 	needOnlyOneRow bool
 
 	// The source node (which returns values that feed into the aggregation).
-	plan planNode
+	plan PlanNode
 
 	// The group-by columns are the first numGroupCols columns of
 	// the source plan.
@@ -58,7 +58,7 @@ type groupNode struct {
 	run groupRun
 }
 
-// groupBy constructs a planNode "complex" consisting of a groupNode and other
+// groupBy constructs a PlanNode "complex" consisting of a groupNode and other
 // post-processing nodes according to grouping functions or clauses.
 //
 // The complex always includes a groupNode which initially uses the given
@@ -95,11 +95,11 @@ type groupNode struct {
 //              v
 //          renderNode (pre-agg rendering)
 //
-// This function returns both the consumer-side planNode and the main groupNode; if there
+// This function returns both the consumer-side PlanNode and the main groupNode; if there
 // is no grouping, both are nil.
 func (p *Planner) groupBy(
 	ctx context.Context, n *tree.SelectClause, r *renderNode,
-) (planNode, *groupNode, error) {
+) (PlanNode, *groupNode, error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
@@ -235,7 +235,7 @@ func (p *Planner) groupBy(
 	group.numGroupCols = len(r.render)
 
 	var havingNode *filterNode
-	plan := planNode(group)
+	plan := PlanNode(group)
 
 	// Extract any aggregate functions from having expressions, adding renders to
 	// r as needed.

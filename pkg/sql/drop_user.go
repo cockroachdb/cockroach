@@ -40,7 +40,7 @@ type DropUserNode struct {
 
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.
-func (p *Planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
+func (p *Planner) DropUser(ctx context.Context, n *tree.DropUser) (PlanNode, error) {
 	return p.DropUserNode(ctx, n.Names, n.IfExists, false /* isRole */, "DROP USER")
 }
 
@@ -182,14 +182,14 @@ func (n *DropUserNode) startExec(params runParams) error {
 	return nil
 }
 
-// Next implements the planNode interface.
+// Next implements the PlanNode interface.
 func (*DropUserNode) Next(runParams) (bool, error) { return false, nil }
 
-// Values implements the planNode interface.
+// Values implements the PlanNode interface.
 func (*DropUserNode) Values() tree.Datums { return tree.Datums{} }
 
-// Close implements the planNode interface.
+// Close implements the PlanNode interface.
 func (*DropUserNode) Close(context.Context) {}
 
-// FastPathResults implements the planNodeFastPath interface.
+// FastPathResults implements the PlanNodeFastPath interface.
 func (n *DropUserNode) FastPathResults() (int, bool) { return n.run.numDeleted, true }

@@ -114,7 +114,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	); err != nil {
 		return err
 	}
-	plan := planNode(scan)
+	plan := PlanNode(scan)
 
 	neededColumns := make([]bool, len(o.tableDesc.Columns))
 	for _, id := range columnIDs {

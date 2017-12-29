@@ -25,21 +25,21 @@ import (
 //
 // This is intended for nodes where it is simpler to compute a batch of rows at
 // once instead of maintaining internal state in order to operate correctly
-// under the constraints imposed by Next() and Values() under the planNode
+// under the constraints imposed by Next() and Values() under the PlanNode
 // interface.
 type RowBuffer struct {
 	*sqlbase.RowContainer
 	output tree.Datums
 }
 
-// Values here is analogous to Values() as defined under planNode.
+// Values here is analogous to Values() as defined under PlanNode.
 //
 // Available after Next(), result only valid until the next call to Next()
 func (rb *RowBuffer) Values() tree.Datums {
 	return rb.output
 }
 
-// Next here is analogous to Next() as defined under planNode, if no pre-computed
+// Next here is analogous to Next() as defined under PlanNode, if no pre-computed
 // results were buffered in prior to the call we return false. Else we stage the
 // next output value for the subsequent call to Values().
 func (rb *RowBuffer) Next() bool {

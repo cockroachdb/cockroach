@@ -37,7 +37,7 @@ type scatterNode struct {
 // Scatter moves ranges to random stores
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
 // Privileges: INSERT on table.
-func (p *Planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error) {
+func (p *Planner) Scatter(ctx context.Context, n *tree.Scatter) (PlanNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err

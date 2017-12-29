@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func newPlanNode() planNode {
+func newPlanNode() PlanNode {
 	return &zeroNode{}
 }
 
@@ -68,7 +68,7 @@ func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
 	}
 }
 
-func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan planNode, exec func(planNode) error) {
+func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan PlanNode, exec func(PlanNode) error) {
 	params := runParams{
 		ctx: context.TODO(),
 		p:   makeTestPlanner(),
@@ -89,20 +89,20 @@ func TestParallelizeQueueNoDependencies(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func(plan PlanNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		close(run3)
 		return nil
 	})
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func(plan PlanNode) error {
 		<-run2
 		res = append(res, 2)
 		assertLenEventually(t, &pq, 1)
 		return nil
 	})
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func(plan PlanNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLenEventually(t, &pq, 2)
@@ -126,24 +126,24 @@ func TestParallelizeQueueAllDependent(t *testing.T) {
 
 	var res []int
 	run := make(chan struct{})
-	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 PlanNode, p2 PlanNode) bool {
 		return false
 	})
 
 	// Executes: plan1 -> plan2 -> plan3.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func(plan PlanNode) error {
 		<-run
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		return nil
 	})
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func(plan PlanNode) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 2)
 		return nil
 	})
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func(plan PlanNode) error {
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
 		return nil
@@ -166,7 +166,7 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
 	run1, run3 := make(chan struct{}), make(chan struct{})
-	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 PlanNode, p2 PlanNode) bool {
 		if (p1 == plan1 && p2 == plan2) || (p1 == plan2 && p2 == plan1) {
 			// plan1 and plan2 are dependent
 			return false
@@ -176,18 +176,18 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func(plan PlanNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return nil
 	})
-	pq.MustAdd(t, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func(plan PlanNode) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 1)
 		return nil
 	})
-	pq.MustAdd(t, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func(plan PlanNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -212,7 +212,7 @@ func TestParallelizeQueueError(t *testing.T) {
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
 	run1, run3 := make(chan struct{}), make(chan struct{})
 	planErr := errors.Errorf("plan1 will throw this error")
-	analyzer := dependencyAnalyzerFunc(func(p1 planNode, p2 planNode) bool {
+	analyzer := dependencyAnalyzerFunc(func(p1 PlanNode, p2 PlanNode) bool {
 		if (p1 == plan1 && p2 == plan2) || (p1 == plan2 && p2 == plan1) {
 			// plan1 and plan2 are dependent
 			return false
@@ -222,19 +222,19 @@ func TestParallelizeQueueError(t *testing.T) {
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func(plan PlanNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return planErr
 	})
-	pq.MustAdd(t, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func(plan PlanNode) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
 		return nil
 	})
-	pq.MustAdd(t, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func(plan PlanNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -267,7 +267,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.MustAdd(t, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func(plan PlanNode) error {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
 		return planErr
@@ -281,7 +281,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		return nil
 	})
 
-	pq.MustAdd(t, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func(plan PlanNode) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
@@ -295,7 +295,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErrs)
 	}
 
-	pq.MustAdd(t, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func(plan PlanNode) error {
 		// Will be called, because the error is cleared when Wait is called.
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
@@ -311,7 +311,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 func planQuery(
 	t *testing.T, s serverutils.TestServerInterface, sql string,
-) (*Planner, planNode, func()) {
+) (*Planner, PlanNode, func()) {
 	kvDB := s.KVClient().(*client.DB)
 	txn := client.NewTxn(kvDB, s.NodeID())
 	txn.Proto().OrigTimestamp = s.Clock().Now()
@@ -454,7 +454,7 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				da := NewSpanBasedDependencyAnalyzer()
 
-				planAndAnalyze := func(q string) (planNode, func()) {
+				planAndAnalyze := func(q string) (PlanNode, func()) {
 					p, plan, finish := planQuery(t, s, q)
 					params := runParams{
 						ctx:     context.TODO(),

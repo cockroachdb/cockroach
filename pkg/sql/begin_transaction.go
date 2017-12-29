@@ -20,7 +20,7 @@ import (
 )
 
 // BeginTransaction starts a new transaction.
-func (p *Planner) BeginTransaction(n *tree.BeginTransaction) (planNode, error) {
+func (p *Planner) BeginTransaction(n *tree.BeginTransaction) (PlanNode, error) {
 	if p.session.TxnState.State() != AutoRetry || p.txn == nil {
 		return nil, errors.Errorf("the server should have already created a transaction. "+
 			"state: %s", p.session.TxnState.State())

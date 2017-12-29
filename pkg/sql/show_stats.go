@@ -36,7 +36,7 @@ var showTableStatsColumns = sqlbase.ResultColumns{
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
-func (p *Planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
+func (p *Planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (PlanNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (p *Planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	return &delayedNode{
 		name:    "SHOW STATISTICS FOR TABLE " + n.Table.String(),
 		columns: showTableStatsColumns,
-		constructor: func(ctx context.Context, p *Planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *Planner) (PlanNode, error) {
 			// We need to query the table_statistics and then do some post-processing:
 			//  - convert column IDs to a list of column names
 			//  - if the statistic has a histogram, we return the statistic ID as a

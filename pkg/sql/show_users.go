@@ -22,7 +22,7 @@ import (
 
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
-func (p *Planner) ShowUsers(ctx context.Context, n *tree.ShowUsers) (planNode, error) {
+func (p *Planner) ShowUsers(ctx context.Context, n *tree.ShowUsers) (PlanNode, error) {
 	return p.delegateQuery(ctx, "SHOW USERS",
 		`SELECT username FROM system.users WHERE "isRole" = false ORDER BY 1`, nil, nil)
 }

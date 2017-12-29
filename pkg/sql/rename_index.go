@@ -30,7 +30,7 @@ var errEmptyIndexName = errors.New("empty index name")
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *Planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
+func (p *Planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (PlanNode, error) {
 	tn, err := p.expandIndexName(ctx, n.Index, true /* requireTable */)
 	if err != nil {
 		return nil, err

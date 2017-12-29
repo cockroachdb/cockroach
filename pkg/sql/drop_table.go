@@ -39,7 +39,7 @@ type dropTableNode struct {
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
-func (p *Planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
+func (p *Planner) DropTable(ctx context.Context, n *tree.DropTable) (PlanNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()

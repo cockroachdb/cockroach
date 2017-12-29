@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// COPY FROM is not a usual planNode. After a COPY FROM is executed as a
-// planNode and until an error or it is explicitly completed, the planner
+// COPY FROM is not a usual PlanNode. After a COPY FROM is executed as a
+// PlanNode and until an error or it is explicitly completed, the planner
 // carries a reference to a copyNode to send the contents of copy data
 // payloads using the executor's Copy methods. Attempting to execute non-COPY
 // statements before the COPY has finished will result in an error.
@@ -53,7 +53,7 @@ type copyNode struct {
 
 // Copy begins a COPY.
 // Privileges: INSERT on table.
-func (p *Planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) {
+func (p *Planner) Copy(ctx context.Context, n *tree.CopyFrom) (PlanNode, error) {
 	cn := &copyNode{
 		table:   &n.Table,
 		columns: n.Columns,
@@ -312,7 +312,7 @@ var decodeMap = map[byte]byte{
 // CopyData is the statement type after a block of COPY data has been
 // received. There may be additional rows ready to insert. If so, return an
 // insertNode, otherwise emptyNode.
-func (p *Planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, error) {
+func (p *Planner) CopyData(ctx context.Context, n CopyDataBlock) (PlanNode, error) {
 	// When this many rows are in the copy buffer, they are inserted.
 	const copyRowSize = 100
 

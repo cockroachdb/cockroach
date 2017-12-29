@@ -42,7 +42,7 @@ type planMaker interface {
 	// or prepare() below.
 	newPlan(
 		ctx context.Context, stmt tree.Statement, desiredTypes []types.T,
-	) (planNode, error)
+	) (PlanNode, error)
 
 	// makePlan prepares the query plan for a single SQL statement.  it
 	// calls newPlan() then optimizePlan() on the result.  Execution must
@@ -57,22 +57,22 @@ type planMaker interface {
 	// must start by calling Start() first and then iterating using
 	// Next() and Values() in order to retrieve matching
 	// rows.
-	makePlan(ctx context.Context, stmt Statement) (planNode, error)
+	makePlan(ctx context.Context, stmt Statement) (PlanNode, error)
 
 	// prepare does the same checks as makePlan but skips building some
 	// data structures necessary for execution, based on the assumption
-	// that the plan will never be run. A planNode built with prepare()
+	// that the plan will never be run. A PlanNode built with prepare()
 	// will do just enough work to check the structural validity of the
 	// SQL statement and determine types for placeholders. However it is
 	// not appropriate to call optimizePlan(), Next() or Values() on a plan
 	// object created with prepare().
-	prepare(ctx context.Context, stmt tree.Statement) (planNode, error)
+	prepare(ctx context.Context, stmt tree.Statement) (PlanNode, error)
 }
 
 var _ planMaker = &Planner{}
 
-// runParams is a struct containing all parameters passed to planNode.Next() and
-// planNode.Start().
+// runParams is a struct containing all parameters passed to PlanNode.Next() and
+// PlanNode.Start().
 type runParams struct {
 	// context.Context for this method call.
 	ctx context.Context
@@ -86,24 +86,24 @@ type runParams struct {
 	p *Planner
 }
 
-// planNode defines the interface for executing a query or portion of a query.
+// PlanNode defines the interface for executing a query or portion of a query.
 //
-// The following methods apply to planNodes and contain special cases
+// The following methods apply to PlanNodes and contain special cases
 // for each type; they thus need to be extended when adding/removing
-// planNode instances:
+// PlanNode instances:
 // - planMaker.newPlan()
 // - planMaker.prepare()
 // - planMaker.setNeededColumns()  (needed_columns.go)
 // - planMaker.expandPlan()        (expand_plan.go)
 // - planVisitor.visit()           (walk.go)
-// - planNodeNames                 (walk.go)
+// - PlanNodeNames                 (walk.go)
 // - planMaker.optimizeFilters()   (filter_opt.go)
 // - setLimitHint()                (limit_hint.go)
 // - collectSpans()                (plan_spans.go)
 // - planOrdering()                (plan_ordering.go)
 // - planColumns()                 (plan_columns.go)
 //
-type planNode interface {
+type PlanNode interface {
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
 	// that return a result set, the Values() method will return one row
@@ -112,7 +112,7 @@ type planNode interface {
 	//
 	// Available after startPlan(). It is illegal to call Next() after it returns
 	// false. It is legal to call Next() even if the node implements
-	// planNodeFastPath and the FastPathResults() method returns true.
+	// PlanNodeFastPath and the FastPathResults() method returns true.
 	Next(params runParams) (bool, error)
 
 	// Values returns the values at the current row. The result is only valid
@@ -121,20 +121,17 @@ type planNode interface {
 	// Available after Next().
 	Values() tree.Datums
 
-	// Close terminates the planNode execution and releases its resources.
+	// Close terminates the PlanNode execution and releases its resources.
 	// This method should be called if the node has been used in any way (any
 	// methods on it have been called) after it was constructed. Note that this
 	// doesn't imply that startPlan() has been necessarily called.
 	Close(ctx context.Context)
 }
 
-// PlanNode is the exported name for planNode. Useful for CCL hooks.
-type PlanNode = planNode
-
-// planNodeFastPath is implemented by nodes that can perform all their
+// PlanNodeFastPath is implemented by nodes that can perform all their
 // work during startPlan(), possibly affecting even multiple rows. For
 // example, DELETE can do this.
-type planNodeFastPath interface {
+type PlanNodeFastPath interface {
 	// FastPathResults returns the affected row count and true if the
 	// node has no result set and has already executed when startPlan() completes.
 	// Note that Next() must still be valid even if this method returns
@@ -142,62 +139,62 @@ type planNodeFastPath interface {
 	FastPathResults() (int, bool)
 }
 
-var _ planNode = &alterIndexNode{}
-var _ planNode = &alterTableNode{}
-var _ planNode = &alterSequenceNode{}
-var _ planNode = &copyNode{}
-var _ planNode = &createDatabaseNode{}
-var _ planNode = &createIndexNode{}
-var _ planNode = &createTableNode{}
-var _ planNode = &createViewNode{}
-var _ planNode = &createSequenceNode{}
-var _ planNode = &createStatsNode{}
-var _ planNode = &delayedNode{}
-var _ planNode = &deleteNode{}
-var _ planNode = &distinctNode{}
-var _ planNode = &dropDatabaseNode{}
-var _ planNode = &dropIndexNode{}
-var _ planNode = &dropTableNode{}
-var _ planNode = &dropViewNode{}
-var _ planNode = &dropSequenceNode{}
-var _ planNode = &zeroNode{}
-var _ planNode = &unaryNode{}
-var _ planNode = &explainDistSQLNode{}
-var _ planNode = &explainPlanNode{}
-var _ planNode = &showTraceNode{}
-var _ planNode = &filterNode{}
-var _ planNode = &groupNode{}
-var _ planNode = &hookFnNode{}
-var _ planNode = &indexJoinNode{}
-var _ planNode = &insertNode{}
-var _ planNode = &joinNode{}
-var _ planNode = &limitNode{}
-var _ planNode = &ordinalityNode{}
-var _ planNode = &testingRelocateNode{}
-var _ planNode = &renderNode{}
-var _ planNode = &scanNode{}
-var _ planNode = &scatterNode{}
-var _ planNode = &showRangesNode{}
-var _ planNode = &showFingerprintsNode{}
-var _ planNode = &sortNode{}
-var _ planNode = &splitNode{}
-var _ planNode = &unionNode{}
-var _ planNode = &updateNode{}
-var _ planNode = &valueGenerator{}
-var _ planNode = &valuesNode{}
-var _ planNode = &windowNode{}
-var _ planNode = &CreateUserNode{}
-var _ planNode = &DropUserNode{}
+var _ PlanNode = &alterIndexNode{}
+var _ PlanNode = &alterTableNode{}
+var _ PlanNode = &alterSequenceNode{}
+var _ PlanNode = &copyNode{}
+var _ PlanNode = &createDatabaseNode{}
+var _ PlanNode = &createIndexNode{}
+var _ PlanNode = &createTableNode{}
+var _ PlanNode = &createViewNode{}
+var _ PlanNode = &createSequenceNode{}
+var _ PlanNode = &createStatsNode{}
+var _ PlanNode = &delayedNode{}
+var _ PlanNode = &deleteNode{}
+var _ PlanNode = &distinctNode{}
+var _ PlanNode = &dropDatabaseNode{}
+var _ PlanNode = &dropIndexNode{}
+var _ PlanNode = &dropTableNode{}
+var _ PlanNode = &dropViewNode{}
+var _ PlanNode = &dropSequenceNode{}
+var _ PlanNode = &zeroNode{}
+var _ PlanNode = &unaryNode{}
+var _ PlanNode = &explainDistSQLNode{}
+var _ PlanNode = &explainPlanNode{}
+var _ PlanNode = &showTraceNode{}
+var _ PlanNode = &filterNode{}
+var _ PlanNode = &groupNode{}
+var _ PlanNode = &hookFnNode{}
+var _ PlanNode = &indexJoinNode{}
+var _ PlanNode = &insertNode{}
+var _ PlanNode = &joinNode{}
+var _ PlanNode = &limitNode{}
+var _ PlanNode = &ordinalityNode{}
+var _ PlanNode = &testingRelocateNode{}
+var _ PlanNode = &renderNode{}
+var _ PlanNode = &scanNode{}
+var _ PlanNode = &scatterNode{}
+var _ PlanNode = &showRangesNode{}
+var _ PlanNode = &showFingerprintsNode{}
+var _ PlanNode = &sortNode{}
+var _ PlanNode = &splitNode{}
+var _ PlanNode = &unionNode{}
+var _ PlanNode = &updateNode{}
+var _ PlanNode = &valueGenerator{}
+var _ PlanNode = &valuesNode{}
+var _ PlanNode = &windowNode{}
+var _ PlanNode = &CreateUserNode{}
+var _ PlanNode = &DropUserNode{}
 
-var _ planNodeFastPath = &alterUserSetPasswordNode{}
-var _ planNodeFastPath = &createTableNode{}
-var _ planNodeFastPath = &CreateUserNode{}
-var _ planNodeFastPath = &deleteNode{}
-var _ planNodeFastPath = &DropUserNode{}
-var _ planNodeFastPath = &setZoneConfigNode{}
+var _ PlanNodeFastPath = &alterUserSetPasswordNode{}
+var _ PlanNodeFastPath = &createTableNode{}
+var _ PlanNodeFastPath = &CreateUserNode{}
+var _ PlanNodeFastPath = &deleteNode{}
+var _ PlanNodeFastPath = &DropUserNode{}
+var _ PlanNodeFastPath = &setZoneConfigNode{}
 
 // makePlan implements the Planner interface.
-func (p *Planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
+func (p *Planner) makePlan(ctx context.Context, stmt Statement) (PlanNode, error) {
 	plan, err := p.newPlan(ctx, stmt.AST, nil)
 	if err != nil {
 		return nil, err
@@ -228,7 +225,7 @@ func (p *Planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 }
 
 // startPlan starts the plan and all its sub-query nodes.
-func startPlan(params runParams, plan planNode) error {
+func startPlan(params runParams, plan PlanNode) error {
 	if err := startExec(params, plan); err != nil {
 		return err
 	}
@@ -237,21 +234,21 @@ func startPlan(params runParams, plan planNode) error {
 	return nil
 }
 
-// execStartable is implemented by planNodes that have an initial
+// execStartable is implemented by PlanNodes that have an initial
 // execution step.
 type execStartable interface {
 	startExec(params runParams) error
 }
 
-// startExec calls startExec() on each planNode that supports
+// startExec calls startExec() on each PlanNode that supports
 // execStartable using a depth-first, post-order traversal.
 // The subqueries, if any, are also started.
 //
 // Reminder: walkPlan() ensures that subqueries and sub-plans are
 // started before startExec() is called.
-func startExec(params runParams, plan planNode) error {
+func startExec(params runParams, plan PlanNode) error {
 	o := planObserver{
-		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
+		enterNode: func(ctx context.Context, _ string, p PlanNode) (bool, error) {
 			switch p.(type) {
 			case *explainPlanNode, *explainDistSQLNode:
 				// Do not recurse: we're not starting the plan if we just show its structure with EXPLAIN.
@@ -264,7 +261,7 @@ func startExec(params runParams, plan planNode) error {
 			}
 			return true, nil
 		},
-		leaveNode: func(_ string, n planNode) error {
+		leaveNode: func(_ string, n PlanNode) error {
 			if s, ok := n.(execStartable); ok {
 				return s.startExec(params)
 			}
@@ -291,7 +288,7 @@ func startExec(params runParams, plan planNode) error {
 	return walkPlan(params.ctx, plan, o)
 }
 
-func (p *Planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planNode, error) {
+func (p *Planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (PlanNode, error) {
 	// TODO(dan): This iteration makes the plan dispatch no longer constant
 	// time. We could fix that with a map of `reflect.Type` but including
 	// reflection in such a primary codepath is unfortunate. Instead, the
@@ -326,7 +323,7 @@ func (p *Planner) delegateQuery(
 	sql string,
 	initialCheck func(ctx context.Context) error,
 	desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	// Prepare the sub-plan.
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
@@ -351,7 +348,7 @@ func (p *Planner) delegateQuery(
 
 		// The delayed constructor's only responsibility is to call
 		// initialCheck() - the plan is already constructed.
-		constructor: func(ctx context.Context, _ *Planner) (planNode, error) {
+		constructor: func(ctx context.Context, _ *Planner) (PlanNode, error) {
 			if err := initialCheck(ctx); err != nil {
 				return nil, err
 			}
@@ -369,11 +366,11 @@ func (p *Planner) delegateQuery(
 	}, nil
 }
 
-// newPlan constructs a planNode from a statement. This is used
+// newPlan constructs a PlanNode from a statement. This is used
 // recursively by the various node constructors.
 func (p *Planner) newPlan(
 	ctx context.Context, stmt tree.Statement, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	tracing.AnnotateTrace()
 
 	// This will set the system DB trigger for transactions containing
@@ -562,7 +559,7 @@ func (p *Planner) newPlan(
 // needed both to type placeholders and to inform pgwire of the types
 // of the result columns. All statements that either support
 // placeholders or have result columns must be handled here.
-func (p *Planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, error) {
+func (p *Planner) prepare(ctx context.Context, stmt tree.Statement) (PlanNode, error) {
 	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
 		return plan, err
 	}

@@ -35,7 +35,7 @@ type alterUserSetPasswordNode struct {
 // Privileges: UPDATE on the users table.
 func (p *Planner) AlterUserSetPassword(
 	ctx context.Context, n *tree.AlterUserSetPassword,
-) (planNode, error) {
+) (PlanNode, error) {
 	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err

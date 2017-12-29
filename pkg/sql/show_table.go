@@ -32,7 +32,7 @@ import (
 // %[4]s the database name as SQL identifier.
 func (p *Planner) showTableDetails(
 	ctx context.Context, showType string, t tree.NormalizableTableName, query string,
-) (planNode, error) {
+) (PlanNode, error) {
 	tn, err := t.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err

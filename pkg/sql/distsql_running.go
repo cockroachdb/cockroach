@@ -427,7 +427,7 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 	return nil
 }
 
-// PlanAndRun generates a physical plan from a planNode tree and executes it. It
+// PlanAndRun generates a physical plan from a PlanNode tree and executes it. It
 // assumes that the tree is supported (see CheckSupport).
 //
 // Note that errors that happen while actually running the flow are reported to
@@ -435,7 +435,7 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	txn *client.Txn,
-	tree planNode,
+	tree PlanNode,
 	recv *distSQLReceiver,
 	evalCtx tree.EvalContext,
 ) error {

@@ -28,7 +28,7 @@ import (
 
 // ShowCreateTable returns a SHOW CREATE TABLE statement for the specified table.
 // Privileges: Any privilege on table.
-func (p *Planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) (planNode, error) {
+func (p *Planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) (PlanNode, error) {
 	// We make the check whether the name points to a table or not in
 	// SQL, so as to avoid a double lookup (a first one to check if the
 	// descriptor is of the right type, another to populate the
@@ -48,7 +48,7 @@ func (p *Planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) 
 
 // ShowCreateView returns a CREATE VIEW statement for the specified view.
 // Privileges: Any privilege on view.
-func (p *Planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (planNode, error) {
+func (p *Planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (PlanNode, error) {
 	// We make the check whether the name points to a view or not in
 	// SQL, so as to avoid a double lookup (a first one to check if the
 	// descriptor is of the right type, another to populate the
