@@ -224,7 +224,7 @@ func TestExtractNotNullConstraints(t *testing.T) {
 		{`a = 1 OR b = 2`, []int{}},
 		{`(a = 1 AND b = 2) OR (b = 3 AND j = 4)`, []int{1}},
 		{`(a, b) = (1, 2)`, []int{0, 1}},
-		{`(a, b) > (1, 2)`, []int{0, 1}},
+		{`(a, b) > (1, 2)`, []int{}},
 		{`a IN (b,j)`, []int{0}},
 		{`(a, b) IN ((1,j))`, []int{0, 1}},
 		{`a NOT IN (b,j)`, []int{0}},
