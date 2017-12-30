@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -699,137 +700,213 @@ func runCommitTrigger(
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies a
-// ComputeChecksum command on the range. It then issues CollectChecksum commands
-// to the other replicas.
-//
-// TODO(tschottdorf): We should call this AdminCheckConsistency.
+// ComputeChecksum through Raft and then issues CollectChecksum commands to the
+// other replicas. When an inconsistency is detected and no diff was requested,
+// the consistency check will be re-run to collect a diff, which is then printed
+// before calling `log.Fatal`.
 func (r *Replica) CheckConsistency(
 	ctx context.Context, args roachpb.CheckConsistencyRequest,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
 	desc := r.Desc()
 	key := desc.StartKey.AsRawKey()
+	// Keep the request from crossing the local->global boundary.
+	if bytes.Compare(key, keys.LocalMax) < 0 {
+		key = keys.LocalMax
+	}
 	endKey := desc.EndKey.AsRawKey()
 	id := uuid.MakeV4()
-	// Send a ComputeChecksum to all the replicas of the range.
-	{
-		var ba roachpb.BatchRequest
-		ba.RangeID = desc.RangeID
-		checkArgs := &roachpb.ComputeChecksumRequest{
-			Span: roachpb.Span{
-				Key:    key,
-				EndKey: endKey,
-			},
-			Version:    batcheval.ReplicaChecksumVersion,
-			ChecksumID: id,
-			Snapshot:   args.WithDiff,
-		}
-		ba.Add(checkArgs)
-		ba.Timestamp = r.store.Clock().Now()
-		_, pErr := r.Send(ctx, ba)
-		if pErr != nil {
-			return roachpb.CheckConsistencyResponse{}, pErr
-		}
+
+	checkArgs := roachpb.ComputeChecksumRequest{
+		Span: roachpb.Span{
+			Key:    key,
+			EndKey: endKey,
+		},
+		Version:    batcheval.ReplicaChecksumVersion,
+		ChecksumID: id,
+		Snapshot:   args.WithDiff,
 	}
 
-	// Get local checksum. This might involving waiting for it.
-	c, err := r.getChecksum(ctx, id)
+	results, err := r.RunConsistencyCheck(ctx, checkArgs)
 	if err != nil {
-		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(
-			errors.Wrapf(err, "could not compute checksum for range [%s, %s]", key, endKey))
+		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(err)
 	}
 
-	// Get remote checksums.
-	localReplica, err := r.GetReplicaDescriptor()
-	if err != nil {
-		return roachpb.CheckConsistencyResponse{},
-			roachpb.NewError(errors.Wrap(err, "could not get replica descriptor"))
-	}
-	var inconsistencyCount uint32
-	var wg sync.WaitGroup
-	for _, replica := range desc.Replicas {
-		if replica == localReplica {
+	var inconsistencyCount int
+
+	for _, result := range results {
+		expResponse := results[0].Response
+		if result.Err != nil || bytes.Equal(expResponse.Checksum, result.Response.Checksum) {
 			continue
 		}
-		wg.Add(1)
-		replica := replica // per-iteration copy
-		if err := r.store.Stopper().RunAsyncTask(ctx, "storage.Replica: checking consistency",
-			func(ctx context.Context) {
-				ctx, cancel := context.WithTimeout(ctx, collectChecksumTimeout)
-				defer cancel()
-				defer wg.Done()
-				addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
-				if err != nil {
-					log.Error(ctx, errors.Wrapf(err, "could not resolve node ID %d", replica.NodeID))
-					return
-				}
-				conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String()).Connect(ctx)
-				if err != nil {
-					log.Error(ctx,
-						errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr))
-					return
-				}
-				client := NewConsistencyClient(conn)
-				req := &CollectChecksumRequest{
-					StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
-					r.RangeID,
-					id,
-					c.checksum,
-				}
-				resp, err := client.CollectChecksum(ctx, req)
-				if err != nil {
-					log.Error(ctx, errors.Wrapf(err, "could not CollectChecksum from replica %s", replica))
-					return
-				}
-				if bytes.Equal(c.checksum, resp.Checksum) {
-					return
-				}
-				atomic.AddUint32(&inconsistencyCount, 1)
-				var buf bytes.Buffer
-				_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x",
-					replica, c.checksum, resp.Checksum)
-				if c.snapshot != nil && resp.Snapshot != nil {
-					diff := diffRange(c.snapshot, resp.Snapshot)
-					if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
-						report(r.store.Ident, diff)
-					}
-					buf.WriteByte('\n')
-					_, _ = diff.WriteTo(&buf)
-				}
-				log.Error(ctx, buf.String())
-			}); err != nil {
-			log.Error(ctx, errors.Wrap(err, "could not run async CollectChecksum"))
-			wg.Done()
+		inconsistencyCount++
+		var buf bytes.Buffer
+		_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x",
+			result.Replica, expResponse.Checksum, result.Response.Checksum)
+		if expResponse.Snapshot != nil && result.Response.Snapshot != nil {
+			diff := diffRange(expResponse.Snapshot, result.Response.Snapshot)
+			if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
+				report(r.store.Ident, diff)
+			}
+			buf.WriteByte('\n')
+			_, _ = diff.WriteTo(&buf)
 		}
+		log.Error(ctx, buf.String())
 	}
-	wg.Wait()
+
+	// Everything is good, no further action necessary.
+	if inconsistencyCount == 0 {
+		return roachpb.CheckConsistencyResponse{}, nil
+	}
 
 	logFunc := log.Fatalf
 	if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
-		p(r.store.Ident)
+		if !args.WithDiff {
+			// We'll call this recursively with WithDiff==true; let's let that call
+			// be the one to trigger the handler.
+			p(r.store.Ident)
+		}
 		logFunc = log.Errorf
 	}
 
-	if inconsistencyCount == 0 {
-	} else if args.WithDiff {
+	// Diff was printed above, so call logFunc with a short message only.
+	if args.WithDiff {
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
-	} else {
-		if err := r.store.stopper.RunAsyncTask(
-			r.AnnotateCtx(context.Background()), "storage.Replica: checking consistency (re-run)", func(ctx context.Context) {
-				log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
-					inconsistencyCount)
-				// Keep the request from crossing the local->global boundary.
-				if bytes.Compare(key, keys.LocalMax) < 0 {
-					key = keys.LocalMax
-				}
-				if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
-					logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", err)
-				}
-			}); err != nil {
-			log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
+		return roachpb.CheckConsistencyResponse{}, nil
+	}
+
+	// No diff was printed, so we want to re-run with diff.
+	// Note that this will call Fatal recursively in `CheckConsistency` (in the code above).
+	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
+		inconsistencyCount)
+	if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
+		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", err)
+	}
+
+	// Not reached except in tests.
+	return roachpb.CheckConsistencyResponse{}, nil
+}
+
+// A ConsistencyCheckResult contains the outcome of a CollectChecksum call.
+type ConsistencyCheckResult struct {
+	Replica  roachpb.ReplicaDescriptor
+	Response CollectChecksumResponse
+	Err      error
+}
+
+func (r *Replica) collectChecksumFromReplica(
+	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, checksum []byte,
+) (CollectChecksumResponse, error) {
+	addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
+	if err != nil {
+		return CollectChecksumResponse{}, errors.Wrapf(err, "could not resolve node ID %d",
+			replica.NodeID)
+	}
+	conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	if err != nil {
+		return CollectChecksumResponse{},
+			errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr)
+	}
+	client := NewConsistencyClient(conn)
+	req := &CollectChecksumRequest{
+		StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
+		r.RangeID,
+		id,
+		checksum,
+	}
+	resp, err := client.CollectChecksum(ctx, req)
+	if err != nil {
+		return CollectChecksumResponse{}, err
+	}
+	return *resp, nil
+}
+
+// RunConsistencyCheck carries out a round of CheckConsistency/CollectChecksum
+// for the members of this range, returning the results (which it does not act
+// upon). The first result will belong to the local replica.
+func (r *Replica) RunConsistencyCheck(
+	ctx context.Context, req roachpb.ComputeChecksumRequest,
+) ([]ConsistencyCheckResult, error) {
+	// Send a ComputeChecksum which will trigger computation of the checksum on
+	// all replicas.
+	{
+		var b client.Batch
+		b.AddRawRequest(&req)
+
+		if err := r.store.db.Run(ctx, &b); err != nil {
+			return nil, err
 		}
 	}
 
-	return roachpb.CheckConsistencyResponse{}, nil
+	var orderedReplicas []roachpb.ReplicaDescriptor
+	{
+		desc := r.Desc()
+		localReplica, err := r.GetReplicaDescriptor()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get replica descriptor")
+		}
+
+		// Move the local replica to the front (which makes it the "master"
+		// we're comparing against).
+		orderedReplicas = append(orderedReplicas, desc.Replicas...)
+
+		sort.Slice(orderedReplicas, func(i, j int) bool {
+			return orderedReplicas[i] == localReplica
+		})
+	}
+
+	resultCh := make(chan ConsistencyCheckResult, len(orderedReplicas))
+	var results []ConsistencyCheckResult
+	var wg sync.WaitGroup
+
+	for _, replica := range orderedReplicas {
+		wg.Add(1)
+		replica := replica // per-iteration copy for the goroutine
+		if err := r.store.Stopper().RunAsyncTask(ctx, "storage.Replica: checking consistency",
+			func(ctx context.Context) {
+				defer wg.Done()
+
+				ctx, cancel := context.WithTimeout(ctx, collectChecksumTimeout)
+				defer cancel()
+
+				var masterChecksum []byte
+				if len(results) > 0 {
+					masterChecksum = results[0].Response.Checksum
+				}
+				resp, err := r.collectChecksumFromReplica(ctx, replica, req.ChecksumID, masterChecksum)
+				resultCh <- ConsistencyCheckResult{
+					Replica:  replica,
+					Response: resp,
+					Err:      err,
+				}
+			}); err != nil {
+			wg.Done()
+			// If we can't start tasks, the node is likely draining. Just return the error verbatim.
+			return nil, err
+		}
+
+		// Collect the master result eagerly so that we can send a SHA in the
+		// remaining requests (this is used for logging inconsistencies on the
+		// remote nodes only).
+		if len(results) == 0 {
+			wg.Wait()
+			result := <-resultCh
+			if err := result.Err; err != nil {
+				// If we can't compute the local checksum, give up.
+				return nil, errors.Wrap(err, "computing own checksum")
+			}
+			results = append(results, result)
+		}
+	}
+
+	wg.Wait()
+	close(resultCh)
+
+	// Collect the remaining results.
+	for result := range resultCh {
+		results = append(results, result)
+	}
+
+	return results, nil
 }
 
 // getChecksum waits for the result of ComputeChecksum and returns it.
@@ -867,7 +944,7 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 	if !ok {
 		return ReplicaChecksum{}, errors.Errorf("no map entry for checksum (ID = %s)", id)
 	}
-	if c.checksum == nil {
+	if c.Checksum == nil {
 		return ReplicaChecksum{}, errors.Errorf(
 			"checksum is nil, most likely because the async computation could not be run (ID = %s)", id)
 	}
@@ -882,9 +959,9 @@ func (r *Replica) computeChecksumDone(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.mu.checksums[id]; ok {
-		c.checksum = sha
+		c.Checksum = sha
 		c.gcTimestamp = timeutil.Now().Add(batcheval.ReplicaChecksumGCInterval)
-		c.snapshot = snapshot
+		c.Snapshot = snapshot
 		r.mu.checksums[id] = c
 		// Notify
 		close(c.notify)
