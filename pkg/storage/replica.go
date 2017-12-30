@@ -1098,15 +1098,15 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	minIndex := status.Commit
 	for _, rep := range r.mu.state.Desc.Replicas {
 		// Only consider followers that that have "healthy" RPC connections.
-		if r.store.cfg.Transport.resolver != nil {
-			addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
-			if err != nil {
-				continue
-			}
-			if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
-				continue
-			}
+
+		addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
+		if err != nil {
+			continue
 		}
+		if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
+			continue
+		}
+
 		// Only consider followers that are active.
 		if !r.isFollowerActiveLocked(ctx, rep.ReplicaID) {
 			continue
