@@ -144,13 +144,20 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	// same direction) starting at <offset>.
 	prefixLen := 0
 	dir := c.colInfos[offset].Direction
+	nullVal := false
 	for i := range lhs.children {
-		if !c.isIndexColumn(lhs.children[i], offset+i) {
+		if !(offset+i < len(c.colInfos) && c.isIndexColumn(lhs.children[i], offset+i)) {
 			// Variable doesn't refer to the right column.
 			break
 		}
 		if rhs.children[i].op != constOp {
 			// Right-hand value is not a constant.
+			break
+		}
+		if isConstNull(rhs.children[i]) {
+			// NULLs are tricky and require special handling; see
+			// nullVal related code below.
+			nullVal = true
 			break
 		}
 		if c.colInfos[offset+i].Direction != dir {
@@ -208,7 +215,22 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		panic(fmt.Sprintf("unsupported op %s", e.op))
 	}
 
-	if prefixLen < len(lhs.children) {
+	// The spans are "tight" unless we used just a prefix.
+	tight = (prefixLen == len(lhs.children))
+
+	if nullVal {
+		// NULL is treated semantically as "unknown value", so
+		//   (1, 2) > (1, NULL) is NULL,
+		// but
+		//   (2, 2) > (1, NULL) is true.
+		//
+		// So either of these constraints:
+		//   (a, b) > (1, NULL)
+		//   (a, b) >= (1, NULL)
+		// is true if and only if a > 1.
+		inclusive = false
+		tight = true
+	} else if prefixLen < len(lhs.children) {
 		// If we only keep a prefix, exclusive inequalities become exclusive.
 		// For example:
 		//   (a, b, c) > (1, 2, 3) becomes (a, b) >= (1, 2)
@@ -220,15 +242,43 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		less = !less
 	}
 
-	sp := MakeFullSpan()
+	// We use makeNotNullSpan to disallow NULLs on the first column.
+	sp := c.makeNotNullSpan(offset)
 	if less {
 		sp.End = LogicalKey{Vals: datums, Inclusive: inclusive}
 	} else {
 		sp.Start = LogicalKey{Vals: datums, Inclusive: inclusive}
 	}
+
+	// Consider (a, b, c) <= (1, 2, 3).
+	//
+	// If the columns are not null, the condition is equivalent to
+	// the span [ - /1/2/3].
+	//
+	// If column a is nullable, the condition is equivalent to the
+	// span (/NULL - /1/2/3].
+	//
+	// However, if column b or c is nullable, we still have to filter
+	// out the NULLs on those columns, so whatever span we generate is
+	// not "tight". For example, the span (/NULL - /1/2/3] can contain
+	// (1, NULL, NULL) which is not <= (1, 2, 3).
+	// TODO(radu): we could generate multiple spans:
+	//   (/NULL - /0], (/1/NULL - /1/1], (/1/2/NULL, /1/2/3]
+	//
+	// If the condition is > or >= this is not a problem. For example
+	// (a, b, c) >= (1, 2, 3) has the span [/1/2/3 - ] which excludes
+	// any values of the form (1, NULL, x) or (1, 2, NULL). Other values
+	// with NULLs like (2, NULL, NULL) are ok because
+	// (2, NULL, NULL) >= (1, 2, 3).
+	if tight && less {
+		for i := 1; i < prefixLen; i++ {
+			if c.colInfos[i].Nullable {
+				tight = false
+				break
+			}
+		}
+	}
 	c.preferInclusive(offset, &sp)
-	// The spans are "tight" unless we used just a prefix.
-	tight = (prefixLen == len(lhs.children))
 	return LogicalSpans{sp}, true, tight
 }
 
