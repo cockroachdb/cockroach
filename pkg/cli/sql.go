@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/chzyer/readline"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -629,7 +630,14 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 
 		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
 
-		c.checkSyntax = true
+		if c.conn.serverVersion != build.GetInfo().Tag {
+			fmt.Fprintln(stderr,
+				"warning: client-side syntax checking disabled because versions don't match.\n"+
+					"override if desired with \\set check_syntax.")
+			c.checkSyntax = false
+		} else {
+			c.checkSyntax = true
+		}
 		c.normalizeHistory = true
 		c.errExit = false
 		c.smartPrompt = true
