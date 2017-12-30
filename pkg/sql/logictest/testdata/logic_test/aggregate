@@ -20,6 +20,16 @@ SELECT ARRAY_AGG(1) FROM kv
 ----
 NULL
 
+query T
+SELECT JSON_AGG(1) FROM kv
+----
+NULL
+
+query T
+SELECT JSONB_AGG(1) FROM kv
+----
+NULL
+
 query IIIIRRRRBBT
 SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
@@ -27,6 +37,16 @@ NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT ARRAY_AGG(v) FROM kv
+----
+NULL
+
+query T
+SELECT JSON_AGG(v) FROM kv
+----
+NULL
+
+query T
+SELECT JSONB_AGG(v) FROM kv
 ----
 NULL
 
@@ -41,6 +61,16 @@ query T
 SELECT ARRAY_AGG(1)
 ----
 {1}
+
+query T
+SELECT JSON_AGG(1)
+----
+[1]
+
+query T
+SELECT JSONB_AGG(1)
+----
+[1]
 
 # Check that COALESCE using aggregate results over an empty table
 # work properly.
@@ -95,6 +125,16 @@ query T
 SELECT ARRAY_AGG(1) FROM kv
 ----
 {1,1,1,1,1,1}
+
+query T
+SELECT JSON_AGG(1) FROM kv
+----
+[1,1,1,1,1,1]
+
+query T
+SELECT JSONB_AGG(1) FROM kv
+----
+[1,1,1,1,1,1]
 
 # Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
 query I rowsort
@@ -505,6 +545,16 @@ query T
 SELECT array_agg(s) FROM kv WHERE s IS NULL
 ----
 {NULL}
+
+query T
+SELECT JSON_AGG(s) FROM kv WHERE s IS NULL
+----
+[null]
+
+query T
+SELECT JSONB_AGG(s) FROM kv WHERE s IS NULL
+----
+[null]
 
 query RRRR
 SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
@@ -961,6 +1011,16 @@ query T
 SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 aabbA
+
+query T
+SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+----
+["a","a",null,"b","b","A"]
+
+query T
+SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+----
+["a","a",null,"b","b","A"]
 
 # Tests for the single-row optimization.
 statement OK

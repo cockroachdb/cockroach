@@ -69,11 +69,13 @@ CREATE TABLE d.t (a STRING)
 func TestAggregatesMonitorMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// By selecting the LENGTH we prevent anything besides the aggregate itself
-	// from being able to catch the large memory usage.
+	// By avoiding printing the aggregate results we prevent anything
+	// besides the aggregate itself from being able to catch the
+	// large memory usage.
 	statements := []string{
 		`SELECT LENGTH(CONCAT_AGG(a)) FROM d.t`,
 		`SELECT ARRAY_LENGTH(ARRAY_AGG(a), 1) FROM d.t`,
+		`SELECT JSON_TYPEOF(JSON_AGG(A)) FROM d.t`,
 	}
 
 	for _, statement := range statements {

@@ -29,6 +29,10 @@
 </span></td></tr>
 <tr><td><code>final_variance(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>, arg3: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the variance from the selected locally-computed squared difference values.</p>
 </span></td></tr>
+<tr><td><code>json_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>aggregates values as a JSON or JSONB array</p>
+</span></td></tr>
+<tr><td><code>jsonb_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>aggregates values as a JSON or JSONB array</p>
+</span></td></tr>
 <tr><td><code>max(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><code>max(arg1: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>

@@ -360,6 +360,8 @@ message AggregatorSpec {
     SQRDIFF = 15;
     FINAL_VARIANCE = 16;
     FINAL_STDDEV = 17;
+    JSON_AGG = 18;
+    JSONB_AGG = 19;
   }
 
   message Aggregation {
