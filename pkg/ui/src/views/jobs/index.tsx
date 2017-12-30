@@ -251,7 +251,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
         </PageConfig>
       </div>
       <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
-        <Loading loading={_.isEmpty(data)} className="loading-image" image={noResults}>
+        <Loading loading={_.isEmpty(data)} className="loading-image loading-image__text" text="No Results">
           <section className="section">
             <JobsSortedTable
               data={data}
