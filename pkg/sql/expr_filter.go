@@ -359,6 +359,19 @@ func splitFilter(expr tree.TypedExpr, conv varConvertFunc) (restricted, remainde
 	return restricted, remainder
 }
 
+// extractNotNullConstraintsFromNotNullTuple deduces which IndexedVars must be
+// not NULL given an expr that must be not NULL and, if it is a tuple, all its
+// members must be not NULL.
+func extractNotNullConstraintsFromNotNullTuple(expr tree.TypedExpr) util.FastIntSet {
+	result := extractNotNullConstraintsFromNotNullExpr(expr)
+	if t, ok := expr.(*tree.Tuple); ok {
+		for _, e := range t.Exprs {
+			result.UnionWith(extractNotNullConstraintsFromNotNullExpr(e.(tree.TypedExpr)))
+		}
+	}
+	return result
+}
+
 // extractNotNullConstraintsFromNotNullExpr deduces which IndexedVars must be
 // not NULL for expr to be not NULL. It is best-effort so there may be false
 // negatives (but no false positives).
@@ -367,13 +380,6 @@ func extractNotNullConstraintsFromNotNullExpr(expr tree.TypedExpr) util.FastIntS
 	case *tree.IndexedVar:
 		var result util.FastIntSet
 		result.Add(t.Idx)
-		return result
-
-	case *tree.Tuple:
-		var result util.FastIntSet
-		for _, e := range t.Exprs {
-			result.UnionWith(extractNotNullConstraintsFromNotNullExpr(e.(tree.TypedExpr)))
-		}
 		return result
 
 	case *tree.BinaryExpr:
@@ -388,13 +394,17 @@ func extractNotNullConstraintsFromNotNullExpr(expr tree.TypedExpr) util.FastIntS
 			return util.FastIntSet{}
 		}
 		if t.Operator == tree.In || t.Operator == tree.NotIn {
-			return extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+			return extractNotNullConstraintsFromNotNullTuple(t.TypedLeft())
 		}
 		// For all other comparison operations, both operands must be not NULL.
-		left := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
-		right := extractNotNullConstraintsFromNotNullExpr(t.TypedRight())
-		left.UnionWith(right)
-		return left
+		result := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+		result.UnionWith(extractNotNullConstraintsFromNotNullExpr(t.TypedRight()))
+		// For tuple equality, all tuple members must be not NULL.
+		if t.Operator == tree.EQ {
+			result.UnionWith(extractNotNullConstraintsFromNotNullTuple(t.TypedLeft()))
+			result.UnionWith(extractNotNullConstraintsFromNotNullTuple(t.TypedRight()))
+		}
+		return result
 
 	case *tree.ParenExpr:
 		return extractNotNullConstraintsFromNotNullExpr(t.TypedInnerExpr())
@@ -437,19 +447,11 @@ func extractNotNullConstraints(filter tree.TypedExpr) util.FastIntSet {
 		return extractNotNullConstraintsFromNotNullExpr(t.TypedInnerExpr())
 
 	case *tree.ComparisonExpr:
-		if t.Operator == tree.IsNotDistinctFrom && t.Right == tree.DNull {
-			return util.FastIntSet{}
+		result := extractNotNullConstraintsFromNotNullExpr(filter)
+		if t.Operator == tree.IsDistinctFrom && t.Right == tree.DNull {
+			result.UnionWith(extractNotNullConstraintsFromNotNullExpr(t.TypedLeft()))
 		}
-
-		if (t.Operator == tree.IsDistinctFrom && t.Right == tree.DNull) ||
-			t.Operator == tree.In || t.Operator == tree.NotIn {
-			return extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
-		}
-		// For all other comparison operations, both operands must be not NULL.
-		left := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
-		right := extractNotNullConstraintsFromNotNullExpr(t.TypedRight())
-		left.UnionWith(right)
-		return left
+		return result
 
 	default:
 		// For any expression to be TRUE, it must not be NULL.
