@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -22,7 +23,31 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
+
+// Test the behavior of Run in the presence of errors that switch to the drain
+// and forward metadata mode.
+func TestRunDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// A source with no rows and 2 ProducerMetadata messages.
+	src := &RowChannel{}
+	src.InitWithBufSize(nil, 10)
+	src.Push(nil, ProducerMetadata{Err: fmt.Errorf("test")})
+	src.Push(nil, ProducerMetadata{})
+
+	// A receiver that is marked as done consuming rows so that Run will
+	// immediately move from forwarding rows and metadata to draining metadata.
+	buf := &RowBuffer{}
+	buf.ConsumerDone()
+
+	Run(context.Background(), src, buf)
+
+	if src.consumerStatus != DrainRequested {
+		t.Fatalf("expected DrainRequested, but found %d", src.consumerStatus)
+	}
+}
 
 // Benchmark a pipeline of RowChannels.
 func BenchmarkRowChannelPipeline(b *testing.B) {
