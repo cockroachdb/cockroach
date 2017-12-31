@@ -1639,12 +1639,33 @@ func MVCCReverseScan(
 func MVCCIterate(
 	ctx context.Context,
 	engine Reader,
-	startKey,
-	endKey roachpb.Key,
+	startKey, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 	reverse bool,
+	f func(roachpb.KeyValue) (bool, error),
+) ([]roachpb.Intent, error) {
+	// Get a new iterator.
+	iter := engine.NewIterator(false)
+	defer iter.Close()
+
+	return MVCCIterateUsingIter(
+		ctx, engine, startKey, endKey, timestamp, consistent, txn, reverse, iter, f,
+	)
+}
+
+// MVCCIterateUsingIter iterates over the key range [start,end) using the
+// supplied iterator. See comments for MVCCIterate.
+func MVCCIterateUsingIter(
+	ctx context.Context,
+	engine Reader,
+	startKey, endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+	reverse bool,
+	iter Iterator,
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
 	if !consistent && txn != nil {
@@ -1675,10 +1696,6 @@ func MVCCIterate(
 		encKey = MakeMVCCMetadataKey(startKey)
 		getMeta = getScanMeta
 	}
-
-	// Get a new iterator.
-	iter := engine.NewIterator(false)
-	defer iter.Close()
 
 	// Seeking for the first defined position.
 	if reverse {
@@ -2128,13 +2145,6 @@ func GetIterAndBuf(engine Reader) IterAndBuf {
 }
 
 // GetBufUsingIter returns an IterAndBuf using the supplied iterator.
-func GetBufUsingIter(iter Iterator) IterAndBuf {
-	return IterAndBuf{
-		buf:  newPutBuffer(),
-		iter: iter,
-	}
-}
-
 func GetBufUsingIter(iter Iterator) IterAndBuf {
 	return IterAndBuf{
 		buf:  newPutBuffer(),

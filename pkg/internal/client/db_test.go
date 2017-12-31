@@ -403,7 +403,6 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "GenerateForcedRetryableError"}:    {},
 		{txnType, "InternalSetPriority"}:             {},
 		{txnType, "IsFinalized"}:                     {},
-		{txnType, "IsSerializableRestart"}:           {},
 		{txnType, "NewBatch"}:                        {},
 		{txnType, "Exec"}:                            {},
 		{txnType, "PrepareForRetry"}:                 {},

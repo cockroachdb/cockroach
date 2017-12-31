@@ -168,7 +168,12 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					Poison:    test.poison,
 				}
 				ri.Key = roachpb.Key("b")
-				rir := roachpb.ResolveIntentRangeRequest(ri)
+				rir := roachpb.ResolveIntentRangeRequest{
+					IntentTxn: txnMeta,
+					Status:    test.status,
+					Poison:    test.poison,
+				}
+				rir.Key = ri.Key
 				rir.EndKey = roachpb.Key("c")
 
 				ac := abortspan.New(desc.RangeID)
