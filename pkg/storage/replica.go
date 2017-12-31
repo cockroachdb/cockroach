@@ -2074,7 +2074,7 @@ func (r *Replica) updateTimestampCache(ba *roachpb.BatchRequest, br *roachpb.Bat
 				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
 					ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
-					// See comment in the ScanRequest case. For revert scans, results
+					// See comment in the ScanRequest case. For reverse scans, results
 					// are returned in reverse order and we truncate the start key of
 					// the span.
 					start = resp.Rows[len(resp.Rows)-1].Key

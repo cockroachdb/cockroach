@@ -214,6 +214,70 @@ func TestIntentSpanIterate(t *testing.T) {
 	}
 }
 
+func TestReadSpanIterate(t *testing.T) {
+	testCases := []struct {
+		req    Request
+		resp   Response
+		span   Span
+		resume *Span
+	}{
+		{&ConditionalPutRequest{}, &ConditionalPutResponse{},
+			Span{Key: Key("a")}, nil},
+		{&ScanRequest{}, &ScanResponse{},
+			Span{Key("a"), Key("c")}, &Span{Key("b"), Key("c")}},
+		{&GetRequest{}, &GetResponse{},
+			Span{Key: Key("b")}, nil},
+		{&ReverseScanRequest{}, &ReverseScanResponse{},
+			Span{Key("d"), Key("f")}, &Span{Key("d"), Key("e")}},
+		{&DeleteRangeRequest{}, &DeleteRangeResponse{},
+			Span{Key("g"), Key("i")}, &Span{Key("h"), Key("i")}},
+	}
+
+	// A batch request with a batch response with no ResumeSpan.
+	ba := BatchRequest{}
+	br := BatchResponse{}
+	for _, tc := range testCases {
+		tc.req.SetHeader(tc.span)
+		ba.Add(tc.req)
+		br.Add(tc.resp)
+	}
+
+	var spans []Span
+	fn := func(key, endKey Key) {
+		spans = append(spans, Span{Key: key, EndKey: endKey})
+	}
+	ba.ReadSpanIterate(&br, fn)
+	// Only the conditional put isn't considered a read span.
+	expSpans := []Span{testCases[1].span, testCases[2].span, testCases[3].span, testCases[4].span}
+	if !reflect.DeepEqual(expSpans, spans) {
+		t.Fatalf("unexpected spans: expected %+v, found = %+v", expSpans, spans)
+	}
+
+	// Batch responses with ResumeSpans.
+	ba = BatchRequest{}
+	br = BatchResponse{}
+	for _, tc := range testCases {
+		tc.req.SetHeader(tc.span)
+		ba.Add(tc.req)
+		if tc.resume != nil {
+			tc.resp.SetHeader(ResponseHeader{ResumeSpan: tc.resume})
+		}
+		br.Add(tc.resp)
+	}
+
+	spans = []Span{}
+	ba.ReadSpanIterate(&br, fn)
+	expSpans = []Span{
+		Span{Key("a"), Key("b")},
+		Span{Key: Key("b")},
+		Span{Key("e"), Key("f")},
+		Span{Key("g"), Key("h")},
+	}
+	if !reflect.DeepEqual(expSpans, spans) {
+		t.Fatalf("unexpected spans: expected %+v, found = %+v", expSpans, spans)
+	}
+}
+
 func TestBatchResponseCombine(t *testing.T) {
 	br := &BatchResponse{}
 	{

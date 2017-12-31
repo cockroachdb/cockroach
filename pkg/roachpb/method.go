@@ -138,4 +138,8 @@ const (
 	AdminScatter
 	// AddSSTable links a file into the RocksDB log-structured merge-tree.
 	AddSSTable
+	// UpdateRead verifies no writes have occurred since the transaction
+	// orig timestamp and sets a new span in the timestamp cache at the
+	// current transaction timestamp.
+	UpdateRead
 )

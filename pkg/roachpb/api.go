@@ -74,6 +74,7 @@ const (
 	isWrite                // write cmds go through raft and must be proposed on lease holder
 	isTxn                  // txn commands may be part of a transaction
 	isTxnWrite             // txn write cmds start heartbeat and are marked for intent resolution
+	isTxnRead              // txn cmds which read and must be updated to avoid serializable restart
 	isRange                // range commands may span multiple keys
 	isReverse              // reverse commands traverse ranges in descending direction
 	isAlone                // requests which must be alone in a batch
@@ -94,6 +95,13 @@ func IsReadOnly(args Request) bool {
 // intents when used within a transaction.
 func IsTransactionWrite(args Request) bool {
 	return (args.flags() & isTxnWrite) != 0
+}
+
+// IsTransactionRead returns true if the request reads data and must
+// be checked via UpdateRead if used within a SERIALIZABLE transaction
+// to avoid transaction retry if original and commit timestamps diverge.
+func IsTransactionRead(args Request) bool {
+	return (args.flags() & isTxnRead) != 0
 }
 
 // IsRange returns true if the command is range-based and must include
@@ -512,6 +520,9 @@ func (*AdminScatterRequest) Method() Method { return AdminScatter }
 // Method implements the Request interface.
 func (*AddSSTableRequest) Method() Method { return AddSSTable }
 
+// Method implements the Request interface.
+func (*UpdateReadRequest) Method() Method { return UpdateRead }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -734,6 +745,12 @@ func (r *AddSSTableRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
+// ShallowCopy implements the Request interface.
+func (r *UpdateReadRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
 // NewGet returns a Request initialized to get the value at key.
 func NewGet(key Key) Request {
 	return &GetRequest{
@@ -868,17 +885,25 @@ func NewReverseScan(key, endKey Key) Request {
 	}
 }
 
-func (*GetRequest) flags() int { return isRead | isTxn | updatesTSCache }
+func (*GetRequest) flags() int { return isRead | isTxn | isTxnRead | updatesTSCache }
 func (*PutRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsTSCache }
 
-// ConditionalPut and InitPut effectively read and may not write,
-// so must update the timestamp cache.
+// ConditionalPut effectively reads and may not write, so must update
+// the timestamp cache. Note that conditional puts will always leave
+// an intent in a transaction or they will return an error. Therefore,
+// they do not list isTxnRead as a flag.
 func (*ConditionalPutRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | updatesTSCache | consultsTSCache
 }
+
+// InitPut, like ConditionalPut, may read but not write, so must update
+// the timestamp cache. Unlike conditional puts, failing to write is not
+// an error, so we list isTxnRead as a flag.
 func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesTSCache | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | isTxnRead | updatesTSCache | consultsTSCache
 }
+
+// Increment reads, but also always writes, so isTxnRead is not listed.
 func (*IncrementRequest) flags() int { return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache }
 func (*DeleteRequest) flags() int    { return isWrite | isTxn | isTxnWrite | consultsTSCache }
 func (drr *DeleteRangeRequest) flags() int {
@@ -902,15 +927,21 @@ func (drr *DeleteRangeRequest) flags() int {
 	// DeleteRange updates the timestamp cache as it doesn't leave
 	// intents or tombstones for keys which don't yet exist. By updating
 	// the write timestamp cache, it forces subsequent writes to get a
-	// write-too-old error and avoids the phantom delete anomaly.
-	return isWrite | isTxn | isTxnWrite | isRange | updatesTSCache | consultsTSCache
+	// write-too-old error and avoids the phantom delete anomaly. It
+	// must also list isTxnRead, which means that to avoid a
+	// serializable restart, the span covered by DeleteRange must be
+	// checked via UpdateRead to ensure that no new values were written
+	// to a later timestamp than the DeleteRange.
+	return isWrite | isTxn | isTxnWrite | isTxnRead | isTxnRead | isRange | updatesTSCache | consultsTSCache
 }
 
 // Note that ClearRange commands cannot be part of a transaction as
 // they clear all MVCC versions.
-func (*ClearRangeRequest) flags() int       { return isWrite | isRange | isAlone }
-func (*ScanRequest) flags() int             { return isRead | isRange | isTxn | updatesTSCache }
-func (*ReverseScanRequest) flags() int      { return isRead | isRange | isReverse | isTxn | updatesTSCache }
+func (*ClearRangeRequest) flags() int { return isWrite | isRange | isAlone }
+func (*ScanRequest) flags() int       { return isRead | isRange | isTxn | isTxnRead | updatesTSCache }
+func (*ReverseScanRequest) flags() int {
+	return isRead | isRange | isReverse | isTxn | isTxnRead | updatesTSCache
+}
 func (*BeginTransactionRequest) flags() int { return isWrite | isTxn | consultsTSCache }
 
 // EndTransaction updates the write timestamp cache to prevent
@@ -962,6 +993,7 @@ func (*ExportRequest) flags() int                   { return isRead | isRange | 
 func (*ImportRequest) flags() int                   { return isAdmin | isAlone }
 func (*AdminScatterRequest) flags() int             { return isAdmin | isAlone | isRange }
 func (*AddSSTableRequest) flags() int               { return isWrite | isAlone | isRange }
+func (*UpdateReadRequest) flags() int               { return isRead | isTxn | isRange | updatesTSCache }
 
 // Keys returns credentials in an aws.Config.
 func (b *ExportStorage_S3) Keys() *aws.Config {

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,6 +58,24 @@ type txnMetadata struct {
 	// coordinator. By keeping this record, the coordinator will be able
 	// to update the write intent when the transaction is committed.
 	keys []roachpb.Span
+
+	// readKeys stores key ranges which were read during a transaction.
+	// This field is utilized only for SERIALIZABLE isolation level and
+	// is used in the event a transaction experiences a retry error. In
+	// that case, the coordinator uses the UpdateRead RPC to verify that
+	// no write has occurred to the spans more recently than the txn's
+	// original timestamp, and updates the affected timestamp caches to
+	// the transaction's pushed timestamp. On failure, the retry error
+	// is propagated. On success, the transaction's original and current
+	// timestamps are forwarded to the restart timestamp, and the end
+	// transaction is resent, with the expectation of success.
+	readKeys []roachpb.Span
+
+	// readKeysExceeded indicates that too many read keys were set over
+	// the course of the transaction to track them all, so they were
+	// discarded, making it impossible to update read spans and avoid
+	// serializable txn restarts.
+	readKeysExceeded bool
 
 	// lastUpdateNanos is the latest wall time in nanos the client sent
 	// transaction operations to this coordinator. Accessed and updated
@@ -182,6 +201,7 @@ type TxnCoordSender struct {
 	clock              *hlc.Clock
 	heartbeatInterval  time.Duration
 	maxTxnIntentsBytes int64
+	maxTxnReadsBytes   int64
 	clientTimeout      time.Duration
 	txnMu              struct {
 		syncutil.Mutex
@@ -216,6 +236,7 @@ func NewTxnCoordSender(
 		clock:              clock,
 		heartbeatInterval:  base.DefaultHeartbeatInterval,
 		maxTxnIntentsBytes: base.ChunkRaftCommandThresholdBytes,
+		maxTxnReadsBytes:   base.ChunkRaftCommandThresholdBytes,
 		clientTimeout:      defaultClientTimeout,
 		linearizable:       linearizable,
 		stopper:            stopper,
@@ -413,6 +434,14 @@ func (tc *TxnCoordSender) Send(
 			et.IntentSpans = condensedSpans
 			if txnMeta != nil {
 				txnMeta.keys = et.IntentSpans
+				// If there are no read spans, set the OrigTimestamp to the Timestamp
+				// before sending the batch to completely avoid serializable restarts.
+				if ba.Txn.Isolation == enginepb.SERIALIZABLE &&
+					!txnMeta.readKeysExceeded && len(txnMeta.readKeys) == 0 {
+					txnCopy := *ba.Txn
+					txnCopy.OrigTimestamp = txnCopy.Timestamp
+					ba.Txn = &txnCopy
+				}
 			}
 			return nil
 		}(); pErr != nil {
@@ -433,8 +462,19 @@ func (tc *TxnCoordSender) Send(
 		var pErr *roachpb.Error
 		br, pErr = tc.wrapped.Send(ctx, ba)
 
-		if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); ok {
+		switch err := pErr.GetDetail().(type) {
+		case *roachpb.OpRequiresTxnError:
 			br, pErr = tc.resendWithTxn(ctx, ba)
+		case *roachpb.TransactionRetryError:
+			if err.Reason == roachpb.RETRY_SERIALIZABLE {
+				if newBa, ok := tc.tryUpdateTxnReads(ctx, ba, pErr); ok {
+					// We've updated all of the read spans successfully and set
+					// the transaction orig timestamp and current timestamp to
+					// the same value in newBa; the end txn should succeed now.
+					// Recursively retry.
+					return tc.Send(ctx, newBa)
+				}
+			}
 		}
 
 		if pErr = tc.updateState(ctx, startNS, ba, br, pErr); pErr != nil {
@@ -962,6 +1002,11 @@ func (tc *TxnCoordSender) updateState(
 	// the updated transaction record to be sent along with the reply.
 	// The transaction metadata is created with the first writing operation.
 	//
+	// For serializable requests, keep the read spans in the event we get
+	// a serializable retry error. We can use the set of read spans to
+	// avoid retrying the transaction if all the spans can be updated to
+	// the current transaction timestamp.
+	//
 	// A tricky edge case is that of a transaction which "fails" on the
 	// first writing request, but actually manages to write some intents
 	// (for example, due to being multi-range). In this case, there will
@@ -987,26 +1032,34 @@ func (tc *TxnCoordSender) updateState(
 		// intents blocking concurrent writers for extended periods of time.
 		// See #3346.
 		var keys []roachpb.Span
+		var readKeys []roachpb.Span
 		if txnMeta != nil {
 			keys = txnMeta.keys
+			readKeys = txnMeta.readKeys
 		}
 		ba.IntentSpanIterate(br, func(key, endKey roachpb.Key) {
-			keys = append(keys, roachpb.Span{
-				Key:    key,
-				EndKey: endKey,
-			})
+			keys = append(keys, roachpb.Span{Key: key, EndKey: endKey})
 		})
-
 		var err error
 		keys, err = tc.maybeCondenseIntentSpans(ctx, keys)
 		if err != nil {
 			tc.unregisterTxnLocked(txnID)
 			return roachpb.NewError(err)
 		}
+		// Iterate over and aggregate read-only spans in the requests,
+		// qualified by possible resume spans in the responses, if the txn
+		// has serializable isolation and we haven't yet exceeded the max
+		// read key bytes.
+		if ba.Txn.Isolation == enginepb.SERIALIZABLE && txnMeta != nil && !txnMeta.readKeysExceeded {
+			ba.ReadSpanIterate(br, func(key, endKey roachpb.Key) {
+				readKeys = append(readKeys, roachpb.Span{Key: key, EndKey: endKey})
+			})
+		}
 
 		if txnMeta != nil {
 			txnMeta.keys = keys
-		} else if len(keys) > 0 {
+			txnMeta.readKeys = readKeys
+		} else if len(keys) > 0 || len(readKeys) > 0 {
 			// If the transaction is already over, there's no point in
 			// launching a one-off coordinator which will shut down right
 			// away. If we ended up here with an error, we'll always start
@@ -1018,6 +1071,7 @@ func (tc *TxnCoordSender) updateState(
 				txnMeta = &txnMetadata{
 					txn:              newTxn,
 					keys:             keys,
+					readKeys:         readKeys,
 					firstUpdateNanos: startNS,
 					lastUpdateNanos:  tc.clock.PhysicalNow(),
 					timeoutDuration:  tc.clientTimeout,
@@ -1042,6 +1096,19 @@ func (tc *TxnCoordSender) updateState(
 				// loop shutdown.
 				etArgs, ok := br.Responses[len(br.Responses)-1].GetInner().(*roachpb.EndTransactionResponse)
 				tc.updateStats(tc.clock.PhysicalNow()-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
+			}
+		}
+
+		// Verify and enforce the size in bytes of all read-only spans
+		// doesn't exceed the max threshold.
+		var readKeysSize int64
+		for _, s := range readKeys {
+			readKeysSize += int64(len(s.Key) + len(s.EndKey))
+			if readKeysSize > tc.maxTxnReadsBytes {
+				// Note that txnMeta is guaranteed non-nil here since readKeys is non-empty.
+				txnMeta.readKeys = []roachpb.Span{}
+				txnMeta.readKeysExceeded = true
+				break
 			}
 		}
 	}
@@ -1099,6 +1166,52 @@ func (tc *TxnCoordSender) resendWithTxn(
 	}
 	br.Txn = nil // hide the evidence
 	return br, nil
+}
+
+// tryUpdateTxnReads send UpdateRead commands to all spans read during
+// the transaction to ensure that no writes were written more recently
+// than the original transaction timestamp. All implicated timestamp
+// caches are updated with the final transaction timestamp. On success,
+// returns true and an updated BatchRequest containing a transaction
+// whose original timestamp and timestamp have been set to the same
+// value.
+func (tc *TxnCoordSender) tryUpdateTxnReads(
+	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
+) (roachpb.BatchRequest, bool) {
+	// Update original batch txn with the txn returned with the error.
+	newTxn := ba.Txn
+	errTxn := pErr.GetTxn()
+	if errTxn == nil {
+		return roachpb.BatchRequest{}, false
+	}
+	newTxn.Update(errTxn)
+
+	// Get the transaction state and if all read spans are known,
+	// execute a batch of UpdateRead RPCs.
+	tc.txnMu.Lock()
+	txnMeta, ok := tc.txnMu.txns[newTxn.ID]
+	tc.txnMu.Unlock()
+	if !ok || txnMeta.readKeysExceeded {
+		return roachpb.BatchRequest{}, false
+	}
+
+	updateReadBa := roachpb.BatchRequest{}
+	updateReadBa.Txn = newTxn
+	for _, s := range txnMeta.readKeys {
+		updateReadBa.Add(&roachpb.UpdateReadRequest{Span: s})
+	}
+	if _, batchErr := tc.wrapped.Send(ctx, updateReadBa); batchErr != nil {
+		if log.V(4) {
+			log.Infof(ctx, "failed to update txn reads (%s); propagating original retry error", batchErr)
+		}
+		return roachpb.BatchRequest{}, false
+	}
+
+	// Update the newTxn original timestamp to equal the current,
+	// update and return the batch request to be resent.
+	newTxn.OrigTimestamp = newTxn.Timestamp
+	ba.Txn = newTxn
+	return ba, true
 }
 
 // updateStats updates transaction metrics after a transaction finishes.
