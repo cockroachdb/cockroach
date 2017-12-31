@@ -157,7 +157,6 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 			case NeedMoreRows:
 				continue
 			case DrainRequested:
-				src.ConsumerDone()
 				row = nil
 			case ConsumerClosed:
 				src.ConsumerClosed()
