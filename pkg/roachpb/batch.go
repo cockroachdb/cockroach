@@ -205,31 +205,74 @@ func (br *BatchResponse) String() string {
 // contained in the requests are used, but when a response contains a
 // ResumeSpan the ResumeSpan is subtracted from the request span to provide a
 // more minimal span of keys affected by the request.
-func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(key, endKey Key)) {
+func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !IsTransactionWrite(req) {
 			continue
 		}
-		h := req.Header()
+		var resp Response
 		if br != nil {
-			resumeSpan := br.Responses[i].GetInner().Header().ResumeSpan
-			// If a resume span exists we need to cull the span.
-			if resumeSpan != nil {
-				if bytes.Equal(resumeSpan.Key, h.Key) {
-					if bytes.Equal(resumeSpan.EndKey, h.EndKey) {
-						// Nothing was written.
-						continue
-					}
-					fn(resumeSpan.EndKey, h.EndKey)
-				} else {
-					fn(h.Key, resumeSpan.Key)
-				}
-				continue
-			}
+			resp = br.Responses[i].GetInner()
 		}
-		fn(h.Key, h.EndKey)
+		if span, ok := actualSpan(req, resp); ok {
+			fn(span)
+		}
 	}
+}
+
+// ReadSpanIterate calls the passed method with the key spans of
+// requests in the batch which have the isTxnRead flag set, meaning
+// they cover a key or span of keys which must be checked via
+// UpdateRead to avoid having to restart a SERIALIZABLE
+// transaction. Usually the key spans contained in the requests are
+// used, but when a response contains a ResumeSpan the ResumeSpan is
+// subtracted from the request span to provide a more minimal span of
+// keys affected by the request. The supplied function is called with
+// each span and a bool indicating whether the span updates the write
+// timestamp cache.
+func (ba *BatchRequest) ReadSpanIterate(br *BatchResponse, fn func(Span, bool)) {
+	for i, arg := range ba.Requests {
+		req := arg.GetInner()
+		if !IsTransactionRead(req) {
+			continue
+		}
+		var resp Response
+		if br != nil {
+			resp = br.Responses[i].GetInner()
+		}
+		if span, ok := actualSpan(req, resp); ok {
+			var writeCache bool
+			switch req.(type) {
+			case *DeleteRangeRequest:
+				writeCache = true
+			}
+			fn(span, writeCache)
+		}
+	}
+}
+
+// actualSpan returns the actual request span which was operated on,
+// according to the existence of a resume span in the response. If
+// nothing was operated on, returns false.
+func actualSpan(req Request, resp Response) (Span, bool) {
+	h := req.Header()
+	if resp != nil {
+		resumeSpan := resp.Header().ResumeSpan
+		// If a resume span exists we need to cull the span.
+		if resumeSpan != nil {
+			if bytes.Equal(resumeSpan.Key, h.Key) {
+				if bytes.Equal(resumeSpan.EndKey, h.EndKey) {
+					return Span{}, false
+				}
+				return Span{Key: resumeSpan.EndKey, EndKey: h.EndKey}, true
+			} else {
+				return Span{Key: h.Key, EndKey: resumeSpan.Key}, true
+			}
+			return Span{}, false
+		}
+	}
+	return h, true
 }
 
 // Combine implements the Combinable interface. It combines each slot of the

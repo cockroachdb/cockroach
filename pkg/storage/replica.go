@@ -2043,7 +2043,11 @@ func (r *Replica) updateTimestampCache(ba *roachpb.BatchRequest, br *roachpb.Bat
 		if roachpb.UpdatesTimestampCache(args) {
 			header := args.Header()
 			start, end := header.Key, header.EndKey
-			switch args.(type) {
+			switch t := args.(type) {
+			case *roachpb.UpdateReadRequest:
+				// UpdateRead updates either the read or write timestamp cache,
+				// depending on the WriteCache parameter.
+				tc.Add(start, end, ts, txnID, !t.WriteCache /* readCache */)
 			case *roachpb.DeleteRangeRequest:
 				// DeleteRange adds to the write timestamp cache to prevent
 				// subsequent writes from rewriting history.
@@ -2074,7 +2078,7 @@ func (r *Replica) updateTimestampCache(ba *roachpb.BatchRequest, br *roachpb.Bat
 				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
 					ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
-					// See comment in the ScanRequest case. For revert scans, results
+					// See comment in the ScanRequest case. For reverse scans, results
 					// are returned in reverse order and we truncate the start key of
 					// the span.
 					start = resp.Rows[len(resp.Rows)-1].Key

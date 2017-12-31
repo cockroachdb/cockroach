@@ -132,7 +132,7 @@ message PutResponse {
 // - Returns true and sets value if exp_value equals existing value.
 // - If key doesn't exist and exp_value is nil, sets value.
 // - If key exists, but value is empty and exp_value is not nil but empty, sets value.
-// - Otherwise, returns error and the actual value of the key in the response.
+// - Otherwise, returns an error containing the actual value of the key.
 message ConditionalPutRequest {
   option (gogoproto.equal) = true;
 
@@ -1109,6 +1109,27 @@ message AddSSTableResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// UpdateReadRequest is arguments to the UpdateRead() method, which
+// verifies that no writes have occurred since the original
+// transaction timestamp and updates the timestamp cache with a span
+// at the current transaction timestamp. If keys in the read span
+// were written more recently than the original txn timestamp, returns
+// an error and does not update the timestamp cache.
+message UpdateReadRequest {
+  option (gogoproto.equal) = true;
+
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // If set, indicates that this read should update the write timestamp
+  // cache. This handles the case of DeleteRange, which must set the
+  // write too old flag on transactions which attempt earlier writes.
+  bool write_cache = 2;
+}
+
+// UpdateReadResponse is the response to the UdpateRead() operation.
+message UpdateReadResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -1160,6 +1181,7 @@ message RequestUnion {
   QueryTxnRequest query_txn = 33;
   AdminScatterRequest admin_scatter = 36;
   AddSSTableRequest add_sstable = 37;
+  UpdateReadRequest update_read = 39;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1210,6 +1232,7 @@ message ResponseUnion {
   QueryTxnResponse query_txn = 33;
   AdminScatterResponse admin_scatter = 36;
   AddSSTableResponse add_sstable = 37;
+  UpdateReadResponse update_read = 39;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
