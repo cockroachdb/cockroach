@@ -131,12 +131,25 @@ const scalarPropsAllocChunk = 16
 const relationalPropsAllocChunk = 1
 
 type buildContext struct {
+	ctx     context.Context
+	evalCtx *tree.EvalContext
+	catalog optbase.Catalog
+
+	state queryState
+
 	preallocScalarProps     []scalarProps
 	preallocExprs           []Expr
 	preallocRelationalProps []relationalProps
-	catalog                 optbase.Catalog
-	state                   queryState
-	ctx                     context.Context
+}
+
+func makeBuildContext(
+	ctx context.Context, evalCtx *tree.EvalContext, catalog optbase.Catalog,
+) buildContext {
+	return buildContext{
+		ctx:     ctx,
+		evalCtx: evalCtx,
+		catalog: catalog,
+	}
 }
 
 func (bc *buildContext) newRelationalProps() *relationalProps {
@@ -395,6 +408,17 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 		}
 		initTupleExpr(e, children)
 
+	// Because Placeholder is also a Datum, it must come before the Datum case.
+	case *tree.Placeholder:
+		d, err := t.Eval(bc.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		if _, ok := d.(*tree.Placeholder); ok {
+			panic("no placeholder value")
+		}
+		initConstExpr(e, d)
+
 	case tree.Datum:
 		initConstExpr(e, t)
 
@@ -405,28 +429,29 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 }
 
 // build converts a tree.Statement to an Expr tree.
-func build(ctx context.Context, stmt tree.Statement, catalog optbase.Catalog) (_ *Expr, err error) {
+func build(
+	ctx context.Context, stmt tree.Statement, catalog optbase.Catalog, evalCtx *tree.EvalContext,
+) (_ *Expr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)
 		}
 	}()
-	buildCtx := buildContext{
-		catalog: catalog,
-		state:   queryState{tables: make(map[tableName][]columnIndex)},
-		ctx:     ctx,
-	}
+	buildCtx := makeBuildContext(ctx, evalCtx, catalog)
+	buildCtx.state.tables = make(map[tableName][]columnIndex)
 	return buildCtx.build(stmt), nil
 }
 
 // buildScalar converts a tree.TypedExpr to an Expr tree.
-func buildScalar(pexpr tree.TypedExpr) (_ *Expr, err error) {
+func buildScalar(pexpr tree.TypedExpr, evalCtx *tree.EvalContext) (_ *Expr, err error) {
+	// We use panics in buildScalar code because it makes the code less tedious;
+	// buildScalar doesn't alter global state so catching panics is safe.
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)
 		}
 	}()
-	buildCtx := buildContext{}
+	buildCtx := makeBuildContext(context.TODO(), evalCtx, nil /* catalog */)
 	return buildCtx.buildScalar(pexpr), nil
 }
 
@@ -572,11 +597,11 @@ func scalarToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 }
 
 // BuildScalarExpr converts a TypedExpr to a *Expr tree and normalizes it.
-func BuildScalarExpr(typedExpr tree.TypedExpr) (*Expr, error) {
+func BuildScalarExpr(typedExpr tree.TypedExpr, evalCtx *tree.EvalContext) (*Expr, error) {
 	if typedExpr == nil {
 		return nil, nil
 	}
-	e, err := buildScalar(typedExpr)
+	e, err := buildScalar(typedExpr, evalCtx)
 	if err != nil {
 		return nil, err
 	}
