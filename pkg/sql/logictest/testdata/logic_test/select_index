@@ -154,13 +154,13 @@ render                     ·               ·
            ├── index-join  ·               ·
            │    ├── scan   ·               ·
            │    │          table           t@bc
-           │    │          spans           /!NULL-/"3"
+           │    │          spans           -/"3"
            │    └── scan   ·               ·
            │               table           t@primary
            └── index-join  ·               ·
                 ├── scan   ·               ·
                 │          table           t@bc
-                │          spans           /!NULL-/"3"
+                │          spans           -/"3"
                 └── scan   ·               ·
 ·                          table           t@primary
 
@@ -301,7 +301,6 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 3 OR a > 3]
 ----
 fetched: /t/ab/1/2 -> NULL
 output row: [1 2]
-fetched: /t/ab/3/4 -> NULL
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 

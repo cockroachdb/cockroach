@@ -486,20 +486,12 @@ SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col
 query TTT
 EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-render                    ·           ·
- └── index-join           ·           ·
-      ├── scan            ·           ·
-      │    │              table       tab4@idx_tab4_0
-      │    │              spans       /!NULL-/5.38/1
-      │    │              subqueries  1
-      │    └── render     ·           ·
-      │         └── scan  ·           ·
-      │                   table       tab4@primary
-      │                   spans       ALL
-      └── scan            ·           ·
-           │              table       tab4@primary
-           │              subqueries  1
-           └── render     ·           ·
-                └── scan  ·           ·
-·                         table       tab4@primary
-·                         spans       ALL
+render               ·           ·
+ └── scan            ·           ·
+      │              table       tab4@primary
+      │              spans       ALL
+      │              subqueries  1
+      └── render     ·           ·
+           └── scan  ·           ·
+·                    table       tab4@primary
+·                    spans       ALL
