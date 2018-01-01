@@ -133,6 +133,34 @@ func (sp LogicalSpan) String() string {
 // contiguous sequence of index columns, starting at a given offset.
 type LogicalSpans []LogicalSpan
 
+// ExactPrefix returns the longest prefix of columns that are
+// constrained to a single value. For example:
+//   filter: @1 = 1 AND (@2 = 3 OR @2 >= 5 AND @2 <= 7)
+//   spans: [/1/3 - /1/3]
+//          [/1/5 - /1/7]
+//   exact prefix: 1
+func ExactPrefix(spans LogicalSpans, evalCtx *tree.EvalContext) int {
+	if len(spans) == 0 {
+		return 0
+	}
+	for i := 0; ; i++ {
+		var val tree.Datum
+		for j, sp := range spans {
+			if len(sp.Start.Vals) <= i || len(sp.End.Vals) <= i {
+				return i
+			}
+			if sp.Start.Vals[i].Compare(evalCtx, sp.End.Vals[i]) != 0 {
+				return i
+			}
+			if j == 0 {
+				val = sp.Start.Vals[i]
+			} else if sp.Start.Vals[i].Compare(evalCtx, val) != 0 {
+				return i
+			}
+		}
+	}
+}
+
 type indexConstraintCtx struct {
 	// types of the columns of the index we are generating constraints for.
 	colInfos []IndexColumnInfo
