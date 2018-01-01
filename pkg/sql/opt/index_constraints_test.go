@@ -76,12 +76,12 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			e, err := BuildScalarExpr(typedExpr)
+			evalCtx := tree.MakeTestingEvalContext()
+			e, err := BuildScalarExpr(typedExpr, &evalCtx)
 			if err != nil {
 				b.Fatal(err)
 			}
 
-			evalCtx := tree.MakeTestingEvalContext()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic IndexConstraints
