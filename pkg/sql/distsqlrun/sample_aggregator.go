@@ -35,7 +35,6 @@ import (
 type sampleAggregator struct {
 	processorBase
 
-	flowCtx *FlowCtx
 	input   RowSource
 	inTypes []sqlbase.ColumnType
 	sr      stats.SampleReservoir
@@ -78,7 +77,6 @@ func newSampleAggregator(
 
 	rankCol := len(spec.SampledColumnIDs)
 	s := &sampleAggregator{
-		flowCtx:      flowCtx,
 		input:        input,
 		inTypes:      input.OutputTypes(),
 		tableID:      spec.TableID,
@@ -102,7 +100,7 @@ func newSampleAggregator(
 
 	s.sr.Init(int(spec.SampleSize))
 
-	if err := s.out.Init(post, []sqlbase.ColumnType{}, &flowCtx.EvalCtx, output); err != nil {
+	if err := s.init(post, []sqlbase.ColumnType{}, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 	return s, nil

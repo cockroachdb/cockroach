@@ -31,7 +31,6 @@ import (
 type algebraicSetOp struct {
 	processorBase
 
-	flowCtx *FlowCtx
 	evalCtx *tree.EvalContext
 
 	leftSource, rightSource RowSource
@@ -51,7 +50,6 @@ func newAlgebraicSetOp(
 	output RowReceiver,
 ) (*algebraicSetOp, error) {
 	e := &algebraicSetOp{
-		flowCtx:     flowCtx,
 		leftSource:  leftSource,
 		rightSource: rightSource,
 		ordering:    spec.Ordering,
@@ -81,7 +79,7 @@ func newAlgebraicSetOp(
 	}
 
 	e.types = lt
-	err := e.init(post, e.types, flowCtx, output)
+	err := e.init(post, e.types, flowCtx, nil /* evalCtx */, output)
 	if err != nil {
 		return nil, err
 	}

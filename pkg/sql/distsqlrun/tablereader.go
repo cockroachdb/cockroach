@@ -60,8 +60,6 @@ type tableReader struct {
 	ctx  context.Context
 	span opentracing.Span
 
-	flowCtx *FlowCtx
-
 	tableDesc sqlbase.TableDescriptor
 	spans     roachpb.Spans
 	limitHint int64
@@ -100,7 +98,6 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 	tr := &tableReader{
-		flowCtx:   flowCtx,
 		tableDesc: spec.Table,
 		isCheck:   spec.IsCheck,
 		indexIdx:  int(spec.IndexIdx),
@@ -118,7 +115,7 @@ func newTableReader(
 	if spec.IsCheck {
 		types = ScrubTypes
 	}
-	if err := tr.init(post, types, flowCtx, output); err != nil {
+	if err := tr.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 
