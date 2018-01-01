@@ -126,7 +126,23 @@ func (p *planner) selectIndex(
 		c.init(s)
 	}
 
-	if s.filter != nil {
+	if useExperimentalIndexConstraints {
+		if s.filter != nil {
+			filterExpr, err := opt.BuildScalarExpr(s.filter, &p.evalCtx)
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range candidates {
+				if err := c.makeIndexConstraintsExperimental(filterExpr, &p.evalCtx); err != nil {
+					return nil, err
+				}
+				if spans, ok := c.ic.Spans(); ok && len(spans) == 0 {
+					// No spans (i.e. the filter is always false).
+					return &zeroNode{}, nil
+				}
+			}
+		}
+	} else if s.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
 
@@ -196,9 +212,11 @@ func (p *planner) selectIndex(
 	}
 
 	for _, c := range candidates {
-		// Compute the prefix of the index for which we have exact constraints. This
-		// prefix is inconsequential for ordering because the values are identical.
-		c.exactPrefix = c.constraints.exactPrefix(&p.evalCtx)
+		if !useExperimentalIndexConstraints {
+			// Compute the prefix of the index for which we have exact constraints. This
+			// prefix is inconsequential for ordering because the values are identical.
+			c.exactPrefix = c.constraints.exactPrefix(&p.evalCtx)
+		}
 		if analyzeOrdering != nil {
 			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching, &p.evalCtx)
 		}
@@ -219,32 +237,50 @@ func (p *planner) selectIndex(
 	s.index = c.index
 	s.specifiedIndex = nil
 	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
-	var err error
-	s.spans, err = makeSpans(&p.evalCtx, c.constraints, c.desc, c.index)
-	if err != nil {
-		return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
-			c.constraints, s.desc.ID, s.index.ID)
+
+	if useExperimentalIndexConstraints {
+		var err error
+		s.spans, err = c.spansFromLogicalSpansExperimental(s.desc, c.index)
+		if err != nil {
+			return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
+				c.constraints, s.desc.ID, s.index.ID)
+		}
+	} else {
+		var err error
+		s.spans, err = makeSpans(&p.evalCtx, c.constraints, c.desc, c.index)
+		if err != nil {
+			return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
+				c.constraints, s.desc.ID, s.index.ID)
+		}
 	}
+
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
 		return &zeroNode{}, nil
 	}
 
 	s.origFilter = s.filter
-	s.filter = applyIndexConstraints(&p.evalCtx, s.filter, c.constraints)
 	if s.filter != nil {
+		if useExperimentalIndexConstraints {
+			s.filter = c.ic.RemainingFilter(&s.filterVars)
+		} else {
+			s.filter = applyIndexConstraints(&p.evalCtx, s.filter, c.constraints)
+		}
+
 		// Constraint propagation may have produced new constant sub-expressions.
 		// Propagate them and check if s.filter can be applied prematurely.
-		var err error
-		s.filter, err = p.evalCtx.NormalizeExpr(s.filter)
-		if err != nil {
-			return nil, err
-		}
-		switch s.filter {
-		case tree.DBoolFalse, tree.DNull:
-			return &zeroNode{}, nil
-		case tree.DBoolTrue:
-			s.filter = nil
+		if s.filter != nil {
+			var err error
+			s.filter, err = p.evalCtx.NormalizeExpr(s.filter)
+			if err != nil {
+				return nil, err
+			}
+			switch s.filter {
+			case tree.DBoolFalse, tree.DNull:
+				return &zeroNode{}, nil
+			case tree.DBoolTrue:
+				s.filter = nil
+			}
 		}
 	}
 	s.filterVars.Rebind(s.filter, true, false)
@@ -372,6 +408,9 @@ type indexInfo struct {
 	covering    bool // Does the index cover the required IndexedVars?
 	reverse     bool
 	exactPrefix int
+
+	// Used for the new (experimental) index constraints code.
+	ic opt.IndexConstraints
 }
 
 func (v *indexInfo) init(s *scanNode) {
@@ -1145,7 +1184,7 @@ func spansFromLogicalSpans(
 	index *sqlbase.IndexDescriptor,
 ) (roachpb.Spans, error) {
 	spans := make(roachpb.Spans, len(logicalSpans))
-	interstices := make([][]byte, len(index.ColumnDirections)+1)
+	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
 	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
 	if len(index.Interleave.Ancestors) > 0 {
 		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
@@ -1926,4 +1965,193 @@ func makeComparisonInterval(op tree.ComparisonOperator, largerDatum bool) (int, 
 	default:
 		return 0, 0, false
 	}
+}
+
+const useExperimentalIndexConstraints = true
+
+// makeIndexConstraintsExperimental uses the opt code to generate index
+// constraints. Initializes v.ic, as well as v.exactPrefix and v.cost (with a
+// baseline cost for the index).
+func (v *indexInfo) makeIndexConstraintsExperimental(
+	filter *opt.Expr, evalCtx *tree.EvalContext,
+) error {
+	numIndexCols := len(v.index.ColumnIDs)
+	numExtraCols := len(v.index.ExtraColumnIDs)
+
+	colIdxMap := make(map[sqlbase.ColumnID]int, len(v.desc.Columns))
+	for i := range v.desc.Columns {
+		colIdxMap[v.desc.Columns[i].ID] = i
+	}
+
+	// Set up the IndexColumnInfo structures.
+	colInfos := make([]opt.IndexColumnInfo, 0, numIndexCols+numExtraCols)
+	for i := 0; i < numIndexCols+numExtraCols; i++ {
+		var colID sqlbase.ColumnID
+		var dir encoding.Direction
+
+		if i < numIndexCols {
+			colID = v.index.ColumnIDs[i]
+			var err error
+			dir, err = v.index.ColumnDirections[i].ToEncodingDirection()
+			if err != nil {
+				return err
+			}
+		} else {
+			colID = v.index.ExtraColumnIDs[i-numIndexCols]
+			// Extra columns are always ascending.
+			dir = encoding.Ascending
+		}
+
+		idx, ok := colIdxMap[colID]
+		if !ok {
+			// Inactive column.
+			break
+		}
+
+		colDesc := &v.desc.Columns[idx]
+		colInfos = append(colInfos, opt.IndexColumnInfo{
+			VarIdx:    idx,
+			Typ:       colDesc.Type.ToDatumType(),
+			Direction: dir,
+			Nullable:  colDesc.Nullable,
+		})
+	}
+	var spans opt.LogicalSpans
+	var ok bool
+	if filter != nil {
+		v.ic.Init(filter, colInfos, evalCtx)
+		spans, ok = v.ic.Spans()
+	}
+	if !ok {
+		v.cost *= 1000
+	} else {
+		v.exactPrefix = opt.ExactPrefix(spans, evalCtx)
+		// Find the number of columns that are restricted in all spans.
+		numCols := len(colInfos)
+		for _, sp := range spans {
+			// Take the max between the length of the start values and the end
+			// values.
+			n := len(sp.Start.Vals)
+			if n < len(sp.End.Vals) {
+				n = len(sp.End.Vals)
+			}
+			// Take the minimum n across all spans.
+			if numCols > n {
+				numCols = n
+			}
+		}
+		// Boost the cost by what fraction of columns have constraints. The higher
+		// the fraction, the smaller the cost.
+		v.cost *= float64((numIndexCols + numExtraCols)) / float64(numCols)
+	}
+	return nil
+}
+
+// spansFromLogicalSpansExperimental converts op.LogicalSpans to roachpb.Spans.
+// interstices are pieces of the key that need to be inserted after each column
+// (for interleavings).
+func (v *indexInfo) spansFromLogicalSpansExperimental(
+	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+) (roachpb.Spans, error) {
+	interstices := make([][]byte, len(index.ColumnDirections)+1)
+	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
+	if len(index.Interleave.Ancestors) > 0 {
+		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
+		sharedPrefixLen := 0
+		for i, ancestor := range index.Interleave.Ancestors {
+			// The first ancestor is already encoded in interstices[0].
+			if i != 0 {
+				interstices[sharedPrefixLen] =
+					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.TableID))
+				interstices[sharedPrefixLen] =
+					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.IndexID))
+			}
+			sharedPrefixLen += int(ancestor.SharedPrefixLen)
+			interstices[sharedPrefixLen] = encoding.EncodeInterleavedSentinel(interstices[sharedPrefixLen])
+		}
+		interstices[sharedPrefixLen] =
+			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(tableDesc.ID))
+		interstices[sharedPrefixLen] =
+			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(index.ID))
+	}
+
+	logicalSpans, ok := v.ic.Spans()
+	if !ok {
+		sp, err := spanFromLogicalSpanExperimental(tableDesc, index, opt.MakeFullSpan(), interstices)
+		if err != nil {
+			return nil, err
+		}
+		return roachpb.Spans{sp}, nil
+	}
+
+	spans := make(roachpb.Spans, len(logicalSpans))
+	for i, ls := range logicalSpans {
+		s, err := spanFromLogicalSpanExperimental(tableDesc, index, ls, interstices)
+		if err != nil {
+			return nil, err
+		}
+		spans[i] = s
+	}
+	return spans, nil
+}
+
+// spanFromLogicalSpanExperimental converts an opt.LogicalSpan to a
+// roachpb.Span.
+func spanFromLogicalSpanExperimental(
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	ls opt.LogicalSpan,
+	interstices [][]byte,
+) (roachpb.Span, error) {
+	var s roachpb.Span
+	var err error
+	// Encode each logical part of the start key for span.(start)Key.
+	for i, val := range ls.Start.Vals {
+		s.Key = append(s.Key, interstices[i]...)
+		// For extra columns (like implicit columns), the direction
+		// is ascending.
+		dir := encoding.Ascending
+		if i < len(index.ColumnDirections) {
+			dir, err = index.ColumnDirections[i].ToEncodingDirection()
+			if err != nil {
+				return roachpb.Span{}, err
+			}
+		}
+		s.Key, err = sqlbase.EncodeTableKey(s.Key, val, dir)
+		if err != nil {
+			return roachpb.Span{}, err
+		}
+	}
+	if ls.Start.Inclusive {
+		s.Key = append(s.Key, interstices[len(ls.Start.Vals)]...)
+	} else {
+		// We need to exclude the value this logical part refers to.
+		s.Key = s.Key.PrefixEnd()
+	}
+
+	// Encode each logical part of the end key as span.EndKey.
+	for i, val := range ls.End.Vals {
+		s.EndKey = append(s.EndKey, interstices[i]...)
+		dir := encoding.Ascending
+		if i < len(index.ColumnDirections) {
+			dir, err = index.ColumnDirections[i].ToEncodingDirection()
+			if err != nil {
+				return roachpb.Span{}, err
+			}
+		}
+		s.EndKey, err = sqlbase.EncodeTableKey(s.EndKey, val, dir)
+		if err != nil {
+			return roachpb.Span{}, err
+		}
+	}
+	s.EndKey = append(s.EndKey, interstices[len(ls.End.Vals)]...)
+
+	// We tighten the end key to prevent reading interleaved children
+	// after the last parent key.
+	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc, index, s.EndKey, ls.End.Inclusive)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+
+	return s, nil
 }
