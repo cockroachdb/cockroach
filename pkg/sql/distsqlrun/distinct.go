@@ -15,24 +15,17 @@
 package distsqlrun
 
 import (
-	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type distinct struct {
 	processorBase
 
-	ctx          context.Context
-	span         opentracing.Span
 	evalCtx      *tree.EvalContext
 	input        RowSource
 	types        []sqlbase.ColumnType
@@ -42,12 +35,7 @@ type distinct struct {
 	distinctCols util.FastIntSet
 	memAcc       mon.BoundAccount
 	datumAlloc   sqlbase.DatumAlloc
-	started      bool
-	closed       bool
 	scratch      []byte
-	// consumerStatus is used by the RowSource interface to signal that the
-	// consumer is done accepting rows or is no longer accepting data.
-	consumerStatus ConsumerStatus
 }
 
 var _ Processor = &distinct{}
@@ -128,14 +116,12 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 
 func (d *distinct) close() {
 	if !d.closed {
-		d.closed = true
-		d.input.ConsumerClosed()
+		// Need to close the mem accounting while the context is still valid.
 		d.memAcc.Close(d.ctx)
-		tracing.FinishSpan(d.span)
-		d.span = nil
 	}
-	// This prevents Next() from returning more rows.
-	d.out.consumerClosed()
+	if d.internalClose() {
+		d.input.ConsumerClosed()
+	}
 }
 
 // producerMeta constructs the ProducerMetadata after consumption of rows has
@@ -159,10 +145,7 @@ func (d *distinct) producerMeta(err error) ProducerMetadata {
 
 // Next is part of the RowSource interface.
 func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
-	if !d.started {
-		d.started = true
-		d.ctx = log.WithLogTag(d.flowCtx.Ctx, "Evaluator", nil)
-		d.ctx, d.span = processorSpan(d.ctx, "distinct")
+	if d.maybeStart("distinct", "Distinct") {
 		d.evalCtx = d.flowCtx.NewEvalCtx()
 	}
 
@@ -230,20 +213,13 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (d *distinct) ConsumerDone() {
+	d.consumerDone("distinct")
 	d.input.ConsumerDone()
-	if d.consumerStatus != NeedMoreRows {
-		log.Fatalf(context.Background(), "distinct already done or closed: %d",
-			d.consumerStatus)
-	}
-	d.consumerStatus = DrainRequested
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (d *distinct) ConsumerClosed() {
-	if d.consumerStatus == ConsumerClosed {
-		log.Fatalf(context.Background(), "distinct already closed")
-	}
-	d.consumerStatus = ConsumerClosed
+	d.consumerClosed("distinct")
 	// The consumer is done, Next() will not be called again.
 	d.close()
 }
