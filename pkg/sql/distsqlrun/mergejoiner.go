@@ -32,7 +32,6 @@ import (
 type mergeJoiner struct {
 	joinerBase
 
-	flowCtx *FlowCtx
 	evalCtx *tree.EvalContext
 
 	leftSource, rightSource RowSource
@@ -57,7 +56,6 @@ func newMergeJoiner(
 	}
 
 	m := &mergeJoiner{
-		flowCtx:     flowCtx,
 		leftSource:  leftSource,
 		rightSource: rightSource,
 	}

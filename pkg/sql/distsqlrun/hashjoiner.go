@@ -80,8 +80,6 @@ type hashJoiner struct {
 
 	leftSource, rightSource RowSource
 
-	flowCtx *FlowCtx
-
 	// initialBufferSize is the maximum amount of data we buffer from each stream
 	// as part of the initial buffering phase. Normally
 	// hashJoinerInitialBufferSize, can be tweaked for tests.
@@ -120,7 +118,6 @@ func newHashJoiner(
 	output RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
-		flowCtx:           flowCtx,
 		initialBufferSize: hashJoinerInitialBufferSize,
 		leftSource:        leftSource,
 		rightSource:       rightSource,
