@@ -303,6 +303,7 @@ func TestOpt(t *testing.T) {
 				var iVarHelper tree.IndexedVarHelper
 				var colInfos []IndexColumnInfo
 				var typedExpr tree.TypedExpr
+				evalCtx := tree.MakeTestingEvalContext()
 
 				for _, arg := range d.cmdArgs {
 					key := arg
@@ -340,13 +341,12 @@ func TestOpt(t *testing.T) {
 				}
 				buildScalarFn := func() {
 					var err error
-					e, err = buildScalar(typedExpr)
+					e, err = buildScalar(typedExpr, &evalCtx)
 					if err != nil {
 						t.Fatal(err)
 					}
 				}
 
-				evalCtx := tree.MakeTestingEvalContext()
 				var err error
 				typedExpr, err = parseScalarExpr(d.sql, &iVarHelper)
 				if err != nil {
