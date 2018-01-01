@@ -485,7 +485,7 @@ update               ·      ·
       └── limit      ·      ·
            └── scan  ·      ·
 ·                    table  kv@primary
-·                    spans  /!NULL-/2/#
+·                    spans  -/2/#
 ·                    limit  1
 
 query II

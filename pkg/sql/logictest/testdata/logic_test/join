@@ -1110,7 +1110,7 @@ render               ·         ·
            │         filter    b > 1
            └── scan  ·         ·
 ·                    table     square@primary
-·                    spans     /!NULL-/5/#
+·                    spans     -/5/#
 ·                    filter    sq > 1
 
 query IIII rowsort
@@ -1665,10 +1665,10 @@ join       0  join  ·               ·                  (x, y, u, x, y, v)  x=x
  │         0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
  ├── scan  1  scan  ·               ·                  (x, y, u, x, y, v)  x=x; y=y; x=CONST; y!=NULL
  │         1  ·     table           xyu@primary        ·                   ·
- │         1  ·     spans           /1/!NULL-/1/10     ·                   ·
+ │         1  ·     spans           /1-/1/10           ·                   ·
  └── scan  1  scan  ·               ·                  (x, y, u, x, y, v)  x=x; y=y; x=CONST; y!=NULL
 ·          1  ·     table           xyv@primary        ·                   ·
-·          1  ·     spans           /1/!NULL-/1/10     ·                   ·
+·          1  ·     spans           /1-/1/10           ·                   ·
 
 query IIIIII
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
@@ -1684,10 +1684,10 @@ join       0  join  ·               ·                  (x, y, u, x, y, v)  x=x
  │         0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
  ├── scan  1  scan  ·               ·                  (x, y, u, x, y, v)  x=x; y=y; x=CONST; y!=NULL
  │         1  ·     table           xyu@primary        ·                   ·
- │         1  ·     spans           /1/!NULL-/1/10     ·                   ·
+ │         1  ·     spans           /1-/1/10           ·                   ·
  └── scan  1  scan  ·               ·                  (x, y, u, x, y, v)  x=x; y=y; x=CONST; y!=NULL
 ·          1  ·     table           xyv@primary        ·                   ·
-·          1  ·     spans           /1/!NULL-/1/10     ·                   ·
+·          1  ·     spans           /1-/1/10           ·                   ·
 
 query IIIIII
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1707,7 +1707,7 @@ join       0  join  ·               ·                                       (x
  │         1  ·     spans           ALL                                     ·                   ·
  └── scan  1  scan  ·               ·                                       (x, y, u, x, y, v)  ·
 ·          1  ·     table           xyv@primary                             ·                   ·
-·          1  ·     spans           /1/!NULL-/1/10                          ·                   ·
+·          1  ·     spans           /1-/1/10                                ·                   ·
 
 query IIIIII rowsort
 SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1728,7 +1728,7 @@ join       0  join  ·               ·                                       (x
  │         0  ·     pred            (test.xyv.x = 1) AND (test.xyv.y < 10)  ·                   ·
  ├── scan  1  scan  ·               ·                                       (x, y, u, x, y, v)  ·
  │         1  ·     table           xyu@primary                             ·                   ·
- │         1  ·     spans           /1/!NULL-/1/10                          ·                   ·
+ │         1  ·     spans           /1-/1/10                                ·                   ·
  └── scan  1  scan  ·               ·                                       (x, y, u, x, y, v)  ·
 ·          1  ·     table           xyv@primary                             ·                   ·
 ·          1  ·     spans           ALL                                     ·                   ·
@@ -1856,7 +1856,7 @@ join       0  join  ·               ·                             (x, y, u, x,
  │         1  ·     spans           ALL                           ·                   ·
  └── scan  1  scan  ·               ·                             (x, y, u, x, y, v)  ·
 ·          1  ·     table           xyv@primary                   ·                   ·
-·          1  ·     spans           /1/!NULL-/1/10                ·                   ·
+·          1  ·     spans           /1-/1/10                      ·                   ·
 
 query IIIIII rowsort
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1877,7 +1877,7 @@ join       0  join  ·               ·                             (x, y, u, x,
  │         0  ·     pred            (xyv.x = 1) AND (xyv.y < 10)  ·                   ·
  ├── scan  1  scan  ·               ·                             (x, y, u, x, y, v)  ·
  │         1  ·     table           xyu@primary                   ·                   ·
- │         1  ·     spans           /1/!NULL-/1/10                ·                   ·
+ │         1  ·     spans           /1-/1/10                      ·                   ·
  └── scan  1  scan  ·               ·                             (x, y, u, x, y, v)  ·
 ·          1  ·     table           xyv@primary                   ·                   ·
 ·          1  ·     spans           ALL                           ·                   ·
@@ -1895,23 +1895,21 @@ NULL  NULL  NULL  2  2  2
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
-render          0  render  ·               ·                      (x, y, u, v)  x!=NULL; y!=NULL
- │              0  ·       render 0        test.xyu.x             ·             ·
- │              0  ·       render 1        test.xyu.y             ·             ·
- │              0  ·       render 2        test.xyu.u             ·             ·
- │              0  ·       render 3        test.xyv.v             ·             ·
- └── join       1  join    ·               ·                      (x, y, u, v)  x!=NULL; y!=NULL
-      │         1  ·       type            inner                  ·             ·
-      │         1  ·       equality        (x, y) = (x, y)        ·             ·
-      │         1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"      ·             ·
-      ├── scan  2  scan    ·               ·                      (x, y, u, v)  x!=NULL; y!=NULL
-      │         2  ·       table           xyu@primary            ·             ·
-      │         2  ·       spans           /1/2/4-                ·             ·
-      │         2  ·       filter          (x, y, u) > (1, 2, 3)  ·             ·
-      └── scan  2  scan    ·               ·                      (x, y, u, v)  x!=NULL; y!=NULL
-·               2  ·       table           xyv@primary            ·             ·
-·               2  ·       spans           /1/2-                  ·             ·
-·               2  ·       filter          (x, y) >= (1, 2)       ·             ·
+render          0  render  ·               ·                  (x, y, u, v)  x!=NULL; y!=NULL
+ │              0  ·       render 0        test.xyu.x         ·             ·
+ │              0  ·       render 1        test.xyu.y         ·             ·
+ │              0  ·       render 2        test.xyu.u         ·             ·
+ │              0  ·       render 3        test.xyv.v         ·             ·
+ └── join       1  join    ·               ·                  (x, y, u, v)  x!=NULL; y!=NULL
+      │         1  ·       type            inner              ·             ·
+      │         1  ·       equality        (x, y) = (x, y)    ·             ·
+      │         1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·             ·
+      ├── scan  2  scan    ·               ·                  (x, y, u, v)  x!=NULL; y!=NULL
+      │         2  ·       table           xyu@primary        ·             ·
+      │         2  ·       spans           /1/2/4-            ·             ·
+      └── scan  2  scan    ·               ·                  (x, y, u, v)  x!=NULL; y!=NULL
+·               2  ·       table           xyv@primary        ·             ·
+·               2  ·       spans           /1/2-              ·             ·
 
 
 # Regression test for #20858.

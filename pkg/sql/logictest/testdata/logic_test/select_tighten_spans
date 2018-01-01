@@ -189,7 +189,7 @@ EXPLAIN SELECT * FROM p1 WHERE b <= 3
 ----
 scan  ·      ·
 ·     table  p1@b
-·     spans  /!NULL-/4
+·     spans  -/4
 
 query II rowsort
 SELECT * FROM p1 WHERE b <= 3
@@ -205,7 +205,7 @@ EXPLAIN SELECT * FROM p1 WHERE a <= 3
 ----
 scan  ·      ·
 ·     table  p1@primary
-·     spans  /!NULL-/4
+·     spans  -/4
 
 query II rowsort
 SELECT * FROM p1 WHERE a <= 3
@@ -223,14 +223,14 @@ EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b <= 3
 ----
 scan  ·      ·
 ·     table  p1@primary
-·     spans  /!NULL-/3/3/#
+·     spans  -/3/3/#
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b < 4
 ----
 scan  ·      ·
 ·     table  p1@primary
-·     spans  /!NULL-/3/3/#
+·     spans  -/3/3/#
 
 query II rowsort
 SELECT * FROM p1 WHERE a <= 3 AND b <= 3
@@ -243,8 +243,8 @@ query TTT
 EXPLAIN SELECT * FROM p1 WHERE a >= 2 AND b <= 3
 ----
 scan  ·      ·
-·     table  p1@b
-·     spans  /!NULL-/4
+·     table  p1@primary
+·     spans  /2-
 
 query II rowsort
 SELECT * FROM p1 WHERE a >= 2 AND b <= 3
@@ -261,28 +261,28 @@ EXPLAIN SELECT * FROM p1 WHERE a <= 0 AND b <= 0
 ----
 scan  ·      ·
 ·     table  p1@primary
-·     spans  /!NULL-/0/0/#
+·     spans  -/0/0/#
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= -1 AND b <= -1
 ----
 scan  ·      ·
 ·     table  p1@primary
-·     spans  /!NULL-/-1/-1/#
+·     spans  -/-1/-1/#
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808
 ----
 scan  ·      ·
 ·     table  p1@primary
-·     spans  /1/!NULL-/1/-9223372036854775808/#
+·     spans  /1-/1/-9223372036854775808/#
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807
 ----
 scan  ·      ·
 ·     table  p1@primary
-·     spans  /1/!NULL-/1/9223372036854775807/#
+·     spans  /1-/1/9223372036854775807/#
 
 # Table c1 (interleaved table)
 
@@ -293,7 +293,7 @@ EXPLAIN SELECT * FROM c1 WHERE a <= 3
 ----
 scan  ·      ·
 ·     table  c1@primary
-·     spans  /!NULL-/4
+·     spans  -/4
 
 query II rowsort
 SELECT * FROM c1 WHERE a <= 3
@@ -310,7 +310,7 @@ EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
 ----
 scan  ·      ·
 ·     table  c1@primary
-·     spans  /!NULL-/3/3/#/52/1/#
+·     spans  -/3/3/#/52/1/#
 
 query II rowsort
 SELECT * FROM c1 WHERE a <= 3 AND b <= 3
@@ -347,7 +347,7 @@ EXPLAIN SELECT * FROM p2 WHERE i <= 5
 ----
 scan  ·      ·
 ·     table  p2@primary
-·     spans  /!NULL-/5/#
+·     spans  -/5/#
 
 query II rowsort
 SELECT * FROM p2 WHERE i <= 5
@@ -385,7 +385,7 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
 ----
 scan  ·      ·
 ·     table  p2@p2_id
-·     spans  /!NULL-/6/#/53/2/6
+·     spans  -/6/#/53/2/6
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
@@ -450,7 +450,7 @@ EXPLAIN SELECT * FROM bytes_t WHERE a < 'aa'
 Tree  Field  Description
 scan  ·      ·
 ·     table  bytes_t@primary
-·     spans  /!NULL-/"aa"
+·     spans  -/"aa"
 
 query T
 SELECT * FROM bytes_t WHERE a < 'aa'
@@ -478,7 +478,7 @@ EXPLAIN SELECT * FROM decimal_t WHERE a < 2
 Tree  Field  Description
 scan  ·      ·
 ·     table  decimal_t@primary
-·     spans  /!NULL-/2
+·     spans  -/2
 
 query R rowsort
 SELECT * FROM decimal_t WHERE a < 2
