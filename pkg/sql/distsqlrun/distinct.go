@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 )
 
 type distinct struct {
@@ -30,6 +31,7 @@ type distinct struct {
 	input        RowSource
 	types        []sqlbase.ColumnType
 	lastGroupKey sqlbase.EncDatumRow
+	arena        stringarena.Arena
 	seen         map[string]struct{}
 	orderedCols  []uint32
 	distinctCols util.FastIntSet
@@ -49,6 +51,7 @@ func newDistinct(
 		orderedCols: spec.OrderedColumns,
 		memAcc:      flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
+
 	for _, col := range spec.DistinctColumns {
 		d.distinctCols.Add(int(col))
 	}
@@ -177,34 +180,37 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 
 		if !matched {
 			d.lastGroupKey = row
-			d.seen = make(map[string]struct{})
 			d.memAcc.Clear(d.ctx)
+			d.arena = stringarena.Make(&d.memAcc)
+			d.seen = make(map[string]struct{})
 		}
 
-		if _, ok := d.seen[string(encoding)]; !ok {
-			if len(encoding) > 0 {
-				if err := d.memAcc.Grow(d.ctx, int64(len(encoding))); err != nil {
-					return nil, d.producerMeta(err)
-				}
-				d.seen[string(encoding)] = struct{}{}
+		if len(encoding) > 0 {
+			if _, ok := d.seen[string(encoding)]; ok {
+				continue
 			}
-
-			outRow, status, err := d.out.ProcessRow(d.ctx, row)
+			s, err := d.arena.AllocBytes(d.ctx, encoding)
 			if err != nil {
 				return nil, d.producerMeta(err)
 			}
-			switch status {
-			case NeedMoreRows:
-				if outRow == nil && err == nil {
-					continue
-				}
-			case DrainRequested:
-				d.input.ConsumerDone()
+			d.seen[s] = struct{}{}
+		}
+
+		outRow, status, err := d.out.ProcessRow(d.ctx, row)
+		if err != nil {
+			return nil, d.producerMeta(err)
+		}
+		switch status {
+		case NeedMoreRows:
+			if outRow == nil && err == nil {
 				continue
 			}
-
-			return outRow, ProducerMetadata{}
+		case DrainRequested:
+			d.input.ConsumerDone()
+			continue
 		}
+
+		return outRow, ProducerMetadata{}
 	}
 }
 

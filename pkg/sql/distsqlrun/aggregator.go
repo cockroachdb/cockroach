@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/pkg/errors"
 )
 
@@ -107,8 +108,9 @@ type aggregator struct {
 	// buckets is used during the accumulation phase to track the bucket keys
 	// that have been seen. After accumulation, the keys are extracted into
 	// bucketsIter for iteration.
-	buckets     map[string]struct{} // The set of bucket keys.
+	buckets     map[string]struct{}
 	bucketsIter []string
+	arena       stringarena.Arena
 	row         sqlbase.EncDatumRow
 	scratch     []byte
 }
@@ -132,6 +134,7 @@ func newAggregator(
 		outputTypes:  make([]sqlbase.ColumnType, len(spec.Aggregations)),
 		bucketsAcc:   flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
+	ag.arena = stringarena.Make(&ag.bucketsAcc)
 
 	// Loop over the select expressions and extract any aggregate functions --
 	// non-aggregation functions are replaced with parser.NewIdentAggregate,
@@ -317,7 +320,7 @@ func (ag *aggregator) ConsumerClosed() {
 
 // accumulateRow accumulates a single row, returning an error if accumulation
 // failed for any reason.
-func (ag *aggregator) accumulateRow(row sqlbase.EncDatumRow) (err error) {
+func (ag *aggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 	// The encoding computed here determines which bucket the non-grouping
 	// datums are accumulated to.
 	encoded, err := ag.encode(ag.scratch, row)
@@ -327,10 +330,11 @@ func (ag *aggregator) accumulateRow(row sqlbase.EncDatumRow) (err error) {
 	ag.scratch = encoded[:0]
 
 	if _, ok := ag.buckets[string(encoded)]; !ok {
-		if err := ag.bucketsAcc.Grow(ag.ctx, int64(len(encoded))); err != nil {
+		s, err := ag.arena.AllocBytes(ag.ctx, encoded)
+		if err != nil {
 			return err
 		}
-		ag.buckets[string(encoded)] = struct{}{}
+		ag.buckets[s] = struct{}{}
 	}
 
 	// Feed the func holders for this bucket the non-grouping datums.
@@ -380,6 +384,7 @@ type aggregateFuncHolder struct {
 	group         *aggregator
 	buckets       map[string]tree.AggregateFunc
 	seen          map[string]struct{}
+	arena         *stringarena.Arena
 	bucketsMemAcc *mon.BoundAccount
 }
 
@@ -393,6 +398,7 @@ func (ag *aggregator) newAggregateFuncHolder(
 		group:         ag,
 		buckets:       make(map[string]tree.AggregateFunc),
 		bucketsMemAcc: &ag.bucketsAcc,
+		arena:         &ag.arena,
 	}
 }
 
@@ -411,14 +417,16 @@ func (a *aggregateFuncHolder) add(
 				return err
 			}
 		}
+
 		if _, ok := a.seen[string(encoded)]; ok {
 			// skip
 			return nil
 		}
-		if err := a.bucketsMemAcc.Grow(ctx, int64(len(encoded))); err != nil {
+		s, err := a.arena.AllocBytes(ctx, encoded)
+		if err != nil {
 			return err
 		}
-		a.seen[string(encoded)] = struct{}{}
+		a.seen[s] = struct{}{}
 	}
 
 	impl, ok := a.buckets[string(bucket)]
