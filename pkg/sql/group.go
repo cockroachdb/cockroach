@@ -411,6 +411,9 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 	for bucket = range n.run.buckets {
 		break
 	}
+	// TODO(peter): Deleting from the n.run.buckets is fairly slow. The similar
+	// code in distsqlrun.aggregator performs a single step of copying all of the
+	// buckets to a slice and then releasing the buckets map.
 	delete(n.run.buckets, bucket)
 	for i, f := range n.funcs {
 		aggregateFunc, ok := f.run.buckets[bucket]
