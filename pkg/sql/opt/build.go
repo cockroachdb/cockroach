@@ -42,7 +42,7 @@ var comparisonOpMap = [...]operator{
 	tree.NotRegIMatch:      notRegIMatchOp,
 	tree.IsNotDistinctFrom: isOp,
 	tree.IsDistinctFrom:    isNotOp,
-	tree.Any:               anyOp,
+	tree.Any:               someOp,
 	tree.Some:              someOp,
 	tree.All:               allOp,
 }
@@ -192,6 +192,7 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 			bc.buildScalar(t.TypedLeft()),
 			bc.buildScalar(t.TypedRight()),
 		)
+		e.subOperator = comparisonOpMap[t.SubOperator]
 	case *tree.UnaryExpr:
 		initUnaryExpr(e, unaryOpMap[t.Operator], bc.buildScalar(t.TypedInnerExpr()))
 
@@ -368,8 +369,9 @@ func unaryOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 }
 
 func comparisonOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
-	return tree.NewTypedComparisonExpr(
+	return tree.NewTypedComparisonExprWithSubOp(
 		comparisonOpReverseMap[e.op],
+		comparisonOpReverseMap[e.subOperator],
 		scalarToTypedExpr(e.children[0], ivh),
 		scalarToTypedExpr(e.children[1], ivh),
 	)
