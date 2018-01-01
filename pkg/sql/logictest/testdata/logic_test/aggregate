@@ -1266,14 +1266,14 @@ SELECT MIN(v) FROM opt_test WHERE k <> 4
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 ----
-group           0  group   ·            ·                                   (min)  ·
- │              0  ·       aggregate 0  min(test.opt_test.v + 1)            ·      ·
- └── render     1  render  ·            ·                                   (min)  ·
-      │         1  ·       render 0     test.opt_test.v + 1                 ·      ·
-      └── scan  2  scan    ·            ·                                   (min)  ·
-·               2  ·       table        opt_test@primary                    ·      ·
-·               2  ·       spans        /!NULL-                             ·      ·
-·               2  ·       filter       (k != 4) AND ((v + 1) IS NOT NULL)  ·      ·
+group           0  group   ·            ·                         (min)  ·
+ │              0  ·       aggregate 0  min(test.opt_test.v + 1)  ·      ·
+ └── render     1  render  ·            ·                         (min)  ·
+      │         1  ·       render 0     test.opt_test.v + 1       ·      ·
+      └── scan  2  scan    ·            ·                         (min)  ·
+·               2  ·       table        opt_test@primary          ·      ·
+·               2  ·       spans        -/3/# /5-                 ·      ·
+·               2  ·       filter       (v + 1) IS NOT NULL       ·      ·
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query TITTTTT
