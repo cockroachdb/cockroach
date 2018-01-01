@@ -31,6 +31,10 @@ import "github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 // TODO(radu): support relational operators and extend this description.
 type Expr struct {
 	op operator
+	// subOperator is used for array operators (SOME, ALL). For
+	// example, for "a < SOME(SELECT * FROM t)" the operator is
+	// someOp and the subOperator is ltOp.
+	subOperator operator
 	// Child expressions. The interpretation of the children is operator
 	// dependent. For example, for a eqOp, there are two child expressions (the
 	// left-hand side and the right-hand side); for an andOp, there are at least
