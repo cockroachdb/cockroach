@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -92,21 +91,29 @@ func GetAggregateInfo(
 type aggregator struct {
 	processorBase
 
-	input       RowSource
-	inputTypes  []sqlbase.ColumnType
-	funcs       []*aggregateFuncHolder
-	outputTypes []sqlbase.ColumnType
-	datumAlloc  sqlbase.DatumAlloc
+	accumulating bool
+	input        RowSource
+	inputTypes   []sqlbase.ColumnType
+	funcs        []*aggregateFuncHolder
+	outputTypes  []sqlbase.ColumnType
+	datumAlloc   sqlbase.DatumAlloc
 
 	bucketsAcc mon.BoundAccount
 
 	groupCols    columns
 	aggregations []AggregatorSpec_Aggregation
 
-	buckets map[string]struct{} // The set of bucket keys.
+	// buckets is used during the accumulation phase to track the bucket keys
+	// that have been seen. After accumulation, the keys are extracted into
+	// bucketsIter for iteration.
+	buckets     map[string]struct{} // The set of bucket keys.
+	bucketsIter []string
+	row         sqlbase.EncDatumRow
+	scratch     []byte
 }
 
 var _ Processor = &aggregator{}
+var _ RowSource = &aggregator{}
 
 func newAggregator(
 	flowCtx *FlowCtx,
@@ -172,166 +179,199 @@ func newAggregator(
 
 // Run is part of the processor interface.
 func (ag *aggregator) Run(wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
+	if ag.out.output == nil {
+		panic("aggregator output not initialized for emitting rows")
 	}
-	ctx := ag.flowCtx.Ctx
-	defer ag.bucketsAcc.Close(ctx)
-	defer func() {
+	Run(ag.flowCtx.Ctx, ag, ag.out.output)
+	if wg != nil {
+		wg.Done()
+	}
+}
+
+func (ag *aggregator) close() {
+	if !ag.closed {
+		log.VEventf(ag.ctx, 2, "exiting aggregator")
+		ag.bucketsAcc.Close(ag.ctx)
 		for _, f := range ag.funcs {
 			for _, aggFunc := range f.buckets {
-				aggFunc.Close(ctx)
+				aggFunc.Close(ag.ctx)
 			}
 		}
-	}()
+	}
+	ag.internalClose()
+}
 
-	ctx = log.WithLogTag(ctx, "Agg", nil)
-	ctx, span := processorSpan(ctx, "aggregator")
-	defer tracing.FinishSpan(span)
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// valuesProcessor ran out of rows or encountered an error. It is ok for err to
+// be nil indicating that we're done producing rows even though no error
+// occurred.
+func (ag *aggregator) producerMeta(err error) ProducerMetadata {
+	var meta ProducerMetadata
+	if !ag.closed {
+		meta = ProducerMetadata{Err: err}
+		if err == nil {
+			meta.TraceData = getTraceData(ag.ctx)
+		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		ag.close()
+	}
+	return meta
+}
 
-	if log.V(2) {
-		log.Infof(ctx, "starting aggregation process")
-		defer log.Infof(ctx, "exiting aggregator")
+// Next is part of the RowSource interface.
+func (ag *aggregator) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+	if ag.maybeStart("aggregator", "Agg") {
+		log.VEventf(ag.ctx, 2, "starting aggregation process")
+		ag.accumulating = true
 	}
 
-	if err := ag.accumulateRows(ctx); err != nil {
-		// We swallow the error here, it has already been forwarded to the output.
-		return
+	if ag.accumulating {
+		for {
+			row, meta := ag.input.Next()
+			if !meta.Empty() {
+				if meta.Err != nil {
+					return nil, ag.producerMeta(meta.Err)
+				}
+				return nil, meta
+			}
+			if row == nil {
+				break
+			}
+			if ag.closed || ag.consumerStatus != NeedMoreRows {
+				continue
+			}
+			if err := ag.accumulateRow(row); err != nil {
+				return nil, ag.producerMeta(err)
+			}
+		}
+
+		// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
+		// aggregated.
+		if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
+			ag.buckets[""] = struct{}{}
+		}
+
+		ag.bucketsIter = make([]string, 0, len(ag.buckets))
+		for bucket := range ag.buckets {
+			ag.bucketsIter = append(ag.bucketsIter, bucket)
+		}
+		ag.buckets = nil
+
+		ag.accumulating = false
+		log.VEvent(ag.ctx, 1, "accumulation complete")
+
+		ag.row = make(sqlbase.EncDatumRow, len(ag.funcs))
 	}
 
-	log.VEvent(ctx, 1, "accumulation complete")
-
-	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
-	// aggregated.
-	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
-		ag.buckets[""] = struct{}{}
+	if ag.closed || ag.consumerStatus != NeedMoreRows {
+		return nil, ag.producerMeta(nil /* err */)
 	}
 
-	// Render the results.
-	var consumerDone bool
-	row := make(sqlbase.EncDatumRow, len(ag.funcs))
-	for bucket := range ag.buckets {
+	for {
+		if len(ag.bucketsIter) == 0 {
+			return nil, ag.producerMeta(nil /* err */)
+		}
+
+		bucket := ag.bucketsIter[0]
+		ag.bucketsIter = ag.bucketsIter[1:]
+
 		for i, f := range ag.funcs {
 			result, err := f.get(bucket)
 			if err != nil {
-				DrainAndClose(ctx, ag.out.output, err, ag.input)
-				return
+				return nil, ag.producerMeta(err)
 			}
 			if result == nil {
 				// Special case useful when this is a local stage of a distributed
 				// aggregation.
 				result = tree.DNull
 			}
-			row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], result)
+			ag.row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], result)
 		}
 
-		consumerDone = !emitHelper(ctx, &ag.out, row, ProducerMetadata{})
-		if consumerDone {
-			break
+		outRow, status, err := ag.out.ProcessRow(ag.ctx, ag.row)
+		if outRow != nil {
+			return outRow, ProducerMetadata{}
 		}
-	}
-	// If the consumer has been found to be done, emitHelper() already closed the
-	// output.
-	if !consumerDone {
-		sendTraceData(ctx, ag.out.output)
-		ag.out.Close()
+		if outRow == nil && err == nil && status == NeedMoreRows {
+			continue
+		}
+		return nil, ag.producerMeta(err)
 	}
 }
 
-// accumulateRows reads and accumulates all input rows.
-// If no error is return, it means that all the rows from the input have been
-// consumed.
-// If an error is returned, both the input and the output have been properly
-// closed, and the error has also been forwarded to the output.
-func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
-	cleanupRequired := true
-	defer func() {
-		if err != nil {
-			log.Infof(ctx, "accumulate error %s", err)
-			if cleanupRequired {
-				DrainAndClose(ctx, ag.out.output, err, ag.input)
-			}
-		}
-	}()
+// ConsumerDone is part of the RowSource interface.
+func (ag *aggregator) ConsumerDone() {
+	ag.consumerDone("aggregator")
+	ag.input.ConsumerDone()
+}
 
-	var scratch []byte
-	for {
-		row, meta := ag.input.Next()
-		if !meta.Empty() {
-			if meta.Err != nil {
-				return meta.Err
-			}
-			if !emitHelper(ctx, &ag.out, nil /* row */, meta, ag.input) {
-				// TODO(andrei): here, because we're passing metadata through, we have
-				// an opportunity to find out that the consumer doesn't need the data
-				// any more. If the producer doesn't push any metadata, then there's no
-				// opportunity to find this out until the accumulation phase is done. We
-				// should have a way to periodically peek at the state of the
-				// RowReceiver that's hiding behind the ProcOutputHelper.
-				cleanupRequired = false
-				return errors.Errorf("consumer stopped before it received rows")
-			}
-			continue
-		}
-		if row == nil {
-			return nil
-		}
+// ConsumerClosed is part of the RowSource interface.
+func (ag *aggregator) ConsumerClosed() {
+	ag.consumerClosed("aggregator")
+	// The consumer is done, Next() will not be called again.
+	ag.close()
+}
 
-		// The encoding computed here determines which bucket the non-grouping
-		// datums are accumulated to.
-		encoded, err := ag.encode(scratch, row)
-		if err != nil {
+// accumulateRow accumulates a single row, returning an error if accumulation
+// failed for any reason.
+func (ag *aggregator) accumulateRow(row sqlbase.EncDatumRow) (err error) {
+	// The encoding computed here determines which bucket the non-grouping
+	// datums are accumulated to.
+	encoded, err := ag.encode(ag.scratch, row)
+	if err != nil {
+		return err
+	}
+	ag.scratch = encoded[:0]
+
+	if _, ok := ag.buckets[string(encoded)]; !ok {
+		if err := ag.bucketsAcc.Grow(ag.ctx, int64(len(encoded))); err != nil {
 			return err
 		}
-
-		if _, ok := ag.buckets[string(encoded)]; !ok {
-			if err := ag.bucketsAcc.Grow(ctx, int64(len(encoded))); err != nil {
-				return err
-			}
-			ag.buckets[string(encoded)] = struct{}{}
-		}
-
-		// Feed the func holders for this bucket the non-grouping datums.
-		for i, a := range ag.aggregations {
-			if a.FilterColIdx != nil {
-				col := *a.FilterColIdx
-				if err := row[col].EnsureDecoded(&ag.inputTypes[col], &ag.datumAlloc); err != nil {
-					return err
-				}
-				if row[*a.FilterColIdx].Datum != tree.DBoolTrue {
-					// This row doesn't contribute to this aggregation.
-					continue
-				}
-			}
-			// Extract the corresponding arguments from the row to feed into the
-			// aggregate function.
-			// Most functions require at most one argument thus we separate
-			// the first argument and allocation of (if applicable) a variadic
-			// collection of arguments thereafter.
-			var firstArg tree.Datum
-			var otherArgs tree.Datums
-			if len(a.ColIdx) > 1 {
-				otherArgs = make(tree.Datums, len(a.ColIdx)-1)
-			}
-			isFirstArg := true
-			for j, c := range a.ColIdx {
-				if err := row[c].EnsureDecoded(&ag.inputTypes[c], &ag.datumAlloc); err != nil {
-					return err
-				}
-				if isFirstArg {
-					firstArg = row[c].Datum
-					isFirstArg = false
-					continue
-				}
-				otherArgs[j-1] = row[c].Datum
-			}
-
-			if err := ag.funcs[i].add(ctx, encoded, firstArg, otherArgs); err != nil {
-				return err
-			}
-		}
-		scratch = encoded[:0]
+		ag.buckets[string(encoded)] = struct{}{}
 	}
+
+	// Feed the func holders for this bucket the non-grouping datums.
+	for i, a := range ag.aggregations {
+		if a.FilterColIdx != nil {
+			col := *a.FilterColIdx
+			if err := row[col].EnsureDecoded(&ag.inputTypes[col], &ag.datumAlloc); err != nil {
+				return err
+			}
+			if row[*a.FilterColIdx].Datum != tree.DBoolTrue {
+				// This row doesn't contribute to this aggregation.
+				continue
+			}
+		}
+		// Extract the corresponding arguments from the row to feed into the
+		// aggregate function.
+		// Most functions require at most one argument thus we separate
+		// the first argument and allocation of (if applicable) a variadic
+		// collection of arguments thereafter.
+		var firstArg tree.Datum
+		var otherArgs tree.Datums
+		if len(a.ColIdx) > 1 {
+			otherArgs = make(tree.Datums, len(a.ColIdx)-1)
+		}
+		isFirstArg := true
+		for j, c := range a.ColIdx {
+			if err := row[c].EnsureDecoded(&ag.inputTypes[c], &ag.datumAlloc); err != nil {
+				return err
+			}
+			if isFirstArg {
+				firstArg = row[c].Datum
+				isFirstArg = false
+				continue
+			}
+			otherArgs[j-1] = row[c].Datum
+		}
+
+		if err := ag.funcs[i].add(ag.ctx, encoded, firstArg, otherArgs); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type aggregateFuncHolder struct {
