@@ -33,7 +33,6 @@ type distinct struct {
 
 	ctx          context.Context
 	span         opentracing.Span
-	flowCtx      *FlowCtx
 	evalCtx      *tree.EvalContext
 	input        RowSource
 	types        []sqlbase.ColumnType
@@ -58,7 +57,6 @@ func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*distinct, error) {
 	d := &distinct{
-		flowCtx:     flowCtx,
 		input:       input,
 		orderedCols: spec.OrderedColumns,
 		memAcc:      flowCtx.EvalCtx.Mon.MakeBoundAccount(),
@@ -68,7 +66,7 @@ func newDistinct(
 	}
 
 	d.types = input.OutputTypes()
-	if err := d.init(post, d.types, flowCtx, output); err != nil {
+	if err := d.init(post, d.types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 

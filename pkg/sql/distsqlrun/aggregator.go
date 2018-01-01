@@ -92,7 +92,6 @@ func GetAggregateInfo(
 type aggregator struct {
 	processorBase
 
-	flowCtx     *FlowCtx
 	input       RowSource
 	inputTypes  []sqlbase.ColumnType
 	funcs       []*aggregateFuncHolder
@@ -117,7 +116,6 @@ func newAggregator(
 	output RowReceiver,
 ) (*aggregator, error) {
 	ag := &aggregator{
-		flowCtx:      flowCtx,
 		input:        input,
 		groupCols:    spec.GroupCols,
 		aggregations: spec.Aggregations,
@@ -165,7 +163,7 @@ func newAggregator(
 
 		ag.outputTypes[i] = retType
 	}
-	if err := ag.init(post, ag.outputTypes, flowCtx, output); err != nil {
+	if err := ag.init(post, ag.outputTypes, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 

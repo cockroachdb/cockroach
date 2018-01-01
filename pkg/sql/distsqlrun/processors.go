@@ -354,7 +354,8 @@ func (h *ProcOutputHelper) consumerClosed() {
 }
 
 type processorBase struct {
-	out ProcOutputHelper
+	out     ProcOutputHelper
+	flowCtx *FlowCtx
 }
 
 // OutputTypes is part of the processor interface.
@@ -363,9 +364,17 @@ func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
 }
 
 func (pb *processorBase) init(
-	post *PostProcessSpec, types []sqlbase.ColumnType, flowCtx *FlowCtx, output RowReceiver,
+	post *PostProcessSpec,
+	types []sqlbase.ColumnType,
+	flowCtx *FlowCtx,
+	evalCtx *tree.EvalContext,
+	output RowReceiver,
 ) error {
-	return pb.out.Init(post, types, flowCtx.NewEvalCtx(), output)
+	pb.flowCtx = flowCtx
+	if evalCtx == nil {
+		evalCtx = flowCtx.NewEvalCtx()
+	}
+	return pb.out.Init(post, types, evalCtx, output)
 }
 
 // noopProcessor is a processor that simply passes rows through from the
@@ -375,10 +384,9 @@ func (pb *processorBase) init(
 type noopProcessor struct {
 	processorBase
 
-	ctx     context.Context
-	span    opentracing.Span
-	flowCtx *FlowCtx
-	input   RowSource
+	ctx   context.Context
+	span  opentracing.Span
+	input RowSource
 
 	started bool
 	closed  bool
@@ -394,8 +402,8 @@ var _ RowSource = &noopProcessor{}
 func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
-	n := &noopProcessor{flowCtx: flowCtx, input: input}
-	if err := n.init(post, input.OutputTypes(), flowCtx, output); err != nil {
+	n := &noopProcessor{input: input}
+	if err := n.init(post, input.OutputTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 	return n, nil

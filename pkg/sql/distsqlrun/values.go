@@ -31,7 +31,6 @@ type valuesProcessor struct {
 
 	ctx     context.Context
 	span    opentracing.Span
-	flowCtx *FlowCtx
 	columns []DatumInfo
 	data    [][]byte
 
@@ -52,7 +51,6 @@ func newValuesProcessor(
 	flowCtx *FlowCtx, spec *ValuesCoreSpec, post *PostProcessSpec, output RowReceiver,
 ) (*valuesProcessor, error) {
 	v := &valuesProcessor{
-		flowCtx: flowCtx,
 		columns: spec.Columns,
 		data:    spec.RawBytes,
 	}
@@ -60,7 +58,7 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.init(post, types, flowCtx, output); err != nil {
+	if err := v.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 	return v, nil

@@ -35,8 +35,6 @@ const joinReaderBatchSize = 100
 type joinReader struct {
 	processorBase
 
-	flowCtx *FlowCtx
-
 	desc  sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
 
@@ -62,7 +60,6 @@ func newJoinReader(
 	}
 
 	jr := &joinReader{
-		flowCtx:    flowCtx,
 		desc:       spec.Table,
 		input:      input,
 		inputTypes: input.OutputTypes(),
@@ -73,7 +70,7 @@ func newJoinReader(
 		types[i] = spec.Table.Columns[i].Type
 	}
 
-	if err := jr.init(post, types, flowCtx, output); err != nil {
+	if err := jr.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 
