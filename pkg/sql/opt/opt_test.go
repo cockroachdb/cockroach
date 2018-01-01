@@ -323,6 +323,7 @@ func TestOpt(t *testing.T) {
 				var iVarHelper tree.IndexedVarHelper
 				var colInfos []IndexColumnInfo
 				var typedExpr tree.TypedExpr
+				evalCtx := tree.MakeTestingEvalContext()
 
 				for _, arg := range d.cmdArgs {
 					key := arg
@@ -370,13 +371,12 @@ func TestOpt(t *testing.T) {
 				}
 				buildScalarFn := func() {
 					var err error
-					e, err = buildScalar(getTypedExpr())
+					e, err = buildScalar(getTypedExpr(), &evalCtx)
 					if err != nil {
 						t.Fatal(err)
 					}
 				}
 
-				evalCtx := tree.MakeTestingEvalContext()
 				for _, cmd := range strings.Split(d.cmd, ",") {
 					switch cmd {
 					case "semtree-normalize":
@@ -398,7 +398,7 @@ func TestOpt(t *testing.T) {
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
-						e, err = build(ctx, stmt, catalog)
+						e, err = build(ctx, stmt, catalog, &evalCtx)
 						if err != nil {
 							return fmt.Sprintf("error: %v\n", err)
 						}
