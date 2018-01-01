@@ -359,13 +359,13 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		}
 
 		outRow, status, err := tr.out.ProcessRow(tr.ctx, row)
+		if outRow != nil {
+			return outRow, ProducerMetadata{}
+		}
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue
 		}
-		if err != nil {
-			return nil, tr.producerMeta(err)
-		}
-		return outRow, ProducerMetadata{}
+		return nil, tr.producerMeta(err)
 	}
 }
 
