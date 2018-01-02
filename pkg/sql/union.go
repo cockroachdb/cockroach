@@ -76,6 +76,11 @@ type unionNode struct {
 	// selection/filtering logic.
 	emit unionNodeEmit
 
+	// unionType is the type of operation (UNION, INTERSECT, EXCEPT)
+	unionType tree.UnionType
+	// all indicates if the operation is the ALL or DISTINCT version
+	all bool
+
 	run unionRun
 }
 
@@ -149,11 +154,13 @@ func (p *planner) Union(
 	}
 
 	node := &unionNode{
-		right:    right,
-		left:     left,
-		inverted: inverted,
-		emitAll:  emitAll,
-		emit:     emit,
+		right:     right,
+		left:      left,
+		inverted:  inverted,
+		emitAll:   emitAll,
+		emit:      emit,
+		unionType: n.Type,
+		all:       n.All,
 	}
 	return node, nil
 }
