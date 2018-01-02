@@ -651,6 +651,7 @@ func (p *planner) notifySchemaChange(
 		leaseHolderCache:     p.ExecCfg().LeaseHolderCache,
 		rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
 		clock:                p.ExecCfg().Clock,
+		settings:             p.ExecCfg().Settings,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
 }

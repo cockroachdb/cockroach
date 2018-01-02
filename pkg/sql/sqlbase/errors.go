@@ -31,7 +31,11 @@ const (
 	// CodeRangeUnavailable signals that some data from the cluster cannot be
 	// accessed (e.g. because all replicas awol).
 	// We're using the postgres "Internal Error" error class "XX".
-	CodeRangeUnavailable string = "XXC00"
+	CodeRangeUnavailable = "XXC00"
+
+	// CodeCCLRequired signals that a CCL binary is required to complete this
+	// task.
+	CodeCCLRequired = "XXC01"
 )
 
 const (
@@ -99,12 +103,24 @@ func NewInvalidSchemaDefinitionError(err error) error {
 	return pgerror.NewError(pgerror.CodeInvalidSchemaDefinitionError, err.Error())
 }
 
+// NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
+// binary.
+func NewCCLRequiredError(err error) error {
+	return pgerror.NewError(CodeCCLRequired, err.Error())
+}
+
+// IsCCLRequiredError returns whether the error is a CCLRequired error.
+func IsCCLRequiredError(err error) bool {
+	return errHasCode(err, CodeCCLRequired)
+}
+
 // IsPermanentSchemaChangeError returns true if the error results in
 // a permanent failure of a schema change.
 func IsPermanentSchemaChangeError(err error) bool {
 	return errHasCode(err, pgerror.CodeNotNullViolationError) ||
 		errHasCode(err, pgerror.CodeUniqueViolationError) ||
-		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError)
+		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError) ||
+		errHasCode(err, CodeCCLRequired)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.
