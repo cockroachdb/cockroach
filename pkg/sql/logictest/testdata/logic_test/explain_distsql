@@ -8,11 +8,12 @@
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 
-# Verify the EXPLAIN (DISTSQL) schema.
+# Verify that EXPLAIN (DISTSQL) hides the JSON column by default (#21089)
 query BT colnames
-SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM kv] WHERE false
+EXPLAIN (DISTSQL) VALUES (1)
 ----
-Automatic URL
+Automatic  URL
+true       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFjTYHTV289KWDFmCBiEdjomjMzoJAkb_PVgaQoZAxvee9H3chsCefu2VBPqEAUZhjexIhONetQejv0H3CnNYc9pro-A4EvSGNKeFoHG0SyaBgqdk56Xyvruf7nPo3DmHi3zBFAXO6cGQZCeC7ot633MgWTkIPZlek40C-YnaLcI5OvqP7Kqmxb_6rxaeJLV1aGEMbSqmfNwDAAD__7pEYro=
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames
