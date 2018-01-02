@@ -41,8 +41,6 @@ type tableInfo struct {
 type interleavedReaderJoiner struct {
 	joinerBase
 
-	flowCtx *FlowCtx
-
 	// Each tableInfo contains the output helper (for intermediate
 	// filtering) and ordering info for each table-index being joined.
 	tables    []tableInfo
@@ -145,7 +143,6 @@ func newInterleavedReaderJoiner(
 	}
 
 	irj := &interleavedReaderJoiner{
-		flowCtx:            flowCtx,
 		tables:             tables,
 		allSpans:           allSpans,
 		ancestorTablePos:   ancestorTablePos,

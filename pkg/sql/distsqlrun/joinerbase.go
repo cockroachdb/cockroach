@@ -89,7 +89,7 @@ func (jb *joinerBase) init(
 	if err := jb.onCond.init(onExpr, types, evalCtx); err != nil {
 		return err
 	}
-	return jb.out.Init(post, types, evalCtx, output)
+	return jb.processorBase.init(post, types, flowCtx, evalCtx, output)
 }
 
 type joinSide uint8

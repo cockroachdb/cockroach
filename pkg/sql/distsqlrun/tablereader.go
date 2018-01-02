@@ -16,10 +16,8 @@ package distsqlrun
 
 import (
 	"bytes"
-	"context"
 	"sync"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // ScrubTypes is the schema for TableReaders that are doing a SCRUB
@@ -53,14 +50,7 @@ var ScrubTypes = []sqlbase.ColumnType{
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
 	processorBase
-
-	// ctx and span contain the tracing state while the processor is active
-	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not
-	// be otherwise used).
-	ctx  context.Context
-	span opentracing.Span
-
-	flowCtx *FlowCtx
+	rowSourceBase
 
 	tableDesc sqlbase.TableDescriptor
 	spans     roachpb.Spans
@@ -69,8 +59,6 @@ type tableReader struct {
 	fetcher sqlbase.MultiRowFetcher
 	alloc   sqlbase.DatumAlloc
 
-	started bool
-	closed  bool
 	isCheck bool
 	// fetcherResultToColIdx maps RowFetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
@@ -83,10 +71,6 @@ type tableReader struct {
 	// trailingMetadata contains producer metadata that is sent once the consumer
 	// status is not NeedMoreRows.
 	trailingMetadata []ProducerMetadata
-
-	// consumerStatus is used by the RowSource interface to signal that the
-	// consumer is done accepting rows or is no longer accepting data.
-	consumerStatus ConsumerStatus
 }
 
 var _ Processor = &tableReader{}
@@ -100,7 +84,6 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 	tr := &tableReader{
-		flowCtx:   flowCtx,
 		tableDesc: spec.Table,
 		isCheck:   spec.IsCheck,
 		indexIdx:  int(spec.IndexIdx),
@@ -118,7 +101,7 @@ func newTableReader(
 	if spec.IsCheck {
 		types = ScrubTypes
 	}
-	if err := tr.init(post, types, flowCtx, output); err != nil {
+	if err := tr.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 
@@ -288,14 +271,7 @@ func (tr *tableReader) prettyPrimaryKeyValues(
 // close the tableReader and finish any tracing. Any subsequent calls to Next()
 // will return empty data.
 func (tr *tableReader) close() {
-	if !tr.closed {
-		tr.closed = true
-		log.VEventf(tr.ctx, 1, "exiting")
-		tracing.FinishSpan(tr.span)
-		tr.span = nil
-	}
-	// This prevents Next() from returning more rows.
-	tr.out.consumerClosed()
+	tr.internalClose()
 }
 
 // producerMeta constructs the ProducerMetadata after consumption of rows has
@@ -327,15 +303,10 @@ func (tr *tableReader) producerMeta(err error) ProducerMetadata {
 
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
-	if !tr.started {
-		tr.started = true
-
+	if tr.maybeStart("table reader", "TableReader") {
 		if tr.flowCtx.txn == nil {
 			log.Fatalf(tr.ctx, "tableReader outside of txn")
 		}
-
-		tr.ctx = log.WithLogTagInt(tr.flowCtx.Ctx, "TableReader", int(tr.tableDesc.ID))
-		tr.ctx, tr.span = processorSpan(tr.ctx, "table reader")
 		log.VEventf(tr.ctx, 1, "starting")
 
 		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
@@ -389,30 +360,24 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		}
 
 		outRow, status, err := tr.out.ProcessRow(tr.ctx, row)
+		if outRow != nil {
+			return outRow, ProducerMetadata{}
+		}
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue
 		}
-		if err != nil {
-			return nil, tr.producerMeta(err)
-		}
-		return outRow, ProducerMetadata{}
+		return nil, tr.producerMeta(err)
 	}
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (tr *tableReader) ConsumerDone() {
-	if tr.consumerStatus != NeedMoreRows {
-		log.Fatalf(context.Background(), "tableReader already done or closed: %d", tr.consumerStatus)
-	}
-	tr.consumerStatus = DrainRequested
+	tr.consumerDone("tableReader")
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (tr *tableReader) ConsumerClosed() {
-	if tr.consumerStatus == ConsumerClosed {
-		log.Fatalf(context.Background(), "tableReader already closed")
-	}
-	tr.consumerStatus = ConsumerClosed
+	tr.consumerClosed("tableReader")
 	// The consumer is done, Next() will not be called again.
 	tr.close()
 }
