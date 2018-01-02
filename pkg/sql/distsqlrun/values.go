@@ -24,6 +24,7 @@ import (
 // rows.
 type valuesProcessor struct {
 	processorBase
+	rowSourceBase
 
 	columns []DatumInfo
 	data    [][]byte
@@ -154,5 +155,4 @@ func (v *valuesProcessor) ConsumerClosed() {
 	v.consumerClosed("values")
 	// The consumer is done, Next() will not be called again.
 	v.close()
-
 }

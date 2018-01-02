@@ -50,6 +50,7 @@ var ScrubTypes = []sqlbase.ColumnType{
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
 	processorBase
+	rowSourceBase
 
 	tableDesc sqlbase.TableDescriptor
 	spans     roachpb.Spans
