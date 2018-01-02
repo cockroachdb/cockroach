@@ -81,7 +81,7 @@ func (n *showZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
-	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier)
+	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier, params.p.session.Database)
 	if err != nil {
 		return err
 	}
@@ -108,11 +108,8 @@ func (n *showZoneConfigNode) startExec(params runParams) error {
 
 	// Determine the CLI specifier for the zone config that actually applies
 	// without performing another KV lookup.
-	zs, err := ascendZoneSpecifier(n.zoneSpecifier, uint32(targetID), zoneID, subzone)
-	if err != nil {
-		return err
-	}
-	n.run.cliSpecifier = config.CLIZoneSpecifier(zs)
+	n.run.cliSpecifier = config.CLIZoneSpecifier(ascendZoneSpecifier(
+		n.zoneSpecifier, uint32(targetID), zoneID, subzone))
 
 	// Ensure subzone configs don't infect the output of config_bytes.
 	zone.Subzones = nil
@@ -157,7 +154,7 @@ func (*showZoneConfigNode) Close(context.Context) {}
 // finds without impacting performance.
 func ascendZoneSpecifier(
 	zs tree.ZoneSpecifier, resolvedID, actualID uint32, actualSubzone *config.Subzone,
-) (tree.ZoneSpecifier, error) {
+) tree.ZoneSpecifier {
 	if actualID == keys.RootNamespaceID {
 		// We had to traverse to the top of the hierarchy, so we're showing the
 		// default zone config.
@@ -165,11 +162,7 @@ func ascendZoneSpecifier(
 	} else if resolvedID != actualID {
 		// We traversed at least one level up, and we're not at the top of the
 		// hierarchy, so we're showing the database zone config.
-		tn, err := zs.TableOrIndex.Table.Normalize()
-		if err != nil {
-			return tree.ZoneSpecifier{}, err
-		}
-		zs.Database = tn.DatabaseName
+		zs.Database = zs.TableOrIndex.Table.TableName().DatabaseName
 	} else if actualSubzone == nil {
 		// We didn't find a subzone, so no index or partition zone config exists.
 		zs.TableOrIndex.Index = ""
@@ -178,5 +171,5 @@ func ascendZoneSpecifier(
 		// The resolved subzone did not name a partition, just an index.
 		zs.Partition = ""
 	}
-	return zs, nil
+	return zs
 }
