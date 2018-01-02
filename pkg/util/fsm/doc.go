@@ -39,5 +39,25 @@ provided event to its current state. This does two things:
 
 See example_test.go for a full working example of a state machine with an
 associated set of states and events.
+
+This package encourages the Pattern to be declared as a map literal. When
+declaring this literal, be careful to not declare two equal keys: they'll result
+in the second overwriting the first with no warning because of how Go deals with
+map literals. Note that keys that are not technically equal, but where one is a
+superset of the other, will work as intended. E.g. the following is permitted:
+ Compile(Pattern{
+   stateOpen{retryIntent: Any} {
+     eventTxnFinish{}: {...}
+   }
+   stateOpen{retryIntent: True} {
+     eventRetriableErr{}: {...}
+   }
+
+Members of this package are accessed frequently when implementing a state
+machine. For that reason, it is encouraged to dot-import this package in the
+file with the transitions Pattern. The respective file should be kept small and
+named <name>_fsm.go; our linter doesn't complain about dot-imports in such
+files.
+
 */
 package fsm

@@ -144,6 +144,22 @@ func TestTransitionsWithVarBindings(t *testing.T) {
 	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state3{False}, Event: event3{False}}), state4{False, False})
 }
 
+func TestCurState(t *testing.T) {
+	ctx := context.Background()
+	trans := Compile(Pattern{
+		state1{}: {
+			event1{}: {state2{}, func(a Args) error { return nil }},
+		},
+	})
+	m := MakeMachine(trans, state1{}, nil /* es */)
+
+	e := Event(event1{})
+	if err := m.Apply(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+	require.Equal(t, m.CurState(), state2{})
+}
+
 func BenchmarkPatternCompilation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = Compile(Pattern{

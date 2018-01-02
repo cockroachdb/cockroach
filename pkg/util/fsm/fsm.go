@@ -12,6 +12,8 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// See doc.go for a description.
+
 package fsm
 
 import (
@@ -137,4 +139,9 @@ func (m *Machine) ApplyWithBaggage(ctx context.Context, e Event, b EventBaggage)
 		Baggage:  b,
 	})
 	return err
+}
+
+// CurState returns the current state.
+func (m *Machine) CurState() State {
+	return m.cur
 }
