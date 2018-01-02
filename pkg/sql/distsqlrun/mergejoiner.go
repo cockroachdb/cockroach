@@ -35,6 +35,7 @@ type mergeJoiner struct {
 	evalCtx *tree.EvalContext
 
 	leftSource, rightSource RowSource
+	leftRows, rightRows     []sqlbase.EncDatumRow
 
 	streamMerger streamMerger
 }
@@ -72,7 +73,6 @@ func newMergeJoiner(
 		convertToColumnOrdering(spec.LeftOrdering),
 		rightSource,
 		convertToColumnOrdering(spec.RightOrdering),
-		output, /*metadataSync*/
 		spec.NullEquality,
 	)
 	if err != nil {
@@ -117,21 +117,30 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 func (m *mergeJoiner) outputBatch(
 	ctx context.Context, cancelChecker *sqlbase.CancelChecker,
 ) (bool, error) {
-	leftRows, rightRows, err := m.streamMerger.NextBatch(m.evalCtx)
-	if err != nil {
-		return false, err
-	}
-	if leftRows == nil && rightRows == nil {
-		return false, nil
-	}
-	var matchedRight []bool
-	if m.joinType == fullOuter || m.joinType == rightOuter {
-		matchedRight = make([]bool, len(rightRows))
+	for {
+		var meta *ProducerMetadata
+		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.evalCtx)
+		if meta != nil {
+			if meta.Err != nil {
+				return false, meta.Err
+			}
+			_ = m.out.output.Push(nil /* row */, *meta)
+			continue
+		}
+		if m.leftRows == nil && m.rightRows == nil {
+			return false, nil
+		}
+		break
 	}
 
-	for _, lrow := range leftRows {
+	var matchedRight []bool
+	if m.joinType == fullOuter || m.joinType == rightOuter {
+		matchedRight = make([]bool, len(m.rightRows))
+	}
+
+	for _, lrow := range m.leftRows {
 		matched := false
-		for rIdx, rrow := range rightRows {
+		for rIdx, rrow := range m.rightRows {
 			if err := cancelChecker.Check(); err != nil {
 				return false, err
 			}
@@ -160,7 +169,7 @@ func (m *mergeJoiner) outputBatch(
 
 	if matchedRight != nil {
 		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
-		for rIdx, rrow := range rightRows {
+		for rIdx, rrow := range m.rightRows {
 			if !matchedRight[rIdx] {
 				needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, rrow, rightSide)
 				if !needMoreRows || err != nil {
