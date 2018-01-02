@@ -12,6 +12,31 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// This package provides a library used for building finite state automata. It
+// lets one declare the state machine's states and events, and the transition
+// graph in a declarative way.
+//
+// Notes:
+//
+// This package encourages the Pattern to be declared as a map literal. When
+// declaring this literal, be careful to not declare two equal keys: they'll
+// result in the second overwriting the first with no warning. Note that keys
+// that are not technically equal, but where one is a superser of the other,
+// will work as intended. E.g. the following is permitted:
+//  Compile(Pattern{
+//    stateOpen{retryIntent: Any} {
+//      eventTxnFinish{}: {...}
+//    }
+//    stateOpen{retryIntent: True} {
+//      eventRetriableErr{}: {...}
+//    }
+//
+// Members of this package are accessed frequently when implementing a
+// state machine. For that reason, it is encouraged to dot-import this package
+// in the file with the transitions Pattern. The respective file should be
+// kept small and named <name>_fsm.go; our linter doesn't complain about
+// dot-imports in such files.
+
 package fsm
 
 import (
@@ -123,4 +148,9 @@ func (m *Machine) ApplyWithBaggage(ctx context.Context, e Event, b EventBaggage)
 		Baggage:  b,
 	})
 	return
+}
+
+// GetCurState returns the current state.
+func (m *Machine) GetCurState() State {
+	return m.cur
 }
