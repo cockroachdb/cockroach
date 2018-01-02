@@ -121,32 +121,6 @@ func readBackupDescriptor(
 	return backupDesc, err
 }
 
-// ValidatePreviousBackups checks that the timestamps of previous backups are
-// consistent and covers `spans`. The most recently backed-up time is returned.
-func ValidatePreviousBackups(
-	ctx context.Context, uris []string, settings *cluster.Settings, spans []roachpb.Span,
-) (hlc.Timestamp, error) {
-	if len(uris) == 0 || len(uris) == 1 && uris[0] == "" {
-		// Full backup.
-		return hlc.Timestamp{}, nil
-	}
-	backups := make([]BackupDescriptor, len(uris))
-	for i, uri := range uris {
-		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
-		if err != nil {
-			return hlc.Timestamp{}, errors.Wrapf(err, "failed to read backup from %q", uri)
-		}
-		backups[i] = desc
-	}
-
-	// This reuses Restore's logic for lining up all the start and end
-	// timestamps to validate the previous backups that this one is incremental
-	// from.
-	lowWaterMark := keys.MinKey
-	_, endTime, err := makeImportSpans(spans, backups, lowWaterMark)
-	return endTime, errors.Wrap(err, "invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
-}
-
 func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
@@ -413,6 +387,11 @@ func resolveTargetsToDescriptors(
 	return matched.descs, matched.expandedDB, nil
 }
 
+type spanAndTime struct {
+	span       roachpb.Span
+	start, end hlc.Timestamp
+}
+
 // backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
@@ -454,7 +433,7 @@ func backup(
 		return mu.exported, errors.Wrap(err, "fetching range descriptors")
 	}
 
-	var completedSpans []roachpb.Span
+	var completedSpans, completedIntroducedSpans []roachpb.Span
 	if checkpointDesc != nil {
 		// TODO(benesch): verify these files, rather than accepting them as truth
 		// blindly.
@@ -462,7 +441,11 @@ func backup(
 		mu.files = checkpointDesc.Files
 		mu.exported = checkpointDesc.EntryCounts
 		for _, file := range checkpointDesc.Files {
-			completedSpans = append(completedSpans, file.Span)
+			if (file.StartTime == hlc.Timestamp{} && file.EndTime != hlc.Timestamp{}) {
+				completedIntroducedSpans = append(completedIntroducedSpans, file.Span)
+			} else {
+				completedSpans = append(completedSpans, file.Span)
+			}
 		}
 	}
 
@@ -470,6 +453,15 @@ func backup(
 	// range-sized pieces so that we can use the number of completed requests as a
 	// rough measure of progress.
 	spans := splitAndFilterSpans(backupDesc.Spans, completedSpans, ranges)
+	introducedSpans := splitAndFilterSpans(backupDesc.IntroducedSpans, completedIntroducedSpans, ranges)
+
+	allSpans := make([]spanAndTime, 0, len(spans)+len(introducedSpans))
+	for _, s := range introducedSpans {
+		allSpans = append(allSpans, spanAndTime{span: s, start: hlc.Timestamp{}, end: backupDesc.StartTime})
+	}
+	for _, s := range spans {
+		allSpans = append(allSpans, spanAndTime{span: s, start: backupDesc.StartTime, end: backupDesc.EndTime})
+	}
 
 	progressLogger := jobProgressLogger{
 		job:           job,
@@ -496,7 +488,6 @@ func backup(
 	maxConcurrentExports := clusterNodeCount(gossip) * storageccl.ExportRequestLimit
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
-	header := roachpb.Header{Timestamp: backupDesc.EndTime}
 	g, gCtx := errgroup.WithContext(ctx)
 
 	requestFinishedCh := make(chan struct{}, len(spans)) // enough buffer to never block
@@ -510,21 +501,21 @@ func backup(
 		})
 	}
 
-	for i := range spans {
+	for i := range allSpans {
 		select {
 		case exportsSem <- struct{}{}:
 		case <-ctx.Done():
 			return mu.exported, ctx.Err()
 		}
 
-		span := spans[i]
+		span := allSpans[i]
 		g.Go(func() error {
 			defer func() { <-exportsSem }()
-
+			header := roachpb.Header{Timestamp: span.end}
 			req := &roachpb.ExportRequest{
-				Span:       span,
+				Span:       span.span,
 				Storage:    exportStore.Conf(),
-				StartTime:  backupDesc.StartTime,
+				StartTime:  span.start,
 				MVCCFilter: roachpb.MVCCFilter(backupDesc.MVCCFilter),
 			}
 			res, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
@@ -534,12 +525,17 @@ func backup(
 
 			mu.Lock()
 			for _, file := range res.(*roachpb.ExportResponse).Files {
-				mu.files = append(mu.files, BackupDescriptor_File{
+				f := BackupDescriptor_File{
 					Span:        file.Span,
 					Path:        file.Path,
 					Sha512:      file.Sha512,
 					EntryCounts: file.Exported,
-				})
+				}
+				if span.start != backupDesc.StartTime {
+					f.StartTime = span.start
+					f.EndTime = span.end
+				}
+				mu.files = append(mu.files, f)
 				mu.exported.Add(file.Exported)
 			}
 			var checkpointFiles backupFileDescriptors
@@ -717,12 +713,55 @@ func backupPlanHook(
 
 		spans := spansForAllTableIndexes(tables)
 
+		var prevBackups []BackupDescriptor
+		if len(incrementalFrom) > 0 {
+			prevBackups = make([]BackupDescriptor, len(incrementalFrom))
+			for i, uri := range incrementalFrom {
+				desc, err := ReadBackupDescriptorFromURI(ctx, uri, p.ExecCfg().Settings)
+				if err != nil {
+					return errors.Wrapf(err, "failed to read backup from %q", uri)
+				}
+				prevBackups[i] = desc
+			}
+		}
+
 		var startTime hlc.Timestamp
-		if backupStmt.IncrementalFrom != nil {
+		var newSpans roachpb.Spans
+		if len(prevBackups) > 0 {
+			tablesInPrev := make(map[sqlbase.ID]struct{})
+			dbsInPrev := make(map[sqlbase.ID]struct{})
+			for _, d := range prevBackups[len(prevBackups)-1].Descriptors {
+				if t := d.GetTable(); t != nil {
+					tablesInPrev[t.ID] = struct{}{}
+				}
+			}
+			for _, d := range prevBackups[len(prevBackups)-1].CompleteDbs {
+				dbsInPrev[d] = struct{}{}
+			}
+
+			for _, d := range targetDescs {
+				if t := d.GetTable(); t != nil {
+					if _, ok := tablesInPrev[t.ID]; ok {
+						continue
+					}
+					if _, ok := dbsInPrev[t.ParentID]; ok {
+						continue
+					}
+					return errors.Errorf("previous backup does not contain table %q", t.Name)
+				}
+			}
+
 			var err error
-			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom, p.ExecCfg().Settings, spans)
+			_, startTime, err = makeImportSpans(spans, prevBackups, keys.MinKey,
+				func(span intervalccl.Range, start, end hlc.Timestamp) error {
+					if (start == hlc.Timestamp{}) {
+						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
+						return nil
+					}
+					return errOnMissingRange(span, start, end)
+				})
 			if err != nil {
-				return err
+				return errors.Wrap(err, "invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
 			}
 		}
 
@@ -732,16 +771,28 @@ func backupPlanHook(
 		}
 
 		backupDesc := BackupDescriptor{
-			StartTime:     startTime,
-			EndTime:       endTime,
-			MVCCFilter:    mvccFilter,
-			Descriptors:   targetDescs,
-			CompleteDbs:   completeDBs,
-			Spans:         spans,
-			FormatVersion: BackupFormatDescriptorTrackingVersion,
-			BuildInfo:     build.GetInfo(),
-			NodeID:        p.ExecCfg().NodeID.Get(),
-			ClusterID:     p.ExecCfg().ClusterID(),
+			StartTime:       startTime,
+			EndTime:         endTime,
+			MVCCFilter:      mvccFilter,
+			Descriptors:     targetDescs,
+			CompleteDbs:     completeDBs,
+			Spans:           spans,
+			IntroducedSpans: newSpans,
+			FormatVersion:   BackupFormatDescriptorTrackingVersion,
+			BuildInfo:       build.GetInfo(),
+			NodeID:          p.ExecCfg().NodeID.Get(),
+			ClusterID:       p.ExecCfg().ClusterID(),
+		}
+
+		// Sanity check: re-run the validation that RESTORE will do, but this time
+		// including this backup, to ensure that the this backup plus any previous
+		// backups does cover the interval expected.
+		if _, coveredEnd, err := makeImportSpans(
+			spans, append(prevBackups, backupDesc), keys.MinKey, errOnMissingRange,
+		); err != nil {
+			return err
+		} else if coveredEnd != endTime {
+			return errors.Errorf("expected backup (along with any previous backups) to cover to %v, not %v", endTime, coveredEnd)
 		}
 
 		descBytes, err := protoutil.Marshal(&backupDesc)
