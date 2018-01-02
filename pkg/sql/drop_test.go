@@ -15,19 +15,17 @@
 package sql_test
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"testing"
 
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -358,40 +356,6 @@ SHOW TABLES;
 	}
 }
 
-func checkKeyCount(t *testing.T, kvDB *client.DB, span roachpb.Span, numKeys int) {
-	t.Helper()
-	if kvs, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 0); err != nil {
-		t.Fatal(err)
-	} else if l := numKeys; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
-	}
-}
-
-func createKVTable(sqlDB *gosql.DB, numRows int) error {
-	// Fix the column families so the key counts don't change if the family
-	// heuristics are updated.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE IF NOT EXISTS t;
-CREATE TABLE t.kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
-CREATE INDEX foo on t.kv (v);
-`); err != nil {
-		return err
-	}
-
-	// Bulk insert.
-	var insert bytes.Buffer
-	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
-		return err
-	}
-	for i := 1; i < numRows; i++ {
-		if _, err := insert.WriteString(fmt.Sprintf(` ,(%d, %d)`, i, numRows-i)); err != nil {
-			return err
-		}
-	}
-	_, err := sqlDB.Exec(insert.String())
-	return err
-}
-
 func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const chunkSize = 200
@@ -405,7 +369,7 @@ func TestDropIndex(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*chunkSize + 1
-	if err := createKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
@@ -416,11 +380,11 @@ func TestDropIndex(t *testing.T) {
 	}
 	indexSpan := tableDesc.IndexSpan(idx.ID)
 
-	checkKeyCount(t, kvDB, indexSpan, numRows)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, indexSpan, 0)
+	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
 
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
@@ -428,42 +392,78 @@ func TestDropIndex(t *testing.T) {
 	}
 }
 
-func createKVInterleavedTable(t *testing.T, sqlDB *gosql.DB, numRows int) {
-	// Fix the column families so the key counts don't change if the family
-	// heuristics are updated.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-SET DATABASE=t;
-CREATE TABLE kv (k INT PRIMARY KEY, v INT);
-CREATE TABLE intlv (k INT, m INT, n INT, PRIMARY KEY (k, m)) INTERLEAVE IN PARENT kv (k);
-CREATE INDEX intlv_idx ON intlv (k, n) INTERLEAVE IN PARENT kv (k);
-`); err != nil {
+func TestDropIndexWithZoneConfigOSS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const chunkSize = 200
+	const numRows = 2*chunkSize + 1
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{BackfillChunkSize: chunkSize},
+	}
+	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	defer s.Stopper().Stop(context.Background())
+
+	// Create a test table with a secondary index.
+	if err := tests.CreateKVTable(sqlDB.DB, numRows); err != nil {
 		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	indexDesc, _, err := tableDesc.FindIndexByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexSpan := tableDesc.IndexSpan(indexDesc.ID)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+
+	// Hack in zone configs for the primary and secondary indexes. (You need a CCL
+	// binary to do this properly.) Dropping the index will thus require
+	// regenerating the zone config's SubzoneSpans, which will fail with a "CCL
+	// required" error.
+	zoneConfig := config.ZoneConfig{
+		Subzones: []config.Subzone{
+			{IndexID: uint32(tableDesc.PrimaryIndex.ID), Config: config.DefaultZoneConfig()},
+			{IndexID: uint32(indexDesc.ID), Config: config.DefaultZoneConfig()},
+		},
+	}
+	zoneConfigBytes, err := protoutil.Marshal(&zoneConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); !exists {
+		t.Fatal("zone config for index does not exist")
 	}
 
-	var insert bytes.Buffer
-	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
-		t.Fatal(err)
+	// Verify that dropping the index fails with a "CCL required" error.
+	_, err = sqlDB.DB.Exec(`DROP INDEX t.kv@foo`)
+	if pqErr, ok := err.(*pq.Error); !ok || pqErr.Code != sqlbase.CodeCCLRequired {
+		t.Fatalf("expected pq error with CCLRequired code, but got %v", err)
 	}
-	for i := 1; i < numRows; i++ {
-		if _, err := insert.WriteString(fmt.Sprintf(` ,(%d, %d)`, i, numRows-i)); err != nil {
-			t.Fatal(err)
-		}
+
+	// Verify that the index and its zone config still exist.
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); !exists {
+		t.Fatal("zone config for index no longer exists")
 	}
-	if _, err := sqlDB.Exec(insert.String()); err != nil {
-		t.Fatal(err)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+	// TODO(benesch): Run scrub here. It can't currently handle the way t.kv
+	// declares column families.
+
+	// Manually remove the zone config. (Again, doing this through the normal
+	// channels requires a CCL binary.)
+	sqlDB.Exec(t, `DELETE FROM system.zones WHERE id = $1`, tableDesc.ID)
+
+	// Verify the index can now be properly dropped from an OSS binary.
+	sqlDB.Exec(t, `DROP INDEX t.kv@foo`)
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); exists {
+		t.Fatal("zone config for index still exists after dropping index")
 	}
-	insert.Reset()
-	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.intlv VALUES (%d, %d, %d)`, 0, numRows-1, numRows-1)); err != nil {
-		t.Fatal(err)
-	}
-	for i := 1; i < numRows; i++ {
-		if _, err := insert.WriteString(fmt.Sprintf(` ,(%d, %d, %d)`, i, numRows-i, numRows-i)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := sqlDB.Exec(insert.String()); err != nil {
-		t.Fatal(err)
+	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
+		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 }
 
@@ -480,17 +480,17 @@ func TestDropIndexInterleaved(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*chunkSize + 1
-	createKVInterleavedTable(t, sqlDB, numRows)
+	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	tableSpan := tableDesc.TableSpan()
 
-	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 
 	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
 		t.Fatal(err)
 	}
-	checkKeyCount(t, kvDB, tableSpan, 2*numRows)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 2*numRows)
 
 	// Ensure that index is not active.
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
@@ -516,7 +516,7 @@ func TestDropTable(t *testing.T) {
 	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
-	if err := createKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -547,7 +547,7 @@ func TestDropTable(t *testing.T) {
 	}
 
 	tableSpan := tableDesc.TableSpan()
-	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
@@ -568,13 +568,13 @@ func TestDropTable(t *testing.T) {
 	}
 
 	// Can create a table with the same name.
-	if err := createKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
 		t.Fatal(err)
 	}
 
 	// A lot of garbage has been left behind to be cleaned up by the
 	// asynchronous path.
-	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 
 	if err := descExists(sqlDB, true, tableDesc.ID); err != nil {
 		t.Fatal(err)
@@ -600,7 +600,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
-	if err := createKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -630,7 +630,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	}
 
 	tableSpan := tableDesc.TableSpan()
-	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
@@ -643,7 +643,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		return zoneExists(sqlDB, nil, tableDesc.ID)
 	})
 
-	checkKeyCount(t, kvDB, tableSpan, 0)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
 }
 
 func writeTableDesc(ctx context.Context, db *client.DB, tableDesc *sqlbase.TableDescriptor) error {
@@ -701,7 +701,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	}
 
 	tableSpan := tableDesc.TableSpan()
-	checkKeyCount(t, kvDB, tableSpan, numRows)
+	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
 
 	sqlDB.Exec(t, `DROP TABLE test.t`)
 
@@ -723,7 +723,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return descExists(sqlDB.DB, false, tableDesc.ID)
 	})
-	checkKeyCount(t, kvDB, tableSpan, 0)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
 }
 
 // Tests dropping a table that is interleaved within
@@ -741,13 +741,13 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
-	createKVInterleavedTable(t, sqlDB, numRows)
+	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	tableDescInterleaved := sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
 	tableSpan := tableDesc.TableSpan()
 
-	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
+	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
 		t.Fatal(err)
 	}
@@ -764,7 +764,7 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 		return descExists(sqlDB, false, tableDescInterleaved.ID)
 	})
 
-	checkKeyCount(t, kvDB, tableSpan, numRows)
+	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
 }
 
 func TestDropTableInTxn(t *testing.T) {
