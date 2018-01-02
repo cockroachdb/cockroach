@@ -222,6 +222,10 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	// Ensure the shorthand index syntax works.
 	sqlutils.SetZoneConfig(t, sqlDB, `INDEX "primary"`, yamlOverride)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, `INDEX "primary"`, primaryRow)
+
+	// Ensure the session database is respected.
+	sqlutils.SetZoneConfig(t, sqlDB, "PARTITION p0 OF TABLE t", yamlOverride)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "PARTITION p0 OF TABLE t", p0Row)
 }
 
 func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
