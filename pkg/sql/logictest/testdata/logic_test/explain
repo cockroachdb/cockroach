@@ -60,6 +60,17 @@ EXPLAIN (PLAN,DISTSQL) SELECT 1
 statement error unsupported EXPLAIN option
 EXPLAIN (PLAN,UNKNOWN) SELECT 1
 
+statement error could not determine data type of placeholder \$1
+EXPLAIN (TYPES) SELECT $1
+
+query TITTTTT colnames
+EXPLAIN (TYPES) SELECT $1::INT
+----
+Tree           Level  Type      Field     Description               Columns          Ordering
+render         0      render    ·         ·                         ("$1::INT" int)  "$1::INT"=CONST
+│             0      ·         render 0  (($1)[string]::INT)[int]  ·                ·
+└── emptyrow  1      emptyrow  ·         ·                         ("$1::INT" int)  "$1::INT"=CONST
+
 # Ensure that tracing results are sorted after gathering
 query TITTTTT
 EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
