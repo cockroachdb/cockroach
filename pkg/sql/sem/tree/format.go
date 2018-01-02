@@ -203,11 +203,12 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 	if f.disambiguateDatumTypes {
 		var typ types.T
 		if d, isDatum := n.(Datum); isDatum {
-			if d.AmbiguousFormat() {
+			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {
+				// p.typ will be nil if the placeholder has not been type-checked yet.
+				typ = p.typ
+			} else if d.AmbiguousFormat() {
 				typ = d.ResolvedType()
 			}
-		} else if p, isPlaceholder := n.(*Placeholder); isPlaceholder {
-			typ = p.typ
 		}
 		if typ != nil {
 			buf.WriteString(":::")
