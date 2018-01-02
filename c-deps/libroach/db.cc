@@ -2605,3 +2605,11 @@ const rocksdb::Comparator* CockroachComparator() { return &kComparator; }
 rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch) {
   return new DBBatchInserter(batch);
 }
+
+DBStatus DBLockFile(DBSlice filename, DBFileLock* lock) {
+  return ToDBStatus(rocksdb::Env::Default()->LockFile(ToString(filename), (rocksdb::FileLock**)lock));
+}
+
+DBStatus DBUnlockFile(DBFileLock lock) {
+  return ToDBStatus(rocksdb::Env::Default()->UnlockFile((rocksdb::FileLock*)lock));
+}
