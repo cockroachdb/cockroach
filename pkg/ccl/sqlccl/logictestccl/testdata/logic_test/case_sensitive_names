@@ -1,0 +1,21 @@
+# LogicTest: default
+
+statement ok
+CREATE TABLE p (a INT PRIMARY KEY) PARTITION BY LIST (a) (
+  PARTITION P1 VALUES IN (1),
+  PARTITION "P1" VALUES IN (2),
+  PARTITION "Amélie" VALUES IN (3)
+)
+
+query TT
+SHOW CREATE TABLE p
+----
+p  CREATE TABLE p (
+   a INT NOT NULL,
+   CONSTRAINT "primary" PRIMARY KEY (a ASC),
+   FAMILY "primary" (a)
+) PARTITION BY LIST (a) (
+   PARTITION p1 VALUES IN ((1)),
+   PARTITION "P1" VALUES IN ((2)),
+   PARTITION "Amélie" VALUES IN ((3))
+)
