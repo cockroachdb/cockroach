@@ -773,20 +773,22 @@ func (txn *Txn) Exec(
 			}
 		}
 
-		if _, ok := err.(*roachpb.UnhandledRetryableError); ok {
+		cause := errors.Cause(err)
+
+		if _, ok := cause.(*roachpb.UnhandledRetryableError); ok {
 			// We sent transactional requests, so the TxnCoordSender was supposed to
 			// turn retryable errors into HandledRetryableTxnError.
 			log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.Exec level: %s", err)
 		}
 
-		retErr, retryable := err.(*roachpb.HandledRetryableTxnError)
+		retErr, retryable := cause.(*roachpb.HandledRetryableTxnError)
 		if retryable && !txn.IsRetryableErrMeantForTxn(*retErr) {
 			// Make sure the txn record that err carries is for this txn.
 			// If it's not, we terminate the "retryable" character of the error. We
 			// might get a HandledRetryableTxnError if the closure ran another
 			// transaction internally and let the error propagate upwards.
 			return errors.Wrapf(
-				retErr,
+				err,
 				"retryable error from another txn. Current txn ID: %v", txn.Proto().ID)
 		}
 		if !opt.AutoRetry || !retryable {
