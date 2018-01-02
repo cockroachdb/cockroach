@@ -775,10 +775,21 @@ func (r *Replica) destroyDataRaftMuLocked(
 
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
-	if err := clearRangeData(ctx, r.Desc(), ms.KeyCount, r.store.Engine(), batch); err != nil {
+	desc := r.Desc()
+	if err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch); err != nil {
 		return err
 	}
 	clearTime := timeutil.Now()
+
+	// Suggest the cleared range to the compactor queue.
+	r.store.compactor.SuggestCompaction(ctx, storagebase.SuggestedCompaction{
+		StartKey: roachpb.Key(desc.StartKey),
+		EndKey:   roachpb.Key(desc.EndKey),
+		Compaction: storagebase.Compaction{
+			Bytes:            ms.Total(),
+			SuggestedAtNanos: clearTime.UnixNano(),
+		},
+	})
 
 	// Save a tombstone to ensure that replica IDs never get reused.
 	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {

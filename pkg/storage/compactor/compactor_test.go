@@ -505,7 +505,7 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 	defer cleanup()
 
 	// Add a suggested compaction -- this won't get processed by this
-	// compactor for two minutes.
+	// compactor for an hour.
 	compactor.opts.CompactionMinInterval = time.Hour
 	compactor.SuggestCompaction(context.Background(), storagebase.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
@@ -567,10 +567,8 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
 		}
 		// Verify compaction queue is empty.
-		if empty, err := compactor.isSpanEmpty(
-			context.Background(), keys.LocalStoreSuggestedCompactionsMin, keys.LocalStoreSuggestedCompactionsMax,
-		); err != nil || !empty {
-			return fmt.Errorf("compaction queue not empty or err: %t, %v", empty, err)
+		if bytesQueued, err := compactor.examineQueue(context.Background()); err != nil || bytesQueued > 0 {
+			return fmt.Errorf("compaction queue not empty (%d bytes) or err %v", bytesQueued, err)
 		}
 		return nil
 	})
