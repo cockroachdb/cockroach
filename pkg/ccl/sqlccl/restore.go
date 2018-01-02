@@ -406,7 +406,7 @@ type importEntry struct {
 	entryType importEntryType
 
 	// Only set if entryType is backupSpan
-	backup BackupDescriptor
+	start, end hlc.Timestamp
 
 	// Only set if entryType is backupFile
 	dir  roachpb.ExportStorage
@@ -414,6 +414,13 @@ type importEntry struct {
 
 	// Only set if entryType is request
 	files []roachpb.ImportRequest_File
+}
+
+func errOnMissingRange(span intervalccl.Range, start, end hlc.Timestamp) error {
+	return errors.Errorf(
+		"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
+		start, end, roachpb.Key(span.Start), roachpb.Key(span.End),
+	)
 }
 
 // makeImportSpans pivots the backups, which are grouped by time, into
@@ -442,8 +449,14 @@ type importEntry struct {
 //
 // NB: All grouping operates in the pre-rewrite keyspace, meaning the keyranges
 // as they were backed up, not as they're being restored.
+//
+// If a span is not covered, the onMissing function is called with the span and
+// time missing to determine what error, if any, should be returned.
 func makeImportSpans(
-	tableSpans []roachpb.Span, backups []BackupDescriptor, lowWaterMark roachpb.Key,
+	tableSpans []roachpb.Span,
+	backups []BackupDescriptor,
+	lowWaterMark roachpb.Key,
+	onMissing func(span intervalccl.Range, start, end hlc.Timestamp) error,
 ) ([]importEntry, hlc.Timestamp, error) {
 	// Put the covering for the already-completed spans into the
 	// OverlapCoveringMerge input first. Payloads are returned in the same order
@@ -487,11 +500,19 @@ func makeImportSpans(
 		}
 
 		var backupSpanCovering intervalccl.Covering
+		for _, s := range b.IntroducedSpans {
+			backupSpanCovering = append(backupSpanCovering, intervalccl.Range{
+				Start:   s.Key,
+				End:     s.EndKey,
+				Payload: importEntry{Span: s, entryType: backupSpan, start: hlc.Timestamp{}, end: b.StartTime},
+			})
+		}
+
 		for _, s := range b.Spans {
 			backupSpanCovering = append(backupSpanCovering, intervalccl.Range{
 				Start:   s.Key,
 				End:     s.EndKey,
-				Payload: importEntry{Span: s, entryType: backupSpan, backup: b},
+				Payload: importEntry{Span: s, entryType: backupSpan, start: b.StartTime, end: b.EndTime},
 			})
 		}
 		backupCoverings = append(backupCoverings, backupSpanCovering)
@@ -532,13 +553,13 @@ rangeLoop:
 			case tableSpan:
 				needed = true
 			case backupSpan:
-				if ts != ie.backup.StartTime {
+				if ts != ie.start {
 					return nil, hlc.Timestamp{}, errors.Errorf(
 						"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
-						ts, ie.backup.StartTime,
+						ts, ie.start,
 						roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
 				}
-				ts = ie.backup.EndTime
+				ts = ie.end
 			case backupFile:
 				if len(ie.file.Path) > 0 {
 					files = append(files, roachpb.ImportRequest_File{
@@ -551,9 +572,9 @@ rangeLoop:
 		}
 		if needed {
 			if ts != maxEndTime {
-				return nil, hlc.Timestamp{}, errors.Errorf(
-					"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
-					ts, maxEndTime, roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
+				if err := onMissing(importRange, ts, maxEndTime); err != nil {
+					return nil, hlc.Timestamp{}, err
+				}
 			}
 			// If needed is false, we have data backed up that is not necessary
 			// for this restore. Skip it.
@@ -861,7 +882,7 @@ func restore(
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	lowWaterMark := job.Record.Details.(jobs.RestoreDetails).LowWaterMark
-	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark)
+	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark, errOnMissingRange)
 	if err != nil {
 		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
