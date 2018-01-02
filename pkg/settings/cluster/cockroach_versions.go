@@ -127,7 +127,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		//
 		// These backwards-incompatible changes include:
 		//   - writing table descriptors with a partitioning scheme
-		//   - writing table descriptors with derived CHECK constraints
 		//   - writing zone configs with index or partition subzones
 		//
 		// There is no guarantee that upgrading a cluster that uses partitioning
