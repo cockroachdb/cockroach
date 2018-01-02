@@ -86,7 +86,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Node Liveness Heartbeat Latency: 99th percentile"
+    <LineGraph title="Node Heartbeat Latency: 99th percentile"
       tooltip={`The 99th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.
                               Values are displayed individually for each node.`}>
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
@@ -104,7 +104,7 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Node Liveness Heartbeat Latency: 90th percentile"
+    <LineGraph title="Node Heartbeat Latency: 90th percentile"
       tooltip={`The 90th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period.
                               Values are displayed individually for each node.`}>
       <Axis units={AxisUnits.Duration} label="heartbeat latency">
