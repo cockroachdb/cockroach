@@ -207,5 +207,29 @@ export const nodesSummarySelector = createSelector(
   },
 );
 
+/**
+ * nodesSummarySelector returns a directory object containing a variety of
+ * computed information based on the current nodes. This object is easy to
+ * connect to components on child pages.
+ */
+export const commissionedNodesSummarySelector = createSelector(
+  nodesSummarySelector,
+  (nodesSummary) => {
+    const commisionedNodeIds = _.keys(_.filter(nodesSummary.livenessStatusByNodeID, (livenessStatus) => {
+        return (livenessStatus !== LivenessStatus.DECOMMISSIONED)
+      }
+    ));
+
+    return {
+      nodeStatuses: nodesSummary.nodeStatuses,
+      nodeIDs: _.filter(nodesSummary.nodeIDs, (_, nodeID) => (commisionedNodeIds.indexOf(nodeID.toString()) != -1)),
+      nodeStatusByID: nodesSummary.nodeStatusByID,
+      nodeSums: nodesSummary.nodeSums,
+      livenessStatusByNodeID: nodesSummary.livenessStatusByNodeID,
+      livenessByNodeID: nodesSummary.livenessByNodeID,
+    };
+  },
+);
+
 const nodesSummaryType = nullOfReturnType(nodesSummarySelector);
 export type NodesSummary = typeof nodesSummaryType;

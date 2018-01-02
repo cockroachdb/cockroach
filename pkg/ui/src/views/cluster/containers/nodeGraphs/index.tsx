@@ -17,7 +17,7 @@ import ClusterSummaryBar from "./summaryBar";
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import { commissionedNodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
@@ -230,7 +230,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 export default connect(
   (state: AdminUIState) => {
     return {
-      nodesSummary: nodesSummarySelector(state),
+      nodesSummary: commissionedNodesSummarySelector(state),
       nodesQueryValid: state.cachedData.nodes.valid,
       livenessQueryValid: state.cachedData.nodes.valid,
       hoverState: hoverStateSelector(state),
