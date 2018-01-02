@@ -129,6 +129,11 @@ SELECT currval('foo')
 ----
 2
 
+query T
+SELECT pg_sequence_parameters('foo'::regclass::oid)
+----
+(1,1,9223372036854775807,1,f,1,20)
+
 # You can create a sequence with different increment.
 
 statement ok
@@ -143,6 +148,11 @@ query I
 SELECT nextval('bar')
 ----
 6
+
+query T
+SELECT pg_sequence_parameters('bar'::regclass::oid)
+----
+(1,1,9223372036854775807,5,f,1,20)
 
 # You can create a sequence with different start and increment.
 
@@ -159,6 +169,11 @@ SELECT nextval('baz')
 ----
 7
 
+query T
+SELECT pg_sequence_parameters('baz'::regclass::oid)
+----
+(2,1,9223372036854775807,5,f,1,20)
+
 # You can create a sequence that goes down.
 
 statement ok
@@ -173,6 +188,11 @@ query I
 SELECT nextval('down_test')
 ----
 9
+
+query T
+SELECT pg_sequence_parameters('down_test'::regclass::oid)
+----
+(10,-9223372036854775808,-1,-1,f,1,20)
 
 
 # You can create and use a sequence with special characters.
