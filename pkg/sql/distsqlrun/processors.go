@@ -367,10 +367,6 @@ type processorBase struct {
 	// used as a RowSource.
 	started bool
 	closed  bool
-
-	// consumerStatus is used by the RowSource interface to signal that the
-	// consumer is done accepting rows or is no longer accepting data.
-	consumerStatus ConsumerStatus
 }
 
 // OutputTypes is part of the processor interface.
@@ -431,21 +427,29 @@ func (pb *processorBase) internalClose() bool {
 	return closing
 }
 
+// rowSourceBase provides common functionality for RowSource implementations
+// that need to track consumer status.
+type rowSourceBase struct {
+	// consumerStatus is used by the RowSource interface to signal that the
+	// consumer is done accepting rows or is no longer accepting data.
+	consumerStatus ConsumerStatus
+}
+
 // consumerDone helps processors RowSource.ConsumerDone.
-func (pb *processorBase) consumerDone(name string) {
-	if pb.consumerStatus != NeedMoreRows {
+func (rb *rowSourceBase) consumerDone(name string) {
+	if rb.consumerStatus != NeedMoreRows {
 		log.Fatalf(context.Background(), "%s already done or closed: %d",
-			name, pb.consumerStatus)
+			name, rb.consumerStatus)
 	}
-	pb.consumerStatus = DrainRequested
+	rb.consumerStatus = DrainRequested
 }
 
 // consumerDone helps processors RowSource.ConsumerClosed.
-func (pb *processorBase) consumerClosed(name string) {
-	if pb.consumerStatus == ConsumerClosed {
+func (rb *rowSourceBase) consumerClosed(name string) {
+	if rb.consumerStatus == ConsumerClosed {
 		log.Fatalf(context.Background(), "%s already closed", name)
 	}
-	pb.consumerStatus = ConsumerClosed
+	rb.consumerStatus = ConsumerClosed
 }
 
 // noopProcessor is a processor that simply passes rows through from the
@@ -529,9 +533,6 @@ func (n *noopProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		if row == nil {
 			return nil, n.producerMeta(nil /* err */)
 		}
-		if n.consumerStatus != NeedMoreRows {
-			continue
-		}
 
 		outRow, status, err := n.out.ProcessRow(n.ctx, row)
 		if err != nil {
@@ -552,13 +553,11 @@ func (n *noopProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (n *noopProcessor) ConsumerDone() {
-	n.consumerDone("noop")
 	n.input.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (n *noopProcessor) ConsumerClosed() {
-	n.consumerClosed("noop")
 	// The consumer is done, Next() will not be called again.
 	n.close()
 }

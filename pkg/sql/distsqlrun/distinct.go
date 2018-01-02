@@ -157,9 +157,6 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		if row == nil {
 			return nil, d.producerMeta(nil /* err */)
 		}
-		if d.consumerStatus != NeedMoreRows {
-			continue
-		}
 
 		// If we are processing DISTINCT(x, y) and the input stream is ordered
 		// by x, we define x to be our group key. Our seen set at any given time
@@ -213,13 +210,11 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (d *distinct) ConsumerDone() {
-	d.consumerDone("distinct")
 	d.input.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (d *distinct) ConsumerClosed() {
-	d.consumerClosed("distinct")
 	// The consumer is done, Next() will not be called again.
 	d.close()
 }

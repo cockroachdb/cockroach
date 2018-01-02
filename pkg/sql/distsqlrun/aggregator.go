@@ -90,6 +90,7 @@ func GetAggregateInfo(
 // accompanying SELECT expressions.
 type aggregator struct {
 	processorBase
+	rowSourceBase
 
 	accumulating bool
 	input        RowSource
