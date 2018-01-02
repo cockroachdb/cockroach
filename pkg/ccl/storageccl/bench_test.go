@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -34,7 +35,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 
 	for _, numEntries := range []int{100, 1000, 10000, 300000} {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
-			bankData := sampledataccl.BankRows(numEntries)
+			bankData := bank.FromRows(numEntries).Tables()[0]
 			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
 			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
 			if err != nil {
@@ -92,7 +93,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 
 	for _, numEntries := range []int{100, 1000, 10000} {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
-			bankData := sampledataccl.BankRows(numEntries)
+			bankData := bank.FromRows(numEntries).Tables()[0]
 			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
 			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
 			if err != nil {
@@ -143,7 +144,7 @@ func BenchmarkImport(b *testing.B) {
 
 	for _, numEntries := range []int{1, 100, 10000, 300000} {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
-			bankData := sampledataccl.BankRows(numEntries)
+			bankData := bank.FromRows(numEntries).Tables()[0]
 			subdir := strconv.Itoa(numEntries)
 			backupDir := filepath.Join(tempDir, subdir)
 			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)

@@ -755,6 +755,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/tylertreat/hdrhistogram-writer"
+  packages = ["."]
+  revision = "d105e3c15daaac745539bdd3e4a1f743b8feda09"
+
+[[projects]]
+  branch = "master"
   name = "github.com/wadey/gocovmerge"
   packages = ["."]
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
@@ -851,6 +857,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "679bf9ad71b5a7ff49ebb930e975ffd90abf5d56155eb1778c2e46d1dd4c95e1"
+  inputs-digest = "b19d347783d403acfdaf23b7352aec6febff937181dae556bae2881be4780f5a"
   solver-name = "gps-cdcl"
   solver-version = 1
