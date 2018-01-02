@@ -3858,3 +3858,53 @@ func TestFailedConfChange(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestStoreRangeRemovalCompactionSuggestion verifies that if a replica
+// is removed from a store, a compaction suggestion is made to the
+// compactor queue.
+func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2)
+
+	repl, err := mtc.stores[0].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := repl.AnnotateCtx(context.Background())
+
+	deleteStore := mtc.stores[2]
+	if err := repl.ChangeReplicas(
+		ctx,
+		roachpb.REMOVE_REPLICA,
+		roachpb.ReplicationTarget{
+			NodeID:  deleteStore.Ident.NodeID,
+			StoreID: deleteStore.Ident.StoreID,
+		},
+		repl.Desc(),
+		storage.ReasonRebalance,
+		"",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Check for a compaction metric indicating non-zero bytes are queued.
+		if c := mtc.stores[2].Compactor().Metrics.BytesQueued.Value(); c == 0 {
+			return errors.Errorf("expected non-zero bytes queued in suggested compaction queue; got %d", c)
+		}
+		// Verify that no compaction metrics are showing non-zero bytes in the
+		// other stores.
+		for i := 0; i < 2; i++ {
+			if c := mtc.stores[i].Compactor().Metrics.BytesQueued.Value(); c != 0 {
+				return errors.Errorf("expected zero bytes queued in suggested compaction queue; got %d", c)
+			}
+		}
+		return nil
+	})
+}
