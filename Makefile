@@ -404,6 +404,12 @@ HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 CONFIGURE_FLAGS :=
 CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
 
+# The following flag informs cmake to not print percent completes on target
+# completion, to prevent spammy output from make when c-deps are all already
+# built. Percent completion messages are still printed when actual compilation
+# is being performed.
+CMAKE_FLAGS += -DCMAKE_TARGET_MESSAGES=OFF
+
 # override so that no one is tempted to make USE_STDMALLOC=1 instead of make
 # TAGS=stdmalloc; without TAGS=stdmalloc, Go will still try to link jemalloc.
 override USE_STDMALLOC := $(findstring stdmalloc,$(TAGS))
@@ -618,7 +624,7 @@ libcryptopp: $(CRYPTOPP_DIR)/Makefile
 
 .PHONY: libjemalloc
 libjemalloc: $(JEMALLOC_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
+	@$(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static | grep -v "Nothing to be done" || true
 
 .PHONY: libprotobuf
 libprotobuf: $(PROTOBUF_DIR)/Makefile
