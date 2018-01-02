@@ -202,13 +202,23 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 	if err != nil {
 		return nil, err
 	}
+	cols := planColumns(plan)
 	if stmt.ExpectedTypes != nil {
-		if !stmt.ExpectedTypes.TypesEqual(planColumns(plan)) {
+		if !stmt.ExpectedTypes.TypesEqual(cols) {
 			return nil, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
 	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
+		return nil, err
+	}
+
+	// Ensure that any hidden result column is effectively hidden.
+	// We do this before optimization below so that the needed
+	// column optimization kills the hidden columns.
+	plan, err = p.hideHiddenColumns(ctx, plan, cols)
+	if err != nil {
+		plan.Close(ctx)
 		return nil, err
 	}
 
@@ -225,6 +235,35 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 		log.Infof(ctx, "statement %s compiled to:\n%s", stmt, planToString(ctx, plan))
 	}
 	return plan, nil
+}
+
+// hideHiddenColumn ensures that if the plan is returning some hidden
+// column(s), it is wrapped into a renderNode which only renders the
+// visible columns.
+func (p *planner) hideHiddenColumns(
+	ctx context.Context, plan planNode, cols sqlbase.ResultColumns,
+) (planNode, error) {
+	hasHidden := false
+	for i := range cols {
+		if cols[i].Hidden {
+			hasHidden = true
+			break
+		}
+	}
+	if !hasHidden {
+		// Nothing to do.
+		return plan, nil
+	}
+
+	var tn tree.TableName
+	newPlan, err := p.insertRender(ctx, plan, &tn)
+	if err != nil {
+		// Don't return a nil plan on error -- the caller must be able to
+		// Close() it even if the replacement fails.
+		return plan, err
+	}
+
+	return newPlan, nil
 }
 
 // startPlan starts the plan and all its sub-query nodes.
