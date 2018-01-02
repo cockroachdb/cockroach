@@ -27,13 +27,13 @@ import (
 )
 
 // planObserver is the interface to implement by components that need
-// to visit a planNode tree.
+// to visit a PlanNode tree.
 // Used mainly by EXPLAIN, but also for the collector of back-references
 // for view definitions.
 type planObserver struct {
 	// enterNode is invoked upon entering a tree node. It can return false to
 	// stop the recursion at this node.
-	enterNode func(ctx context.Context, nodeName string, plan planNode) (bool, error)
+	enterNode func(ctx context.Context, nodeName string, plan PlanNode) (bool, error)
 
 	// expr is invoked for each expression field in each node.
 	expr func(nodeName, fieldName string, n int, expr tree.Expr)
@@ -42,7 +42,7 @@ type planObserver struct {
 	attr func(nodeName, fieldName, attr string)
 
 	// leaveNode is invoked upon leaving a tree node.
-	leaveNode func(nodeName string, plan planNode) error
+	leaveNode func(nodeName string, plan PlanNode) error
 
 	// subqueryNode is invoked for each sub-query node. It can return
 	// an error to stop the recursion entirely.
@@ -52,7 +52,7 @@ type planObserver struct {
 // walkPlan performs a depth-first traversal of the plan given as
 // argument, informing the planObserver of the node details at each
 // level.
-func walkPlan(ctx context.Context, plan planNode, observer planObserver) error {
+func walkPlan(ctx context.Context, plan PlanNode, observer planObserver) error {
 	v := makePlanVisitor(ctx, observer)
 	v.visit(plan)
 	return v.err
@@ -64,20 +64,20 @@ type planVisitor struct {
 	ctx      context.Context
 
 	// subplans is a temporary accumulator array used when collecting
-	// sub-query plans at each planNode.
-	subplans []planNode
+	// sub-query plans at each PlanNode.
+	subplans []PlanNode
 	err      error
 }
 
 // makePlanVisitor creates a planVisitor instance.
-// ctx will be stored in the planVisitor and used when visiting planNode's and
+// ctx will be stored in the planVisitor and used when visiting PlanNode's and
 // expressions..
 func makePlanVisitor(ctx context.Context, observer planObserver) planVisitor {
 	return planVisitor{observer: observer, ctx: ctx}
 }
 
 // visit is the recursive function that supports walkPlan().
-func (v *planVisitor) visit(plan planNode) {
+func (v *planVisitor) visit(plan PlanNode) {
 	if v.err != nil {
 		return
 	}
@@ -119,7 +119,7 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "size", description)
 		}
 
-		var subplans []planNode
+		var subplans []PlanNode
 		for i, tuple := range n.tuples {
 			for j, expr := range tuple {
 				if n.columns[j].Omitted {
@@ -138,7 +138,7 @@ func (v *planVisitor) visit(plan planNode) {
 		subplans := v.expr(name, "expr", -1, n.expr, nil)
 		v.subqueries(name, subplans)
 
-	case *scanNode:
+	case *ScanNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.desc.Name, n.index.Name))
 			if n.noIndexJoin {
@@ -167,7 +167,7 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.source.plan)
 
 	case *renderNode:
-		var subplans []planNode
+		var subplans []PlanNode
 		for i, r := range n.render {
 			subplans = v.expr(name, "render", i, r, subplans)
 		}
@@ -223,7 +223,7 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.left.plan)
 		v.visit(n.right.plan)
 
-	case *limitNode:
+	case *LimitNode:
 		subplans := v.expr(name, "count", -1, n.countExpr, nil)
 		subplans = v.expr(name, "offset", -1, n.offsetExpr, subplans)
 		v.subqueries(name, subplans)
@@ -287,7 +287,7 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.plan)
 
 	case *groupNode:
-		var subplans []planNode
+		var subplans []PlanNode
 		for i, agg := range n.funcs {
 			subplans = v.expr(name, "aggregate", i, agg.expr, subplans)
 		}
@@ -298,7 +298,7 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.plan)
 
 	case *windowNode:
-		var subplans []planNode
+		var subplans []PlanNode
 		for i, agg := range n.funcs {
 			subplans = v.expr(name, "window", i, agg.expr, subplans)
 		}
@@ -333,7 +333,7 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "into", buf.String())
 		}
 
-		var subplans []planNode
+		var subplans []PlanNode
 		for i, dexpr := range n.defaultExprs {
 			subplans = v.expr(name, "default", i, dexpr, subplans)
 		}
@@ -363,7 +363,7 @@ func (v *planVisitor) visit(plan planNode) {
 				v.observer.attr(name, "set", buf.String())
 			}
 		}
-		var subplans []planNode
+		var subplans []PlanNode
 		for i, rexpr := range n.rh.exprs {
 			subplans = v.expr(name, "returning", i, rexpr, subplans)
 		}
@@ -377,7 +377,7 @@ func (v *planVisitor) visit(plan planNode) {
 		if v.observer.attr != nil {
 			v.observer.attr(name, "from", n.tableDesc.Name)
 		}
-		var subplans []planNode
+		var subplans []PlanNode
 		for i, rexpr := range n.rh.exprs {
 			subplans = v.expr(name, "returning", i, rexpr, subplans)
 		}
@@ -398,7 +398,7 @@ func (v *planVisitor) visit(plan planNode) {
 		}
 
 	case *setVarNode:
-		var subplans []planNode
+		var subplans []PlanNode
 		for i, texpr := range n.typedValues {
 			subplans = v.expr(name, "value", i, texpr, subplans)
 		}
@@ -445,7 +445,7 @@ func (v *planVisitor) visit(plan planNode) {
 
 // subqueries informs the observer that the following sub-plans are
 // for sub-queries.
-func (v *planVisitor) subqueries(nodeName string, subplans []planNode) {
+func (v *planVisitor) subqueries(nodeName string, subplans []PlanNode) {
 	if len(subplans) == 0 || v.err != nil {
 		return
 	}
@@ -460,8 +460,8 @@ func (v *planVisitor) subqueries(nodeName string, subplans []planNode) {
 // expr wraps observer.expr() and provides it with the current node's
 // name. It also collects the plans for the sub-queries.
 func (v *planVisitor) expr(
-	nodeName string, fieldName string, n int, expr tree.Expr, subplans []planNode,
-) []planNode {
+	nodeName string, fieldName string, n int, expr tree.Expr, subplans []PlanNode,
+) []PlanNode {
 	if v.err != nil {
 		return subplans
 	}
@@ -487,7 +487,7 @@ func (v *planVisitor) expr(
 }
 
 // planVisitor is also an Expr visitor whose task is to collect
-// sub-query plans for the surrounding planNode.
+// sub-query plans for the surrounding PlanNode.
 var _ tree.Visitor = &planVisitor{}
 
 func (v *planVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
@@ -510,18 +510,18 @@ func (v *planVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 }
 func (v *planVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
-// nodeName returns the name of the given planNode as string.  The
+// nodeName returns the name of the given PlanNode as string.  The
 // node's current state is taken into account, e.g. sortNode has
 // either name "sort" or "nosort" depending on whether sorting is
 // needed.
-func nodeName(plan planNode) string {
+func nodeName(plan PlanNode) string {
 	// Some nodes have custom names depending on attributes.
 	switch n := plan.(type) {
 	case *sortNode:
 		if !n.needSort {
 			return "nosort"
 		}
-	case *scanNode:
+	case *ScanNode:
 		if n.reverse {
 			return "revscan"
 		}
@@ -531,7 +531,7 @@ func nodeName(plan planNode) string {
 		}
 	}
 
-	name, ok := planNodeNames[reflect.TypeOf(plan)]
+	name, ok := PlanNodeNames[reflect.TypeOf(plan)]
 	if !ok {
 		panic(fmt.Sprintf("name missing for type %T", plan))
 	}
@@ -539,10 +539,10 @@ func nodeName(plan planNode) string {
 	return name
 }
 
-// planNodeNames is the mapping from node type to strings.  The
+// PlanNodeNames is the mapping from node type to strings.  The
 // strings are constant and not precomputed so that the type names can
 // be changed without changing the output of "EXPLAIN".
-var planNodeNames = map[reflect.Type]string{
+var PlanNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterIndexNode{}):           "alter index",
 	reflect.TypeOf(&alterTableNode{}):           "alter table",
 	reflect.TypeOf(&alterSequenceNode{}):        "alter sequence",
@@ -576,11 +576,11 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&indexJoinNode{}):            "index-join",
 	reflect.TypeOf(&insertNode{}):               "insert",
 	reflect.TypeOf(&joinNode{}):                 "join",
-	reflect.TypeOf(&limitNode{}):                "limit",
+	reflect.TypeOf(&LimitNode{}):                "limit",
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
 	reflect.TypeOf(&testingRelocateNode{}):      "testingRelocate",
 	reflect.TypeOf(&renderNode{}):               "render",
-	reflect.TypeOf(&scanNode{}):                 "scan",
+	reflect.TypeOf(&ScanNode{}):                 "scan",
 	reflect.TypeOf(&scatterNode{}):              "scatter",
 	reflect.TypeOf(&scrubNode{}):                "scrub",
 	reflect.TypeOf(&setVarNode{}):               "set",

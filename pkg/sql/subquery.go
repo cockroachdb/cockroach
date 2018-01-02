@@ -38,7 +38,7 @@ type subquery struct {
 	execMode subqueryExecMode
 	expanded bool
 	started  bool
-	plan     planNode
+	plan     PlanNode
 	result   tree.Datum
 }
 
@@ -107,7 +107,7 @@ func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	return s.result, nil
 }
 
-func (s *subquery) doEval(ctx context.Context, p *planner) (result tree.Datum, err error) {
+func (s *subquery) doEval(ctx context.Context, p *Planner) (result tree.Datum, err error) {
 	// After evaluation, there is no plan remaining.
 	defer func() { s.plan.Close(ctx); s.plan = nil }()
 
@@ -254,7 +254,7 @@ func (v *subquerySpanCollector) subqueryNode(ctx context.Context, sq *subquery) 
 	return nil
 }
 
-func collectSubquerySpans(params runParams, plan planNode) (roachpb.Spans, error) {
+func collectSubquerySpans(params runParams, plan PlanNode) (roachpb.Spans, error) {
 	v := subquerySpanCollector{params: params}
 	po := planObserver{subqueryNode: v.subqueryNode}
 	if err := walkPlan(params.ctx, plan, po); err != nil {
@@ -267,7 +267,7 @@ func collectSubquerySpans(params runParams, plan planNode) (roachpb.Spans, error
 // sql.subquery node and an initial query plan for running the
 // subquery.
 type subqueryVisitor struct {
-	*planner
+	*Planner
 	columns int
 	err     error
 
@@ -359,9 +359,9 @@ func (v *subqueryVisitor) replaceSubquery(
 
 	// Calling newPlan() might recursively invoke replaceSubqueries, so we need
 	// to preserve the state of the visitor across the call to newPlan().
-	visitorCopy := v.planner.subqueryVisitor
-	plan, err := v.planner.newPlan(v.ctx, sub.Select, nil)
-	v.planner.subqueryVisitor = visitorCopy
+	visitorCopy := v.Planner.subqueryVisitor
+	plan, err := v.Planner.newPlan(v.ctx, sub.Select, nil)
+	v.Planner.subqueryVisitor = visitorCopy
 	if err != nil {
 		return nil, err
 	}
@@ -457,10 +457,10 @@ func (v *subqueryVisitor) replaceSubquery(
 	return result, nil
 }
 
-func (p *planner) replaceSubqueries(
+func (p *Planner) replaceSubqueries(
 	ctx context.Context, expr tree.Expr, columns int,
 ) (tree.Expr, error) {
-	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns, ctx: ctx}
+	p.subqueryVisitor = subqueryVisitor{Planner: p, columns: columns, ctx: ctx}
 	expr, _ = tree.WalkExpr(&p.subqueryVisitor, expr)
 	return expr, p.subqueryVisitor.err
 }

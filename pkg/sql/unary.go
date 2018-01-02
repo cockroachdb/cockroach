@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// unaryNode is a planNode with no columns and a single row with empty results
+// unaryNode is a PlanNode with no columns and a single row with empty results
 // which is used by select statements that have no table. It is used for its
 // property as the join identity.
 type unaryNode struct {

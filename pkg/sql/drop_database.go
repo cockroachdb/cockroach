@@ -43,7 +43,7 @@ type dropDatabaseNode struct {
 // (cockroach database == postgres schema). the postgres default of not
 // dropping the schema if there are dependent objects is more sensible
 // (see the RESTRICT and CASCADE options).
-func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
+func (p *Planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (PlanNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -190,7 +190,7 @@ func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 // descriptors from the list that are dependent on other descriptors in the
 // list (e.g. if view v1 depends on table t1, then v1 will be filtered from
 // the list).
-func (p *planner) filterCascadedTables(
+func (p *Planner) filterCascadedTables(
 	ctx context.Context, tables []*sqlbase.TableDescriptor,
 ) ([]*sqlbase.TableDescriptor, error) {
 	// Accumulate the set of all tables/views that will be deleted by cascade
@@ -210,7 +210,7 @@ func (p *planner) filterCascadedTables(
 	return filteredTableList, nil
 }
 
-func (p *planner) accumulateDependentTables(
+func (p *Planner) accumulateDependentTables(
 	ctx context.Context, dependentTables map[sqlbase.ID]bool, desc *sqlbase.TableDescriptor,
 ) error {
 	for _, ref := range desc.DependedOnBy {

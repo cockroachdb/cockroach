@@ -24,7 +24,7 @@ import (
 
 // setNeededColumns informs the node about which columns are
 // effectively needed by the consumer of its result rows.
-func setNeededColumns(plan planNode, needed []bool) {
+func setNeededColumns(plan PlanNode, needed []bool) {
 	switch n := plan.(type) {
 	case *createTableNode:
 		if n.n.As() {
@@ -42,7 +42,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 			setNeededColumns(n.plan, allColumns(n.plan))
 		}
 
-	case *limitNode:
+	case *LimitNode:
 		setNeededColumns(n.plan, needed)
 
 	case *indexJoinNode:
@@ -52,7 +52,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		// TODO(radu/knz): see the comments at the start of index_join.go,
 		// perhaps this can be optimized to utilize the column values
 		// already provided by the index instead of re-retrieving them
-		// using the table scanNode.
+		// using the table ScanNode.
 		setNeededColumns(n.table, needed)
 		setNeededColumns(n.index, n.primaryKeyColumns)
 
@@ -86,7 +86,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 		markOmitted(n.columns, needed)
 
-	case *scanNode:
+	case *ScanNode:
 		// Reset the needed columns set.
 		n.valNeededForCol = util.FastIntSet{}
 		for i, colNeeded := range needed {
@@ -225,7 +225,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 }
 
 // allColumns returns true for every column produced by the plan.
-func allColumns(plan planNode) []bool {
+func allColumns(plan PlanNode) []bool {
 	needed := make([]bool, len(planColumns(plan)))
 	for i := range needed {
 		needed[i] = true

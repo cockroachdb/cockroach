@@ -26,19 +26,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// distinctNode de-duplicates rows returned by a wrapped planNode.
+// distinctNode de-duplicates rows returned by a wrapped PlanNode.
 type distinctNode struct {
-	plan planNode
+	plan PlanNode
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
 
-	// distinctOnColIdxs are the column indices of the child planNode and
+	// distinctOnColIdxs are the column indices of the child PlanNode and
 	// is what defines the distinct key.
 	// For a normal DISTINCT (without the ON clause), distinctOnColIdxs
-	// contains all the column indices of the child planNode.
+	// contains all the column indices of the child PlanNode.
 	// Otherwise, distinctOnColIdxs is a strict subset of the child
-	// planNode's column indices indicating which columns are specified in
+	// PlanNode's column indices indicating which columns are specified in
 	// the DISTINCT ON (<exprs>) clause.
 	distinctOnColIdxs util.FastIntSet
 
@@ -46,15 +46,15 @@ type distinctNode struct {
 }
 
 // distinct constructs a distinctNode.
-func (p *planner) distinct(
+func (p *Planner) distinct(
 	ctx context.Context, n *tree.SelectClause, r *renderNode,
-) (planNode, *distinctNode, error) {
+) (PlanNode, *distinctNode, error) {
 	if !n.Distinct {
 		return nil, nil, nil
 	}
 
 	d := &distinctNode{}
-	plan := planNode(d)
+	plan := PlanNode(d)
 
 	if n.DistinctOn == nil {
 		return plan, d, nil

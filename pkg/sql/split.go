@@ -31,13 +31,13 @@ type splitNode struct {
 
 	tableDesc *sqlbase.TableDescriptor
 	index     *sqlbase.IndexDescriptor
-	rows      planNode
+	rows      PlanNode
 	run       splitRun
 }
 
 // Split executes a KV split.
 // Privileges: INSERT on table.
-func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
+func (p *Planner) Split(ctx context.Context, n *tree.Split) (PlanNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err

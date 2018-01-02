@@ -30,15 +30,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-var scanNodePool = sync.Pool{
+// ScanNodePool is a pool of scan nodes.
+var ScanNodePool = sync.Pool{
 	New: func() interface{} {
-		return &scanNode{}
+		return &ScanNode{}
 	},
 }
 
-// A scanNode handles scanning over the key/value pairs for a table and
+// ScanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
-type scanNode struct {
+type ScanNode struct {
 	desc  *sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
 
@@ -81,7 +82,7 @@ type scanNode struct {
 	// from the original filter.
 	origFilter tree.TypedExpr
 
-	// if non-zero, hardLimit indicates that the scanNode only needs to provide
+	// if non-zero, hardLimit indicates that the ScanNode only needs to provide
 	// this many rows (after applying any filter). It is a "hard" guarantee that
 	// Next will only be called this many times.
 	hardLimit int64
@@ -114,27 +115,31 @@ const (
 	publicAndNonPublicColumns scanVisibility = 1
 )
 
-func (p *planner) Scan() *scanNode {
-	n := scanNodePool.Get().(*scanNode)
+// Scan perform the actual scan.
+func (p *Planner) Scan() *ScanNode {
+	n := ScanNodePool.Get().(*ScanNode)
 	return n
 }
 
-// scanNode implements tree.IndexedVarContainer.
-var _ tree.IndexedVarContainer = &scanNode{}
+// ScanNode implements tree.IndexedVarContainer.
+var _ tree.IndexedVarContainer = &ScanNode{}
 
-func (n *scanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+// IndexedVarEval evaluates at the specified index.
+func (n *ScanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return n.run.row[idx].Eval(ctx)
 }
 
-func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
+// IndexedVarResolvedType returns the type at the specified index.
+func (n *ScanNode) IndexedVarResolvedType(idx int) types.T {
 	return n.resultColumns[idx].Typ
 }
 
-func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+// IndexedVarNodeFormatter returns the formatted name at the specified index.
+func (n *ScanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return tree.Name(n.resultColumns[idx].Name)
 }
 
-// scanRun contains the run-time state of scanNode during local execution.
+// scanRun contains the run-time state of ScanNode during local execution.
 type scanRun struct {
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
@@ -146,14 +151,14 @@ type scanRun struct {
 	scanInitialized  bool
 	isSecondaryIndex bool
 
-	// Indicates if this scanNode will do a physical data check. This is
+	// Indicates if this ScanNode will do a physical data check. This is
 	// only true when running SCRUB commands.
 	isCheck bool
 
 	fetcher sqlbase.MultiRowFetcher
 }
 
-func (n *scanNode) startExec(params runParams) error {
+func (n *ScanNode) startExec(params runParams) error {
 	tableArgs := sqlbase.MultiRowFetcherTableArgs{
 		Desc:             n.desc,
 		Index:            n.index,
@@ -166,12 +171,14 @@ func (n *scanNode) startExec(params runParams) error {
 		false /* isCheck */, &params.p.alloc, tableArgs)
 }
 
-func (n *scanNode) Close(context.Context) {
-	*n = scanNode{}
-	scanNodePool.Put(n)
+// Close closes a scan node.
+func (n *ScanNode) Close(context.Context) {
+	*n = ScanNode{}
+	ScanNodePool.Put(n)
 }
 
-func (n *scanNode) Next(params runParams) (bool, error) {
+// Next steps the scan.
+func (n *ScanNode) Next(params runParams) (bool, error) {
 	tracing.AnnotateTrace()
 	if !n.run.scanInitialized {
 		if err := n.initScan(params); err != nil {
@@ -199,20 +206,21 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 	return false, nil
 }
 
-func (n *scanNode) Values() tree.Datums {
+// Values returns the scanned values.
+func (n *ScanNode) Values() tree.Datums {
 	return n.run.row
 }
 
 // disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
 // where we scan batches of unordered spans.
-func (n *scanNode) disableBatchLimit() {
+func (n *ScanNode) disableBatchLimit() {
 	n.disableBatchLimits = true
 	n.hardLimit = 0
 	n.softLimit = 0
 }
 
 // initScan sets up the rowFetcher and starts a scan.
-func (n *scanNode) initScan(params runParams) error {
+func (n *ScanNode) initScan(params runParams) error {
 	limitHint := n.limitHint()
 	if err := n.run.fetcher.StartScan(
 		params.ctx,
@@ -228,7 +236,7 @@ func (n *scanNode) initScan(params runParams) error {
 	return nil
 }
 
-func (n *scanNode) limitHint() int64 {
+func (n *ScanNode) limitHint() int64 {
 	var limitHint int64
 	if n.hardLimit != 0 {
 		limitHint = n.hardLimit
@@ -246,10 +254,10 @@ func (n *scanNode) limitHint() int64 {
 	return limitHint
 }
 
-// Initializes a scanNode with a table descriptor.
+// Initializes a ScanNode with a table descriptor.
 // wantedColumns is optional.
-func (n *scanNode) initTable(
-	p *planner,
+func (n *ScanNode) initTable(
+	p *Planner,
 	desc *sqlbase.TableDescriptor,
 	indexHints *tree.IndexHints,
 	scanVisibility scanVisibility,
@@ -273,7 +281,7 @@ func (n *scanNode) initTable(
 	return n.initDescDefaults(p.planDeps, scanVisibility, wantedColumns)
 }
 
-func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
+func (n *ScanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
 	if indexHints.Index != "" {
 		// Search index by name.
 		indexName := string(indexHints.Index)
@@ -360,7 +368,7 @@ func appendUnselectedColumns(
 // Initializes the column structures.
 // wantedColumns is optional.
 // An error may be returned only if wantedColumns is set.
-func (n *scanNode) initDescDefaults(
+func (n *ScanNode) initDescDefaults(
 	planDeps planDependencies, scanVisibility scanVisibility, wantedColumns []tree.ColumnID,
 ) error {
 	n.scanVisibility = scanVisibility
@@ -399,7 +407,7 @@ func (n *scanNode) initDescDefaults(
 		planDeps[n.desc.ID] = deps
 	}
 
-	// Set up the rest of the scanNode.
+	// Set up the rest of the ScanNode.
 	switch scanVisibility {
 	case publicColumns:
 		// Mutations are invisible.
@@ -428,7 +436,7 @@ func (n *scanNode) initDescDefaults(
 
 // initOrdering initializes the ordering info using the selected index. This
 // must be called after index selection is performed.
-func (n *scanNode) initOrdering(exactPrefix int, evalCtx *tree.EvalContext) {
+func (n *ScanNode) initOrdering(exactPrefix int, evalCtx *tree.EvalContext) {
 	if n.index == nil {
 		return
 	}
@@ -440,7 +448,7 @@ func (n *scanNode) initOrdering(exactPrefix int, evalCtx *tree.EvalContext) {
 //   - we scan a given index (potentially in reverse order), and
 //   - the first `exactPrefix` columns of the index each have a constant value
 //     (see physicalProps).
-func (n *scanNode) computePhysicalProps(
+func (n *ScanNode) computePhysicalProps(
 	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool, evalCtx *tree.EvalContext,
 ) physicalProps {
 	var pp physicalProps

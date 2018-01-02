@@ -28,7 +28,8 @@ type controlJobNode struct {
 	desiredStatus jobs.Status
 }
 
-func (p *planner) PauseJob(ctx context.Context, n *tree.PauseJob) (planNode, error) {
+// PauseJob builds a control job plan node to pause a job.
+func (p *Planner) PauseJob(ctx context.Context, n *tree.PauseJob) (PlanNode, error) {
 	typedJobID, err := p.analyzeExpr(
 		ctx,
 		n.ID,
@@ -48,7 +49,8 @@ func (p *planner) PauseJob(ctx context.Context, n *tree.PauseJob) (planNode, err
 	}, nil
 }
 
-func (p *planner) ResumeJob(ctx context.Context, n *tree.ResumeJob) (planNode, error) {
+// ResumeJob builds a control job plan node to resume a job.
+func (p *Planner) ResumeJob(ctx context.Context, n *tree.ResumeJob) (PlanNode, error) {
 	typedJobID, err := p.analyzeExpr(
 		ctx,
 		n.ID,
@@ -68,7 +70,8 @@ func (p *planner) ResumeJob(ctx context.Context, n *tree.ResumeJob) (planNode, e
 	}, nil
 }
 
-func (p *planner) CancelJob(ctx context.Context, n *tree.CancelJob) (planNode, error) {
+// CancelJob builds a control job plan node to cancel a job.
+func (p *Planner) CancelJob(ctx context.Context, n *tree.CancelJob) (PlanNode, error) {
 	typedJobID, err := p.analyzeExpr(
 		ctx,
 		n.ID,

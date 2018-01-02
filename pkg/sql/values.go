@@ -33,7 +33,7 @@ type valuesNode struct {
 	tuples  [][]tree.TypedExpr
 	// isConst is set if the valuesNode only contains constant expressions (no
 	// subqueries). In this case, rows will be evaluated during the first call
-	// to planNode.Start and memoized for future consumption. A valuesNode with
+	// to PlanNode.Start and memoized for future consumption. A valuesNode with
 	// isConst = true can serve its values multiple times. See valuesNode.Reset.
 	isConst bool
 
@@ -41,9 +41,9 @@ type valuesNode struct {
 }
 
 // Values implements the VALUES clause.
-func (p *planner) Values(
+func (p *Planner) Values(
 	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	v := &valuesNode{
 		n:       n,
 		isConst: true,
@@ -102,15 +102,15 @@ func (p *planner) Values(
 	}
 
 	// TODO(nvanbenschoten): if v.isConst, we should be able to evaluate n.rows
-	// ahead of time. This requires changing the contract for planNode.Close such
-	// that it must always be called unless an error is returned from a planNode
+	// ahead of time. This requires changing the contract for PlanNode.Close such
+	// that it must always be called unless an error is returned from a PlanNode
 	// constructor. This would simplify the Close contract, but would make some
 	// code (like in planner.SelectClause) more messy.
 	v.isConst = !p.hasSubqueries
 	return v, nil
 }
 
-func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
+func (p *Planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
 		columns: columns,
 		isConst: true,
@@ -138,7 +138,7 @@ func (n *valuesNode) startExec(params runParams) error {
 
 	// This node is coming from a SQL query (as opposed to sortNode and
 	// others that create a valuesNode internally for storing results
-	// from other planNodes), so its expressions need evaluting.
+	// from other PlanNodes), so its expressions need evaluting.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
 		params.evalCtx.Mon.MakeBoundAccount(),

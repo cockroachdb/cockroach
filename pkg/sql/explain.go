@@ -42,7 +42,7 @@ var explainStrings = map[explainMode]string{
 // info about the wrapped statement.
 //
 // Privileges: the same privileges as the statement being explained.
-func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error) {
+func (p *Planner) Explain(ctx context.Context, n *tree.Explain) (PlanNode, error) {
 	mode := explainNone
 
 	optimized := true

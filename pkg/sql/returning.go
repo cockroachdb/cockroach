@@ -27,7 +27,7 @@ import (
 // returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
 // result rows, one for each call to append().
 type returningHelper struct {
-	p *planner
+	p *Planner
 	// Expected columns.
 	columns    sqlbase.ResultColumns
 	ivarHelper tree.IndexedVarHelper
@@ -49,7 +49,7 @@ type returningHelper struct {
 
 // newReturningHelper creates a new returningHelper for use by an
 // insert/update node.
-func (p *planner) newReturningHelper(
+func (p *Planner) newReturningHelper(
 	ctx context.Context,
 	r tree.ReturningClause,
 	desiredTypes []types.T,

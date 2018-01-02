@@ -48,7 +48,7 @@ type sqlCheckConstraintCheckOperation struct {
 // sqlCheckConstraintCheckOperation during local execution.
 type sqlCheckConstraintCheckRun struct {
 	started     bool
-	rows        planNode
+	rows        PlanNode
 	hasRowsLeft bool
 }
 

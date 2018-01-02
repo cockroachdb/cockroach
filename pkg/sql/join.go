@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// joinNode is a planNode whose rows are the result of an inner or
+// joinNode is a PlanNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
 	joinType joinType
@@ -69,7 +69,7 @@ const (
 // makeJoin constructs a planDataSource for a JOIN.
 // The source might be a joinNode, or it could be a renderNode on top of a
 // joinNode (in the case of outer natural joins).
-func (p *planner) makeJoin(
+func (p *Planner) makeJoin(
 	ctx context.Context,
 	astJoinType string,
 	left planDataSource,
@@ -418,7 +418,7 @@ func (n *joinNode) hashJoinStart(params runParams) error {
 	return nil
 }
 
-// Next implements the planNode interface.
+// Next implements the PlanNode interface.
 func (n *joinNode) Next(params runParams) (res bool, err error) {
 	// If results available from from previously computed results, we just
 	// return true.
@@ -599,12 +599,12 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 	return n.run.buffer.Next(), nil
 }
 
-// Values implements the planNode interface.
+// Values implements the PlanNode interface.
 func (n *joinNode) Values() tree.Datums {
 	return n.run.buffer.Values()
 }
 
-// Close implements the planNode interface.
+// Close implements the PlanNode interface.
 func (n *joinNode) Close(ctx context.Context) {
 	n.run.buffer.Close(ctx)
 	n.run.buffer = nil
@@ -832,9 +832,9 @@ func (n *joinNode) joinOrdering() physicalProps {
 // TODO(richardwu): For prefix/subset joins, this ancestor will be the furthest
 // ancestor down the interleaved hierarchy which contains all the columns of
 // the maximal join prefix (see maximalJoinPrefix in distsql_join.go).
-func (n *joinNode) interleavedNodes() (ancestor *scanNode, descendant *scanNode) {
-	leftScan, leftOk := n.left.plan.(*scanNode)
-	rightScan, rightOk := n.right.plan.(*scanNode)
+func (n *joinNode) interleavedNodes() (ancestor *ScanNode, descendant *ScanNode) {
+	leftScan, leftOk := n.left.plan.(*ScanNode)
+	rightScan, rightOk := n.right.plan.(*ScanNode)
 
 	if !leftOk || !rightOk {
 		return nil, nil

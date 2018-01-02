@@ -47,7 +47,7 @@ type cteNameEnvironmentFrame map[tree.Name]cteSource
 // cteSource is the value part of an entry in an environment frame. It holds
 // the plan that will be used to retrieve the data that's named by the CTE.
 type cteSource struct {
-	plan planNode
+	plan PlanNode
 	// used is set to true if this CTE has been used as a statement source. It's
 	// only around to prevent multiple use of a CTE, which is currently not
 	// supported.
@@ -65,7 +65,7 @@ func (e cteNameEnvironment) pop() cteNameEnvironment {
 	return e[:len(e)-1]
 }
 
-func popCteNameEnvironment(p *planner) {
+func popCteNameEnvironment(p *Planner) {
 	p.cteNameEnvironment = p.cteNameEnvironment.pop()
 }
 
@@ -73,7 +73,7 @@ func popCteNameEnvironment(p *planner) {
 // environment, with all of the CTE clauses defined in the given tree.With.
 // It returns a resetter function that must be called once the enclosing scope
 // is finished resolving names, which pops the environment frame.
-func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planner), error) {
+func (p *Planner) initWith(ctx context.Context, with *tree.With) (func(p *Planner), error) {
 	if with != nil {
 		frame := make(cteNameEnvironmentFrame)
 		p.cteNameEnvironment = p.cteNameEnvironment.push(frame)
@@ -98,7 +98,7 @@ func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planne
 // getCTEDataSource looks up the table name in the planner's CTE name
 // environment, returning the planDataSource corresponding to the CTE if it was
 // found. The second return parameter returns true if a CTE was found.
-func (p *planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSource, bool, error) {
+func (p *Planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSource, bool, error) {
 	if p.cteNameEnvironment == nil {
 		return planDataSource{}, false, nil
 	}

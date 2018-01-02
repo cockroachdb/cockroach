@@ -22,23 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// AuthorizationAccessor for checking authorization (e.g. desc privileges).
-type AuthorizationAccessor interface {
-	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
-	CheckPrivilege(
-		descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
-	) error
-
-	// CheckAnyPrivilege returns nil if user has any privileges at all.
-	CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error
-
-	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
-	// or node). Includes the named action in the error message.
-	RequireSuperUser(action string) error
-}
-
-var _ AuthorizationAccessor = &planner{}
-
 // CheckPrivilegeForUser verifies that `user`` has `privilege` on `descriptor`.
 func CheckPrivilegeForUser(
 	user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
@@ -51,14 +34,14 @@ func CheckPrivilegeForUser(
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) CheckPrivilege(
+func (p *Planner) CheckPrivilege(
 	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
 	return CheckPrivilegeForUser(p.session.User, descriptor, privilege)
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
+func (p *Planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
 	if isVirtualDescriptor(descriptor) {
 		return nil
 	}
@@ -71,7 +54,7 @@ func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
 }
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
-func (p *planner) RequireSuperUser(action string) error {
+func (p *Planner) RequireSuperUser(action string) error {
 	if p.session.User != security.RootUser && p.session.User != security.NodeUser {
 		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)
 	}

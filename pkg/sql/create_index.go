@@ -33,7 +33,7 @@ type createIndexNode struct {
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
-func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
+func (p *Planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (PlanNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err

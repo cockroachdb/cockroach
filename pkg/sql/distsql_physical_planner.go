@@ -44,20 +44,20 @@ import (
 // DistSQLPlanner is used to generate distributed plans from logical
 // plans. A rough overview of the process:
 //
-//  - the plan is based on a planNode tree (in the future it will be based on an
+//  - the plan is based on a PlanNode tree (in the future it will be based on an
 //    intermediate representation tree). Only a subset of the possible trees is
 //    supported (this can be checked via CheckSupport).
 //
-//  - we generate a physicalPlan for the planNode tree recursively. The
+//  - we generate a physicalPlan for the PlanNode tree recursively. The
 //    physicalPlan consists of a network of processors and streams, with a set
 //    of unconnected "result routers". The physicalPlan also has information on
-//    ordering and on the mapping planNode columns to columns in the result
+//    ordering and on the mapping PlanNode columns to columns in the result
 //    streams (all result routers output streams with the same schema).
 //
-//    The physicalPlan for a scanNode leaf consists of TableReaders, one for each node
+//    The physicalPlan for a ScanNode leaf consists of TableReaders, one for each node
 //    that has one or more ranges.
 //
-//  - for each an internal planNode we start with the plan of the child node(s)
+//  - for each an internal PlanNode we start with the plan of the child node(s)
 //    and add processing stages (connected to the result routers of the children
 //    node).
 type DistSQLPlanner struct {
@@ -179,11 +179,11 @@ func (dsp *DistSQLPlanner) checkExpr(expr tree.Expr) error {
 	return v.err
 }
 
-// CheckSupport looks at a planNode tree and decides:
+// CheckSupport looks at a PlanNode tree and decides:
 //  - whether DistSQL is equipped to handle the query (if not, an error is
 //    returned).
 //  - whether it is recommended that the query be run with DistSQL.
-func (dsp *DistSQLPlanner) CheckSupport(node planNode) (bool, error) {
+func (dsp *DistSQLPlanner) CheckSupport(node PlanNode) (bool, error) {
 	rec, err := dsp.checkSupportForNode(node)
 	if err != nil {
 		return false, err
@@ -251,7 +251,7 @@ func leafType(t types.T) types.T {
 // checkSupportForNode returns a distRecommendation (as described above) or an
 // error if the plan subtree is not supported by DistSQL.
 // TODO(radu): add tests for this.
-func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendation, error) {
+func (dsp *DistSQLPlanner) checkSupportForNode(node PlanNode) (distRecommendation, error) {
 	switch n := node.(type) {
 	case *filterNode:
 		if err := dsp.checkExpr(n.filter); err != nil {
@@ -303,7 +303,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		return rec, nil
 
-	case *scanNode:
+	case *ScanNode:
 		rec := canDistribute
 		if n.hardLimit != 0 || n.softLimit != 0 {
 			// We don't yet recommend distributing plans where limits propagate
@@ -348,7 +348,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		// Distribute aggregations if possible.
 		return rec.compose(shouldDistribute), nil
 
-	case *limitNode:
+	case *LimitNode:
 		if err := dsp.checkExpr(n.countExpr); err != nil {
 			return 0, err
 		}
@@ -417,24 +417,24 @@ func (p *planningCtx) sanityCheckAddresses() error {
 	return nil
 }
 
-// physicalPlan is a partial physical plan which corresponds to a planNode
-// (partial in that it can correspond to a planNode subtree and not necessarily
-// to the entire planNode for a given query).
+// physicalPlan is a partial physical plan which corresponds to a PlanNode
+// (partial in that it can correspond to a PlanNode subtree and not necessarily
+// to the entire PlanNode for a given query).
 //
 // It augments distsqlplan.PhysicalPlan with information relating the physical
-// plan to a planNode subtree.
+// plan to a PlanNode subtree.
 //
-// These plans are built recursively on a planNode tree.
+// These plans are built recursively on a PlanNode tree.
 type physicalPlan struct {
 	distsqlplan.PhysicalPlan
 
-	// planToStreamColMap maps planNode Columns() to columns in the result
+	// planToStreamColMap maps PlanNode Columns() to columns in the result
 	// streams. Note that in some cases, not all columns in the result streams
 	// are referenced in the map (this is due to some processors not being
 	// configurable to output only certain columns and will be fixed).
 	//
-	// Conversely, in some cases not all planNode columns have a corresponding
-	// result stream column (these map to index -1); this is the case for scanNode
+	// Conversely, in some cases not all PlanNode columns have a corresponding
+	// result stream column (these map to index -1); this is the case for ScanNode
 	// and indexJoinNode where not all columns in the table are actually used in
 	// the plan.
 	planToStreamColMap []int
@@ -653,9 +653,9 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 }
 
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
-// corresponds to a scanNode, except for the Spans and OutputColumns.
+// corresponds to a ScanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode, evalCtx *tree.EvalContext,
+	n *ScanNode, evalCtx *tree.EvalContext,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
 		Table:   *n.desc,
@@ -671,7 +671,7 @@ func initTableReaderSpec(
 			}
 		}
 		if s.IndexIdx == 0 {
-			err := errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
+			err := errors.Errorf("invalid ScanNode index %v (table %s)", n.index, n.desc.Name)
 			return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
 		}
 	}
@@ -696,8 +696,8 @@ func initTableReaderSpec(
 }
 
 // getOutputColumnsFromScanNode returns the indices of the columns that are
-// returned by a scanNode.
-func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
+// returned by a ScanNode.
+func getOutputColumnsFromScanNode(n *ScanNode) []uint32 {
 	var outputColumns []uint32
 	// TODO(radu): if we have a scan with a filter, valNeededForCol will include
 	// the columns needed for the filter, even if they aren't needed for the
@@ -749,7 +749,7 @@ func (dsp *DistSQLPlanner) convertOrdering(
 // one for each node that has spans that we are reading.
 // overridesResultColumns is optional.
 func (dsp *DistSQLPlanner) createTableReaders(
-	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
+	planCtx *planningCtx, n *ScanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
 	spec, post, err := initTableReaderSpec(n, planCtx.evalCtx)
 	if err != nil {
@@ -1108,7 +1108,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 			// operations are relatively expensive.
 			relToAbsLocalIdx := make([]uint32, len(info.LocalStage))
 			// First prepare and spec local aggregations.
-			// Note the planNode first feeds the input (inputTypes)
+			// Note the PlanNode first feeds the input (inputTypes)
 			// into the local aggregators.
 			for i, localFunc := range info.LocalStage {
 				localAgg := distsqlrun.AggregatorSpec_Aggregation{
@@ -1384,7 +1384,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	}
 
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
-	// planNode columns to stream columns because the aggregator
+	// PlanNode columns to stream columns because the aggregator
 	// has been programmed to produce the same columns as the groupNode.
 	if !planToStreamMapSet {
 		p.planToStreamColMap = identityMap(p.planToStreamColMap, len(aggregations))
@@ -1459,9 +1459,9 @@ ColLoop:
 }
 
 // getTypesForPlanResult returns the types of the elements in the result streams
-// of a plan that corresponds to a given planNode. If planToSreamColMap is nil,
+// of a plan that corresponds to a given PlanNode. If planToSreamColMap is nil,
 // a 1-1 mapping is assumed.
-func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.ColumnType {
+func getTypesForPlanResult(node PlanNode, planToStreamColMap []int) []sqlbase.ColumnType {
 	nodeColumns := planColumns(node)
 	if planToStreamColMap == nil {
 		// No remapping.
@@ -1697,10 +1697,10 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 }
 
 func (dsp *DistSQLPlanner) createPlanForNode(
-	planCtx *planningCtx, node planNode,
+	planCtx *planningCtx, node PlanNode,
 ) (physicalPlan, error) {
 	switch n := node.(type) {
-	case *scanNode:
+	case *ScanNode:
 		return dsp.createTableReaders(planCtx, n, nil)
 
 	case *indexJoinNode:
@@ -1749,7 +1749,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 		return plan, nil
 
-	case *limitNode:
+	case *LimitNode:
 		plan, err := dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err

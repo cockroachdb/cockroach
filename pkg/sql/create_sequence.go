@@ -29,7 +29,8 @@ type createSequenceNode struct {
 	dbDesc *sqlbase.DatabaseDescriptor
 }
 
-func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
+// CreateSequence builds a create sequence plan node.
+func (p *Planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (PlanNode, error) {
 	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err

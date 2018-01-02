@@ -39,7 +39,7 @@ import (
 type createTableNode struct {
 	n          *tree.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
-	sourcePlan planNode
+	sourcePlan PlanNode
 
 	run createTableRun
 }
@@ -47,7 +47,7 @@ type createTableNode struct {
 // CreateTable creates a table.
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
-func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNode, error) {
+func (p *Planner) CreateTable(ctx context.Context, n *tree.CreateTable) (PlanNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		}
 	}
 
-	var sourcePlan planNode
+	var sourcePlan PlanNode
 	if n.As() {
 		// The sourcePlan is needed to determine the set of columns to use
 		// to populate the new table descriptor in Start() below. We
@@ -329,7 +329,7 @@ func matchesIndex(
 	return true
 }
 
-func (p *planner) resolveFK(
+func (p *Planner) resolveFK(
 	ctx context.Context,
 	tbl *sqlbase.TableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
@@ -580,7 +580,7 @@ func colNames(cols []sqlbase.ColumnDescriptor) string {
 	return s.String()
 }
 
-func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.TableDescriptor) error {
+func (p *Planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.TableDescriptor) error {
 	if err := td.SetUpVersion(); err != nil {
 		return err
 	}
@@ -594,7 +594,7 @@ func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.Tabl
 	return nil
 }
 
-func (p *planner) addInterleave(
+func (p *Planner) addInterleave(
 	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
@@ -702,7 +702,7 @@ func addInterleave(
 
 // finalizeInterleave creates backreferences from an interleaving parent to the
 // child data being interleaved.
-func (p *planner) finalizeInterleave(
+func (p *Planner) finalizeInterleave(
 	ctx context.Context, desc *sqlbase.TableDescriptor, index sqlbase.IndexDescriptor,
 ) error {
 	// TODO(dan): This is similar to finalizeFKs. Consolidate them
@@ -1272,7 +1272,7 @@ func MakeTableDesc(
 }
 
 // makeTableDesc creates a table descriptor from a CreateTable statement.
-func (p *planner) makeTableDesc(
+func (p *Planner) makeTableDesc(
 	ctx context.Context,
 	n *tree.CreateTable,
 	parentID, id sqlbase.ID,

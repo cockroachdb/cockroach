@@ -32,7 +32,7 @@ import (
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
-func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
+func (p *Planner) RenameTable(ctx context.Context, n *tree.RenameTable) (PlanNode, error) {
 	oldTn, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
-func (p *planner) dependentViewRenameError(
+func (p *Planner) dependentViewRenameError(
 	ctx context.Context, typeName, objName string, parentID, viewID sqlbase.ID,
 ) error {
 	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, viewID)

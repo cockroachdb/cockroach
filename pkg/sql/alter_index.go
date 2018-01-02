@@ -33,7 +33,7 @@ type alterIndexNode struct {
 
 // AlterIndex applies a schema change on an index.
 // Privileges: CREATE on table.
-func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode, error) {
+func (p *Planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (PlanNode, error) {
 	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, &n.Index.Table, n.Index, privilege.CREATE)
 	if err != nil {
 		return nil, err

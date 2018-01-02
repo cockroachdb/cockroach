@@ -25,12 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-// explainPlanNode wraps the logic for EXPLAIN as a planNode.
+// explainPlanNode wraps the logic for EXPLAIN as a PlanNode.
 type explainPlanNode struct {
 	explainer explainer
 
 	// plan is the sub-node being explained.
-	plan planNode
+	plan PlanNode
 
 	// expanded indicates whether to invoke expandPlan() on the sub-node.
 	expanded bool
@@ -67,10 +67,10 @@ var explainPlanVerboseColumns = sqlbase.ResultColumns{
 	{Name: "Ordering", Typ: types.String},
 }
 
-// newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
-func (p *planner) makeExplainPlanNode(
-	explainer explainer, expanded, optimized bool, origStmt tree.Statement, plan planNode,
-) planNode {
+// newExplainPlanNode instantiates a PlanNode that runs an EXPLAIN query.
+func (p *Planner) makeExplainPlanNode(
+	explainer explainer, expanded, optimized bool, origStmt tree.Statement, plan PlanNode,
+) PlanNode {
 	columns := explainPlanColumns
 
 	if explainer.showMetadata {
@@ -125,7 +125,7 @@ func (e *explainPlanNode) Close(ctx context.Context) {
 type explainEntry struct {
 	level                 int
 	node, field, fieldVal string
-	plan                  planNode
+	plan                  PlanNode
 }
 
 // explainer represents the run-time state of the EXPLAIN logic.
@@ -154,7 +154,7 @@ type explainer struct {
 	// expressions and result columns.
 	showTypes bool
 
-	// level is the current depth in the tree of planNodes.
+	// level is the current depth in the tree of PlanNodes.
 	level int
 
 	// explainEntry accumulates entries (nodes or attributes).
@@ -164,8 +164,8 @@ type explainer struct {
 var emptyString = tree.NewDString("")
 
 // populateExplain walks the plan and generates rows in a valuesNode.
-func (p *planner) populateExplain(
-	ctx context.Context, e *explainer, v *valuesNode, plan planNode,
+func (p *Planner) populateExplain(
+	ctx context.Context, e *explainer, v *valuesNode, plan PlanNode,
 ) error {
 	e.entries = nil
 	_ = walkPlan(ctx, plan, e.observer())
@@ -218,8 +218,8 @@ func (p *planner) populateExplain(
 	return nil
 }
 
-// planToString uses explain() to build a string representation of the planNode.
-func planToString(ctx context.Context, plan planNode) string {
+// planToString uses explain() to build a string representation of the PlanNode.
+func planToString(ctx context.Context, plan PlanNode) string {
 	e := explainer{
 		showMetadata: true,
 		showExprs:    true,
@@ -273,7 +273,7 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
 }
 
 // enterNode implements the planObserver interface.
-func (e *explainer) enterNode(_ context.Context, name string, plan planNode) (bool, error) {
+func (e *explainer) enterNode(_ context.Context, name string, plan PlanNode) (bool, error) {
 	e.entries = append(e.entries, explainEntry{
 		level: e.level,
 		node:  name,
@@ -294,13 +294,13 @@ func (e *explainer) attr(nodeName, fieldName, attr string) {
 }
 
 // leaveNode implements the planObserver interface.
-func (e *explainer) leaveNode(name string, _ planNode) error {
+func (e *explainer) leaveNode(name string, _ PlanNode) error {
 	e.level--
 	return nil
 }
 
 // formatColumns converts a column signature for a data source /
-// planNode to a string. The column types are printed iff the 2nd
+// PlanNode to a string. The column types are printed iff the 2nd
 // argument specifies so.
 func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 	var buf bytes.Buffer

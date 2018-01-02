@@ -26,13 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// showTraceNode is a planNode that wraps another node and uses session
+// showTraceNode is a PlanNode that wraps another node and uses session
 // tracing to report all the database events that occur during its
 // execution.
 // It is used as the top-level node for SHOW TRACE FOR statements.
 type showTraceNode struct {
 	// plan is the wrapped execution plan that will be traced.
-	plan    planNode
+	plan    PlanNode
 	columns sqlbase.ResultColumns
 
 	// If set, the trace will also include "KV trace" messages - verbose messages
@@ -44,7 +44,7 @@ type showTraceNode struct {
 
 // ShowTrace shows the current stored session trace.
 // Privileges: None.
-func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
+func (p *Planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (PlanNode, error) {
 	const fullSelection = `
        timestamp,
        timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
@@ -171,7 +171,7 @@ WHERE message LIKE 'fetched: %'
 // kvTrancingEnabled: If set, the trace will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the
 //   messages are per-row.
-func (p *planner) makeShowTraceNode(plan planNode, kvTracingEnabled bool) (planNode, error) {
+func (p *Planner) makeShowTraceNode(plan PlanNode, kvTracingEnabled bool) (PlanNode, error) {
 	desc, err := p.getVirtualTabler().getVirtualTableDesc(&sessionTraceTableName)
 	if err != nil {
 		return nil, err
@@ -223,7 +223,7 @@ func (n *showTraceNode) Next(params runParams) (bool, error) {
 			defer sp.Finish()
 
 			slowPath := true
-			if a, ok := n.plan.(planNodeFastPath); ok {
+			if a, ok := n.plan.(PlanNodeFastPath); ok {
 				if count, res := a.FastPathResults(); res {
 					log.VEventf(consumeCtx, 2, "fast path - rows affected: %d", count)
 					slowPath = false

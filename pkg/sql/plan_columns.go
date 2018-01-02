@@ -19,12 +19,12 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 var noColumns = make(sqlbase.ResultColumns, 0)
 
 // planColumns returns the signature of rows logically computed
-// by the given planNode.
+// by the given PlanNode.
 // The signature consists of the list of columns with
 // their name and type.
 //
 // The length of the returned slice is guaranteed to be equal to the
-// length of the tuple returned by the planNode's Values() method
+// length of the tuple returned by the PlanNode's Values() method
 // during local execution.
 //
 // The returned slice is *not* mutable. To modify the result column
@@ -32,20 +32,20 @@ var noColumns = make(sqlbase.ResultColumns, 0)
 // planMutableColumns defined below.
 //
 // Available after newPlan().
-func planColumns(plan planNode) sqlbase.ResultColumns {
+func planColumns(plan PlanNode) sqlbase.ResultColumns {
 	return getPlanColumns(plan, false)
 }
 
 // planMutableColumns is similar to planColumns() but returns a
 // ResultColumns slice that can be modified by the caller.
-func planMutableColumns(plan planNode) sqlbase.ResultColumns {
+func planMutableColumns(plan PlanNode) sqlbase.ResultColumns {
 	return getPlanColumns(plan, true)
 }
 
 // getPlanColumns implements the logic for the
 // planColumns/planMutableColumns functions. The mut argument
 // indicates whether the slice should be mutable (mut=true) or not.
-func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
+func getPlanColumns(plan PlanNode, mut bool) sqlbase.ResultColumns {
 	switch n := plan.(type) {
 
 	// Nodes that define their own schema.
@@ -63,7 +63,7 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *renderNode:
 		return n.columns
-	case *scanNode:
+	case *ScanNode:
 		return n.resultColumns
 	case *sortNode:
 		return n.columns
@@ -112,7 +112,7 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.source.plan, mut)
 	case *indexJoinNode:
 		return getPlanColumns(n.table, mut)
-	case *limitNode:
+	case *LimitNode:
 		return getPlanColumns(n.plan, mut)
 	case *unionNode:
 		if n.inverted {

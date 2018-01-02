@@ -40,18 +40,18 @@ import (
 //
 // - at instantiation:
 //
-//   - the original table scan is replaced by two scanNodes, one for the
+//   - the original table scan is replaced by two ScanNodes, one for the
 //     index and one for the table.
 //   - the filter expression is split in a filter-specific part and
-//     table-specific part, and propagated to the respective scanNodes.
+//     table-specific part, and propagated to the respective ScanNodes.
 //
 // - during execution:
 //
-//   - rows from the index scanNode are fetched; this contains
+//   - rows from the index ScanNode are fetched; this contains
 //     both the indexed columns (as pk of the index itself)
 //     and the PK of the indexed table.
 //   - using the PK of the indexed table, rows from the indexed
-//     table are fetched using the table scanNode.
+//     table are fetched using the table ScanNode.
 //
 //   The work is batched: we pull joinBatchSize rows from the index
 //   and use the primary key to construct spans that are looked up in
@@ -61,29 +61,29 @@ import (
 // optimization implemented by setNeededColumns() (needed_columns.go)
 // which aims to reduce I/O by avoiding the decoding of column data
 // when it is not required downstream. This optimization needs to know
-// which columns are needed from the index scanNode and which are
-// needed from the table scanNode. This is determined as follows:
+// which columns are needed from the index ScanNode and which are
+// needed from the table ScanNode. This is determined as follows:
 //
-// - from the index scanNode: we need at least the indexed table's PK
+// - from the index ScanNode: we need at least the indexed table's PK
 //   (for otherwise the table lookup would not be possible), and
 //   the columns needed by the index-specific filter.
-// - from the table scanNode: we need at least the columns needed by
+// - from the table ScanNode: we need at least the columns needed by
 //   the table-specific filter.
 //
 // Here the question remains of where to obtain the additional columns
 // needed by the downstream consumer node. For any non-indexed
-// columns, the table scanNode naturally provides the values. For
-// indexed columns, currently the table scanNode also provides the
+// columns, the table ScanNode naturally provides the values. For
+// indexed columns, currently the table ScanNode also provides the
 // values, but really this could be optimized further to re-use the
-// column data from the index scanNode instead. See the comment
-// for valNeededForCol in scanNode.
+// column data from the index ScanNode instead. See the comment
+// for valNeededForCol in ScanNode.
 type indexJoinNode struct {
-	index *scanNode
-	table *scanNode
+	index *ScanNode
+	table *ScanNode
 
 	// primaryKeyColumns is the set of PK columns for which the
-	// indexJoinNode requires a value from the index scanNode, to use as
-	// lookup keys in the table scanNode. Note that the index scanNode
+	// indexJoinNode requires a value from the index ScanNode, to use as
+	// lookup keys in the table ScanNode. Note that the index ScanNode
 	// may produce more values than this, e.g. when its filter expression
 	// uses more columns than the PK.
 	primaryKeyColumns []bool
@@ -97,14 +97,14 @@ type indexJoinNode struct {
 // is created separately as a member of the resulting index join node.
 // The new index scan node is also returned alongside the new index join
 // node.
-func (p *planner) makeIndexJoin(
-	origScan *scanNode, exactPrefix int,
-) (resultPlan *indexJoinNode, indexScan *scanNode) {
-	// Reuse the input argument's scanNode and its initialized parameters
+func (p *Planner) makeIndexJoin(
+	origScan *ScanNode, exactPrefix int,
+) (resultPlan *indexJoinNode, indexScan *ScanNode) {
+	// Reuse the input argument's ScanNode and its initialized parameters
 	// at a starting point to build the new indexScan node.
 	indexScan = origScan
 
-	// Create a new scanNode that will be used with the primary index.
+	// Create a new ScanNode that will be used with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
 	// Note: initDescDefaults can only error out if its 3rd argument is not nil.
@@ -120,8 +120,8 @@ func (p *planner) makeIndexJoin(
 	// filter into an index-specific part and a "rest" part.
 	primaryKeyColumns := make([]bool, len(origScan.cols))
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
-		// All the PK columns from the table scanNode must
-		// be fetched in the index scanNode.
+		// All the PK columns from the table ScanNode must
+		// be fetched in the index ScanNode.
 		idx, ok := indexScan.colIdxMap[colID]
 		if !ok {
 			panic(fmt.Sprintf("Unknown column %d in PrimaryIndex!", colID))
@@ -132,7 +132,7 @@ func (p *planner) makeIndexJoin(
 
 	// To split the WHERE filter into an index-specific part and a
 	// "rest" part below the splitFilter() code must know which columns
-	// are provided by the index scanNode. Since primaryKeyColumns only
+	// are provided by the index ScanNode. Since primaryKeyColumns only
 	// contains the PK columns of the indexed table, we also need to
 	// gather here which additional columns are indexed. This is done in
 	// valProvidedIndex.
@@ -172,7 +172,7 @@ func (p *planner) makeIndexJoin(
 	indexScan.filter = indexScan.filterVars.Rebind(indexScan.filter, true, false)
 
 	// Ensure that the remaining indexed vars are transferred to the
-	// table scanNode fully.
+	// table ScanNode fully.
 	table.filter = table.filterVars.Rebind(table.filter, true, false)
 
 	indexScan.initOrdering(exactPrefix, &p.evalCtx)
@@ -195,14 +195,14 @@ func (p *planner) makeIndexJoin(
 // indexJoinRun stores the run-time state of indexJoinNode during local execution.
 type indexJoinRun struct {
 	// primaryKeyPrefix is the KV key prefix of the rows
-	// retrieved from the table scanNode.
+	// retrieved from the table ScanNode.
 	primaryKeyPrefix roachpb.Key
 
-	// colIDtoRowIndex maps column IDs in the table scanNode into column
-	// IDs in the index scanNode's results. The presence of a column ID
+	// colIDtoRowIndex maps column IDs in the table ScanNode into column
+	// IDs in the index ScanNode's results. The presence of a column ID
 	// in this mapping is not sufficient to cause a column's values to
 	// be produced; which columns are effectively loaded are decided by
-	// the scanNodes' own valNeededForCol, which is updated by
+	// the ScanNodes' own valNeededForCol, which is updated by
 	// setNeededColumns(). So there may be more columns in
 	// colIDtoRowIndex than effectively accessed.
 	colIDtoRowIndex map[sqlbase.ColumnID]int

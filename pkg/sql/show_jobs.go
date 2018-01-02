@@ -22,7 +22,7 @@ import (
 
 // ShowJobs returns all the jobs.
 // Privileges: None.
-func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, error) {
+func (p *Planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (PlanNode, error) {
 	return p.delegateQuery(ctx, "SHOW JOBS",
 		`SELECT id, type, description, username, status, created, started, finished, modified,
             fraction_completed, error, coordinator_id

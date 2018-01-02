@@ -27,7 +27,8 @@ type dropSequenceNode struct {
 	td []*sqlbase.TableDescriptor
 }
 
-func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
+// DropSequence builds a drop sequence plan node.
+func (p *Planner) DropSequence(ctx context.Context, n *tree.DropSequence) (PlanNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()
@@ -101,7 +102,7 @@ func (*dropSequenceNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropSequenceNode) Values() tree.Datums          { return tree.Datums{} }
 func (*dropSequenceNode) Close(context.Context)        {}
 
-func (p *planner) dropSequenceImpl(
+func (p *Planner) dropSequenceImpl(
 	ctx context.Context, seqDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
 ) error {
 	err := p.initiateDropTable(ctx, seqDesc)

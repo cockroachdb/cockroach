@@ -28,7 +28,7 @@ import (
 // the prepared statement. This is not called in normal circumstances by
 // the executor - it merely exists to enable explains and traces for execute
 // statements.
-func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error) {
+func (p *Planner) Execute(ctx context.Context, n *tree.Execute) (PlanNode, error) {
 	if p.isPreparing {
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidPreparedStatementDefinitionError,
 			"can't prepare an EXECUTE statement")

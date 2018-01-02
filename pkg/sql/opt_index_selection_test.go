@@ -163,7 +163,7 @@ func makeTestIndexFromStr(
 
 func makeConstraints(
 	t *testing.T,
-	p *planner,
+	p *Planner,
 	sql string,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,

@@ -135,13 +135,13 @@ type dataSourceInfo struct {
 }
 
 // planDataSource contains the data source information for data
-// produced by a planNode.
+// produced by a PlanNode.
 type planDataSource struct {
 	// info which describe the columns.
 	info *dataSourceInfo
 
 	// plan which can be used to retrieve the data.
-	plan planNode
+	plan PlanNode
 }
 
 // sourceAlias associates a table name (alias) to a set of columns in the result
@@ -239,7 +239,7 @@ func newSourceInfoForSingleTable(tn tree.TableName, columns sqlbase.ResultColumn
 }
 
 // getSources combines zero or more FROM sources into cross-joins.
-func (p *planner) getSources(
+func (p *Planner) getSources(
 	ctx context.Context, sources []tree.TableExpr, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch len(sources) {
@@ -268,7 +268,7 @@ func (p *planner) getSources(
 
 // getVirtualDataSource attempts to find a virtual table with the
 // given name.
-func (p *planner) getVirtualDataSource(
+func (p *Planner) getVirtualDataSource(
 	ctx context.Context, tn *tree.TableName,
 ) (planDataSource, bool, error) {
 	virtual, err := p.session.virtualSchemas.getVirtualTableEntry(tn)
@@ -316,7 +316,7 @@ func (p *planner) getVirtualDataSource(
 			plan: &delayedNode{
 				name:    sourceName.String(),
 				columns: columns,
-				constructor: func(ctx context.Context, p *planner) (planNode, error) {
+				constructor: func(ctx context.Context, p *Planner) (PlanNode, error) {
 					return constructor(ctx, p, prefix)
 				},
 			},
@@ -330,7 +330,7 @@ func (p *planner) getVirtualDataSource(
 // return zero or more than one column, the columns are grouped into
 // a tuple. This is needed for SRF substitution (e.g. `SELECT
 // pg_get_keywords()`).
-func (p *planner) getDataSourceAsOneColumn(
+func (p *Planner) getDataSourceAsOneColumn(
 	ctx context.Context, src *tree.FuncExpr,
 ) (planDataSource, error) {
 	ds, err := p.getDataSource(ctx, src, nil, publicColumns)
@@ -363,7 +363,7 @@ func (p *planner) getDataSourceAsOneColumn(
 
 // getDataSource builds a planDataSource from a single data source clause
 // (TableExpr) in a SelectClause.
-func (p *planner) getDataSource(
+func (p *Planner) getDataSource(
 	ctx context.Context, src tree.TableExpr, hints *tree.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch t := src.(type) {
@@ -458,7 +458,8 @@ func (p *planner) getDataSource(
 	}
 }
 
-func (p *planner) QualifyWithDatabase(
+// QualifyWithDatabase returns a qualified table name including database name.
+func (p *Planner) QualifyWithDatabase(
 	ctx context.Context, t *tree.NormalizableTableName,
 ) (*tree.TableName, error) {
 	tn, err := t.Normalize()
@@ -473,7 +474,7 @@ func (p *planner) QualifyWithDatabase(
 	return tn, nil
 }
 
-func (p *planner) getTableDescByID(
+func (p *Planner) getTableDescByID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
 	descFunc := p.session.tables.getTableVersionByID
@@ -483,7 +484,7 @@ func (p *planner) getTableDescByID(
 	return descFunc(ctx, p.txn, tableID)
 }
 
-func (p *planner) getTableScanByRef(
+func (p *Planner) getTableScanByRef(
 	ctx context.Context, tref *tree.TableRef, hints *tree.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
@@ -573,7 +574,7 @@ func renameSource(
 // getTableScanOrViewPlan builds a planDataSource from a single data source
 // clause (either a table or a view) in a SelectClause, expanding views out
 // into subqueries.
-func (p *planner) getTableScanOrViewPlan(
+func (p *Planner) getTableScanOrViewPlan(
 	ctx context.Context, tn *tree.TableName, hints *tree.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	if tn.PrefixOriginallySpecified {
@@ -590,7 +591,7 @@ func (p *planner) getTableScanOrViewPlan(
 	return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil)
 }
 
-func (p *planner) getTableDesc(
+func (p *Planner) getTableDesc(
 	ctx context.Context, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	if p.avoidCachedDescriptors {
@@ -600,7 +601,7 @@ func (p *planner) getTableDesc(
 	return p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 }
 
-func (p *planner) getPlanForDesc(
+func (p *Planner) getPlanForDesc(
 	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
 	tn *tree.TableName,
@@ -636,7 +637,7 @@ func (p *planner) getPlanForDesc(
 
 // getViewPlan builds a planDataSource for the view specified by the
 // table name and descriptor, expanding out its subquery plan.
-func (p *planner) getViewPlan(
+func (p *Planner) getViewPlan(
 	ctx context.Context, tn *tree.TableName, desc *sqlbase.TableDescriptor,
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
@@ -692,7 +693,7 @@ func (p *planner) getViewPlan(
 
 // getSubqueryPlan builds a planDataSource for a select statement, including
 // for simple VALUES statements.
-func (p *planner) getSubqueryPlan(
+func (p *Planner) getSubqueryPlan(
 	ctx context.Context, tn tree.TableName, sel tree.SelectStatement, cols sqlbase.ResultColumns,
 ) (planDataSource, error) {
 	plan, err := p.newPlan(ctx, sel, nil)
@@ -708,7 +709,7 @@ func (p *planner) getSubqueryPlan(
 	}, nil
 }
 
-func (p *planner) getGeneratorPlan(ctx context.Context, t *tree.FuncExpr) (planDataSource, error) {
+func (p *Planner) getGeneratorPlan(ctx context.Context, t *tree.FuncExpr) (planDataSource, error) {
 	plan, err := p.makeGenerator(ctx, t)
 	if err != nil {
 		return planDataSource{}, err

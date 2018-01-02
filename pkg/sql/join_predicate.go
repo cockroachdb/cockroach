@@ -149,7 +149,7 @@ func (p *joinPredicate) tryAddEqualityFilter(filter tree.Expr, left, right *data
 }
 
 // makeOnPredicate constructs a joinPredicate object for joins with a ON clause.
-func (p *planner) makeOnPredicate(
+func (p *Planner) makeOnPredicate(
 	ctx context.Context, typ joinType, left, right *dataSourceInfo, expr tree.Expr,
 ) (*joinPredicate, *dataSourceInfo, error) {
 	pred, info, err := makeEqualityPredicate(typ, left, right, nil /*leftColNames*/, nil /*rightColNames*/)

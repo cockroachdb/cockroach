@@ -63,9 +63,9 @@ type insertNode struct {
 // Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
-func (p *planner) Insert(
+func (p *Planner) Insert(
 	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	resetter, err := p.initWith(ctx, n.With)
 	if err != nil {
 		return nil, err
@@ -500,7 +500,7 @@ func GenerateInsertRow(
 	return rowVals, nil
 }
 
-func (p *planner) processColumns(
+func (p *Planner) processColumns(
 	tableDesc *sqlbase.TableDescriptor, node tree.UnresolvedNames,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if node == nil {

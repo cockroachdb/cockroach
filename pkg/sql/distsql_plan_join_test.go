@@ -34,8 +34,8 @@ import (
 )
 
 func setTestEqCols(n *joinNode, colNames []string) error {
-	left := n.left.plan.(*scanNode)
-	right := n.right.plan.(*scanNode)
+	left := n.left.plan.(*ScanNode)
+	right := n.right.plan.(*ScanNode)
 
 	n.pred = &joinPredicate{}
 	n.mergeJoinOrdering = nil

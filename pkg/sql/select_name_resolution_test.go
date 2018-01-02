@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func testInitDummySelectNode(p *planner, desc *sqlbase.TableDescriptor) *renderNode {
-	scan := &scanNode{}
+func testInitDummySelectNode(p *Planner, desc *sqlbase.TableDescriptor) *renderNode {
+	scan := &ScanNode{}
 	scan.desc = desc
 	// Note: scan.initDescDefaults only returns an error if its 2nd argument is not nil.
 	_ = scan.initDescDefaults(p.planDeps, publicColumns, nil)

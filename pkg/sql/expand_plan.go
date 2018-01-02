@@ -27,7 +27,7 @@ import (
 // the query plan to its final form, including index selection and
 // expansion of sub-queries. Returns an error if the initialization
 // fails.
-func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, error) {
+func (p *Planner) expandPlan(ctx context.Context, plan PlanNode) (PlanNode, error) {
 	var err error
 	plan, err = doExpandPlan(ctx, p, noParams, plan)
 	if err != nil {
@@ -48,8 +48,8 @@ var noParams = expandParameters{numRowsHint: math.MaxInt64, desiredOrdering: nil
 
 // doExpandPlan is the algorithm that supports expandPlan().
 func doExpandPlan(
-	ctx context.Context, p *planner, params expandParameters, plan planNode,
-) (planNode, error) {
+	ctx context.Context, p *Planner, params expandParameters, plan PlanNode,
+) (PlanNode, error) {
 	var err error
 	switch n := plan.(type) {
 	case *createTableNode:
@@ -90,7 +90,7 @@ func doExpandPlan(
 		}
 
 	case *indexJoinNode:
-		// We ignore the return value because we know the scanNode is preserved.
+		// We ignore the return value because we know the ScanNode is preserved.
 		_, err = doExpandPlan(ctx, p, params, n.index)
 		if err != nil {
 			return plan, err
@@ -141,7 +141,7 @@ func doExpandPlan(
 		// ordinality ordering accordingly.
 		n.optimizeOrdering()
 
-	case *limitNode:
+	case *LimitNode:
 		// Estimate the limit parameters. We can't full eval them just yet,
 		// because evaluation requires running potential sub-queries, which
 		// cannot occur during expand.
@@ -191,14 +191,14 @@ func doExpandPlan(
 	case *distinctNode:
 		plan, err = expandDistinctNode(ctx, p, params, n)
 
-	case *scanNode:
+	case *ScanNode:
 		plan, err = expandScanNode(ctx, p, params, n)
 
 	case *renderNode:
 		plan, err = expandRenderNode(ctx, p, params, n)
 
 	case *delayedNode:
-		var newPlan planNode
+		var newPlan PlanNode
 		newPlan, err = n.constructor(ctx, p)
 		if err != nil {
 			return plan, err
@@ -267,8 +267,8 @@ func elideDoubleSort(parent, source *sortNode) {
 }
 
 func expandDistinctNode(
-	ctx context.Context, p *planner, params expandParameters, d *distinctNode,
-) (planNode, error) {
+	ctx context.Context, p *Planner, params expandParameters, d *distinctNode,
+) (PlanNode, error) {
 	// TODO(radu/knz): perhaps we can propagate the DISTINCT
 	// clause as desired ordering for the source node.
 	var err error
@@ -319,8 +319,8 @@ func expandDistinctNode(
 }
 
 func expandScanNode(
-	ctx context.Context, p *planner, params expandParameters, s *scanNode,
-) (planNode, error) {
+	ctx context.Context, p *Planner, params expandParameters, s *ScanNode,
+) (PlanNode, error) {
 	var analyzeOrdering analyzeOrderingFn
 	if len(params.desiredOrdering) > 0 {
 		analyzeOrdering = func(indexProps physicalProps) (matchingCols, totalCols int) {
@@ -344,8 +344,8 @@ func expandScanNode(
 }
 
 func expandRenderNode(
-	ctx context.Context, p *planner, params expandParameters, r *renderNode,
-) (planNode, error) {
+	ctx context.Context, p *Planner, params expandParameters, r *renderNode,
+) (PlanNode, error) {
 	params.desiredOrdering = translateOrdering(params.desiredOrdering, r)
 
 	var err error
@@ -450,7 +450,7 @@ func translateOrdering(desiredDown sqlbase.ColumnOrdering, r *renderNode) sqlbas
 // This determination cannot be done directly as part of the doExpandPlan
 // recursion (using desiredOrdering) because some nodes (distinctNode) make use
 // of whatever ordering the underlying node happens to provide.
-func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) planNode {
+func (p *Planner) simplifyOrderings(plan PlanNode, usefulOrdering sqlbase.ColumnOrdering) PlanNode {
 	if plan == nil {
 		return nil
 	}
@@ -515,7 +515,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.props.trim(usefulOrdering)
 		n.source = p.simplifyOrderings(n.source, n.restrictOrdering(usefulOrdering))
 
-	case *limitNode:
+	case *LimitNode:
 		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
 
 	case *groupNode:
@@ -580,7 +580,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		sourceOrdering := n.projectChildPropsToOnExprs()
 		n.plan = p.simplifyOrderings(n.plan, sourceOrdering.ordering)
 
-	case *scanNode:
+	case *ScanNode:
 		n.props.trim(usefulOrdering)
 
 	case *renderNode:

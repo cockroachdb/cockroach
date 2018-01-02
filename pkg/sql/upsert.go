@@ -31,7 +31,7 @@ import (
 var upsertExcludedTable = tree.TableName{TableName: "excluded"}
 
 type upsertHelper struct {
-	p                  *planner
+	p                  *Planner
 	evalExprs          []tree.TypedExpr
 	whereExpr          tree.TypedExpr
 	sourceInfo         *dataSourceInfo
@@ -80,7 +80,7 @@ func (uh *upsertHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return uh.sourceInfo.NodeFormatter(idx)
 }
 
-func (p *planner) makeUpsertHelper(
+func (p *Planner) makeUpsertHelper(
 	ctx context.Context,
 	tn *tree.TableName,
 	tableDesc *sqlbase.TableDescriptor,

@@ -85,7 +85,7 @@ func (sqlEngineMetrics) MetricStruct() {}
 // - result is the result set computed by the query/statement.
 // - err is the error encountered, if any.
 func recordStatementSummary(
-	planner *planner,
+	planner *Planner,
 	stmt Statement,
 	distSQLUsed bool,
 	automaticRetryCount int,

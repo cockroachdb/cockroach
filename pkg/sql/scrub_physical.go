@@ -114,14 +114,14 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	); err != nil {
 		return err
 	}
-	plan := planNode(scan)
+	plan := PlanNode(scan)
 
 	neededColumns := make([]bool, len(o.tableDesc.Columns))
 	for _, id := range columnIDs {
 		neededColumns[colIDToIdx[sqlbase.ColumnID(id)]] = true
 	}
 
-	// Optimize the plan. This is required in order to populate scanNode
+	// Optimize the plan. This is required in order to populate ScanNode
 	// spans.
 	plan, err = params.p.optimizePlan(ctx, plan, neededColumns)
 	if err != nil {
@@ -130,7 +130,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 	defer plan.Close(ctx)
 
-	scan = plan.(*scanNode)
+	scan = plan.(*ScanNode)
 
 	span := o.tableDesc.IndexSpan(o.indexDesc.ID)
 	spans := []roachpb.Span{span}

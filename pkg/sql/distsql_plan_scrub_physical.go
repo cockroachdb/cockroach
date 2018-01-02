@@ -29,7 +29,7 @@ import (
 // instead of row data. The plan is finalized.
 func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	planCtx *planningCtx,
-	n *scanNode,
+	n *ScanNode,
 	desc sqlbase.TableDescriptor,
 	indexDesc sqlbase.IndexDescriptor,
 	spans []roachpb.Span,

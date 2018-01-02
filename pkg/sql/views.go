@@ -72,7 +72,7 @@ func (d planDependencies) String() string {
 // information about which indexes and columns are needed from each
 // dependency. The set of columns from the view query's results is
 // also returned.
-func (p *planner) analyzeViewQuery(
+func (p *Planner) analyzeViewQuery(
 	ctx context.Context, viewSelect *tree.Select,
 ) (planDependencies, sqlbase.ResultColumns, error) {
 	// To avoid races with ongoing schema changes to tables that the view

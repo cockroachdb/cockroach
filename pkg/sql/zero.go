@@ -20,14 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// zeroNode is a planNode with no columns and no rows and is used for nodes that
+// zeroNode is a PlanNode with no columns and no rows and is used for nodes that
 // have no results. (e.g. a table for which the filtering condition has a
 // contradiction)
 type zeroNode struct {
-	// We use planNodes as map keys, and zero-size structs are optimized to all
+	// We use PlanNodes as map keys, and zero-size structs are optimized to all
 	// point to the same location in memory. As a result, unless we include some
 	// field in this struct every zeroNode will have the same identity.
-	// In particular, the parallelization detector maps planNodes to go channels
+	// In particular, the parallelization detector maps PlanNodes to go channels
 	// which this causes problems for (see TestParallelizeQueueNoDependencies).
 	_ interface{}
 }

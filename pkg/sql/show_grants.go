@@ -26,7 +26,7 @@ import (
 )
 
 // checkTableExists checks if the table exists by using the security.RootUser.
-func checkTableExists(ctx context.Context, p *planner, tn *tree.TableName) error {
+func checkTableExists(ctx context.Context, p *Planner, tn *tree.TableName) error {
 	if _, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/); err != nil {
 		return sqlbase.NewUndefinedRelationError(tn)
 	}
@@ -37,7 +37,7 @@ func checkTableExists(ctx context.Context, p *planner, tn *tree.TableName) error
 // Privileges: None.
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
-func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode, error) {
+func (p *Planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (PlanNode, error) {
 	var params []string
 	var initCheck func(context.Context) error
 

@@ -46,7 +46,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error
+	populate func(ctx context.Context, p *Planner, prefix string, addRow func(...tree.Datum) error) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -98,7 +98,7 @@ type virtualTableEntry struct {
 	desc     *sqlbase.TableDescriptor
 }
 
-type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
+type virtualTableConstructor func(context.Context, *Planner, string) (PlanNode, error)
 
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
@@ -115,7 +115,7 @@ func (e virtualTableEntry) getPlanInfo(
 		})
 	}
 
-	constructor := func(ctx context.Context, p *planner, prefix string) (planNode, error) {
+	constructor := func(ctx context.Context, p *Planner, prefix string) (PlanNode, error) {
 		v := p.newContainerValuesNode(columns, 0)
 
 		err := e.tableDef.populate(ctx, p, prefix, func(datums ...tree.Datum) error {
@@ -142,7 +142,7 @@ func (e virtualTableEntry) getPlanInfo(
 	return columns, constructor
 }
 
-func (vs *virtualSchemaHolder) init(ctx context.Context, p *planner) error {
+func (vs *virtualSchemaHolder) init(ctx context.Context, p *Planner) error {
 	*vs = virtualSchemaHolder{
 		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames: make([]string, len(virtualSchemas)),
@@ -191,7 +191,7 @@ func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 }
 
 func initVirtualTableDesc(
-	ctx context.Context, p *planner, t virtualSchemaTable,
+	ctx context.Context, p *Planner, t virtualSchemaTable,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {

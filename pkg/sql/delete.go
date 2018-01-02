@@ -45,9 +45,9 @@ type deleteNode struct {
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
-func (p *planner) Delete(
+func (p *Planner) Delete(
 	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
-) (planNode, error) {
+) (PlanNode, error) {
 	resetter, err := p.initWith(ctx, n.With)
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func (d *deleteNode) startExec(params runParams) error {
 	if sel, ok := maybeScan.(*renderNode); ok {
 		maybeScan = sel.source.plan
 	}
-	if scan, ok := maybeScan.(*scanNode); ok && canDeleteWithoutScan(params.ctx, d.n, scan, &d.tw) {
+	if scan, ok := maybeScan.(*ScanNode); ok && canDeleteWithoutScan(params.ctx, d.n, scan, &d.tw) {
 		d.run.fastPath = true
 		return d.fastDelete(params, scan)
 	}
@@ -208,7 +208,7 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 // i.e. if we do not need to know their values for filtering expressions or a
 // RETURNING clause or for updating secondary indexes.
 func canDeleteWithoutScan(
-	ctx context.Context, n *tree.Delete, scan *scanNode, td *tableDeleter,
+	ctx context.Context, n *tree.Delete, scan *ScanNode, td *tableDeleter,
 ) bool {
 	if !td.fastPathAvailable(ctx) {
 		return false
@@ -231,7 +231,7 @@ func canDeleteWithoutScan(
 // `fastDelete` skips the scan of rows and just deletes the ranges that
 // `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
 // that it is safe to do so.
-func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
+func (d *deleteNode) fastDelete(params runParams, scan *ScanNode) error {
 	if err := scan.initScan(params); err != nil {
 		return err
 	}

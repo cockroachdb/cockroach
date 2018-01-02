@@ -28,7 +28,7 @@ import (
 
 // ShowCreateTable returns a SHOW CREATE TABLE statement for the specified table.
 // Privileges: Any privilege on table.
-func (p *planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) (planNode, error) {
+func (p *Planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) (PlanNode, error) {
 	// We make the check whether the name points to a table or not in
 	// SQL, so as to avoid a double lookup (a first one to check if the
 	// descriptor is of the right type, another to populate the
@@ -48,7 +48,7 @@ func (p *planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) 
 
 // ShowCreateView returns a CREATE VIEW statement for the specified view.
 // Privileges: Any privilege on view.
-func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (planNode, error) {
+func (p *Planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (PlanNode, error) {
 	// We make the check whether the name points to a view or not in
 	// SQL, so as to avoid a double lookup (a first one to check if the
 	// descriptor is of the right type, another to populate the
@@ -68,7 +68,7 @@ func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (p
 
 // showCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
-func (p *planner) showCreateView(
+func (p *Planner) showCreateView(
 	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
@@ -85,7 +85,7 @@ func (p *planner) showCreateView(
 	return buf.String(), nil
 }
 
-func (p *planner) printForeignKeyConstraint(
+func (p *Planner) printForeignKeyConstraint(
 	ctx context.Context, buf *bytes.Buffer, dbPrefix string, idx sqlbase.IndexDescriptor,
 ) error {
 	fk := idx.ForeignKey
@@ -132,7 +132,7 @@ func (p *planner) printForeignKeyConstraint(
 // unless it is equal to the given dbPrefix. This allows us to elide
 // the prefix when the given table references other tables in the
 // current database.
-func (p *planner) showCreateTable(
+func (p *Planner) showCreateTable(
 	ctx context.Context, tn tree.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
@@ -231,7 +231,7 @@ func quoteNames(names ...string) string {
 // The name of the parent table is prefixed by its database name unless
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
-func (p *planner) showCreateInterleave(
+func (p *Planner) showCreateInterleave(
 	ctx context.Context, idx *sqlbase.IndexDescriptor, buf *bytes.Buffer, dbPrefix string,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {

@@ -39,12 +39,12 @@ type CreateUserNode struct {
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
-func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode, error) {
+func (p *Planner) CreateUser(ctx context.Context, n *tree.CreateUser) (PlanNode, error) {
 	return p.CreateUserNode(ctx, n.Name, n.Password, n.IfNotExists, false /* isRole */, "CREATE USER")
 }
 
 // CreateUserNode creates a "create user" plan node. This can be called from CREATE USER or CREATE ROLE.
-func (p *planner) CreateUserNode(
+func (p *Planner) CreateUserNode(
 	ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
 ) (*CreateUserNode, error) {
 	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})
@@ -133,16 +133,16 @@ type createUserRun struct {
 	rowsAffected int
 }
 
-// Next implements the planNode interface.
+// Next implements the PlanNode interface.
 func (*CreateUserNode) Next(runParams) (bool, error) { return false, nil }
 
-// Values implements the planNode interface.
+// Values implements the PlanNode interface.
 func (*CreateUserNode) Values() tree.Datums { return tree.Datums{} }
 
-// Close implements the planNode interface.
+// Close implements the PlanNode interface.
 func (*CreateUserNode) Close(context.Context) {}
 
-// FastPathResults implements the planNodeFastPath interface.
+// FastPathResults implements the PlanNodeFastPath interface.
 func (n *CreateUserNode) FastPathResults() (int, bool) { return n.run.rowsAffected, true }
 
 const usernameHelp = "usernames are case insensitive, must start with a letter " +
@@ -174,7 +174,7 @@ type userAuthInfo struct {
 	password func() (string, error)
 }
 
-func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
+func (p *Planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
 	name, err := p.TypeAsString(nameE, ctx)
 	if err != nil {
 		return userAuthInfo{}, err

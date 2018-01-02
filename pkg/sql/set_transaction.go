@@ -22,11 +22,11 @@ import (
 )
 
 // SetTransaction sets a transaction's isolation level
-func (p *planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {
+func (p *Planner) SetTransaction(n *tree.SetTransaction) (PlanNode, error) {
 	return &zeroNode{}, p.setTransactionModes(n.Modes)
 }
 
-func (p *planner) setTransactionModes(modes tree.TransactionModes) error {
+func (p *Planner) setTransactionModes(modes tree.TransactionModes) error {
 	if err := p.setIsolationLevel(modes.Isolation); err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func (p *planner) setTransactionModes(modes tree.TransactionModes) error {
 	return p.setReadWriteMode(modes.ReadWriteMode)
 }
 
-func (p *planner) setIsolationLevel(level tree.IsolationLevel) error {
+func (p *Planner) setIsolationLevel(level tree.IsolationLevel) error {
 	var iso enginepb.IsolationType
 	switch level {
 	case tree.UnspecifiedIsolation:
@@ -52,7 +52,7 @@ func (p *planner) setIsolationLevel(level tree.IsolationLevel) error {
 	return p.session.TxnState.setIsolationLevel(iso)
 }
 
-func (p *planner) setUserPriority(userPriority tree.UserPriority) error {
+func (p *Planner) setUserPriority(userPriority tree.UserPriority) error {
 	var up roachpb.UserPriority
 	switch userPriority {
 	case tree.UnspecifiedUserPriority:
@@ -69,7 +69,7 @@ func (p *planner) setUserPriority(userPriority tree.UserPriority) error {
 	return p.session.TxnState.setPriority(up)
 }
 
-func (p *planner) setReadWriteMode(readWriteMode tree.ReadWriteMode) error {
+func (p *Planner) setReadWriteMode(readWriteMode tree.ReadWriteMode) error {
 	switch readWriteMode {
 	case tree.UnspecifiedReadWriteMode:
 		return nil

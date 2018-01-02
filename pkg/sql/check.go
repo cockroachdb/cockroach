@@ -40,7 +40,7 @@ type checkHelper struct {
 }
 
 func (c *checkHelper) init(
-	ctx context.Context, p *planner, tn *tree.TableName, tableDesc *sqlbase.TableDescriptor,
+	ctx context.Context, p *Planner, tn *tree.TableName, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	if len(tableDesc.Checks) == 0 {
 		return nil
@@ -135,7 +135,7 @@ func (c *checkHelper) check(ctx *tree.EvalContext) error {
 	return nil
 }
 
-func (p *planner) validateCheckExpr(
+func (p *Planner) validateCheckExpr(
 	ctx context.Context, exprStr string, tableName tree.TableExpr, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	expr, err := parser.ParseExpr(exprStr)
@@ -179,7 +179,7 @@ func (p *planner) validateCheckExpr(
 	return nil
 }
 
-func (p *planner) validateForeignKey(
+func (p *Planner) validateForeignKey(
 	ctx context.Context, srcTable *sqlbase.TableDescriptor, srcIdx *sqlbase.IndexDescriptor,
 ) error {
 	targetTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, srcIdx.ForeignKey.Table)

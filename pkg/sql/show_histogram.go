@@ -37,12 +37,12 @@ var showHistogramColumns = sqlbase.ResultColumns{
 
 // ShowHistogram returns a SHOW HISTOGRAM statement.
 // Privileges: Any privilege on the respective table.
-func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (planNode, error) {
+func (p *Planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (PlanNode, error) {
 	return &delayedNode{
 		name:    fmt.Sprintf("SHOW HISTOGRAM %d", n.HistogramID),
 		columns: showHistogramColumns,
 
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *Planner) (PlanNode, error) {
 			rows, err := p.queryRows(
 				ctx,
 				`SELECT "tableID", "columnIDs", histogram

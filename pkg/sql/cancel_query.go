@@ -30,7 +30,8 @@ type cancelQueryNode struct {
 	queryID tree.TypedExpr
 }
 
-func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNode, error) {
+// CancelQuery builds a cancelQuery plan node.
+func (p *Planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (PlanNode, error) {
 	typedQueryID, err := p.analyzeExpr(
 		ctx,
 		n.ID,
