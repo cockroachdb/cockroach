@@ -1,0 +1,112 @@
+# LogicTest: 5node-distsql 5node-distsql-disk
+
+statement ok
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z TEXT
+)
+
+statement ok
+INSERT INTO xyz VALUES
+  (1, 1, NULL),
+  (2, 1, 'a'),
+  (3, 1, 'b'),
+  (4, 2, 'b'),
+  (5, 2, 'c')
+
+statement ok
+ALTER TABLE xyz SPLIT AT VALUES (2), (3), (4), (5)
+
+statement ok
+ALTER TABLE xyz TESTING_RELOCATE VALUES
+  (ARRAY[1], 1),
+  (ARRAY[2], 2),
+  (ARRAY[3], 3),
+  (ARRAY[4], 4),
+  (ARRAY[5], 5)
+
+query TTITI colnames
+SELECT * FROM [SHOW TESTING_RANGES FROM TABLE xyz]
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /2       1         {1}       1
+/2         /3       2         {2}       2
+/3         /4       3         {3}       3
+/4         /5       4         {4}       4
+/5         NULL     5         {5}       5
+
+# Simple UNION ALL. (The ORDER BY applies to the UNION, not the last select.)
+query I
+SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x
+----
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElU-PokAQxe_7KTZ13d7EavAfJ69edOPObcKBoSuGRGnS3SQ6xu8-AQ6ORquHEODIn997r7teUhfItaJNciQL0TsgCJAgIAABIQiYQiygMDola7WpfmmAtTpBNBGQ5UXpqtexgFQbgugCLnMHggjeko8D7ShRZECAIpdkh9qkMNkxMefV6fwJArali36vEOKrAF26m551yZ4gwqsY3FO28fyvjXu0W-Gfl-LBOOI3TW0UGVLPRJ8k2Oi_urj795V3eOeNI7RjGE_ZxrPbAHsVlyNMaBhP2caz10vsJh6MMKFhPGUbz14vsZt4OMKEhvGUbTx7vcReF-yObKFzSz_acJNqQZLaU7NQrS5NSv-MTmub5nFbc_ULRdY1X2XzsM6bT1XA7zCycMDDkoXDOxgf4aALHPJnRj73lKXnPDxj4QUPz7scetEFXrIwem4M-ZKhr2V8zTzRsVPPkC8aTj3R-arhzIPzXfNl58vmo_m24dITne-bnHhwvnGe7JIv3CMdX399BQAA__9E1reF
+
+# UNION ALL with swapped column orders.
+query II rowsort
+SELECT x, y FROM xyz UNION ALL SELECT y, x from xyz
+----
+1 1
+1 1
+1 2
+1 3
+2 1
+2 4
+2 5
+3 1
+4 2
+5 2
+
+# UNION ALL with different ORDER BY types.
+query I
+(SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x
+----
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY z) ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlkFvm0AQhe_9FdVcs5U8C9guJ19zSaq0t4oD9Y4iS44X7S5S0oj_XgGVEtIwg-Wl5Gjg8c3b99j1M5ysoZvygTzkPwFBgQYFCShIQUEGhYLK2T15b137SC-4No-QrxQcTlUd2suFgr11BPkzhEM4EuTwo_x1pDsqDTlQYCiUh2MHqdzhoXRPu8en36Dgtg755x2qXQJFo8DW4eWVPpT3BDk2ajr2u3XhLXGnr16T9ChJj5JeANYZcmT-JRTNO-Pc2C-2Gj77d47RIZJz7J67yuPe0_-2ytlHWOX1xXbxavTlm2VeLi0fTl6-MfZ2wMZldgABG3EHiGxw6sc3p8Hhx6eXSVDARkwwssGpCc5pcJhgskyCAjZigpENTk1wToPDBNNlEhSwEROMbHBqgnMaHP8L8w7pjnxlT54mnbCr9oAmc0_9ge5t7fb0zdl9h-l_3na67oIhH_q72P-4PvW32gFfi5EV64EY34o1K17z5IQVp7w4ZcUZP3bGijc8ec2Ktzx5c4l4y0eV8XN_5VuyEmrCl0zoCfItQy3A-Z4JaSNfNBSahnzVJOd811D4RpBvm-ScrxtuBbhQOAHOF04LhdN84QTnWtjWhMJpvnDSrsgXTguF0-ftbUXz6U8AAAD__7-ewX0=
+
+# UNION ALL with conflicting numbers of ORDER BY columns.
+query I
+(SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x
+----
+1
+1
+2
+2
+3
+3
+4
+4
+5
+5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT x FROM xyz ORDER BY y) UNION ALL (SELECT x FROM xyz ORDER BY y, z) ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEljFv2zAQhff-iuJWs4CPkmxXk9YsSZF2KzSo5iEw4JgCSQNJA__3wlKBxIF1R0sENFrS08d374n0GxysofvmmTyUvwFBgQYFGSjIQUEBtYLW2S15b935kV5wZ16gXCrYHdpjOF-uFWytIyjfIOzCnqCEX82fPT1SY8iBAkOh2e07SOt2z417rV5e_4KCh2Mov1aoKq2qDOqTAnsM72_1oXkiKPGk4sk_rQufoZVeqCpbRAP1IPCdY50hR-Y6qD5dWdm9_Wbby-f_L2dwIdktzm-e-SA2TzDwOFIxYdLJpryabBcXgy9fz_NyaXwYPb4h9uaCjbPtBwI5_X6Q2mrkZzjO55jPUM-WpUBOn2Vqq5FZjvM5JststiwFcvosU1uNzHKczzFZ5rNlKZDTZ5naamSW43xO_atzhfRIvrUHT1En8fJ8kJN5ov7g9_botvTD2W2H6X8-dLrugiEf-rvY_7g79LfOC_woRlasL8T4WaxZ8YonZ6w458U5Ky74ZReseM2TV6x4w5PXU8QbPqqCX_d3viVLoSZ8yYSeIN8y1AKc75mQNvJFQ6FpyFdNcs53DYVvBPm2Sc75uuFGgAuFE-B84bRQOM0XTnCuhW1NKJzmCyftinzhtFA4fdveVp--_AsAAP__ZcDMag==

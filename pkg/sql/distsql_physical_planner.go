@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -359,6 +360,21 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *distinctNode:
 		return dsp.checkSupportForNode(n.plan)
+
+	case *unionNode:
+		// Only UNION ALL is supported so far.
+		if n.unionType == tree.UnionOp && n.all {
+			recLeft, err := dsp.checkSupportForNode(n.left)
+			if err != nil {
+				return 0, err
+			}
+			recRight, err := dsp.checkSupportForNode(n.right)
+			if err != nil {
+				return 0, err
+			}
+			return recLeft.compose(recRight), nil
+		}
+		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 
 	case *valuesNode:
 		if n.n == nil {
@@ -1765,6 +1781,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *distinctNode:
 		return dsp.createPlanForDistinct(planCtx, n)
 
+	case *unionNode:
+		return dsp.createPlanForUnionAll(planCtx, n)
+
 	case *valuesNode:
 		return dsp.createPlanForValues(planCtx, n)
 
@@ -1897,6 +1916,76 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
 
 	return plan, nil
+}
+
+func (dsp *DistSQLPlanner) createPlanForUnionAll(
+	planCtx *planningCtx, n *unionNode,
+) (physicalPlan, error) {
+	leftPlan, err := dsp.createPlanForNode(planCtx, n.left)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	rightPlan, err := dsp.createPlanForNode(planCtx, n.right)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	var p physicalPlan
+
+	// Merge the plans' planToStreamColMap, which should be equivalent.
+	// TODO(solon): Are there any valid UNION ALL cases where these differ? If
+	// we encounter any, we could handle them similarly to the differing
+	// ResultTypes case below.
+	if !reflect.DeepEqual(leftPlan.planToStreamColMap, rightPlan.planToStreamColMap) {
+		return physicalPlan{}, errors.Errorf(
+			"planToStreamColMap mismatch: %v, %v", leftPlan.planToStreamColMap,
+			rightPlan.planToStreamColMap)
+	}
+	p.planToStreamColMap = leftPlan.planToStreamColMap
+
+	// Merge the plans' result types and merge ordering.
+	resultTypes, err := distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+	mergeOrdering := leftPlan.MergeOrdering
+	if err != nil || !mergeOrdering.Equal(rightPlan.MergeOrdering) {
+		// The result types or merge ordering can differ between the two sides in
+		// pathological cases, like if they have incompatible ORDER BY clauses.
+		// Resolve this by collecting results on a single node and adding a
+		// projection to the results that will be unioned.
+		columns := make([]uint32, 0, len(p.planToStreamColMap))
+		for _, col := range p.planToStreamColMap {
+			if col < 0 {
+				continue
+			}
+			columns = append(columns, uint32(col))
+		}
+
+		for _, plan := range []*physicalPlan{&leftPlan, &rightPlan} {
+			plan.AddSingleGroupStage(
+				dsp.nodeDesc.NodeID,
+				distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+				distsqlrun.PostProcessSpec{},
+				plan.ResultTypes)
+			plan.AddProjection(columns)
+		}
+
+		// Result types should now be mergeable.
+		resultTypes, err = distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		mergeOrdering = distsqlrun.Ordering{}
+	}
+
+	// Merge processors, streams, result routers, and stage counter.
+	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
+	p.PhysicalPlan, leftRouters, rightRouters = distsqlplan.MergePlans(
+		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
+	p.ResultRouters = append(leftRouters, rightRouters...)
+
+	p.ResultTypes = resultTypes
+	p.MergeOrdering = mergeOrdering
+
+	return p, nil
 }
 
 func (dsp *DistSQLPlanner) newPlanningCtx(
