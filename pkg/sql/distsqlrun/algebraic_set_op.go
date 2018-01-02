@@ -118,20 +118,17 @@ func (e *algebraicSetOp) Run(wg *sync.WaitGroup) {
 // right stream. It does not remove duplicates.
 func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 	leftGroup := makeStreamGroupAccumulator(
-		MakeNoMetadataRowSource(e.leftSource, e.out.output),
-		convertToColumnOrdering(e.ordering),
+		e.leftSource, convertToColumnOrdering(e.ordering),
 	)
-
 	rightGroup := makeStreamGroupAccumulator(
-		MakeNoMetadataRowSource(e.rightSource, e.out.output),
-		convertToColumnOrdering(e.ordering),
+		e.rightSource, convertToColumnOrdering(e.ordering),
 	)
 
-	leftRows, err := leftGroup.advanceGroup(e.evalCtx)
+	leftRows, err := leftGroup.advanceGroup(e.evalCtx, e.out.output)
 	if err != nil {
 		return err
 	}
-	rightRows, err := rightGroup.advanceGroup(e.evalCtx)
+	rightRows, err := rightGroup.advanceGroup(e.evalCtx, e.out.output)
 	if err != nil {
 		return err
 	}
@@ -201,11 +198,11 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 					}
 				}
 			}
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx)
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
-			rightRows, err = rightGroup.advanceGroup(e.evalCtx)
+			rightRows, err = rightGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
@@ -220,13 +217,13 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 					return err
 				}
 			}
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx)
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
 		}
 		if cmp > 0 {
-			rightRows, err = rightGroup.advanceGroup(e.evalCtx)
+			rightRows, err = rightGroup.advanceGroup(e.evalCtx, e.out.output)
 			if len(rightRows) == 0 {
 				break
 			}
@@ -250,7 +247,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 
 		// Emit all remaining rows.
 		for {
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx)
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			// Emit all left rows until completion/error.
 			if err != nil || len(leftRows) == 0 {
 				return err
