@@ -30,7 +30,6 @@ import (
 type sorter struct {
 	processorBase
 
-	flowCtx *FlowCtx
 	// input is a row source without metadata; the metadata is directed straight
 	// to out.output.
 	input NoMetadataRowSource
@@ -59,7 +58,6 @@ func newSorter(
 		count = int64(post.Limit) + int64(post.Offset)
 	}
 	s := &sorter{
-		flowCtx:     flowCtx,
 		input:       MakeNoMetadataRowSource(input, output),
 		rawInput:    input,
 		ordering:    convertToColumnOrdering(spec.OutputOrdering),
@@ -67,7 +65,7 @@ func newSorter(
 		count:       count,
 		tempStorage: flowCtx.TempStorage,
 	}
-	if err := s.init(post, input.OutputTypes(), flowCtx, output); err != nil {
+	if err := s.init(post, input.OutputTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 	return s, nil

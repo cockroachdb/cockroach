@@ -15,34 +15,22 @@
 package distsqlrun
 
 import (
-	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // valuesProcessor is a processor that has no inputs and generates "pre-canned"
 // rows.
 type valuesProcessor struct {
 	processorBase
+	rowSourceBase
 
-	ctx     context.Context
-	span    opentracing.Span
-	flowCtx *FlowCtx
 	columns []DatumInfo
 	data    [][]byte
 
-	started bool
-	closed  bool
-	sd      StreamDecoder
-	rowBuf  sqlbase.EncDatumRow
-
-	// consumerStatus is used by the RowSource interface to signal that the
-	// consumer is done accepting rows or is no longer accepting data.
-	consumerStatus ConsumerStatus
+	sd     StreamDecoder
+	rowBuf sqlbase.EncDatumRow
 }
 
 var _ Processor = &valuesProcessor{}
@@ -52,7 +40,6 @@ func newValuesProcessor(
 	flowCtx *FlowCtx, spec *ValuesCoreSpec, post *PostProcessSpec, output RowReceiver,
 ) (*valuesProcessor, error) {
 	v := &valuesProcessor{
-		flowCtx: flowCtx,
 		columns: spec.Columns,
 		data:    spec.RawBytes,
 	}
@@ -60,7 +47,7 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.init(post, types, flowCtx, output); err != nil {
+	if err := v.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 	return v, nil
@@ -78,13 +65,7 @@ func (v *valuesProcessor) Run(wg *sync.WaitGroup) {
 }
 
 func (v *valuesProcessor) close() {
-	if !v.closed {
-		v.closed = true
-		tracing.FinishSpan(v.span)
-		v.span = nil
-	}
-	// This prevents Next() from returning more rows.
-	v.out.consumerClosed()
+	v.internalClose()
 }
 
 // producerMeta constructs the ProducerMetadata after consumption of rows has
@@ -108,10 +89,7 @@ func (v *valuesProcessor) producerMeta(err error) ProducerMetadata {
 
 // Next is part of the RowSource interface.
 func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
-	if !v.started {
-		v.started = true
-		v.ctx, v.span = processorSpan(v.flowCtx.Ctx, "values")
-
+	if v.maybeStart("values", "" /* logTag */) {
 		// Add a bogus header to apease the StreamDecoder, which wants to receive a
 		// header before any data.
 		m := &ProducerMessage{
@@ -169,20 +147,12 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (v *valuesProcessor) ConsumerDone() {
-	if v.consumerStatus != NeedMoreRows {
-		log.Fatalf(context.Background(), "values already done or closed: %d",
-			v.consumerStatus)
-	}
-	v.consumerStatus = DrainRequested
+	v.consumerDone("values")
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (v *valuesProcessor) ConsumerClosed() {
-	if v.consumerStatus == ConsumerClosed {
-		log.Fatalf(context.Background(), "values already closed")
-	}
-	v.consumerStatus = ConsumerClosed
+	v.consumerClosed("values")
 	// The consumer is done, Next() will not be called again.
 	v.close()
-
 }
