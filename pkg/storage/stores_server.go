@@ -66,10 +66,15 @@ func (is Server) CollectChecksum(
 			}
 			ccr := c.CollectChecksumResponse
 			if !bytes.Equal(req.Checksum, ccr.Checksum) {
-				log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
-					req.RangeID, req.Checksum, ccr.Checksum)
-				// Leave resp.Snapshot alone so that the caller will receive what's
-				// in it (if anything).
+				// If this check is false, then this request is the replica carrying out
+				// the consistency check. The message is spurious, but we want to leave the
+				// snapshot (if present) intact.
+				if len(req.Checksum) > 0 {
+					log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
+						req.RangeID, req.Checksum, ccr.Checksum)
+					// Leave resp.Snapshot alone so that the caller will receive what's
+					// in it (if anything).
+				}
 			} else {
 				ccr.Snapshot = nil
 			}
