@@ -153,10 +153,8 @@ func (t *partitioningTest) parse() error {
 			}
 			subzone.IndexID = uint32(idxDesc.ID)
 			if len(constraints) > 0 {
-				// TODO(dan): This `data.` is hardcoded because of a bug in
-				// ALTER INDEX/EXPERIMENTAL CONFIGURE ZONE.
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER INDEX data.%s@%s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
+					`ALTER INDEX %s@%s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
 					tree.Name(t.name), idxDesc.Name, constraints,
 				)
 			}
@@ -166,10 +164,8 @@ func (t *partitioningTest) parse() error {
 			// doesn't specify.
 			subzone.PartitionName = subzoneShort[1:]
 			if len(constraints) > 0 {
-				// TODO(dan): This `data.` is hardcoded because of a bug in
-				// ALTER TABLE/PARTITION/EXPERIMENTAL CONFIGURE ZONE.
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER PARTITION %s OF TABLE data.%s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
+					`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
 					subzone.PartitionName, tree.Name(t.name), constraints,
 				)
 			}
