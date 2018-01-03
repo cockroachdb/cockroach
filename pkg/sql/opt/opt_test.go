@@ -290,7 +290,7 @@ func TestOpt(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
-				var e *expr
+				var e *Expr
 				var varTypes []types.T
 				var iVarHelper tree.IndexedVarHelper
 				var colInfos []IndexColumnInfo
@@ -368,7 +368,7 @@ func TestOpt(t *testing.T) {
 						}
 						var ic IndexConstraints
 
-						ic.initWithExpr(e, colInfos, &evalCtx)
+						ic.Init(e, colInfos, &evalCtx)
 						spans, ok := ic.Spans()
 
 						var buf bytes.Buffer
