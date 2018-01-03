@@ -22,6 +22,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -306,6 +307,34 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 			}
+
+			// Drop check constraints which reference the column.
+			// For every check on the table, walk the check expr
+			// and ensure any check which references the column
+			// is removed from the table descriptor.
+			validChecks := n.tableDesc.Checks[:0]
+
+			for _, check := range n.tableDesc.Checks {
+				expr, err := parser.ParseExpr(check.Expr)
+				if err != nil {
+					return err
+				}
+
+				exprDoesReferenceColumn, err := exprContainsColumnName(expr, col)
+				if err != nil {
+					return err
+				}
+
+				if !exprDoesReferenceColumn {
+					validChecks = append(validChecks, check)
+				}
+			}
+
+			if len(validChecks) != len(n.tableDesc.Checks) {
+				n.tableDesc.Checks = validChecks
+				descriptorChanged = true
+			}
+
 			found := false
 			for i := range n.tableDesc.Columns {
 				if n.tableDesc.Columns[i].ID == col.ID {
@@ -573,4 +602,46 @@ func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) strin
 		s.WriteString(values[i].String())
 	}
 	return s.String()
+}
+
+// exprContainsColumnNames determines whether the given column occurs in the
+// given expression.
+// It achieves this using a lexical comparison without considering scoping.
+// WARNING: this logic only works for 'simple' expressions.
+// If/when CHECK expressions are extended to also support subqueries,
+// this logic will need to be amended.
+func exprContainsColumnName(expr tree.Expr, col sqlbase.ColumnDescriptor) (bool, error) {
+	exprContainsColumnName := false
+
+	preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		if string(c.ColumnName) == col.Name {
+			// This is a CHECK constraint which contains the column to be dropped
+			exprContainsColumnName = true
+		}
+		// Convert to a dummy node of the correct type.
+		return nil, false, dummyColumnItem{col.Type.ToDatumType()}
+	}
+
+	_, err := tree.SimpleVisit(expr, preFn)
+	if err != nil {
+		return false, err
+	}
+
+	return exprContainsColumnName, nil
 }

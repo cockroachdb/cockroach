@@ -1245,6 +1245,52 @@ func dropIndexSchemaChange(
 	}
 }
 
+// TestDropColumn tests that dropped columns properly drop their Table's CHECK constraints
+func TestDropColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (
+  k INT PRIMARY KEY,
+  v INT CONSTRAINT check_v CHECK (v >= 0),
+  a INT DEFAULT 0 CONSTRAINT check_av CHECK (a <= v),
+  b INT DEFAULT 100 CONSTRAINT check_ab CHECK (b > a)
+);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read table descriptor.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(tableDesc.Checks) != 3 {
+		t.Fatalf("Expected 3 checks but got %d ", len(tableDesc.Checks))
+	}
+
+	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP v"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-read table descriptor.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Only check_ab should remain
+	if len(tableDesc.Checks) != 1 {
+		checkExprs := make([]string, 0)
+		for i := range tableDesc.Checks {
+			checkExprs = append(checkExprs, tableDesc.Checks[i].Expr)
+		}
+		t.Fatalf("Expected 1 check but got %d with CHECK expr %s ", len(tableDesc.Checks), strings.Join(checkExprs, ", "))
+	}
+
+	if tableDesc.Checks[0].Name != "check_ab" {
+		t.Fatalf("Only check_ab should remain, got: %s ", tableDesc.Checks[0].Name)
+	}
+}
+
 // Test schema changes are retried and complete properly. This also checks
 // that a mutation checkpoint reduces the number of chunks operated on during
 // a retry.
