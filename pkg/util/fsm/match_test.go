@@ -24,11 +24,11 @@ func TestMatchPattern(t *testing.T) {
 	// No expansion patterns.
 	p1 := expandPattern(Pattern{
 		state1{}: {
-			event1{}: {state2{}, noAction},
+			event1{}: {state2{}, noAction, ""},
 		},
 		state2{}: {
-			event1{}: {state1{}, noAction},
-			event2{}: {state2{}, noAction},
+			event1{}: {state1{}, noAction, ""},
+			event2{}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p1), 2)
@@ -39,7 +39,7 @@ func TestMatchPattern(t *testing.T) {
 	// State expansion match patterns.
 	p2 := expandPattern(Pattern{
 		state3{True}: {
-			event1{}: {state2{}, noAction},
+			event1{}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p2), 1)
@@ -49,7 +49,7 @@ func TestMatchPattern(t *testing.T) {
 
 	p3 := expandPattern(Pattern{
 		state3{False}: {
-			event1{}: {state2{}, noAction},
+			event1{}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p3), 1)
@@ -59,7 +59,7 @@ func TestMatchPattern(t *testing.T) {
 
 	p4 := expandPattern(Pattern{
 		state3{Any}: {
-			event1{}: {state2{}, noAction},
+			event1{}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p4), 2)
@@ -69,7 +69,7 @@ func TestMatchPattern(t *testing.T) {
 
 	p5 := expandPattern(Pattern{
 		state4{Any, True}: {
-			event1{}: {state2{}, noAction},
+			event1{}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p5), 2)
@@ -82,7 +82,7 @@ func TestMatchPattern(t *testing.T) {
 
 	p6 := expandPattern(Pattern{
 		state4{False, Any}: {
-			event1{}: {state2{}, noAction},
+			event1{}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p6), 2)
@@ -95,7 +95,7 @@ func TestMatchPattern(t *testing.T) {
 
 	p7 := expandPattern(Pattern{
 		state4{Any, Any}: {
-			event1{}: {state2{}, noAction},
+			event1{}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p7), 4)
@@ -109,10 +109,10 @@ func TestMatchPattern(t *testing.T) {
 	// Event expansion match patterns.
 	p8 := expandPattern(Pattern{
 		state1{}: {
-			event3{True}: {state2{}, noAction},
+			event3{True}: {state2{}, noAction, ""},
 		},
 		state2{}: {
-			event3{Any}: {state2{}, noAction},
+			event3{Any}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p8), 2)
@@ -121,10 +121,10 @@ func TestMatchPattern(t *testing.T) {
 
 	p9 := expandPattern(Pattern{
 		state1{}: {
-			event4{True, Any}: {state2{}, noAction},
+			event4{True, Any}: {state2{}, noAction, ""},
 		},
 		state2{}: {
-			event4{Any, Any}: {state2{}, noAction},
+			event4{Any, Any}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p9), 2)
@@ -134,10 +134,10 @@ func TestMatchPattern(t *testing.T) {
 	// State and Event expansion match patterns.
 	p10 := expandPattern(Pattern{
 		state3{Any}: {
-			event4{Any, Any}: {state2{}, noAction},
+			event4{Any, Any}: {state2{}, noAction, ""},
 		},
 		state4{Any, True}: {
-			event3{Any}: {state2{}, noAction},
+			event3{Any}: {state2{}, noAction, ""},
 		},
 	})
 	require.Equal(t, len(p10), 4)
@@ -152,7 +152,7 @@ func TestMatchPattern(t *testing.T) {
 func TestMatchVariableVar(t *testing.T) {
 	p := expandPattern(Pattern{
 		state3{Var("a")}: {
-			event3{Var("b")}: {state4{Var("b"), Var("a")}, noAction},
+			event3{Var("b")}: {state4{Var("b"), Var("a")}, noAction, ""},
 		},
 	})
 
@@ -170,36 +170,36 @@ func TestInvalidPattern(t *testing.T) {
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state3{Any}: {
-				event1{}: {state2{}, noAction},
+				event1{}: {state2{}, noAction, ""},
 			},
 			state3{True}: {
-				event1{}: {state2{}, noAction},
+				event1{}: {state2{}, noAction, ""},
 			},
 		})
 	})
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state4{Any, True}: {
-				event1{}: {state2{}, noAction},
+				event1{}: {state2{}, noAction, ""},
 			},
 			state4{False, Any}: {
-				event1{}: {state2{}, noAction},
+				event1{}: {state2{}, noAction, ""},
 			},
 		})
 	})
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state1{}: {
-				event3{Any}:  {state2{}, noAction},
-				event3{True}: {state2{}, noAction},
+				event3{Any}:  {state2{}, noAction, ""},
+				event3{True}: {state2{}, noAction, ""},
 			},
 		})
 	})
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state1{}: {
-				event4{Any, False}: {state2{}, noAction},
-				event4{True, Any}:  {state2{}, noAction},
+				event4{Any, False}: {state2{}, noAction, ""},
+				event4{True, Any}:  {state2{}, noAction, ""},
 			},
 		})
 	})
@@ -208,21 +208,21 @@ func TestInvalidPattern(t *testing.T) {
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state3{Var("a")}: {
-				event3{Var("a")}: {state2{}, noAction},
+				event3{Var("a")}: {state2{}, noAction, ""},
 			},
 		})
 	})
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state4{Var("a"), Var("a")}: {
-				event1{}: {state2{}, noAction},
+				event1{}: {state2{}, noAction, ""},
 			},
 		})
 	})
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state1{}: {
-				event4{Var("a"), Var("a")}: {state2{}, noAction},
+				event4{Var("a"), Var("a")}: {state2{}, noAction, ""},
 			},
 		})
 	})
@@ -231,21 +231,21 @@ func TestInvalidPattern(t *testing.T) {
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state3{nil}: {
-				event1{}: {state1{}, noAction},
+				event1{}: {state1{}, noAction, ""},
 			},
 		})
 	})
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state1{}: {
-				event3{nil}: {state1{}, noAction},
+				event3{nil}: {state1{}, noAction, ""},
 			},
 		})
 	})
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state1{}: {
-				event1{}: {state3{nil}, noAction},
+				event1{}: {state3{nil}, noAction, ""},
 			},
 		})
 	})
@@ -254,7 +254,7 @@ func TestInvalidPattern(t *testing.T) {
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state1{}: {
-				event3{Var("a")}: {state3{Var("b")}, noAction},
+				event3{Var("a")}: {state3{Var("b")}, noAction, ""},
 			},
 		})
 	})
@@ -263,7 +263,7 @@ func TestInvalidPattern(t *testing.T) {
 	require.Panics(t, func() {
 		expandPattern(Pattern{
 			state1{}: {
-				event1{}: {state3{Any}, noAction},
+				event1{}: {state3{Any}, noAction, ""},
 			},
 		})
 	})

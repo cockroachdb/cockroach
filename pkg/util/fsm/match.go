@@ -82,8 +82,9 @@ func expandPattern(p Pattern) Pattern {
 					scope := mergeScope(sVar.scope, eVar.scope)
 					xNext := bindVar(reflect.ValueOf(t.Next), scope)
 					xsm[xe] = Transition{
-						Next:   xNext.Interface().(State),
-						Action: t.Action,
+						Next:        xNext.Interface().(State),
+						Action:      t.Action,
+						Description: t.Description,
 					}
 				}
 			}

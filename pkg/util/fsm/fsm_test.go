@@ -66,12 +66,12 @@ func (tr Transitions) applyWithoutErr(t *testing.T, a Args) State {
 func TestBasicTransitions(t *testing.T) {
 	trans := Compile(Pattern{
 		state1{}: {
-			event1{}: {state2{}, noAction},
-			event2{}: {state1{}, noAction},
+			event1{}: {state2{}, noAction, ""},
+			event2{}: {state1{}, noAction, ""},
 		},
 		state2{}: {
-			event1{}: {state1{}, noAction},
-			event2{}: {state2{}, noAction},
+			event1{}: {state1{}, noAction, ""},
+			event2{}: {state2{}, noAction, ""},
 		},
 	})
 
@@ -90,12 +90,12 @@ func TestTransitionActions(t *testing.T) {
 	var extendedState int
 	trans := Compile(Pattern{
 		state1{}: {
-			event1{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 1 })},
-			event2{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 2 })},
+			event1{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 1 }), ""},
+			event2{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 2 }), ""},
 		},
 		state2{}: {
-			event1{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 3 })},
-			event2{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 4 })},
+			event1{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 3 }), ""},
+			event2{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 4 }), ""},
 		},
 	})
 
@@ -115,7 +115,7 @@ func TestTransitionActions(t *testing.T) {
 func TestTransitionsWithWildcards(t *testing.T) {
 	trans := Compile(Pattern{
 		state3{Any}: {
-			event3{Any}: {state1{}, noAction},
+			event3{Any}: {state1{}, noAction, ""},
 		},
 	})
 
@@ -128,7 +128,7 @@ func TestTransitionsWithWildcards(t *testing.T) {
 func TestTransitionsWithVarBindings(t *testing.T) {
 	trans := Compile(Pattern{
 		state3{Var("a")}: {
-			event3{Var("b")}: {state4{Var("b"), Var("a")}, noAction},
+			event3{Var("b")}: {state4{Var("b"), Var("a")}, noAction, ""},
 		},
 	})
 
@@ -142,24 +142,24 @@ func BenchmarkPatternCompilation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = Compile(Pattern{
 			state1{}: {
-				event4{True, Any}:  {state2{}, noAction},
-				event4{False, Any}: {state1{}, noAction},
+				event4{True, Any}:  {state2{}, noAction, ""},
+				event4{False, Any}: {state1{}, noAction, ""},
 			},
 			state2{}: {
-				event4{Any, Any}: {state2{}, noAction},
+				event4{Any, Any}: {state2{}, noAction, ""},
 			},
 			state3{True}: {
-				event1{}: {state1{}, noAction},
+				event1{}: {state1{}, noAction, ""},
 			},
 			state3{False}: {
-				event3{True}:  {state2{}, noAction},
-				event3{False}: {state1{}, noAction},
+				event3{True}:  {state2{}, noAction, ""},
+				event3{False}: {state1{}, noAction, ""},
 			},
 			state4{Var("x"), Var("y")}: {
-				event4{True, True}:   {state1{}, noAction},
-				event4{True, False}:  {state2{}, noAction},
-				event4{False, True}:  {state3{Var("x")}, noAction},
-				event4{False, False}: {state4{Var("y"), Var("x")}, noAction},
+				event4{True, True}:   {state1{}, noAction, ""},
+				event4{True, False}:  {state2{}, noAction, ""},
+				event4{False, True}:  {state3{Var("x")}, noAction, ""},
+				event4{False, False}: {state4{Var("y"), Var("x")}, noAction, ""},
 			},
 		})
 	}
@@ -170,27 +170,27 @@ func BenchmarkStateTransition(b *testing.B) {
 	ctx := context.Background()
 	trans := Compile(Pattern{
 		state1{}: {
-			event1{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 1 })},
-			event2{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 2 })},
+			event1{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 1 }), ""},
+			event2{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 2 }), ""},
 		},
 		state2{}: {
-			event1{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 3 })},
-			event2{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 4 })},
+			event1{}: {state1{}, noErr(func(a Args) { *a.Extended.(*int) = 3 }), ""},
+			event2{}: {state2{}, noErr(func(a Args) { *a.Extended.(*int) = 4 }), ""},
 		},
 		// Unused, but complicates transition graph. Demonstrates that a more
 		// complicated graph does not hurt runtime performance.
 		state3{True}: {
-			event1{}: {state1{}, noAction},
+			event1{}: {state1{}, noAction, ""},
 		},
 		state3{False}: {
-			event3{True}:  {state2{}, noAction},
-			event3{False}: {state1{}, noAction},
+			event3{True}:  {state2{}, noAction, ""},
+			event3{False}: {state1{}, noAction, ""},
 		},
 		state4{Var("x"), Var("y")}: {
-			event4{True, True}:   {state1{}, noAction},
-			event4{True, False}:  {state2{}, noAction},
-			event4{False, True}:  {state3{Var("x")}, noAction},
-			event4{False, False}: {state4{Var("y"), Var("x")}, noAction},
+			event4{True, True}:   {state1{}, noAction, ""},
+			event4{True, False}:  {state2{}, noAction, ""},
+			event4{False, True}:  {state3{Var("x")}, noAction, ""},
+			event4{False, False}: {state4{Var("y"), Var("x")}, noAction, ""},
 		},
 	})
 	m := MakeMachine(trans, state1{}, &extendedState)

@@ -28,7 +28,11 @@ func writeDot(fName string) error {
 	}
 
 	writeHeader(f)
-	fmt.Fprintf(f, "// To generate a .png file, run \"dot -Tpng %s -o %s.png\".\n\n",
+	fmt.Fprintf(f, "// To generate a .png file, run:\n" +
+    "// brew install cairo pango\n" +
+    "// brew install graphviz --with-pango\n" +
+    "// dot -Tpng %s -o %s.png\".\n\n" +
+    "// The Pango/Cairo renderer is needed for rendering our HTML labels.\n",
 		fName, strings.TrimSuffix(fName, filepath.Ext(fName)))
 	{tmpl-base-pkg}.{tmpl-type}.WriteDotGraphString(f, "{tmpl-start-state}")
 	return f.Close()
