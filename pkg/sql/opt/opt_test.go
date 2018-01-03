@@ -368,7 +368,7 @@ func TestOpt(t *testing.T) {
 						}
 						var ic IndexConstraints
 
-						ic.initWithExpr(e, colInfos, &evalCtx)
+						ic.Init(e, colInfos, &evalCtx)
 						spans, ok := ic.Spans()
 
 						var buf bytes.Buffer

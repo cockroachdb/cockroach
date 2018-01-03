@@ -911,21 +911,6 @@ type IndexConstraints struct {
 
 // Init processes the filter and calculates the spans.
 func (ic *IndexConstraints) Init(
-	filter tree.TypedExpr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
-) (err error) {
-	e, err := buildScalar(filter)
-	if err != nil {
-		return err
-	}
-	if e != nil {
-		normalizeExpr(e)
-	}
-
-	ic.initWithExpr(e, colInfos, evalCtx)
-	return nil
-}
-
-func (ic *IndexConstraints) initWithExpr(
 	filter *Expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
 ) {
 	*ic = IndexConstraints{
