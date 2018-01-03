@@ -650,8 +650,6 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 }
 
 func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) error {
-	iter := db.NewIterator(false /* prefix */)
-	defer iter.Close()
 	fmt.Println("checking MVCC stats")
 	defer fmt.Println()
 
@@ -662,9 +660,7 @@ func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) erro
 			if err != nil {
 				return false, err
 			}
-			from := engine.MakeMVCCMetadataKey(desc.StartKey.AsRawKey())
-			to := engine.MakeMVCCMetadataKey(desc.EndKey.AsRawKey())
-			ms, err := iter.ComputeStats(from, to, claimedMS.LastUpdateNanos)
+			ms, err := storage.ComputeStatsForRange(&desc, db, claimedMS.LastUpdateNanos)
 			if err != nil {
 				return false, err
 			}
