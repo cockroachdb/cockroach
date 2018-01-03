@@ -1772,10 +1772,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 }
 
 // This test checks backward compatibility with old data that contains
-// sentinel k:v pairs at the start of each table row. Cockroachdb used
+// sentinel kv pairs at the start of each table row. Cockroachdb used
 // to write table rows with sentinel values in the past. When a new column
 // is added to such a table with the new column included in the same
-// column family as the primary key columns, the sentinel k:v pairs
+// column family as the primary key columns, the sentinel kv pairs
 // start representing this new column. This test checks that the sentinel
 // values represent NULL column values, and that an UPDATE to such
 // a column works correctly.
