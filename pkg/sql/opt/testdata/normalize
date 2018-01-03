@@ -1,0 +1,350 @@
+# Verify normalization of nested ANDs/ORs.
+build-scalar,normalize,semtree-expr vars=(int, int)
+@1 >= 5 AND @1 <= 10 AND @2 > 0 AND @2 < 10
+----
+and (type: bool)
+ ├── ge (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ ├── le (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (10) (type: int)
+ ├── gt (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (0) (type: int)
+ └── lt (type: bool)
+      ├── variable (1) (type: int)
+      └── const (10) (type: int)
+(((@1 >= 5) AND (@1 <= 10)) AND (@2 > 0)) AND (@2 < 10)
+
+build-scalar,normalize,semtree-expr vars=(int, int)
+@1 >= 5 OR @1 <= 10 OR @2 > 0 OR @2 < 10
+----
+or (type: bool)
+ ├── ge (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ ├── le (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (10) (type: int)
+ ├── gt (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (0) (type: int)
+ └── lt (type: bool)
+      ├── variable (1) (type: int)
+      └── const (10) (type: int)
+(((@1 >= 5) OR (@1 <= 10)) OR (@2 > 0)) OR (@2 < 10)
+
+build-scalar,normalize,semtree-expr vars=(int, int, int)
+@1 >= 5 AND (@2 = 1 OR @2 > 3) AND (@3 > 2)
+----
+and (type: bool)
+ ├── ge (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ ├── or (type: bool)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── const (1) (type: int)
+ │    └── gt (type: bool)
+ │         ├── variable (1) (type: int)
+ │         └── const (3) (type: int)
+ └── gt (type: bool)
+      ├── variable (2) (type: int)
+      └── const (2) (type: int)
+((@1 >= 5) AND ((@2 = 1) OR (@2 > 3))) AND (@3 > 2)
+
+build-scalar,normalize,semtree-expr vars=(int, int, int)
+@1 >= 5 AND (@2 = 1 OR @2 = 3 OR @2 > 5) AND (@3 > 2)
+----
+and (type: bool)
+ ├── ge (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (5) (type: int)
+ ├── or (type: bool)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── const (1) (type: int)
+ │    ├── eq (type: bool)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── const (3) (type: int)
+ │    └── gt (type: bool)
+ │         ├── variable (1) (type: int)
+ │         └── const (5) (type: int)
+ └── gt (type: bool)
+      ├── variable (2) (type: int)
+      └── const (2) (type: int)
+((@1 >= 5) AND (((@2 = 1) OR (@2 = 3)) OR (@2 > 5))) AND (@3 > 2)
+
+build-scalar,normalize,semtree-expr vars=(int, int, int)
+(@1 >= 5 AND @1 <= 10) OR (@2 > 1 AND @2 < 3) OR (@3 > 2)
+----
+or (type: bool)
+ ├── and (type: bool)
+ │    ├── ge (type: bool)
+ │    │    ├── variable (0) (type: int)
+ │    │    └── const (5) (type: int)
+ │    └── le (type: bool)
+ │         ├── variable (0) (type: int)
+ │         └── const (10) (type: int)
+ ├── and (type: bool)
+ │    ├── gt (type: bool)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── const (1) (type: int)
+ │    └── lt (type: bool)
+ │         ├── variable (1) (type: int)
+ │         └── const (3) (type: int)
+ └── gt (type: bool)
+      ├── variable (2) (type: int)
+      └── const (2) (type: int)
+(((@1 >= 5) AND (@1 <= 10)) OR ((@2 > 1) AND (@2 < 3))) OR (@3 > 2)
+
+build-scalar,normalize,semtree-expr vars=(int, int, int, int)
+(@1, @2 + @3, 5 + @4 * 2) = (@2 + @3, 8, @1 - @4)
+----
+and (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── plus (type: int)
+ │         ├── variable (1) (type: int)
+ │         └── variable (2) (type: int)
+ ├── eq (type: bool)
+ │    ├── plus (type: int)
+ │    │    ├── variable (1) (type: int)
+ │    │    └── variable (2) (type: int)
+ │    └── const (8) (type: int)
+ └── eq (type: bool)
+      ├── plus (type: int)
+      │    ├── const (5) (type: int)
+      │    └── mult (type: int)
+      │         ├── variable (3) (type: int)
+      │         └── const (2) (type: int)
+      └── minus (type: int)
+           ├── variable (0) (type: int)
+           └── variable (3) (type: int)
+((@1 = (@2 + @3)) AND ((@2 + @3) = 8)) AND ((5 + (@4 * 2)) = (@1 - @4))
+
+build-scalar,normalize,semtree-expr vars=(int, int, int, int)
+((@1, @2), (@3, @4)) = ((1, 2), (3, 4))
+----
+and (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (1) (type: int)
+ ├── eq (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── const (2) (type: int)
+ ├── eq (type: bool)
+ │    ├── variable (2) (type: int)
+ │    └── const (3) (type: int)
+ └── eq (type: bool)
+      ├── variable (3) (type: int)
+      └── const (4) (type: int)
+(((@1 = 1) AND (@2 = 2)) AND (@3 = 3)) AND (@4 = 4)
+
+build-scalar,normalize,semtree-expr vars=(int, int, int, string)
+(@1, (@2, 'a'), (@3, 'b', 5)) = (9, (@1 + @3, @4), (5, @4, @1))
+----
+and (type: bool)
+ ├── eq (type: bool)
+ │    ├── variable (0) (type: int)
+ │    └── const (9) (type: int)
+ ├── eq (type: bool)
+ │    ├── variable (1) (type: int)
+ │    └── plus (type: int)
+ │         ├── variable (0) (type: int)
+ │         └── variable (2) (type: int)
+ ├── eq (type: bool)
+ │    ├── variable (3) (type: string)
+ │    └── const ('a') (type: string)
+ ├── eq (type: bool)
+ │    ├── variable (2) (type: int)
+ │    └── const (5) (type: int)
+ ├── eq (type: bool)
+ │    ├── variable (3) (type: string)
+ │    └── const ('b') (type: string)
+ └── eq (type: bool)
+      ├── variable (0) (type: int)
+      └── const (5) (type: int)
+(((((@1 = 9) AND (@2 = (@1 + @3))) AND (@4 = 'a')) AND (@3 = 5)) AND (@4 = 'b')) AND (@1 = 5)
+
+# Verify normalization of negated comparisons.
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 = 5)
+----
+ne (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+@1 != 5
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 <> 5)
+----
+eq (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+@1 = 5
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 >= 5)
+----
+lt (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+@1 < 5
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 <= 5)
+----
+gt (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+@1 > 5
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 > 5)
+----
+le (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+@1 <= 5
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 < 5)
+----
+ge (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+@1 >= 5
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 IN (1, 2))
+----
+not-in (type: bool)
+ ├── variable (0) (type: int)
+ └── tuple (type: tuple{int, int})
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
+@1 NOT IN (1, 2)
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 NOT IN (1, 2))
+----
+in (type: bool)
+ ├── variable (0) (type: int)
+ └── tuple (type: tuple{int, int})
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
+@1 IN (1, 2)
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 LIKE 'foo')
+----
+not-like (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 NOT LIKE 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 NOT LIKE 'foo')
+----
+like (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 LIKE 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 ILIKE 'foo')
+----
+not-ilike (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 NOT ILIKE 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 NOT ILIKE 'foo')
+----
+ilike (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 ILIKE 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 SIMILAR TO 'foo')
+----
+not-similar-to (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 NOT SIMILAR TO 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 NOT SIMILAR TO 'foo')
+----
+similar-to (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 SIMILAR TO 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 ~ 'foo')
+----
+not-regmatch (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 !~ 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 !~ 'foo')
+----
+regmatch (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 ~ 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 ~* 'foo')
+----
+not-regimatch (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 !~* 'foo'
+
+build-scalar,normalize,semtree-expr vars=(string)
+NOT (@1 !~* 'foo')
+----
+regimatch (type: bool)
+ ├── variable (0) (type: string)
+ └── const ('foo') (type: string)
+@1 ~* 'foo'
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 IS NULL)
+----
+is-not (type: bool)
+ ├── variable (0) (type: int)
+ └── const (NULL) (type: NULL)
+@1 IS NOT NULL
+
+build-scalar,normalize,semtree-expr vars=(int)
+NOT (@1 IS NOT NULL)
+----
+is (type: bool)
+ ├── variable (0) (type: int)
+ └── const (NULL) (type: NULL)
+@1 IS NULL
+
+build-scalar,normalize,semtree-expr vars=(int, int)
+NOT (@1 IS DISTINCT FROM @2)
+----
+is (type: bool)
+ ├── variable (0) (type: int)
+ └── variable (1) (type: int)
+@1 IS NOT DISTINCT FROM @2
+
+build-scalar,normalize,semtree-expr vars=(int, int)
+NOT (@1 IS NOT DISTINCT FROM @2)
+----
+is-not (type: bool)
+ ├── variable (0) (type: int)
+ └── variable (1) (type: int)
+@1 IS DISTINCT FROM @2
