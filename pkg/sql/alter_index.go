@@ -59,31 +59,18 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	for _, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
-			previousTableDesc := *n.tableDesc
 			partitioning, err := createPartitionedBy(
 				params.ctx, params.p.evalCtx.Settings, &params.p.evalCtx, n.tableDesc, n.indexDesc, t.PartitionBy)
 			if err != nil {
 				return err
 			}
+			descriptorChanged = !proto.Equal(
+				&n.indexDesc.Partitioning,
+				&partitioning,
+			)
 			n.indexDesc.Partitioning = partitioning
-			// TODO(dan): This checks TableDescriptors instead of
-			// PartitioningDescriptors to mirror the fast path check. Of course,
-			// RepartitioningFastPathAvailable could also be acting on
-			// PartitioningDescriptors but then it would need a complicated
-			// method signature and it felt weird to impose that on the
-			// sql<->sqlccl hook. Revisit?
-			descriptorChanged = !proto.Equal(&previousTableDesc, n.tableDesc)
-			if descriptorChanged {
-				fastPath, err := RepartitioningFastPathAvailable(&previousTableDesc, n.tableDesc)
-				if err != nil {
-					return err
-				}
-				if !fastPath {
-					return fmt.Errorf("data validation is required for this repartitioning, but is currently unimplemented")
-				}
-				// TODO(dan): Remove zone configs which no longer point at a
-				// partition.
-			}
+			// TODO(dan): Remove zone configs which no longer point at a
+			// partition.
 		default:
 			return fmt.Errorf("unsupported alter command: %T", cmd)
 		}
@@ -99,7 +86,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	if addedMutations {
 		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
 			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
-	} else {
+	} else if descriptorChanged {
 		err = n.tableDesc.SetUpVersion()
 	}
 	if err != nil {

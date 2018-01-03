@@ -99,9 +99,8 @@ type partitioningTest struct {
 }
 
 type repartitioningTest struct {
-	index      string
-	old, new   partitioningTest
-	isFastPath bool
+	index    string
+	old, new partitioningTest
 }
 
 // parse fills in the various fields of `partitioningTest.parsed`.
@@ -762,90 +761,76 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartitioningTest, error) {
 	tests := []repartitioningTest{
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `unpartitioned`},
-			new:        partitioningTest{name: `unpartitioned`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `unpartitioned`},
+			new:   partitioningTest{name: `unpartitioned`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `unpartitioned`},
-			new:        partitioningTest{name: `single col list partitioning`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `unpartitioned`},
+			new:   partitioningTest{name: `single col list partitioning`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `unpartitioned`},
-			new:        partitioningTest{name: `single col list partitioning - DEFAULT`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `unpartitioned`},
+			new:   partitioningTest{name: `single col list partitioning - DEFAULT`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `unpartitioned`},
-			new:        partitioningTest{name: `single col range partitioning`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `unpartitioned`},
+			new:   partitioningTest{name: `single col range partitioning`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `unpartitioned`},
-			new:        partitioningTest{name: `single col range partitioning - MAXVALUE`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `unpartitioned`},
+			new:   partitioningTest{name: `single col range partitioning - MAXVALUE`},
 		},
 
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col list partitioning`},
-			new:        partitioningTest{name: `single col list partitioning - DEFAULT`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `single col list partitioning`},
+			new:   partitioningTest{name: `single col list partitioning - DEFAULT`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col list partitioning - DEFAULT`},
-			new:        partitioningTest{name: `single col list partitioning`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `single col list partitioning - DEFAULT`},
+			new:   partitioningTest{name: `single col list partitioning`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `multi col list partitioning`},
-			new:        partitioningTest{name: `multi col list partitioning - DEFAULT`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `multi col list partitioning`},
+			new:   partitioningTest{name: `multi col list partitioning - DEFAULT`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `multi col list partitioning - DEFAULT`},
-			new:        partitioningTest{name: `multi col list partitioning`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `multi col list partitioning - DEFAULT`},
+			new:   partitioningTest{name: `multi col list partitioning`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `multi col list partitioning - DEFAULT`},
-			new:        partitioningTest{name: `multi col list partitioning - DEFAULT DEFAULT`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `multi col list partitioning - DEFAULT`},
+			new:   partitioningTest{name: `multi col list partitioning - DEFAULT DEFAULT`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `multi col list partitioning - DEFAULT DEFAULT`},
-			new:        partitioningTest{name: `multi col list partitioning - DEFAULT`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `multi col list partitioning - DEFAULT DEFAULT`},
+			new:   partitioningTest{name: `multi col list partitioning - DEFAULT`},
 		},
 
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col range partitioning`},
-			new:        partitioningTest{name: `single col range partitioning - MAXVALUE`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `single col range partitioning`},
+			new:   partitioningTest{name: `single col range partitioning - MAXVALUE`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col range partitioning - MAXVALUE`},
-			new:        partitioningTest{name: `single col range partitioning`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `single col range partitioning - MAXVALUE`},
+			new:   partitioningTest{name: `single col range partitioning`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `multi col range partitioning`},
-			new:        partitioningTest{name: `multi col range partitioning - MAXVALUE`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `multi col range partitioning`},
+			new:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
 		},
 		{
 			// NB: Most of these fast path tests are false one way and true the
@@ -853,87 +838,74 @@ func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartition
 			// The `multi col range partitioning - MAXVALUE` partition test has
 			// been constructed to cover exactly the same set of values so we
 			// can have a true<->true test case as well.
-			index:      `primary`,
-			old:        partitioningTest{name: `multi col range partitioning - MAXVALUE`},
-			new:        partitioningTest{name: `multi col range partitioning`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
+			new:   partitioningTest{name: `multi col range partitioning`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `multi col range partitioning - MAXVALUE`},
-			new:        partitioningTest{name: `multi col range partitioning - MAXVALUE MAXVALUE`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
+			new:   partitioningTest{name: `multi col range partitioning - MAXVALUE MAXVALUE`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `multi col range partitioning - MAXVALUE MAXVALUE`},
-			new:        partitioningTest{name: `multi col range partitioning - MAXVALUE`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `multi col range partitioning - MAXVALUE MAXVALUE`},
+			new:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
 		},
 
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col list partitioning`},
-			new:        partitioningTest{name: `single col range partitioning`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `single col list partitioning`},
+			new:   partitioningTest{name: `single col range partitioning`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col range partitioning`},
-			new:        partitioningTest{name: `single col list partitioning`},
-			isFastPath: false,
+			index: `primary`,
+			old:   partitioningTest{name: `single col range partitioning`},
+			new:   partitioningTest{name: `single col list partitioning`},
 		},
 
 		// TODO(dan): One repartitioning is fully implemented, these tests also
 		// need to pass with no ccl code.
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col list partitioning`},
-			new:        partitioningTest{name: `unpartitioned`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `single col list partitioning`},
+			new:   partitioningTest{name: `unpartitioned`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col list partitioning - DEFAULT`},
-			new:        partitioningTest{name: `unpartitioned`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `single col list partitioning - DEFAULT`},
+			new:   partitioningTest{name: `unpartitioned`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col range partitioning`},
-			new:        partitioningTest{name: `unpartitioned`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `single col range partitioning`},
+			new:   partitioningTest{name: `unpartitioned`},
 		},
 		{
-			index:      `primary`,
-			old:        partitioningTest{name: `single col range partitioning - MAXVALUE`},
-			new:        partitioningTest{name: `unpartitioned`},
-			isFastPath: true,
+			index: `primary`,
+			old:   partitioningTest{name: `single col range partitioning - MAXVALUE`},
+			new:   partitioningTest{name: `unpartitioned`},
 		},
 
 		{
-			index:      `b_idx`,
-			old:        partitioningTest{name: `secondary index - unpartitioned`},
-			new:        partitioningTest{name: `secondary index - list partitioning`},
-			isFastPath: false,
+			index: `b_idx`,
+			old:   partitioningTest{name: `secondary index - unpartitioned`},
+			new:   partitioningTest{name: `secondary index - list partitioning`},
 		},
 		{
-			index:      `b_idx`,
-			old:        partitioningTest{name: `secondary index - list partitioning`},
-			new:        partitioningTest{name: `secondary index - unpartitioned`},
-			isFastPath: true,
+			index: `b_idx`,
+			old:   partitioningTest{name: `secondary index - list partitioning`},
+			new:   partitioningTest{name: `secondary index - unpartitioned`},
 		},
 		{
-			index:      `b_idx`,
-			old:        partitioningTest{name: `secondary index - list partitioning`},
-			new:        partitioningTest{name: `secondary index - list partitioning - DEFAULT`},
-			isFastPath: true,
+			index: `b_idx`,
+			old:   partitioningTest{name: `secondary index - list partitioning`},
+			new:   partitioningTest{name: `secondary index - list partitioning - DEFAULT`},
 		},
 		{
-			index:      `b_idx`,
-			old:        partitioningTest{name: `secondary index - list partitioning - DEFAULT`},
-			new:        partitioningTest{name: `secondary index - list partitioning`},
-			isFastPath: false,
+			index: `b_idx`,
+			old:   partitioningTest{name: `secondary index - list partitioning - DEFAULT`},
+			new:   partitioningTest{name: `secondary index - list partitioning`},
 		},
 	}
 
@@ -999,28 +971,6 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 		return errors.New(err.String())
 	}
 	return nil
-}
-
-func TestRepartitioningFastPathAvailable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
-	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-
-	for _, test := range testCases {
-		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
-			isFastPath, err := RepartitioningFastPathAvailable(
-				test.old.parsed.tableDesc, test.new.parsed.tableDesc)
-			if err != nil {
-				t.Fatalf("%+v", err)
-			}
-			if isFastPath != test.isFastPath {
-				t.Errorf("got %v expected %v", isFastPath, test.isFastPath)
-			}
-		})
-	}
 }
 
 func TestInitialPartitioning(t *testing.T) {
@@ -1174,10 +1124,6 @@ func TestRepartitioning(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	for _, test := range testCases {
-		if !test.isFastPath {
-			// non-fastpath repartitioning is unimplemented
-			continue
-		}
 		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
 			sqlDB.Exec(t, `DROP DATABASE IF EXISTS data`)
 			sqlDB.Exec(t, `CREATE DATABASE data`)
