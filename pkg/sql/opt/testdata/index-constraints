@@ -129,6 +129,16 @@ build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 != NULL
 ----
 
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1
+----
+[/true - /true]
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+NOT @1
+----
+[/false - /false]
+
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1)
 @1 = 1 AND @2 = 2
 ----
