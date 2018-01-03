@@ -178,7 +178,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 			nullVal = true
 			break
 		}
-		if c.colInfos[offset+i].Direction != dir {
+		if c.colInfos[offset+i].Direction != dir && e.op != neOp {
 			// The direction changed. For example:
 			//   a ASCENDING, b DESCENDING, c ASCENDING
 			//   (a, b, c) >= (1, 2, 3)
@@ -219,7 +219,24 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		spans[1].Start = LogicalKey{Vals: datumsCopy, Inclusive: false}
 		c.preferInclusive(offset, &spans[0])
 		c.preferInclusive(offset, &spans[1])
-		return spans, true, true
+		// If any columns are nullable, the spans could include unwanted NULLs.
+		// For example, for
+		//   (@1, @2, @3) != (1, 2, 3)
+		// we need to exclude tuples like
+		//   (1, NULL, NULL)
+		//   (NULL, 2, 3)
+		//
+		// But note that some tuples with NULLs can satisfy the condition, e.g.
+		//   (5, NULL, NULL)
+		//   (NULL, 5, 5)
+		tight = true
+		for i := 0; i < prefixLen; i++ {
+			if c.colInfos[offset+i].Nullable {
+				tight = false
+				break
+			}
+		}
+		return spans, true, tight
 
 	case ltOp:
 		less, inclusive = true, false
@@ -290,7 +307,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	// (2, NULL, NULL) >= (1, 2, 3).
 	if tight && less {
 		for i := 1; i < prefixLen; i++ {
-			if c.colInfos[i].Nullable {
+			if c.colInfos[offset+i].Nullable {
 				tight = false
 				break
 			}
