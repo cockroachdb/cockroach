@@ -83,6 +83,8 @@ type Args struct {
 type Transition struct {
 	Next   State
 	Action func(Args) error
+	// Description, if set, is reflected in the DOT diagram.
+	Description string
 }
 
 // TransitionNotFoundError is returned from Machine.Apply when the Event cannot

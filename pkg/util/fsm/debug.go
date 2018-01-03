@@ -34,10 +34,10 @@ type debugInfo struct {
 // eventAppliedToState returns the State resulting from applying the specified
 // Event to the specified State and the bool true, or false if there is no
 // associated transition.
-func (di debugInfo) eventAppliedToState(sName, eName string) (State, bool) {
+func (di debugInfo) eventAppliedToState(sName, eName string) (State, string, bool) {
 	sm := di.t.expanded[di.stateNameMap[sName]]
 	tr, ok := sm[di.eventNameMap[eName]]
-	return tr.Next, ok
+	return tr.Next, tr.Description, ok
 }
 
 func (di debugInfo) reachable(sName string) bool {
@@ -119,7 +119,7 @@ func genReport(w io.Writer, t Transitions) {
 
 		for _, eName := range di.sortedEventNames {
 			handledBuf := &missing
-			if _, ok := di.eventAppliedToState(sName, eName); ok {
+			if _, _, ok := di.eventAppliedToState(sName, eName); ok {
 				handledBuf = &present
 			}
 			fmt.Fprintf(handledBuf, "\t\t%s\n", eName)
@@ -178,9 +178,16 @@ func (dw dotWriter) writeEdges(start string) {
 			}
 		}
 		for _, eName := range di.sortedEventNames {
-			if next, ok := di.eventAppliedToState(sName, eName); ok {
-				fmt.Fprintf(dw.w, "\t%q -> %q [label = %q]\n",
-					sName, stateName(next), eName)
+			if next, desc, ok := di.eventAppliedToState(sName, eName); ok {
+				var label string
+				if desc == "" {
+					label = fmt.Sprintf("%q", eName)
+				} else {
+					// We'll use an HTML label with the description on the 2nd line.
+					label = fmt.Sprintf("<%s<BR/><I>%s</I>>", eName, desc)
+				}
+				fmt.Fprintf(dw.w, "\t%q -> %q [label = %s]\n",
+					sName, stateName(next), label)
 			}
 		}
 	}
