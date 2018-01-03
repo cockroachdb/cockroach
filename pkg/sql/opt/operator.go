@@ -109,7 +109,7 @@ type operatorInfo struct {
 	// class of the operator (see operatorClass).
 	class operatorClass
 
-	normalizeFn func(*expr)
+	normalizeFn func(*Expr)
 }
 
 // operatorTab stores static information about all operators.
@@ -135,5 +135,5 @@ func registerOperator(op operator, info operatorInfo) {
 // operators.
 type operatorClass interface {
 	// format outputs information about the expr tree to a treePrinter.
-	format(e *expr, tp treeprinter.Node)
+	format(e *Expr, tp treeprinter.Node)
 }

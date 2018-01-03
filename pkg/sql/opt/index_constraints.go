@@ -60,7 +60,7 @@ func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
 // operand. The <tight> return value indicates if the spans are exactly
 // equivalent to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForSingleColumn(
-	offset int, op operator, val *expr,
+	offset int, op operator, val *Expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	if op == inOp && isTupleOfConstants(val) {
 		// We assume that the values of the tuple are already ordered and distinct.
@@ -149,7 +149,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForTupleInequality(
-	offset int, e *expr,
+	offset int, e *Expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	lhs, rhs := e.children[0], e.children[1]
 
@@ -307,7 +307,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForTupleIn(
-	offset int, e *expr,
+	offset int, e *Expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	lhs, rhs := e.children[0], e.children[1]
 
@@ -375,7 +375,7 @@ Outer:
 // The <tight> return value indicates if the spans are exactly equivalent to the
 // expression (and not weaker). See simplifyFilter for more information.
 func (c *indexConstraintCtx) makeSpansForExpr(
-	offset int, e *expr,
+	offset int, e *Expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	switch e.op {
 	case constOp:
@@ -447,7 +447,7 @@ type indexConstraintConjunctionCtx struct {
 	*indexConstraintCtx
 
 	// andExprs is a set of conjuncts that make up the filter.
-	andExprs []*expr
+	andExprs []*Expr
 
 	// Memoization data structure for calcOffset.
 	results []calcOffsetResult
@@ -464,7 +464,7 @@ type calcOffsetResult struct {
 
 // makeSpansForAndExprs calculates spans for a conjunction.
 func (c *indexConstraintCtx) makeSpansForAndExprs(
-	offset int, andExprs []*expr,
+	offset int, andExprs []*Expr,
 ) (_ LogicalSpans, ok bool) {
 	conjCtx := indexConstraintConjunctionCtx{
 		indexConstraintCtx: c,
@@ -668,7 +668,7 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 
 // makeSpansForOrExprs calculates spans for a disjunction.
 func (c *indexConstraintCtx) makeSpansForOrExprs(
-	offset int, orExprs []*expr,
+	offset int, orExprs []*Expr,
 ) (_ LogicalSpans, ok bool) {
 	var spans LogicalSpans
 
@@ -691,19 +691,19 @@ func (c *indexConstraintCtx) makeSpansForOrExprs(
 	return spans, true
 }
 
-var constTrueExpr = &expr{
+var constTrueExpr = &Expr{
 	op:          constOp,
 	scalarProps: &scalarProps{typ: types.Bool},
 	private:     tree.DBoolTrue,
 }
 
-var constFalseExpr = &expr{
+var constFalseExpr = &Expr{
 	op:          constOp,
 	scalarProps: &scalarProps{typ: types.Bool},
 	private:     tree.DBoolFalse,
 }
 
-func constBoolExpr(val bool) *expr {
+func constBoolExpr(val bool) *Expr {
 	if val {
 		return constTrueExpr
 	}
@@ -799,8 +799,8 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(spans LogicalSpans) int {
 //    `@1 <= 1 OR @1 >= 4` has spans `[ - /1], [/1 - ]` but in separation neither
 //    sub-expression is always true inside these spans.
 func (c *indexConstraintCtx) simplifyFilterImpl(
-	e *expr, spans LogicalSpans, maxSimplifyPrefix int,
-) *expr {
+	e *Expr, spans LogicalSpans, maxSimplifyPrefix int,
+) *Expr {
 	// Special handling for AND and OR.
 	if e.op == orOp || e.op == andOp {
 		// If a child expression is simplified to a const bool of
@@ -808,7 +808,7 @@ func (c *indexConstraintCtx) simplifyFilterImpl(
 		// false for AND and true for OR.
 		var shortcircuitValue = (e.op == orOp)
 
-		var children []*expr
+		var children []*Expr
 		for i, child := range e.children {
 			simplified := c.simplifyFilterImpl(child, spans, maxSimplifyPrefix)
 			if ok, val := isConstBool(simplified); ok {
@@ -818,7 +818,7 @@ func (c *indexConstraintCtx) simplifyFilterImpl(
 				// We can ignore this child (it is true for AND, false for OR).
 			} else {
 				if children == nil {
-					children = make([]*expr, 0, len(e.children)-i)
+					children = make([]*Expr, 0, len(e.children)-i)
 				}
 				children = append(children, simplified)
 			}
@@ -831,7 +831,7 @@ func (c *indexConstraintCtx) simplifyFilterImpl(
 			return children[0]
 		default:
 			scalarPropsCopy := *e.scalarProps
-			return &expr{
+			return &Expr{
 				op:          e.op,
 				scalarProps: &scalarPropsCopy,
 				private:     e.private,
@@ -870,7 +870,7 @@ func (c *indexConstraintCtx) simplifyFilterImpl(
 
 // simplifyFilter removes parts of the filter that are satisfied by the spans. It
 // is best-effort. Returns nil if there is no remaining filter.
-func (c *indexConstraintCtx) simplifyFilter(filter *expr, spans LogicalSpans) *expr {
+func (c *indexConstraintCtx) simplifyFilter(filter *Expr, spans LogicalSpans) *Expr {
 	remainingFilter := c.simplifyFilterImpl(filter, spans, c.getMaxSimplifyPrefix(spans))
 	if ok, val := isConstBool(remainingFilter); ok && val {
 		return nil
@@ -903,7 +903,7 @@ type IndexColumnInfo struct {
 type IndexConstraints struct {
 	indexConstraintCtx
 
-	filter *expr
+	filter *Expr
 
 	spansPopulated bool
 	spans          LogicalSpans
@@ -926,7 +926,7 @@ func (ic *IndexConstraints) Init(
 }
 
 func (ic *IndexConstraints) initWithExpr(
-	filter *expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
+	filter *Expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
 ) {
 	*ic = IndexConstraints{
 		filter:             filter,
@@ -947,7 +947,7 @@ func (ic *IndexConstraints) Spans() (_ LogicalSpans, ok bool) {
 // RemainingFilter calculates a simplified filter that needs to be applied
 // within the returned Spans.
 func (ic *IndexConstraints) RemainingFilter(ivh *tree.IndexedVarHelper) tree.TypedExpr {
-	var res *expr
+	var res *Expr
 	if !ic.spansPopulated {
 		if ok, val := isConstBool(ic.filter); ok && val {
 			return nil
