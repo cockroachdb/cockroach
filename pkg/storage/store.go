@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -356,7 +357,7 @@ type Store struct {
 	compactor          *compactor.Compactor        // Schedules compaction of the engine
 	tsCache            tscache.Cache               // Most recent timestamps for keys / key ranges
 	allocator          Allocator                   // Makes allocation decisions
-	rangeIDAlloc       *idAllocator                // Range ID allocator
+	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
 	gcQueue            *gcQueue                    // Garbage collection queue
 	splitQueue         *splitQueue                 // Range splitting queue
 	replicateQueue     *replicateQueue             // Replication queue
@@ -1092,8 +1093,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(
-		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper,
+	idAlloc, err := idalloc.NewAllocator(
+		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, 2 /* minID */, rangeIDAllocCount, s.stopper,
 	)
 	if err != nil {
 		return err
