@@ -140,6 +140,7 @@ show_stmt ::=
 	| show_constraints_stmt
 	| show_create_table_stmt
 	| show_create_view_stmt
+	| show_create_sequence_stmt
 	| show_csettings_stmt
 	| show_databases_stmt
 	| show_grants_stmt
@@ -417,6 +418,9 @@ show_create_table_stmt ::=
 
 show_create_view_stmt ::=
 	'SHOW' 'CREATE' 'VIEW' var_name
+
+show_create_sequence_stmt ::=
+	'SHOW' 'CREATE' 'SEQUENCE' var_name
 
 show_csettings_stmt ::=
 	'SHOW' 'CLUSTER' 'SETTING' any_name
