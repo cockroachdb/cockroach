@@ -33,7 +33,7 @@ func init() {
 		tupleOp:             {name: "tuple"},
 		andOp:               {name: "and", normalizeFn: normalizeAndOrOp},
 		orOp:                {name: "or", normalizeFn: normalizeAndOrOp},
-		notOp:               {name: "not"},
+		notOp:               {name: "not", normalizeFn: normalizeNotOp},
 		eqOp:                {name: "eq", normalizeFn: normalizeEqOp},
 		ltOp:                {name: "lt"},
 		gtOp:                {name: "gt"},
@@ -226,6 +226,68 @@ func normalizeAndOrOp(e *expr) {
 			e.children = append(e.children, child)
 		}
 	}
+}
+
+func normalizeNotOp(e *expr) {
+	if e.op != notOp {
+		panic(fmt.Sprintf("invalid call on %s", e))
+	}
+	child := e.children[0]
+	var newOp operator
+
+	// See if the child is a comparison that we can invert.
+	switch child.op {
+	case eqOp:
+		newOp = neOp
+	case neOp:
+		newOp = eqOp
+	case gtOp:
+		newOp = leOp
+	case geOp:
+		newOp = ltOp
+	case ltOp:
+		newOp = geOp
+	case leOp:
+		newOp = gtOp
+	case inOp:
+		newOp = notInOp
+	case notInOp:
+		newOp = inOp
+	case likeOp:
+		newOp = notLikeOp
+	case notLikeOp:
+		newOp = likeOp
+	case iLikeOp:
+		newOp = notILikeOp
+	case notILikeOp:
+		newOp = iLikeOp
+	case similarToOp:
+		newOp = notSimilarToOp
+	case notSimilarToOp:
+		newOp = similarToOp
+	case regMatchOp:
+		newOp = notRegMatchOp
+	case notRegMatchOp:
+		newOp = regMatchOp
+	case regIMatchOp:
+		newOp = notRegMatchOp
+	case notRegIMatchOp:
+		newOp = regMatchOp
+	case isOp:
+		newOp = isNotOp
+	case isNotOp:
+		newOp = isOp
+
+	case notOp:
+		// Special case: NOT NOT (x) -> (x)
+		*e = *child.children[0]
+		return
+
+	default:
+		return
+	}
+	*e = *child
+	e.op = newOp
 }
 
 func normalizeEqOp(e *expr) {

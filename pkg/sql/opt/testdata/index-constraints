@@ -22,6 +22,11 @@ build-scalar,normalize,index-constraints vars=(int) index=(@1)
 ----
 [/3 - ]
 
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+NOT (@1 <= 2)
+----
+[/3 - ]
+
 build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 @1 > 2
 ----
@@ -39,6 +44,12 @@ build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
 @1 != 2
+----
+[ - /1]
+[/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+NOT (@1 = 2)
 ----
 [ - /1]
 [/3 - ]

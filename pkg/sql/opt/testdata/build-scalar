@@ -390,3 +390,77 @@ eq (type: bool)
  ├── unsupported-scalar (length(@1)) (type: int)
  └── const (2) (type: int)
 length(@1) = 2
+
+build-scalar,normalize vars=(int)
+NOT (@1 = 5)
+----
+ne (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+
+build-scalar,normalize vars=(int)
+NOT (@1 <> 5)
+----
+eq (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+
+build-scalar,normalize vars=(int)
+NOT (@1 >= 5)
+----
+lt (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+
+build-scalar,normalize vars=(int)
+NOT (@1 <= 5)
+----
+gt (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+
+build-scalar,normalize vars=(int)
+NOT (@1 > 5)
+----
+le (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+
+build-scalar,normalize vars=(int)
+NOT (@1 < 5)
+----
+ge (type: bool)
+ ├── variable (0) (type: int)
+ └── const (5) (type: int)
+
+build-scalar,normalize vars=(int)
+NOT (@1 IS NULL)
+----
+is-not (type: bool)
+ ├── variable (0) (type: int)
+ └── const (NULL) (type: NULL)
+
+build-scalar,normalize vars=(int)
+NOT (@1 IS NOT NULL)
+----
+is (type: bool)
+ ├── variable (0) (type: int)
+ └── const (NULL) (type: NULL)
+
+build-scalar,normalize vars=(int)
+NOT (@1 IN (1, 2))
+----
+not-in (type: bool)
+ ├── variable (0) (type: int)
+ └── tuple (type: tuple{int, int})
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
+
+build-scalar,normalize vars=(int)
+NOT (@1 NOT IN (1, 2))
+----
+in (type: bool)
+ ├── variable (0) (type: int)
+ └── tuple (type: tuple{int, int})
+      ├── const (1) (type: int)
+      └── const (2) (type: int)
