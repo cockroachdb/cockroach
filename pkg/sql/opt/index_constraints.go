@@ -178,7 +178,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 			nullVal = true
 			break
 		}
-		if c.colInfos[offset+i].Direction != dir {
+		if c.colInfos[offset+i].Direction != dir && e.op != neOp {
 			// The direction changed. For example:
 			//   a ASCENDING, b DESCENDING, c ASCENDING
 			//   (a, b, c) >= (1, 2, 3)
@@ -211,15 +211,31 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 			// determine any constraint on (a, b).
 			return nil, false, false
 		}
-		spans := LogicalSpans{MakeFullSpan(), MakeFullSpan()}
-		spans[0].End = LogicalKey{Vals: datums, Inclusive: false}
-		// We don't want the spans to alias each other, the preferInclusive
-		// calls below could mangle them.
-		datumsCopy := append([]tree.Datum(nil), datums...)
-		spans[1].Start = LogicalKey{Vals: datumsCopy, Inclusive: false}
+		nullSpan := c.makeNotNullSpan(offset)
+		// preferInclusive can modify the keys in place; make a copy.
+		datumsCopy := append(tree.Datums(nil), datums...)
+		spans := LogicalSpans{
+			{
+				Start: nullSpan.Start,
+				End:   LogicalKey{Vals: datums, Inclusive: false},
+			},
+			{
+				Start: LogicalKey{Vals: datumsCopy, Inclusive: false},
+				End:   nullSpan.End,
+			},
+		}
 		c.preferInclusive(offset, &spans[0])
 		c.preferInclusive(offset, &spans[1])
-		return spans, true, true
+		// If any columns but the first are nullable, the spans
+		// include unwanted NULLs.
+		tight = true
+		for i := 1; i < prefixLen; i++ {
+			if c.colInfos[offset+i].Nullable {
+				tight = false
+				break
+			}
+		}
+		return spans, true, tight
 
 	case ltOp:
 		less, inclusive = true, false
@@ -290,7 +306,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	// (2, NULL, NULL) >= (1, 2, 3).
 	if tight && less {
 		for i := 1; i < prefixLen; i++ {
-			if c.colInfos[i].Nullable {
+			if c.colInfos[offset+i].Nullable {
 				tight = false
 				break
 			}
