@@ -26,7 +26,7 @@ import (
 // ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
 // two replica snapshots. For now it's only a diff between their KV pairs.
 type ReplicaSnapshotDiff struct {
-	// LeaseHolder is set to true of this k:v pair is only present on the lease
+	// LeaseHolder is set to true of this kv pair is only present on the lease
 	// holder.
 	LeaseHolder bool
 	Key         roachpb.Key
@@ -83,7 +83,7 @@ func (rsds ReplicaSnapshotDiffSlice) String() string {
 	return buf.String()
 }
 
-// diffs the two k:v dumps between the lease holder and the replica.
+// diffs the two kv dumps between the lease holder and the replica.
 func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
 	if l == nil || r == nil {
 		return nil

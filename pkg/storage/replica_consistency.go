@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -302,12 +304,12 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
 // checksum, and sends out a notification.
 func (r *Replica) computeChecksumDone(
-	ctx context.Context, id uuid.UUID, sha []byte, snapshot *roachpb.RaftSnapshotData,
+	ctx context.Context, id uuid.UUID, result replicaHash, snapshot *roachpb.RaftSnapshotData,
 ) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.mu.checksums[id]; ok {
-		c.Checksum = sha
+		c.Checksum = result.SHA512[:]
 		c.gcTimestamp = timeutil.Now().Add(batcheval.ReplicaChecksumGCInterval)
 		c.Snapshot = snapshot
 		r.mu.checksums[id] = c
@@ -321,63 +323,100 @@ func (r *Replica) computeChecksumDone(
 	}
 }
 
+type replicaHash struct {
+	SHA512                    [sha512.Size]byte
+	PersistedMS, RecomputedMS enginepb.MVCCStats
+}
+
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
-// It will dump all the k:v data into snapshot if it is provided.
+// It will dump all the kv data into snapshot if it is provided.
 func (r *Replica) sha512(
-	desc roachpb.RangeDescriptor, snap engine.Reader, snapshot *roachpb.RaftSnapshotData,
-) ([]byte, error) {
-	hasher := sha512.New()
+	ctx context.Context,
+	desc roachpb.RangeDescriptor,
+	snap engine.Reader,
+	snapshot *roachpb.RaftSnapshotData,
+) (*replicaHash, error) {
 	tombstoneKey := engine.MakeMVCCMetadataKey(keys.RaftTombstoneKey(desc.RangeID))
 
 	// Iterate over all the data in the range.
-	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
+	iter := snap.NewIterator(false /* prefix */)
 	defer iter.Close()
 
+	var alloc bufalloc.ByteAllocator
+	hasher := sha512.New()
+
 	var legacyTimestamp hlc.LegacyTimestamp
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return nil, err
-		} else if !ok {
-			break
-		}
-		key := iter.Key()
-		if key.Equal(tombstoneKey) {
+	visitor := func(unsafeKey engine.MVCCKey, unsafeValue []byte) error {
+		if unsafeKey.Equal(tombstoneKey) {
 			// Skip the tombstone key which is marked as replicated even though it
 			// isn't.
 			//
 			// TODO(peter): Figure out a way to migrate this key to the unreplicated
 			// key space.
-			continue
+			return nil
 		}
-		value := iter.Value()
 
 		if snapshot != nil {
-			// Add the k:v into the debug message.
-			snapshot.KV = append(snapshot.KV, roachpb.RaftSnapshotData_KeyValue{Key: key.Key, Value: value, Timestamp: key.Timestamp})
+			// Add (a copy of) the kv pair into the debug message.
+			kv := roachpb.RaftSnapshotData_KeyValue{
+				Timestamp: unsafeKey.Timestamp,
+			}
+			alloc, kv.Key = alloc.Copy(unsafeKey.Key, 0)
+			alloc, kv.Value = alloc.Copy(unsafeValue, 0)
+			snapshot.KV = append(snapshot.KV, kv)
 		}
 
 		// Encode the length of the key and value.
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(key.Key))); err != nil {
-			return nil, err
+		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeKey.Key))); err != nil {
+			return err
 		}
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(value))); err != nil {
-			return nil, err
+		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeValue))); err != nil {
+			return err
 		}
-		if _, err := hasher.Write(key.Key); err != nil {
-			return nil, err
+		if _, err := hasher.Write(unsafeKey.Key); err != nil {
+			return err
 		}
-		legacyTimestamp = hlc.LegacyTimestamp(key.Timestamp)
+		legacyTimestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
 		timestamp, err := protoutil.Marshal(&legacyTimestamp)
+		if err != nil {
+			return err
+		}
+		if _, err := hasher.Write(timestamp); err != nil {
+			return err
+		}
+		_, err = hasher.Write(unsafeValue)
+		return err
+	}
+
+	var ms enginepb.MVCCStats
+	for _, span := range makeReplicatedKeyRanges(&desc) {
+		spanMS, err := engine.ComputeStatsGo(
+			iter, span.start, span.end, 0 /* nowNanos */, visitor,
+		)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := hasher.Write(timestamp); err != nil {
-			return nil, err
-		}
-		if _, err := hasher.Write(value); err != nil {
-			return nil, err
-		}
+		ms.Add(spanMS)
 	}
-	sha := make([]byte, 0, sha512.Size)
-	return hasher.Sum(sha), nil
+
+	var result replicaHash
+	result.RecomputedMS = ms
+	hasher.Sum(result.SHA512[:])
+
+	ok, err := engine.MVCCGetProto(
+		ctx, snap, keys.RangeStatsKey(desc.RangeID), hlc.Timestamp{},
+		true /* consistent */, nil /* txn */, &result.PersistedMS,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errors.New("no MVCCStats persisted")
+	}
+
+	// We're not required to do so, but it looks nicer if both stats are aged to
+	// the same timestamp.
+	result.RecomputedMS.AgeTo(result.PersistedMS.LastUpdateNanos)
+
+	return &result, nil
 }
