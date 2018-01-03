@@ -105,9 +105,22 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 			break
 		}
 
-		var done bool
-		done, err = m.outputOneRow(ctx)
-		if err != nil || done {
+		var row sqlbase.EncDatumRow
+		row, err = m.nextRow(ctx)
+		if row == nil || err != nil {
+			break
+		}
+
+		var outRow sqlbase.EncDatumRow
+		var status ConsumerStatus
+		outRow, status, err = m.out.ProcessRow(ctx, row)
+		if outRow != nil {
+			if m.out.output.Push(outRow, ProducerMetadata{}) != NeedMoreRows {
+				break
+			}
+			continue
+		}
+		if err != nil || status != NeedMoreRows {
 			break
 		}
 	}
@@ -116,76 +129,75 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 	log.VEventf(ctx, 2, "exiting merge joiner run")
 }
 
-func (m *mergeJoiner) outputOneRow(ctx context.Context) (done bool, _ error) {
-	for m.leftIdx < len(m.leftRows) {
-		// Main join loop.
-		lrow := m.leftRows[m.leftIdx]
-		for m.rightIdx < len(m.rightRows) {
-			ridx := m.rightIdx
-			m.rightIdx++
-			renderedRow, err := m.render(lrow, m.rightRows[ridx])
-			if err != nil {
-				return false, err
-			}
-			if renderedRow != nil {
-				m.matchedRightCount++
-				if m.matchedRight != nil {
-					m.matchedRight[ridx] = true
+func (m *mergeJoiner) nextRow(ctx context.Context) (sqlbase.EncDatumRow, error) {
+	// The loops below form a restartable state machine that iterates over a batch
+	// of rows from the left and right side of the join. The state machine
+	// returns a result for every row that should be output.
+
+	for {
+		for m.leftIdx < len(m.leftRows) {
+			// We have unprocessed rows from the left-side batch.
+			lrow := m.leftRows[m.leftIdx]
+			for m.rightIdx < len(m.rightRows) {
+				// We have unprocessed rows from the right-side batch.
+				ridx := m.rightIdx
+				m.rightIdx++
+				renderedRow, err := m.render(lrow, m.rightRows[ridx])
+				if err != nil {
+					return nil, err
 				}
-				consumerStatus, err := m.out.EmitRow(ctx, renderedRow)
-				if err != nil || consumerStatus != NeedMoreRows {
-					return false, err
+				if renderedRow != nil {
+					m.matchedRightCount++
+					if m.matchedRight != nil {
+						m.matchedRight[ridx] = true
+					}
+					return renderedRow, nil
 				}
-				return false, nil
 			}
+
+			// We've exhausted the right-side batch. Adjust the indexes for the next
+			// row from the left-side of the batch.
+			m.rightIdx = 0
+			m.leftIdx++
+
+			// If we didn't match any rows on the right-side of the batch and this is
+			// a left or full outer join, emit an unmatched left-side row.
+			if m.matchedRightCount == 0 && shouldEmitUnmatchedRow(leftSide, m.joinType) {
+				return m.renderUnmatchedRow(lrow, leftSide), nil
+			}
+
+			m.matchedRightCount = 0
 		}
 
-		m.rightIdx = 0
-		m.leftIdx++
-
-		// We've exhausted the right side batch.
-		if m.matchedRightCount == 0 {
-			// Maybe output the left side row if no right side rows were matched.
-			needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, lrow, leftSide)
-			if !needMoreRows || err != nil {
-				return false, err
+		// We've exhausted the left-side batch. If this is a right or full outer
+		// join (and thus matchedRight!=nil), emit unmatched right-side rows.
+		if m.matchedRight != nil {
+			for m.rightIdx < len(m.rightRows) {
+				ridx := m.rightIdx
+				m.rightIdx++
+				if m.matchedRight[ridx] {
+					continue
+				}
+				return m.renderUnmatchedRow(m.rightRows[ridx], rightSide), nil
 			}
-			return false, nil
+
+			m.matchedRight = nil
 		}
 
-		m.matchedRightCount = 0
+		m.leftIdx, m.rightIdx = 0, 0
+		if done, err := m.nextBatch(ctx); done {
+			return nil, err
+		}
 	}
-
-	if m.matchedRight != nil {
-		// No-more rows on the left side, maybe output unmatched rows from the
-		// right side.
-		for m.rightIdx < len(m.rightRows) {
-			ridx := m.rightIdx
-			m.rightIdx++
-			if m.matchedRight[ridx] {
-				continue
-			}
-			needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, m.rightRows[ridx], rightSide)
-			if !needMoreRows || err != nil {
-				return false, err
-			}
-			return false, nil
-		}
-
-		m.matchedRight = nil
-	}
-
-	m.leftIdx, m.rightIdx = 0, 0
-	return m.fillBatch(ctx)
 }
 
-func (m *mergeJoiner) fillBatch(ctx context.Context) (done bool, _ error) {
+func (m *mergeJoiner) nextBatch(ctx context.Context) (done bool, _ error) {
 	for {
 		var meta *ProducerMetadata
 		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.evalCtx)
 		if meta != nil {
 			if meta.Err != nil {
-				return false, meta.Err
+				return true, meta.Err
 			}
 			_ = m.out.output.Push(nil /* row */, *meta)
 			continue
@@ -195,7 +207,7 @@ func (m *mergeJoiner) fillBatch(ctx context.Context) (done bool, _ error) {
 		}
 
 		m.matchedRight = nil
-		if m.joinType == fullOuter || m.joinType == rightOuter {
+		if shouldEmitUnmatchedRow(rightSide, m.joinType) {
 			m.matchedRight = make([]bool, len(m.rightRows))
 		}
 		return false, nil
