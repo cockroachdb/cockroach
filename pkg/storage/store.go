@@ -3436,7 +3436,7 @@ func sendSnapshot(
 		}
 		var key engine.MVCCKey
 		var value []byte
-		alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
+		alloc, key, value = snap.Iter.AllocIterKeyValue(alloc)
 		if bytes.HasPrefix(key.Key, unreplicatedPrefix) {
 			continue
 		}

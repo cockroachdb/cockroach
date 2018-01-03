@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -330,7 +331,7 @@ func (r *Replica) sha512(
 	tombstoneKey := engine.MakeMVCCMetadataKey(keys.RaftTombstoneKey(desc.RangeID))
 
 	// Iterate over all the data in the range.
-	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
+	iter := rditer.NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 
 	var legacyTimestamp hlc.LegacyTimestamp

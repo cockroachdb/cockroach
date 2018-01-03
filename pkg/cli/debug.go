@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -184,7 +185,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	iter := storage.NewReplicaDataIterator(&desc, db, debugCtx.replicated)
+	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated)
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return err

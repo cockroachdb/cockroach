@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 )
 
 // ComputeStatsForRange computes the stats for a given range by
@@ -30,8 +31,8 @@ func ComputeStatsForRange(
 	defer iter.Close()
 
 	ms := enginepb.MVCCStats{}
-	for _, r := range makeReplicatedKeyRanges(d) {
-		msDelta, err := iter.ComputeStats(r.start, r.end, nowNanos)
+	for _, keyRange := range rditer.MakeReplicatedKeyRanges(d) {
+		msDelta, err := iter.ComputeStats(keyRange.Start, keyRange.End, nowNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
