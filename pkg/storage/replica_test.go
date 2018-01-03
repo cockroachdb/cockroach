@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -6750,6 +6751,27 @@ func TestReplicaDestroy(t *testing.T) {
 	// Now try a fresh descriptor and succeed.
 	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *repl.Desc(), true); err != nil {
 		t.Fatal(err)
+	}
+
+	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* replicatedOnly */)
+	defer iter.Close()
+	if ok, err := iter.Valid(); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		// If the range is destroyed, only a tombstone key should be there.
+		k1 := iter.Key().Key
+		if tombstoneKey := keys.RaftTombstoneKey(tc.repl.RangeID); !bytes.Equal(k1, tombstoneKey) {
+			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
+		}
+
+		iter.Next()
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			t.Errorf("expected a destroyed replica to have only a tombstone key, but found more")
+		}
+	} else {
+		t.Errorf("expected a tombstone key, but got an empty iteration")
 	}
 }
 

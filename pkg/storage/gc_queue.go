@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -691,7 +692,7 @@ func RunGC(
 	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
 ) (GCInfo, error) {
 
-	iter := NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
+	iter := rditer.NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 
 	var infoMu = lockableGCInfo{}
