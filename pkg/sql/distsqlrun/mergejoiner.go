@@ -99,63 +99,24 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 	cancelChecker := sqlbase.NewCancelChecker(ctx)
 	m.evalCtx = m.flowCtx.NewEvalCtx()
 
+	var err error
 	for {
-		moreBatches, err := m.outputBatch(ctx, cancelChecker)
-		if err != nil || !moreBatches {
-			DrainAndClose(
-				ctx, m.out.output, err, m.leftSource, m.rightSource)
+		if err = cancelChecker.Check(); err != nil {
+			break
+		}
+
+		var done bool
+		done, err = m.outputOneRow(ctx)
+		if err != nil || done {
 			break
 		}
 	}
+
+	DrainAndClose(ctx, m.out.output, err, m.leftSource, m.rightSource)
 	log.VEventf(ctx, 2, "exiting merge joiner run")
 }
 
-// outputBatch outputs all the rows corresponding to a streamMerger batch (the
-// cross-product of two groups of matching rows).
-//
-// Returns true if more batches are available and needed. If false is returned,
-// the caller should drain the inputs (as the termination condition might have
-// been dictated by the consumer saying that no more rows are needed) and close
-// the output.
-func (m *mergeJoiner) outputBatch(
-	ctx context.Context, cancelChecker *sqlbase.CancelChecker,
-) (bool, error) {
-	for {
-		var meta *ProducerMetadata
-		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.evalCtx)
-		if meta != nil {
-			if meta.Err != nil {
-				return false, meta.Err
-			}
-			_ = m.out.output.Push(nil /* row */, *meta)
-			continue
-		}
-		if m.leftRows == nil && m.rightRows == nil {
-			return false, nil
-		}
-
-		m.matchedRight = nil
-		if m.joinType == fullOuter || m.joinType == rightOuter {
-			m.matchedRight = make([]bool, len(m.rightRows))
-		}
-		break
-	}
-
-	for {
-		if err := cancelChecker.Check(); err != nil {
-			return false, err
-		}
-		batchDone, err := m.outputOneRow(ctx)
-		if err != nil {
-			return false, err
-		}
-		if !batchDone {
-			return true, nil
-		}
-	}
-}
-
-func (m *mergeJoiner) outputOneRow(ctx context.Context) (bool, error) {
+func (m *mergeJoiner) outputOneRow(ctx context.Context) (done bool, _ error) {
 	for m.leftIdx < len(m.leftRows) {
 		// Main join loop.
 		lrow := m.leftRows[m.leftIdx]
@@ -175,7 +136,7 @@ func (m *mergeJoiner) outputOneRow(ctx context.Context) (bool, error) {
 				if err != nil || consumerStatus != NeedMoreRows {
 					return false, err
 				}
-				return true, nil
+				return false, nil
 			}
 		}
 
@@ -189,7 +150,7 @@ func (m *mergeJoiner) outputOneRow(ctx context.Context) (bool, error) {
 			if !needMoreRows || err != nil {
 				return false, err
 			}
-			return true, nil
+			return false, nil
 		}
 
 		m.matchedRightCount = 0
@@ -208,13 +169,35 @@ func (m *mergeJoiner) outputOneRow(ctx context.Context) (bool, error) {
 			if !needMoreRows || err != nil {
 				return false, err
 			}
-			return true, nil
+			return false, nil
 		}
 
 		m.matchedRight = nil
 	}
 
 	m.leftIdx, m.rightIdx = 0, 0
-	m.leftRows, m.rightRows = nil, nil
-	return false, nil
+	return m.fillBatch(ctx)
+}
+
+func (m *mergeJoiner) fillBatch(ctx context.Context) (done bool, _ error) {
+	for {
+		var meta *ProducerMetadata
+		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.evalCtx)
+		if meta != nil {
+			if meta.Err != nil {
+				return false, meta.Err
+			}
+			_ = m.out.output.Push(nil /* row */, *meta)
+			continue
+		}
+		if m.leftRows == nil && m.rightRows == nil {
+			return true, nil
+		}
+
+		m.matchedRight = nil
+		if m.joinType == fullOuter || m.joinType == rightOuter {
+			m.matchedRight = make([]bool, len(m.rightRows))
+		}
+		return false, nil
+	}
 }
