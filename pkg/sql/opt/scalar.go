@@ -94,7 +94,7 @@ type scalarClass struct{}
 
 var _ operatorClass = scalarClass{}
 
-func (scalarClass) format(e *expr, tp treeprinter.Node) {
+func (scalarClass) format(e *Expr, tp treeprinter.Node) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%v", e.op)
 	if e.private != nil {
@@ -109,19 +109,19 @@ func (scalarClass) format(e *expr, tp treeprinter.Node) {
 // node. The scalarProps must be initialized separately.
 
 // initConstExpr initializes a constOp expression node.
-func initConstExpr(e *expr, datum tree.Datum) {
+func initConstExpr(e *Expr, datum tree.Datum) {
 	e.op = constOp
 	e.private = datum
 }
 
 // isConstNull returns true if a constOp with a NULL value.
-func isConstNull(e *expr) bool {
+func isConstNull(e *Expr) bool {
 	return e.op == constOp && e.private == tree.DNull
 }
 
 // isConstBool checks whether e is a constOp with a boolean value, in
 // which case it returns the boolean value.
-func isConstBool(e *expr) (ok bool, val bool) {
+func isConstBool(e *Expr) (ok bool, val bool) {
 	if e.op == constOp {
 		switch e.private {
 		case tree.DBoolTrue:
@@ -133,7 +133,7 @@ func isConstBool(e *expr) (ok bool, val bool) {
 	return false, false
 }
 
-func initUnsupportedExpr(e *expr, typedExpr tree.TypedExpr) {
+func initUnsupportedExpr(e *Expr, typedExpr tree.TypedExpr) {
 	e.op = unsupportedScalarOp
 	e.private = typedExpr
 }
@@ -143,38 +143,38 @@ var _ = initFunctionCallExpr
 var _ = (*tree.FuncExpr).ResolvedFunc
 
 // initFunctionCallExpr initializes a functionCallOp expression node.
-func initFunctionCallExpr(e *expr, def *tree.FunctionDefinition, children []*expr) {
+func initFunctionCallExpr(e *Expr, def *tree.FunctionDefinition, children []*Expr) {
 	e.op = functionCallOp
 	e.children = children
 	e.private = def
 }
 
 // initUnaryExpr initializes expression nodes for operators with a single input.
-func initUnaryExpr(e *expr, op operator, input *expr) {
+func initUnaryExpr(e *Expr, op operator, input *Expr) {
 	e.op = op
-	e.children = []*expr{input}
+	e.children = []*Expr{input}
 }
 
 // initBinaryExpr initializes expression nodes for operators with two inputs.
-func initBinaryExpr(e *expr, op operator, input1 *expr, input2 *expr) {
+func initBinaryExpr(e *Expr, op operator, input1 *Expr, input2 *Expr) {
 	e.op = op
-	e.children = []*expr{input1, input2}
+	e.children = []*Expr{input1, input2}
 }
 
 // initVariableExpr initializes a variableOp expression node.
 // The index refers to a column index (currently derived from an IndexedVar).
-func initVariableExpr(e *expr, index int) {
+func initVariableExpr(e *Expr, index int) {
 	e.op = variableOp
 	e.private = index
 }
 
 // isIndexedVar checks if e is a variableOp that represents an
 // indexed variable with the given index.
-func isIndexedVar(e *expr, index int) bool {
+func isIndexedVar(e *Expr, index int) bool {
 	return e.op == variableOp && e.private.(int) == index
 }
 
-func initTupleExpr(e *expr, children []*expr) {
+func initTupleExpr(e *Expr, children []*Expr) {
 	// In general, the order matters in a tuple so we use an "ordered list"
 	// operator. In some cases (IN) the order doesn't matter; we could convert
 	// those to listOp during normalization, but there doesn't seem to be a
@@ -183,7 +183,7 @@ func initTupleExpr(e *expr, children []*expr) {
 	e.children = children
 }
 
-func isTupleOfConstants(e *expr) bool {
+func isTupleOfConstants(e *Expr) bool {
 	if e.op != tupleOp {
 		return false
 	}
@@ -198,7 +198,7 @@ func isTupleOfConstants(e *expr) bool {
 // Normalization rules for andOp and orOp: merge in any children that have the
 // same operator.
 // Example: a and (b and c)  ->  a and b and c
-func normalizeAndOrOp(e *expr) {
+func normalizeAndOrOp(e *Expr) {
 	if e.op != andOp && e.op != orOp {
 		panic(fmt.Sprintf("invalid call on %s", e))
 	}
@@ -217,7 +217,7 @@ func normalizeAndOrOp(e *expr) {
 		return
 	}
 	saved := e.children
-	e.children = make([]*expr, 0, newNumChildren)
+	e.children = make([]*Expr, 0, newNumChildren)
 
 	for _, child := range saved {
 		if child.op == e.op {
@@ -228,7 +228,7 @@ func normalizeAndOrOp(e *expr) {
 	}
 }
 
-func normalizeNotOp(e *expr) {
+func normalizeNotOp(e *Expr) {
 	if e.op != notOp {
 		panic(fmt.Sprintf("invalid call on %s", e))
 	}
@@ -290,7 +290,7 @@ func normalizeNotOp(e *expr) {
 	e.op = newOp
 }
 
-func normalizeEqOp(e *expr) {
+func normalizeEqOp(e *Expr) {
 	if e.op != eqOp {
 		panic(fmt.Sprintf("invalid call on %s", e))
 	}
@@ -307,9 +307,9 @@ func normalizeEqOp(e *expr) {
 		if len(lhs.children) != len(rhs.children) {
 			panic(fmt.Sprintf("tuple length mismatch in eqOp: %s", e))
 		}
-		e.children = make([]*expr, len(lhs.children))
+		e.children = make([]*Expr, len(lhs.children))
 		for i := range lhs.children {
-			e.children[i] = &expr{
+			e.children[i] = &Expr{
 				op:          andOp,
 				scalarProps: &scalarProps{typ: types.Bool},
 			}
