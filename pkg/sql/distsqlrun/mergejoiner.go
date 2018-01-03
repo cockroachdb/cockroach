@@ -105,9 +105,14 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 			break
 		}
 
-		var row sqlbase.EncDatumRow
-		row, err = m.nextRow(ctx)
-		if row == nil || err != nil {
+		row, meta := m.nextRow(ctx)
+		if meta != nil {
+			if m.out.output.Push(nil, *meta) != NeedMoreRows || meta.Err != nil {
+				break
+			}
+			continue
+		}
+		if row == nil {
 			break
 		}
 
@@ -129,7 +134,7 @@ func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
 	log.VEventf(ctx, 2, "exiting merge joiner run")
 }
 
-func (m *mergeJoiner) nextRow(ctx context.Context) (sqlbase.EncDatumRow, error) {
+func (m *mergeJoiner) nextRow(ctx context.Context) (sqlbase.EncDatumRow, *ProducerMetadata) {
 	// The loops below form a restartable state machine that iterates over a batch
 	// of rows from the left and right side of the join. The state machine
 	// returns a result for every row that should be output.
@@ -144,7 +149,7 @@ func (m *mergeJoiner) nextRow(ctx context.Context) (sqlbase.EncDatumRow, error) 
 				m.rightIdx++
 				renderedRow, err := m.render(lrow, m.rightRows[ridx])
 				if err != nil {
-					return nil, err
+					return nil, &ProducerMetadata{Err: err}
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
@@ -184,32 +189,21 @@ func (m *mergeJoiner) nextRow(ctx context.Context) (sqlbase.EncDatumRow, error) 
 			m.matchedRight = nil
 		}
 
-		m.leftIdx, m.rightIdx = 0, 0
-		if done, err := m.nextBatch(ctx); done {
-			return nil, err
-		}
-	}
-}
-
-func (m *mergeJoiner) nextBatch(ctx context.Context) (done bool, _ error) {
-	for {
+		// Retrieve the next batch of rows to process.
 		var meta *ProducerMetadata
 		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.evalCtx)
 		if meta != nil {
-			if meta.Err != nil {
-				return true, meta.Err
-			}
-			_ = m.out.output.Push(nil /* row */, *meta)
-			continue
+			return nil, meta
 		}
 		if m.leftRows == nil && m.rightRows == nil {
-			return true, nil
+			return nil, nil
 		}
 
+		// Prepare for processing the next batch.
 		m.matchedRight = nil
 		if shouldEmitUnmatchedRow(rightSide, m.joinType) {
 			m.matchedRight = make([]bool, len(m.rightRows))
 		}
-		return false, nil
+		m.leftIdx, m.rightIdx = 0, 0
 	}
 }
