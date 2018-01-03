@@ -16,9 +16,6 @@ package sqlbase
 
 import "context"
 
-// Interval of Check() calls to wait between checks for context cancellation.
-const cancelCheckInterval int64 = 1000
-
 // CancelChecker is a helper object for repeatedly checking whether the associated context
 // has been canceled or not. Encapsulates all logic for waiting for cancelCheckInterval
 // rows before actually checking for cancellation. The cancellation check
@@ -28,10 +25,7 @@ type CancelChecker struct {
 	ctx context.Context
 
 	// Number of times Check() has been called since last context cancellation check.
-	callsSinceLastCheck int64
-
-	// Last returned cancellation value.
-	isCanceled bool
+	callsSinceLastCheck int32
 }
 
 // NewCancelChecker returns a new CancelChecker.
@@ -43,19 +37,21 @@ func NewCancelChecker(ctx context.Context) *CancelChecker {
 
 // Check returns an error if the associated query has been canceled.
 func (c *CancelChecker) Check() error {
-	if !c.isCanceled && c.callsSinceLastCheck%cancelCheckInterval == 0 {
+	// Interval of Check() calls to wait between checks for context
+	// cancellation. The value is a power of 2 to allow the compiler to use
+	// bitwise AND instead of division.
+	const cancelCheckInterval = 1024
+
+	if c.callsSinceLastCheck%cancelCheckInterval == 0 {
 		select {
 		case <-c.ctx.Done():
-			c.isCanceled = true
+			// Once the context is cancelled, we no longer increment
+			// callsSinceLastCheck and will fall into this path on subsequent calls
+			// to Check().
+			return NewQueryCanceledError()
 		default:
-			c.isCanceled = false
 		}
 	}
-
 	c.callsSinceLastCheck++
-
-	if c.isCanceled {
-		return NewQueryCanceledError()
-	}
 	return nil
 }
