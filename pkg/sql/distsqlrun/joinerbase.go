@@ -141,6 +141,7 @@ func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 		if side == rightSide {
 			return false
 		}
+	case fullOuter:
 	}
 	return true
 }
