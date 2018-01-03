@@ -395,6 +395,18 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		spans, ok := c.makeSpansForOrExprs(offset, e.children)
 		// We don't have enough information to know if the spans are "tight".
 		return spans, ok, false
+
+	case variableOp:
+		// Support (@1) as (@1 = TRUE) if @1 is boolean.
+		if c.colInfos[offset].Typ == types.Bool && c.isIndexColumn(e, offset) {
+			return c.makeSpansForSingleColumn(offset, eqOp, constTrueExpr)
+		}
+
+	case notOp:
+		// Support (NOT @1) as (@1 = FALSE) is @1 is boolean.
+		if c.colInfos[offset].Typ == types.Bool && c.isIndexColumn(e.children[0], offset) {
+			return c.makeSpansForSingleColumn(offset, eqOp, constFalseExpr)
+		}
 	}
 
 	if len(e.children) < 2 {
