@@ -277,11 +277,6 @@ func MakeNoMetadataRowSource(src RowSource, sink RowReceiver) NoMetadataRowSourc
 	return NoMetadataRowSource{src: src, metadataSink: sink}
 }
 
-// OutputTypes returns the source types.
-func (rs *NoMetadataRowSource) OutputTypes() []sqlbase.ColumnType {
-	return rs.src.OutputTypes()
-}
-
 // NextRow is analogous to RowSource.Next. If the producer sends an error, we
 // can't just forward it to metadataSink. We need to let the consumer know so
 // that it's not under the impression that everything is hunky-dory and it can
