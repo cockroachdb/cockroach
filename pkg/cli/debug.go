@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -616,6 +617,7 @@ Perform local consistency checks of a single store.
 
 Capable of detecting the following errors:
 * Raft logs that are inconsistent with their metadata
+* MVCC stats that are inconsistent with the data within the range
 `,
 	RunE: MaybeDecorateGRPCError(runDebugCheckStoreCmd),
 }
@@ -631,6 +633,8 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
+	ctx := context.Background()
+
 	if len(args) != 1 {
 		return errors.New("one required argument: dir")
 	}
@@ -639,7 +643,54 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := runDebugCheckStoreRaft(ctx, db); err != nil {
+		return err
+	}
+	return runDebugCheckStoreDescriptors(ctx, db)
+}
 
+func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) error {
+	iter := db.NewIterator(false /* prefix */)
+	defer iter.Close()
+	fmt.Println("checking MVCC stats")
+	defer fmt.Println()
+
+	var failed bool
+	if err := storage.IterateRangeDescriptors(ctx, db,
+		func(desc roachpb.RangeDescriptor) (bool, error) {
+			claimedMS, err := stateloader.Make(serverCfg.Settings, desc.RangeID).LoadMVCCStats(ctx, db)
+			if err != nil {
+				return false, err
+			}
+			from := engine.MakeMVCCMetadataKey(desc.StartKey.AsRawKey())
+			to := engine.MakeMVCCMetadataKey(desc.EndKey.AsRawKey())
+			ms, err := iter.ComputeStats(from, to, claimedMS.LastUpdateNanos)
+			if err != nil {
+				return false, err
+			}
+
+			if !ms.Equal(*claimedMS) {
+				var prefix string
+				if !claimedMS.ContainsEstimates {
+					failed = true
+				} else {
+					prefix = "(ignored) "
+				}
+				fmt.Printf("\n%s%+v: diff(actual, claimed): %s\n", prefix, desc, strings.Join(pretty.Diff(ms, *claimedMS), "\n"))
+			} else {
+				fmt.Print(".")
+			}
+			return false, nil
+		}); err != nil {
+		return err
+	}
+	if failed {
+		return errors.New("check failed")
+	}
+	return nil
+}
+
+func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 	// Iterate over the entire range-id-local space.
 	start := roachpb.Key(keys.LocalRangeIDPrefix)
 	end := start.PrefixEnd()
@@ -653,7 +704,7 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 		return replicaInfo[rangeID]
 	}
 
-	if _, err := engine.MVCCIterate(context.Background(), db, start, end, hlc.MaxTimestamp,
+	if _, err := engine.MVCCIterate(ctx, db, start, end, hlc.MaxTimestamp,
 		false /* consistent */, nil, /* txn */
 		false /* reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			rangeID, _, suffix, detail, err := keys.DecodeRangeIDKey(kv.Key)
