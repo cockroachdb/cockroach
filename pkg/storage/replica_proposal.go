@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -209,8 +210,8 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		// lease's expiration but instead use the new lease's start to initialize
 		// the timestamp cache low water.
 		desc := r.Desc()
-		for _, keyRange := range makeReplicatedKeyRanges(desc) {
-			r.store.tsCache.SetLowWater(keyRange.start.Key, keyRange.end.Key, newLease.Start)
+		for _, keyRange := range rditer.MakeReplicatedKeyRanges(desc) {
+			r.store.tsCache.SetLowWater(keyRange.Start.Key, keyRange.End.Key, newLease.Start)
 		}
 
 		// Reset the request counts used to make lease placement decisions whenever
