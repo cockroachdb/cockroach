@@ -2410,9 +2410,15 @@ func willOverflow(a, b int64) bool {
 // faster.) ComputeStatsGo is here for codepaths that have a pure-go
 // implementation of SimpleIterator.
 //
+// When optional callbacks are specified, they are invoked for each physical
+// key-value pair (i.e. not for implicit meta records), and iteration is aborted
+// on the first error returned from any of them.
+//
+// Callbacks must copy any data they intend to hold on to.
+//
 // This implementation must match engine/db.cc:MVCCComputeStatsInternal.
 func ComputeStatsGo(
-	iter SimpleIterator, start, end MVCCKey, nowNanos int64,
+	iter SimpleIterator, start, end MVCCKey, nowNanos int64, callbacks ...func(MVCCKey, []byte) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
@@ -2432,6 +2438,12 @@ func ComputeStatsGo(
 
 		unsafeKey := iter.UnsafeKey()
 		unsafeValue := iter.UnsafeValue()
+
+		for _, f := range callbacks {
+			if err := f(unsafeKey, unsafeValue); err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+		}
 
 		isSys := bytes.Compare(unsafeKey.Key, keys.LocalMax) < 0
 		isValue := unsafeKey.IsValue()
