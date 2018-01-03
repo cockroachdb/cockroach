@@ -464,7 +464,9 @@ build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1, @2
 [/6/2/3/4 - /9/2/3/4]
 Remaining filter: ((@2 = 2) AND (@3 = 3)) AND (@4 = 4)
 
-build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1 desc, @2 desc, @3 desc, @4 desc)
+build-scalar,normalize,index-constraints \
+  vars=(int, int, int, int) \
+  index=(@1 desc, @2 desc, @3 desc, @4 desc)
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/9/2/3/4 - /6/2/3/4]
@@ -626,7 +628,9 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 
 (/NULL - /1/2/3]
 Remaining filter: (@1, @2, @3) <= (1, 2, 3)
 
-build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc not null, @2 desc not null, @3 desc not null)
+build-scalar,normalize,index-constraints \
+  vars=(int, int, int) \
+  index=(@1 desc not null, @2 desc not null, @3 desc not null)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [ - /1/2/4]
