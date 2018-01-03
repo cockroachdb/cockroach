@@ -67,8 +67,9 @@ func (eventRetriableErr) Event()         {}
 var txnStateTransitions = Compile(Pattern{
 	stateNoTxn{}: {
 		eventNoTopLevelTransition{False}: {
-			Next:   stateNoTxn{},
-			Action: writeAction("Identity"),
+			Description: "my test transition",
+			Next:        stateNoTxn{},
+			Action:      writeAction("Identity"),
 		},
 		eventTxnStart{}: {
 			Next:   stateOpen{False},
@@ -304,7 +305,7 @@ func ExampleTransitions_WriteDotGraph() {
 	// 	"Aborted{RetryIntent:true}" -> "Aborted{RetryIntent:true}" [label = "NonRetriableErr{IsCommit:true}"]
 	// 	"Aborted{RetryIntent:true}" -> "NoTxn{}" [label = "TxnFinish{}"]
 	// 	"Aborted{RetryIntent:true}" -> "Open{RetryIntent:true}" [label = "TxnStart{}"]
-	// 	"NoTxn{}" -> "NoTxn{}" [label = "NoTopLevelTransition{RetryIntent:false}"]
+	// 	"NoTxn{}" -> "NoTxn{}" [label = <NoTopLevelTransition{RetryIntent:false}<BR><I>my test transition</I>>]
 	// 	"NoTxn{}" -> "Open{RetryIntent:false}" [label = "TxnStart{}"]
 	// 	"Open{RetryIntent:false}" -> "Open{RetryIntent:false}" [label = "NoTopLevelTransition{RetryIntent:false}"]
 	// 	"Open{RetryIntent:false}" -> "Open{RetryIntent:true}" [label = "NoTopLevelTransition{RetryIntent:true}"]

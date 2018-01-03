@@ -80,6 +80,8 @@ type Args struct {
 type Transition struct {
 	Next   State
 	Action func(Args) error
+	// Description, if set, is reflected in the DOT diagram.
+	Description string
 }
 
 // Transitions is a set of expanded state transitions generated from a Pattern,
