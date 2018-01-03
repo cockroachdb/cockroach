@@ -533,15 +533,12 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 	// Try to extend the spans with constraints on more columns.
 
 	// newSpans accumulates the extended spans, but is initialized only if we need
-	// to break up a span into multiple spans (otherwise spans is modified in
-	// place).
+	// to remove a span or break up a span into multiple spans (otherwise spans is
+	// modified in place).
 	var newSpans LogicalSpans
 	for i := 0; i < len(spans); i++ {
 		start, end := spans[i].Start, spans[i].End
 		startLen, endLen := len(start.Vals), len(end.Vals)
-
-		// Currently startLen, endLen can be at most 1; but this will change
-		// when we will support tuple expressions.
 
 		if startLen == endLen && startLen > 0 && offset+startLen < len(c.colInfos) &&
 			c.compareKeyVals(offset, start.Vals, end.Vals) == 0 {
@@ -598,6 +595,7 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 			continue
 		}
 
+		var modified bool
 		if startLen > 0 && offset+startLen < len(c.colInfos) && spans[i].Start.Inclusive {
 			// We can advance the starting boundary. Calculate constraints for the
 			// column that follows.
@@ -615,6 +613,7 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 				//   The best we can do is tighten the span to:
 				//     [/2/1 - ]
 				spans[i].Start.extend(s[0].Start)
+				modified = true
 			}
 		}
 
@@ -626,6 +625,18 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 				// last one to tighten the span.
 				spans[i].End.extend(s[len(s)-1].End)
 			}
+			modified = true
+		}
+		if modified && !c.isSpanValid(offset, &spans[i]) {
+			// The span became invalid and needs to be removed. For example:
+			//   @1 >= 1 AND (@1, @2) <= (1, 2) AND @2 = 5
+			// We start with the span [/1 - /1/2] and we try to extend it with the
+			// span [/5 - /5] on the second column. This results in an invalid span
+			// [/1/5 - /1/2].
+			if newSpans == nil {
+				newSpans = spans[:i:i]
+			}
+			continue
 		}
 		if newSpans != nil {
 			newSpans = append(newSpans, spans[i])
@@ -931,6 +942,10 @@ func (ic *IndexConstraints) RemainingFilter(ivh *tree.IndexedVarHelper) tree.Typ
 		}
 		res = ic.filter
 	} else {
+		if len(ic.spans) == 0 {
+			// We have a contradiction, there is no remaining filter.
+			return nil
+		}
 		res = ic.simplifyFilter(ic.filter, ic.spans)
 	}
 	if res == nil {
