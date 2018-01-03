@@ -196,6 +196,14 @@ func (r *testdataReader) Next(t *testing.T) bool {
 			// Skip comment lines.
 			continue
 		}
+		// Support wrapping directive lines using \, for example:
+		//   build-scalar \
+		//   vars(int)
+		for strings.HasSuffix(line, `\`) && r.scanner.Scan() {
+			nextLine := r.scanner.Text()
+			r.emit(nextLine)
+			line = strings.TrimSuffix(line, `\`) + " " + strings.TrimSpace(nextLine)
+		}
 
 		fields := splitDirectives(t, line)
 		if len(fields) == 0 {
