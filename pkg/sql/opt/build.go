@@ -376,3 +376,16 @@ func scalarToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	}
 	panic(fmt.Sprintf("unsupported op %s", e.op))
 }
+
+// BuildScalarExpr converts a TypedExpr to a *Expr tree and normalizes it.
+func BuildScalarExpr(typedExpr tree.TypedExpr) (*Expr, error) {
+	if typedExpr == nil {
+		return nil, nil
+	}
+	e, err := buildScalar(typedExpr)
+	if err != nil {
+		return nil, err
+	}
+	normalizeExpr(e)
+	return e, nil
+}
