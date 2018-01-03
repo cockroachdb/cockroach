@@ -16,7 +16,6 @@ package fsm
 
 import (
 	"context"
-	"fmt"
 )
 
 // State is a node in a Machine's transition graph.
@@ -61,6 +60,17 @@ type Transition struct {
 	Action func(Args) error
 }
 
+// TransitionNotFoundError is returned from Machine.Apply when the Event cannot
+// be applied to the current State.
+type TransitionNotFoundError struct {
+	State State
+	Event Event
+}
+
+func (e TransitionNotFoundError) Error() string {
+	return "event " + eventName(e.Event) + " inappropriate in current state " + stateName(e.State)
+}
+
 // Transitions is a set of expanded state transitions generated from a Pattern,
 // forming a State graph with Events acting as the directed edges between
 // different States.
@@ -83,11 +93,11 @@ func Compile(p Pattern) Transitions {
 func (t Transitions) apply(a Args) (State, error) {
 	sm, ok := t.expanded[a.Prev]
 	if !ok {
-		panic(fmt.Sprintf("unknown state %#v", a.Prev))
+		return a.Prev, TransitionNotFoundError{State: a.Prev, Event: a.Event}
 	}
 	tr, ok := sm[a.Event]
 	if !ok {
-		panic(fmt.Sprintf("unknown state transition %#v(%#v)", a.Prev, a.Event))
+		return a.Prev, TransitionNotFoundError{State: a.Prev, Event: a.Event}
 	}
 	if tr.Action != nil {
 		if err := tr.Action(a); err != nil {
