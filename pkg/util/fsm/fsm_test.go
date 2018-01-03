@@ -62,6 +62,11 @@ func (tr Transitions) applyWithoutErr(t *testing.T, a Args) State {
 	require.Nil(t, err)
 	return s
 }
+func (tr Transitions) applyWithErr(t *testing.T, a Args) error {
+	_, err := tr.apply(a)
+	require.NotNil(t, err)
+	return err
+}
 
 func TestBasicTransitions(t *testing.T) {
 	trans := Compile(Pattern{
@@ -82,8 +87,9 @@ func TestBasicTransitions(t *testing.T) {
 	require.Equal(t, trans.applyWithoutErr(t, Args{Prev: state2{}, Event: event2{}}), state2{})
 
 	// Invalid transitions.
-	require.Panics(t, func() { trans.applyWithoutErr(t, Args{Prev: state3{}, Event: event1{}}) })
-	require.Panics(t, func() { trans.applyWithoutErr(t, Args{Prev: state1{}, Event: event3{}}) })
+	notFoundErr := TransitionNotFoundError{}
+	require.IsType(t, trans.applyWithErr(t, Args{Prev: state3{}, Event: event1{}}), notFoundErr)
+	require.IsType(t, trans.applyWithErr(t, Args{Prev: state1{}, Event: event3{}}), notFoundErr)
 }
 
 func TestTransitionActions(t *testing.T) {
