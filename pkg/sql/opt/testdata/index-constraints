@@ -529,6 +529,41 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 ----
 [ - /1/2/2]
 [/1/2/4 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/4]
+[/1/2/2 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2, @3)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2, @3)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2 not null, @3 not null)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
 
 build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) != (1, 2, @1)
