@@ -126,7 +126,7 @@ const scalarPropsAllocChunk = 16
 
 type buildContext struct {
 	preallocScalarProps []scalarProps
-	preallocExprs       []expr
+	preallocExprs       []Expr
 }
 
 func (bc *buildContext) newScalarProps() *scalarProps {
@@ -139,9 +139,9 @@ func (bc *buildContext) newScalarProps() *scalarProps {
 }
 
 // newExpr returns a new *expr with a new, blank scalarProps.
-func (bc *buildContext) newExpr() *expr {
+func (bc *buildContext) newExpr() *Expr {
 	if len(bc.preallocExprs) == 0 {
-		bc.preallocExprs = make([]expr, exprAllocChunk)
+		bc.preallocExprs = make([]Expr, exprAllocChunk)
 	}
 	e := &bc.preallocExprs[0]
 	bc.preallocExprs = bc.preallocExprs[1:]
@@ -150,7 +150,7 @@ func (bc *buildContext) newExpr() *expr {
 }
 
 // buildScalar converts a tree.TypedExpr to an expr tree.
-func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *expr {
+func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 	switch t := pexpr.(type) {
 	case *tree.ParenExpr:
 		return bc.buildScalar(t.TypedInnerExpr())
@@ -203,14 +203,14 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *expr {
 		initVariableExpr(e, t.Idx)
 
 	case *tree.Tuple:
-		children := make([]*expr, len(t.Exprs))
+		children := make([]*Expr, len(t.Exprs))
 		for i, e := range t.Exprs {
 			children[i] = bc.buildScalar(e.(tree.TypedExpr))
 		}
 		initTupleExpr(e, children)
 
 	case *tree.DTuple:
-		children := make([]*expr, len(t.D))
+		children := make([]*Expr, len(t.D))
 		for i, d := range t.D {
 			children[i] = bc.buildScalar(d)
 		}
@@ -226,7 +226,7 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *expr {
 }
 
 // buildScalar converts a tree.TypedExpr to an expr tree.
-func buildScalar(pexpr tree.TypedExpr) (_ *expr, err error) {
+func buildScalar(pexpr tree.TypedExpr) (_ *Expr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)
@@ -236,12 +236,12 @@ func buildScalar(pexpr tree.TypedExpr) (_ *expr, err error) {
 	return buildCtx.buildScalar(pexpr), nil
 }
 
-var typedExprConvMap [numOperators]func(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr
+var typedExprConvMap [numOperators]func(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr
 
 func init() {
 	// This code is not inline to avoid an initialization loop error (some of the
 	// functions depend on scalarToTypedExpr which depends on typedExprConvMap).
-	typedExprConvMap = [numOperators]func(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr{
+	typedExprConvMap = [numOperators]func(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr{
 		constOp:    constOpToTypedExpr,
 		variableOp: variableOpToTypedExpr,
 
@@ -297,15 +297,15 @@ func init() {
 	}
 }
 
-func constOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func constOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	return e.private.(tree.Datum)
 }
 
-func variableOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func variableOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	return ivh.IndexedVar(e.private.(int))
 }
 
-func boolOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func boolOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	switch e.op {
 	case andOp, orOp:
 		n := scalarToTypedExpr(e.children[0], ivh)
@@ -326,7 +326,7 @@ func boolOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	}
 }
 
-func tupleOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func tupleOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	if isTupleOfConstants(e) {
 		datums := make(tree.Datums, len(e.children))
 		for i, child := range e.children {
@@ -341,7 +341,7 @@ func tupleOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	return tree.NewTypedTuple(children)
 }
 
-func unaryOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func unaryOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	return tree.NewTypedUnaryExpr(
 		unaryOpReverseMap[e.op],
 		scalarToTypedExpr(e.children[0], ivh),
@@ -349,7 +349,7 @@ func unaryOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	)
 }
 
-func comparisonOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func comparisonOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	return tree.NewTypedComparisonExpr(
 		comparisonOpReverseMap[e.op],
 		scalarToTypedExpr(e.children[0], ivh),
@@ -357,7 +357,7 @@ func comparisonOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr
 	)
 }
 
-func binaryOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func binaryOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	return tree.NewTypedBinaryExpr(
 		binaryOpReverseMap[e.op],
 		scalarToTypedExpr(e.children[0], ivh),
@@ -366,13 +366,26 @@ func binaryOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	)
 }
 
-func unsupportedScalarOpToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func unsupportedScalarOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	return e.private.(tree.TypedExpr)
 }
 
-func scalarToTypedExpr(e *expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func scalarToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 	if fn := typedExprConvMap[e.op]; fn != nil {
 		return fn(e, ivh)
 	}
 	panic(fmt.Sprintf("unsupported op %s", e.op))
+}
+
+// BuildScalarExpr converts a TypedExpr to a *Expr tree and normalizes it.
+func BuildScalarExpr(typedExpr tree.TypedExpr) (*Expr, error) {
+	if typedExpr == nil {
+		return nil, nil
+	}
+	e, err := buildScalar(typedExpr)
+	if err != nil {
+		return nil, err
+	}
+	normalizeExpr(e)
+	return e, nil
 }

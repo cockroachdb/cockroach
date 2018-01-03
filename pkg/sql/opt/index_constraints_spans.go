@@ -151,7 +151,7 @@ func makeIndexConstraintCtx(
 
 // isIndexColumn returns true if e is an indexed var that corresponds
 // to index column <offset>.
-func (c *indexConstraintCtx) isIndexColumn(e *expr, index int) bool {
+func (c *indexConstraintCtx) isIndexColumn(e *Expr, index int) bool {
 	return isIndexedVar(e, c.colInfos[index].VarIdx)
 }
 
