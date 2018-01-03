@@ -984,9 +984,9 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 }
 
 type subtestDetails struct {
-	name                  string       // the subtest's name, empty if not a subtest
-	buffer                bytes.Buffer // a chunk of the test file representing the subtest
-	lineLineIndexIntoFile int          // the line number of the test file where the subtest started
+	name                  string        // the subtest's name, empty if not a subtest
+	buffer                *bytes.Buffer // a chunk of the test file representing the subtest
+	lineLineIndexIntoFile int           // the line number of the test file where the subtest started
 }
 
 func (t *logicTest) processTestFile(path string, config testClusterConfig) error {
@@ -1011,6 +1011,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 				return err
 			}
 		} else {
+			t.emit(fmt.Sprintf("subtest %s", subtest.name))
 			t.t.Run(subtest.name, func(subtestT *testing.T) {
 				t.subtestT = subtestT
 				defer func() {
@@ -1054,7 +1055,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	var subtests []subtestDetails
 	var curName string
 	var curLineIndexIntoFile int
-	var buffer bytes.Buffer
+	buffer := &bytes.Buffer{}
 	for s.Scan() {
 		line := s.Text()
 		fields := strings.Fields(line)
@@ -1072,7 +1073,7 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 				buffer:                buffer,
 				lineLineIndexIntoFile: curLineIndexIntoFile,
 			})
-			buffer = bytes.Buffer{}
+			buffer = &bytes.Buffer{}
 			curName = fields[1]
 			curLineIndexIntoFile = s.line + 1
 		} else {
@@ -1094,7 +1095,7 @@ func (t *logicTest) processSubtest(
 ) error {
 	defer t.traceStop()
 
-	s := newLineScanner(&subtest.buffer)
+	s := newLineScanner(subtest.buffer)
 	t.lastProgress = timeutil.Now()
 
 	repeat := 1
