@@ -163,17 +163,17 @@ func (r *Replica) computeChecksumPostApply(
 		if args.Snapshot {
 			snapshot = &roachpb.RaftSnapshotData{}
 		}
-		sha, err := r.sha512(desc, snap, snapshot)
+		result, err := r.sha512(ctx, desc, snap, snapshot)
 		if err != nil {
 			log.Errorf(ctx, "%v", err)
-			sha = nil
+			result = replicaHash{} // already true, but make sure
 		}
-		r.computeChecksumDone(ctx, id, sha, snapshot)
+		r.computeChecksumDone(ctx, id, result, snapshot)
 	}); err != nil {
 		defer snap.Close()
 		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", id))
 		// Set checksum to nil.
-		r.computeChecksumDone(ctx, id, nil, nil)
+		r.computeChecksumDone(ctx, id, replicaHash{}, nil)
 	}
 }
 
