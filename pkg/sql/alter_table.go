@@ -22,6 +22,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -306,6 +307,66 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 			}
+
+			// Drop check constraints which reference column
+			// For every check on the table, walk the check expr
+			// and ensure any check which references the column
+			// is removed from the table descriptor.
+			validChecks := n.tableDesc.Checks[:0]
+			shouldDrop := map[int]bool{}
+
+			for i, check := range n.tableDesc.Checks {
+				expr, err := parser.ParseExpr(check.Expr)
+				if err != nil {
+					return err
+				}
+
+				preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+					vBase, ok := expr.(tree.VarName)
+					if !ok {
+						// Not a VarName, don't do anything to this node.
+						return nil, true, expr
+					}
+
+					v, err := vBase.NormalizeVarName()
+					if err != nil {
+						return err, false, nil
+					}
+
+					c, ok := v.(*tree.ColumnItem)
+					if !ok {
+						return nil, true, expr
+					}
+
+					foundCol, err := n.tableDesc.FindActiveColumnByName(string(c.ColumnName))
+					if err != nil {
+						return nil, true, expr
+					}
+					if foundCol.Name == col.Name {
+						// This is a CHECK constraint which contains the column to be dropped
+						shouldDrop[i] = true
+					}
+					// Convert to a dummy node of the correct type.
+					return nil, false, dummyColumnItem{col.Type.ToDatumType()}
+				}
+
+				_, err = tree.SimpleVisit(expr, preFn)
+				if err != nil {
+					return err
+				}
+			}
+
+			for i, check := range n.tableDesc.Checks {
+				if _, ok := shouldDrop[i]; !ok {
+					validChecks = append(validChecks, check)
+				}
+			}
+
+			if len(validChecks) != len(n.tableDesc.Checks) {
+				n.tableDesc.Checks = validChecks
+				descriptorChanged = true
+			}
+
 			found := false
 			for i := range n.tableDesc.Columns {
 				if n.tableDesc.Columns[i].ID == col.ID {
