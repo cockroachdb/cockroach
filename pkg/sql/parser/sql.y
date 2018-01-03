@@ -676,6 +676,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_table_stmt
 %type <tree.Statement> show_create_view_stmt
+%type <tree.Statement> show_create_sequence_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_grants_stmt
@@ -2558,33 +2559,35 @@ non_reserved_word_or_sconst:
 // %Category: Group
 // %Text:
 // SHOW SESSION, SHOW CLUSTER SETTING, SHOW DATABASES, SHOW TABLES, SHOW COLUMNS, SHOW INDEXES,
-// SHOW CONSTRAINTS, SHOW CREATE TABLE, SHOW CREATE VIEW, SHOW USERS, SHOW TRANSACTION, SHOW BACKUP,
-// SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SESSIONS, SHOW SYNTAX, SHOW TRACE
+// SHOW CONSTRAINTS, SHOW CREATE TABLE, SHOW CREATE VIEW, SHOW CREATE SEQUENCE, SHOW USERS,
+// SHOW TRANSACTION, SHOW BACKUP, SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SESSIONS, SHOW SYNTAX,
+// SHOW TRACE
 show_stmt:
-  show_backup_stmt       // EXTEND WITH HELP: SHOW BACKUP
-| show_columns_stmt      // EXTEND WITH HELP: SHOW COLUMNS
-| show_constraints_stmt  // EXTEND WITH HELP: SHOW CONSTRAINTS
-| show_create_table_stmt // EXTEND WITH HELP: SHOW CREATE TABLE
-| show_create_view_stmt  // EXTEND WITH HELP: SHOW CREATE VIEW
-| show_csettings_stmt    // EXTEND WITH HELP: SHOW CLUSTER SETTING
-| show_databases_stmt    // EXTEND WITH HELP: SHOW DATABASES
-| show_grants_stmt       // EXTEND WITH HELP: SHOW GRANTS
-| show_histogram_stmt    // EXTEND WITH HELP: SHOW HISTOGRAM
-| show_indexes_stmt      // EXTEND WITH HELP: SHOW INDEXES
-| show_jobs_stmt         // EXTEND WITH HELP: SHOW JOBS
-| show_queries_stmt      // EXTEND WITH HELP: SHOW QUERIES
-| show_roles_stmt        // EXTEND WITH HELP: SHOW ROLES
-| show_session_stmt      // EXTEND WITH HELP: SHOW SESSION
-| show_sessions_stmt     // EXTEND WITH HELP: SHOW SESSIONS
-| show_stats_stmt        // EXTEND WITH HELP: SHOW STATISTICS
-| show_syntax_stmt       // EXTEND WITH HELP: SHOW SYNTAX
-| show_tables_stmt       // EXTEND WITH HELP: SHOW TABLES
+  show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
+| show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
+| show_constraints_stmt     // EXTEND WITH HELP: SHOW CONSTRAINTS
+| show_create_table_stmt    // EXTEND WITH HELP: SHOW CREATE TABLE
+| show_create_view_stmt     // EXTEND WITH HELP: SHOW CREATE VIEW
+| show_create_sequence_stmt // EXTEND WITH HELP: SHOW CREATE SEQUENCE
+| show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
+| show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
+| show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
+| show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
+| show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
+| show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
+| show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
+| show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
+| show_session_stmt         // EXTEND WITH HELP: SHOW SESSION
+| show_sessions_stmt        // EXTEND WITH HELP: SHOW SESSIONS
+| show_stats_stmt           // EXTEND WITH HELP: SHOW STATISTICS
+| show_syntax_stmt          // EXTEND WITH HELP: SHOW SYNTAX
+| show_tables_stmt          // EXTEND WITH HELP: SHOW TABLES
 | show_testing_stmt
-| show_trace_stmt        // EXTEND WITH HELP: SHOW TRACE
-| show_transaction_stmt  // EXTEND WITH HELP: SHOW TRANSACTION
-| show_users_stmt        // EXTEND WITH HELP: SHOW USERS
+| show_trace_stmt           // EXTEND WITH HELP: SHOW TRACE
+| show_transaction_stmt     // EXTEND WITH HELP: SHOW TRANSACTION
+| show_users_stmt           // EXTEND WITH HELP: SHOW USERS
 | show_zone_stmt
-| SHOW error             // SHOW HELP: SHOW
+| SHOW error                // SHOW HELP: SHOW
 
 // %Help: SHOW SESSION - display session variables
 // %Category: Cfg
@@ -2894,6 +2897,16 @@ show_create_view_stmt:
     $$.val = &tree.ShowCreateView{View: $4.normalizableTableName()}
   }
 | SHOW CREATE VIEW error // SHOW HELP: SHOW CREATE VIEW
+
+// %Help: SHOW CREATE SEQUENCE - display the CREATE SEQUENCE statement for a sequence
+// %Category: DDL
+// %Text: SHOW CREATE SEQUENCE <seqname>
+show_create_sequence_stmt:
+	SHOW CREATE SEQUENCE var_name
+	{
+		$$.val = &tree.ShowCreateSequence{Sequence: $4.normalizableTableName()}
+	}
+| SHOW CREATE SEQUENCE error // SHOW HELP: SHOW CREATE SEQUENCE
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv

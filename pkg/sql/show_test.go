@@ -368,6 +368,84 @@ func TestShowCreateView(t *testing.T) {
 	}
 }
 
+func TestShowCreateSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+		CREATE DATABASE d;
+		SET DATABASE = d;
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		create   string
+		expected string
+	}{
+		{
+			`CREATE SEQUENCE %s`,
+			`CREATE SEQUENCE %s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+		},
+		{
+			`CREATE SEQUENCE %s INCREMENT BY 5`,
+			`CREATE SEQUENCE %s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1`,
+		},
+		{
+			`CREATE SEQUENCE %s START WITH 5`,
+			`CREATE SEQUENCE %s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 5`,
+		},
+		{
+			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0`,
+			`CREATE SEQUENCE %s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10`,
+		},
+	}
+	for i, test := range tests {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			name := fmt.Sprintf("t%d", i)
+			stmt := fmt.Sprintf(test.create, name)
+			fmt.Println("XXXXXXXX", stmt)
+			expect := fmt.Sprintf(test.expected, name)
+			if _, err := sqlDB.Exec(stmt); err != nil {
+				t.Fatal(err)
+			}
+			row := sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE SEQUENCE %s", name))
+			var scanName, create string
+			if err := row.Scan(&scanName, &create); err != nil {
+				t.Fatal(err)
+			}
+			if scanName != name {
+				t.Fatalf("expected view name %s, got %s", name, scanName)
+			}
+			if create != expect {
+				t.Fatalf("statement: %s\ngot: %s\nexpected: %s", stmt, create, expect)
+			}
+			if _, err := sqlDB.Exec(fmt.Sprintf("DROP SEQUENCE %s", name)); err != nil {
+				t.Fatal(err)
+			}
+			// Re-insert to make sure it's round-trippable.
+			name += "_2"
+			expect = fmt.Sprintf(test.expected, name)
+			if _, err := sqlDB.Exec(expect); err != nil {
+				t.Fatalf("reinsert failure: %s: %s", expect, err)
+			}
+			row = sqlDB.QueryRow(fmt.Sprintf("SHOW CREATE SEQUENCE %s", name))
+			if err := row.Scan(&scanName, &create); err != nil {
+				t.Fatal(err)
+			}
+			if create != expect {
+				t.Fatalf("round trip statement: %s\ngot: %s", expect, create)
+			}
+			if _, err := sqlDB.Exec(fmt.Sprintf("DROP SEQUENCE %s", name)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestShowQueries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
