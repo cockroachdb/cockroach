@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package rditer
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
-// keyRange is a helper struct for the ReplicaDataIterator.
-type keyRange struct {
-	start, end engine.MVCCKey
+// KeyRange is a helper struct for the ReplicaDataIterator.
+type KeyRange struct {
+	Start, End engine.MVCCKey
 }
 
 // ReplicaDataIterator provides a complete iteration over all key / value
@@ -34,18 +34,18 @@ type keyRange struct {
 // A ReplicaDataIterator provides a subset of the engine.Iterator interface.
 type ReplicaDataIterator struct {
 	curIndex int
-	ranges   []keyRange
+	ranges   []KeyRange
 	iterator engine.Iterator
 }
 
-// makeAllKeyRanges returns all key ranges for the given Range.
-func makeAllKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
+// MakeAllKeyRanges returns all key ranges for the given Range.
+func MakeAllKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 	return makeReplicaKeyRanges(d, keys.MakeRangeIDPrefix)
 }
 
-// makeReplicatedKeyRanges returns all key ranges that are fully Raft replicated
+// MakeReplicatedKeyRanges returns all key ranges that are fully Raft replicated
 // for the given Range.
-func makeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
+func MakeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []KeyRange {
 	return makeReplicaKeyRanges(d, keys.MakeRangeIDReplicatedPrefix)
 }
 
@@ -54,7 +54,7 @@ func makeReplicatedKeyRanges(d *roachpb.RangeDescriptor) []keyRange {
 // metadata).
 func makeReplicaKeyRanges(
 	d *roachpb.RangeDescriptor, metaFunc func(roachpb.RangeID) roachpb.Key,
-) []keyRange {
+) []KeyRange {
 	// The first range in the keyspace starts at KeyMin, which includes the
 	// node-local space. We need the original StartKey to find the range
 	// metadata, but the actual data starts at LocalMax.
@@ -63,18 +63,18 @@ func makeReplicaKeyRanges(
 		dataStartKey = keys.LocalMax
 	}
 	sysRangeIDKey := metaFunc(d.RangeID)
-	return []keyRange{
+	return []KeyRange{
 		{
-			start: engine.MakeMVCCMetadataKey(sysRangeIDKey),
-			end:   engine.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
+			Start: engine.MakeMVCCMetadataKey(sysRangeIDKey),
+			End:   engine.MakeMVCCMetadataKey(sysRangeIDKey.PrefixEnd()),
 		},
 		{
-			start: engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
-			end:   engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
+			Start: engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.StartKey)),
+			End:   engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(d.EndKey)),
 		},
 		{
-			start: engine.MakeMVCCMetadataKey(dataStartKey),
-			end:   engine.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
+			Start: engine.MakeMVCCMetadataKey(dataStartKey),
+			End:   engine.MakeMVCCMetadataKey(d.EndKey.AsRawKey()),
 		},
 	}
 }
@@ -83,15 +83,15 @@ func makeReplicaKeyRanges(
 func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, e engine.Reader, replicatedOnly bool,
 ) *ReplicaDataIterator {
-	rangeFunc := makeAllKeyRanges
+	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {
-		rangeFunc = makeReplicatedKeyRanges
+		rangeFunc = MakeReplicatedKeyRanges
 	}
 	ri := &ReplicaDataIterator{
 		ranges:   rangeFunc(d),
 		iterator: e.NewIterator(false),
 	}
-	ri.iterator.Seek(ri.ranges[ri.curIndex].start)
+	ri.iterator.Seek(ri.ranges[ri.curIndex].Start)
 	ri.advance()
 	return ri
 }
@@ -113,12 +113,12 @@ func (ri *ReplicaDataIterator) Next() {
 // invalid.
 func (ri *ReplicaDataIterator) advance() {
 	for {
-		if ok, _ := ri.Valid(); !ok || ri.iterator.Less(ri.ranges[ri.curIndex].end) {
+		if ok, _ := ri.Valid(); !ok || ri.iterator.Less(ri.ranges[ri.curIndex].End) {
 			return
 		}
 		ri.curIndex++
 		if ri.curIndex < len(ri.ranges) {
-			ri.iterator.Seek(ri.ranges[ri.curIndex].start)
+			ri.iterator.Seek(ri.ranges[ri.curIndex].Start)
 		} else {
 			// Otherwise, seek to end to make iterator invalid.
 			ri.iterator.Seek(engine.MVCCKeyMax)
@@ -142,9 +142,9 @@ func (ri *ReplicaDataIterator) Value() []byte {
 	return ri.iterator.Value()
 }
 
-// allocIterKeyValue returns ri.Key() and ri.Value() with the underlying
+// AllocIterKeyValue returns ri.Key() and ri.Value() with the underlying
 // storage allocated from the passed ByteAllocator.
-func (ri *ReplicaDataIterator) allocIterKeyValue(
+func (ri *ReplicaDataIterator) AllocIterKeyValue(
 	a bufalloc.ByteAllocator,
 ) (bufalloc.ByteAllocator, engine.MVCCKey, []byte) {
 	return engine.AllocIterKeyValue(a, ri.iterator)

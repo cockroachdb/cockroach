@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -450,7 +451,7 @@ type OutgoingSnapshot struct {
 	// The RocksDB snapshot that will be streamed from.
 	EngineSnap engine.Reader
 	// The complete range iterator for the snapshot to stream.
-	Iter *ReplicaDataIterator
+	Iter *rditer.ReplicaDataIterator
 	// The replica state within the snapshot.
 	State storagebase.ReplicaState
 	// Allows access the the original Replica's sideloaded storage. Note that
@@ -533,7 +534,7 @@ func snapshot(
 
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
-	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
+	iter := rditer.NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	snapUUID := uuid.MakeV4()
 
 	log.Infof(ctx, "generated %s snapshot %s at index %d",
@@ -673,14 +674,14 @@ func clearRangeData(
 	// sstable better.
 	const clearRangeMinKeys = 64
 	const metadataRanges = 2
-	for i, keyRange := range makeAllKeyRanges(desc) {
+	for i, keyRange := range rditer.MakeAllKeyRanges(desc) {
 		// Metadata ranges always have too few keys to justify ClearRange (see
 		// above), but the data range's key count needs to be explicitly checked.
 		var err error
 		if i >= metadataRanges && keyCount >= clearRangeMinKeys {
-			err = batch.ClearRange(keyRange.start, keyRange.end)
+			err = batch.ClearRange(keyRange.Start, keyRange.End)
 		} else {
-			err = batch.ClearIterRange(iter, keyRange.start, keyRange.end)
+			err = batch.ClearIterRange(iter, keyRange.Start, keyRange.End)
 		}
 		if err != nil {
 			return err
