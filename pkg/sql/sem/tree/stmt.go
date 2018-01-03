@@ -614,6 +614,15 @@ func (*ShowCreateView) hiddenFromStats()                   {}
 func (*ShowCreateView) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
+func (*ShowCreateSequence) StatementType() StatementType { return Rows }
+
+// StatementTag implements the Statement interface.
+func (*ShowCreateSequence) StatementTag() string { return "SHOW CREATE SEQUENCE" }
+
+func (*ShowCreateSequence) hiddenFromStats()                   {}
+func (*ShowCreateSequence) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
 func (*ShowBackup) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -879,6 +888,7 @@ func (n *ShowColumns) String() string               { return AsString(n) }
 func (n *ShowConstraints) String() string           { return AsString(n) }
 func (n *ShowCreateTable) String() string           { return AsString(n) }
 func (n *ShowCreateView) String() string            { return AsString(n) }
+func (n *ShowCreateSequence) String() string        { return AsString(n) }
 func (n *ShowDatabases) String() string             { return AsString(n) }
 func (n *ShowGrants) String() string                { return AsString(n) }
 func (n *ShowHistogram) String() string             { return AsString(n) }
