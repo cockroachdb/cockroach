@@ -36,6 +36,9 @@ type mergeJoiner struct {
 
 	leftSource, rightSource RowSource
 	leftRows, rightRows     []sqlbase.EncDatumRow
+	leftIdx, rightIdx       int
+	matchedRight            []bool
+	matchedRightCount       int
 
 	streamMerger streamMerger
 }
@@ -130,53 +133,88 @@ func (m *mergeJoiner) outputBatch(
 		if m.leftRows == nil && m.rightRows == nil {
 			return false, nil
 		}
+
+		m.matchedRight = nil
+		if m.joinType == fullOuter || m.joinType == rightOuter {
+			m.matchedRight = make([]bool, len(m.rightRows))
+		}
 		break
 	}
 
-	var matchedRight []bool
-	if m.joinType == fullOuter || m.joinType == rightOuter {
-		matchedRight = make([]bool, len(m.rightRows))
+	for {
+		if err := cancelChecker.Check(); err != nil {
+			return false, err
+		}
+		batchDone, err := m.outputOneRow(ctx)
+		if err != nil {
+			return false, err
+		}
+		if !batchDone {
+			return true, nil
+		}
 	}
+}
 
-	for _, lrow := range m.leftRows {
-		matched := false
-		for rIdx, rrow := range m.rightRows {
-			if err := cancelChecker.Check(); err != nil {
-				return false, err
-			}
-			renderedRow, err := m.render(lrow, rrow)
+func (m *mergeJoiner) outputOneRow(ctx context.Context) (bool, error) {
+	for m.leftIdx < len(m.leftRows) {
+		// Main join loop.
+		lrow := m.leftRows[m.leftIdx]
+		for m.rightIdx < len(m.rightRows) {
+			ridx := m.rightIdx
+			m.rightIdx++
+			renderedRow, err := m.render(lrow, m.rightRows[ridx])
 			if err != nil {
 				return false, err
 			}
 			if renderedRow != nil {
-				matched = true
-				if matchedRight != nil {
-					matchedRight[rIdx] = true
+				m.matchedRightCount++
+				if m.matchedRight != nil {
+					m.matchedRight[ridx] = true
 				}
 				consumerStatus, err := m.out.EmitRow(ctx, renderedRow)
 				if err != nil || consumerStatus != NeedMoreRows {
 					return false, err
 				}
+				return true, nil
 			}
 		}
-		if !matched {
+
+		m.rightIdx = 0
+		m.leftIdx++
+
+		// We've exhausted the right side batch.
+		if m.matchedRightCount == 0 {
+			// Maybe output the left side row if no right side rows were matched.
 			needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, lrow, leftSide)
 			if !needMoreRows || err != nil {
 				return false, err
 			}
+			return true, nil
 		}
+
+		m.matchedRightCount = 0
 	}
 
-	if matchedRight != nil {
-		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
-		for rIdx, rrow := range m.rightRows {
-			if !matchedRight[rIdx] {
-				needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, rrow, rightSide)
-				if !needMoreRows || err != nil {
-					return false, err
-				}
+	if m.matchedRight != nil {
+		// No-more rows on the left side, maybe output unmatched rows from the
+		// right side.
+		for m.rightIdx < len(m.rightRows) {
+			ridx := m.rightIdx
+			m.rightIdx++
+			if m.matchedRight[ridx] {
+				continue
 			}
+			needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, m.rightRows[ridx], rightSide)
+			if !needMoreRows || err != nil {
+				return false, err
+			}
+			return true, nil
 		}
+
+		m.matchedRight = nil
 	}
-	return true, nil
+
+	m.leftIdx, m.rightIdx = 0, 0
+	m.leftRows, m.rightRows = nil, nil
+	return false, nil
 }
