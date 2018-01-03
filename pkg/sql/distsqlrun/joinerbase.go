@@ -68,7 +68,7 @@ func (jb *joinerBase) init(
 	jb.eqCols[rightSide] = columns(rightEqColumns)
 	jb.numMergedEqualityColumns = int(numMergedColumns)
 
-	jb.combinedRow = make(sqlbase.EncDatumRow, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
+	jb.combinedRow = make(sqlbase.EncDatumRow, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
 
 	types := make([]sqlbase.ColumnType, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
@@ -175,16 +175,16 @@ func (jb *joinerBase) maybeEmitUnmatchedRow(
 // or after simplifying ON left.x = right.x) are NOT checked for equality.
 // See CompareEncDatumRowForMerge.
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	jb.combinedRow = jb.combinedRow[:0]
-	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
-		// this function is called only when lrow and rrow match on the equality
+	n := jb.numMergedEqualityColumns
+	for i := 0; i < n; i++ {
+		// This function is called only when lrow and rrow match on the equality
 		// columns which can never happen if there are any NULLs in these
 		// columns. So we know for sure the lrow value is not null
-		value := lrow[jb.eqCols[leftSide][idx]]
-		jb.combinedRow = append(jb.combinedRow, value)
+		jb.combinedRow[i] = lrow[jb.eqCols[leftSide][i]]
 	}
-	jb.combinedRow = append(jb.combinedRow, lrow...)
-	jb.combinedRow = append(jb.combinedRow, rrow...)
+	copy(jb.combinedRow[n:], lrow)
+	copy(jb.combinedRow[n+len(lrow):], rrow)
+
 	if jb.onCond.expr != nil {
 		res, err := jb.onCond.evalFilter(jb.combinedRow)
 		if !res || err != nil {
