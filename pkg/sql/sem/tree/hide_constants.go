@@ -20,7 +20,7 @@ package tree
 // unless hideConstants is set in the flags and the node is a datum or
 // a literal.
 func (ctx *FmtCtx) formatNodeOrHideConstants(n NodeFormatter) {
-	if ctx.flags.hideConstants {
+	if ctx.flags.HasFlags(FmtHideConstants) {
 		switch v := n.(type) {
 		case *ValuesClause:
 			v.formatHideConstants(ctx)

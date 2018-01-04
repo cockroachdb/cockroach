@@ -530,7 +530,7 @@ func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		t.Format(ctx.Buffer, ctx.flags.encodeFlags)
+		t.Format(ctx.Buffer, ctx.flags.EncodeFlags())
 	}
 	ctx.WriteByte(')')
 }
@@ -1063,9 +1063,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 
 	// We need to remove name anonimization for the function name in
 	// particular. Do this by overriding the flags.
-	fmtDisableAnonymize := *ctx.flags
-	fmtDisableAnonymize.anonymize = false
-	subCtx := ctx.CopyWithFlags(&fmtDisableAnonymize)
+	subCtx := ctx.CopyWithFlags(ctx.flags & ^FmtAnonymize)
 	subCtx.FormatNode(node.Func)
 
 	ctx.WriteByte('(')
@@ -1149,14 +1147,14 @@ type CastExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CastExpr) Format(ctx *FmtCtx) {
-	buf, f := ctx.Buffer, ctx.flags
+	buf := ctx.Buffer
 	switch node.SyntaxMode {
 	case CastPrepend:
 		// This is a special case for things like INTERVAL '1s'. These only work
 		// with string constats; if the underlying expression was changed, we fall
 		// back to the short syntax.
 		if _, ok := node.Expr.(*StrVal); ok {
-			node.Type.Format(buf, f.encodeFlags)
+			node.Type.Format(buf, ctx.flags.EncodeFlags())
 			ctx.WriteByte(' ')
 			ctx.FormatNode(node.Expr)
 			break
@@ -1165,12 +1163,12 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 	case CastShort:
 		exprFmtWithParen(ctx, node.Expr)
 		ctx.WriteString("::")
-		node.Type.Format(buf, f.encodeFlags)
+		node.Type.Format(buf, ctx.flags.EncodeFlags())
 	default:
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		node.Type.Format(buf, f.encodeFlags)
+		node.Type.Format(buf, ctx.flags.EncodeFlags())
 		ctx.WriteByte(')')
 	}
 }
@@ -1289,18 +1287,18 @@ type AnnotateTypeExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
-	buf, f := ctx.Buffer, ctx.flags
+	buf := ctx.Buffer
 	switch node.SyntaxMode {
 	case AnnotateShort:
 		exprFmtWithParen(ctx, node.Expr)
 		ctx.WriteString(":::")
-		node.Type.Format(buf, f.encodeFlags)
+		node.Type.Format(buf, ctx.flags.EncodeFlags())
 
 	default:
 		ctx.WriteString("ANNOTATE_TYPE(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(", ")
-		node.Type.Format(buf, f.encodeFlags)
+		node.Type.Format(buf, ctx.flags.EncodeFlags())
 		ctx.WriteByte(')')
 	}
 }

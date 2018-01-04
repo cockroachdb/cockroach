@@ -23,34 +23,109 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-type fmtFlags struct {
-	showTypes        bool
-	ShowTableAliases bool
-	symbolicVars     bool
-	hideConstants    bool
-	// If true, non-function names are replaced by underscores.
-	anonymize bool
-	// If true, strings will be formatted for being contents of ARRAYs.
-	withinArray bool
-	// If true, datums and placeholders will have type annotations (like
+// FmtFlags carries options for the pretty-printer.
+type FmtFlags int
+
+// HasFlags tests whether the given flags are all set.
+func (f FmtFlags) HasFlags(subset FmtFlags) bool {
+	return f&subset == subset
+}
+
+// SetFlags sets the given formatting flags.
+func (f *FmtFlags) SetFlags(subset FmtFlags) {
+	*f |= subset
+}
+
+// EncodeFlags returns the subset of the flags that are also lex encode flags.
+func (f FmtFlags) EncodeFlags() lex.EncodeFlags {
+	return lex.EncodeFlags(f) & (lex.EncFirstFreeFlagBit - 1)
+}
+
+// Basic bit definitions for the FmtFlags bitmask.
+const (
+	// FmtSimple instructs the pretty-printer to produce
+	// a straightforward representation.
+	FmtSimple FmtFlags = 0
+
+	// FmtShowPasswords instructs the pretty-printer to not suppress passwords.
+	// If not set, passwords are replaced by *****.
+	FmtShowPasswords FmtFlags = FmtFlags(lex.EncFirstFreeFlagBit) << iota
+
+	// FmtShowTypes instructs the pretty-printer to
+	// annotate expressions with their resolved types.
+	FmtShowTypes
+
+	// FmtHideConstants instructs the pretty-printer to produce a
+	// representation that does not disclose query-specific data.
+	FmtHideConstants
+
+	// FmtAnonymize instructs the pretty-printer to remove
+	// any name but function names.
+	// TODO(knz): temporary until a better solution is found for #13968
+	FmtAnonymize
+
+	// FmtAlwaysQualifyTableNames instructs the pretty-printer to
+	// qualify table names, even if originally omitted.
+	FmtAlwaysQualifyTableNames
+
+	// FmtAlwaysGroupExprs instructs the pretty-printer to enclose
+	// sub-expressions between parentheses.
+	// Used for testing.
+	FmtAlwaysGroupExprs
+
+	// FmtShowTableAliases reveals the table aliases.
+	FmtShowTableAliases
+
+	// If set, strings will be formatted for being contents of ARRAYs.
+	// Used internally in combination with FmtArrays defined below.
+	fmtWithinArray
+
+	// If set, datums and placeholders will have type annotations (like
 	// :::interval) as necessary to disambiguate between possible type
 	// resolutions.
-	disambiguateDatumTypes bool
-	// If false, passwords are replaced by *****.
-	showPasswords bool
-	// If true, always prints qualified names even if originally omitted.
-	alwaysQualify bool
-	// If true, grouping parentheses are always shown. Used for testing.
-	alwaysParens bool
-	// Flags that control the formatting of strings and identifiers.
-	encodeFlags lex.EncodeFlags
-}
+	fmtDisambiguateDatumTypes
+
+	// fmtSymbolicVars indicates that IndexedVars must be pretty-printed
+	// using numeric notation (@123).
+	fmtSymbolicVars
+)
+
+// Composite/derived flag definitions follow.
+const (
+	// FmtBareStrings instructs the pretty-printer to print strings without
+	// wrapping quotes, if the string contains no special characters.
+	FmtBareStrings FmtFlags = FmtFlags(lex.EncBareStrings)
+
+	// FmtBareIdentifiers instructs the pretty-printer to print
+	// identifiers without wrapping quotes in any case.
+	FmtBareIdentifiers FmtFlags = FmtFlags(lex.EncBareIdentifiers)
+
+	// FmtArrays instructs the pretty-printer to print strings without
+	// wrapping quotes, if the string contains no special characters.
+	FmtArrays FmtFlags = fmtWithinArray | FmtFlags(lex.EncBareStrings)
+
+	// FmtParsable instructs the pretty-printer to produce a representation that
+	// can be parsed into an equivalent expression (useful for serialization of
+	// expressions).
+	FmtParsable FmtFlags = fmtDisambiguateDatumTypes
+
+	// FmtCheckEquivalence instructs the pretty-printer to produce a representation
+	// that can be used to check equivalence of expressions. Specifically:
+	//  - IndexedVars are formatted using symbolic notation (to disambiguate
+	//    columns).
+	//  - datum types are disambiguated with explicit type
+	//    annotations. This is necessary because datums of different types
+	//    can otherwise be formatted to the same string: (for example the
+	//    DDecimal 1 and the DInt 1).
+	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes
+)
 
 // FmtCtx is suitable for passing to Format() methods.
 // It also exposes the underlying bytes.Buffer interface for
 // convenience.
 type FmtCtx struct {
 	*bytes.Buffer
+	// The flags to use for pretty-printing.
 	flags FmtFlags
 	// indexedVarFormat is an optional interceptor for
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
@@ -69,65 +144,6 @@ func MakeFmtCtx(buf *bytes.Buffer, f FmtFlags) FmtCtx {
 	return FmtCtx{Buffer: buf, flags: f}
 }
 
-// FmtFlags enables conditional formatting in the pretty-printer.
-type FmtFlags *fmtFlags
-
-// FmtSimple instructs the pretty-printer to produce
-// a straightforward representation.
-var FmtSimple FmtFlags = &fmtFlags{}
-
-// FmtSimpleWithPasswords instructs the pretty-printer to produce a
-// straightforward representation that does not suppress passwords.
-var FmtSimpleWithPasswords FmtFlags = &fmtFlags{showPasswords: true}
-
-// FmtShowTypes instructs the pretty-printer to
-// annotate expressions with their resolved types.
-var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
-
-// FmtBareStrings instructs the pretty-printer to print strings without
-// wrapping quotes, if the string contains no special characters.
-var FmtBareStrings FmtFlags = &fmtFlags{encodeFlags: lex.EncBareStrings}
-
-// FmtArrays instructs the pretty-printer to print strings without
-// wrapping quotes, if the string contains no special characters.
-var FmtArrays FmtFlags = &fmtFlags{withinArray: true, encodeFlags: lex.EncBareStrings}
-
-// FmtBareIdentifiers instructs the pretty-printer to print
-// identifiers without wrapping quotes in any case.
-var FmtBareIdentifiers FmtFlags = &fmtFlags{encodeFlags: lex.EncBareIdentifiers}
-
-// FmtParsable instructs the pretty-printer to produce a representation that
-// can be parsed into an equivalent expression (useful for serialization of
-// expressions).
-var FmtParsable FmtFlags = &fmtFlags{disambiguateDatumTypes: true}
-
-// FmtCheckEquivalence instructs the pretty-printer to produce a representation
-// that can be used to check equivalence of expressions. Specifically:
-//  - IndexedVars are formatted using symbolic notation (to disambiguate
-//    columns).
-//  - datum types are disambiguated with explicit type
-//    annotations. This is necessary because datums of different types
-//    can otherwise be formatted to the same string: (for example the
-//    DDecimal 1 and the DInt 1).
-var FmtCheckEquivalence FmtFlags = &fmtFlags{symbolicVars: true, disambiguateDatumTypes: true}
-
-// FmtHideConstants instructs the pretty-printer to produce a
-// representation that does not disclose query-specific data.
-var FmtHideConstants FmtFlags = &fmtFlags{hideConstants: true}
-
-// FmtAnonymize instructs the pretty-printer to remove
-// any name but function names.
-// TODO(knz): temporary until a better solution is found for #13968
-var FmtAnonymize FmtFlags = &fmtFlags{anonymize: true}
-
-// FmtSimpleQualified instructs the pretty-printer to produce
-// a straightforward representation that qualifies table names.
-var FmtSimpleQualified FmtFlags = &fmtFlags{alwaysQualify: true}
-
-// FmtAlwaysGroupExprs instructs the pretty-printer to enclose
-// sub-expressions between parentheses.
-var FmtAlwaysGroupExprs FmtFlags = &fmtFlags{alwaysParens: true}
-
 // WithReformatTableNames modifies FmtCtx to instructs the pretty-printer
 // to substitute the printing of table names using the provided function.
 func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *NormalizableTableName)) *FmtCtx {
@@ -138,9 +154,7 @@ func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *NormalizableTableNam
 // StripTypeFormatting removes the flag that extracts types from the format flags,
 // so as to enable rendering expressions for which types have not been computed yet.
 func (ctx *FmtCtx) StripTypeFormatting() {
-	nf := *ctx.flags
-	nf.showTypes = false
-	ctx.flags = &nf
+	ctx.flags &= ^FmtShowTypes
 }
 
 // CopyWithFlags creates a new FmtCtx with different formatting flags
@@ -151,9 +165,9 @@ func (ctx *FmtCtx) CopyWithFlags(f FmtFlags) FmtCtx {
 	return ret
 }
 
-// ShowTableAliases returns true iff the flags have the corresponding bit set.
-func (ctx *FmtCtx) ShowTableAliases() bool {
-	return ctx.flags.ShowTableAliases
+// HasFlags returns true iff the given flags are set in the formatter context.
+func (ctx *FmtCtx) HasFlags(f FmtFlags) bool {
+	return ctx.flags.HasFlags(f)
 }
 
 // Printf calls fmt.Fprintf on the linked bytes.Buffer. It is provided
@@ -170,11 +184,16 @@ func (ctx *FmtCtx) Printf(f string, args ...interface{}) {
 // FmtExpr returns FmtFlags that indicate how the pretty-printer
 // should format expressions.
 func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases bool) FmtFlags {
-	f := *base
-	f.showTypes = showTypes
-	f.symbolicVars = symbolicVars
-	f.ShowTableAliases = showTableAliases
-	return &f
+	if showTypes {
+		base |= FmtShowTypes
+	}
+	if symbolicVars {
+		base |= fmtSymbolicVars
+	}
+	if showTableAliases {
+		base |= FmtShowTableAliases
+	}
+	return base
 }
 
 // WithIndexedVarFormat modifies FmtCtx to customize the printing of
@@ -202,7 +221,7 @@ type NodeFormatter interface {
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 	f := ctx.flags
-	if f.showTypes {
+	if f.HasFlags(FmtShowTypes) {
 		if te, ok := n.(TypedExpr); ok {
 			ctx.WriteByte('(')
 			ctx.formatNodeOrHideConstants(n)
@@ -220,18 +239,18 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			return
 		}
 	}
-	if f.alwaysParens {
+	if f.HasFlags(FmtAlwaysGroupExprs) {
 		if _, ok := n.(Expr); ok {
 			ctx.WriteByte('(')
 		}
 	}
 	ctx.formatNodeOrHideConstants(n)
-	if f.alwaysParens {
+	if f.HasFlags(FmtAlwaysGroupExprs) {
 		if _, ok := n.(Expr); ok {
 			ctx.WriteByte(')')
 		}
 	}
-	if f.disambiguateDatumTypes {
+	if f.HasFlags(fmtDisambiguateDatumTypes) {
 		var typ types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {
@@ -247,7 +266,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			if err != nil {
 				panic(err)
 			}
-			colType.Format(ctx.Buffer, f.encodeFlags)
+			colType.Format(ctx.Buffer, f.EncodeFlags())
 		}
 	}
 }

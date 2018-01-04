@@ -298,7 +298,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						if err := params.p.dropIndexByName(
 							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
 							t.DropBehavior, ignoreIdxConstraint,
-							tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
+							tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 						); err != nil {
 							return err
 						}
@@ -504,7 +504,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	var err error
 	if addedMutations {
 		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
-			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
