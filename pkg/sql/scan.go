@@ -270,7 +270,7 @@ func (n *scanNode) initTable(
 	}
 
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	return n.initDescDefaults(p.planDeps, scanVisibility, wantedColumns)
+	return n.initDescDefaults(p.curPlan.deps, scanVisibility, wantedColumns)
 }
 
 func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
