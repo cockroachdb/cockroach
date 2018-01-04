@@ -32,11 +32,11 @@ func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error
 	if p.isPreparing {
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidPreparedStatementDefinitionError,
 			"can't prepare an EXECUTE statement")
-	} else if p.plannedExecute {
+	} else if p.curPlan.plannedExecute {
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"can't have more than 1 EXECUTE per statement")
 	}
-	p.plannedExecute = true
+	p.curPlan.plannedExecute = true
 	ps, newPInfo, err := getPreparedStatementForExecute(p.session, n)
 	if err != nil {
 		return nil, err

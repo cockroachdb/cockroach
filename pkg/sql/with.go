@@ -66,7 +66,7 @@ func (e cteNameEnvironment) pop() cteNameEnvironment {
 }
 
 func popCteNameEnvironment(p *planner) {
-	p.cteNameEnvironment = p.cteNameEnvironment.pop()
+	p.curPlan.cteNameEnvironment = p.curPlan.cteNameEnvironment.pop()
 }
 
 // initWith pushes a new environment frame onto the planner's CTE name
@@ -76,7 +76,7 @@ func popCteNameEnvironment(p *planner) {
 func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planner), error) {
 	if with != nil {
 		frame := make(cteNameEnvironmentFrame)
-		p.cteNameEnvironment = p.cteNameEnvironment.push(frame)
+		p.curPlan.cteNameEnvironment = p.curPlan.cteNameEnvironment.push(frame)
 		for _, cte := range with.CTEList {
 			if _, ok := frame[cte.Name.Alias]; ok {
 				return nil, pgerror.NewErrorf(
@@ -99,7 +99,7 @@ func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planne
 // environment, returning the planDataSource corresponding to the CTE if it was
 // found. The second return parameter returns true if a CTE was found.
 func (p *planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSource, bool, error) {
-	if p.cteNameEnvironment == nil {
+	if p.curPlan.cteNameEnvironment == nil {
 		return planDataSource{}, false, nil
 	}
 	tn, err := t.Normalize()
@@ -107,8 +107,8 @@ func (p *planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSourc
 		return planDataSource{}, false, err
 	}
 	// Iterate backward through the environment, most recent frame first.
-	for i := range p.cteNameEnvironment {
-		frame := p.cteNameEnvironment[len(p.cteNameEnvironment)-1-i]
+	for i := range p.curPlan.cteNameEnvironment {
+		frame := p.curPlan.cteNameEnvironment[len(p.curPlan.cteNameEnvironment)-1-i]
 		if tn.DatabaseName == "" && tn.PrefixName == "" {
 			if cteSource, ok := frame[tn.TableName]; ok {
 				if cteSource.used {

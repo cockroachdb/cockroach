@@ -59,8 +59,8 @@ func (p *planner) Values(
 
 	v.columns = make(sqlbase.ResultColumns, 0, numCols)
 
-	defer func(prev bool) { p.hasSubqueries = prev }(p.hasSubqueries)
-	p.hasSubqueries = false
+	defer func(prev bool) { p.curPlan.hasSubqueries = prev }(p.curPlan.hasSubqueries)
+	p.curPlan.hasSubqueries = false
 
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
@@ -106,7 +106,7 @@ func (p *planner) Values(
 	// that it must always be called unless an error is returned from a planNode
 	// constructor. This would simplify the Close contract, but would make some
 	// code (like in planner.SelectClause) more messy.
-	v.isConst = !p.hasSubqueries
+	v.isConst = !p.curPlan.hasSubqueries
 	return v, nil
 }
 

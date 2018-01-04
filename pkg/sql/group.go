@@ -158,7 +158,7 @@ func (p *planner) groupBy(
 				if err != nil {
 					return nil, nil, err
 				}
-				p.hasStar = p.hasStar || hasStar
+				p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 			}
 			groupByExprs[i] = resolvedExpr
 		}
@@ -213,7 +213,7 @@ func (p *planner) groupBy(
 		if err != nil {
 			return nil, nil, err
 		}
-		p.hasStar = p.hasStar || hasStar
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 
 		// GROUP BY (a, b) -> GROUP BY a, b
 		cols, exprs = flattenTuples(cols, exprs, &r.ivarHelper)

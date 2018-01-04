@@ -97,28 +97,39 @@ type planner struct {
 	// query.
 	cancelChecker *sqlbase.CancelChecker
 
-	// planDeps, if non-nil, collects the table/view dependencies for this query.
-	// Any planNode constructors that resolves a table name or reference in the query
-	// to a descriptor must register this descriptor into planDeps.
-	// This is (currently) used by CREATE VIEW.
-	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
-	planDeps planDependencies
-
-	// cteNameEnvironment collects the mapping from common table expression alias
-	// to the planNodes that represent their source.
-	cteNameEnvironment cteNameEnvironment
-
-	// hasStar collects whether any star expansion has occurred during
-	// logical plan construction. This is used by CREATE VIEW until
-	// #10028 is addressed.
-	hasStar bool
-	// hasSubqueries collects whether any subqueries expansion has
-	// occurred during logical plan construction.
-	hasSubqueries bool
 	// isPreparing is true if this planner is currently preparing.
 	isPreparing bool
-	// plannedExecute is true if this planner has planned an EXECUTE statement.
-	plannedExecute bool
+
+	// curPlan collects the properties of the current plan being prepared. This state
+	// is undefined at the beginning of the planning of each new statement, and cannot
+	// be reused for an old prepared statement after a new statement has been prepared.
+	//
+	// Note: some additional per-statement state is also stored in
+	// semaCtx (placeholders).
+	// TODO(jordan): investigate whether/how per-plan state like
+	// placeholder data can be concentrated in a single struct.
+	curPlan struct {
+		// deps, if non-nil, collects the table/view dependencies for this query.
+		// Any planNode constructors that resolves a table name or reference in the query
+		// to a descriptor must register this descriptor into planDeps.
+		// This is (currently) used by CREATE VIEW.
+		// TODO(knz): Remove this in favor of a better encapsulated mechanism.
+		deps planDependencies
+
+		// cteNameEnvironment collects the mapping from common table expression alias
+		// to the planNodes that represent their source.
+		cteNameEnvironment cteNameEnvironment
+
+		// hasStar collects whether any star expansion has occurred during
+		// logical plan construction. This is used by CREATE VIEW until
+		// #10028 is addressed.
+		hasStar bool
+		// hasSubqueries collects whether any subqueries expansion has
+		// occurred during logical plan construction.
+		hasSubqueries bool
+		// plannedExecute is true if this planner has planned an EXECUTE statement.
+		plannedExecute bool
+	}
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser

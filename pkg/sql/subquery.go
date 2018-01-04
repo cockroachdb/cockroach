@@ -355,7 +355,7 @@ func (v *subqueryVisitor) VisitPost(expr tree.Expr) tree.Expr {
 func (v *subqueryVisitor) replaceSubquery(
 	sub *tree.Subquery, multiRow bool, desiredColumns int,
 ) (*subquery, error) {
-	v.hasSubqueries = true
+	v.curPlan.hasSubqueries = true
 
 	// Calling newPlan() might recursively invoke replaceSubqueries, so we need
 	// to preserve the state of the visitor across the call to newPlan().

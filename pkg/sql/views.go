@@ -82,12 +82,12 @@ func (p *planner) analyzeViewQuery(
 	p.avoidCachedDescriptors = true
 
 	// Request dependency tracking.
-	defer func(prev planDependencies) { p.planDeps = prev }(p.planDeps)
-	p.planDeps = make(planDependencies)
+	defer func(prev planDependencies) { p.curPlan.deps = prev }(p.curPlan.deps)
+	p.curPlan.deps = make(planDependencies)
 
 	// Request star detection
-	defer func(prev bool) { p.hasStar = prev }(p.hasStar)
-	p.hasStar = false
+	defer func(prev bool) { p.curPlan.hasStar = prev }(p.curPlan.hasStar)
+	p.curPlan.hasStar = false
 
 	// Now generate the source plan.
 	sourcePlan, err := p.Select(ctx, viewSelect, []types.T{})
@@ -98,11 +98,11 @@ func (p *planner) analyzeViewQuery(
 	defer sourcePlan.Close(ctx)
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if p.hasStar {
+	if p.curPlan.hasStar {
 		return nil, nil, fmt.Errorf("views do not currently support * expressions")
 	}
 
-	return p.planDeps, planColumns(sourcePlan), nil
+	return p.curPlan.deps, planColumns(sourcePlan), nil
 }
 
 // RecomputeViewDependencies does the work of CREATE VIEW w.r.t.
@@ -166,7 +166,7 @@ func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor
 
 		// Request dependency tracking and generate the source plan
 		// to collect the dependencies.
-		p.planDeps = make(planDependencies)
+		p.curPlan.deps = make(planDependencies)
 		sourcePlan, err := p.newPlan(ctx, stmt, []types.T{})
 		if err != nil {
 			log.Errorf(ctx, "view [%d] (%q) has broken query %q: %v",
@@ -177,8 +177,8 @@ func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor
 		sourcePlan.Close(ctx)
 
 		log.VEventf(ctx, 1, "collected dependencies for view [%d] (%q):\n%s",
-			tableID, tn, p.planDeps.String())
-		allViewDeps[tableID] = p.planDeps
+			tableID, tn, p.curPlan.deps.String())
+		allViewDeps[tableID] = p.curPlan.deps
 	}
 
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
