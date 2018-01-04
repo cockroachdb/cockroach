@@ -14,10 +14,8 @@
  * These provide various crypto primitives. They currently use CryptoPP.
  */
 
-// KeyHash returns the sha-256 hash of the string. Returned value is in hexadecimal format.
-std::string KeyHash(const std::string& k);
-
-// HexString returns the lowercase hexadecimal representation of 's'.
+// HexString returns the lowercase hexadecimal representation of the data contained 's'.
+// eg: HexString("1") -> "31" (hex(character value)), not "1" -> "1".
 std::string HexString(const std::string& s);
 
 // RandomBytes returns `length` bytes of data from a pseudo-random number generator.

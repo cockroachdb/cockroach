@@ -35,7 +35,7 @@ rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg)
     return rocksdb::Status::InvalidArgument(fmt::StringPrintf("expected error \"%s\", got success", err_msg));
   }
   std::regex re(err_msg);
-  if (std::regex_match(status.getState(), re)) {
+  if ((strcmp(err_msg, status.getState()) == 0) || std::regex_match(status.getState(), re)) {
     return rocksdb::Status::OK();
   }
   return rocksdb::Status::InvalidArgument(

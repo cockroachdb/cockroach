@@ -75,19 +75,6 @@ const RegistryVersion RegistryVersion_MIN = Base;
 const RegistryVersion RegistryVersion_MAX = Base;
 const int RegistryVersion_ARRAYSIZE = RegistryVersion_MAX + 1;
 
-enum EncryptionType {
-  Plaintext = 0,
-  AES128_CTR = 1,
-  AES192_CTR = 2,
-  AES256_CTR = 3,
-  EncryptionType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
-  EncryptionType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
-};
-bool EncryptionType_IsValid(int value);
-const EncryptionType EncryptionType_MIN = Plaintext;
-const EncryptionType EncryptionType_MAX = AES256_CTR;
-const int EncryptionType_ARRAYSIZE = EncryptionType_MAX + 1;
-
 // ===================================================================
 
 class Registry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.Registry) */ {
@@ -291,55 +278,18 @@ class FileEntry : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   ::std::string* release_filename();
   void set_allocated_filename(::std::string* filename);
 
-  // string key_id = 3;
-  void clear_key_id();
-  static const int kKeyIdFieldNumber = 3;
-  const ::std::string& key_id() const;
-  void set_key_id(const ::std::string& value);
-  #if LANG_CXX11
-  void set_key_id(::std::string&& value);
-  #endif
-  void set_key_id(const char* value);
-  void set_key_id(const char* value, size_t size);
-  ::std::string* mutable_key_id();
-  ::std::string* release_key_id();
-  void set_allocated_key_id(::std::string* key_id);
-
-  // bytes nonce = 4;
-  void clear_nonce();
-  static const int kNonceFieldNumber = 4;
-  const ::std::string& nonce() const;
-  void set_nonce(const ::std::string& value);
-  #if LANG_CXX11
-  void set_nonce(::std::string&& value);
-  #endif
-  void set_nonce(const char* value);
-  void set_nonce(const void* value, size_t size);
-  ::std::string* mutable_nonce();
-  ::std::string* release_nonce();
-  void set_allocated_nonce(::std::string* nonce);
-
-  // .cockroach.storage.engine.enginepb.EncryptionType type = 2;
-  void clear_type();
-  static const int kTypeFieldNumber = 2;
-  ::cockroach::storage::engine::enginepb::EncryptionType type() const;
-  void set_type(::cockroach::storage::engine::enginepb::EncryptionType value);
-
-  // uint32 counter = 5;
-  void clear_counter();
-  static const int kCounterFieldNumber = 5;
-  ::google::protobuf::uint32 counter() const;
-  void set_counter(::google::protobuf::uint32 value);
+  // int32 env_level = 2;
+  void clear_env_level();
+  static const int kEnvLevelFieldNumber = 2;
+  ::google::protobuf::int32 env_level() const;
+  void set_env_level(::google::protobuf::int32 value);
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.FileEntry)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr filename_;
-  ::google::protobuf::internal::ArenaStringPtr key_id_;
-  ::google::protobuf::internal::ArenaStringPtr nonce_;
-  int type_;
-  ::google::protobuf::uint32 counter_;
+  ::google::protobuf::int32 env_level_;
   mutable int _cached_size_;
   friend struct protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::TableStruct;
 };
@@ -456,138 +406,18 @@ inline void FileEntry::set_allocated_filename(::std::string* filename) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.FileEntry.Filename)
 }
 
-// .cockroach.storage.engine.enginepb.EncryptionType type = 2;
-inline void FileEntry::clear_type() {
-  type_ = 0;
+// int32 env_level = 2;
+inline void FileEntry::clear_env_level() {
+  env_level_ = 0;
 }
-inline ::cockroach::storage::engine::enginepb::EncryptionType FileEntry::type() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.type)
-  return static_cast< ::cockroach::storage::engine::enginepb::EncryptionType >(type_);
+inline ::google::protobuf::int32 FileEntry::env_level() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.env_level)
+  return env_level_;
 }
-inline void FileEntry::set_type(::cockroach::storage::engine::enginepb::EncryptionType value) {
+inline void FileEntry::set_env_level(::google::protobuf::int32 value) {
   
-  type_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.type)
-}
-
-// string key_id = 3;
-inline void FileEntry::clear_key_id() {
-  key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline const ::std::string& FileEntry::key_id() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.key_id)
-  return key_id_.GetNoArena();
-}
-inline void FileEntry::set_key_id(const ::std::string& value) {
-  
-  key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.key_id)
-}
-#if LANG_CXX11
-inline void FileEntry::set_key_id(::std::string&& value) {
-  
-  key_id_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.FileEntry.key_id)
-}
-#endif
-inline void FileEntry::set_key_id(const char* value) {
-  GOOGLE_DCHECK(value != NULL);
-  
-  key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.FileEntry.key_id)
-}
-inline void FileEntry::set_key_id(const char* value, size_t size) {
-  
-  key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.FileEntry.key_id)
-}
-inline ::std::string* FileEntry::mutable_key_id() {
-  
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.FileEntry.key_id)
-  return key_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* FileEntry::release_key_id() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.FileEntry.key_id)
-  
-  return key_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void FileEntry::set_allocated_key_id(::std::string* key_id) {
-  if (key_id != NULL) {
-    
-  } else {
-    
-  }
-  key_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key_id);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.FileEntry.key_id)
-}
-
-// bytes nonce = 4;
-inline void FileEntry::clear_nonce() {
-  nonce_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline const ::std::string& FileEntry::nonce() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.nonce)
-  return nonce_.GetNoArena();
-}
-inline void FileEntry::set_nonce(const ::std::string& value) {
-  
-  nonce_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.nonce)
-}
-#if LANG_CXX11
-inline void FileEntry::set_nonce(::std::string&& value) {
-  
-  nonce_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.FileEntry.nonce)
-}
-#endif
-inline void FileEntry::set_nonce(const char* value) {
-  GOOGLE_DCHECK(value != NULL);
-  
-  nonce_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.FileEntry.nonce)
-}
-inline void FileEntry::set_nonce(const void* value, size_t size) {
-  
-  nonce_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.FileEntry.nonce)
-}
-inline ::std::string* FileEntry::mutable_nonce() {
-  
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.FileEntry.nonce)
-  return nonce_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* FileEntry::release_nonce() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.FileEntry.nonce)
-  
-  return nonce_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void FileEntry::set_allocated_nonce(::std::string* nonce) {
-  if (nonce != NULL) {
-    
-  } else {
-    
-  }
-  nonce_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), nonce);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.FileEntry.nonce)
-}
-
-// uint32 counter = 5;
-inline void FileEntry::clear_counter() {
-  counter_ = 0u;
-}
-inline ::google::protobuf::uint32 FileEntry::counter() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.counter)
-  return counter_;
-}
-inline void FileEntry::set_counter(::google::protobuf::uint32 value) {
-  
-  counter_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.counter)
+  env_level_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.env_level)
 }
 
 #ifdef __GNUC__
@@ -609,7 +439,6 @@ namespace google {
 namespace protobuf {
 
 template <> struct is_proto_enum< ::cockroach::storage::engine::enginepb::RegistryVersion> : ::google::protobuf::internal::true_type {};
-template <> struct is_proto_enum< ::cockroach::storage::engine::enginepb::EncryptionType> : ::google::protobuf::internal::true_type {};
 
 }  // namespace protobuf
 }  // namespace google

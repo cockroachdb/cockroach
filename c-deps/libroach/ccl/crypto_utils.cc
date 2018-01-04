@@ -12,17 +12,6 @@
 #include <cryptopp/osrng.h>
 #include <cryptopp/sha.h>
 
-std::string KeyHash(const std::string& k) {
-  std::string value;
-  CryptoPP::SHA256 hash;
-
-  CryptoPP::StringSource ss(
-      k, true /* PumpAll */,
-      new CryptoPP::HashFilter(hash, new CryptoPP::HexEncoder(new CryptoPP::StringSink(value), false /* uppercase */)));
-
-  return value;
-}
-
 std::string HexString(const std::string& s) {
   std::string value;
 

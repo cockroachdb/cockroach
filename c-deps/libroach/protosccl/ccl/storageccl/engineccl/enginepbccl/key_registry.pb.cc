@@ -69,7 +69,6 @@ void TableStruct::InitDefaultsImpl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   ::google::protobuf::internal::InitProtobufDefaults();
-  ::cockroach::storage::engine::enginepb::protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::InitDefaults();
   _DataKeysRegistry_StoreKeysEntry_default_instance_._instance.DefaultConstruct();
   ::google::protobuf::internal::OnShutdownDestroyMessage(
       &_DataKeysRegistry_StoreKeysEntry_default_instance_);_DataKeysRegistry_DataKeysEntry_default_instance_._instance.DefaultConstruct();
@@ -95,7 +94,6 @@ void InitDefaults() {
 namespace {
 void AddDescriptorsImpl() {
   InitDefaults();
-  ::cockroach::storage::engine::enginepb::protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::AddDescriptors();
 }
 } // anonymous namespace
 
@@ -105,6 +103,18 @@ void AddDescriptors() {
 }
 
 }  // namespace protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto
+
+bool EncryptionType_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+      return true;
+    default:
+      return false;
+  }
+}
 
 
 // ===================================================================
@@ -809,7 +819,7 @@ bool KeyInfo::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // .cockroach.storage.engine.enginepb.EncryptionType encryption_type = 1;
+      // .cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType encryption_type = 1;
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
@@ -817,7 +827,7 @@ bool KeyInfo::MergePartialFromCodedStream(
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
                  input, &value)));
-          set_encryption_type(static_cast< ::cockroach::storage::engine::enginepb::EncryptionType >(value));
+          set_encryption_type(static_cast< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType >(value));
         } else {
           goto handle_unusual;
         }
@@ -926,7 +936,7 @@ void KeyInfo::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // .cockroach.storage.engine.enginepb.EncryptionType encryption_type = 1;
+  // .cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType encryption_type = 1;
   if (this->encryption_type() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteEnum(
       1, this->encryption_type(), output);
@@ -1011,7 +1021,7 @@ size_t KeyInfo::ByteSizeLong() const {
         this->creation_time());
   }
 
-  // .cockroach.storage.engine.enginepb.EncryptionType encryption_type = 1;
+  // .cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType encryption_type = 1;
   if (this->encryption_type() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->encryption_type());
@@ -1098,15 +1108,15 @@ void KeyInfo::InternalSwap(KeyInfo* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // KeyInfo
 
-// .cockroach.storage.engine.enginepb.EncryptionType encryption_type = 1;
+// .cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType encryption_type = 1;
 void KeyInfo::clear_encryption_type() {
   encryption_type_ = 0;
 }
-::cockroach::storage::engine::enginepb::EncryptionType KeyInfo::encryption_type() const {
+::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType KeyInfo::encryption_type() const {
   // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo.encryption_type)
-  return static_cast< ::cockroach::storage::engine::enginepb::EncryptionType >(encryption_type_);
+  return static_cast< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType >(encryption_type_);
 }
-void KeyInfo::set_encryption_type(::cockroach::storage::engine::enginepb::EncryptionType value) {
+void KeyInfo::set_encryption_type(::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType value) {
   
   encryption_type_ = value;
   // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo.encryption_type)

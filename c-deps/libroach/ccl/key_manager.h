@@ -13,15 +13,18 @@
 #include <rocksdb/status.h>
 #include <string>
 #include "ccl/storageccl/engineccl/enginepbccl/key_registry.pb.h"
-#include "storage/engine/enginepb/file_registry.pb.h"
 
-namespace enginepb = cockroach::storage::engine::enginepb;
 namespace enginepbccl = cockroach::ccl::storageccl::engineccl::enginepbccl;
 
+// Constants must not be changed, they are used to build the persisted key registry.
+// The key ID is 32 bytes (the length of the longest possible AES key). This is to easily
+// tell if a store key file has the right length.
+static const size_t kKeyIDLength = 32;
 static const std::string kPlainKeyID = "plain";
+static const std::string kKeyRegistryFilename = "COCKROACHDB_DATA_KEYS";
 
 // Helpers are in a separate namespace to avoid pollution.
-// **WARNING**: these should only be used by the KeyManager and its tests.
+// These should only be used by the KeyManager and its tests.
 namespace KeyManagerUtils {
 
 // Read key from a file.
@@ -70,8 +73,6 @@ class KeyManager {
   // **WARNING**: this must not be logged, displayed, or stored outside the key registry.
   virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) = 0;
 };
-
-static const std::string kKeyRegistryFilename = "COCKROACHDB_DATA_KEYS";
 
 // FileKeyManager loads raw keys from files.
 // Keys are only loaded at startup after object construction, but before use.
