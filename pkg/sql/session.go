@@ -1394,14 +1394,16 @@ func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) err
 		stmts, err := parser.Parse(sqlStmts)
 		if err == nil {
 			var buf bytes.Buffer
+			anonCtx := tree.MakeFmtCtx(&buf, tree.FmtAnonymize)
+			hideCtx := tree.MakeFmtCtx(&buf, tree.FmtHideConstants)
 			for _, stmt := range NewStatementList(stmts) {
-				tree.FormatNode(&buf, tree.FmtAnonymize, stmt.AST)
+				anonCtx.FormatNode(stmt.AST)
 				stmt.AST, err = parser.ParseOne(buf.String())
 				buf.Reset()
 				if err != nil {
 					buf.WriteString("[unknown]")
 				} else {
-					tree.FormatNode(&buf, tree.FmtHideConstants, stmt.AST)
+					hideCtx.FormatNode(stmt.AST)
 				}
 
 				anonymized = append(anonymized, buf.String())

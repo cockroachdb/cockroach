@@ -33,12 +33,12 @@ import (
 func exprFmtFlagsBase(evalCtx *tree.EvalContext) tree.FmtFlags {
 	return tree.FmtPlaceholderFormat(
 		tree.FmtCheckEquivalence,
-		func(buf *bytes.Buffer, flags tree.FmtFlags, p *tree.Placeholder) {
+		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
 			if err != nil {
 				panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
 			}
-			d.Format(buf, flags)
+			d.Format(fmtCtx)
 		})
 }
 
@@ -64,17 +64,18 @@ func MakeExpression(
 	} else {
 		f = tree.FmtIndexedVarFormat(
 			exprFmtFlagsBase(evalCtx),
-			func(buf *bytes.Buffer, idx int) {
+			func(ctx *tree.FmtCtx, idx int) {
 				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {
 					panic(fmt.Sprintf("unmapped index %d", idx))
 				}
-				fmt.Fprintf(buf, "@%d", remappedIdx+1)
+				ctx.Printf("@%d", remappedIdx+1)
 			},
 		)
 	}
 	var buf bytes.Buffer
-	tree.FormatNode(&buf, f, expr)
+	fmtCtx := tree.MakeFmtCtx(&buf, f)
+	fmtCtx.FormatNode(expr)
 	if log.V(1) {
 		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(expr))
 	}

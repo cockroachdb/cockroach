@@ -98,6 +98,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 	}
 
 	var usedBy bytes.Buffer
+	fmtCtx := tree.MakeFmtCtx(&usedBy, tree.FmtSimple)
 	if err := forEachDatabaseDesc(params.ctx, params.p,
 		func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.GetPrivileges().Users {
@@ -105,7 +106,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 					if usedBy.Len() > 0 {
 						usedBy.WriteString(", ")
 					}
-					tree.Name(db.Name).Format(&usedBy, tree.FmtSimple)
+					fmtCtx.FormatNode(tree.Name(db.Name))
 				}
 			}
 			return nil
@@ -123,7 +124,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 					if usedBy.Len() > 0 {
 						usedBy.WriteString(", ")
 					}
-					tn.Format(&usedBy, tree.FmtSimple)
+					fmtCtx.FormatNode(&tn)
 				}
 			}
 			return nil
@@ -132,11 +133,12 @@ func (n *DropUserNode) startExec(params runParams) error {
 	}
 	if usedBy.Len() > 0 {
 		var nameList bytes.Buffer
+		nameListFmtCtx := tree.MakeFmtCtx(&nameList, tree.FmtSimple)
 		for i, name := range names {
 			if i > 0 {
 				nameList.WriteString(", ")
 			}
-			tree.Name(name).Format(&nameList, tree.FmtSimple)
+			nameListFmtCtx.FormatNode(tree.Name(name))
 		}
 		return pgerror.NewErrorf(pgerror.CodeGroupingError,
 			"cannot drop user%s or role%s %s: grants still exist on %s",

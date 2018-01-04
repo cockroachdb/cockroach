@@ -15,8 +15,6 @@
 package tree
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -114,13 +112,13 @@ type AllColumnsSelector struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (a *AllColumnsSelector) Format(buf *bytes.Buffer, f FmtFlags) {
+func (a *AllColumnsSelector) Format(ctx *FmtCtx) {
 	if !a.TableName.DBNameOriginallyOmitted {
-		FormatNode(buf, f, a.TableName.DatabaseName)
-		buf.WriteByte('.')
+		ctx.FormatNode(a.TableName.DatabaseName)
+		ctx.WriteByte('.')
 	}
-	FormatNode(buf, f, a.TableName.TableName)
-	buf.WriteString(".*")
+	ctx.FormatNode(a.TableName.TableName)
+	ctx.WriteString(".*")
 }
 func (a *AllColumnsSelector) String() string { return AsString(a) }
 
@@ -150,21 +148,21 @@ type ColumnItem struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (c *ColumnItem) Format(buf *bytes.Buffer, f FmtFlags) {
+func (c *ColumnItem) Format(ctx *FmtCtx) {
 	if c.TableName.TableName != "" {
 		if !c.TableName.DBNameOriginallyOmitted {
-			FormatNode(buf, f, c.TableName.DatabaseName)
-			buf.WriteByte('.')
+			ctx.FormatNode(c.TableName.DatabaseName)
+			ctx.WriteByte('.')
 		}
-		FormatNode(buf, f, c.TableName.TableName)
-		buf.WriteByte('.')
+		ctx.FormatNode(c.TableName.TableName)
+		ctx.WriteByte('.')
 	}
-	FormatNode(buf, f, c.ColumnName)
+	ctx.FormatNode(c.ColumnName)
 	if len(c.Selector) > 0 {
 		if _, ok := c.Selector[0].(*ArraySubscript); !ok {
-			buf.WriteByte('.')
+			ctx.WriteByte('.')
 		}
-		FormatNode(buf, f, c.Selector)
+		ctx.FormatNode(c.Selector)
 	}
 }
 func (c *ColumnItem) String() string { return AsString(c) }
