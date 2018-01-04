@@ -226,7 +226,8 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, params.EvalContext())
+		col, _, _, err := sqlbase.MakeColumnDefDescs(
+			&columnTableDef, &params.p.semaCtx, params.EvalContext())
 		if err != nil {
 			return desc, err
 		}

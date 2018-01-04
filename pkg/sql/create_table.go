@@ -804,7 +804,7 @@ func makeTableDescIfAs(
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
+		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -845,9 +845,19 @@ func MakeTableDesc(
 					)
 				}
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
+			}
+
+			if d.HasDefaultExpr() {
+				seqDescriptor, err := maybeAddSequenceDependency(&desc, col, expr, evalCtx)
+				if err != nil {
+					return desc, err
+				}
+				if seqDescriptor != nil {
+					affected[seqDescriptor.ID] = seqDescriptor
+				}
 			}
 
 			desc.AddColumn(*col)
