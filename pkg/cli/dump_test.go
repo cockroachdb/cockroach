@@ -880,6 +880,47 @@ CREATE VIEW bar ("1") AS SELECT 1;
 	}
 }
 
+func TestDumpSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE SEQUENCE d.blog_posts_id_seq;
+	CREATE TABLE d.blog_posts (id INT PRIMARY KEY DEFAULT nextval('blog_posts_id_seq'), title text);
+`
+	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(out)
+	}
+
+	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(out)
+	}
+
+	const expect = `dump d
+CREATE SEQUENCE blog_posts_id_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+CREATE TABLE blog_posts (
+	id INT NOT NULL DEFAULT nextval('blog_posts_id_seq':::STRING),
+	title STRING NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, title)
+);
+`
+	// TODO(vilterp): make sure these get dumped in order!
+
+	if out != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
+
 // TestDumpPrimaryKeyConstraint tests that a primary key with a non-default
 // name works.
 func TestDumpPrimaryKeyConstraint(t *testing.T) {
