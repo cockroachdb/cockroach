@@ -1307,11 +1307,10 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			"set it on the root of the interleaved hierarchy instead", idxDesc.Name)
 	}
 
-	// We don't need real prefixes in the TranslateValueEncodingToSpan calls
-	// because we're only using it to look for collisions and the prefix would
-	// be the same for all of them. Faking them out with DNull allows us to make
-	// O(list partition) calls to TranslateValueEncodingToSpan instead of O(list
-	// partition entry).
+	// We don't need real prefixes in the DecodePartitionTuple calls because we're
+	// only using it to look for collisions and the prefix would be the same for
+	// all of them. Faking them out with DNull allows us to make O(list partition)
+	// calls to DecodePartitionTuple instead of O(list partition entry).
 	fakePrefixDatums := make([]tree.Datum, colOffset)
 	for i := range fakePrefixDatums {
 		fakePrefixDatums[i] = tree.DNull
@@ -1353,14 +1352,13 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			// NB: key encoding is used to check uniqueness because it has
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
-				datums, keyPrefix, err := TranslateValueEncodingToSpan(
+				tuple, keyPrefix, err := DecodePartitionTuple(
 					a, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
 				if err != nil {
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 				}
 				if _, exists := listValues[string(keyPrefix)]; exists {
-					return fmt.Errorf("(%s) cannot be present in more than one partition",
-						printPartitioningPrefix(datums, int(partDesc.NumColumns), "DEFAULT"))
+					return fmt.Errorf("%s cannot be present in more than one partition", tuple)
 				}
 				listValues[string(keyPrefix)] = struct{}{}
 			}
@@ -1385,20 +1383,17 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			// NB: key encoding is used to check sortedness and uniqueness
 			// because it has to match the behavior of the value when
 			// indexed.
-			datums, endKey, err := TranslateValueEncodingToSpan(
+			tuple, endKey, err := DecodePartitionTuple(
 				a, desc, idxDesc, partDesc, p.UpperBound, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
 			if _, exists := rangeValues[string(endKey)]; exists {
-				return fmt.Errorf("(%s) cannot be present in more than one partition",
-					printPartitioningPrefix(datums, int(partDesc.NumColumns), "MAXVALUE"))
+				return fmt.Errorf("%s cannot be present in more than one partition", tuple)
 			}
-
 			rangeValues[string(endKey)] = struct{}{}
 			if bytes.Compare(lastEndKey, endKey) >= 0 {
-				return fmt.Errorf("values must be strictly increasing: %s is out of order",
-					tree.AsString(datums))
+				return fmt.Errorf("values must be strictly increasing: %s is out of order", tuple)
 			}
 			lastEndKey = endKey
 		}

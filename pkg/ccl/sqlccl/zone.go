@@ -171,18 +171,18 @@ func indexCoveringsForPartitioning(
 		listCoverings := make([]intervalccl.Covering, int(partDesc.NumColumns)+1)
 		for _, p := range partDesc.List {
 			for _, valueEncBuf := range p.Values {
-				datums, keyPrefix, err := sqlbase.TranslateValueEncodingToSpan(
+				t, keyPrefix, err := sqlbase.DecodePartitionTuple(
 					a, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return nil, err
 				}
 				if _, ok := relevantPartitions[p.Name]; ok {
-					listCoverings[len(datums)] = append(listCoverings[len(datums)], intervalccl.Range{
+					listCoverings[len(t.Datums)] = append(listCoverings[len(t.Datums)], intervalccl.Range{
 						Start: keyPrefix, End: roachpb.Key(keyPrefix).PrefixEnd(),
 						Payload: config.Subzone{PartitionName: p.Name},
 					})
 				}
-				newPrefixDatums := append(prefixDatums, datums...)
+				newPrefixDatums := append(prefixDatums, t.Datums...)
 				subpartitionCoverings, err := indexCoveringsForPartitioning(
 					a, tableDesc, idxDesc, &p.Subpartitioning, relevantPartitions, newPrefixDatums)
 				if err != nil {
@@ -218,7 +218,7 @@ func indexCoveringsForPartitioning(
 			if _, ok := relevantPartitions[p.Name]; !ok {
 				continue
 			}
-			_, endKey, err := sqlbase.TranslateValueEncodingToSpan(
+			_, endKey, err := sqlbase.DecodePartitionTuple(
 				a, tableDesc, idxDesc, partDesc, p.UpperBound, prefixDatums)
 			if err != nil {
 				return nil, err

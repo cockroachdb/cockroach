@@ -24,54 +24,112 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TranslateValueEncodingToSpan parses columns (which are a prefix of the
-// columns of `idxDesc`) encoded with the "value" encoding and returns the
-// parsed datums. It also reencodes them into a key as they would be for
-// `idxDesc` (accounting for index dirs, interleaves, subpartitioning, etc).
+// PartitionSpecialValCode identifies a special value.
+type PartitionSpecialValCode uint64
+
+const (
+	// PartitionDefaultVal represents the special DEFAULT value.
+	PartitionDefaultVal PartitionSpecialValCode = iota
+	// PartitionMaxVal represents the special MAXVALUE value.
+	PartitionMaxVal
+)
+
+func (c PartitionSpecialValCode) String() string {
+	switch c {
+	case PartitionDefaultVal:
+		return (tree.DefaultVal{}).String()
+	case PartitionMaxVal:
+		return (tree.MaxVal{}).String()
+	}
+	panic("unreachable")
+}
+
+// PartitionTuple represents a tuple in a partitioning specification.
+//
+// It contains any number of true datums, stored in the Datums field, followed
+// by any number of special partitioning values, represented by the Special and
+// SpecialCount fields.
+type PartitionTuple struct {
+	Datums       tree.Datums
+	Special      PartitionSpecialValCode
+	SpecialCount int
+}
+
+// Format writes a string representation of the tuple to the provided buffer.
+func (t *PartitionTuple) Format(buf *bytes.Buffer) {
+	buf.WriteByte('(')
+	for i := 0; i < len(t.Datums)+t.SpecialCount; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		if i < len(t.Datums) {
+			tree.FormatNode(buf, tree.FmtSimple, t.Datums[i])
+		} else {
+			buf.WriteString(t.Special.String())
+		}
+	}
+	buf.WriteByte(')')
+}
+
+func (t *PartitionTuple) String() string {
+	var buf bytes.Buffer
+	t.Format(&buf)
+	return buf.String()
+}
+
+// DecodePartitionTuple parses columns (which are a prefix of the columns of
+// `idxDesc`) encoded with the "value" encoding and returns the parsed datums.
+// It also reencodes them into a key as they would be for `idxDesc` (accounting
+// for index dirs, interleaves, subpartitioning, etc).
 //
 // For a list partitioning, this returned key can be used as a prefix scan to
 // select all rows that have the given columns as a prefix (this is true even if
 // the list partitioning contains DEFAULT).
 //
 // Examples of the key returned for a list partitioning:
-// - (1, 2) -> /table/index/1/2
-// - (1, DEFAULT) -> /table/index/1
-// - (DEFAULT, DEFAULT) -> /table/index
+//   - (1, 2) -> /table/index/1/2
+//   - (1, DEFAULT) -> /table/index/1
+//   - (DEFAULT, DEFAULT) -> /table/index
 //
 // For a range partitioning, this returned key can be used as a exclusive end
 // key to select all rows strictly less than ones with the given columns as a
 // prefix (this is true even if the range partitioning contains MAXVALUE).
 //
 // Examples of the key returned for a range partitioning:
-// - (1, 2) -> /table/index/1/3
-// - (1, MAXVALUE) -> /table/index/2
-// - (DEFAULT, DEFAULT) -> (/table/index).PrefixEnd()
-//
-// If DEFAULT or MAXVALUE is encountered, the returned row (both reencoded and
-// parsed datums) will be shorter then len(colIDs); specifically it will contain
-// all the values up to but not including the special one.
+//   - (1, 2) -> /table/index/1/3
+//   - (1, MAXVALUE) -> /table/index/2
+//   - (DEFAULT, DEFAULT) -> (/table/index).PrefixEnd()
 //
 // NB: It is required elsewhere and assumed here that if an entry for a list
 // partitioning contains DEFAULT, everything in that entry "after" also has to
 // be DEFAULT. So, (1, 2, DEFAULT) is valid but (1, DEFAULT, 2) is not.
 // Similarly for range partitioning and MAXVALUE.
-func TranslateValueEncodingToSpan(
+func DecodePartitionTuple(
 	a *DatumAlloc,
 	tableDesc *TableDescriptor,
 	idxDesc *IndexDescriptor,
 	partDesc *PartitioningDescriptor,
 	valueEncBuf []byte,
-	prefixDatums []tree.Datum,
-) (tree.Datums, []byte, error) {
+	prefixDatums tree.Datums,
+) (*PartitionTuple, []byte, error) {
 	if len(prefixDatums)+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
 	}
 
-	datums := make(tree.Datums, int(partDesc.NumColumns))
-	specialIdx := -1
+	t := &PartitionTuple{
+		Datums: make(tree.Datums, 0, int(partDesc.NumColumns)),
+	}
+
+	if len(partDesc.List) > 0 {
+		t.Special = PartitionDefaultVal
+	} else if len(partDesc.Range) > 0 {
+		t.Special = PartitionMaxVal
+	} else {
+		return nil, nil, errors.New("unknown partition type")
+	}
 
 	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
-	for i, colID := range colIDs {
+	for _, colID := range colIDs {
 		col, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
 			return nil, nil, err
@@ -79,36 +137,26 @@ func TranslateValueEncodingToSpan(
 		if _, dataOffset, _, typ, err := encoding.DecodeValueTag(valueEncBuf); err != nil {
 			return nil, nil, errors.Wrap(err, "decoding")
 		} else if typ == encoding.NotNull {
-			if specialIdx == -1 {
-				specialIdx = i
-			}
+			t.SpecialCount++
 			valueEncBuf = valueEncBuf[dataOffset:]
 			continue
 		}
-		datums[i], valueEncBuf, err = DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
+		var datum tree.Datum
+		datum, valueEncBuf, err = DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "decoding")
 		}
-		if specialIdx != -1 {
-			if len(partDesc.List) > 0 && len(partDesc.Range) == 0 {
-				return nil, nil, errors.Errorf(
-					"non-DEFAULT value (%s) not allowed after DEFAULT", datums[i])
-			} else if len(partDesc.Range) > 0 && len(partDesc.List) == 0 {
-				return nil, nil, errors.Errorf(
-					"non-MAXVALUE value (%s) not allowed after MAXVALUE", datums[i])
-			} else {
-				return nil, nil, errors.Errorf("unknown partition type")
-			}
+		if t.SpecialCount > 0 {
+			return nil, nil, errors.Errorf("non-%[1]s value (%[2]s) not allowed after %[1]s",
+				t.Special, datum)
 		}
+		t.Datums = append(t.Datums, datum)
 	}
 	if len(valueEncBuf) > 0 {
-		return nil, nil, fmt.Errorf("superfluous data in encoded value")
-	}
-	if specialIdx != -1 {
-		datums = datums[:specialIdx]
+		return nil, nil, errors.New("superfluous data in encoded value")
 	}
 
-	allDatums := append(prefixDatums, datums...)
+	allDatums := append(prefixDatums, t.Datums...)
 	colMap := make(map[ColumnID]int, len(allDatums))
 	for i := range allDatums {
 		colMap[idxDesc.ColumnIDs[i]] = i
@@ -131,31 +179,9 @@ func TranslateValueEncodingToSpan(
 	// larger than everything it should match. Instead, we need `PrefixEnd()`.
 	// This also intuitively makes sense; we're essentially a key that is
 	// guaranteed to be less than `(2, MINVALUE, ..., MINVALUE)`.
-	if specialIdx != -1 && len(partDesc.Range) > 0 {
+	if t.SpecialCount > 0 && t.Special == PartitionMaxVal {
 		key = roachpb.Key(key).PrefixEnd()
 	}
 
-	return datums, key, nil
-}
-
-func printPartitioningPrefix(datums []tree.Datum, numColumns int, s string) string {
-	var buf bytes.Buffer
-	PrintPartitioningTuple(&buf, datums, numColumns, s)
-	return buf.String()
-}
-
-// PrintPartitioningTuple prints the first `numColumns` datums in a partitioning
-// tuple to `buf`. If `numColumns >= len(datums)`, then `s` (which is expected
-// to be DEFAULT or MAXVALUE) is used to fill.
-func PrintPartitioningTuple(buf *bytes.Buffer, datums []tree.Datum, numColumns int, s string) {
-	for i := 0; i < numColumns; i++ {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		if i < len(datums) {
-			buf.WriteString(tree.AsString(datums[i]))
-		} else {
-			buf.WriteString(s)
-		}
-	}
+	return t, key, nil
 }
