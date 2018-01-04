@@ -86,6 +86,7 @@ explain_stmt ::=
 
 grant_stmt ::=
 	'GRANT' privileges 'ON' targets 'TO' grantee_list
+	| 'GRANT' grantee_list 'TO' grantee_list opt_admin_option
 
 insert_stmt ::=
 	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
@@ -110,6 +111,7 @@ resume_stmt ::=
 
 revoke_stmt ::=
 	'REVOKE' privileges 'ON' targets 'FROM' grantee_list
+	| 'REVOKE' opt_admin_option_for grantee_list 'FROM' grantee_list
 
 savepoint_stmt ::=
 	'SAVEPOINT' name
@@ -303,6 +305,10 @@ privileges ::=
 grantee_list ::=
 	( name ) ( ( ',' name ) )*
 
+opt_admin_option ::=
+	'WITH' 'ADMIN' 'OPTION'
+	| 
+
 insert_target ::=
 	qualified_name
 	| qualified_name 'AS' name
@@ -360,6 +366,10 @@ preparable_stmt ::=
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const
+
+opt_admin_option_for ::=
+	'ADMIN' 'OPTION' 'FOR'
+	| 
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' qualified_name opt_as_of_clause opt_scrub_options_clause
@@ -612,10 +622,8 @@ unreserved_keyword ::=
 	| 'DATABASES'
 	| 'DAY'
 	| 'DEALLOCATE'
-	| 'DELETE'
 	| 'DISCARD'
 	| 'DOUBLE'
-	| 'DROP'
 	| 'ENCODING'
 	| 'EXECUTE'
 	| 'EXPERIMENTAL'
@@ -634,7 +642,6 @@ unreserved_keyword ::=
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INDEXES'
-	| 'INSERT'
 	| 'INT2VECTOR'
 	| 'INTERLEAVE'
 	| 'INVERTED'
@@ -664,6 +671,7 @@ unreserved_keyword ::=
 	| 'OF'
 	| 'OFF'
 	| 'OID'
+	| 'OPTION'
 	| 'OPTIONS'
 	| 'ORDINALITY'
 	| 'OVER'
@@ -743,7 +751,6 @@ unreserved_keyword ::=
 	| 'UNBOUNDED'
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
-	| 'UPDATE'
 	| 'UPSERT'
 	| 'USE'
 	| 'USERS'
@@ -1257,12 +1264,16 @@ opt_array_bounds ::=
 	| 
 
 type_func_name_keyword ::=
-	'COLLATION'
+	'ADMIN'
+	| 'COLLATION'
 	| 'CROSS'
+	| 'DELETE'
+	| 'DROP'
 	| 'FAMILY'
 	| 'FULL'
 	| 'INNER'
 	| 'ILIKE'
+	| 'INSERT'
 	| 'IS'
 	| 'JOIN'
 	| 'LEFT'
@@ -1274,6 +1285,7 @@ type_func_name_keyword ::=
 	| 'OVERLAPS'
 	| 'RIGHT'
 	| 'SIMILAR'
+	| 'UPDATE'
 
 reserved_keyword ::=
 	'ALL'

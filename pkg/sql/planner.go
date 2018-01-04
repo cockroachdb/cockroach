@@ -217,6 +217,10 @@ func (p *planner) LeaseMgr() *LeaseManager {
 	return p.session.tables.leaseMgr
 }
 
+func (p *planner) Txn() *client.Txn {
+	return p.txn
+}
+
 func (p *planner) User() string {
 	return p.session.User
 }

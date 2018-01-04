@@ -451,7 +451,7 @@ func newNameFromStr(s string) *tree.Name {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str>   ABORT ACTION ADD
+%token <str>   ABORT ACTION ADD ADMIN
 %token <str>   ALL ALL_EXISTENCE ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str>   ASYMMETRIC AT
 
@@ -501,7 +501,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   NOT NOTHING NULL NULLIF
 %token <str>   NULLS NUMERIC
 
-%token <str>   OF OFF OFFSET OID ON ONLY OPTIONS OR
+%token <str>   OF OFF OFFSET OID ON ONLY OPTION OPTIONS OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
 %token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
@@ -815,6 +815,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <bool> opt_unique opt_column
 %type <bool> opt_using_gin
+%type <bool> opt_admin_option
+%type <bool> opt_admin_option_for
 
 %type <empty> opt_set_data
 
@@ -1915,6 +1917,7 @@ drop_user_stmt:
 // %Help: DROP ROLE - remove a role
 // %Category: Priv
 // %Text: DROP ROLE [IF EXISTS] <role> [, ...]
+// %SeeAlso: CREATE ROLE, SHOW ROLES
 drop_role_stmt:
   DROP ROLE string_or_placeholder_list
   {
@@ -2109,10 +2112,13 @@ deallocate_stmt:
   }
 | DEALLOCATE error // SHOW HELP: DEALLOCATE
 
-// %Help: GRANT - define access privileges
+// %Help: GRANT - define access privileges and role memberships
 // %Category: Priv
 // %Text:
-// GRANT {ALL | <privileges...> } ON <targets...> TO <grantees...>
+// Grant privileges:
+//   GRANT {ALL | <privileges...> } ON <targets...> TO <grantees...>
+// Grant role membership (CCL only):
+//   GRANT <roles> TO <roles or users> [WITH ADMIN OPTION]
 //
 // Privileges:
 //   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE
@@ -2127,12 +2133,29 @@ grant_stmt:
   {
     $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
+| GRANT grantee_list TO grantee_list opt_admin_option
+  {
+    $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: $5.bool()}
+  }
 | GRANT error // SHOW HELP: GRANT
 
-// %Help: REVOKE - remove access privileges
+opt_admin_option:
+  WITH ADMIN OPTION
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+
+// %Help: REVOKE - remove access privileges and role memberships
 // %Category: Priv
 // %Text:
-// REVOKE {ALL | <privileges...> } ON <targets...> FROM <grantees...>
+// Revoke privileges:
+//   REVOKE {ALL | <privileges...> } ON <targets...> FROM <grantees...>
+// Revoke role membership (CCL only):
+//   REVOKE [ADMIN OPTION FOR] <roles> FROM <roles or users>
 //
 // Privileges:
 //   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE
@@ -2147,7 +2170,21 @@ revoke_stmt:
   {
     $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
+| REVOKE opt_admin_option_for grantee_list FROM grantee_list
+  {
+    $$.val = &tree.RevokeRole{Roles: $3.nameList(), Members: $5.nameList(), AdminOption: $2.bool()}
+  }
 | REVOKE error // SHOW HELP: REVOKE
+
+opt_admin_option_for:
+  ADMIN OPTION FOR
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
 
 targets:
   table_pattern_list
@@ -2943,6 +2980,7 @@ show_users_stmt:
 // %Help: SHOW ROLES - list defined roles
 // %Category: Priv
 // %Text: SHOW ROLES
+// %SeeAlso: CREATE ROLE, DROP ROLE
 show_roles_stmt:
   SHOW ROLES
   {
@@ -3656,6 +3694,7 @@ opt_password:
 // %Help: CREATE ROLE - define a new role
 // %Category: Priv
 // %Text: CREATE ROLE [IF NOT EXISTS] <name>
+// %SeeAlso: DROP ROLE, SHOW ROLES
 create_role_stmt:
   CREATE ROLE string_or_placeholder
   {
@@ -7243,10 +7282,8 @@ unreserved_keyword:
 | DATABASES
 | DAY
 | DEALLOCATE
-| DELETE
 | DISCARD
 | DOUBLE
-| DROP
 | ENCODING
 | EXECUTE
 | EXPERIMENTAL
@@ -7265,7 +7302,6 @@ unreserved_keyword:
 | INCREMENT
 | INCREMENTAL
 | INDEXES
-| INSERT
 | INT2VECTOR
 | INTERLEAVE
 | INVERTED
@@ -7295,6 +7331,7 @@ unreserved_keyword:
 | OF
 | OFF
 | OID
+| OPTION
 | OPTIONS
 | ORDINALITY
 | OVER
@@ -7374,7 +7411,6 @@ unreserved_keyword:
 | UNBOUNDED
 | UNCOMMITTED
 | UNKNOWN
-| UPDATE
 | UPSERT
 | USE
 | USERS
@@ -7473,12 +7509,16 @@ col_name_keyword:
 //
 // TODO(dan): see if we can move MAXVALUE and MINVALUE to a less restricted list
 type_func_name_keyword:
-  COLLATION
+  ADMIN
+| COLLATION
 | CROSS
+| DELETE
+| DROP
 | FAMILY
 | FULL
 | INNER
 | ILIKE
+| INSERT
 | IS
 | JOIN
 | LEFT
@@ -7490,6 +7530,7 @@ type_func_name_keyword:
 | OVERLAPS
 | RIGHT
 | SIMILAR
+| UPDATE
 
 // Reserved keyword --- these keywords are usable only as a unrestricted_name.
 //
