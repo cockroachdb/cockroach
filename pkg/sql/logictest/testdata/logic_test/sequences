@@ -594,6 +594,17 @@ SELECT * FROM txn_test
 1 foo
 3 baz
 
+# PREVENTION OF DROPPING A SEQUENCE WHICH IS BEING USED
+
+statement ok
+CREATE SEQUENCE drop_prevention_test
+
+statement ok
+CREATE TABLE drop_prevention_test_tbl (id INT PRIMARY KEY DEFAULT nextval('drop_prevention_test'))
+
+statement error pq: cannot drop sequence drop_prevention_test because other objects depend on it
+DROP SEQUENCE drop_prevention_test
+
 # Giving a nonexistent function doesn't mess up the nextval-detection algorithm.
 
 statement error pq: unknown function: nxtvl()
