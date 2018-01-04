@@ -654,9 +654,8 @@ func NewPlaceholder(name string) *Placeholder {
 
 // Format implements the NodeFormatter interface.
 func (node *Placeholder) Format(ctx *FmtCtx) {
-	f := ctx.flags
-	if f.placeholderFormat != nil {
-		f.placeholderFormat(ctx, node)
+	if ctx.placeholderFormat != nil {
+		ctx.placeholderFormat(ctx, node)
 		return
 	}
 	ctx.WriteByte('$')
