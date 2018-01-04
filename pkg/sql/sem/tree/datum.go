@@ -951,7 +951,7 @@ func (d *DCollatedString) Format(ctx *FmtCtx) {
 	} else {
 		lex.EncodeSQLString(buf, d.Contents)
 		ctx.WriteString(" COLLATE ")
-		lex.EncodeUnrestrictedSQLIdent(buf, d.Locale, lex.EncodeFlags{})
+		lex.EncodeUnrestrictedSQLIdent(buf, d.Locale, lex.EncNoFlags)
 	}
 }
 
@@ -1085,7 +1085,7 @@ func (*DBytes) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	withQuotes := f.withinArray || !f.encodeFlags.BareStrings
+	withQuotes := f.withinArray || !f.encodeFlags.HasFlags(lex.EncBareStrings)
 	if withQuotes {
 		ctx.WriteByte('\'')
 	}
@@ -1181,11 +1181,12 @@ func (*DUuid) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !f.encodeFlags.BareStrings {
+	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 	ctx.WriteString(d.UUID.String())
-	if !f.encodeFlags.BareStrings {
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 }
@@ -1340,11 +1341,12 @@ func (*DIPAddr) AmbiguousFormat() bool {
 // Format implements the NodeFormatter interface.
 func (d *DIPAddr) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !f.encodeFlags.BareStrings {
+	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 	ctx.WriteString(d.IPAddr.String())
-	if !f.encodeFlags.BareStrings {
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 }
@@ -1450,11 +1452,12 @@ func (*DDate) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !f.encodeFlags.BareStrings {
+	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 	ctx.WriteString(timeutil.Unix(int64(*d)*SecondsInDay, 0).Format(dateFormat))
-	if !f.encodeFlags.BareStrings {
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 }
@@ -1549,11 +1552,12 @@ func (*DTime) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 func (d *DTime) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !f.encodeFlags.BareStrings {
+	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 	ctx.WriteString(timeofday.TimeOfDay(*d).String())
-	if !f.encodeFlags.BareStrings {
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 }
@@ -1783,11 +1787,12 @@ func (*DTimestamp) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !f.encodeFlags.BareStrings {
+	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 	ctx.WriteString(d.UTC().Format(TimestampOutputFormat))
-	if !f.encodeFlags.BareStrings {
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 }
@@ -1881,11 +1886,12 @@ func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !f.encodeFlags.BareStrings {
+	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 	ctx.WriteString(d.Time.Format(TimestampOutputFormat))
-	if !f.encodeFlags.BareStrings {
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 }
@@ -2089,11 +2095,12 @@ func (*DInterval) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DInterval) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !f.encodeFlags.BareStrings {
+	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 	d.Duration.Format(ctx.Buffer)
-	if !f.encodeFlags.BareStrings {
+	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
 }
@@ -2864,7 +2871,7 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
 		d.DInt.Format(ctx)
 	} else {
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncodeFlags{BareStrings: true})
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncBareStrings)
 	}
 }
 

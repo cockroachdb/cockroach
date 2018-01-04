@@ -39,19 +39,34 @@ var mustQuoteMap = map[byte]bool{
 }
 
 // EncodeFlags influence the formatting of strings and identifiers.
-type EncodeFlags struct {
-	// BareStrings indicates that strings will be rendered without
-	// wrapping quotes if they contain no special characters.
-	BareStrings bool
-	// BareIdentifiers indicates that identifiers will be rendered
-	// without wrapping quotes.
-	BareIdentifiers bool
+type EncodeFlags int
+
+// HasFlags tests whether the given flags are set.
+func (f EncodeFlags) HasFlags(subset EncodeFlags) bool {
+	return f&subset == subset
 }
+
+const (
+	// EncNoFlags indicates nothing special should happen while encoding.
+	EncNoFlags EncodeFlags = 0
+
+	// EncBareStrings indicates that strings will be rendered without
+	// wrapping quotes if they contain no special characters.
+	EncBareStrings EncodeFlags = 1 << iota
+
+	// EncBareIdentifiers indicates that identifiers will be rendered
+	// without wrapping quotes.
+	EncBareIdentifiers
+
+	// EncFirstFreeFlagBit needs to remain unused; it is used as base
+	// bit offset for tree.FmtFlags.
+	EncFirstFreeFlagBit
+)
 
 // EncodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
 func EncodeSQLString(buf *bytes.Buffer, in string) {
-	EncodeSQLStringWithFlags(buf, in, EncodeFlags{})
+	EncodeSQLStringWithFlags(buf, in, EncNoFlags)
 }
 
 // EscapeSQLString returns an escaped SQL representation of the given
@@ -80,7 +95,7 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
 	escapedString := false
-	bareStrings := flags.BareStrings
+	bareStrings := flags.HasFlags(EncBareStrings)
 	// Loop through each unicode code point.
 	for i, r := range in {
 		ch := byte(r)
@@ -140,7 +155,7 @@ func EncodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
 // The identifier is only quoted if the flags don't tell otherwise and
 // the identifier contains special characters.
 func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
-	if flags.BareIdentifiers || isBareIdentifier(s) {
+	if flags.HasFlags(EncBareIdentifiers) || isBareIdentifier(s) {
 		buf.WriteString(s)
 		return
 	}
@@ -152,7 +167,7 @@ func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) 
 // contains special characters, or the identifier is a reserved SQL
 // keyword.
 func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
-	if flags.BareIdentifiers || (!isReservedKeyword(s) && isBareIdentifier(s)) {
+	if flags.HasFlags(EncBareIdentifiers) || (!isReservedKeyword(s) && isBareIdentifier(s)) {
 		buf.WriteString(s)
 		return
 	}
