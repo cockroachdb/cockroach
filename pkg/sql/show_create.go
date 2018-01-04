@@ -317,8 +317,8 @@ func ShowCreatePartitioning(
 		return nil
 	}
 
-	// We don't need real prefixes in the TranslateValueEncodingToSpan calls
-	// because we only use the tree.Datums part of the output.
+	// We don't need real prefixes in the DecodePartitionTuple calls because we
+	// only use the tree.Datums part of the output.
 	fakePrefixDatums := make([]tree.Datum, colOffset)
 	for i := range fakePrefixDatums {
 		fakePrefixDatums[i] = tree.DNull
@@ -354,15 +354,12 @@ func ShowCreatePartitioning(
 			if j != 0 {
 				buf.WriteString(`, `)
 			}
-			datums, _, err := sqlbase.TranslateValueEncodingToSpan(
-				a, tableDesc, idxDesc, partDesc, values, fakePrefixDatums,
-			)
+			tuple, _, err := sqlbase.DecodePartitionTuple(
+				a, tableDesc, idxDesc, partDesc, values, fakePrefixDatums)
 			if err != nil {
 				return err
 			}
-			buf.WriteString(`(`)
-			sqlbase.PrintPartitioningTuple(buf, datums, int(partDesc.NumColumns), "DEFAULT")
-			buf.WriteString(`)`)
+			buf.WriteString(tuple.String())
 		}
 		buf.WriteString(`)`)
 		if err := ShowCreatePartitioning(
@@ -379,15 +376,12 @@ func ShowCreatePartitioning(
 		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
 		fmt.Fprintf(buf, part.Name)
 		buf.WriteString(` VALUES < `)
-		datums, _, err := sqlbase.TranslateValueEncodingToSpan(
-			a, tableDesc, idxDesc, partDesc, part.UpperBound, fakePrefixDatums,
-		)
+		tuple, _, err := sqlbase.DecodePartitionTuple(
+			a, tableDesc, idxDesc, partDesc, part.UpperBound, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
-		buf.WriteString(`(`)
-		sqlbase.PrintPartitioningTuple(buf, datums, int(partDesc.NumColumns), "MAXVALUE")
-		buf.WriteString(`)`)
+		buf.WriteString(tuple.String())
 	}
 	fmt.Fprintf(buf, "\n%s)", indentStr)
 	return nil
