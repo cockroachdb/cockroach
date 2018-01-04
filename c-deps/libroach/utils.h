@@ -20,4 +20,5 @@
 
 // Write 'contents' to a temporary file, sync, rename to 'filename'.
 // On non-OK status, the original file has not been touched.
-rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, const std::string& filename, const std::string& contents);
+rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, const std::string& filename,
+                                      const std::string& contents);

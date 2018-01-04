@@ -65,7 +65,8 @@ char* __attribute__((weak)) prettyPrintKey(DBKey) { die_missing_symbol(__func__)
 // DBOpenHook in OSS mode only verifies that no extra options are specified.
 __attribute__((weak)) rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts) {
   if (opts.extra_options.len != 0) {
-    return rocksdb::Status::InvalidArgument("DBOptions has extra_options, but OSS code cannot handle them");
+    return rocksdb::Status::InvalidArgument(
+        "DBOptions has extra_options, but OSS code cannot handle them");
   }
   return rocksdb::Status::OK();
 }
@@ -110,7 +111,12 @@ struct DBImpl : public DBEngine {
   // Either env can be NULL.
   DBImpl(rocksdb::DB* r, rocksdb::Env* m, std::shared_ptr<rocksdb::Cache> bc,
          std::shared_ptr<DBEventListener> event_listener, rocksdb::Env* s_env)
-      : DBEngine(r), switching_env(s_env), memenv(m), rep_deleter(r), block_cache(bc), event_listener(event_listener) {}
+      : DBEngine(r),
+        switching_env(s_env),
+        memenv(m),
+        rep_deleter(r),
+        block_cache(bc),
+        event_listener(event_listener) {}
   virtual ~DBImpl() {
     const rocksdb::Options& opts = rep->GetOptions();
     const std::shared_ptr<rocksdb::Statistics>& s = opts.statistics;
@@ -260,7 +266,8 @@ std::string EncodePrefixNextKey(DBSlice k) {
   return s;
 }
 
-WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key, rocksdb::Slice* timestamp) {
+WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
+                                 rocksdb::Slice* timestamp) {
   if (buf.empty()) {
     return false;
   }
@@ -273,7 +280,8 @@ WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key, rocksd
   return true;
 }
 
-WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice* timestamp, int64_t* wall_time, int32_t* logical) {
+WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice* timestamp, int64_t* wall_time,
+                                        int32_t* logical) {
   uint64_t w;
   if (!DecodeUint64(timestamp, &w)) {
     return false;
@@ -291,7 +299,8 @@ WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice* timestamp, int64_t* wall
   return true;
 }
 
-WARN_UNUSED_RESULT bool DecodeHLCTimestamp(rocksdb::Slice buf, cockroach::util::hlc::Timestamp* timestamp) {
+WARN_UNUSED_RESULT bool DecodeHLCTimestamp(rocksdb::Slice buf,
+                                           cockroach::util::hlc::Timestamp* timestamp) {
   int64_t wall_time;
   int32_t logical;
   if (!DecodeTimestamp(&buf, &wall_time, &logical)) {
@@ -302,7 +311,8 @@ WARN_UNUSED_RESULT bool DecodeHLCTimestamp(rocksdb::Slice buf, cockroach::util::
   return true;
 }
 
-WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, int64_t* wall_time, int32_t* logical) {
+WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, int64_t* wall_time,
+                                  int32_t* logical) {
   key->clear();
 
   rocksdb::Slice timestamp;
@@ -421,7 +431,8 @@ cockroach::roachpb::ValueType GetTag(const std::string& val) {
 
 void SetTag(std::string* val, cockroach::roachpb::ValueType tag) { (*val)[kTagPos] = tag; }
 
-WARN_UNUSED_RESULT bool ParseProtoFromValue(const std::string& val, google::protobuf::MessageLite* msg) {
+WARN_UNUSED_RESULT bool ParseProtoFromValue(const std::string& val,
+                                            google::protobuf::MessageLite* msg) {
   if (val.size() < kHeaderSize) {
     return false;
   }
@@ -446,7 +457,8 @@ bool IsValidSplitKey(const rocksdb::Slice& key, bool allow_meta2_splits) {
     // and the first non-meta range would span [Meta2KeyMax,...).
     return false;
   }
-  const auto& no_split_spans = allow_meta2_splits ? kSortedNoSplitSpans : kSortedNoSplitSpansWithoutMeta2Splits;
+  const auto& no_split_spans =
+      allow_meta2_splits ? kSortedNoSplitSpans : kSortedNoSplitSpansWithoutMeta2Splits;
   for (auto span : no_split_spans) {
     // kSortedNoSplitSpans and kSortedNoSplitSpansWithoutMeta2Splits are
     // both reverse sorted (largest to smallest) on the span end key which
@@ -492,10 +504,13 @@ class DBComparator : public rocksdb::Comparator {
     return ts_b.compare(ts_a);
   }
 
-  virtual bool Equal(const rocksdb::Slice& a, const rocksdb::Slice& b) const override { return a == b; }
+  virtual bool Equal(const rocksdb::Slice& a, const rocksdb::Slice& b) const override {
+    return a == b;
+  }
 
   // The RocksDB docs say it is safe to leave these two methods unimplemented.
-  virtual void FindShortestSeparator(std::string* start, const rocksdb::Slice& limit) const override {}
+  virtual void FindShortestSeparator(std::string* start,
+                                     const rocksdb::Slice& limit) const override {}
 
   virtual void FindShortSuccessor(std::string* key) const override {}
 };
@@ -524,9 +539,13 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
  public:
   DBBatchInserter(rocksdb::WriteBatchBase* batch) : batch_(batch) {}
 
-  virtual void Put(const rocksdb::Slice& key, const rocksdb::Slice& value) { batch_->Put(key, value); }
+  virtual void Put(const rocksdb::Slice& key, const rocksdb::Slice& value) {
+    batch_->Put(key, value);
+  }
   virtual void Delete(const rocksdb::Slice& key) { batch_->Delete(key); }
-  virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) { batch_->Merge(key, value); }
+  virtual void Merge(const rocksdb::Slice& key, const rocksdb::Slice& value) {
+    batch_->Merge(key, value);
+  }
   virtual rocksdb::Status DeleteRangeCF(uint32_t column_family_id, const rocksdb::Slice& begin_key,
                                         const rocksdb::Slice& end_key) {
     if (column_family_id == 0) {
@@ -548,9 +567,12 @@ bool TimeSeriesSampleOrdering(const cockroach::roachpb::InternalTimeSeriesSample
 
 // IsTimeSeriesData returns true if the given protobuffer Value contains a
 // TimeSeriesData message.
-bool IsTimeSeriesData(const std::string& val) { return GetTag(val) == cockroach::roachpb::TIMESERIES; }
+bool IsTimeSeriesData(const std::string& val) {
+  return GetTag(val) == cockroach::roachpb::TIMESERIES;
+}
 
-void SerializeTimeSeriesToValue(std::string* val, const cockroach::roachpb::InternalTimeSeriesData& ts) {
+void SerializeTimeSeriesToValue(std::string* val,
+                                const cockroach::roachpb::InternalTimeSeriesData& ts) {
   SerializeProtoToValue(val, ts);
   SetTag(val, cockroach::roachpb::TIMESERIES);
 }
@@ -559,8 +581,8 @@ void SerializeTimeSeriesToValue(std::string* val, const cockroach::roachpb::Inte
 // InternalTimeSeriesData messages. The messages cannot be merged if they have
 // different start timestamps or sample durations. Returns true if the merge is
 // successful.
-WARN_UNUSED_RESULT bool MergeTimeSeriesValues(std::string* left, const std::string& right, bool full_merge,
-                                              rocksdb::Logger* logger) {
+WARN_UNUSED_RESULT bool MergeTimeSeriesValues(std::string* left, const std::string& right,
+                                              bool full_merge, rocksdb::Logger* logger) {
   // Attempt to parse TimeSeriesData from both Values.
   cockroach::roachpb::InternalTimeSeriesData left_ts;
   cockroach::roachpb::InternalTimeSeriesData right_ts;
@@ -600,8 +622,8 @@ WARN_UNUSED_RESULT bool MergeTimeSeriesValues(std::string* left, const std::stri
   new_ts.set_sample_duration_nanos(left_ts.sample_duration_nanos());
 
   // Sort values in right_ts. Assume values in left_ts have been sorted.
-  std::stable_sort(right_ts.mutable_samples()->pointer_begin(), right_ts.mutable_samples()->pointer_end(),
-                   TimeSeriesSampleOrdering);
+  std::stable_sort(right_ts.mutable_samples()->pointer_begin(),
+                   right_ts.mutable_samples()->pointer_end(), TimeSeriesSampleOrdering);
 
   // Merge sample values of left and right into new_ts.
   auto left_front = left_ts.samples().begin();
@@ -668,8 +690,8 @@ WARN_UNUSED_RESULT bool ConsolidateTimeSeriesValue(std::string* val, rocksdb::Lo
   new_ts.set_sample_duration_nanos(val_ts.sample_duration_nanos());
 
   // Sort values in the ts value.
-  std::stable_sort(val_ts.mutable_samples()->pointer_begin(), val_ts.mutable_samples()->pointer_end(),
-                   TimeSeriesSampleOrdering);
+  std::stable_sort(val_ts.mutable_samples()->pointer_begin(),
+                   val_ts.mutable_samples()->pointer_end(), TimeSeriesSampleOrdering);
 
   // Consolidate sample values from the ts value with duplicate offsets.
   auto front = val_ts.samples().begin();
@@ -694,8 +716,8 @@ WARN_UNUSED_RESULT bool ConsolidateTimeSeriesValue(std::string* val, rocksdb::Lo
 }
 
 WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMetadata* left,
-                                    const cockroach::storage::engine::enginepb::MVCCMetadata& right, bool full_merge,
-                                    rocksdb::Logger* logger) {
+                                    const cockroach::storage::engine::enginepb::MVCCMetadata& right,
+                                    bool full_merge, rocksdb::Logger* logger) {
   if (left->has_raw_bytes()) {
     if (!right.has_raw_bytes()) {
       rocksdb::Warn(logger, "inconsistent value types for merge (left = bytes, right = ?)");
@@ -716,7 +738,8 @@ WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMe
                               "series data (type(left) != type(right))");
         return false;
       }
-      return MergeTimeSeriesValues(left->mutable_raw_bytes(), right.raw_bytes(), full_merge, logger);
+      return MergeTimeSeriesValues(left->mutable_raw_bytes(), right.raw_bytes(), full_merge,
+                                   logger);
     } else {
       const rocksdb::Slice rdata = ValueDataBytes(right.raw_bytes());
       left->mutable_raw_bytes()->append(rdata.data(), rdata.size());
@@ -793,8 +816,10 @@ class DBMergeOperator : public rocksdb::MergeOperator {
     return true;
   }
 
-  virtual bool PartialMergeMulti(const rocksdb::Slice& key, const std::deque<rocksdb::Slice>& operand_list,
-                                 std::string* new_value, rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
+  virtual bool PartialMergeMulti(const rocksdb::Slice& key,
+                                 const std::deque<rocksdb::Slice>& operand_list,
+                                 std::string* new_value,
+                                 rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
     cockroach::storage::engine::enginepb::MVCCMetadata meta;
 
     for (int i = 0; i < operand_list.size(); i++) {
@@ -811,8 +836,9 @@ class DBMergeOperator : public rocksdb::MergeOperator {
   }
 
  private:
-  bool MergeOne(cockroach::storage::engine::enginepb::MVCCMetadata* meta, const rocksdb::Slice& operand,
-                bool full_merge, rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
+  bool MergeOne(cockroach::storage::engine::enginepb::MVCCMetadata* meta,
+                const rocksdb::Slice& operand, bool full_merge,
+                rocksdb::Logger* logger) const WARN_UNUSED_RESULT {
     cockroach::storage::engine::enginepb::MVCCMetadata operand_meta;
     if (!operand_meta.ParseFromArray(operand.data(), operand.size())) {
       rocksdb::Warn(logger, "corrupted operand value");
@@ -948,7 +974,8 @@ struct DBGetter : public Getter {
 // Upon return, the delta iterator will point to the next entry past
 // key. The delta iterator may not be valid if the end of iteration
 // was reached.
-DBStatus ProcessDeltaKey(Getter* base, rocksdb::WBWIIterator* delta, rocksdb::Slice key, DBString* value) {
+DBStatus ProcessDeltaKey(Getter* base, rocksdb::WBWIIterator* delta, rocksdb::Slice key,
+                         DBString* value) {
   if (value->data != NULL) {
     free(value->data);
   }
@@ -1022,7 +1049,8 @@ DBStatus ProcessDeltaKey(Getter* base, rocksdb::WBWIIterator* delta, rocksdb::Sl
 // from a WriteBatchWithIndex.
 class BaseDeltaIterator : public rocksdb::Iterator {
  public:
-  BaseDeltaIterator(rocksdb::Iterator* base_iterator, rocksdb::WBWIIterator* delta_iterator, bool prefix_same_as_start)
+  BaseDeltaIterator(rocksdb::Iterator* base_iterator, rocksdb::WBWIIterator* delta_iterator,
+                    bool prefix_same_as_start)
       : current_at_base_(true),
         equal_keys_(false),
         status_(rocksdb::Status::OK()),
@@ -1034,7 +1062,9 @@ class BaseDeltaIterator : public rocksdb::Iterator {
 
   virtual ~BaseDeltaIterator() { ClearMerged(); }
 
-  bool Valid() const override { return status_.ok() && (current_at_base_ ? BaseValid() : DeltaValid()); }
+  bool Valid() const override {
+    return status_.ok() && (current_at_base_ ? BaseValid() : DeltaValid());
+  }
 
   void SeekToFirst() override {
     base_iterator_->SeekToFirst();
@@ -1080,7 +1110,9 @@ class BaseDeltaIterator : public rocksdb::Iterator {
 
   void Prev() override { status_ = rocksdb::Status::NotSupported("Prev() not supported"); }
 
-  rocksdb::Slice key() const override { return current_at_base_ ? base_iterator_->key() : delta_key_; }
+  rocksdb::Slice key() const override {
+    return current_at_base_ ? base_iterator_->key() : delta_key_;
+  }
 
   rocksdb::Slice value() const override {
     if (current_at_base_) {
@@ -1312,13 +1344,15 @@ DBSSTable* DBEngine::GetSSTables(int* n) {
     tables[i].size = metadata[i].size;
 
     rocksdb::Slice tmp;
-    if (DecodeKey(metadata[i].smallestkey, &tmp, &tables[i].start_key.wall_time, &tables[i].start_key.logical)) {
+    if (DecodeKey(metadata[i].smallestkey, &tmp, &tables[i].start_key.wall_time,
+                  &tables[i].start_key.logical)) {
       // This is a bit ugly because we want DBKey.key to be copied and
       // not refer to the memory in metadata[i].smallestkey.
       DBString str = ToDBString(tmp);
       tables[i].start_key.key = DBSlice{str.data, str.len};
     }
-    if (DecodeKey(metadata[i].largestkey, &tmp, &tables[i].end_key.wall_time, &tables[i].end_key.logical)) {
+    if (DecodeKey(metadata[i].largestkey, &tmp, &tables[i].end_key.wall_time,
+                  &tables[i].end_key.logical)) {
       DBString str = ToDBString(tmp);
       tables[i].end_key.key = DBSlice{str.data, str.len};
     }
@@ -1344,8 +1378,9 @@ DBString DBEngine::GetUserProperties() {
     auto ts_min = userprops.find("crdb.ts.min");
     if (ts_min != userprops.end() && !ts_min->second.empty()) {
       if (!DecodeHLCTimestamp(rocksdb::Slice(ts_min->second), sst->mutable_ts_min())) {
-        fmt::SStringPrintf(all.mutable_error(), "unable to decode crdb.ts.min value '%s' in table %s",
-                           rocksdb::Slice(ts_min->second).ToString(true).c_str(), sst->path().c_str());
+        fmt::SStringPrintf(
+            all.mutable_error(), "unable to decode crdb.ts.min value '%s' in table %s",
+            rocksdb::Slice(ts_min->second).ToString(true).c_str(), sst->path().c_str());
         break;
       }
     }
@@ -1353,8 +1388,9 @@ DBString DBEngine::GetUserProperties() {
     auto ts_max = userprops.find("crdb.ts.max");
     if (ts_max != userprops.end() && !ts_max->second.empty()) {
       if (!DecodeHLCTimestamp(rocksdb::Slice(ts_max->second), sst->mutable_ts_max())) {
-        fmt::SStringPrintf(all.mutable_error(), "unable to decode crdb.ts.max value '%s' in table %s",
-                           rocksdb::Slice(ts_max->second).ToString(true).c_str(), sst->path().c_str());
+        fmt::SStringPrintf(
+            all.mutable_error(), "unable to decode crdb.ts.max value '%s' in table %s",
+            rocksdb::Slice(ts_max->second).ToString(true).c_str(), sst->path().c_str());
         break;
       }
     }
@@ -1362,7 +1398,8 @@ DBString DBEngine::GetUserProperties() {
   return ToDBString(all.SerializeAsString());
 }
 
-DBBatch::DBBatch(DBEngine* db) : DBEngine(db->rep), updates(0), has_delete_range(false), batch(&kComparator) {}
+DBBatch::DBBatch(DBEngine* db)
+    : DBEngine(db->rep), updates(0), has_delete_range(false), batch(&kComparator) {}
 
 DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db) : DBEngine(db->rep), updates(0) {}
 
@@ -1393,8 +1430,9 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
     return rocksdb::Status::OK();
   }
 
-  rocksdb::Status AddUserKey(const rocksdb::Slice& user_key, const rocksdb::Slice& value, rocksdb::EntryType type,
-                             rocksdb::SequenceNumber seq, uint64_t file_size) override {
+  rocksdb::Status AddUserKey(const rocksdb::Slice& user_key, const rocksdb::Slice& value,
+                             rocksdb::EntryType type, rocksdb::SequenceNumber seq,
+                             uint64_t file_size) override {
     rocksdb::Slice unused;
     rocksdb::Slice ts;
     if (SplitKey(user_key, &unused, &ts) && !ts.empty()) {
@@ -1421,8 +1459,8 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
 class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
  public:
   explicit TimeBoundTblPropCollectorFactory() {}
-  virtual rocksdb::TablePropertiesCollector*
-  CreateTablePropertiesCollector(rocksdb::TablePropertiesCollectorFactory::Context context) override {
+  virtual rocksdb::TablePropertiesCollector* CreateTablePropertiesCollector(
+      rocksdb::TablePropertiesCollectorFactory::Context context) override {
     return new TimeBoundTblPropCollector();
   }
   const char* Name() const override { return "TimeBoundTblPropCollectorFactory"; }
@@ -1610,8 +1648,9 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
-  *db = new DBImpl(db_ptr, memenv.release(), db_opts.cache != nullptr ? db_opts.cache->rep : nullptr, event_listener,
-                   switching_env.release());
+  *db =
+      new DBImpl(db_ptr, memenv.release(), db_opts.cache != nullptr ? db_opts.cache->rep : nullptr,
+                 event_listener, switching_env.release());
   return kSuccess;
 }
 
@@ -1650,9 +1689,7 @@ DBStatus DBSyncWAL(DBEngine* db) {
 #endif
 }
 
-DBStatus DBCompact(DBEngine* db) {
-  return DBCompactRange(db, DBKey(), DBKey());
-}
+DBStatus DBCompact(DBEngine* db) { return DBCompactRange(db, DBKey(), DBKey()); }
 
 DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end) {
   rocksdb::CompactRangeOptions options;
@@ -1738,9 +1775,10 @@ DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end) {
     sst.push_back(metadata[i]);
   }
   // Sort the metadata by smallest key.
-  std::sort(sst.begin(), sst.end(), [](const rocksdb::SstFileMetaData& a, const rocksdb::SstFileMetaData& b) -> bool {
-      return a.smallestkey < b.smallestkey;
-    });
+  std::sort(sst.begin(), sst.end(),
+            [](const rocksdb::SstFileMetaData& a, const rocksdb::SstFileMetaData& b) -> bool {
+              return a.smallestkey < b.smallestkey;
+            });
 
   // Walk over the bottom-most sstables in order and perform
   // compactions every 128MB.
@@ -1875,7 +1913,8 @@ DBStatus DBSnapshot::Delete(DBKey key) { return FmtStatus("unsupported"); }
 
 DBStatus DBImpl::DeleteRange(DBKey start, DBKey end) {
   rocksdb::WriteOptions options;
-  return ToDBStatus(rep->DeleteRange(options, rep->DefaultColumnFamily(), EncodeKey(start), EncodeKey(end)));
+  return ToDBStatus(
+      rep->DeleteRange(options, rep->DefaultColumnFamily(), EncodeKey(start), EncodeKey(end)));
 }
 
 DBStatus DBBatch::DeleteRange(DBKey start, DBKey end) {
@@ -1981,7 +2020,9 @@ DBStatus DBWriteOnlyBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
 
 DBStatus DBSnapshot::ApplyBatchRepr(DBSlice repr, bool sync) { return FmtStatus("unsupported"); }
 
-DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr, bool sync) { return db->ApplyBatchRepr(repr, sync); }
+DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr, bool sync) {
+  return db->ApplyBatchRepr(repr, sync);
+}
 
 DBSlice DBImpl::BatchRepr() { return ToDBSlice("unsupported"); }
 
@@ -2043,14 +2084,17 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
   rep->GetIntProperty("rocksdb.estimate-table-readers-mem", &table_readers_mem_estimate);
 
   uint64_t pending_compaction_bytes_estimate;
-  rep->GetIntProperty("rocksdb.estimate-pending-compaction-bytes", &pending_compaction_bytes_estimate);
+  rep->GetIntProperty("rocksdb.estimate-pending-compaction-bytes",
+                      &pending_compaction_bytes_estimate);
 
   stats->block_cache_hits = (int64_t)s->getTickerCount(rocksdb::BLOCK_CACHE_HIT);
   stats->block_cache_misses = (int64_t)s->getTickerCount(rocksdb::BLOCK_CACHE_MISS);
   stats->block_cache_usage = (int64_t)block_cache->GetUsage();
   stats->block_cache_pinned_usage = (int64_t)block_cache->GetPinnedUsage();
-  stats->bloom_filter_prefix_checked = (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_CHECKED);
-  stats->bloom_filter_prefix_useful = (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL);
+  stats->bloom_filter_prefix_checked =
+      (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_CHECKED);
+  stats->bloom_filter_prefix_useful =
+      (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL);
   stats->memtable_total_size = memtable_total_size;
   stats->flushes = (int64_t)event_listener->GetFlushes();
   stats->compactions = (int64_t)event_listener->GetCompactions();
@@ -2098,11 +2142,17 @@ DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
 
 DBStatus DBBatch::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
 
-DBStatus DBWriteOnlyBatch::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
+DBStatus DBWriteOnlyBatch::EnvWriteFile(DBSlice path, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
 
-DBStatus DBSnapshot::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
+DBStatus DBSnapshot::EnvWriteFile(DBSlice path, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
 
-DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) { return db->EnvWriteFile(path, contents); }
+DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) {
+  return db->EnvWriteFile(path, contents);
+}
 
 DBIterator* DBNewIter(DBEngine* db, bool prefix) {
   rocksdb::ReadOptions opts;
@@ -2265,8 +2315,8 @@ inline int64_t age_factor(int64_t fromNS, int64_t toNS) {
 // should be taken as a hint but determined by the max timestamp encountered.
 //
 // This implementation must match engine.ComputeStatsGo.
-MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start, DBKey end,
-                                         int64_t now_nanos) {
+MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start,
+                                         DBKey end, int64_t now_nanos) {
   MVCCStatsResult stats;
   memset(&stats, 0, sizeof(stats));
 
@@ -2353,13 +2403,13 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
           stats.intent_age += age_factor(meta.timestamp().wall_time(), now_nanos);
         }
         if (meta.key_bytes() != kMVCCVersionTimestampSize) {
-          stats.status = FmtStatus("expected mvcc metadata key bytes to equal %d; got %d", kMVCCVersionTimestampSize,
-                                   int(meta.key_bytes()));
+          stats.status = FmtStatus("expected mvcc metadata key bytes to equal %d; got %d",
+                                   kMVCCVersionTimestampSize, int(meta.key_bytes()));
           break;
         }
         if (meta.val_bytes() != value.size()) {
-          stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d", int(value.size()),
-                                   int(meta.val_bytes()));
+          stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
+                                   int(value.size()), int(meta.val_bytes()));
           break;
         }
       } else {
@@ -2383,8 +2433,8 @@ bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits) {
   return IsValidSplitKey(ToSlice(key), allow_meta2_splits);
 }
 
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split, int64_t target_size,
-                          bool allow_meta2_splits, DBString* split_key) {
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
+                          int64_t target_size, bool allow_meta2_splits, DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
@@ -2407,8 +2457,8 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
     }
 
     ++n;
-    const bool valid =
-        n > 1 && IsValidSplitKey(decoded_key, allow_meta2_splits) && decoded_key.compare(min_split_key) >= 0;
+    const bool valid = n > 1 && IsValidSplitKey(decoded_key, allow_meta2_splits) &&
+                       decoded_key.compare(min_split_key) >= 0;
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;
@@ -2609,7 +2659,8 @@ rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batc
 }
 
 DBStatus DBLockFile(DBSlice filename, DBFileLock* lock) {
-  return ToDBStatus(rocksdb::Env::Default()->LockFile(ToString(filename), (rocksdb::FileLock**)lock));
+  return ToDBStatus(
+      rocksdb::Env::Default()->LockFile(ToString(filename), (rocksdb::FileLock**)lock));
 }
 
 DBStatus DBUnlockFile(DBFileLock lock) {
