@@ -228,6 +228,17 @@ func (node *ShowCreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, &node.View)
 }
 
+// ShowCreateSequence represents a SHOW CREATE SEQUENCE statement.
+type ShowCreateSequence struct {
+	Sequence NormalizableTableName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowCreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW CREATE SEQUENCE ")
+	FormatNode(buf, f, &node.Sequence)
+}
+
 // ShowSyntax represents a SHOW SYNTAX statement.
 // This the most lightweight thing that can be done on a statement
 // server-side: just report the statement that was entered without

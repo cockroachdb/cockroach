@@ -547,6 +547,8 @@ func (p *planner) newPlan(
 		return p.ShowCreateTable(ctx, n)
 	case *tree.ShowCreateView:
 		return p.ShowCreateView(ctx, n)
+	case *tree.ShowCreateSequence:
+		return p.ShowCreateSequence(ctx, n)
 	case *tree.ShowDatabases:
 		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
@@ -647,6 +649,8 @@ func (p *planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, e
 		return p.ShowCreateTable(ctx, n)
 	case *tree.ShowCreateView:
 		return p.ShowCreateView(ctx, n)
+	case *tree.ShowCreateSequence:
+		return p.ShowCreateSequence(ctx, n)
 	case *tree.ShowColumns:
 		return p.ShowColumns(ctx, n)
 	case *tree.ShowDatabases:
