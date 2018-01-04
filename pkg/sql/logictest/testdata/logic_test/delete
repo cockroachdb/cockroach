@@ -182,13 +182,14 @@ INSERT INTO unindexed VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
 ----
-delete          ·      ·
- │              from   unindexed
- └── nosort     ·      ·
-      │         order  +v
-      └── scan  ·      ·
-·               table  unindexed@primary
-·               spans  ALL
+delete               ·      ·
+ │                   from   unindexed
+ └── render          ·      ·
+      └── nosort     ·      ·
+           │         order  +v
+           └── scan  ·      ·
+·                    table  unindexed@primary
+·                    spans  ALL
 
 query II
 DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC RETURNING v,k

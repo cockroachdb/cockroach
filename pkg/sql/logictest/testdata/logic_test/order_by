@@ -156,45 +156,49 @@ SELECT b FROM t ORDER BY a DESC
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
-nosort             ·      ·
- │                 order  -a
- └── render        ·      ·
-      └── revscan  ·      ·
-·                  table  t@primary
-·                  spans  ALL
+render                  ·      ·
+ └── nosort             ·      ·
+      │                 order  -a
+      └── render        ·      ·
+           └── revscan  ·      ·
+·                       table  t@primary
+·                       spans  ALL
 
 # Check that LIMIT propagates past nosort nodes.
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
 ----
-limit                ·      ·
- └── nosort          ·      ·
-      │              order  +a
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  t@primary
-·                    spans  ALL
-·                    limit  1
+limit                     ·      ·
+ └── render               ·      ·
+      └── nosort          ·      ·
+           │              order  +a
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  t@primary
+·                         spans  ALL
+·                         limit  1
 
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-nosort             ·      ·
- │                 order  -a,+b
- └── render        ·      ·
-      └── revscan  ·      ·
-·                  table  t@primary
-·                  spans  ALL
+render                  ·      ·
+ └── nosort             ·      ·
+      │                 order  -a,+b
+      └── render        ·      ·
+           └── revscan  ·      ·
+·                       table  t@primary
+·                       spans  ALL
 
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-nosort             ·      ·
- │                 order  -a,-b
- └── render        ·      ·
-      └── revscan  ·      ·
-·                  table  t@primary
-·                  spans  ALL
+render                  ·      ·
+ └── nosort             ·      ·
+      │                 order  -a,-b
+      └── render        ·      ·
+           └── revscan  ·      ·
+·                       table  t@primary
+·                       spans  ALL
 
 query TITTTTT
 EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, t.*)
@@ -348,12 +352,13 @@ SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER 
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-nosort          ·      ·
- │              order  +"1 + 2"
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
+render               ·      ·
+ └── nosort          ·      ·
+      │              order  +"1 + 2"
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  t@primary
+·                    spans  ALL
 
 query TTT
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
@@ -366,12 +371,13 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-nosort          ·      ·
- │              order  +length
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  t@primary
-·               spans  ALL
+render               ·      ·
+ └── nosort          ·      ·
+      │              order  +length
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  t@primary
+·                    spans  ALL
 
 # Check that the sort key reuses the existing render.
 query TITTTTT
@@ -501,45 +507,51 @@ index-join  ·      ·
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
-nosort          ·      ·
- │              order  +b,+c
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  ALL
+render               ·      ·
+ └── nosort          ·      ·
+      │              order  +b,+c
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  abc@bc
+·                    spans  ALL
 
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
-nosort          0  nosort  ·         ·           (a, b)  b!=NULL; +b
- │              0  ·       order     +b,+c       ·       ·
- └── render     1  render  ·         ·           (a, b)  b!=NULL; +b
-      │         1  ·       render 0  test.abc.a  ·       ·
-      │         1  ·       render 1  test.abc.b  ·       ·
-      │         1  ·       render 2  test.abc.c  ·       ·
-      └── scan  2  scan    ·         ·           (a, b)  b!=NULL; +b
-·               2  ·       table     abc@bc      ·       ·
-·               2  ·       spans     ALL         ·       ·
+render               0  render  ·         ·           (a, b)  b!=NULL; +b
+ │                   0  ·       render 0  a           ·       ·
+ │                   0  ·       render 1  b           ·       ·
+ └── nosort          1  nosort  ·         ·           (a, b)  b!=NULL; +b
+      │              1  ·       order     +b,+c       ·       ·
+      └── render     2  render  ·         ·           (a, b)  b!=NULL; +b
+           │         2  ·       render 0  test.abc.a  ·       ·
+           │         2  ·       render 1  test.abc.b  ·       ·
+           │         2  ·       render 2  test.abc.c  ·       ·
+           └── scan  3  scan    ·         ·           (a, b)  b!=NULL; +b
+·                    3  ·       table     abc@bc      ·       ·
+·                    3  ·       spans     ALL         ·       ·
 
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
-nosort          ·      ·
- │              order  +b,+c,+a
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  ALL
+render               ·      ·
+ └── nosort          ·      ·
+      │              order  +b,+c,+a
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  abc@bc
+·                    spans  ALL
 
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-nosort          ·      ·
- │              order  +b,+c,-a
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  abc@bc
-·               spans  ALL
+render               ·      ·
+ └── nosort          ·      ·
+      │              order  +b,+c,-a
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  abc@bc
+·                    spans  ALL
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT b, c FROM abc ORDER BY b, c]
@@ -614,12 +626,13 @@ render        ·      ·
 query TITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-nosort          0  nosort  ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
- │              0  ·       order  +b,+c        ·       ·
- └── render     1  render  ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
-      └── scan  2  scan    ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
-·               2  ·       table  abc@primary  ·       ·
-·               2  ·       spans  /1-/2        ·       ·
+render               0  render  ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
+ └── nosort          1  nosort  ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
+      │              1  ·       order  +b,+c        ·       ·
+      └── render     2  render  ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
+           └── scan  3  scan    ·      ·            (b, c)  b!=NULL; c!=NULL; key(b,c); +b,+c
+·                    3  ·       table  abc@primary  ·       ·
+·                    3  ·       spans  /1-/2        ·       ·
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))

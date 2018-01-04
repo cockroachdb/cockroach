@@ -256,7 +256,7 @@ func (p *planner) hideHiddenColumns(
 	}
 
 	var tn tree.TableName
-	newPlan, err := p.insertRender(ctx, plan, &tn)
+	newPlan, err := p.insertRender(ctx, plan, &tn, planColumns(plan))
 	if err != nil {
 		// Don't return a nil plan on error -- the caller must be able to
 		// Close() it even if the replacement fails.

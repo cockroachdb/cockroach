@@ -83,11 +83,12 @@ render              0  render    ·  ·  (x)  x=CONST
 query TITTTTT
 EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y, 3 AS z) ORDER BY y
 ----
-nosort                   0  nosort    ·      ·   (x)  x=CONST
- │                       0  ·         order  +y  ·    ·
- └── render              1  render    ·      ·   (x)  x=CONST
-      └── render         2  render    ·      ·   (x)  x=CONST
-           └── emptyrow  3  emptyrow  ·      ·   (x)  x=CONST
+render                        0  render    ·      ·   (x)  x=CONST
+ └── nosort                   1  nosort    ·      ·   (x)  x=CONST
+      │                       1  ·         order  +y  ·    ·
+      └── render              2  render    ·      ·   (x)  x=CONST
+           └── render         3  render    ·      ·   (x)  x=CONST
+                └── emptyrow  4  emptyrow  ·      ·   (x)  x=CONST
 
 # Propagation to sub-queries.
 query TITTTTT

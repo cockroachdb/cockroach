@@ -153,7 +153,7 @@ func (p *planner) Update(
 	if r, ok := rows.(*renderNode); ok {
 		render = r
 	} else {
-		render, err = p.insertRender(ctx, rows, tn)
+		render, err = p.insertRender(ctx, rows, tn, planColumns(rows))
 		if err != nil {
 			return nil, err
 		}
