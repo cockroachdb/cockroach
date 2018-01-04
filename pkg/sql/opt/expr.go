@@ -14,7 +14,12 @@
 
 package opt
 
-import "github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+import (
+	"bytes"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+)
 
 // Expr implements the node of a unified expressions tree for both relational
 // and scalar expressions in a query.
@@ -23,12 +28,52 @@ import "github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 // types of properties depend on the expression type (or equivalently, operator
 // type). For scalar expressions, the properties are stored in scalarProps. An
 // example of a scalar property is the type (types.T) of the scalar expression.
+// For relational expressions, the properties are stored in props. An example
+// of a relational property is the set of columns referenced in the expression.
 //
-// Currently, Expr only supports scalar expressions and operators. More
-// information pertaining to relational operators will be added when they are
-// supported.
+// Every unique column and every projection (that is more than just a pass
+// through of a column) is given a column index within the query. The column
+// indexes are global to the query (see queryState.columns). For example,
+// consider the query:
 //
-// TODO(radu): support relational operators and extend this description.
+//   SELECT x FROM a WHERE y > 0
+//
+// There are 2 columns in the above query: x and y. During name resolution, the
+// above query becomes:
+//
+//   SELECT [0] FROM a WHERE [1] > 0
+//   -- [0] -> x
+//   -- [1] -> y
+//
+// This is akin to the way parser.IndexedVar works except that we're taking
+// care to make the indexes unique across the entire statement.
+//
+// Relational expressions are composed of inputs, and optional auxiliary
+// expressions (not yet implemented). The output columns are derived by the
+// operator from the inputs and stored in props.columns.
+//
+//   +---------+---------+-------+--------+
+//   |  out 0  |  out 1  |  ...  |  out N |
+//   +---------+---------+-------+--------+
+//   |                operator            |
+//   +---------+---------+-------+--------+
+//   |  in 0   |  in 1   |  ...  |  in N  |
+//   +---------+---------+-------+--------+
+//
+// A query is composed of a tree of relational expressions. For example, a
+// simple join might look like:
+//
+//   +-----------+
+//   | join a, b |
+//   +-----------+
+//      |     |
+//      |     |   +--------+
+//      |     +---| scan b |
+//      |         +--------+
+//      |
+//      |    +--------+
+//      +----| scan a |
+//           +--------+
 type Expr struct {
 	op operator
 	// Child expressions. The interpretation of the children is operator
@@ -36,7 +81,10 @@ type Expr struct {
 	// left-hand side and the right-hand side); for an andOp, there are at least
 	// two child expressions (each one being a conjunct).
 	children []*Expr
+	// Relational properties. Nil for scalar expressions.
+	props *relationalProps
 	// Scalar properties (properties that pertain only to scalar operators).
+	// Nil for relational expressions.
 	scalarProps *scalarProps
 	// Operator-dependent data used by this expression. For example, constOp
 	// stores a pointer to the constant value.
@@ -61,6 +109,19 @@ func normalizeExprNode(e *Expr) {
 	if normalizeFn := operatorTab[e.op].normalizeFn; normalizeFn != nil {
 		normalizeFn(e)
 	}
+}
+
+// formatRelational adds a node for a relational operator and returns a
+// reference to the new treeprinter.Node (for adding more children).
+func formatRelational(e *Expr, tp treeprinter.Node) treeprinter.Node {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%v", e.op)
+	if !e.props.outputCols.Empty() {
+		fmt.Fprintf(&buf, " [out=%s]", e.props.outputCols)
+	}
+	n := tp.Child(buf.String())
+	e.props.format(n)
+	return n
 }
 
 // formatExprs formats the given expressions as children of the same
@@ -89,6 +150,12 @@ func (e *Expr) String() string {
 	tp := treeprinter.New()
 	e.format(tp)
 	return tp.String()
+}
+
+func (e *Expr) initProps() {
+	if e.props != nil {
+		e.props.init()
+	}
 }
 
 func (e *Expr) shallowCopy() *Expr {

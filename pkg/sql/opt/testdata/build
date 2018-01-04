@@ -1,0 +1,11 @@
+exec
+CREATE DATABASE t
+
+exec
+CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+
+build
+SELECT * FROM t.a
+----
+scan [out=(0,1)]
+ └── columns: a.x:int:0* a.y:float:1

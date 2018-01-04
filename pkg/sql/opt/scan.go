@@ -12,25 +12,29 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package opt_test
+package opt
 
 import (
-	"os"
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
+// scan is the lowest level relational operator, responsible for scanning
+// tables.
 
-func TestMain(m *testing.M) {
-	security.SetAssetLoader(securitytest.EmbeddedAssets)
-	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+func init() {
+	registerOperator(scanOp, operatorInfo{name: "scan", class: scanClass{}})
+}
 
-	os.Exit(m.Run())
+func initScanExpr(e *Expr, tab sqlbase.Table) {
+	e.op = scanOp
+	e.private = tab
+}
+
+type scanClass struct{}
+
+var _ operatorClass = scanClass{}
+
+func (scanClass) format(e *Expr, tp treeprinter.Node) {
+	formatRelational(e, tp)
 }

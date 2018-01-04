@@ -15,9 +15,11 @@
 package opt
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Map from tree.ComparisonOperator to operator.
@@ -120,13 +122,29 @@ var unaryOpReverseMap = [...]tree.UnaryOperator{
 	unaryComplementOp: tree.UnaryComplement,
 }
 
-// We allocate *scalarProps and *expr in chunks of these sizes.
+// We allocate *Expr, *scalarProps and *relationalProps in chunks of these sizes.
 const exprAllocChunk = 16
 const scalarPropsAllocChunk = 16
 
+// todo(rytaft) Increase the relationalProps chunk size after more relational
+// operators are implemented.
+const relationalPropsAllocChunk = 1
+
 type buildContext struct {
-	preallocScalarProps []scalarProps
-	preallocExprs       []Expr
+	preallocScalarProps     []scalarProps
+	preallocExprs           []Expr
+	preallocRelationalProps []relationalProps
+	catalog                 sqlbase.Catalog
+	state                   *queryState
+}
+
+func (bc *buildContext) newRelationalProps() *relationalProps {
+	if len(bc.preallocRelationalProps) == 0 {
+		bc.preallocRelationalProps = make([]relationalProps, relationalPropsAllocChunk)
+	}
+	p := &bc.preallocRelationalProps[0]
+	bc.preallocRelationalProps = bc.preallocRelationalProps[1:]
+	return p
 }
 
 func (bc *buildContext) newScalarProps() *scalarProps {
@@ -138,25 +156,177 @@ func (bc *buildContext) newScalarProps() *scalarProps {
 	return p
 }
 
-// newExpr returns a new *expr with a new, blank scalarProps.
-func (bc *buildContext) newExpr() *Expr {
+// newExpr returns a new *Expr with a new, blank scalarProps if scalar is true,
+// or a new, blank relationalProps otherwise.
+func (bc *buildContext) newExpr(scalar bool) *Expr {
 	if len(bc.preallocExprs) == 0 {
 		bc.preallocExprs = make([]Expr, exprAllocChunk)
 	}
 	e := &bc.preallocExprs[0]
 	bc.preallocExprs = bc.preallocExprs[1:]
-	e.scalarProps = bc.newScalarProps()
+	if scalar {
+		e.scalarProps = bc.newScalarProps()
+	} else {
+		e.props = bc.newRelationalProps()
+	}
 	return e
 }
 
-// buildScalar converts a tree.TypedExpr to an expr tree.
+// build converts a tree.Statement to an Expr tree.
+func (bc *buildContext) build(ctx context.Context, stmt tree.Statement) *Expr {
+	var result *Expr
+	switch stmt := stmt.(type) {
+	case *tree.ParenSelect:
+		result = bc.buildSelect(ctx, stmt.Select)
+
+	case *tree.Select:
+		result = bc.buildSelect(ctx, stmt)
+
+	default:
+		panic(fmt.Sprintf("unexpected statement: %T", stmt))
+	}
+
+	return result
+}
+
+// buildSelect converts a tree.Select to an Expr tree. This method will
+// expand significantly once we implement joins, aggregations, filters, etc.
+func (bc *buildContext) buildSelect(ctx context.Context, stmt *tree.Select) *Expr {
+	var result *Expr
+	switch t := stmt.Select.(type) {
+	case *tree.ParenSelect:
+		result = bc.buildSelect(ctx, t.Select)
+
+	case *tree.SelectClause:
+		if t.Where != nil || (t.GroupBy != nil && len(t.GroupBy) > 0) || len(t.Exprs) > 1 || t.Distinct {
+			panic("Complex queries not yet supported.")
+		}
+		result = bc.buildFrom(ctx, t.From)
+
+	default:
+		panic(fmt.Sprintf("unexpected select statement: %T", stmt.Select))
+	}
+
+	return result
+}
+
+// buildSelect converts a tree.From to an Expr tree. This method
+// will expand significantly once we implement joins and filters.
+func (bc *buildContext) buildFrom(ctx context.Context, from *tree.From) *Expr {
+	if len(from.Tables) != 1 {
+		panic("Joins not yet supported.")
+	}
+	return bc.buildTable(ctx, from.Tables[0])
+}
+
+// buildTable converts a tree.TableExpr to an Expr tree.
+func (bc *buildContext) buildTable(ctx context.Context, texpr tree.TableExpr) *Expr {
+	// NB: The case statements are sorted lexicographically.
+	switch source := texpr.(type) {
+	case *tree.AliasedTableExpr:
+		result := bc.buildTable(ctx, source.Expr)
+		if source.As.Alias != "" {
+			if n := len(source.As.Cols); n > 0 && n != len(result.props.columns) {
+				panic(fmt.Sprintf("rename specified %d columns, but table contains %d",
+					n, len(result.props.columns)))
+			}
+
+			for i := range result.props.columns {
+				col := &result.props.columns[i]
+				if i < len(source.As.Cols) {
+					col.name = columnName(source.As.Cols[i])
+				}
+				col.table = tableName(source.As.Alias)
+			}
+		}
+		return result
+
+	case *tree.FuncExpr:
+		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+
+	case *tree.JoinTableExpr:
+		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+
+	case *tree.NormalizableTableName:
+		tn, err := source.Normalize()
+		if err != nil {
+			panic(fmt.Sprintf("%s", err))
+		}
+		tab, err := bc.catalog.FindTable(ctx, tn)
+		if err != nil {
+			panic(fmt.Sprintf("%s", err))
+		}
+
+		return bc.buildScan(tab)
+
+	case *tree.ParenTableExpr:
+		return bc.buildTable(ctx, source.Expr)
+
+	case *tree.StatementSource:
+		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+
+	case *tree.Subquery:
+		return bc.build(ctx, source.Select)
+
+	case *tree.TableRef:
+		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+
+	default:
+		panic(fmt.Sprintf("unexpected table expr: %T", texpr))
+	}
+}
+
+// buildScan creates an Expr with a scanOp operator for the given table.
+func (bc *buildContext) buildScan(tab sqlbase.Table) *Expr {
+	result := bc.newExpr(false /* scalar */)
+	initScanExpr(result, tab)
+	result.props.columns = make([]columnProps, 0, len(tab.TableName()))
+	props := result.props
+
+	// Every reference to a table in the query gets a new set of output column
+	// indexes. Consider the query:
+	//
+	//   SELECT * FROM a AS l JOIN a AS r ON (l.x = r.y)
+	//
+	// In this query, `l.x` is not equivalent to `r.x` and `l.y` is not
+	// equivalent to `r.y`. In order to achieve this, we need to give these
+	// columns different indexes.
+	base := len(bc.state.columns)
+	tabName := tableName(tab.TableName())
+	bc.state.tables[tabName] = append(bc.state.tables[tabName], base)
+
+	for i := 0; i < tab.NumColumns(); i++ {
+		index := base + i
+		col := tab.Column(i)
+		colProps := columnProps{
+			index: index,
+			name:  columnName(col.ColumnName()),
+			table: tabName,
+			typ:   col.DatumType(),
+		}
+		bc.state.columns = append(bc.state.columns, colProps)
+		props.columns = append(props.columns, colProps)
+	}
+
+	// Initialize not-NULL columns from the table schema.
+	for i := 0; i < tab.NumColumns(); i++ {
+		if !tab.Column(i).IsNullable() {
+			props.notNullCols.Add(props.columns[i].index)
+		}
+	}
+
+	result.initProps()
+	return result
+}
+
+// buildScalar converts a tree.TypedExpr to an Expr tree.
 func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 	switch t := pexpr.(type) {
 	case *tree.ParenExpr:
 		return bc.buildScalar(t.TypedInnerExpr())
 	}
 
-	e := bc.newExpr()
+	e := bc.newExpr(true /* scalar */)
 	e.scalarProps.typ = pexpr.ResolvedType()
 
 	switch t := pexpr.(type) {
@@ -225,7 +395,21 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 	return e
 }
 
-// buildScalar converts a tree.TypedExpr to an expr tree.
+// build converts a tree.Statement to an Expr tree.
+func build(ctx context.Context, stmt tree.Statement, catalog sqlbase.Catalog) (_ *Expr, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+	buildCtx := buildContext{
+		catalog: catalog,
+		state:   &queryState{tables: make(map[tableName][]columnIndex)},
+	}
+	return buildCtx.build(ctx, stmt), nil
+}
+
+// buildScalar converts a tree.TypedExpr to an Expr tree.
 func buildScalar(pexpr tree.TypedExpr) (_ *Expr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
