@@ -951,8 +951,12 @@ func TestIntervalSklConcurrency(t *testing.T) {
 						txnID := uuid.MakeV4()
 						maxVal := cacheValue{}
 
-						const n = 1000
-						for j := 0; j < n; j++ {
+						rounds := 1000
+						if util.RaceEnabled {
+							// Reduce the number of rounds for race builds.
+							rounds /= 2
+						}
+						for j := 0; j < rounds; j++ {
 							// Choose a random range.
 							from, middle, to := randRange(rng, slots)
 							opt := randRangeOpt(rng)
@@ -1036,8 +1040,12 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 			txnIDs[i] = uuid.MakeV4()
 		}
 
-		const n = 1000
-		for j := 0; j < n; j++ {
+		rounds := 1000
+		if util.RaceEnabled {
+			// Reduce the number of rounds for race builds.
+			rounds /= 2
+		}
+		for j := 0; j < rounds; j++ {
 			t.Logf("round %d", j)
 
 			// Create a set of actions to perform.
