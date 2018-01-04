@@ -126,6 +126,9 @@ message ColumnDescriptor {
   reserved 9;
   optional bool hidden = 6 [(gogoproto.nullable) = false];
   reserved 7;
+  // Id of a sequence used in this column's DEFAULT expression, in a call to nextval().
+  // null if no sequence is used.
+  optional uint32 uses_sequence_id = 10 [(gogoproto.nullable) = true, (gogoproto.casttype) = "ID"];
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.

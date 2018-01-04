@@ -153,9 +153,12 @@ func populateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 //
 // semaCtx and evalCtx can be nil if no default expression is used for the
 // column.
+//
+// The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
+// sequence dependencies).
 func MakeColumnDefDescs(
 	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
-) (*ColumnDescriptor, *IndexDescriptor, error) {
+) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
@@ -165,18 +168,18 @@ func MakeColumnDefDescs(
 	colDatumType := coltypes.CastTargetToDatumType(d.Type)
 	colTyp, err := DatumTypeToColumnType(colDatumType)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	col.Type, err = populateTypeAttrs(colTyp, d.Type)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if t, ok := d.Type.(*coltypes.TInt); ok {
 		if t.IsSerial() {
 			if d.HasDefaultExpr() {
-				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", d.Name)
+				return nil, nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", d.Name)
 			}
 			s := "unique_rowid()"
 			col.DefaultExpr = &s
@@ -185,34 +188,35 @@ func MakeColumnDefDescs(
 
 	if len(d.CheckExprs) > 0 {
 		// Should never happen since `HoistConstraints` moves these to table level
-		return nil, nil, errors.New("unexpected column CHECK constraint")
+		return nil, nil, nil, errors.New("unexpected column CHECK constraint")
 	}
 	if d.HasFKConstraint() {
 		// Should never happen since `HoistConstraints` moves these to table level
-		return nil, nil, errors.New("unexpected column REFERENCED constraint")
+		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
 	}
 
+	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type.
 		if _, err := SanitizeVarFreeExpr(
 			d.DefaultExpr.Expr, colDatumType, "DEFAULT", semaCtx, evalCtx,
 		); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		var t transform.ExprTransformContext
 		if err := t.AssertNoAggregationOrWindowing(
 			d.DefaultExpr.Expr, "DEFAULT expressions", semaCtx.SearchPath,
 		); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		// Type check and simplify: this performs constant folding and reduces the expression.
-		typedExpr, err := tree.TypeCheck(d.DefaultExpr.Expr, semaCtx, col.Type.ToDatumType())
+		typedExpr, err = tree.TypeCheck(d.DefaultExpr.Expr, semaCtx, col.Type.ToDatumType())
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if typedExpr, err = t.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		d.DefaultExpr.Expr = typedExpr
 
@@ -232,7 +236,7 @@ func MakeColumnDefDescs(
 		}
 	}
 
-	return col, idx, nil
+	return col, idx, typedExpr, nil
 }
 
 // MakeIndexKeyPrefix returns the key prefix used for the index's data. If you

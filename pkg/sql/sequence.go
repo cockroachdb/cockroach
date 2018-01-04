@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -225,4 +226,74 @@ func assignSequenceOptions(
 	}
 
 	return nil
+}
+
+// maybeAddSequenceDependency:
+// - if the given expr uses a sequence
+//   - adds a reference on `col` to the sequence. (mutates `col`; caller must persist changes to KV)
+//   - adds a reference on the sequence descriptor to `col`. (returns the modified sequence
+//     descriptor for the caller to save)
+func maybeAddSequenceDependency(
+	tableDesc *sqlbase.TableDescriptor,
+	col *sqlbase.ColumnDescriptor,
+	expr tree.TypedExpr,
+	evalCtx *tree.EvalContext,
+) (*sqlbase.TableDescriptor, error) {
+	ctx := evalCtx.Ctx()
+	seqName, err := getUsedSequenceName(expr)
+	if err != nil {
+		return nil, err
+	}
+	if seqName == nil {
+		return nil, nil
+	}
+	parsedSeqName, err := evalCtx.Planner.ParseQualifiedTableName(ctx, *seqName)
+	if err != nil {
+		return nil, err
+	}
+	seqDesc, err := getSequenceDesc(ctx, evalCtx.Txn, NilVirtualTabler, parsedSeqName)
+	if err != nil {
+		return nil, err
+	}
+	col.UsesSequenceId = &seqDesc.ID
+	// Now that we've gotten the sequence descriptor, I guess we can mutate it?
+	seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, sqlbase.TableDescriptor_Reference{
+		ID:        tableDesc.ID,
+		ColumnIDs: []sqlbase.ColumnID{col.ID},
+	})
+	return seqDesc, nil
+}
+
+// getUsedSequenceName returns the name of the sequence passed to
+// a call to nextval in the given expression, or nil if there is
+// no call to nextval.
+// e.g. nextval('foo') => "foo"; <some other expression> => nil
+func getUsedSequenceName(defaultExpr tree.TypedExpr) (*string, error) {
+	searchPath := sessiondata.SearchPath{}
+	var sequenceName *string
+	_, err := tree.SimpleVisit(
+		defaultExpr,
+		func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+			switch t := expr.(type) {
+			case *tree.FuncExpr:
+				def, err := t.Func.Resolve(searchPath)
+				if err != nil {
+					return err, false, expr
+				}
+				if def.Name == "nextval" {
+					arg := t.Exprs[0]
+					switch a := arg.(type) {
+					case *tree.DString:
+						asString := string(*a)
+						sequenceName = &asString
+					}
+				}
+			}
+			return nil, true, expr
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return sequenceName, nil
 }
