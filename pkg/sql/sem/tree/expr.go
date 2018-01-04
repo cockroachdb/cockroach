@@ -412,6 +412,16 @@ func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *Compa
 	return node
 }
 
+// NewTypedComparisonExprWithSubOp returns a new ComparisonExpr that is verified to be well-typed.
+func NewTypedComparisonExprWithSubOp(
+	op, subOp ComparisonOperator, left, right TypedExpr,
+) *ComparisonExpr {
+	node := &ComparisonExpr{Operator: op, SubOperator: subOp, Left: left, Right: right}
+	node.typ = types.Bool
+	node.memoizeFn()
+	return node
+}
+
 func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
@@ -422,7 +432,18 @@ func (node *ComparisonExpr) memoizeFn() {
 	case Any, Some, All:
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
-		rightRet = rightRet.(types.TArray).Typ
+		// The right operand is either an array or a tuple/subquery.
+		switch t := rightRet.(type) {
+		case types.TArray:
+			// For example:
+			//   x = ANY(ARRAY[1,2])
+			rightRet = t.Typ
+		case types.TTuple:
+			// For example:
+			//   x = ANY(SELECT y FROM t)
+			//   x = ANY(1,2)
+			rightRet = t[0]
+		}
 	}
 
 	fn, ok := CmpOps[fOp].lookupImpl(leftRet, rightRet)

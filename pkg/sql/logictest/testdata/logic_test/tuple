@@ -310,14 +310,13 @@ NULL  3     3
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                       (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u              ·          ·
- │         0  ·       render 1  test.uvw.v              ·          ·
- │         0  ·       render 2  test.uvw.w              ·          ·
- └── scan  1  scan    ·         ·                       (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx       ·          ·
-·          1  ·       spans     /1/2/3-                 ·          ·
-·          1  ·       filter    (u, v, w) >= (1, 2, 3)  ·          ·
+render     0  render  ·         ·                  (u, v, w)  +u,+v,+w
+ │         0  ·       render 0  test.uvw.u         ·          ·
+ │         0  ·       render 1  test.uvw.v         ·          ·
+ │         0  ·       render 2  test.uvw.w         ·          ·
+ └── scan  1  scan    ·         ·                  (u, v, w)  +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx  ·          ·
+·          1  ·       spans     /1/2/3-            ·          ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
@@ -363,14 +362,13 @@ SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                      (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u             ·          ·
- │         0  ·       render 1  test.uvw.v             ·          ·
- │         0  ·       render 2  test.uvw.w             ·          ·
- └── scan  1  scan    ·         ·                      (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx      ·          ·
-·          1  ·       spans     /2/1/2-                ·          ·
-·          1  ·       filter    (u, v, w) > (2, 1, 1)  ·          ·
+render     0  render  ·         ·                  (u, v, w)  +u,+v,+w
+ │         0  ·       render 0  test.uvw.u         ·          ·
+ │         0  ·       render 1  test.uvw.v         ·          ·
+ │         0  ·       render 2  test.uvw.w         ·          ·
+ └── scan  1  scan    ·         ·                  (u, v, w)  +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx  ·          ·
+·          1  ·       spans     /2/1/2-            ·          ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
@@ -489,7 +487,7 @@ render     0  render  ·         ·                       (u, v, w)  +u,+v,+w
  │         0  ·       render 2  test.uvw.w              ·          ·
  └── scan  1  scan    ·         ·                       (u, v, w)  +u,+v,+w
 ·          1  ·       table     uvw@uvw_u_v_w_idx       ·          ·
-·          1  ·       spans     ALL                     ·          ·
+·          1  ·       spans     -/1/2/3 /1/2/4-         ·          ·
 ·          1  ·       filter    (u, v, w) != (1, 2, 3)  ·          ·
 
 query III
@@ -555,14 +553,13 @@ NULL  3     3
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                          (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u                 ·          ·
- │         0  ·       render 1  test.uvw.v                 ·          ·
- │         0  ·       render 2  test.uvw.w                 ·          ·
- └── scan  1  scan    ·         ·                          (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx          ·          ·
-·          1  ·       spans     ALL                        ·          ·
-·          1  ·       filter    (u, v, w) >= (1, NULL, 3)  ·          ·
+render     0  render  ·         ·                  (u, v, w)  +u,+v,+w
+ │         0  ·       render 0  test.uvw.u         ·          ·
+ │         0  ·       render 1  test.uvw.v         ·          ·
+ │         0  ·       render 2  test.uvw.w         ·          ·
+ └── scan  1  scan    ·         ·                  (u, v, w)  +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx  ·          ·
+·          1  ·       spans     /2-                ·          ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
@@ -603,14 +600,13 @@ SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                         (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u                ·          ·
- │         0  ·       render 1  test.uvw.v                ·          ·
- │         0  ·       render 2  test.uvw.w                ·          ·
- └── scan  1  scan    ·         ·                         (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx         ·          ·
-·          1  ·       spans     ALL                       ·          ·
-·          1  ·       filter    (u, v, w) < (2, NULL, 3)  ·          ·
+render     0  render  ·         ·                  (u, v, w)  +u,+v,+w
+ │         0  ·       render 0  test.uvw.u         ·          ·
+ │         0  ·       render 1  test.uvw.v         ·          ·
+ │         0  ·       render 2  test.uvw.w         ·          ·
+ └── scan  1  scan    ·         ·                  (u, v, w)  +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx  ·          ·
+·          1  ·       spans     /!NULL-/2          ·          ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
