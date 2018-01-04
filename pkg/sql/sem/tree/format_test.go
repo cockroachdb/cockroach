@@ -15,6 +15,7 @@
 package tree_test
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -25,11 +26,6 @@ import (
 )
 
 func TestFormatStatement(t *testing.T) {
-	tableFormatter := tree.FmtReformatTableNames(tree.FmtSimple,
-		func(ctx *tree.FmtCtx, _ *tree.NormalizableTableName) {
-			ctx.WriteString("xoxoxo")
-		})
-
 	testData := []struct {
 		stmt     string
 		f        tree.FmtFlags
@@ -39,28 +35,6 @@ func TestFormatStatement(t *testing.T) {
 			`CREATE USER 'foo' WITH PASSWORD *****`},
 		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtSimpleWithPasswords,
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
-
-		{`CREATE TABLE foo (x INT)`, tableFormatter,
-			`CREATE TABLE xoxoxo (x INT)`},
-		{`INSERT INTO foo(x) TABLE bar`, tableFormatter,
-			`INSERT INTO xoxoxo(x) TABLE xoxoxo`},
-		{`UPDATE foo SET x = y`, tableFormatter,
-			`UPDATE xoxoxo SET x = y`},
-		{`DELETE FROM foo`, tableFormatter,
-			`DELETE FROM xoxoxo`},
-		{`ALTER TABLE foo RENAME TO bar`, tableFormatter,
-			`ALTER TABLE xoxoxo RENAME TO xoxoxo`},
-		{`SHOW COLUMNS FROM foo`, tableFormatter,
-			`SHOW COLUMNS FROM xoxoxo`},
-		{`SHOW CREATE TABLE foo`, tableFormatter,
-			`SHOW CREATE TABLE xoxoxo`},
-		// TODO(knz): TRUNCATE and GRANT table names are removed by
-		// tree.FmtAnonymize but not processed by table formatters.
-		//
-		// {`TRUNCATE foo`, tableFormatter,
-		// `TRUNCATE TABLE xoxoxo`},
-		// {`GRANT SELECT ON bar TO foo`, tableFormatter,
-		// `GRANT SELECT ON xoxoxo TO foo`},
 
 		{`CREATE TABLE foo (x INT)`, tree.FmtAnonymize,
 			`CREATE TABLE _ (_ INT)`},
@@ -111,6 +85,56 @@ func TestFormatStatement(t *testing.T) {
 				t.Fatal(err)
 			}
 			stmtStr := tree.AsStringWithFlags(stmt, test.f)
+			if stmtStr != test.expected {
+				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
+			}
+		})
+	}
+}
+
+func TestFormatTableName(t *testing.T) {
+	testData := []struct {
+		stmt     string
+		expected string
+	}{
+		{`CREATE TABLE foo (x INT)`,
+			`CREATE TABLE xoxoxo (x INT)`},
+		{`INSERT INTO foo(x) TABLE bar`,
+			`INSERT INTO xoxoxo(x) TABLE xoxoxo`},
+		{`UPDATE foo SET x = y`,
+			`UPDATE xoxoxo SET x = y`},
+		{`DELETE FROM foo`,
+			`DELETE FROM xoxoxo`},
+		{`ALTER TABLE foo RENAME TO bar`,
+			`ALTER TABLE xoxoxo RENAME TO xoxoxo`},
+		{`SHOW COLUMNS FROM foo`,
+			`SHOW COLUMNS FROM xoxoxo`},
+		{`SHOW CREATE TABLE foo`,
+			`SHOW CREATE TABLE xoxoxo`},
+		// TODO(knz): TRUNCATE and GRANT table names are removed by
+		// tree.FmtAnonymize but not processed by table formatters.
+		//
+		// {`TRUNCATE foo`,
+		// `TRUNCATE TABLE xoxoxo`},
+		// {`GRANT SELECT ON bar TO foo`,
+		// `GRANT SELECT ON xoxoxo TO foo`},
+	}
+
+	var buf bytes.Buffer
+	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
+	fmtCtx.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.NormalizableTableName) {
+		ctx.WriteString("xoxoxo")
+	})
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.stmt), func(t *testing.T) {
+			stmt, err := parser.ParseOne(test.stmt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			buf.Reset()
+			fmtCtx.FormatNode(stmt)
+			stmtStr := buf.String()
 			if stmtStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
 			}
