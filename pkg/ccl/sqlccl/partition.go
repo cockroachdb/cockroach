@@ -327,18 +327,18 @@ func selectPartitionExprsByName(
 
 		for _, l := range partDesc.List {
 			for _, valueEncBuf := range l.Values {
-				datums, _, err := sqlbase.TranslateValueEncodingToSpan(
+				t, _, err := sqlbase.DecodePartitionTuple(
 					a, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return err
 				}
-				allDatums := append(prefixDatums, datums...)
+				allDatums := append(prefixDatums, t.Datums...)
 
 				// When len(allDatums) < len(colVars), the missing elements are DEFAULTs, so
 				// we can simply exclude them from the expr.
 				partValueExpr := tree.NewTypedComparisonExpr(tree.EQ,
 					tree.NewTypedTuple(colVars[:len(allDatums)]), tree.NewDTuple(allDatums...))
-				partValueExprs[len(datums)] = append(partValueExprs[len(datums)], exprAndPartName{
+				partValueExprs[len(t.Datums)] = append(partValueExprs[len(t.Datums)], exprAndPartName{
 					expr: partValueExpr,
 					name: l.Name,
 				})
