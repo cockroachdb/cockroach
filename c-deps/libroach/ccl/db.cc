@@ -19,7 +19,8 @@
 
 const DBStatus kSuccess = {NULL, 0};
 
-// DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if needed.
+// DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
+// needed.
 rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts) {
   DBSlice options = db_opts.extra_options;
   if (options.len == 0) {
@@ -41,8 +42,8 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts) {
             << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
 
   // Initialize store key manager.
-  std::shared_ptr<FileKeyManager> store_key_manager(
-      new FileKeyManager(rocksdb::Env::Default(), opts.key_files().current_key(), opts.key_files().old_key()));
+  std::shared_ptr<FileKeyManager> store_key_manager(new FileKeyManager(
+      rocksdb::Env::Default(), opts.key_files().current_key(), opts.key_files().old_key()));
   rocksdb::Status status = store_key_manager->LoadKeys();
   if (!status.ok()) {
     return status;
@@ -67,7 +68,8 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts) {
   return rocksdb::Status::InvalidArgument("encryption is not supported");
 }
 
-DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats) {
+DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos,
+                           MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();
 
   // TODO(dan): Inserting into a batch just to iterate over it is unfortunate.

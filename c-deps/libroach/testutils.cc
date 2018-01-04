@@ -27,12 +27,14 @@ rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg)
     if (status.ok()) {
       return rocksdb::Status::OK();
     }
-    return rocksdb::Status::InvalidArgument(fmt::StringPrintf("expected success, got error \"%s\"", status.getState()));
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("expected success, got error \"%s\"", status.getState()));
   }
 
   // Expected failure.
   if (status.ok()) {
-    return rocksdb::Status::InvalidArgument(fmt::StringPrintf("expected error \"%s\", got success", err_msg));
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("expected error \"%s\", got success", err_msg));
   }
   std::regex re(err_msg);
   if (std::regex_match(status.getState(), re)) {
