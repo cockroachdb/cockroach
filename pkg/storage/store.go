@@ -1772,6 +1772,9 @@ func (s *Store) DB() *client.DB { return s.cfg.DB }
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.cfg.Gossip }
 
+// Compactor accessor.
+func (s *Store) Compactor() *compactor.Compactor { return s.compactor }
+
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 

@@ -392,7 +392,7 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	engines := []engine.Engine{e}
 	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
-	stopper.Stop(context.TODO())
+	defer stopper.Stop(context.TODO())
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
 		context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion,
 		cfg.Settings.Version.ServerVersion, node.clusterID)
