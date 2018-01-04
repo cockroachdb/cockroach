@@ -37,7 +37,7 @@ func TestFormatStatement(t *testing.T) {
 	}{
 		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtSimple,
 			`CREATE USER 'foo' WITH PASSWORD *****`},
-		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtSimpleWithPasswords,
+		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtShowPasswords,
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 
 		{`CREATE TABLE foo (x INT)`, tree.FmtAnonymize,

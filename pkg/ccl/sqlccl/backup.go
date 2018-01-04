@@ -322,7 +322,7 @@ func backupJobDescription(
 		}
 		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
 	}
-	return tree.AsStringWithFlags(b, tree.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(b, tree.FmtAlwaysQualifyTableNames), nil
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.

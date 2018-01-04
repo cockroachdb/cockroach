@@ -372,7 +372,7 @@ func (expr *StrVal) Format(ctx *FmtCtx) {
 	if expr.bytesEsc {
 		lex.EncodeSQLBytes(buf, expr.s)
 	} else {
-		lex.EncodeSQLStringWithFlags(buf, expr.s, f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(buf, expr.s, f.EncodeFlags())
 	}
 }
 

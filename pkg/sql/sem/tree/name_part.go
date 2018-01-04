@@ -33,10 +33,10 @@ type Name string
 // Format implements the NodeFormatter interface.
 func (n Name) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if f.anonymize {
+	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
 	} else {
-		lex.EncodeRestrictedSQLIdent(ctx.Buffer, string(n), f.encodeFlags)
+		lex.EncodeRestrictedSQLIdent(ctx.Buffer, string(n), f.EncodeFlags())
 	}
 }
 
@@ -63,10 +63,10 @@ type UnrestrictedName string
 // Format implements the NodeFormatter interface.
 func (u UnrestrictedName) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if f.anonymize {
+	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
 	} else {
-		lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, string(u), f.encodeFlags)
+		lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, string(u), f.EncodeFlags())
 	}
 }
 
