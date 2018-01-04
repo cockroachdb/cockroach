@@ -213,7 +213,7 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(session *Session) string { return formatBoolAsPostgresSetting(session.DefaultReadOnly) },
 		Reset: func(session *Session) error {
-			session.DefaultIsolationLevel = enginepb.IsolationType(0)
+			session.DefaultReadOnly = false
 			return nil
 		},
 	},
