@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// ZeroNode is the exported alias for zeroNode. Used by CCL.
+type ZeroNode = zeroNode
+
 // zeroNode is a planNode with no columns and no rows and is used for nodes that
 // have no results. (e.g. a table for which the filtering condition has a
 // contradiction)
