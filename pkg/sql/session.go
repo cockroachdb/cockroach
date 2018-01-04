@@ -173,6 +173,9 @@ type queryMeta struct {
 
 	// Cancellation function for the context associated with this query's transaction.
 	ctxCancel context.CancelFunc
+
+	// If set, this query will not be reported as part of SHOW QUERIES.
+	hidden bool
 }
 
 // cancel cancels the query associated with this queryMeta, by closing the associated
@@ -359,8 +362,7 @@ type Session struct {
 	sqlStats *sqlStats
 	// appStats track per-application SQL usage statistics.
 	appStats *appStats
-	// phaseTimes tracks session-level phase times. It is copied-by-value
-	// to each planner in session.newPlanner.
+	// phaseTimes tracks session-level phase times.
 	phaseTimes phaseTimes
 
 	// noCopy is placed here to guarantee that Session objects are not
@@ -626,7 +628,16 @@ func (s *Session) Ctx() context.Context {
 	return s.context
 }
 
-func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
+// txn can be nil.
+func resetPlanner(
+	p *planner,
+	s *Session,
+	txn *client.Txn,
+	evalCtx tree.EvalContext,
+	clusterID uuid.UUID,
+	nodeID roachpb.NodeID,
+	reCache *tree.RegexpCache,
+) {
 	p.session = s
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
 	p.phaseTimes = s.phaseTimes
@@ -637,13 +648,11 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.semaCtx.Location = &s.Location
 	p.semaCtx.SearchPath = s.SearchPath
 
-	p.evalCtx = s.evalCtx()
+	p.evalCtx = evalCtx
 	p.evalCtx.Planner = p
-	if e != nil {
-		p.evalCtx.ClusterID = e.cfg.ClusterID()
-		p.evalCtx.NodeID = e.cfg.NodeID.Get()
-		p.evalCtx.ReCache = e.reCache
-	}
+	p.evalCtx.ClusterID = clusterID
+	p.evalCtx.NodeID = nodeID
+	p.evalCtx.ReCache = reCache
 
 	p.setTxn(txn)
 }
@@ -674,9 +683,17 @@ func (s *Session) FinishPlan() {
 // newPlanner creates a planner inside the scope of the given Session. The
 // statement executed by the planner will be executed in txn. The planner
 // should only be used to execute one statement.
-func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
+//
+// txn can be nil.
+func newPlanner(
+	session *Session,
+	txn *client.Txn,
+	clusterID uuid.UUID,
+	nodeID roachpb.NodeID,
+	reCache *tree.RegexpCache,
+) *planner {
 	p := &planner{}
-	s.resetPlanner(p, e, txn)
+	resetPlanner(p, session, txn, session.evalCtx(), clusterID, nodeID, reCache)
 	return p
 }
 
@@ -703,10 +720,10 @@ func (s *Session) evalCtx() tree.EvalContext {
 }
 
 // resetForBatch prepares the Session for executing a new batch of statements.
-func (s *Session) resetForBatch(e *Executor) {
+func (s *Session) resetForBatch(dbCache *databaseCache) {
 	// Update the database cache to a more recent copy, so that we can use tables
 	// that we created in previous batches of the same transaction.
-	s.tables.databaseCache = e.getDatabaseCache()
+	s.tables.databaseCache = dbCache
 	s.TxnState.schemaChangers.curGroupNum++
 }
 

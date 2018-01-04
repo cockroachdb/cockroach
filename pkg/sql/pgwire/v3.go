@@ -669,7 +669,8 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		sqlTypeHints[strconv.Itoa(i+1)] = v
 	}
 	// Create the new PreparedStatement in the connection's Session.
-	stmt, err := c.session.PreparedStatements.NewFromString(c.executor, name, query, sqlTypeHints)
+	stmt, err := c.session.PreparedStatements.NewFromString(
+		name, query, sqlTypeHints, c.executor.GetDatabaseCache(), c.executor.GetExecCfg(), c.executor.GetReCache())
 	if err != nil {
 		return c.sendError(err)
 	}
@@ -1218,6 +1219,17 @@ func (c *v3Conn) SetColumns(columns sqlbase.ResultColumns) {
 // RowsAffected implements the StatementResult interface.
 func (c *v3Conn) RowsAffected() int {
 	return c.streamingState.rowsAffected
+}
+
+// CloseResultWithError implements the StatementResult interface.
+func (c *v3Conn) CloseResultWithError(err error) error {
+	panic("!!! not implemented")
+}
+
+// SetResultsDeliveredCallback implements the StatementResult interface.
+func (c *v3Conn) SetResultsDeliveredCallback(callback func()) {
+	panic("!!! not implemented")
+	// WIP(andrei): see calls to c.session.FinishPlan() in this file.
 }
 
 // CloseResult implements the StatementResult interface.

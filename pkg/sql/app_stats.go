@@ -166,7 +166,7 @@ func (a *appStats) getStrForStmt(stmt Statement) string {
 }
 
 // sqlStats carries per-application statistics for all applications on
-// each node. It hangs off Executor.
+// each node.
 type sqlStats struct {
 	st *cluster.Settings
 	syncutil.Mutex
