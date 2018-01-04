@@ -25,7 +25,13 @@ type operator uint8
 const (
 	unknownOp operator = iota
 
-	// TODO(radu): no relational operators yet.
+	// -- Relational operators --
+	// This list will grow significantly as we implement new operators.
+	// The only relational operator implemented so far is scanOp.
+
+	// scan is the lowest level relational operator, responsible for scanning
+	// tables.
+	scanOp
 
 	// -- Scalar operators --
 
