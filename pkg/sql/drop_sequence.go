@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -51,6 +52,9 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 		}
 		if !droppedDesc.IsSequence() {
 			return nil, sqlbase.NewWrongObjectTypeError(tn, "sequence")
+		}
+		if depErr := p.sequenceDependencyError(ctx, droppedDesc); depErr != nil {
+			return nil, depErr
 		}
 
 		td = append(td, droppedDesc)
@@ -114,5 +118,21 @@ func (p *planner) dropSequenceImpl(
 			return verifyDropTableMetadata(systemConfig, seqDesc.ID, "sequence")
 		})
 
+	return nil
+}
+
+// sequenceDependency error returns an error if the given sequence cannot be dropped because
+// a table uses it in a DEFAULT expression on one of its columns, or nil if there is no
+// such dependency.
+func (p *planner) sequenceDependencyError(
+	ctx context.Context, droppedDesc *sqlbase.TableDescriptor,
+) error {
+	if len(droppedDesc.DependedOnBy) > 0 {
+		return pgerror.NewErrorf(
+			pgerror.CodeDependentObjectsStillExistError,
+			"cannot drop sequence %s because other objects depend on it",
+			droppedDesc.Name,
+		)
+	}
 	return nil
 }
