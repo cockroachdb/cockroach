@@ -76,13 +76,12 @@ func TestIndexedVars(t *testing.T) {
 
 	// Test formatting using the indexed var format interceptor.
 	var buf bytes.Buffer
-	fmtCtx := MakeFmtCtx(&buf,
-		FmtIndexedVarFormat(
-			FmtSimple,
-			func(ctx *FmtCtx, idx int) {
-				ctx.Printf("customVar%d", idx)
-			},
-		))
+	fmtCtx := MakeFmtCtx(&buf, FmtSimple)
+	fmtCtx.WithIndexedVarFormat(
+		func(ctx *FmtCtx, idx int) {
+			ctx.Printf("customVar%d", idx)
+		},
+	)
 	fmtCtx.FormatNode(typedExpr)
 
 	str = buf.String()

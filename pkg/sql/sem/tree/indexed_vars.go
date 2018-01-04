@@ -94,8 +94,8 @@ func (v *IndexedVar) ResolvedType() types.T {
 // Format implements the NodeFormatter interface.
 func (v *IndexedVar) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if f.indexedVarFormat != nil {
-		f.indexedVarFormat(ctx, v.Idx)
+	if ctx.indexedVarFormat != nil {
+		ctx.indexedVarFormat(ctx, v.Idx)
 	} else if f.symbolicVars || v.col == nil {
 		ctx.Printf("@%d", v.Idx+1)
 	} else {

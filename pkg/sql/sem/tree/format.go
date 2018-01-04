@@ -31,10 +31,6 @@ type fmtFlags struct {
 	// tableNameFormatter will be called on all NormalizableTableNames if it is
 	// non-nil.
 	tableNameFormatter func(*FmtCtx, *NormalizableTableName)
-	// indexedVarFormat is an optional interceptor for
-	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
-	// customize the formatting of IndexedVars.
-	indexedVarFormat func(ctx *FmtCtx, idx int)
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
 	// it can be used to format placeholders differently than normal.
 	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
@@ -62,6 +58,10 @@ type fmtFlags struct {
 type FmtCtx struct {
 	*bytes.Buffer
 	flags FmtFlags
+	// indexedVarFormat is an optional interceptor for
+	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
+	// customize the formatting of IndexedVars.
+	indexedVarFormat func(ctx *FmtCtx, idx int)
 }
 
 // MakeFmtCtx creates a FmtCtx from an existing buffer and flags.
@@ -180,12 +180,11 @@ func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases 
 	return &f
 }
 
-// FmtIndexedVarFormat returns FmtFlags that customizes the printing of
+// WithIndexedVarFormat modifies FmtCtx to customize the printing of
 // IndexedVars using the provided function.
-func FmtIndexedVarFormat(base FmtFlags, fn func(ctx *FmtCtx, idx int)) FmtFlags {
-	f := *base
-	f.indexedVarFormat = fn
-	return &f
+func (ctx *FmtCtx) WithIndexedVarFormat(fn func(ctx *FmtCtx, idx int)) *FmtCtx {
+	ctx.indexedVarFormat = fn
+	return ctx
 }
 
 // FmtPlaceholderFormat returns FmtFlags that customizes the printing of
