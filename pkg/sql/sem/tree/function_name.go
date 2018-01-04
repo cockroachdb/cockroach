@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -38,8 +37,8 @@ type ResolvableFunctionReference struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (fn ResolvableFunctionReference) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, fn.FunctionReference)
+func (fn ResolvableFunctionReference) Format(ctx *FmtCtx) {
+	ctx.FormatNode(fn.FunctionReference)
 }
 func (fn ResolvableFunctionReference) String() string { return AsString(fn) }
 

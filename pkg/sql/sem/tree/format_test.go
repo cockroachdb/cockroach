@@ -15,7 +15,6 @@
 package tree_test
 
 import (
-	"bytes"
 	"fmt"
 	"testing"
 
@@ -27,8 +26,8 @@ import (
 
 func TestFormatStatement(t *testing.T) {
 	tableFormatter := tree.FmtReformatTableNames(tree.FmtSimple,
-		func(_ *tree.NormalizableTableName, buf *bytes.Buffer, _ tree.FmtFlags) {
-			buf.WriteString("xoxoxo")
+		func(ctx *tree.FmtCtx, _ *tree.NormalizableTableName) {
+			ctx.WriteString("xoxoxo")
 		})
 
 	testData := []struct {

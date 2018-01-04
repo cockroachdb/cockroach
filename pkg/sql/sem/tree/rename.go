@@ -23,8 +23,6 @@
 
 package tree
 
-import "bytes"
-
 // RenameDatabase represents a RENAME DATABASE statement.
 type RenameDatabase struct {
 	Name    Name
@@ -32,11 +30,11 @@ type RenameDatabase struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *RenameDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER DATABASE ")
-	FormatNode(buf, f, node.Name)
-	buf.WriteString(" RENAME TO ")
-	FormatNode(buf, f, node.NewName)
+func (node *RenameDatabase) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" RENAME TO ")
+	ctx.FormatNode(node.NewName)
 }
 
 // RenameTable represents a RENAME TABLE or RENAME VIEW statement.
@@ -51,21 +49,21 @@ type RenameTable struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *RenameTable) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
+func (node *RenameTable) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
 	if node.IsView {
-		buf.WriteString("VIEW ")
+		ctx.WriteString("VIEW ")
 	} else if node.IsSequence {
-		buf.WriteString("SEQUENCE ")
+		ctx.WriteString("SEQUENCE ")
 	} else {
-		buf.WriteString("TABLE ")
+		ctx.WriteString("TABLE ")
 	}
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, &node.Name)
-	buf.WriteString(" RENAME TO ")
-	FormatNode(buf, f, &node.NewName)
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" RENAME TO ")
+	ctx.FormatNode(&node.NewName)
 }
 
 // RenameIndex represents a RENAME INDEX statement.
@@ -76,14 +74,14 @@ type RenameIndex struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *RenameIndex) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER INDEX ")
+func (node *RenameIndex) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER INDEX ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Index)
-	buf.WriteString(" RENAME TO ")
-	FormatNode(buf, f, node.NewName)
+	ctx.FormatNode(node.Index)
+	ctx.WriteString(" RENAME TO ")
+	ctx.FormatNode(node.NewName)
 }
 
 // RenameColumn represents a RENAME COLUMN statement.
@@ -96,14 +94,14 @@ type RenameColumn struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *RenameColumn) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER TABLE ")
+func (node *RenameColumn) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TABLE ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, &node.Table)
-	buf.WriteString(" RENAME COLUMN ")
-	FormatNode(buf, f, node.Name)
-	buf.WriteString(" TO ")
-	FormatNode(buf, f, node.NewName)
+	ctx.FormatNode(&node.Table)
+	ctx.WriteString(" RENAME COLUMN ")
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" TO ")
+	ctx.FormatNode(node.NewName)
 }

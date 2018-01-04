@@ -161,7 +161,8 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 
 func (a *appStats) getStrForStmt(stmt Statement) string {
 	var buf bytes.Buffer
-	tree.FormatNode(&buf, tree.FmtHideConstants, stmt.AST)
+	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtHideConstants)
+	fmtCtx.FormatNode(stmt.AST)
 	return buf.String()
 }
 
@@ -267,19 +268,20 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 
 	// Re-format to remove most names.
 	formatter := tree.FmtReformatTableNames(tree.FmtAnonymize,
-		func(t *tree.NormalizableTableName, buf *bytes.Buffer, f tree.FmtFlags) {
+		func(ctx *tree.FmtCtx, t *tree.NormalizableTableName) {
 			tn, err := t.Normalize()
 			if err != nil {
-				buf.WriteByte('_')
+				ctx.WriteByte('_')
 				return
 			}
 			virtual, err := vt.getVirtualTableEntry(tn)
 			if err != nil || virtual.desc == nil {
-				buf.WriteByte('_')
+				ctx.WriteByte('_')
 				return
 			}
 			// Virtual table: we want to keep the name.
-			tn.Format(buf, tree.FmtParsable)
+			keepNameCtx := ctx.CopyWithFlags(tree.FmtParsable)
+			keepNameCtx.FormatNode(tn)
 		})
 	return tree.AsStringWithFlags(stmt, formatter), true
 }

@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -95,12 +94,12 @@ type AllTablesSelector struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (at *AllTablesSelector) Format(buf *bytes.Buffer, f FmtFlags) {
+func (at *AllTablesSelector) Format(ctx *FmtCtx) {
 	if !at.DBNameOriginallyOmitted {
-		FormatNode(buf, f, at.Database)
-		buf.WriteByte('.')
+		ctx.FormatNode(at.Database)
+		ctx.WriteByte('.')
 	}
-	buf.WriteByte('*')
+	ctx.WriteByte('*')
 }
 func (at *AllTablesSelector) String() string { return AsString(at) }
 
@@ -125,11 +124,11 @@ func (at *AllTablesSelector) QualifyWithDatabase(database string) error {
 type TablePatterns []TablePattern
 
 // Format implements the NodeFormatter interface.
-func (tt TablePatterns) Format(buf *bytes.Buffer, f FmtFlags) {
+func (tt TablePatterns) Format(ctx *FmtCtx) {
 	for i, t := range tt {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, t)
+		ctx.FormatNode(t)
 	}
 }

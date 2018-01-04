@@ -23,20 +23,18 @@
 
 package tree
 
-import "bytes"
-
 // ValuesClause represents a VALUES clause.
 type ValuesClause struct {
 	Tuples []*Tuple
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ValuesClause) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("VALUES ")
+func (node *ValuesClause) Format(ctx *FmtCtx) {
+	ctx.WriteString("VALUES ")
 	for i, n := range node.Tuples {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 }

@@ -30,14 +30,14 @@ type fmtFlags struct {
 	hideConstants    bool
 	// tableNameFormatter will be called on all NormalizableTableNames if it is
 	// non-nil.
-	tableNameFormatter func(*NormalizableTableName, *bytes.Buffer, FmtFlags)
+	tableNameFormatter func(*FmtCtx, *NormalizableTableName)
 	// indexedVarFormat is an optional interceptor for
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
-	indexedVarFormat func(buf *bytes.Buffer, idx int)
+	indexedVarFormat func(ctx *FmtCtx, idx int)
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
 	// it can be used to format placeholders differently than normal.
-	placeholderFormat func(buf *bytes.Buffer, f FmtFlags, p *Placeholder)
+	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
 	// If true, non-function names are replaced by underscores.
 	anonymize bool
 	// If true, strings will be formatted for being contents of ARRAYs.
@@ -54,6 +54,19 @@ type fmtFlags struct {
 	alwaysParens bool
 	// Flags that control the formatting of strings and identifiers.
 	encodeFlags lex.EncodeFlags
+}
+
+// FmtCtx is suitable for passing to Format() methods.
+// It also exposes the underlying bytes.Buffer interface for
+// convenience.
+type FmtCtx struct {
+	*bytes.Buffer
+	flags FmtFlags
+}
+
+// MakeFmtCtx creates a FmtCtx from an existing buffer and flags.
+func MakeFmtCtx(buf *bytes.Buffer, f FmtFlags) FmtCtx {
+	return FmtCtx{Buffer: buf, flags: f}
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -118,7 +131,7 @@ var FmtAlwaysGroupExprs FmtFlags = &fmtFlags{alwaysParens: true}
 // FmtReformatTableNames returns FmtFlags that instructs the pretty-printer
 // to substitute the printing of table names using the provided function.
 func FmtReformatTableNames(
-	base FmtFlags, fn func(*NormalizableTableName, *bytes.Buffer, FmtFlags),
+	base FmtFlags, fn func(*FmtCtx, *NormalizableTableName),
 ) FmtFlags {
 	f := *base
 	f.tableNameFormatter = fn
@@ -127,10 +140,34 @@ func FmtReformatTableNames(
 
 // StripTypeFormatting removes the flag that extracts types from the format flags,
 // so as to enable rendering expressions for which types have not been computed yet.
-func StripTypeFormatting(f FmtFlags) FmtFlags {
-	nf := *f
+func (ctx *FmtCtx) StripTypeFormatting() {
+	nf := *ctx.flags
 	nf.showTypes = false
-	return &nf
+	ctx.flags = &nf
+}
+
+// CopyWithFlags creates a new FmtCtx with different formatting flags
+// to become those specified, but the same formatting target.
+func (ctx *FmtCtx) CopyWithFlags(f FmtFlags) FmtCtx {
+	ret := *ctx
+	ret.flags = f
+	return ret
+}
+
+// ShowTableAliases returns true iff the flags have the corresponding bit set.
+func (ctx *FmtCtx) ShowTableAliases() bool {
+	return ctx.flags.ShowTableAliases
+}
+
+// Printf calls fmt.Fprintf on the linked bytes.Buffer. It is provided
+// for convenience, to avoid having to call fmt.Fprintf(ctx.Buffer, ...).
+//
+// Note: DO NOT USE THIS TO INTERPOLATE %s ON NodeFormatter OBJECTS.
+// This would call the String() method on them and would fail to reuse
+// the same bytes buffer (and waste allocations). Instead use
+// ctx.FormatNode().
+func (ctx *FmtCtx) Printf(f string, args ...interface{}) {
+	fmt.Fprintf(ctx.Buffer, f, args...)
 }
 
 // FmtExpr returns FmtFlags that indicate how the pretty-printer
@@ -145,7 +182,7 @@ func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases 
 
 // FmtIndexedVarFormat returns FmtFlags that customizes the printing of
 // IndexedVars using the provided function.
-func FmtIndexedVarFormat(base FmtFlags, fn func(buf *bytes.Buffer, idx int)) FmtFlags {
+func FmtIndexedVarFormat(base FmtFlags, fn func(ctx *FmtCtx, idx int)) FmtFlags {
 	f := *base
 	f.indexedVarFormat = fn
 	return &f
@@ -154,7 +191,7 @@ func FmtIndexedVarFormat(base FmtFlags, fn func(buf *bytes.Buffer, idx int)) Fmt
 // FmtPlaceholderFormat returns FmtFlags that customizes the printing of
 // StarDatums using the provided function.
 func FmtPlaceholderFormat(
-	base FmtFlags, placeholderFn func(buf *bytes.Buffer, f FmtFlags, p *Placeholder),
+	base FmtFlags, placeholderFn func(_ *FmtCtx, _ *Placeholder),
 ) FmtFlags {
 	f := *base
 	f.placeholderFormat = placeholderFn
@@ -163,41 +200,42 @@ func FmtPlaceholderFormat(
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.
 type NodeFormatter interface {
-	// Format performs pretty-printing towards a bytes buffer. The flags argument
-	// influences the results. Most callers should use FormatNode instead.
-	Format(buf *bytes.Buffer, flags FmtFlags)
+	// Format performs pretty-printing towards a bytes buffer. The flags member
+	// of ctx influences the results. Most callers should use FormatNode instead.
+	Format(ctx *FmtCtx)
 }
 
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
-func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
+func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
+	f := ctx.flags
 	if f.showTypes {
 		if te, ok := n.(TypedExpr); ok {
-			buf.WriteByte('(')
-			formatNodeOrHideConstants(buf, f, n)
-			buf.WriteString(")[")
+			ctx.WriteByte('(')
+			ctx.formatNodeOrHideConstants(n)
+			ctx.WriteString(")[")
 			if rt := te.ResolvedType(); rt == nil {
 				// An attempt is made to pretty-print an expression that was
 				// not assigned a type yet. This should not happen, so we make
 				// it clear in the output this needs to be investigated
 				// further.
-				buf.WriteString(fmt.Sprintf("??? %v", te))
+				fmt.Fprintf(ctx.Buffer, "??? %v", te)
 			} else {
-				buf.WriteString(rt.String())
+				ctx.WriteString(rt.String())
 			}
-			buf.WriteByte(']')
+			ctx.WriteByte(']')
 			return
 		}
 	}
 	if f.alwaysParens {
 		if _, ok := n.(Expr); ok {
-			buf.WriteByte('(')
+			ctx.WriteByte('(')
 		}
 	}
-	formatNodeOrHideConstants(buf, f, n)
+	ctx.formatNodeOrHideConstants(n)
 	if f.alwaysParens {
 		if _, ok := n.(Expr); ok {
-			buf.WriteByte(')')
+			ctx.WriteByte(')')
 		}
 	}
 	if f.disambiguateDatumTypes {
@@ -211,12 +249,12 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 			}
 		}
 		if typ != nil {
-			buf.WriteString(":::")
+			ctx.WriteString(":::")
 			colType, err := coltypes.DatumTypeToColumnType(typ)
 			if err != nil {
 				panic(err)
 			}
-			colType.Format(buf, f.encodeFlags)
+			colType.Format(ctx.Buffer, f.encodeFlags)
 		}
 	}
 }
@@ -224,7 +262,8 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 // AsStringWithFlags pretty prints a node to a string given specific flags.
 func AsStringWithFlags(n NodeFormatter, f FmtFlags) string {
 	var buf bytes.Buffer
-	FormatNode(&buf, f, n)
+	ctx := FmtCtx{Buffer: &buf, flags: f}
+	ctx.FormatNode(n)
 	return buf.String()
 }
 
