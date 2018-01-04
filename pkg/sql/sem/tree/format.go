@@ -28,9 +28,6 @@ type fmtFlags struct {
 	ShowTableAliases bool
 	symbolicVars     bool
 	hideConstants    bool
-	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
-	// it can be used to format placeholders differently than normal.
-	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
 	// If true, non-function names are replaced by underscores.
 	anonymize bool
 	// If true, strings will be formatted for being contents of ARRAYs.
@@ -62,6 +59,9 @@ type FmtCtx struct {
 	// tableNameFormatter will be called on all NormalizableTableNames if it is
 	// non-nil.
 	tableNameFormatter func(*FmtCtx, *NormalizableTableName)
+	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
+	// it can be used to format placeholders differently than normal.
+	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
 }
 
 // MakeFmtCtx creates a FmtCtx from an existing buffer and flags.
@@ -184,14 +184,11 @@ func (ctx *FmtCtx) WithIndexedVarFormat(fn func(ctx *FmtCtx, idx int)) *FmtCtx {
 	return ctx
 }
 
-// FmtPlaceholderFormat returns FmtFlags that customizes the printing of
+// WithPlaceholderFormat modifies FmtCtx to customizes the printing of
 // StarDatums using the provided function.
-func FmtPlaceholderFormat(
-	base FmtFlags, placeholderFn func(_ *FmtCtx, _ *Placeholder),
-) FmtFlags {
-	f := *base
-	f.placeholderFormat = placeholderFn
-	return &f
+func (ctx *FmtCtx) WithPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeholder)) *FmtCtx {
+	ctx.placeholderFormat = placeholderFn
+	return ctx
 }
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.
