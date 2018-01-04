@@ -267,7 +267,9 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	}
 
 	// Re-format to remove most names.
-	formatter := tree.FmtReformatTableNames(tree.FmtAnonymize,
+	var buf bytes.Buffer
+	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtAnonymize)
+	fmtCtx.WithReformatTableNames(
 		func(ctx *tree.FmtCtx, t *tree.NormalizableTableName) {
 			tn, err := t.Normalize()
 			if err != nil {
@@ -283,7 +285,8 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 			keepNameCtx := ctx.CopyWithFlags(tree.FmtParsable)
 			keepNameCtx.FormatNode(tn)
 		})
-	return tree.AsStringWithFlags(stmt, formatter), true
+	fmtCtx.FormatNode(stmt)
+	return buf.String(), true
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
