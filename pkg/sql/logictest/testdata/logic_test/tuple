@@ -489,56 +489,68 @@ render     0  render  ·         ·                       (u, v, w)  +u,+v,+w
  │         0  ·       render 2  test.uvw.w              ·          ·
  └── scan  1  scan    ·         ·                       (u, v, w)  +u,+v,+w
 ·          1  ·       table     uvw@uvw_u_v_w_idx       ·          ·
-·          1  ·       spans     /!NULL-                 ·          ·
+·          1  ·       spans     ALL                     ·          ·
 ·          1  ·       filter    (u, v, w) != (1, 2, 3)  ·          ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
 ----
-1  NULL  1
-1  NULL  2
-1  1     NULL
-1  1     1
-1  1     2
-1  1     3
-1  2     1
-1  2     2
-1  3     NULL
-1  3     1
-1  3     2
-1  3     3
-2  NULL  NULL
-2  NULL  1
-2  NULL  2
-2  NULL  3
-2  1     NULL
-2  1     1
-2  1     2
-2  1     3
-2  2     NULL
-2  2     1
-2  2     2
-2  2     3
-2  3     NULL
-2  3     1
-2  3     2
-2  3     3
-3  NULL  NULL
-3  NULL  1
-3  NULL  2
-3  NULL  3
-3  1     NULL
-3  1     1
-3  1     2
-3  1     3
-3  2     NULL
-3  2     1
-3  2     2
-3  2     3
-3  3     NULL
-3  3     1
-3  3     2
-3  3     3
+NULL  NULL  1
+NULL  NULL  2
+NULL  1     NULL
+NULL  1     1
+NULL  1     2
+NULL  1     3
+NULL  2     1
+NULL  2     2
+NULL  3     NULL
+NULL  3     1
+NULL  3     2
+NULL  3     3
+1     NULL  1
+1     NULL  2
+1     1     NULL
+1     1     1
+1     1     2
+1     1     3
+1     2     1
+1     2     2
+1     3     NULL
+1     3     1
+1     3     2
+1     3     3
+2     NULL  NULL
+2     NULL  1
+2     NULL  2
+2     NULL  3
+2     1     NULL
+2     1     1
+2     1     2
+2     1     3
+2     2     NULL
+2     2     1
+2     2     2
+2     2     3
+2     3     NULL
+2     3     1
+2     3     2
+2     3     3
+3     NULL  NULL
+3     NULL  1
+3     NULL  2
+3     NULL  3
+3     1     NULL
+3     1     1
+3     1     2
+3     1     3
+3     2     NULL
+3     2     1
+3     2     2
+3     2     3
+3     3     NULL
+3     3     1
+3     3     2
+3     3     3
 
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
