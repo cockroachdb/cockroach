@@ -66,6 +66,7 @@ package opt
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -77,13 +78,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
@@ -284,8 +290,22 @@ func runTest(t *testing.T, path string, f func(d *testdata) string) {
 	}
 }
 
+// testCatalog implements the sqlbase.Catalog interface.
+type testCatalog struct {
+	kvDB *client.DB
+}
+
+// FindTable implements the sqlbase.Catalog interface.
+func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
+	return sqlbase.GetTableDescriptor(c.kvDB, string(name.DatabaseName), string(name.TableName)), nil
+}
+
 func TestOpt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	catalog := testCatalog{kvDB: kvDB}
 
 	paths, err := filepath.Glob(*logicTestData)
 	if err != nil {
@@ -338,28 +358,52 @@ func TestOpt(t *testing.T) {
 						d.fatalf(t, "unknown argument: %s", key)
 					}
 				}
+				getTypedExpr := func() tree.TypedExpr {
+					if typedExpr == nil {
+						var err error
+						typedExpr, err = parseScalarExpr(d.sql, &iVarHelper)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+					}
+					return typedExpr
+				}
 				buildScalarFn := func() {
 					var err error
-					e, err = buildScalar(typedExpr)
+					e, err = buildScalar(getTypedExpr())
 					if err != nil {
 						t.Fatal(err)
 					}
 				}
 
 				evalCtx := tree.MakeTestingEvalContext()
-				var err error
-				typedExpr, err = parseScalarExpr(d.sql, &iVarHelper)
-				if err != nil {
-					d.fatalf(t, "%v", err)
-				}
 				for _, cmd := range strings.Split(d.cmd, ",") {
 					switch cmd {
 					case "semtree-normalize":
 						// Apply the TypedExpr normalization and rebuild the expression.
-						typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+						typedExpr, err = evalCtx.NormalizeExpr(getTypedExpr())
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
+
+					case "exec":
+						_, err := sqlDB.Exec(d.sql)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+						return ""
+
+					case "build":
+						stmt, err := parser.ParseOne(d.sql)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+						e, err = build(ctx, stmt, catalog)
+						if err != nil {
+							return fmt.Sprintf("error: %v\n", err)
+						}
+						return e.String()
+
 					case "build-scalar":
 						buildScalarFn()
 
