@@ -138,7 +138,7 @@ func (p *planner) distinct(
 			if err != nil {
 				return nil, nil, err
 			}
-			p.hasStar = p.hasStar || hasStar
+			p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 
 			if len(cols) == 0 {
 				// Nothing was expanded! No distinct on here.
