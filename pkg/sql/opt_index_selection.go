@@ -611,6 +611,7 @@ func (v *indexInfo) makeIndexConstraints(
 					continue
 				}
 
+				leftTuple := false
 				if t, ok := c.Left.(*tree.Tuple); ok {
 					// If we have a tuple comparison we need to rearrange the comparison
 					// so that the order of the columns in the tuple matches the order in
@@ -619,6 +620,7 @@ func (v *indexInfo) makeIndexConstraints(
 					// 1)". Note that we don't actually need to rewrite the comparison,
 					// but simply provide a mapping from the order in the tuple to the
 					// order in the index.
+					leftTuple = true
 					for _, colID := range v.index.ColumnIDs[i:] {
 						idx := -1
 						for i, val := range t.Exprs {
@@ -682,7 +684,10 @@ func (v *indexInfo) makeIndexConstraints(
 					// makeSpans() cares about.
 					// We don't simplify "a != x" to "a IS DISTINCT FROM NULL" in
 					// SimplifyExpr because doing so affects other simplifications.
-					if *startDone || *startExpr != nil {
+					// Note that we can't use a non-NULL constraint if we have a tuple
+					// comparison. For example (a, b, c) != (1, 2, 3) passes on tuples
+					// like (NULL, 1, 1).
+					if *startDone || *startExpr != nil || leftTuple {
 						continue
 					}
 					*startExpr = tree.NewTypedComparisonExpr(

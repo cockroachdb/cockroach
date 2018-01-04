@@ -283,6 +283,8 @@ func TestMakeConstraints(t *testing.T) {
 		{`(b, a) = (1, 2)`, `a,b`, `[(b, a) IN ((1, 2))]`},
 		{`(b, a) = (1, 2)`, `a`, `[(b, a) IN ((1, 2))]`},
 
+		{`(a, b) != (1, 2)`, `a,b`, ``},
+
 		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, `a,b`, `[(a, b) IN ((1, 2))]`},
 
 		{`a IS NULL`, `a`, `[a IS NULL]`},
@@ -531,7 +533,7 @@ func TestMakeSpans(t *testing.T) {
 		{`(a, b) < (1, 4)`, `a,b`, `/!NULL-/1/4`, `/1/3-/NULL`},
 		{`(a, b) <= (1, 4)`, `a,b`, `/!NULL-/1/5`, `/1/4-/NULL`},
 		{`(a, b) = (1, 4)`, `a,b`, `/1/4-/1/5`, `/1/4-/1/3`},
-		{`(a, b) != (1, 4)`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`(a, b) != (1, 4)`, `a,b`, `-`, `-`},
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
@@ -735,6 +737,7 @@ func TestApplyConstraints(t *testing.T) {
 		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, `a,b`, `false`},
 		{`a IN (1) AND a = 1`, `a`, `<nil>`},
 		{`(a, b) = (1, 2)`, `a`, `b = 2`},
+		{`(a, b) != (1, 2)`, `a,b`, `(a, b) != (1, 2)`},
 		{`a > 1`, `a`, `<nil>`},
 		{`a < 1`, `a`, `<nil>`},
 		// The constraint (l, m) < (123, 456) must be treated as implying
