@@ -65,22 +65,20 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	// immediately after the traversal because it is not needed further.
 	var queryBuf bytes.Buffer
 	var fmtErr error
-	fmtCtx := tree.MakeFmtCtx(
-		&queryBuf,
-		tree.FmtReformatTableNames(
-			tree.FmtParsable,
-			func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
-				tn, err := p.QualifyWithDatabase(ctx, t)
-				if err != nil {
-					log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
-						tree.ErrString(t), err)
-					fmtErr = err
-					return
-				}
-				// Persist the database prefix expansion.
-				tn.DBNameOriginallyOmitted = false
-			},
-		))
+	fmtCtx := tree.MakeFmtCtx(&queryBuf, tree.FmtParsable)
+	fmtCtx.WithReformatTableNames(
+		func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
+			tn, err := p.QualifyWithDatabase(ctx, t)
+			if err != nil {
+				log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
+					tree.ErrString(t), err)
+				fmtErr = err
+				return
+			}
+			// Persist the database prefix expansion.
+			tn.DBNameOriginallyOmitted = false
+		},
+	)
 	fmtCtx.FormatNode(n.AsSource)
 
 	if fmtErr != nil {

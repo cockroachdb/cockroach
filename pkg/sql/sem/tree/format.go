@@ -28,9 +28,6 @@ type fmtFlags struct {
 	ShowTableAliases bool
 	symbolicVars     bool
 	hideConstants    bool
-	// tableNameFormatter will be called on all NormalizableTableNames if it is
-	// non-nil.
-	tableNameFormatter func(*FmtCtx, *NormalizableTableName)
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
 	// it can be used to format placeholders differently than normal.
 	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
@@ -62,6 +59,9 @@ type FmtCtx struct {
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
 	indexedVarFormat func(ctx *FmtCtx, idx int)
+	// tableNameFormatter will be called on all NormalizableTableNames if it is
+	// non-nil.
+	tableNameFormatter func(*FmtCtx, *NormalizableTableName)
 }
 
 // MakeFmtCtx creates a FmtCtx from an existing buffer and flags.
@@ -128,14 +128,11 @@ var FmtSimpleQualified FmtFlags = &fmtFlags{alwaysQualify: true}
 // sub-expressions between parentheses.
 var FmtAlwaysGroupExprs FmtFlags = &fmtFlags{alwaysParens: true}
 
-// FmtReformatTableNames returns FmtFlags that instructs the pretty-printer
+// WithReformatTableNames modifies FmtCtx to instructs the pretty-printer
 // to substitute the printing of table names using the provided function.
-func FmtReformatTableNames(
-	base FmtFlags, fn func(*FmtCtx, *NormalizableTableName),
-) FmtFlags {
-	f := *base
-	f.tableNameFormatter = fn
-	return &f
+func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *NormalizableTableName)) *FmtCtx {
+	ctx.tableNameFormatter = fn
+	return ctx
 }
 
 // StripTypeFormatting removes the flag that extracts types from the format flags,
