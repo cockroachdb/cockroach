@@ -87,6 +87,23 @@ CREATE SEQUENCE err_test AS INT2
 statement error pq: unimplemented at or near "EOF"
 CREATE SEQUENCE err_test OWNED BY someuser
 
+# PRESENCE IN crdb_internal.create_statements
+
+statement ok
+CREATE SEQUENCE show_create_test
+
+query ITITTTT colnames
+SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
+----
+database_id database_name descriptor_id descriptor_type descriptor_name  create_statement                                                                             state
+50          test          56            sequence        show_create_test CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PUBLIC
+
+query TT colnames
+SHOW CREATE SEQUENCE show_create_test
+----
+Sequence         CreateSequence
+show_create_test CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+
 # DML ERRORS
 
 statement error pgcode 42809 cannot run INSERT on sequence "foo" - sequences are not updateable

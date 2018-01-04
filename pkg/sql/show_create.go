@@ -66,6 +66,27 @@ func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (p
 	return p.showTableDetails(ctx, "SHOW CREATE VIEW", n.View, showCreateViewQuery)
 }
 
+func (p *planner) ShowCreateSequence(
+	ctx context.Context, n *tree.ShowCreateSequence,
+) (planNode, error) {
+	// We make the check whether the name points to a sequence or not in
+	// SQL, so as to avoid a double lookup (a first one to check if the
+	// descriptor is of the right type, another to populate the
+	// create_statements vtable).
+	const showCreateSequenceQuery = `
+			SELECT %[3]s AS "Sequence",
+							IFNULL(create_statement,
+										 crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
+                                              %[1]s || '.' || %[2]s || ' is not a sequence')::string
+							) AS "CreateSequence"
+				 FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
+								WHERE database_name = %[1]s AND descriptor_name = %[2]s
+								AND descriptor_type = 'sequence'
+								UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
+	`
+	return p.showTableDetails(ctx, "SHOW CREATE SEQUENCE", n.Sequence, showCreateSequenceQuery)
+}
+
 // showCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
 func (p *planner) showCreateView(
@@ -122,6 +143,25 @@ func (p *planner) printForeignKeyConstraint(
 		fmt.Fprintf(buf, " ON UPDATE %s", fk.OnUpdate.String())
 	}
 	return nil
+}
+
+// showCreateSequence returns a valid SQL representation of the
+// CREATE SEQUENCE statement used to create the given sequence.
+func (p *planner) showCreateSequence(
+	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
+) (string, error) {
+	var buf bytes.Buffer
+	buf.WriteString("CREATE SEQUENCE ")
+	tree.FormatNode(&buf, tree.FmtSimple, tn)
+	opts := desc.SequenceOpts
+	fmt.Fprintf(&buf, " MINVALUE %d", opts.MinValue)
+	fmt.Fprintf(&buf, " MAXVALUE %d", opts.MaxValue)
+	fmt.Fprintf(&buf, " INCREMENT %d", opts.Increment)
+	fmt.Fprintf(&buf, " START %d", opts.Start)
+	if opts.Cycle {
+		buf.WriteString(" CYCLE")
+	}
+	return buf.String(), nil
 }
 
 // showCreateTable returns a valid SQL representation of the CREATE
