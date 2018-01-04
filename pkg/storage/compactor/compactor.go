@@ -112,21 +112,30 @@ func NewCompactor(eng engine.WithSSTables, capFn storeCapacityFunc) *Compactor {
 // provided stopper indicates. Processing is done with a periodicity of
 // compactionMinInterval, but only if there are compactions pending.
 func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stopper *stop.Stopper) {
-	if empty, err := c.isSpanEmpty(
-		ctx, keys.LocalStoreSuggestedCompactionsMin, keys.LocalStoreSuggestedCompactionsMax,
-	); err != nil {
-		log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
-	} else if !empty {
-		log.Eventf(ctx, "compactor starting in %s as there are suggested compactions pending", c.opts.CompactionMinInterval)
-		c.ch <- struct{}{} // wake up the goroutine immediately
-	}
+	// Wake up immediately to examine the queue and set the bytes queued metric.
+	c.ch <- struct{}{}
 
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
+		defer timer.Stop()
 		var timerSet bool
+
 		for {
 			select {
+			case <-stopper.ShouldStop():
+				return
+
 			case <-c.ch:
+				// A new suggestion was made. Examine the compaction queue,
+				// which returns the number of bytes queued.
+				if bytesQueued, err := c.examineQueue(ctx); err != nil {
+					log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
+				} else if bytesQueued > 0 {
+					log.Eventf(ctx, "compactor starting in %s as there are suggested compactions pending", c.opts.CompactionMinInterval)
+				} else {
+					// Queue is empty, don't set the timer. This can happen only at startup.
+					break
+				}
 				// Set the wait timer if not already set.
 				if !timerSet {
 					timer.Reset(c.opts.CompactionMinInterval)
@@ -135,7 +144,6 @@ func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stoppe
 
 			case <-timer.C:
 				timer.Read = true
-				timer.Stop()
 				spanCtx, cleanup := tracing.EnsureContext(ctx, tracer, "process suggested compactions")
 				ok, err := c.processSuggestions(spanCtx)
 				if err != nil {
@@ -143,8 +151,8 @@ func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stoppe
 				}
 				cleanup()
 				if ok {
-					// Everything has been processed. Wait for the next
-					// suggested compaction before resetting the timer.
+					// The queue was processed. Wait for the next suggested
+					// compaction before resetting timer.
 					timerSet = false
 					break
 				}
@@ -152,9 +160,6 @@ func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stoppe
 				// compaction interval.
 				timer.Reset(c.opts.CompactionMinInterval)
 				timerSet = true
-
-			case <-stopper.ShouldStop():
-				return
 			}
 		}
 	})
@@ -185,7 +190,7 @@ func (aggr aggregatedCompaction) String() string {
 	if len(aggr.suggestions) == 1 {
 		seqFmt = fmt.Sprintf("#%d/%d", aggr.startIdx+1, aggr.total)
 	} else {
-		seqFmt = fmt.Sprintf("#%d-%d/%d", aggr.startIdx+1, aggr.startIdx+len(aggr.suggestions)+1, aggr.total)
+		seqFmt = fmt.Sprintf("#%d-%d/%d", aggr.startIdx+1, aggr.startIdx+len(aggr.suggestions), aggr.total)
 	}
 	return fmt.Sprintf("%s (%s-%s) for %s", seqFmt, aggr.StartKey, aggr.EndKey, humanizeutil.IBytes(aggr.Bytes))
 }
@@ -195,7 +200,7 @@ func (aggr aggregatedCompaction) String() string {
 // exceed the absolute or fractional size thresholds. If suggested
 // compactions don't meet thresholds, they're discarded if they're
 // older than maxSuggestedCompactionRecordAge. Returns a boolean
-// indicating whether the processing occurred.
+// indicating whether the queue was successfully processed.
 func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 	// Collect all suggestions.
 	var suggestions []storagebase.SuggestedCompaction
@@ -332,7 +337,11 @@ func (c *Compactor) processCompaction(
 			log.Fatal(ctx, err) // should never happen on a batch
 		}
 	}
-	return aggr.Bytes, nil
+
+	if shouldProcess {
+		return aggr.Bytes, nil
+	}
+	return 0, nil
 }
 
 // aggregateCompaction merges sc into aggr, to create a new suggested
@@ -369,22 +378,26 @@ func (c *Compactor) aggregateCompaction(
 	return false // aggregated successfully
 }
 
-// isSpanEmpty returns whether the specified key span is empty (true)
-// or contains keys (false).
-func (c *Compactor) isSpanEmpty(ctx context.Context, start, end roachpb.Key) (bool, error) {
-	// If there are any suggested compactions, start the compaction timer.
-	var empty = true
+// examineQueue returns the total number of bytes queued and updates the
+// BytesQueued gauge.
+func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
+	var totalBytes int64
 	if err := c.eng.Iterate(
-		engine.MVCCKey{Key: start},
-		engine.MVCCKey{Key: end},
-		func(_ engine.MVCCKeyValue) (bool, error) {
-			empty = false
-			return true, nil // don't continue iteration
+		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
+		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
+		func(kv engine.MVCCKeyValue) (bool, error) {
+			var c storagebase.Compaction
+			if err := protoutil.Unmarshal(kv.Value, &c); err != nil {
+				return false, err
+			}
+			totalBytes += c.Bytes
+			return false, nil // continue iteration
 		},
 	); err != nil {
-		return false, err
+		return 0, err
 	}
-	return empty, nil
+	c.Metrics.BytesQueued.Update(totalBytes)
+	return totalBytes, nil
 }
 
 // SuggestCompaction writes the specified compaction to persistent
