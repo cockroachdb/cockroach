@@ -198,10 +198,11 @@ func (v *planVisitor) visit(plan planNode) {
 
 			if len(n.pred.leftColNames) > 0 {
 				var buf bytes.Buffer
+				fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
 				buf.WriteByte('(')
-				tree.FormatNode(&buf, tree.FmtSimple, n.pred.leftColNames)
+				fmtCtx.FormatNode(n.pred.leftColNames)
 				buf.WriteString(") = (")
-				tree.FormatNode(&buf, tree.FmtSimple, n.pred.rightColNames)
+				fmtCtx.FormatNode(n.pred.rightColNames)
 				buf.WriteByte(')')
 				v.observer.attr(name, "equality", buf.String())
 			}

@@ -255,6 +255,7 @@ func getMetadataForTable(
 	vals = make([]driver.Value, 2)
 	coltypes := make(map[string]string)
 	var colnames bytes.Buffer
+	fmtCtx := tree.MakeFmtCtx(&colnames, tree.FmtSimple)
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
@@ -274,7 +275,7 @@ func getMetadataForTable(
 		if colnames.Len() > 0 {
 			colnames.WriteString(", ")
 		}
-		tree.FormatNode(&colnames, tree.FmtSimple, tree.Name(name))
+		fmtCtx.FormatNode(tree.Name(name))
 	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
@@ -394,6 +395,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 		// Convert SQL rows into VALUE strings.
 		defer close(stringsCh)
 		var ivals bytes.Buffer
+		fmtCtx := tree.MakeFmtCtx(&ivals, tree.FmtParsable)
 		for vals := range valsCh {
 			ivals.Reset()
 			// Values need to be correctly encoded for INSERT statements in a text file.
@@ -480,7 +482,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 				default:
 					return errors.Errorf("unknown field type: %T (%s)", t, cols[si])
 				}
-				d.Format(&ivals, tree.FmtParsable)
+				d.Format(&fmtCtx)
 			}
 			select {
 			case <-done:

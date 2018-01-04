@@ -24,7 +24,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 )
 
@@ -142,12 +141,12 @@ type IndependentFromParallelizedPriors interface {
 type StatementList []Statement
 
 // Format implements the NodeFormatter interface.
-func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
+func (l StatementList) Format(ctx *FmtCtx) {
 	for i, s := range l {
 		if i > 0 {
-			buf.WriteString("; ")
+			ctx.WriteString("; ")
 		}
-		FormatNode(buf, f, s)
+		ctx.FormatNode(s)
 	}
 }
 
