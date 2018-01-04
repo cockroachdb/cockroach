@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -2538,4 +2539,34 @@ var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 	tree.SetDefault: ForeignKeyReference_SET_DEFAULT,
 	tree.SetNull:    ForeignKeyReference_SET_NULL,
 	tree.Cascade:    ForeignKeyReference_CASCADE,
+}
+
+// IsNullable is part of the optbase.Column interface.
+func (desc *ColumnDescriptor) IsNullable() bool {
+	return desc.Nullable
+}
+
+// ColName is part of the optbase.Column interface.
+func (desc *ColumnDescriptor) ColName() string {
+	return desc.Name
+}
+
+// DatumType is part of the optbase.Column interface.
+func (desc *ColumnDescriptor) DatumType() types.T {
+	return desc.Type.ToDatumType()
+}
+
+// TabName is part of the optbase.Table interface.
+func (desc *TableDescriptor) TabName() string {
+	return desc.GetName()
+}
+
+// NumColumns is part of the optbase.Table interface.
+func (desc *TableDescriptor) NumColumns() int {
+	return len(desc.Columns)
+}
+
+// Column is part of the optbase.Table interface.
+func (desc *TableDescriptor) Column(i int) optbase.Column {
+	return &desc.Columns[i]
 }
