@@ -151,7 +151,7 @@ func CLIZoneSpecifier(zs tree.ZoneSpecifier) string {
 		// The index is redundant when the partition is specified, so omit it.
 		ti.Index = ""
 	}
-	return tree.AsStringWithFlags(&ti, tree.FmtSimpleQualified)
+	return tree.AsStringWithFlags(&ti, tree.FmtAlwaysQualifyTableNames)
 }
 
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific

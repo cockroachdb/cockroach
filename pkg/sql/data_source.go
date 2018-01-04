@@ -944,7 +944,7 @@ type varFormatter struct {
 
 // Format implements the NodeFormatter interface.
 func (c *varFormatter) Format(ctx *tree.FmtCtx) {
-	if ctx.ShowTableAliases() && c.TableName.TableName != "" {
+	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.TableName != "" {
 		if c.TableName.DatabaseName != "" {
 			ctx.FormatNode(c.TableName.DatabaseName)
 			ctx.WriteByte('.')
