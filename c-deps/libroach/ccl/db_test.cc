@@ -14,9 +14,9 @@ TEST(LibroachCCL, DBOpenHook) {
 
   // Try an empty extra_options.
   db_opts.extra_options = ToDBSlice("");
-  EXPECT_OK(DBOpenHook(db_opts));
+  EXPECT_OK(DBOpenHook("", db_opts));
 
   // Try extra_options with bad data.
   db_opts.extra_options = ToDBSlice("blah");
-  EXPECT_ERR(DBOpenHook(db_opts), "failed to parse extra options");
+  EXPECT_ERR(DBOpenHook("", db_opts), "failed to parse extra options");
 }
