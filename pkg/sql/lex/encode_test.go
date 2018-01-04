@@ -87,7 +87,7 @@ func BenchmarkEncodeSQLString(b *testing.B) {
 	str := strings.Repeat("foo", 10000)
 	b.Run("old version", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			lex.EncodeSQLStringWithFlags(bytes.NewBuffer(nil), str, lex.EncodeFlags{BareStrings: true})
+			lex.EncodeSQLStringWithFlags(bytes.NewBuffer(nil), str, lex.EncBareStrings)
 		}
 	})
 	b.Run("new version", func(b *testing.B) {
