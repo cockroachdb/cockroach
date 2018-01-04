@@ -187,6 +187,10 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 			// TODO(radu): we could support inequalities for cases like this by
 			// allowing negation, for example:
 			//  (a, -b, c) >= (1, -2, 3)
+			//
+			// The != operator is an exception where the column directions don't
+			// matter. For example, for (a, b, c) != (1, 2, 3) the spans
+			// [ - /1/2/2], [1/2/4 - ] apply for any combination of directions.
 			break
 		}
 		prefixLen++
