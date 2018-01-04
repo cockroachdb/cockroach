@@ -13,15 +13,21 @@
 #include "crypto_utils.h"
 #include "key_manager.h"
 
-// A few fixed keys and their shas, computed using `echo -n <key contents> | sha256sum`.
+// A few fixed keys and simple IDs (the first 16 bytes).
+// key_file is the file contents for store keys: includes a key ID and key.
+// key is the key.
+// key_id is the ID (Hex of the first part of key_file)
+const std::string key_file_128 = "111111111111111111111111111111111234567890123456";
+const std::string key_file_192 = "22222222222222222222222222222222123456789012345678901234";
+const std::string key_file_256 = "3333333333333333333333333333333312345678901234567890123456789012";
 const std::string key128 = "1234567890123456";
 const std::string key192 = "123456789012345678901234";
 const std::string key256 = "12345678901234567890123456789012";
 
-// We manually compute the key shas with: `echo -n <key contents> | sha256sum`
-const std::string key128_sha = "7a51d064a1a216a692f753fcdab276e4ff201a01d8b66f56d50d4d719fd0dc87";
-const std::string key192_sha = "05ae4505ae2b3f1bdc1f54a7e6b2669c3fcd3d89f4d0b55a25cbf2da29b9fcf1";
-const std::string key256_sha = "e1b85b27d6bcb05846c18e6a48f118e89f0c0587140de9fb3359f8370d0dba08";
+// Hex of the binary value of the first kKeyIDLength of key_file.
+const std::string key_id_128 = "3131313131313131313131313131313131313131313131313131313131313131";
+const std::string key_id_192 = "3232323232323232323232323232323232323232323232323232323232323232";
+const std::string key_id_256 = "3333333333333333333333333333333333333333333333333333333333333333";
 
 TEST(FileKeyManager, ReadKeyFiles) {
   std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
@@ -33,9 +39,14 @@ TEST(FileKeyManager, ReadKeyFiles) {
   };
 
   std::vector<KeyFiles> keys = {
-      {"empty.key", ""},  {"8.key", "12345678"},
-      {"16.key", key128}, {"24.key", key192},
-      {"32.key", key256}, {"64.key", "1234567890123456789012345678901234567890123456789012345678901234"},
+      {"empty.key", ""},
+      {"noid_8.key", "12345678"},
+      {"noid_16.key", "1234567890123456"},
+      {"noid_24.key", "123456789012345678901234"},
+      {"noid_32.key", "12345678901234567890123456789012"},
+      {"16.key", key_file_128},
+      {"24.key", key_file_192},
+      {"32.key", key_file_256},
   };
   for (auto k : keys) {
     ASSERT_OK(rocksdb::WriteStringToFile(env.get(), k.contents, k.filename));
@@ -52,13 +63,21 @@ TEST(FileKeyManager, ReadKeyFiles) {
       {"missing_new.key", "missing_old.key", "missing_new.key: File not found"},
       {"plain", "missing_old.key", "missing_old.key: File not found"},
       {"plain", "plain", ""},
-      {"empty.key", "plain", "key in file empty.key is 0 bytes long, AES keys can be 16, 24, or 32 bytes"},
-      {"8.key", "plain", "key in file 8.key is 8 bytes long, AES keys can be 16, 24, or 32 bytes"},
+      {"empty.key", "plain",
+       "file empty.key is 0 bytes long, it must be <key ID length (32)> + <key size (16, 24, or 32)> long"},
+      {"noid_8.key", "plain",
+       "file noid_8.key is 8 bytes long, it must be <key ID length (32)> + <key size (16, 24, or 32)> long"},
+      {"noid_16.key", "plain",
+       "file noid_16.key is 16 bytes long, it must be <key ID length (32)> + <key size (16, 24, or 32)> long"},
+      {"noid_24.key", "plain",
+       "file noid_24.key is 24 bytes long, it must be <key ID length (32)> + <key size (16, 24, or 32)> long"},
+      {"noid_32.key", "plain",
+       "file noid_32.key is 32 bytes long, it must be <key ID length (32)> + <key size (16, 24, or 32)> long"},
       {"16.key", "plain", ""},
       {"24.key", "plain", ""},
       {"32.key", "plain", ""},
-      {"64.key", "plain", "key in file 64.key is 64 bytes long, AES keys can be 16, 24, or 32 bytes"},
-      {"16.key", "8.key", "key in file 8.key is 8 bytes long, AES keys can be 16, 24, or 32 bytes"},
+      {"16.key", "noid_8.key",
+       "file noid_8.key is 8 bytes long, it must be <key ID length (32)> + <key size (16, 24, or 32)> long"},
       {"16.key", "32.key", ""},
   };
 
@@ -75,7 +94,7 @@ TEST(FileKeyManager, ReadKeyFiles) {
 struct testKey {
   std::string id;
   std::string key;
-  enginepb::EncryptionType type;
+  enginepbccl::EncryptionType type;
   int64_t approximate_timestamp;  // We check that the creation time is within 5s of this timestamp.
   std::string source;
   bool was_exposed;
@@ -87,10 +106,10 @@ struct testKey {
   testKey(const testKey& k)
       : testKey(k.id, k.key, k.type, k.approximate_timestamp, k.source, k.was_exposed, k.parent_key_id) {}
   // Key ID only (to test key existence).
-  testKey(std::string id) : testKey(id, "", enginepb::Plaintext, 0, "") {}
-  testKey(std::string id, std::string key, enginepb::EncryptionType type, int64_t timestamp, std::string source)
+  testKey(std::string id) : testKey(id, "", enginepbccl::Plaintext, 0, "") {}
+  testKey(std::string id, std::string key, enginepbccl::EncryptionType type, int64_t timestamp, std::string source)
       : testKey(id, key, type, timestamp, source, false, "") {}
-  testKey(std::string id, std::string key, enginepb::EncryptionType type, int64_t timestamp, std::string source,
+  testKey(std::string id, std::string key, enginepbccl::EncryptionType type, int64_t timestamp, std::string source,
           bool exposed, std::string parent)
       : id(id),
         key(key),
@@ -178,9 +197,9 @@ TEST(FileKeyManager, BuildKeyFromFile) {
   std::unique_ptr<rocksdb::Env> env(rocksdb::NewMemEnv(rocksdb::Env::Default()));
 
   // Write a few keys.
-  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key128, "16.key"));
-  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key192, "24.key"));
-  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key256, "32.key"));
+  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key_file_128, "16.key"));
+  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key_file_192, "24.key"));
+  ASSERT_OK(rocksdb::WriteStringToFile(env.get(), key_file_256, "32.key"));
 
   int64_t now;
   ASSERT_OK(env->GetCurrentTime(&now));
@@ -192,18 +211,18 @@ TEST(FileKeyManager, BuildKeyFromFile) {
   };
 
   std::vector<TestCase> test_cases = {
-      {"plain", "plain", "plain", {testKey("plain", "", enginepb::Plaintext, now, "plain")}},
+      {"plain", "plain", "plain", {testKey("plain", "", enginepbccl::Plaintext, now, "plain")}},
       {"16.key",
        "32.key",
-       key128_sha,
-       {testKey(key128_sha, key128, enginepb::AES128_CTR, now, "16.key"),
-        testKey(key256_sha, key256, enginepb::AES256_CTR, now, "32.key")}},
+       key_id_128,
+       {testKey(key_id_128, key128, enginepbccl::AES128_CTR, now, "16.key"),
+        testKey(key_id_256, key256, enginepbccl::AES256_CTR, now, "32.key")}},
       {
           "24.key",
           "plain",
-          key192_sha,
-          {testKey(key192_sha, key192, enginepb::AES192_CTR, now, "24.key"),
-           testKey("plain", "", enginepb::Plaintext, now, "plain")},
+          key_id_192,
+          {testKey(key_id_192, key192, enginepbccl::AES192_CTR, now, "24.key"),
+           testKey("plain", "", enginepbccl::Plaintext, now, "plain")},
       },
   };
 
@@ -229,12 +248,12 @@ TEST(FileKeyManager, BuildKeyFromFile) {
         continue;
       }
       secret_key = fkm.GetKey(ki_iter.id);
-      EXPECT_NE(secret_key, nullptr);
+      ASSERT_NE(secret_key, nullptr);
       EXPECT_EQ(secret_key->key(), ki_iter.key);
       EXPECT_OK(compareKeyInfo(secret_key->info(), ki_iter));
 
       key_info = fkm.GetKeyInfo(ki_iter.id);
-      EXPECT_NE(key_info, nullptr);
+      ASSERT_NE(key_info, nullptr);
       EXPECT_OK(compareKeyInfo(*key_info, ki_iter));
     }
   }
@@ -248,7 +267,7 @@ TEST(DataKeyManager, LoadKeys) {
   {
     DataKeyManager dkm(env.get(), "", 0);
     EXPECT_OK(dkm.LoadKeys());
-    EXPECT_EQ(dkm.CurrentKey(), nullptr);
+    ASSERT_EQ(dkm.CurrentKey(), nullptr);
   }
 
   // Now a file with random data.
@@ -358,17 +377,17 @@ TEST(DataKeyManager, KeyFromKeyInfo) {
   };
 
   std::vector<TestCase> test_cases = {
-      {testKey("bad", "", enginepb::EncryptionType_INT_MIN_SENTINEL_DO_NOT_USE_, 0, ""),
+      {testKey("bad", "", enginepbccl::EncryptionType_INT_MIN_SENTINEL_DO_NOT_USE_, 0, ""),
        "unknown encryption type .* for key ID bad",
        {}},
-      {testKey("plain", "", enginepb::Plaintext, now, "plain"), "",
-       testKey("plain", "", enginepb::Plaintext, now, "data key manager", true, "plain")},
-      {testKey(key128_sha, "", enginepb::AES128_CTR, now - 86400, "128.key"), "",
-       testKey("someid", "somekey", enginepb::AES128_CTR, now, "data key manager", false, key128_sha)},
-      {testKey(key192_sha, "", enginepb::AES192_CTR, now + 86400, "192.key"), "",
-       testKey("someid", "somekey", enginepb::AES192_CTR, now, "data key manager", false, key192_sha)},
-      {testKey(key256_sha, "", enginepb::AES256_CTR, 0, "256.key"), "",
-       testKey("someid", "somekey", enginepb::AES256_CTR, now, "data key manager", false, key256_sha)},
+      {testKey("plain", "", enginepbccl::Plaintext, now, "plain"), "",
+       testKey("plain", "", enginepbccl::Plaintext, now, "data key manager", true, "plain")},
+      {testKey(key_id_128, "", enginepbccl::AES128_CTR, now - 86400, "128.key"), "",
+       testKey("someid", "somekey", enginepbccl::AES128_CTR, now, "data key manager", false, key_id_128)},
+      {testKey(key_id_192, "", enginepbccl::AES192_CTR, now + 86400, "192.key"), "",
+       testKey("someid", "somekey", enginepbccl::AES192_CTR, now, "data key manager", false, key_id_192)},
+      {testKey(key_id_256, "", enginepbccl::AES256_CTR, 0, "256.key"), "",
+       testKey("someid", "somekey", enginepbccl::AES256_CTR, now, "data key manager", false, key_id_256)},
   };
 
   int test_num = 0;
@@ -387,16 +406,16 @@ TEST(DataKeyManager, KeyFromKeyInfo) {
 
     size_t expected_length;
     switch (t.new_key.type) {
-    case enginepb::Plaintext:
+    case enginepbccl::Plaintext:
       expected_length = 0;
       break;
-    case enginepb::AES128_CTR:
+    case enginepbccl::AES128_CTR:
       expected_length = 16;
       break;
-    case enginepb::AES192_CTR:
+    case enginepbccl::AES192_CTR:
       expected_length = 24;
       break;
-    case enginepb::AES256_CTR:
+    case enginepbccl::AES256_CTR:
       expected_length = 32;
       break;
     default:
@@ -404,10 +423,10 @@ TEST(DataKeyManager, KeyFromKeyInfo) {
     }
 
     EXPECT_EQ(new_key.key().size(), expected_length);
-    if (t.new_key.type == enginepb::Plaintext) {
+    if (t.new_key.type == enginepbccl::Plaintext) {
       EXPECT_EQ(new_key.key(), "");
     } else {
-      EXPECT_EQ(new_key.info().key_id().size(), 64 /* Hex(random 32 bytes) */);
+      EXPECT_EQ(new_key.info().key_id().size(), kKeyIDLength * 2 /* Hex doubles the size) */);
     }
   }
 }
@@ -430,38 +449,38 @@ TEST(DataKeyManager, SetStoreKey) {
   std::vector<testKey> active_keys;
   std::vector<TestCase> test_cases = {
       {
-          testKey("plain", "", enginepb::Plaintext, now, "plain"),
+          testKey("plain", "", enginepbccl::Plaintext, now, "plain"),
           "",
-          testKey("plain", "", enginepb::Plaintext, now, "data key manager", true, "plain"),
+          testKey("plain", "", enginepbccl::Plaintext, now, "data key manager", true, "plain"),
       },
       {
-          testKey(key128_sha, "", enginepb::AES128_CTR, now - 86400, "128.key"),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, now - 86400, "128.key"),
           "",
-          testKey(key128_sha, "", enginepb::AES128_CTR, now, "data key manager", false, key128_sha),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, now, "data key manager", false, key_id_128),
       },
       {
           // Setting the same store key does nothing.
-          testKey(key128_sha, "", enginepb::AES128_CTR, now - 86400, "128.key"),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, now - 86400, "128.key"),
           "",
           // We add it again because we don't have a "skip" thing. It's find if it's there twice.
-          testKey(key128_sha, "", enginepb::AES128_CTR, now, "data key manager", false, key128_sha),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, now, "data key manager", false, key_id_128),
       },
       {
-          testKey(key256_sha, "", enginepb::AES256_CTR, now - 86400, "256.key"),
+          testKey(key_id_256, "", enginepbccl::AES256_CTR, now - 86400, "256.key"),
           "",
-          testKey(key256_sha, "", enginepb::AES256_CTR, now, "data key manager", false, key256_sha),
+          testKey(key_id_256, "", enginepbccl::AES256_CTR, now, "data key manager", false, key_id_256),
       },
       {
-          testKey(key128_sha, "", enginepb::AES128_CTR, now - 86400, "128.key"),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, now - 86400, "128.key"),
           fmt::StringPrintf("new active store key ID %s already exists as an inactive key. This is really dangerous.",
-                            key128_sha.c_str()),
+                            key_id_128.c_str()),
           {},
       },
       {
           // Switch to plain: this marks all keys as exposed.
-          testKey("plain", "", enginepb::Plaintext, now, "plain"),
+          testKey("plain", "", enginepbccl::Plaintext, now, "plain"),
           "",
-          testKey("plain", "", enginepb::Plaintext, now, "data key manager", true, "plain"),
+          testKey("plain", "", enginepbccl::Plaintext, now, "data key manager", true, "plain"),
       }};
 
   DataKeyManager dkm(env.get(), "", 0);
@@ -481,7 +500,7 @@ TEST(DataKeyManager, SetStoreKey) {
       ASSERT_NE(active_info, nullptr);
       EXPECT_OK(compareNonRandomKeyInfo(active_info->info(), t.active_key));
 
-      if (t.store_info.type == enginepb::Plaintext) {
+      if (t.store_info.type == enginepbccl::Plaintext) {
         // Plaintext store info: mark all existing keys as exposed.
         for (auto ki_iter = active_keys.begin(); ki_iter != active_keys.end(); ++ki_iter) {
           ki_iter->was_exposed = true;
@@ -537,33 +556,33 @@ TEST(DataKeyManager, RotateKey) {
   // Test cases are incremental: the key manager is not reset for each key.
   std::vector<TestCase> test_cases = {
       {
-          testKey("plain", "", enginepb::Plaintext, 0, "plain"),
+          testKey("plain", "", enginepbccl::Plaintext, 0, "plain"),
           0,
-          testKey("plain", "", enginepb::Plaintext, 0, "data key manager", true, "plain"),
+          testKey("plain", "", enginepbccl::Plaintext, 0, "data key manager", true, "plain"),
       },
       {
           // Plain keys are not rotated.
-          testKey("plain", "", enginepb::Plaintext, 0, "plain"),
+          testKey("plain", "", enginepbccl::Plaintext, 0, "plain"),
           20,
-          testKey("plain", "", enginepb::Plaintext, 0, "data key manager", true, "plain"),
+          testKey("plain", "", enginepbccl::Plaintext, 0, "data key manager", true, "plain"),
       },
       {
           // New key on store key change.
-          testKey(key128_sha, "", enginepb::AES128_CTR, 0, "128.key"),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, 0, "128.key"),
           20,
-          testKey("not checked", "not checked", enginepb::AES128_CTR, 20, "data key manager", false, key128_sha),
+          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 20, "data key manager", false, key_id_128),
       },
       {
           // Less than 10 seconds: no change.
-          testKey(key128_sha, "", enginepb::AES128_CTR, 0, "128.key"),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, 0, "128.key"),
           29,
-          testKey("not checked", "not checked", enginepb::AES128_CTR, 20, "data key manager", false, key128_sha),
+          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 20, "data key manager", false, key_id_128),
       },
       {
           // Exactly 10 seconds: new key.
-          testKey(key128_sha, "", enginepb::AES128_CTR, 0, "128.key"),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, 0, "128.key"),
           30,
-          testKey("not checked", "not checked", enginepb::AES128_CTR, 30, "data key manager", false, key128_sha),
+          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 30, "data key manager", false, key_id_128),
       },
   };
 

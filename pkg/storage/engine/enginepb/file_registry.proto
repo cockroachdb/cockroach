@@ -23,33 +23,22 @@ enum RegistryVersion {
   Base = 0;
 }
 
+// Registry describes how a files are handled. This includes the
+// rockdb::Env responsible for each file as well as opaque env details.
+// TODO(mberhault): this is still in flux.
 message Registry {
   // version is currently always Base.
   RegistryVersion version = 1;
   repeated FileEntry files = 2;
 }
 
-enum EncryptionType {
-  // No encryption applied, not used for the registry.
-  Plaintext = 0;
-  // AES in counter mode with various key lengths.
-  AES128_CTR = 1;
-  AES192_CTR = 2;
-  AES256_CTR = 3;
-}
-
 message FileEntry {
   // File path relative to the DB directory.
   // TODO(mberhault): figure out if we need anything special for Windows.
   string Filename = 1;
-  // The type of encryption applied.
-  EncryptionType type = 2;
+  // Env level identifies which rocksdb::Env is responsible for this file.
+  int32 env_level = 2;
 
-  // Encryption fields.
-  // ID (hash) of the key in use, if any.
-  string key_id = 3;
-  // Initialization vector, of size 96 bits (12 bytes) for AES.
-  bytes nonce = 4;
-  // Counter, allowing 2^32 blocks per file, so 64GiB.
-  uint32 counter = 5;
+  // Env-specific fields for non-0 env. These are known by CCL code only.
+  // TODO(mberhault): determine format. Maybe google.protobuf.Any
 }

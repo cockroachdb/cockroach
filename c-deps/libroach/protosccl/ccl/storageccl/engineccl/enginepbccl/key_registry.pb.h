@@ -31,7 +31,7 @@
 #include <google/protobuf/map.h>  // IWYU pragma: export
 #include <google/protobuf/map_entry_lite.h>
 #include <google/protobuf/map_field_lite.h>
-#include "storage/engine/enginepb/file_registry.pb.h"
+#include <google/protobuf/generated_enum_util.h>
 // @@protoc_insertion_point(includes)
 namespace cockroach {
 namespace ccl {
@@ -79,6 +79,19 @@ struct TableStruct {
 void AddDescriptors();
 void InitDefaults();
 }  // namespace protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto
+
+enum EncryptionType {
+  Plaintext = 0,
+  AES128_CTR = 1,
+  AES192_CTR = 2,
+  AES256_CTR = 3,
+  EncryptionType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  EncryptionType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+};
+bool EncryptionType_IsValid(int value);
+const EncryptionType EncryptionType_MIN = Plaintext;
+const EncryptionType EncryptionType_MAX = AES256_CTR;
+const int EncryptionType_ARRAYSIZE = EncryptionType_MAX + 1;
 
 // ===================================================================
 
@@ -382,11 +395,11 @@ class KeyInfo : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::int64 creation_time() const;
   void set_creation_time(::google::protobuf::int64 value);
 
-  // .cockroach.storage.engine.enginepb.EncryptionType encryption_type = 1;
+  // .cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType encryption_type = 1;
   void clear_encryption_type();
   static const int kEncryptionTypeFieldNumber = 1;
-  ::cockroach::storage::engine::enginepb::EncryptionType encryption_type() const;
-  void set_encryption_type(::cockroach::storage::engine::enginepb::EncryptionType value);
+  ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType encryption_type() const;
+  void set_encryption_type(::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType value);
 
   // bool was_exposed = 5;
   void clear_was_exposed();
@@ -682,15 +695,15 @@ inline void DataKeysRegistry::set_allocated_active_data_key(::std::string* activ
 
 // KeyInfo
 
-// .cockroach.storage.engine.enginepb.EncryptionType encryption_type = 1;
+// .cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType encryption_type = 1;
 inline void KeyInfo::clear_encryption_type() {
   encryption_type_ = 0;
 }
-inline ::cockroach::storage::engine::enginepb::EncryptionType KeyInfo::encryption_type() const {
+inline ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType KeyInfo::encryption_type() const {
   // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo.encryption_type)
-  return static_cast< ::cockroach::storage::engine::enginepb::EncryptionType >(encryption_type_);
+  return static_cast< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType >(encryption_type_);
 }
-inline void KeyInfo::set_encryption_type(::cockroach::storage::engine::enginepb::EncryptionType value) {
+inline void KeyInfo::set_encryption_type(::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType value) {
   
   encryption_type_ = value;
   // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo.encryption_type)
@@ -1001,6 +1014,14 @@ inline void SecretKey::set_allocated_key(::std::string* key) {
 }  // namespace storageccl
 }  // namespace ccl
 }  // namespace cockroach
+
+namespace google {
+namespace protobuf {
+
+template <> struct is_proto_enum< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType> : ::google::protobuf::internal::true_type {};
+
+}  // namespace protobuf
+}  // namespace google
 
 // @@protoc_insertion_point(global_scope)
 

@@ -11,7 +11,7 @@
 #include "../utils.h"
 #include "crypto_utils.h"
 
-static std::string kFilenamePlain = "plain";
+static const std::string kFilenamePlain = "plain";
 
 namespace KeyManagerUtils {
 
@@ -25,7 +25,7 @@ rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path, enginepb
   auto info = key->mutable_info();
   if (path == kFilenamePlain) {
     key->set_key("");
-    info->set_encryption_type(enginepb::Plaintext);
+    info->set_encryption_type(enginepbccl::Plaintext);
     info->set_key_id(kPlainKeyID);
     info->set_creation_time(now);
     info->set_source(kFilenamePlain);
@@ -40,25 +40,26 @@ rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path, enginepb
   }
 
   // Check that the length is valid for AES.
-  auto key_length = contents.size();
+  size_t key_length = contents.size() - kKeyIDLength;
   switch (key_length) {
   case 16:
-    info->set_encryption_type(enginepb::AES128_CTR);
+    info->set_encryption_type(enginepbccl::AES128_CTR);
     break;
   case 24:
-    info->set_encryption_type(enginepb::AES192_CTR);
+    info->set_encryption_type(enginepbccl::AES192_CTR);
     break;
   case 32:
-    info->set_encryption_type(enginepb::AES256_CTR);
+    info->set_encryption_type(enginepbccl::AES256_CTR);
     break;
   default:
     return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
-        "key in file %s is %llu bytes long, AES keys can be 16, 24, or 32 bytes", path.c_str(), key_length));
+        "file %s is %llu bytes long, it must be <key ID length (%llu)> + <key size (16, 24, or 32)> long", path.c_str(),
+        contents.size(), kKeyIDLength));
   }
 
-  // Fill in the key.
-  key->set_key(contents);
-  info->set_key_id(KeyHash(contents));
+  // Fill in the key and ID: first kKeyIDLength are the ID, the rest are the key.
+  info->set_key_id(HexString(contents.substr(0, kKeyIDLength)));
+  key->set_key(contents.substr(kKeyIDLength, contents.size() - kKeyIDLength));
   info->set_creation_time(now);
   info->set_source(path);
 
@@ -78,7 +79,7 @@ rocksdb::Status KeyFromKeyInfo(rocksdb::Env* env, const enginepbccl::KeyInfo& st
   info->set_source("data key manager");
   info->set_parent_key_id(store_info.key_id());
 
-  if (store_info.encryption_type() == enginepb::Plaintext) {
+  if (store_info.encryption_type() == enginepbccl::Plaintext) {
     key->set_key("");
     info->set_key_id(kPlainKeyID);
     info->set_was_exposed(true);
@@ -88,13 +89,13 @@ rocksdb::Status KeyFromKeyInfo(rocksdb::Env* env, const enginepbccl::KeyInfo& st
   // AES encryption.
   size_t length;
   switch (store_info.encryption_type()) {
-  case enginepb::AES128_CTR:
+  case enginepbccl::AES128_CTR:
     length = 16;
     break;
-  case enginepb::AES192_CTR:
+  case enginepbccl::AES192_CTR:
     length = 24;
     break;
-  case enginepb::AES256_CTR:
+  case enginepbccl::AES256_CTR:
     length = 32;
     break;
   default:
@@ -103,7 +104,7 @@ rocksdb::Status KeyFromKeyInfo(rocksdb::Env* env, const enginepbccl::KeyInfo& st
   }
   key->set_key(RandomBytes(length));
   // Assign a random ID to the key.
-  info->set_key_id(HexString(RandomBytes(32)));
+  info->set_key_id(HexString(RandomBytes(kKeyIDLength)));
   info->set_was_exposed(false);  // For completeness only.
   return rocksdb::Status::OK();
 }
@@ -257,7 +258,7 @@ rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {
   auto active_key = CurrentKeyLocked();
   assert(active_key != nullptr);
 
-  if (active_key->info().encryption_type() == enginepb::Plaintext) {
+  if (active_key->info().encryption_type() == enginepbccl::Plaintext) {
     // There's no point in rotating plaintext.
     return rocksdb::Status::OK();
   }
@@ -293,7 +294,7 @@ rocksdb::Status DataKeyManager::SetActiveStoreKey(std::unique_ptr<enginepbccl::K
     return MaybeRotateKeyLocked();
   }
 
-  if (store_info->encryption_type() != enginepb::Plaintext) {
+  if (store_info->encryption_type() != enginepbccl::Plaintext) {
     // Make sure the key doesn't exist yet for keys other than plaintext.
     // If we are not currently using plaintext, we're ok overwriting an older "plain" key.
     // TODO(mberhault): Are there cases we may want to allow?
@@ -309,7 +310,7 @@ rocksdb::Status DataKeyManager::SetActiveStoreKey(std::unique_ptr<enginepbccl::K
   (*new_registry->mutable_store_keys())[store_info->key_id()] = *store_info;
   new_registry->set_active_store_key(store_info->key_id());
 
-  if (store_info->encryption_type() == enginepb::Plaintext) {
+  if (store_info->encryption_type() == enginepbccl::Plaintext) {
     // This is a plaintext store key: mark all data keys as exposed.
     for (auto it = new_registry->mutable_data_keys()->begin(); it != new_registry->mutable_data_keys()->end(); ++it) {
       it->second.mutable_info()->set_was_exposed(true);
