@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -37,11 +36,12 @@ type NormalizableTableName struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (nt *NormalizableTableName) Format(buf *bytes.Buffer, f FmtFlags) {
+func (nt *NormalizableTableName) Format(ctx *FmtCtx) {
+	f := ctx.flags
 	if f.tableNameFormatter != nil {
-		f.tableNameFormatter(nt, buf, f)
+		f.tableNameFormatter(ctx, nt)
 	} else {
-		FormatNode(buf, f, nt.TableNameReference)
+		ctx.FormatNode(nt.TableNameReference)
 	}
 }
 func (nt *NormalizableTableName) String() string { return AsString(nt) }
@@ -113,16 +113,17 @@ type TableName struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (t *TableName) Format(buf *bytes.Buffer, f FmtFlags) {
+func (t *TableName) Format(ctx *FmtCtx) {
+	f := ctx.flags
 	if !t.DBNameOriginallyOmitted || f.alwaysQualify || f.tableNameFormatter != nil {
 		if t.PrefixOriginallySpecified {
-			FormatNode(buf, f, t.PrefixName)
-			buf.WriteByte('.')
+			ctx.FormatNode(t.PrefixName)
+			ctx.WriteByte('.')
 		}
-		FormatNode(buf, f, t.DatabaseName)
-		buf.WriteByte('.')
+		ctx.FormatNode(t.DatabaseName)
+		ctx.WriteByte('.')
 	}
-	FormatNode(buf, f, t.TableName)
+	ctx.FormatNode(t.TableName)
 }
 func (t *TableName) String() string { return AsString(t) }
 
@@ -219,12 +220,12 @@ func (t *TableName) QualifyWithDatabase(database string) error {
 type TableNames []TableName
 
 // Format implements the NodeFormatter interface.
-func (ts TableNames) Format(buf *bytes.Buffer, f FmtFlags) {
+func (ts TableNames) Format(ctx *FmtCtx) {
 	for i := range ts {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, &ts[i])
+		ctx.FormatNode(&ts[i])
 	}
 }
 func (ts TableNames) String() string { return AsString(ts) }
@@ -234,12 +235,12 @@ func (ts TableNames) String() string { return AsString(ts) }
 type TableNameReferences []TableNameReference
 
 // Format implements the NodeFormatter interface.
-func (t TableNameReferences) Format(buf *bytes.Buffer, f FmtFlags) {
+func (t TableNameReferences) Format(ctx *FmtCtx) {
 	for i, t := range t {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, t)
+		ctx.FormatNode(t)
 	}
 }
 
@@ -258,11 +259,11 @@ type TableNameWithIndex struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (n *TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, &n.Table)
+func (n *TableNameWithIndex) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&n.Table)
 	if n.Index != "" {
-		buf.WriteByte('@')
-		FormatNode(buf, f, n.Index)
+		ctx.WriteByte('@')
+		ctx.FormatNode(n.Index)
 	}
 }
 
@@ -272,11 +273,11 @@ func (n *TableNameWithIndex) String() string { return AsString(n) }
 type TableNameWithIndexList []*TableNameWithIndex
 
 // Format implements the NodeFormatter interface.
-func (n TableNameWithIndexList) Format(buf *bytes.Buffer, f FmtFlags) {
+func (n TableNameWithIndexList) Format(ctx *FmtCtx) {
 	for i, e := range n {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, e)
+		ctx.FormatNode(e)
 	}
 }

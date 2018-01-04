@@ -14,11 +14,6 @@
 
 package tree
 
-import (
-	"bytes"
-	"fmt"
-)
-
 // ID is a custom type for {Database,Table}Descriptor IDs.
 type ID uint32
 
@@ -42,23 +37,23 @@ type TableRef struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (n *TableRef) Format(buf *bytes.Buffer, f FmtFlags) {
-	fmt.Fprintf(buf, "[%d", n.TableID)
+func (n *TableRef) Format(ctx *FmtCtx) {
+	ctx.Printf("[%d", n.TableID)
 	if n.Columns != nil {
-		buf.WriteByte('(')
+		ctx.WriteByte('(')
 		for i, c := range n.Columns {
 			if i > 0 {
-				buf.WriteString(", ")
+				ctx.WriteString(", ")
 			}
-			fmt.Fprintf(buf, "%d", c)
+			ctx.Printf("%d", c)
 		}
-		buf.WriteByte(')')
+		ctx.WriteByte(')')
 	}
 	if n.As.Alias != "" {
-		buf.WriteString(" AS ")
-		FormatNode(buf, f, n.As)
+		ctx.WriteString(" AS ")
+		ctx.FormatNode(n.As)
 	}
-	buf.WriteByte(']')
+	ctx.WriteByte(']')
 }
 func (n *TableRef) String() string { return AsString(n) }
 

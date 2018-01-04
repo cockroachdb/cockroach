@@ -14,8 +14,6 @@
 
 package tree
 
-import "bytes"
-
 // Split represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
 type Split struct {
 	// Only one of Table and Index can be set.
@@ -27,17 +25,17 @@ type Split struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Split) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
+func (node *Split) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
 	if node.Index != nil {
-		buf.WriteString("INDEX ")
-		FormatNode(buf, f, node.Index)
+		ctx.WriteString("INDEX ")
+		ctx.FormatNode(node.Index)
 	} else {
-		buf.WriteString("TABLE ")
-		FormatNode(buf, f, node.Table)
+		ctx.WriteString("TABLE ")
+		ctx.FormatNode(node.Table)
 	}
-	buf.WriteString(" SPLIT AT ")
-	FormatNode(buf, f, node.Rows)
+	ctx.WriteString(" SPLIT AT ")
+	ctx.FormatNode(node.Rows)
 }
 
 // TestingRelocate represents an `ALTER TABLE/INDEX .. TESTING_RELOCATE ..`
@@ -53,17 +51,17 @@ type TestingRelocate struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *TestingRelocate) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
+func (node *TestingRelocate) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
 	if node.Index != nil {
-		buf.WriteString("INDEX ")
-		FormatNode(buf, f, node.Index)
+		ctx.WriteString("INDEX ")
+		ctx.FormatNode(node.Index)
 	} else {
-		buf.WriteString("TABLE ")
-		FormatNode(buf, f, node.Table)
+		ctx.WriteString("TABLE ")
+		ctx.FormatNode(node.Table)
 	}
-	buf.WriteString(" TESTING_RELOCATE ")
-	FormatNode(buf, f, node.Rows)
+	ctx.WriteString(" TESTING_RELOCATE ")
+	ctx.FormatNode(node.Rows)
 }
 
 // Scatter represents an `ALTER TABLE/INDEX .. SCATTER ..`
@@ -79,21 +77,21 @@ type Scatter struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Scatter) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
+func (node *Scatter) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
 	if node.Index != nil {
-		buf.WriteString("INDEX ")
-		FormatNode(buf, f, node.Index)
+		ctx.WriteString("INDEX ")
+		ctx.FormatNode(node.Index)
 	} else {
-		buf.WriteString("TABLE ")
-		FormatNode(buf, f, node.Table)
+		ctx.WriteString("TABLE ")
+		ctx.FormatNode(node.Table)
 	}
-	buf.WriteString(" SCATTER")
+	ctx.WriteString(" SCATTER")
 	if node.From != nil {
-		buf.WriteString(" FROM (")
-		FormatNode(buf, f, node.From)
-		buf.WriteString(") TO (")
-		FormatNode(buf, f, node.To)
-		buf.WriteString(")")
+		ctx.WriteString(" FROM (")
+		ctx.FormatNode(node.From)
+		ctx.WriteString(") TO (")
+		ctx.FormatNode(node.To)
+		ctx.WriteString(")")
 	}
 }

@@ -81,13 +81,15 @@ func (p *planner) makeExplainPlanNode(
 		tree.FmtSimple, explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames,
 	)
 	explainer.fmtFlags = tree.FmtPlaceholderFormat(noPlaceholderFlags,
-		func(buf *bytes.Buffer, f tree.FmtFlags, placeholder *tree.Placeholder) {
+		func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 			d, err := placeholder.Eval(&p.evalCtx)
 			if err != nil {
-				placeholder.Format(buf, noPlaceholderFlags)
+				// Disable the placeholder formatter.
+				tmpCtx := ctx.CopyWithFlags(noPlaceholderFlags)
+				placeholder.Format(&tmpCtx)
 				return
 			}
-			d.Format(buf, f)
+			ctx.FormatNode(d)
 		})
 
 	node := &explainPlanNode{
@@ -304,12 +306,13 @@ func (e *explainer) leaveNode(name string, _ planNode) error {
 // argument specifies so.
 func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 	var buf bytes.Buffer
+	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
 	buf.WriteByte('(')
 	for i, rCol := range cols {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		tree.FormatNode(&buf, tree.FmtSimple, tree.Name(rCol.Name))
+		fmtCtx.FormatNode(tree.Name(rCol.Name))
 		// Output extra properties like [hidden,omitted].
 		hasProps := false
 		outputProp := func(prop string) {

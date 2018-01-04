@@ -1056,8 +1056,8 @@ func (d dummyColumnItem) String() string {
 }
 
 // Format implements the NodeFormatter interface.
-func (d dummyColumnItem) Format(buf *bytes.Buffer, _ tree.FmtFlags) {
-	buf.WriteString(d.String())
+func (d dummyColumnItem) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString(d.String())
 }
 
 // Walk implements the Expr interface.

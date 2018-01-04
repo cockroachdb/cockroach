@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -67,15 +66,17 @@ const (
 var _ tree.TypedExpr = &subquery{}
 var _ tree.VariableExpr = &subquery{}
 
-func (s *subquery) Format(buf *bytes.Buffer, f tree.FmtFlags) {
+func (s *subquery) Format(ctx *tree.FmtCtx) {
 	if s.execMode == execModeExists {
-		buf.WriteString("EXISTS ")
+		ctx.WriteString("EXISTS ")
 	}
 	// Note: we remove the flag to print types, because subqueries can
 	// be printed in a context where type resolution has not occurred
 	// yet. We do not use FmtSimple directly however, in case the
 	// caller wants to use other flags (e.g. to anonymize identifiers).
-	tree.FormatNode(buf, tree.StripTypeFormatting(f), s.subquery)
+	noTypesCtx := *ctx
+	noTypesCtx.StripTypeFormatting()
+	noTypesCtx.FormatNode(s.subquery)
 }
 
 func (s *subquery) String() string { return tree.AsString(s) }

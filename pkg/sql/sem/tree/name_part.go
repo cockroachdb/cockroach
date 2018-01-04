@@ -15,8 +15,6 @@
 package tree
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
@@ -33,11 +31,12 @@ import (
 type Name string
 
 // Format implements the NodeFormatter interface.
-func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
+func (n Name) Format(ctx *FmtCtx) {
+	f := ctx.flags
 	if f.anonymize {
-		buf.WriteByte('_')
+		ctx.WriteByte('_')
 	} else {
-		lex.EncodeRestrictedSQLIdent(buf, string(n), f.encodeFlags)
+		lex.EncodeRestrictedSQLIdent(ctx.Buffer, string(n), f.encodeFlags)
 	}
 }
 
@@ -62,11 +61,12 @@ func (n Name) Normalize() string {
 type UnrestrictedName string
 
 // Format implements the NodeFormatter interface.
-func (u UnrestrictedName) Format(buf *bytes.Buffer, f FmtFlags) {
+func (u UnrestrictedName) Format(ctx *FmtCtx) {
+	f := ctx.flags
 	if f.anonymize {
-		buf.WriteByte('_')
+		ctx.WriteByte('_')
 	} else {
-		lex.EncodeUnrestrictedSQLIdent(buf, string(u), f.encodeFlags)
+		lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, string(u), f.encodeFlags)
 	}
 }
 
@@ -86,12 +86,12 @@ func (l NameList) ToStrings() []string {
 type NameList []Name
 
 // Format implements the NodeFormatter interface.
-func (l NameList) Format(buf *bytes.Buffer, f FmtFlags) {
+func (l NameList) Format(ctx *FmtCtx) {
 	for i, n := range l {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 }
 
@@ -100,8 +100,8 @@ func (l NameList) Format(buf *bytes.Buffer, f FmtFlags) {
 type UnqualifiedStar struct{}
 
 // Format implements the NodeFormatter interface.
-func (UnqualifiedStar) Format(buf *bytes.Buffer, _ FmtFlags) { buf.WriteByte('*') }
-func (u UnqualifiedStar) String() string                     { return AsString(u) }
+func (UnqualifiedStar) Format(ctx *FmtCtx) { ctx.WriteByte('*') }
+func (u UnqualifiedStar) String() string   { return AsString(u) }
 
 // ArraySubscript corresponds to the syntax `<name>[ ... ]`.
 type ArraySubscript struct {
@@ -111,18 +111,18 @@ type ArraySubscript struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (a *ArraySubscript) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('[')
+func (a *ArraySubscript) Format(ctx *FmtCtx) {
+	ctx.WriteByte('[')
 	if a.Begin != nil {
-		FormatNode(buf, f, a.Begin)
+		ctx.FormatNode(a.Begin)
 	}
 	if a.Slice {
-		buf.WriteByte(':')
+		ctx.WriteByte(':')
 		if a.End != nil {
-			FormatNode(buf, f, a.End)
+			ctx.FormatNode(a.End)
 		}
 	}
-	buf.WriteByte(']')
+	ctx.WriteByte(']')
 }
 
 // NamePart is the interface for the sub-parts of an UnresolvedName or
@@ -147,13 +147,13 @@ func (UnqualifiedStar) namePart()   {}
 type NameParts []NamePart
 
 // Format implements the NodeFormatter interface.
-func (l NameParts) Format(buf *bytes.Buffer, f FmtFlags) {
+func (l NameParts) Format(ctx *FmtCtx) {
 	for i, p := range l {
 		_, isArraySubscript := p.(*ArraySubscript)
 		if !isArraySubscript && i > 0 {
-			buf.WriteByte('.')
+			ctx.WriteByte('.')
 		}
-		FormatNode(buf, f, p)
+		ctx.FormatNode(p)
 	}
 }
 
@@ -162,8 +162,10 @@ func (l NameParts) Format(buf *bytes.Buffer, f FmtFlags) {
 type UnresolvedName NameParts
 
 // Format implements the NodeFormatter interface.
-func (u UnresolvedName) Format(buf *bytes.Buffer, f FmtFlags) { FormatNode(buf, f, NameParts(u)) }
-func (u UnresolvedName) String() string                       { return AsString(u) }
+func (u UnresolvedName) Format(ctx *FmtCtx) {
+	ctx.FormatNode(NameParts(u))
+}
+func (u UnresolvedName) String() string { return AsString(u) }
 
 // UnresolvedNames corresponds to a comma-separate list of unresolved
 // names.  Note: this should be treated as immutable when embedded in
@@ -172,11 +174,11 @@ func (u UnresolvedName) String() string                       { return AsString(
 type UnresolvedNames []UnresolvedName
 
 // Format implements the NodeFormatter interface.
-func (u UnresolvedNames) Format(buf *bytes.Buffer, f FmtFlags) {
+func (u UnresolvedNames) Format(ctx *FmtCtx) {
 	for i, n := range u {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 }

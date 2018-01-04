@@ -23,8 +23,6 @@
 
 package tree
 
-import "bytes"
-
 // DropBehavior represents options for dropping schema elements.
 type DropBehavior int
 
@@ -53,15 +51,15 @@ type DropDatabase struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP DATABASE ")
+func (node *DropDatabase) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP DATABASE ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Name)
+	ctx.FormatNode(node.Name)
 	if node.DropBehavior != DropDefault {
-		buf.WriteByte(' ')
-		buf.WriteString(node.DropBehavior.String())
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.DropBehavior.String())
 	}
 }
 
@@ -73,15 +71,15 @@ type DropIndex struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropIndex) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP INDEX ")
+func (node *DropIndex) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP INDEX ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.IndexList)
+	ctx.FormatNode(node.IndexList)
 	if node.DropBehavior != DropDefault {
-		buf.WriteByte(' ')
-		buf.WriteString(node.DropBehavior.String())
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.DropBehavior.String())
 	}
 }
 
@@ -93,15 +91,15 @@ type DropTable struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropTable) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP TABLE ")
+func (node *DropTable) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP TABLE ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Names)
+	ctx.FormatNode(node.Names)
 	if node.DropBehavior != DropDefault {
-		buf.WriteByte(' ')
-		buf.WriteString(node.DropBehavior.String())
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.DropBehavior.String())
 	}
 }
 
@@ -113,15 +111,15 @@ type DropView struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropView) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP VIEW ")
+func (node *DropView) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP VIEW ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Names)
+	ctx.FormatNode(node.Names)
 	if node.DropBehavior != DropDefault {
-		buf.WriteByte(' ')
-		buf.WriteString(node.DropBehavior.String())
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.DropBehavior.String())
 	}
 }
 
@@ -133,15 +131,15 @@ type DropSequence struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropSequence) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP SEQUENCE ")
+func (node *DropSequence) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP SEQUENCE ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Names)
+	ctx.FormatNode(node.Names)
 	if node.DropBehavior != DropDefault {
-		buf.WriteByte(' ')
-		buf.WriteString(node.DropBehavior.String())
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.DropBehavior.String())
 	}
 }
 
@@ -152,12 +150,12 @@ type DropUser struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropUser) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP USER ")
+func (node *DropUser) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP USER ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Names)
+	ctx.FormatNode(node.Names)
 }
 
 // DropRole represents a DROP ROLE statement
@@ -167,10 +165,10 @@ type DropRole struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *DropRole) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP ROLE ")
+func (node *DropRole) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP ROLE ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Names)
+	ctx.FormatNode(node.Names)
 }

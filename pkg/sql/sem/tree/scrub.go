@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 )
 
@@ -41,27 +40,27 @@ type Scrub struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (n *Scrub) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("EXPERIMENTAL SCRUB ")
+func (n *Scrub) Format(ctx *FmtCtx) {
+	ctx.WriteString("EXPERIMENTAL SCRUB ")
 	switch n.Typ {
 	case ScrubTable:
-		buf.WriteString("TABLE ")
-		n.Table.Format(buf, f)
+		ctx.WriteString("TABLE ")
+		n.Table.Format(ctx)
 	case ScrubDatabase:
-		buf.WriteString("DATABASE ")
-		n.Database.Format(buf, f)
+		ctx.WriteString("DATABASE ")
+		ctx.FormatNode(n.Database)
 	default:
 		panic("Unhandled ScrubType")
 	}
 
 	if n.AsOf.Expr != nil {
-		buf.WriteByte(' ')
-		FormatNode(buf, f, n.AsOf)
+		ctx.WriteByte(' ')
+		ctx.FormatNode(n.AsOf)
 	}
 
 	if len(n.Options) > 0 {
-		buf.WriteString(" WITH OPTIONS ")
-		n.Options.Format(buf, f)
+		ctx.WriteString(" WITH OPTIONS ")
+		ctx.FormatNode(n.Options)
 	}
 }
 
@@ -69,12 +68,12 @@ func (n *Scrub) Format(buf *bytes.Buffer, f FmtFlags) {
 type ScrubOptions []ScrubOption
 
 // Format implements the NodeFormatter interface.
-func (n ScrubOptions) Format(buf *bytes.Buffer, f FmtFlags) {
+func (n ScrubOptions) Format(ctx *FmtCtx) {
 	for i, option := range n {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		option.Format(buf, f)
+		ctx.FormatNode(option)
 	}
 }
 
@@ -103,14 +102,14 @@ type ScrubOptionIndex struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (n *ScrubOptionIndex) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("INDEX ")
+func (n *ScrubOptionIndex) Format(ctx *FmtCtx) {
+	ctx.WriteString("INDEX ")
 	if n.IndexNames != nil {
-		buf.WriteByte('(')
-		n.IndexNames.Format(buf, f)
-		buf.WriteByte(')')
+		ctx.WriteByte('(')
+		ctx.FormatNode(n.IndexNames)
+		ctx.WriteByte(')')
 	} else {
-		buf.WriteString("ALL")
+		ctx.WriteString("ALL")
 	}
 }
 
@@ -118,8 +117,8 @@ func (n *ScrubOptionIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 type ScrubOptionPhysical struct{}
 
 // Format implements the NodeFormatter interface.
-func (n *ScrubOptionPhysical) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("PHYSICAL")
+func (n *ScrubOptionPhysical) Format(ctx *FmtCtx) {
+	ctx.WriteString("PHYSICAL")
 }
 
 // ScrubOptionConstraint represents a CONSTRAINT scrub check.
@@ -128,13 +127,13 @@ type ScrubOptionConstraint struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (n *ScrubOptionConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CONSTRAINT ")
+func (n *ScrubOptionConstraint) Format(ctx *FmtCtx) {
+	ctx.WriteString("CONSTRAINT ")
 	if n.ConstraintNames != nil {
-		buf.WriteByte('(')
-		n.ConstraintNames.Format(buf, f)
-		buf.WriteByte(')')
+		ctx.WriteByte('(')
+		ctx.FormatNode(n.ConstraintNames)
+		ctx.WriteByte(')')
 	} else {
-		buf.WriteString("ALL")
+		ctx.WriteString("ALL")
 	}
 }

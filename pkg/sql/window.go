@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -918,9 +917,9 @@ type windowFuncHolder struct {
 
 func (*windowFuncHolder) Variable() {}
 
-func (w *windowFuncHolder) Format(buf *bytes.Buffer, f tree.FmtFlags) {
+func (w *windowFuncHolder) Format(ctx *tree.FmtCtx) {
 	// Avoid duplicating the type annotation by calling .Format directly.
-	w.expr.Format(buf, f)
+	w.expr.Format(ctx)
 }
 
 func (w *windowFuncHolder) String() string { return tree.AsString(w) }

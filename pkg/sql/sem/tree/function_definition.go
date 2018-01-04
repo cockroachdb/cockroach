@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -57,8 +56,8 @@ func NewFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
 var FunDefs map[string]*FunctionDefinition
 
 // Format implements the NodeFormatter interface.
-func (fd *FunctionDefinition) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(fd.Name)
+func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
+	ctx.WriteString(fd.Name)
 }
 
 func (fd *FunctionDefinition) String() string { return AsString(fd) }

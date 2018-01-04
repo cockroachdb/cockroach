@@ -14,8 +14,6 @@
 
 package tree
 
-import "bytes"
-
 // Import represents a IMPORT statement.
 type Import struct {
 	Table      UnresolvedName
@@ -29,27 +27,27 @@ type Import struct {
 var _ Statement = &Import{}
 
 // Format implements the NodeFormatter interface.
-func (node *Import) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("IMPORT TABLE ")
-	FormatNode(buf, f, node.Table)
+func (node *Import) Format(ctx *FmtCtx) {
+	ctx.WriteString("IMPORT TABLE ")
+	ctx.FormatNode(node.Table)
 
 	if node.CreateFile != nil {
-		buf.WriteString(" CREATE USING ")
-		FormatNode(buf, f, node.CreateFile)
-		buf.WriteString(" ")
+		ctx.WriteString(" CREATE USING ")
+		ctx.FormatNode(node.CreateFile)
+		ctx.WriteString(" ")
 	} else {
-		buf.WriteString(" (")
-		FormatNode(buf, f, node.CreateDefs)
-		buf.WriteString(") ")
+		ctx.WriteString(" (")
+		ctx.FormatNode(node.CreateDefs)
+		ctx.WriteString(") ")
 	}
 
-	buf.WriteString(node.FileFormat)
-	buf.WriteString(" DATA (")
-	FormatNode(buf, f, node.Files)
-	buf.WriteString(") ")
+	ctx.WriteString(node.FileFormat)
+	ctx.WriteString(" DATA (")
+	ctx.FormatNode(node.Files)
+	ctx.WriteString(") ")
 
 	if node.Options != nil {
-		buf.WriteString("WITH ")
-		FormatNode(buf, f, node.Options)
+		ctx.WriteString("WITH ")
+		ctx.FormatNode(node.Options)
 	}
 }

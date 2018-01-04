@@ -232,7 +232,8 @@ func (b *writeBuffer) writeLengthPrefixedString(s string) {
 // writeLengthPrefixedDatum writes a length-prefixed Datum in its
 // string representation. The length is encoded as an int32.
 func (b *writeBuffer) writeLengthPrefixedDatum(d tree.Datum) {
-	tree.FormatNode(&b.variablePutbuf, tree.FmtSimple, d)
+	fmtCtx := tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtSimple)
+	fmtCtx.FormatNode(d)
 	b.writeLengthPrefixedVariablePutbuf()
 }
 

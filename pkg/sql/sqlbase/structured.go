@@ -281,7 +281,8 @@ func (desc *IndexDescriptor) ColNamesFormat(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		tree.Name(name).Format(buf, tree.FmtSimple)
+		fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
+		fmtCtx.FormatNode(tree.Name(name))
 		buf.WriteByte(' ')
 		buf.WriteString(desc.ColumnDirections[i].String())
 	}

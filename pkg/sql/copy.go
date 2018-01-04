@@ -340,7 +340,7 @@ func (p *planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, erro
 }
 
 // Format implements the NodeFormatter interface.
-func (CopyDataBlock) Format(buf *bytes.Buffer, f tree.FmtFlags) {}
+func (CopyDataBlock) Format(_ *tree.FmtCtx) {}
 
 // StatementType implements the Statement interface.
 func (CopyDataBlock) StatementType() tree.StatementType { return tree.RowsAffected }

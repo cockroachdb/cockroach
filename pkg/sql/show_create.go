@@ -93,14 +93,15 @@ func (p *planner) showCreateView(
 	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
+	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
 	buf.WriteString("CREATE VIEW ")
-	tn.Format(&buf, tree.FmtSimple)
+	fmtCtx.FormatNode(tn)
 	buf.WriteString(" (")
 	for i, col := range desc.Columns {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		tree.Name(col.Name).Format(&buf, tree.FmtSimple)
+		fmtCtx.FormatNode(tree.Name(col.Name))
 	}
 	fmt.Fprintf(&buf, ") AS %s", desc.ViewQuery)
 	return buf.String(), nil
@@ -152,7 +153,8 @@ func (p *planner) showCreateSequence(
 ) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteString("CREATE SEQUENCE ")
-	tree.FormatNode(&buf, tree.FmtSimple, tn)
+	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
+	fmtCtx.FormatNode(tn)
 	opts := desc.SequenceOpts
 	fmt.Fprintf(&buf, " MINVALUE %d", opts.MinValue)
 	fmt.Fprintf(&buf, " MAXVALUE %d", opts.MaxValue)
@@ -336,12 +338,13 @@ func ShowCreatePartitioning(
 		fmt.Fprintf(buf, idxDesc.ColumnNames[colOffset+i])
 	}
 	buf.WriteString(`) (`)
+	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
 	for i, part := range partDesc.List {
 		if i != 0 {
 			buf.WriteString(`, `)
 		}
 		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
-		tree.FormatNode(buf, tree.FmtSimple, tree.Name(part.Name))
+		fmtCtx.FormatNode(tree.Name(part.Name))
 		buf.WriteString(` VALUES IN (`)
 		for j, values := range part.Values {
 			if j != 0 {

@@ -24,7 +24,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -47,27 +46,28 @@ type CreateDatabase struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CREATE DATABASE ")
+func (node *CreateDatabase) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	ctx.WriteString("CREATE DATABASE ")
 	if node.IfNotExists {
-		buf.WriteString("IF NOT EXISTS ")
+		ctx.WriteString("IF NOT EXISTS ")
 	}
-	FormatNode(buf, f, node.Name)
+	ctx.FormatNode(node.Name)
 	if node.Template != "" {
-		buf.WriteString(" TEMPLATE = ")
-		lex.EncodeSQLStringWithFlags(buf, node.Template, f.encodeFlags)
+		ctx.WriteString(" TEMPLATE = ")
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Template, f.encodeFlags)
 	}
 	if node.Encoding != "" {
-		buf.WriteString(" ENCODING = ")
-		lex.EncodeSQLStringWithFlags(buf, node.Encoding, f.encodeFlags)
+		ctx.WriteString(" ENCODING = ")
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Encoding, f.encodeFlags)
 	}
 	if node.Collate != "" {
-		buf.WriteString(" LC_COLLATE = ")
-		lex.EncodeSQLStringWithFlags(buf, node.Collate, f.encodeFlags)
+		ctx.WriteString(" LC_COLLATE = ")
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Collate, f.encodeFlags)
 	}
 	if node.CType != "" {
-		buf.WriteString(" LC_CTYPE = ")
-		lex.EncodeSQLStringWithFlags(buf, node.CType, f.encodeFlags)
+		ctx.WriteString(" LC_CTYPE = ")
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.CType, f.encodeFlags)
 	}
 }
 
@@ -78,11 +78,11 @@ type IndexElem struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node IndexElem) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Column)
+func (node IndexElem) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.Column)
 	if node.Direction != DefaultDirection {
-		buf.WriteByte(' ')
-		buf.WriteString(node.Direction.String())
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.Direction.String())
 	}
 }
 
@@ -91,12 +91,12 @@ type IndexElemList []IndexElem
 
 // Format pretty-prints the contained names separated by commas.
 // Format implements the NodeFormatter interface.
-func (l IndexElemList) Format(buf *bytes.Buffer, f FmtFlags) {
+func (l IndexElemList) Format(ctx *FmtCtx) {
 	for i, indexElem := range l {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, indexElem)
+		ctx.FormatNode(indexElem)
 	}
 }
 
@@ -116,37 +116,37 @@ type CreateIndex struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CREATE ")
+func (node *CreateIndex) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE ")
 	if node.Unique {
-		buf.WriteString("UNIQUE ")
+		ctx.WriteString("UNIQUE ")
 	}
 	if node.Inverted {
-		buf.WriteString("INVERTED ")
+		ctx.WriteString("INVERTED ")
 	}
-	buf.WriteString("INDEX ")
+	ctx.WriteString("INDEX ")
 	if node.IfNotExists {
-		buf.WriteString("IF NOT EXISTS ")
+		ctx.WriteString("IF NOT EXISTS ")
 	}
 	if node.Name != "" {
-		FormatNode(buf, f, node.Name)
-		buf.WriteByte(' ')
+		ctx.FormatNode(node.Name)
+		ctx.WriteByte(' ')
 	}
-	buf.WriteString("ON ")
-	FormatNode(buf, f, &node.Table)
-	buf.WriteString(" (")
-	FormatNode(buf, f, node.Columns)
-	buf.WriteByte(')')
+	ctx.WriteString("ON ")
+	ctx.FormatNode(&node.Table)
+	ctx.WriteString(" (")
+	ctx.FormatNode(node.Columns)
+	ctx.WriteByte(')')
 	if len(node.Storing) > 0 {
-		buf.WriteString(" STORING (")
-		FormatNode(buf, f, node.Storing)
-		buf.WriteByte(')')
+		ctx.WriteString(" STORING (")
+		ctx.FormatNode(node.Storing)
+		ctx.WriteByte(')')
 	}
 	if node.Interleave != nil {
-		FormatNode(buf, f, node.Interleave)
+		ctx.FormatNode(node.Interleave)
 	}
 	if node.PartitionBy != nil {
-		FormatNode(buf, f, node.PartitionBy)
+		ctx.FormatNode(node.PartitionBy)
 	}
 }
 
@@ -170,12 +170,12 @@ func (*FamilyTableDef) tableDef() {}
 type TableDefs []TableDef
 
 // Format implements the NodeFormatter interface.
-func (node TableDefs) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node TableDefs) Format(ctx *FmtCtx) {
 	for i, n := range node {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 }
 
@@ -346,67 +346,67 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Name)
-	buf.WriteByte(' ')
-	node.Type.Format(buf, f.encodeFlags)
+func (node *ColumnTableDef) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.Name)
+	ctx.WriteByte(' ')
+	node.Type.Format(ctx.Buffer, ctx.flags.encodeFlags)
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
-		buf.WriteString(" CONSTRAINT ")
-		FormatNode(buf, f, node.Nullable.ConstraintName)
+		ctx.WriteString(" CONSTRAINT ")
+		ctx.FormatNode(node.Nullable.ConstraintName)
 	}
 	switch node.Nullable.Nullability {
 	case Null:
-		buf.WriteString(" NULL")
+		ctx.WriteString(" NULL")
 	case NotNull:
-		buf.WriteString(" NOT NULL")
+		ctx.WriteString(" NOT NULL")
 	}
 	if node.PrimaryKey {
-		buf.WriteString(" PRIMARY KEY")
+		ctx.WriteString(" PRIMARY KEY")
 	} else if node.Unique {
-		buf.WriteString(" UNIQUE")
+		ctx.WriteString(" UNIQUE")
 	}
 	if node.HasDefaultExpr() {
 		if node.DefaultExpr.ConstraintName != "" {
-			buf.WriteString(" CONSTRAINT ")
-			FormatNode(buf, f, node.DefaultExpr.ConstraintName)
+			ctx.WriteString(" CONSTRAINT ")
+			ctx.FormatNode(node.DefaultExpr.ConstraintName)
 		}
-		buf.WriteString(" DEFAULT ")
-		FormatNode(buf, f, node.DefaultExpr.Expr)
+		ctx.WriteString(" DEFAULT ")
+		ctx.FormatNode(node.DefaultExpr.Expr)
 	}
 	for _, checkExpr := range node.CheckExprs {
 		if checkExpr.ConstraintName != "" {
-			buf.WriteString(" CONSTRAINT ")
-			FormatNode(buf, f, checkExpr.ConstraintName)
+			ctx.WriteString(" CONSTRAINT ")
+			ctx.FormatNode(checkExpr.ConstraintName)
 		}
-		buf.WriteString(" CHECK (")
-		FormatNode(buf, f, checkExpr.Expr)
-		buf.WriteByte(')')
+		ctx.WriteString(" CHECK (")
+		ctx.FormatNode(checkExpr.Expr)
+		ctx.WriteByte(')')
 	}
 	if node.HasFKConstraint() {
 		if node.References.ConstraintName != "" {
-			buf.WriteString(" CONSTRAINT ")
-			FormatNode(buf, f, node.References.ConstraintName)
+			ctx.WriteString(" CONSTRAINT ")
+			ctx.FormatNode(node.References.ConstraintName)
 		}
-		buf.WriteString(" REFERENCES ")
-		FormatNode(buf, f, &node.References.Table)
+		ctx.WriteString(" REFERENCES ")
+		ctx.FormatNode(&node.References.Table)
 		if node.References.Col != "" {
-			buf.WriteString(" (")
-			FormatNode(buf, f, node.References.Col)
-			buf.WriteByte(')')
+			ctx.WriteString(" (")
+			ctx.FormatNode(node.References.Col)
+			ctx.WriteByte(')')
 		}
-		FormatNode(buf, f, node.References.Actions)
+		ctx.FormatNode(node.References.Actions)
 	}
 	if node.HasColumnFamily() {
 		if node.Family.Create {
-			buf.WriteString(" CREATE")
+			ctx.WriteString(" CREATE")
 		}
 		if node.Family.IfNotExists {
-			buf.WriteString(" IF NOT EXISTS")
+			ctx.WriteString(" IF NOT EXISTS")
 		}
-		buf.WriteString(" FAMILY")
+		ctx.WriteString(" FAMILY")
 		if len(node.Family.Name) > 0 {
-			buf.WriteByte(' ')
-			FormatNode(buf, f, node.Family.Name)
+			ctx.WriteByte(' ')
+			ctx.FormatNode(node.Family.Name)
 		}
 	}
 }
@@ -488,28 +488,28 @@ func (node *IndexTableDef) SetName(name Name) {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *IndexTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("INDEX ")
+func (node *IndexTableDef) Format(ctx *FmtCtx) {
+	ctx.WriteString("INDEX ")
 	if node.Name != "" {
-		FormatNode(buf, f, node.Name)
-		buf.WriteByte(' ')
+		ctx.FormatNode(node.Name)
+		ctx.WriteByte(' ')
 	}
-	buf.WriteByte('(')
-	FormatNode(buf, f, node.Columns)
-	buf.WriteByte(')')
+	ctx.WriteByte('(')
+	ctx.FormatNode(node.Columns)
+	ctx.WriteByte(')')
 	if node.Storing != nil {
-		buf.WriteString(" STORING (")
-		FormatNode(buf, f, node.Storing)
-		buf.WriteByte(')')
+		ctx.WriteString(" STORING (")
+		ctx.FormatNode(node.Storing)
+		ctx.WriteByte(')')
 	}
 	if node.Interleave != nil {
-		FormatNode(buf, f, node.Interleave)
+		ctx.FormatNode(node.Interleave)
 	}
 	if node.Inverted {
-		buf.WriteString("INVERTED ")
+		ctx.WriteString("INVERTED ")
 	}
 	if node.PartitionBy != nil {
-		FormatNode(buf, f, node.PartitionBy)
+		ctx.FormatNode(node.PartitionBy)
 	}
 }
 
@@ -532,30 +532,30 @@ type UniqueConstraintTableDef struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
-		buf.WriteString("CONSTRAINT ")
-		FormatNode(buf, f, node.Name)
-		buf.WriteByte(' ')
+		ctx.WriteString("CONSTRAINT ")
+		ctx.FormatNode(node.Name)
+		ctx.WriteByte(' ')
 	}
 	if node.PrimaryKey {
-		buf.WriteString("PRIMARY KEY ")
+		ctx.WriteString("PRIMARY KEY ")
 	} else {
-		buf.WriteString("UNIQUE ")
+		ctx.WriteString("UNIQUE ")
 	}
-	buf.WriteByte('(')
-	FormatNode(buf, f, node.Columns)
-	buf.WriteByte(')')
+	ctx.WriteByte('(')
+	ctx.FormatNode(node.Columns)
+	ctx.WriteByte(')')
 	if node.Storing != nil {
-		buf.WriteString(" STORING (")
-		FormatNode(buf, f, node.Storing)
-		buf.WriteByte(')')
+		ctx.WriteString(" STORING (")
+		ctx.FormatNode(node.Storing)
+		ctx.WriteByte(')')
 	}
 	if node.Interleave != nil {
-		FormatNode(buf, f, node.Interleave)
+		ctx.FormatNode(node.Interleave)
 	}
 	if node.PartitionBy != nil {
-		FormatNode(buf, f, node.PartitionBy)
+		ctx.FormatNode(node.PartitionBy)
 	}
 }
 
@@ -592,14 +592,14 @@ type ReferenceActions struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node ReferenceActions) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node ReferenceActions) Format(ctx *FmtCtx) {
 	if node.Delete != NoAction {
-		buf.WriteString(" ON DELETE ")
-		buf.WriteString(node.Delete.String())
+		ctx.WriteString(" ON DELETE ")
+		ctx.WriteString(node.Delete.String())
 	}
 	if node.Update != NoAction {
-		buf.WriteString(" ON UPDATE ")
-		buf.WriteString(node.Update.String())
+		ctx.WriteString(" ON UPDATE ")
+		ctx.WriteString(node.Update.String())
 	}
 }
 
@@ -613,25 +613,25 @@ type ForeignKeyConstraintTableDef struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ForeignKeyConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
-		buf.WriteString("CONSTRAINT ")
-		FormatNode(buf, f, node.Name)
-		buf.WriteByte(' ')
+		ctx.WriteString("CONSTRAINT ")
+		ctx.FormatNode(node.Name)
+		ctx.WriteByte(' ')
 	}
-	buf.WriteString("FOREIGN KEY (")
-	FormatNode(buf, f, node.FromCols)
-	buf.WriteString(") REFERENCES ")
-	FormatNode(buf, f, &node.Table)
+	ctx.WriteString("FOREIGN KEY (")
+	ctx.FormatNode(node.FromCols)
+	ctx.WriteString(") REFERENCES ")
+	ctx.FormatNode(&node.Table)
 
 	if len(node.ToCols) > 0 {
-		buf.WriteByte(' ')
-		buf.WriteByte('(')
-		FormatNode(buf, f, node.ToCols)
-		buf.WriteByte(')')
+		ctx.WriteByte(' ')
+		ctx.WriteByte('(')
+		ctx.FormatNode(node.ToCols)
+		ctx.WriteByte(')')
 	}
 
-	FormatNode(buf, f, node.Actions)
+	ctx.FormatNode(node.Actions)
 }
 
 // SetName implements the TableDef interface.
@@ -658,15 +658,15 @@ func (node *CheckConstraintTableDef) SetName(name Name) {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CheckConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *CheckConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
-		buf.WriteString("CONSTRAINT ")
-		FormatNode(buf, f, node.Name)
-		buf.WriteByte(' ')
+		ctx.WriteString("CONSTRAINT ")
+		ctx.FormatNode(node.Name)
+		ctx.WriteByte(' ')
 	}
-	buf.WriteString("CHECK (")
-	FormatNode(buf, f, node.Expr)
-	buf.WriteByte(')')
+	ctx.WriteString("CHECK (")
+	ctx.FormatNode(node.Expr)
+	ctx.WriteByte(')')
 }
 
 // FamilyTableDef represents a family definition within a CREATE TABLE
@@ -682,15 +682,15 @@ func (node *FamilyTableDef) SetName(name Name) {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *FamilyTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("FAMILY ")
+func (node *FamilyTableDef) Format(ctx *FmtCtx) {
+	ctx.WriteString("FAMILY ")
 	if node.Name != "" {
-		FormatNode(buf, f, node.Name)
-		buf.WriteByte(' ')
+		ctx.FormatNode(node.Name)
+		ctx.WriteByte(' ')
 	}
-	buf.WriteByte('(')
-	FormatNode(buf, f, node.Columns)
-	buf.WriteByte(')')
+	ctx.WriteByte('(')
+	ctx.FormatNode(node.Columns)
+	ctx.WriteByte(')')
 }
 
 // InterleaveDef represents an interleave definition within a CREATE TABLE
@@ -702,20 +702,20 @@ type InterleaveDef struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(" INTERLEAVE IN PARENT ")
-	FormatNode(buf, f, node.Parent)
-	buf.WriteString(" (")
+func (node *InterleaveDef) Format(ctx *FmtCtx) {
+	ctx.WriteString(" INTERLEAVE IN PARENT ")
+	ctx.FormatNode(node.Parent)
+	ctx.WriteString(" (")
 	for i, field := range node.Fields {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, field)
+		ctx.FormatNode(field)
 	}
-	buf.WriteString(")")
+	ctx.WriteString(")")
 	if node.DropBehavior != DropDefault {
-		buf.WriteString(" ")
-		buf.WriteString(node.DropBehavior.String())
+		ctx.WriteString(" ")
+		ctx.WriteString(node.DropBehavior.String())
 	}
 }
 
@@ -739,31 +739,31 @@ type PartitionBy struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *PartitionBy) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *PartitionBy) Format(ctx *FmtCtx) {
 	if node == nil {
-		buf.WriteString(` PARTITION BY NOTHING`)
+		ctx.WriteString(` PARTITION BY NOTHING`)
 		return
 	}
 	if len(node.List) > 0 {
-		buf.WriteString(` PARTITION BY LIST (`)
+		ctx.WriteString(` PARTITION BY LIST (`)
 	} else if len(node.Range) > 0 {
-		buf.WriteString(` PARTITION BY RANGE (`)
+		ctx.WriteString(` PARTITION BY RANGE (`)
 	}
-	FormatNode(buf, f, node.Fields)
-	buf.WriteString(`) (`)
+	ctx.FormatNode(node.Fields)
+	ctx.WriteString(`) (`)
 	for i, p := range node.List {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, p)
+		ctx.FormatNode(p)
 	}
 	for i, p := range node.Range {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, p)
+		ctx.FormatNode(p)
 	}
-	buf.WriteString(`)`)
+	ctx.WriteString(`)`)
 }
 
 // ListPartition represents a PARTITION definition within a PARTITION BY LIST.
@@ -774,14 +774,14 @@ type ListPartition struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node ListPartition) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(`PARTITION `)
-	FormatNode(buf, f, node.Name)
-	buf.WriteString(` VALUES IN (`)
-	FormatNode(buf, f, node.Exprs)
-	buf.WriteByte(')')
+func (node ListPartition) Format(ctx *FmtCtx) {
+	ctx.WriteString(`PARTITION `)
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(` VALUES IN (`)
+	ctx.FormatNode(node.Exprs)
+	ctx.WriteByte(')')
 	if node.Subpartition != nil {
-		FormatNode(buf, f, node.Subpartition)
+		ctx.FormatNode(node.Subpartition)
 	}
 }
 
@@ -793,13 +793,13 @@ type RangePartition struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node RangePartition) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(`PARTITION `)
-	FormatNode(buf, f, node.Name)
-	buf.WriteString(` VALUES < `)
-	FormatNode(buf, f, node.Expr)
+func (node RangePartition) Format(ctx *FmtCtx) {
+	ctx.WriteString(`PARTITION `)
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(` VALUES < `)
+	ctx.FormatNode(node.Expr)
 	if node.Subpartition != nil {
-		FormatNode(buf, f, node.Subpartition)
+		ctx.FormatNode(node.Subpartition)
 	}
 }
 
@@ -821,29 +821,29 @@ func (node *CreateTable) As() bool {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CREATE TABLE ")
+func (node *CreateTable) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE TABLE ")
 	if node.IfNotExists {
-		buf.WriteString("IF NOT EXISTS ")
+		ctx.WriteString("IF NOT EXISTS ")
 	}
-	FormatNode(buf, f, &node.Table)
+	ctx.FormatNode(&node.Table)
 	if node.As() {
 		if len(node.AsColumnNames) > 0 {
-			buf.WriteString(" (")
-			FormatNode(buf, f, node.AsColumnNames)
-			buf.WriteByte(')')
+			ctx.WriteString(" (")
+			ctx.FormatNode(node.AsColumnNames)
+			ctx.WriteByte(')')
 		}
-		buf.WriteString(" AS ")
-		FormatNode(buf, f, node.AsSource)
+		ctx.WriteString(" AS ")
+		ctx.FormatNode(node.AsSource)
 	} else {
-		buf.WriteString(" (")
-		FormatNode(buf, f, node.Defs)
-		buf.WriteByte(')')
+		ctx.WriteString(" (")
+		ctx.FormatNode(node.Defs)
+		ctx.WriteByte(')')
 		if node.Interleave != nil {
-			FormatNode(buf, f, node.Interleave)
+			ctx.FormatNode(node.Interleave)
 		}
 		if node.PartitionBy != nil {
-			FormatNode(buf, f, node.PartitionBy)
+			ctx.FormatNode(node.PartitionBy)
 		}
 	}
 }
@@ -856,52 +856,52 @@ type CreateSequence struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CREATE SEQUENCE ")
+func (node *CreateSequence) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE SEQUENCE ")
 	if node.IfNotExists {
-		buf.WriteString("IF NOT EXISTS ")
+		ctx.WriteString("IF NOT EXISTS ")
 	}
-	FormatNode(buf, f, &node.Name)
-	FormatNode(buf, f, node.Options)
+	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.Options)
 }
 
 // SequenceOptions represents a list of sequence options.
 type SequenceOptions []SequenceOption
 
 // Format implements the NodeFormatter interface.
-func (node SequenceOptions) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node SequenceOptions) Format(ctx *FmtCtx) {
 	for _, option := range node {
-		buf.WriteByte(' ')
+		ctx.WriteByte(' ')
 		switch option.Name {
 		case SeqOptMaxValue, SeqOptMinValue:
 			if option.IntVal == nil {
-				buf.WriteString("NO ")
-				buf.WriteString(option.Name)
+				ctx.WriteString("NO ")
+				ctx.WriteString(option.Name)
 			} else {
-				buf.WriteString(option.Name)
-				buf.WriteByte(' ')
-				buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+				ctx.WriteString(option.Name)
+				ctx.WriteByte(' ')
+				ctx.Printf("%d", *option.IntVal)
 			}
 		case SeqOptCycle:
 			if option.BoolVal {
-				buf.WriteString("CYCLE")
+				ctx.WriteString("CYCLE")
 			} else {
-				buf.WriteString("NO CYCLE")
+				ctx.WriteString("NO CYCLE")
 			}
 		case SeqOptStart:
-			buf.WriteString(option.Name)
-			buf.WriteByte(' ')
+			ctx.WriteString(option.Name)
+			ctx.WriteByte(' ')
 			if option.OptionalWord {
-				buf.WriteString("WITH ")
+				ctx.WriteString("WITH ")
 			}
-			buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+			ctx.Printf("%d", *option.IntVal)
 		case SeqOptIncrement:
-			buf.WriteString(option.Name)
-			buf.WriteByte(' ')
+			ctx.WriteString(option.Name)
+			ctx.WriteByte(' ')
 			if option.OptionalWord {
-				buf.WriteString("BY ")
+				ctx.WriteString("BY ")
 			}
-			buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+			ctx.Printf("%d", *option.IntVal)
 		}
 	}
 }
@@ -938,18 +938,18 @@ func (node *CreateUser) HasPassword() bool {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateUser) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CREATE USER ")
+func (node *CreateUser) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE USER ")
 	if node.IfNotExists {
-		buf.WriteString("IF NOT EXISTS ")
+		ctx.WriteString("IF NOT EXISTS ")
 	}
-	FormatNode(buf, f, node.Name)
+	ctx.FormatNode(node.Name)
 	if node.HasPassword() {
-		buf.WriteString(" WITH PASSWORD ")
-		if f.showPasswords {
-			FormatNode(buf, f, node.Password)
+		ctx.WriteString(" WITH PASSWORD ")
+		if ctx.flags.showPasswords {
+			ctx.FormatNode(node.Password)
 		} else {
-			buf.WriteString("*****")
+			ctx.WriteString("*****")
 		}
 	}
 }
@@ -962,17 +962,17 @@ type AlterUserSetPassword struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterUserSetPassword) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER USER ")
+func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER USER ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Name)
-	buf.WriteString(" WITH PASSWORD ")
-	if f.showPasswords {
-		FormatNode(buf, f, node.Password)
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" WITH PASSWORD ")
+	if ctx.flags.showPasswords {
+		ctx.FormatNode(node.Password)
 	} else {
-		buf.WriteString("*****")
+		ctx.WriteString("*****")
 	}
 }
 
@@ -983,12 +983,12 @@ type CreateRole struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateRole) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CREATE ROLE ")
+func (node *CreateRole) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE ROLE ")
 	if node.IfNotExists {
-		buf.WriteString("IF NOT EXISTS ")
+		ctx.WriteString("IF NOT EXISTS ")
 	}
-	FormatNode(buf, f, node.Name)
+	ctx.FormatNode(node.Name)
 }
 
 // CreateView represents a CREATE VIEW statement.
@@ -999,19 +999,19 @@ type CreateView struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateView) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CREATE VIEW ")
-	FormatNode(buf, f, &node.Name)
+func (node *CreateView) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE VIEW ")
+	ctx.FormatNode(&node.Name)
 
 	if len(node.ColumnNames) > 0 {
-		buf.WriteByte(' ')
-		buf.WriteByte('(')
-		FormatNode(buf, f, node.ColumnNames)
-		buf.WriteByte(')')
+		ctx.WriteByte(' ')
+		ctx.WriteByte('(')
+		ctx.FormatNode(node.ColumnNames)
+		ctx.WriteByte(')')
 	}
 
-	buf.WriteString(" AS ")
-	FormatNode(buf, f, node.AsSource)
+	ctx.WriteString(" AS ")
+	ctx.FormatNode(node.AsSource)
 }
 
 // CreateStats represents a CREATE STATISTICS statement.
@@ -1022,13 +1022,13 @@ type CreateStats struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CreateStats) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CREATE STATISTICS ")
-	FormatNode(buf, f, &node.Name)
+func (node *CreateStats) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE STATISTICS ")
+	ctx.FormatNode(&node.Name)
 
-	buf.WriteString(" ON ")
-	FormatNode(buf, f, node.ColumnNames)
+	ctx.WriteString(" ON ")
+	ctx.FormatNode(node.ColumnNames)
 
-	buf.WriteString(" FROM ")
-	FormatNode(buf, f, &node.Table)
+	ctx.WriteString(" FROM ")
+	ctx.FormatNode(&node.Table)
 }

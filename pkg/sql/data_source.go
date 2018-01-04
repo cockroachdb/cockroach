@@ -943,17 +943,17 @@ type varFormatter struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (c *varFormatter) Format(buf *bytes.Buffer, f tree.FmtFlags) {
-	if f.ShowTableAliases && c.TableName.TableName != "" {
+func (c *varFormatter) Format(ctx *tree.FmtCtx) {
+	if ctx.ShowTableAliases() && c.TableName.TableName != "" {
 		if c.TableName.DatabaseName != "" {
-			tree.FormatNode(buf, f, c.TableName.DatabaseName)
-			buf.WriteByte('.')
+			ctx.FormatNode(c.TableName.DatabaseName)
+			ctx.WriteByte('.')
 		}
 
-		tree.FormatNode(buf, f, c.TableName.TableName)
-		buf.WriteByte('.')
+		ctx.FormatNode(c.TableName.TableName)
+		ctx.WriteByte('.')
 	}
-	tree.FormatNode(buf, f, c.ColumnName)
+	ctx.FormatNode(c.ColumnName)
 }
 
 // NodeFormatter returns a tree.NodeFormatter that, when formatted,

@@ -14,8 +14,6 @@
 
 package tree
 
-import "bytes"
-
 // AlterSequence represents an ALTER SEQUENCE statement, except in the case of
 // ALTER SEQUENCE <seqName> RENAME TO <newSeqName>, which is represented by a
 // RenameTable node.
@@ -26,11 +24,11 @@ type AlterSequence struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterSequence) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER SEQUENCE ")
+func (node *AlterSequence) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER SEQUENCE ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, &node.Name)
-	FormatNode(buf, f, node.Options)
+	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.Options)
 }
