@@ -58,12 +58,10 @@ func MakeExpression(
 	}
 
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
-	var f tree.FmtFlags
-	if indexVarMap == nil {
-		f = exprFmtFlagsBase(evalCtx)
-	} else {
-		f = tree.FmtIndexedVarFormat(
-			exprFmtFlagsBase(evalCtx),
+	var buf bytes.Buffer
+	fmtCtx := tree.MakeFmtCtx(&buf, exprFmtFlagsBase(evalCtx))
+	if indexVarMap != nil {
+		fmtCtx.WithIndexedVarFormat(
 			func(ctx *tree.FmtCtx, idx int) {
 				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {
@@ -73,8 +71,6 @@ func MakeExpression(
 			},
 		)
 	}
-	var buf bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&buf, f)
 	fmtCtx.FormatNode(expr)
 	if log.V(1) {
 		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(expr))
