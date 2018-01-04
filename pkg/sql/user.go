@@ -57,19 +57,21 @@ func GetUserHashedPassword(
 	return exists, hashedPassword, err
 }
 
-// GetAllUsers returns all the usernames in system.users.
-func GetAllUsers(ctx context.Context, plan *planner) (map[string]bool, error) {
-	query := `SELECT username FROM system.users`
-	p := makeInternalPlanner("get-all-user", plan.txn, security.RootUser, plan.extendedEvalCtx.MemMetrics)
-	defer finishInternalPlanner(p)
-	rows, err := p.queryRows(ctx, query)
+// The map value is true if the map key is a role, false if it is a user.
+func GetAllUsersAndRoles(ctx context.Context, plan *planner) (map[string]bool, error) {
+	query := `SELECT username,"isRole"  FROM system.users`
+	newPlanner := makeInternalPlanner("get-all-users-and-roles", plan.txn, security.RootUser, plan.p.session.memMetrics)
+	defer finishInternalPlanner(newPlanner)
+	rows, err := newPlanner.queryRows(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 
 	users := make(map[string]bool)
 	for _, row := range rows {
-		users[string(tree.MustBeDString(row[0]))] = true
+		username := tree.MustBeDString(row[0])
+		isRole := row[1].(*tree.DBool)
+		users[string(username)] = bool(*isRole)
 	}
 	return users, nil
 }

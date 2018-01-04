@@ -15,14 +15,17 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
+// TODO(mberhault): expand role membership for Check* and RequireSuperUser.
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilege(
@@ -35,6 +38,10 @@ type AuthorizationAccessor interface {
 	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
 	// or node). Includes the named action in the error message.
 	RequireSuperUser(action string) error
+
+	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
+	// of and returns a map of role -> isAdmin.
+	MemberOfWithAdminOption(ctx context.Context, member string) (map[string]bool, error)
 }
 
 var _ AuthorizationAccessor = &planner{}
@@ -77,4 +84,56 @@ func (p *planner) RequireSuperUser(action string) error {
 		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)
 	}
 	return nil
+}
+
+// MemberOfWithAdminOption looks up all the roles 'member' belongs to (direct and indirect) and
+// returns a map of "role" -> "isAdmin".
+// The "isAdmin" flag applies to both direct and indirect members.
+func (p *planner) MemberOfWithAdminOption(
+	ctx context.Context, member string,
+) (map[string]bool, error) {
+	ret := map[string]bool{}
+
+	// Keep track of members we looked up.
+	visited := map[string]struct{}{}
+
+	toVisit := []string{member}
+
+	// Placeholders don't work with arrays, so let's do one by one.
+	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
+
+	internalExecutor := InternalExecutor{LeaseManager: p.LeaseMgr()}
+
+	for len(toVisit) > 0 {
+		// Pop first element.
+		m := toVisit[0]
+		toVisit = toVisit[1:]
+		if _, ok := visited[m]; ok {
+			continue
+		}
+		visited[m] = struct{}{}
+
+		rows, err := internalExecutor.QueryRowsInTransaction(
+			ctx,
+			"expand-roles",
+			p.Txn(),
+			lookupRolesStmt,
+			m,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, row := range rows {
+			roleName := tree.MustBeDString(row[0])
+			isAdmin := row[1].(*tree.DBool)
+
+			ret[string(roleName)] = bool(*isAdmin)
+
+			// We need to expand this role. Let the "pop" worry about already-visited elements.
+			toVisit = append(toVisit, string(roleName))
+		}
+	}
+
+	return ret, nil
 }
