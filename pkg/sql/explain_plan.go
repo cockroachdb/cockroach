@@ -271,9 +271,9 @@ func (e *explainer) observer() planObserver {
 func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
 	if e.showExprs && expr != nil {
 		if nodeName == "join" {
-			qualifySave := e.fmtFlags.ShowTableAliases
-			e.fmtFlags.ShowTableAliases = true
-			defer func() { e.fmtFlags.ShowTableAliases = qualifySave }()
+			qualifySave := e.fmtFlags
+			e.fmtFlags.SetFlags(tree.FmtShowTableAliases)
+			defer func(e *explainer, f tree.FmtFlags) { e.fmtFlags = f }(e, qualifySave)
 		}
 		if n >= 0 {
 			fieldName = fmt.Sprintf("%s %d", fieldName, n)

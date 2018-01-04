@@ -47,7 +47,6 @@ type CreateDatabase struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CreateDatabase) Format(ctx *FmtCtx) {
-	f := ctx.flags
 	ctx.WriteString("CREATE DATABASE ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
@@ -55,19 +54,19 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Name)
 	if node.Template != "" {
 		ctx.WriteString(" TEMPLATE = ")
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Template, f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Template, ctx.flags.EncodeFlags())
 	}
 	if node.Encoding != "" {
 		ctx.WriteString(" ENCODING = ")
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Encoding, f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Encoding, ctx.flags.EncodeFlags())
 	}
 	if node.Collate != "" {
 		ctx.WriteString(" LC_COLLATE = ")
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Collate, f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Collate, ctx.flags.EncodeFlags())
 	}
 	if node.CType != "" {
 		ctx.WriteString(" LC_CTYPE = ")
-		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.CType, f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.CType, ctx.flags.EncodeFlags())
 	}
 }
 
@@ -349,7 +348,7 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Name)
 	ctx.WriteByte(' ')
-	node.Type.Format(ctx.Buffer, ctx.flags.encodeFlags)
+	node.Type.Format(ctx.Buffer, ctx.flags.EncodeFlags())
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
 		ctx.WriteString(" CONSTRAINT ")
 		ctx.FormatNode(node.Nullable.ConstraintName)
@@ -946,7 +945,7 @@ func (node *CreateUser) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Name)
 	if node.HasPassword() {
 		ctx.WriteString(" WITH PASSWORD ")
-		if ctx.flags.showPasswords {
+		if ctx.flags.HasFlags(FmtShowPasswords) {
 			ctx.FormatNode(node.Password)
 		} else {
 			ctx.WriteString("*****")
@@ -969,7 +968,7 @@ func (node *AlterUserSetPassword) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.Name)
 	ctx.WriteString(" WITH PASSWORD ")
-	if ctx.flags.showPasswords {
+	if ctx.flags.HasFlags(FmtShowPasswords) {
 		ctx.FormatNode(node.Password)
 	} else {
 		ctx.WriteString("*****")
