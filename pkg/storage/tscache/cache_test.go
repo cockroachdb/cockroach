@@ -555,8 +555,12 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 				txnID := uuid.MakeV4()
 				maxVal := cacheValue{}
 
-				const n = 1000
-				for j := 0; j < n; j++ {
+				rounds := 1000
+				if util.RaceEnabled {
+					// Reduce the number of rounds for race builds.
+					rounds /= 2
+				}
+				for j := 0; j < rounds; j++ {
 					t.Logf("goroutine %d at iter %d", i, j)
 
 					// Wait for all goroutines to synchronize.
