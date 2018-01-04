@@ -86,15 +86,15 @@ var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
 
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
-var FmtBareStrings FmtFlags = &fmtFlags{encodeFlags: lex.EncodeFlags{BareStrings: true}}
+var FmtBareStrings FmtFlags = &fmtFlags{encodeFlags: lex.EncBareStrings}
 
 // FmtArrays instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
-var FmtArrays FmtFlags = &fmtFlags{withinArray: true, encodeFlags: lex.EncodeFlags{BareStrings: true}}
+var FmtArrays FmtFlags = &fmtFlags{withinArray: true, encodeFlags: lex.EncBareStrings}
 
 // FmtBareIdentifiers instructs the pretty-printer to print
 // identifiers without wrapping quotes in any case.
-var FmtBareIdentifiers FmtFlags = &fmtFlags{encodeFlags: lex.EncodeFlags{BareIdentifiers: true}}
+var FmtBareIdentifiers FmtFlags = &fmtFlags{encodeFlags: lex.EncBareIdentifiers}
 
 // FmtParsable instructs the pretty-printer to produce a representation that
 // can be parsed into an equivalent expression (useful for serialization of
