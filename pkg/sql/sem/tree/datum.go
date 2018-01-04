@@ -487,7 +487,7 @@ func (*DInt) AmbiguousFormat() bool { return true }
 func (d *DInt) Format(ctx *FmtCtx) {
 	// If the number is negative, we need to use parens or the `:::INT` type hint
 	// will take precedence over the negation sign.
-	quote := ctx.flags.disambiguateDatumTypes && *d < 0
+	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && *d < 0
 	if quote {
 		ctx.WriteByte('(')
 	}
@@ -616,7 +616,7 @@ func (*DFloat) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DFloat) Format(ctx *FmtCtx) {
 	fl := float64(*d)
-	quote := ctx.flags.disambiguateDatumTypes && (math.IsNaN(fl) || math.IsInf(fl, 0))
+	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && (math.IsNaN(fl) || math.IsInf(fl, 0))
 	if quote {
 		ctx.WriteByte('\'')
 	}
@@ -747,7 +747,7 @@ func (*DDecimal) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(ctx *FmtCtx) {
-	quote := ctx.flags.disambiguateDatumTypes && d.Decimal.Form != apd.Finite
+	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && d.Decimal.Form != apd.Finite
 	if quote {
 		ctx.WriteByte('\'')
 	}
@@ -877,10 +877,10 @@ func (*DString) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := ctx.Buffer, ctx.flags
-	if f.withinArray {
+	if f.HasFlags(fmtWithinArray) {
 		lex.EncodeSQLStringInsideArray(buf, string(*d))
 	} else {
-		lex.EncodeSQLStringWithFlags(buf, string(*d), f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
 	}
 }
 
@@ -946,7 +946,7 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(ctx *FmtCtx) {
 	buf, f := ctx.Buffer, ctx.flags
-	if f.withinArray {
+	if f.HasFlags(fmtWithinArray) {
 		lex.EncodeSQLStringInsideArray(buf, d.Contents)
 	} else {
 		lex.EncodeSQLString(buf, d.Contents)
@@ -1085,7 +1085,7 @@ func (*DBytes) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	withQuotes := f.withinArray || !f.encodeFlags.HasFlags(lex.EncBareStrings)
+	withQuotes := f.HasFlags(fmtWithinArray) || !f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if withQuotes {
 		ctx.WriteByte('\'')
 	}
@@ -1181,7 +1181,7 @@ func (*DUuid) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1341,7 +1341,7 @@ func (*DIPAddr) AmbiguousFormat() bool {
 // Format implements the NodeFormatter interface.
 func (d *DIPAddr) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1452,7 +1452,7 @@ func (*DDate) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1552,7 +1552,7 @@ func (*DTime) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 func (d *DTime) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1787,7 +1787,7 @@ func (*DTimestamp) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1886,7 +1886,7 @@ func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2095,7 +2095,7 @@ func (*DInterval) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DInterval) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	bareStrings := f.encodeFlags.HasFlags(lex.EncBareStrings)
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2230,7 +2230,7 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 	// TODO(justin): ideally the JSON string encoder should know it needs to
 	// escape things to be inside SQL strings in order to avoid this allocation.
 	s := d.JSON.String()
-	lex.EncodeSQLStringWithFlags(ctx.Buffer, s, ctx.flags.encodeFlags)
+	lex.EncodeSQLStringWithFlags(ctx.Buffer, s, ctx.flags.EncodeFlags())
 }
 
 // Size implements the Datum interface.

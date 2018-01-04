@@ -117,7 +117,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
-		tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
+		tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 	if err != nil {
 		return err
 	}

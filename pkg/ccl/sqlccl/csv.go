@@ -864,7 +864,7 @@ func importJobDescription(
 		stmt.Options = append(stmt.Options, tree.KVOption{Key: importOptionTransformOnly})
 	}
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
-	return tree.AsStringWithFlags(&stmt, tree.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(&stmt, tree.FmtAlwaysQualifyTableNames), nil
 }
 
 const importCSVEnabledSetting = "experimental.importcsv.enabled"

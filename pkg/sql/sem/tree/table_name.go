@@ -114,7 +114,8 @@ type TableName struct {
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !t.DBNameOriginallyOmitted || f.alwaysQualify || ctx.tableNameFormatter != nil {
+	if !t.DBNameOriginallyOmitted ||
+		f.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil {
 		if t.PrefixOriginallySpecified {
 			ctx.FormatNode(t.PrefixName)
 			ctx.WriteByte('.')

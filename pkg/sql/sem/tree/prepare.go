@@ -35,7 +35,7 @@ func (node *Prepare) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			t.Format(ctx.Buffer, ctx.flags.encodeFlags)
+			t.Format(ctx.Buffer, ctx.flags.EncodeFlags())
 		}
 		ctx.WriteRune(')')
 	}
