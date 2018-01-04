@@ -85,7 +85,9 @@ explain_stmt ::=
 	| 'EXPLAIN' '(' explain_option_list ')' explainable_stmt
 
 grant_stmt ::=
-	'GRANT' privileges 'ON' targets 'TO' grantee_list
+	'GRANT' privileges 'ON' targets 'TO' name_list
+	| 'GRANT' privilege_list 'TO' name_list
+	| 'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'
 
 insert_stmt ::=
 	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
@@ -109,7 +111,9 @@ resume_stmt ::=
 	'RESUME' 'JOB' a_expr
 
 revoke_stmt ::=
-	'REVOKE' privileges 'ON' targets 'FROM' grantee_list
+	'REVOKE' privileges 'ON' targets 'FROM' name_list
+	| 'REVOKE' privilege_list 'FROM' name_list
+	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list
 
 savepoint_stmt ::=
 	'SAVEPOINT' name
@@ -300,8 +304,11 @@ privileges ::=
 	'ALL'
 	| privilege_list
 
-grantee_list ::=
+name_list ::=
 	( name ) ( ( ',' name ) )*
+
+privilege_list ::=
+	( privilege ) ( ( ',' privilege ) )*
 
 insert_target ::=
 	qualified_name
@@ -536,9 +543,6 @@ alter_user_password_stmt ::=
 table_pattern_list ::=
 	( table_pattern ) ( ( ',' table_pattern ) )*
 
-name_list ::=
-	( name ) ( ( ',' name ) )*
-
 non_reserved_word_or_sconst ::=
 	non_reserved_word
 	| 'SCONST'
@@ -582,6 +586,7 @@ unreserved_keyword ::=
 	'ABORT'
 	| 'ACTION'
 	| 'ADD'
+	| 'ADMIN'
 	| 'ALTER'
 	| 'AT'
 	| 'BACKUP'
@@ -666,6 +671,7 @@ unreserved_keyword ::=
 	| 'OF'
 	| 'OFF'
 	| 'OID'
+	| 'OPTION'
 	| 'OPTIONS'
 	| 'ORDINALITY'
 	| 'OVER'
@@ -868,8 +874,11 @@ expr_list ::=
 explain_option_name ::=
 	non_reserved_word
 
-privilege_list ::=
-	( privilege ) ( ( ',' privilege ) )*
+privilege ::=
+	name
+	| 'CREATE'
+	| 'GRANT'
+	| 'SELECT'
 
 opt_conf_expr ::=
 	'(' name_list ')' where_clause
@@ -988,7 +997,7 @@ on_privilege_target_clause ::=
 	| 
 
 for_grantee_clause ::=
-	'FOR' grantee_list
+	'FOR' name_list
 	| 
 
 opt_compact ::=
@@ -1180,15 +1189,6 @@ table_name_with_index_list ::=
 
 table_name_list ::=
 	( any_name ) ( ( ',' any_name ) )*
-
-privilege ::=
-	'CREATE'
-	| 'DROP'
-	| 'GRANT'
-	| 'SELECT'
-	| 'INSERT'
-	| 'DELETE'
-	| 'UPDATE'
 
 column_def ::=
 	name typename col_qual_list
