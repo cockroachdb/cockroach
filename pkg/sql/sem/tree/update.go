@@ -23,8 +23,6 @@
 
 package tree
 
-import "bytes"
-
 // Update represents an UPDATE statement.
 type Update struct {
 	With      *With
@@ -37,28 +35,28 @@ type Update struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Update) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.With)
-	buf.WriteString("UPDATE ")
-	FormatNode(buf, f, node.Table)
-	buf.WriteString(" SET ")
-	FormatNode(buf, f, node.Exprs)
-	FormatNode(buf, f, node.Where)
-	FormatNode(buf, f, node.OrderBy)
-	FormatNode(buf, f, node.Limit)
-	FormatNode(buf, f, node.Returning)
+func (node *Update) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.With)
+	ctx.WriteString("UPDATE ")
+	ctx.FormatNode(node.Table)
+	ctx.WriteString(" SET ")
+	ctx.FormatNode(node.Exprs)
+	ctx.FormatNode(node.Where)
+	ctx.FormatNode(node.OrderBy)
+	ctx.FormatNode(node.Limit)
+	ctx.FormatNode(node.Returning)
 }
 
 // UpdateExprs represents a list of update expressions.
 type UpdateExprs []*UpdateExpr
 
 // Format implements the NodeFormatter interface.
-func (node UpdateExprs) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node UpdateExprs) Format(ctx *FmtCtx) {
 	for i, n := range node {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 }
 
@@ -70,14 +68,14 @@ type UpdateExpr struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *UpdateExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *UpdateExpr) Format(ctx *FmtCtx) {
 	open, close := "", ""
 	if node.Tuple {
 		open, close = "(", ")"
 	}
-	buf.WriteString(open)
-	FormatNode(buf, f, node.Names)
-	buf.WriteString(close)
-	buf.WriteString(" = ")
-	FormatNode(buf, f, node.Expr)
+	ctx.WriteString(open)
+	ctx.FormatNode(node.Names)
+	ctx.WriteString(close)
+	ctx.WriteString(" = ")
+	ctx.FormatNode(node.Expr)
 }

@@ -183,6 +183,7 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 
 	case *tree.DTuple:
 		b.variablePutbuf.WriteString("(")
+		fmtCtx := tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtSimple)
 		for i, d := range v.D {
 			if i > 0 {
 				b.variablePutbuf.WriteString(",")
@@ -191,7 +192,7 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 				// Emit nothing on NULL.
 				continue
 			}
-			tree.FormatNode(&b.variablePutbuf, tree.FmtSimple, d)
+			fmtCtx.FormatNode(d)
 		}
 		b.variablePutbuf.WriteString(")")
 		b.writeLengthPrefixedVariablePutbuf()
@@ -207,12 +208,13 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 		}
 
 		b.variablePutbuf.WriteString(begin)
+		fmtCtx := tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtArrays)
 		for i, d := range v.Array {
 			if i > 0 {
 				b.variablePutbuf.WriteString(sep)
 			}
 			// TODO(justin): add a test for nested arrays.
-			tree.FormatNode(&b.variablePutbuf, tree.FmtArrays, d)
+			fmtCtx.FormatNode(d)
 		}
 		b.variablePutbuf.WriteString(end)
 		b.writeLengthPrefixedVariablePutbuf()

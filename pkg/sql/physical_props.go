@@ -256,11 +256,12 @@ func (pp *physicalProps) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 //   a=b=c; d=e=f; g=CONST; h=CONST; b+,d-
 func (pp *physicalProps) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns) {
 	pp.check()
+	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
 	printCol := func(buf *bytes.Buffer, columns sqlbase.ResultColumns, colIdx int) {
 		if columns == nil || colIdx >= len(columns) {
 			fmt.Fprintf(buf, "@%d", colIdx+1)
 		} else {
-			tree.FormatNode(buf, tree.FmtSimple, tree.Name(columns[colIdx].Name))
+			fmtCtx.FormatNode(tree.Name(columns[colIdx].Name))
 		}
 	}
 
