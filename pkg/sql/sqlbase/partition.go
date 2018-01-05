@@ -120,14 +120,6 @@ func DecodePartitionTuple(
 		Datums: make(tree.Datums, 0, int(partDesc.NumColumns)),
 	}
 
-	if len(partDesc.List) > 0 {
-		t.Special = PartitionDefaultVal
-	} else if len(partDesc.Range) > 0 {
-		t.Special = PartitionMaxVal
-	} else {
-		return nil, nil, errors.New("unknown partition type")
-	}
-
 	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
 	for _, colID := range colIDs {
 		col, err := tableDesc.FindColumnByID(colID)
@@ -137,8 +129,14 @@ func DecodePartitionTuple(
 		if _, dataOffset, _, typ, err := encoding.DecodeValueTag(valueEncBuf); err != nil {
 			return nil, nil, errors.Wrap(err, "decoding")
 		} else if typ == encoding.NotNull {
+			// NOT NULL signals that a PartitionSpecialValCode follows
+			rem, _, valCode, err := encoding.DecodeNonsortingUvarint(valueEncBuf[dataOffset:])
+			if err != nil {
+				return nil, nil, err
+			}
+			t.Special = PartitionSpecialValCode(valCode)
 			t.SpecialCount++
-			valueEncBuf = valueEncBuf[dataOffset:]
+			valueEncBuf = rem
 			continue
 		}
 		var datum tree.Datum
