@@ -638,7 +638,7 @@ func (node *CoalesceExpr) TypedExprAt(idx int) TypedExpr {
 func (node *CoalesceExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.Name)
 	ctx.WriteByte('(')
-	ctx.FormatNode(node.Exprs)
+	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
 }
 
@@ -720,7 +720,7 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 		ctx.WriteString("ROW")
 	}
 	ctx.WriteByte('(')
-	ctx.FormatNode(node.Exprs)
+	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
 }
 
@@ -751,7 +751,7 @@ type Array struct {
 // Format implements the NodeFormatter interface.
 func (node *Array) Format(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY[")
-	ctx.FormatNode(node.Exprs)
+	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(']')
 }
 
@@ -773,8 +773,8 @@ func (node *ArrayFlatten) Format(ctx *FmtCtx) {
 type Exprs []Expr
 
 // Format implements the NodeFormatter interface.
-func (node Exprs) Format(ctx *FmtCtx) {
-	for i, n := range node {
+func (node *Exprs) Format(ctx *FmtCtx) {
+	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
@@ -786,10 +786,10 @@ func (node Exprs) Format(ctx *FmtCtx) {
 // because it's not parenthesized.
 type TypedExprs []TypedExpr
 
-func (node TypedExprs) String() string {
+func (node *TypedExprs) String() string {
 	var prefix string
 	var buf bytes.Buffer
-	for _, n := range node {
+	for _, n := range *node {
 		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
@@ -1085,16 +1085,16 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	// We need to remove name anonimization for the function name in
 	// particular. Do this by overriding the flags.
 	subCtx := ctx.CopyWithFlags(ctx.flags & ^FmtAnonymize)
-	subCtx.FormatNode(node.Func)
+	subCtx.FormatNode(&node.Func)
 
 	ctx.WriteByte('(')
 	ctx.WriteString(typ)
-	ctx.FormatNode(node.Exprs)
+	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
 	if window := node.WindowDef; window != nil {
 		ctx.WriteString(" OVER ")
 		if window.Name != "" {
-			ctx.FormatNode(window.Name)
+			ctx.FormatNode(&window.Name)
 		} else {
 			ctx.FormatNode(window)
 		}
@@ -1270,8 +1270,8 @@ func validCastTypes(t types.T) []types.T {
 type ArraySubscripts []*ArraySubscript
 
 // Format implements the NodeFormatter interface.
-func (a ArraySubscripts) Format(ctx *FmtCtx) {
-	for _, s := range a {
+func (a *ArraySubscripts) Format(ctx *FmtCtx) {
+	for _, s := range *a {
 		ctx.FormatNode(s)
 	}
 }
@@ -1287,7 +1287,7 @@ type IndirectionExpr struct {
 // Format implements the NodeFormatter interface.
 func (node *IndirectionExpr) Format(ctx *FmtCtx) {
 	exprFmtWithParen(ctx, node.Expr)
-	ctx.FormatNode(node.Indirection)
+	ctx.FormatNode(&node.Indirection)
 }
 
 type annotateSyntaxMode int
@@ -1381,15 +1381,15 @@ func (node *DTable) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
 func (node *ExistsExpr) String() string       { return AsString(node) }
-func (node Exprs) String() string             { return AsString(node) }
+func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
 func (node *IfExpr) String() string           { return AsString(node) }
 func (node *IndexedVar) String() string       { return AsString(node) }
 func (node *IndirectionExpr) String() string  { return AsString(node) }
 func (node *IsOfTypeExpr) String() string     { return AsString(node) }
-func (node Name) String() string              { return AsString(node) }
-func (node UnrestrictedName) String() string  { return AsString(node) }
+func (node *Name) String() string             { return AsString(node) }
+func (node *UnrestrictedName) String() string { return AsString(node) }
 func (node *NotExpr) String() string          { return AsString(node) }
 func (node *NullIfExpr) String() string       { return AsString(node) }
 func (node *NumVal) String() string           { return AsString(node) }
@@ -1405,4 +1405,4 @@ func (node DefaultVal) String() string        { return AsString(node) }
 func (node MaxVal) String() string            { return AsString(node) }
 func (node *Placeholder) String() string      { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
-func (list NameList) String() string          { return AsString(list) }
+func (list *NameList) String() string         { return AsString(list) }

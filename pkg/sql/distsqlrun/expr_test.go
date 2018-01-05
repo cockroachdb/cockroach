@@ -34,7 +34,8 @@ func (d testVarContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.D
 }
 
 func (d testVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return tree.Name(fmt.Sprintf("var%d", idx))
+	n := tree.Name(fmt.Sprintf("var%d", idx))
+	return &n
 }
 
 func TestProcessExpression(t *testing.T) {

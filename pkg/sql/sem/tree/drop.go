@@ -56,7 +56,7 @@ func (node *DropDatabase) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	if node.DropBehavior != DropDefault {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.DropBehavior.String())
@@ -76,7 +76,7 @@ func (node *DropIndex) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.IndexList)
+	ctx.FormatNode(&node.IndexList)
 	if node.DropBehavior != DropDefault {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.DropBehavior.String())
@@ -96,7 +96,7 @@ func (node *DropTable) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Names)
+	ctx.FormatNode(&node.Names)
 	if node.DropBehavior != DropDefault {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.DropBehavior.String())
@@ -116,7 +116,7 @@ func (node *DropView) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Names)
+	ctx.FormatNode(&node.Names)
 	if node.DropBehavior != DropDefault {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.DropBehavior.String())
@@ -136,7 +136,7 @@ func (node *DropSequence) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Names)
+	ctx.FormatNode(&node.Names)
 	if node.DropBehavior != DropDefault {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.DropBehavior.String())
@@ -155,7 +155,7 @@ func (node *DropUser) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Names)
+	ctx.FormatNode(&node.Names)
 }
 
 // DropRole represents a DROP ROLE statement
@@ -170,5 +170,5 @@ func (node *DropRole) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Names)
+	ctx.FormatNode(&node.Names)
 }

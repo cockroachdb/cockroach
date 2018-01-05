@@ -40,7 +40,7 @@ func (node *Revoke) Format(ctx *FmtCtx) {
 	ctx.WriteString("REVOKE ")
 	node.Privileges.Format(ctx.Buffer)
 	ctx.WriteString(" ON ")
-	ctx.FormatNode(node.Targets)
+	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" FROM ")
-	ctx.FormatNode(node.Grantees)
+	ctx.FormatNode(&node.Grantees)
 }

@@ -42,18 +42,18 @@ type TargetList struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (tl TargetList) Format(ctx *FmtCtx) {
+func (tl *TargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
-		ctx.FormatNode(tl.Databases)
+		ctx.FormatNode(&tl.Databases)
 	} else {
-		ctx.FormatNode(tl.Tables)
+		ctx.FormatNode(&tl.Tables)
 	}
 }
 
 // NormalizeTablesWithDatabase normalizes all patterns and qualifies TableNames
 // with the provided db name if non-empty.
-func (tl TargetList) NormalizeTablesWithDatabase(db string) error {
+func (tl *TargetList) NormalizeTablesWithDatabase(db string) error {
 	for i, pattern := range tl.Tables {
 		var err error
 		pattern, err = pattern.NormalizeTablePattern()
@@ -78,7 +78,7 @@ func (node *Grant) Format(ctx *FmtCtx) {
 	ctx.WriteString("GRANT ")
 	node.Privileges.Format(ctx.Buffer)
 	ctx.WriteString(" ON ")
-	ctx.FormatNode(node.Targets)
+	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" TO ")
-	ctx.FormatNode(node.Grantees)
+	ctx.FormatNode(&node.Grantees)
 }

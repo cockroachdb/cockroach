@@ -616,7 +616,7 @@ func exprContainsColumnName(expr tree.Expr, col sqlbase.ColumnDescriptor) (bool,
 			exprContainsColumnName = true
 		}
 		// Convert to a dummy node of the correct type.
-		return nil, false, dummyColumnItem{col.Type.ToDatumType()}
+		return nil, false, &dummyColumnItem{col.Type.ToDatumType()}
 	}
 
 	_, err := tree.SimpleVisit(expr, preFn)

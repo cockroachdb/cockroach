@@ -328,11 +328,12 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 	}
 	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
 	f.buf.WriteByte('(')
-	for i, rCol := range cols {
+	for i := range cols {
+		rCol := &cols[i]
 		if i > 0 {
 			f.buf.WriteString(", ")
 		}
-		f.ctx.FormatNode(tree.Name(rCol.Name))
+		f.ctx.FormatNameP(&rCol.Name)
 		// Output extra properties like [hidden,omitted].
 		hasProps := false
 		outputProp := func(prop string) {

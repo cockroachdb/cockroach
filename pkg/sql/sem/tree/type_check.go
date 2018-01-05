@@ -499,7 +499,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		if desired != types.Any {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
-		sig := fmt.Sprintf("%s(%s)%s", expr.Func, strings.Join(typeNames, ", "), desStr)
+		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
 		if len(fns) == 0 {
 			return nil, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, "unknown signature: %s", sig)
 		}
@@ -543,8 +543,9 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		case AggregateClass:
 		case WindowClass:
 		default:
-			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "OVER specified, but %s() is neither a window function nor an "+
-				"aggregate function", expr.Func)
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"OVER specified, but %s() is neither a window function nor an aggregate function",
+				&expr.Func)
 		}
 
 		if expr.Filter != nil {
@@ -554,14 +555,16 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		// Make sure the window function builtins are used as window function applications.
 		switch builtin.Class {
 		case WindowClass:
-			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "window function %s() requires an OVER clause", expr.Func)
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"window function %s() requires an OVER clause", &expr.Func)
 		}
 	}
 
 	if expr.Filter != nil {
 		if builtin.Class != AggregateClass {
 			// Same error message as Postgres.
-			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "FILTER specified but %s() is not an aggregate function", expr.Func)
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"FILTER specified but %s() is not an aggregate function", &expr.Func)
 		}
 
 	}
@@ -677,7 +680,7 @@ func (expr UnqualifiedStar) TypeCheck(_ *SemaContext, desired types.T) (TypedExp
 }
 
 // TypeCheck implements the Expr interface.
-func (expr UnresolvedName) TypeCheck(s *SemaContext, desired types.T) (TypedExpr, error) {
+func (expr *UnresolvedName) TypeCheck(s *SemaContext, desired types.T) (TypedExpr, error) {
 	v, err := expr.NormalizeVarName()
 	if err != nil {
 		return nil, err
@@ -1484,8 +1487,9 @@ func typeCheckTupleComparison(
 		rightSubExpr := right.Exprs[elemIdx]
 		leftSubExprTyped, rightSubExprTyped, _, err := typeCheckComparisonOp(ctx, op, leftSubExpr, rightSubExpr)
 		if err != nil {
+			exps := Exprs([]Expr{left, right})
 			return nil, nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "tuples %s are not comparable at index %d: %s",
-				Exprs([]Expr{left, right}), elemIdx+1, err)
+				&exps, elemIdx+1, err)
 		}
 		left.Exprs[elemIdx] = leftSubExprTyped
 		left.types[elemIdx] = leftSubExprTyped.ResolvedType()

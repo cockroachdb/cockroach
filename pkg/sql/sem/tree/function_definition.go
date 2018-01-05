@@ -63,7 +63,7 @@ func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
 // ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
-func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
+func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
 	fn, err := n.normalizeFunctionName()
 	if err != nil {
 		return nil, err

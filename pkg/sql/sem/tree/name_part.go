@@ -30,14 +30,37 @@ import (
 // `unrestricted_name` nonterminals. See UnrestrictedName for details.
 type Name string
 
+// NoName is a pre-allocated instance of the empty string, suitable
+// for passing to methods that want a pointer to a name.
+var NoName Name
+
 // Format implements the NodeFormatter interface.
-func (n Name) Format(ctx *FmtCtx) {
+func (n *Name) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
 	} else {
-		lex.EncodeRestrictedSQLIdent(ctx.Buffer, string(n), f.EncodeFlags())
+		lex.EncodeRestrictedSQLIdent(ctx.Buffer, string(*n), f.EncodeFlags())
 	}
+}
+
+// NameStringP escapes an identifier stored in a heap string to a SQL
+// identifier, avoiding a heap allocation.
+func NameStringP(s *string) string {
+	return ((*Name)(s)).String()
+}
+
+// NameString escapes an identifier stored in a string to a SQL
+// identifier.
+func NameString(s string) string {
+	return ((*Name)(&s)).String()
+}
+
+// ErrNameString escapes an identifier stored a string to a SQL
+// identifier suitable for printing in error messages, avoiding a heap
+// allocation.
+func ErrNameString(s *string) string {
+	return ErrString(((*Name)(s)))
 }
 
 // Normalize normalizes to lowercase and Unicode Normalization Form C
@@ -61,12 +84,12 @@ func (n Name) Normalize() string {
 type UnrestrictedName string
 
 // Format implements the NodeFormatter interface.
-func (u UnrestrictedName) Format(ctx *FmtCtx) {
+func (u *UnrestrictedName) Format(ctx *FmtCtx) {
 	f := ctx.flags
 	if f.HasFlags(FmtAnonymize) {
 		ctx.WriteByte('_')
 	} else {
-		lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, string(u), f.EncodeFlags())
+		lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, string(*u), f.EncodeFlags())
 	}
 }
 
@@ -86,12 +109,12 @@ func (l NameList) ToStrings() []string {
 type NameList []Name
 
 // Format implements the NodeFormatter interface.
-func (l NameList) Format(ctx *FmtCtx) {
-	for i, n := range l {
+func (l *NameList) Format(ctx *FmtCtx) {
+	for i := range *l {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(n)
+		ctx.FormatNode(&(*l)[i])
 	}
 }
 
@@ -132,8 +155,8 @@ type NamePart interface {
 	namePart()
 }
 
-var _ NamePart = Name("")
-var _ NamePart = UnrestrictedName("")
+var _ NamePart = func() *Name { n := Name(""); return &n }()
+var _ NamePart = func() *UnrestrictedName { n := UnrestrictedName(""); return &n }()
 var _ NamePart = &ArraySubscript{}
 var _ NamePart = UnqualifiedStar{}
 
@@ -147,8 +170,8 @@ func (UnqualifiedStar) namePart()   {}
 type NameParts []NamePart
 
 // Format implements the NodeFormatter interface.
-func (l NameParts) Format(ctx *FmtCtx) {
-	for i, p := range l {
+func (l *NameParts) Format(ctx *FmtCtx) {
+	for i, p := range *l {
 		_, isArraySubscript := p.(*ArraySubscript)
 		if !isArraySubscript && i > 0 {
 			ctx.WriteByte('.')
@@ -162,10 +185,10 @@ func (l NameParts) Format(ctx *FmtCtx) {
 type UnresolvedName NameParts
 
 // Format implements the NodeFormatter interface.
-func (u UnresolvedName) Format(ctx *FmtCtx) {
-	ctx.FormatNode(NameParts(u))
+func (u *UnresolvedName) Format(ctx *FmtCtx) {
+	ctx.FormatNode((*NameParts)(u))
 }
-func (u UnresolvedName) String() string { return AsString(u) }
+func (u *UnresolvedName) String() string { return AsString(u) }
 
 // UnresolvedNames corresponds to a comma-separate list of unresolved
 // names.  Note: this should be treated as immutable when embedded in
@@ -174,11 +197,11 @@ func (u UnresolvedName) String() string { return AsString(u) }
 type UnresolvedNames []UnresolvedName
 
 // Format implements the NodeFormatter interface.
-func (u UnresolvedNames) Format(ctx *FmtCtx) {
-	for i, n := range u {
+func (u *UnresolvedNames) Format(ctx *FmtCtx) {
+	for i := range *u {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(n)
+		ctx.FormatNode(&(*u)[i])
 	}
 }

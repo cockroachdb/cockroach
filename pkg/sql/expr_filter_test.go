@@ -163,7 +163,8 @@ func TestSplitFilter(t *testing.T) {
 					if colName == col {
 						// Convert to a VarName (to check that conversion happens correctly). It
 						// will print the same.
-						return true, tree.UnresolvedName{tree.Name(colName)}
+						cn := tree.Name(colName)
+						return true, &tree.UnresolvedName{&cn}
 					}
 				}
 				return false, nil

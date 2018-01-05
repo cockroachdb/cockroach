@@ -456,7 +456,7 @@ func (p *planner) newPlan(
 		return p.CancelJob(ctx, n)
 	case *tree.Scrub:
 		return p.Scrub(ctx, n)
-	case CopyDataBlock:
+	case *CopyDataBlock:
 		return p.CopyData(ctx, n)
 	case *tree.CopyFrom:
 		return p.Copy(ctx, n)
