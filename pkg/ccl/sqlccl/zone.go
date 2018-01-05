@@ -199,36 +199,25 @@ func indexCoveringsForPartitioning(
 	}
 
 	if len(partDesc.Range) > 0 {
-		lastEndKey := sqlbase.MakeIndexKeyPrefix(tableDesc, idxDesc.ID)
-		if len(prefixDatums) > 0 {
-			colMap := make(map[sqlbase.ColumnID]int, len(prefixDatums))
-			for i := range prefixDatums {
-				colMap[idxDesc.ColumnIDs[i]] = i
-			}
-
-			var err error
-			lastEndKey, _, err = sqlbase.EncodePartialIndexKey(
-				tableDesc, idxDesc, len(prefixDatums), colMap, prefixDatums, lastEndKey)
-			if err != nil {
-				return nil, err
-			}
-		}
-
 		for _, p := range partDesc.Range {
 			if _, ok := relevantPartitions[p.Name]; !ok {
 				continue
 			}
-			_, endKey, err := sqlbase.DecodePartitionTuple(
-				a, tableDesc, idxDesc, partDesc, p.UpperBound, prefixDatums)
+			_, fromKey, err := sqlbase.DecodePartitionTuple(
+				a, tableDesc, idxDesc, partDesc, p.From, prefixDatums)
+			if err != nil {
+				return nil, err
+			}
+			_, toKey, err := sqlbase.DecodePartitionTuple(
+				a, tableDesc, idxDesc, partDesc, p.To, prefixDatums)
 			if err != nil {
 				return nil, err
 			}
 			if _, ok := relevantPartitions[p.Name]; ok {
 				coverings = append(coverings, intervalccl.Covering{{
-					Start: lastEndKey, End: endKey,
+					Start: fromKey, End: toKey,
 					Payload: config.Subzone{PartitionName: p.Name},
 				}})
-				lastEndKey = endKey
 			}
 		}
 	}

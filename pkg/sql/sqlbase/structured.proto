@@ -212,9 +212,14 @@ message PartitioningDescriptor {
   message Range {
     // Name is the partition name.
     optional string name = 1 [(gogoproto.nullable) = false];
-    // UpperBound is the exclusive upper bound of this range partition. It is
-    // encoded with the EncDatum value encoding. MAXVALUE is encoded as NOT NULL.
-    optional bytes upper_bound = 2;
+    // From is the inclusive lower bound of this range partition. It is encoded
+    // with the EncDatum value encoding. MINVALUE and MAXVALUE are encoded as
+    // NOT NULL followed by a PartitionSpecialValCode encoded as a non-sorting
+    // uvarint.
+    optional bytes from = 3;
+    // To is the exclusive upper bound of this range partition. It is encoded
+    // in the same way as From.
+    optional bytes to = 2;
   }
 
   // NumColumns is how large of a prefix of the columns in an index are used in
