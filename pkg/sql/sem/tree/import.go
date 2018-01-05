@@ -29,7 +29,7 @@ var _ Statement = &Import{}
 // Format implements the NodeFormatter interface.
 func (node *Import) Format(ctx *FmtCtx) {
 	ctx.WriteString("IMPORT TABLE ")
-	ctx.FormatNode(node.Table)
+	ctx.FormatNode(&node.Table)
 
 	if node.CreateFile != nil {
 		ctx.WriteString(" CREATE USING ")
@@ -37,17 +37,17 @@ func (node *Import) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ")
 	} else {
 		ctx.WriteString(" (")
-		ctx.FormatNode(node.CreateDefs)
+		ctx.FormatNode(&node.CreateDefs)
 		ctx.WriteString(") ")
 	}
 
 	ctx.WriteString(node.FileFormat)
 	ctx.WriteString(" DATA (")
-	ctx.FormatNode(node.Files)
+	ctx.FormatNode(&node.Files)
 	ctx.WriteString(") ")
 
 	if node.Options != nil {
 		ctx.WriteString("WITH ")
-		ctx.FormatNode(node.Options)
+		ctx.FormatNode(&node.Options)
 	}
 }

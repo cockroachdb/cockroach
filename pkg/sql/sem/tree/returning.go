@@ -33,7 +33,7 @@ type ReturningExprs SelectExprs
 // Format implements the NodeFormatter interface.
 func (r *ReturningExprs) Format(ctx *FmtCtx) {
 	ctx.WriteString(" RETURNING ")
-	ctx.FormatNode(SelectExprs(*r))
+	ctx.FormatNode((*SelectExprs)(r))
 }
 
 // ReturningNothingClause is a shared instance to avoid unnecessary allocations.

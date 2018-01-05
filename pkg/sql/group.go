@@ -611,7 +611,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					argExpr,
-					fmt.Sprintf("the argument of %s()", t.Func),
+					fmt.Sprintf("the argument of %s()", &t.Func),
 					v.planner.session.SearchPath,
 				); err != nil {
 					v.err = err

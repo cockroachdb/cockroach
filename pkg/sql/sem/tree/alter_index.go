@@ -30,15 +30,15 @@ func (node *AlterIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF EXISTS ")
 	}
 	ctx.FormatNode(node.Index)
-	ctx.FormatNode(node.Cmds)
+	ctx.FormatNode(&node.Cmds)
 }
 
 // AlterIndexCmds represents a list of index alterations.
 type AlterIndexCmds []AlterIndexCmd
 
 // Format implements the NodeFormatter interface.
-func (node AlterIndexCmds) Format(ctx *FmtCtx) {
-	for i, n := range node {
+func (node *AlterIndexCmds) Format(ctx *FmtCtx) {
+	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(",")
 		}

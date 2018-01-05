@@ -131,7 +131,7 @@ func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return tree.Name(n.resultColumns[idx].Name)
+	return (*tree.Name)(&n.resultColumns[idx].Name)
 }
 
 // scanRun contains the run-time state of scanNode during local execution.
@@ -288,7 +288,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index %q not found", tree.ErrString(indexHints.Index))
+			return errors.Errorf("index %q not found", tree.ErrString(&indexHints.Index))
 		}
 	} else if indexHints.IndexID != 0 {
 		// Search index by ID.

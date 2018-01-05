@@ -201,10 +201,6 @@ func (p *planner) validateForeignKey(
 		return err
 	}
 
-	escape := func(s string) string {
-		return tree.Name(s).String()
-	}
-
 	prefix := len(srcIdx.ColumnNames)
 	if p := len(targetIdx.ColumnNames); p < prefix {
 		prefix = p
@@ -214,8 +210,8 @@ func (p *planner) validateForeignKey(
 	join, where := make([]string, prefix), make([]string, prefix)
 
 	for i := 0; i < prefix; i++ {
-		srcCols[i] = fmt.Sprintf("s.%s", escape(srcIdx.ColumnNames[i]))
-		targetCols[i] = fmt.Sprintf("t.%s", escape(targetIdx.ColumnNames[i]))
+		srcCols[i] = fmt.Sprintf("s.%s", tree.NameString(srcIdx.ColumnNames[i]))
+		targetCols[i] = fmt.Sprintf("t.%s", tree.NameString(targetIdx.ColumnNames[i]))
 		join[i] = fmt.Sprintf("(%s = %s OR (%s IS NULL AND %s IS NULL))",
 			srcCols[i], targetCols[i], srcCols[i], targetCols[i])
 		where[i] = fmt.Sprintf("(%s IS NOT NULL AND %s IS NULL)", srcCols[i], targetCols[i])
@@ -224,7 +220,7 @@ func (p *planner) validateForeignKey(
 	query := fmt.Sprintf(
 		`SELECT %s FROM %s@%s AS s LEFT OUTER JOIN %s@%s AS t ON %s WHERE %s LIMIT 1`,
 		strings.Join(srcCols, ", "),
-		srcName, escape(srcIdx.Name), targetName, escape(targetIdx.Name),
+		srcName, tree.NameString(srcIdx.Name), targetName, tree.NameString(targetIdx.Name),
 		strings.Join(join, " AND "),
 		strings.Join(where, " OR "),
 	)

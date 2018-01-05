@@ -108,8 +108,8 @@ func (n *showZoneConfigNode) startExec(params runParams) error {
 
 	// Determine the CLI specifier for the zone config that actually applies
 	// without performing another KV lookup.
-	n.run.cliSpecifier = config.CLIZoneSpecifier(ascendZoneSpecifier(
-		n.zoneSpecifier, uint32(targetID), zoneID, subzone))
+	zs := ascendZoneSpecifier(n.zoneSpecifier, uint32(targetID), zoneID, subzone)
+	n.run.cliSpecifier = config.CLIZoneSpecifier(&zs)
 
 	// Ensure subzone configs don't infect the output of config_bytes.
 	zone.Subzones = nil

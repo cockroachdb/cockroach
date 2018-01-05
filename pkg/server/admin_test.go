@@ -426,8 +426,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 			defer s.Stopper().Stop(context.TODO())
 			ts := s.(*TestServer)
 
-			escDBName := tree.Name(tc.dbName).String()
-			escTblName := tree.Name(tc.tblName).String()
+			escDBName := tree.NameStringP(&tc.dbName)
+			escTblName := tree.NameStringP(&tc.tblName)
 
 			ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")

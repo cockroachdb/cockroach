@@ -39,7 +39,7 @@ func (node *Delete) Format(ctx *FmtCtx) {
 	ctx.WriteString("DELETE FROM ")
 	ctx.FormatNode(node.Table)
 	ctx.FormatNode(node.Where)
-	ctx.FormatNode(node.OrderBy)
+	ctx.FormatNode(&node.OrderBy)
 	ctx.FormatNode(node.Limit)
 	ctx.FormatNode(node.Returning)
 }

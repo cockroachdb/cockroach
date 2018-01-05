@@ -151,9 +151,9 @@ func (d Datums) Reverse() {
 }
 
 // Format implements the NodeFormatter interface.
-func (d Datums) Format(ctx *FmtCtx) {
+func (d *Datums) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
-	for i, v := range d {
+	for i, v := range *d {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
@@ -2425,7 +2425,7 @@ func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DTuple) Format(ctx *FmtCtx) {
-	ctx.FormatNode(d.D)
+	ctx.FormatNode(&d.D)
 }
 
 // SetSorted sets the sorted flag on the DTuple. This should be used when a

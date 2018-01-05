@@ -51,7 +51,7 @@ func (n *TableRef) Format(ctx *FmtCtx) {
 	}
 	if n.As.Alias != "" {
 		ctx.WriteString(" AS ")
-		ctx.FormatNode(n.As)
+		ctx.FormatNode(&n.As)
 	}
 	ctx.WriteByte(']')
 }

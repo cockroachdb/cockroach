@@ -2824,8 +2824,8 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				// Resolve function name.
 				substrs := strings.Split(s, ".")
 				name := UnresolvedName{}
-				for _, substr := range substrs {
-					name = append(name, Name(substr))
+				for i := range substrs {
+					name = append(name, (*Name)(&substrs[i]))
 				}
 				funcDef, err := name.ResolveFunction(ctx.SearchPath)
 				if err != nil {
@@ -3181,7 +3181,7 @@ func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
+func (expr *UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 

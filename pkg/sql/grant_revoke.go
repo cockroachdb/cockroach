@@ -66,7 +66,7 @@ func (p *planner) changePrivileges(
 	}
 	for _, grantee := range grantees {
 		if _, ok := users[string(grantee)]; !ok {
-			return nil, errors.Errorf("user %s does not exist", grantee)
+			return nil, errors.Errorf("user %s does not exist", &grantee)
 		}
 	}
 

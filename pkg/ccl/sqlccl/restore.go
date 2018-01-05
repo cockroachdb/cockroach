@@ -89,7 +89,7 @@ func selectTargets(
 		}
 	}
 	if !seenTable {
-		return nil, nil, errors.Errorf("no tables found: %s", tree.AsString(targets))
+		return nil, nil, errors.Errorf("no tables found: %s", &targets)
 	}
 
 	if lastBackupDesc.FormatVersion >= BackupFormatDescriptorTrackingVersion {

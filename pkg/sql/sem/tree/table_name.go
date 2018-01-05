@@ -51,7 +51,7 @@ func (nt *NormalizableTableName) Normalize() (*TableName, error) {
 	switch t := nt.TableNameReference.(type) {
 	case *TableName:
 		return t, nil
-	case UnresolvedName:
+	case *UnresolvedName:
 		tn, err := t.NormalizeTableName()
 		if err != nil {
 			return nil, err
@@ -117,13 +117,13 @@ func (t *TableName) Format(ctx *FmtCtx) {
 	if !t.DBNameOriginallyOmitted ||
 		f.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil {
 		if t.PrefixOriginallySpecified {
-			ctx.FormatNode(t.PrefixName)
+			ctx.FormatNode(&t.PrefixName)
 			ctx.WriteByte('.')
 		}
-		ctx.FormatNode(t.DatabaseName)
+		ctx.FormatNode(&t.DatabaseName)
 		ctx.WriteByte('.')
 	}
-	ctx.FormatNode(t.TableName)
+	ctx.FormatNode(&t.TableName)
 }
 func (t *TableName) String() string { return AsString(t) }
 
@@ -149,27 +149,28 @@ func NewInvalidNameErrorf(fmt string, args ...interface{}) error {
 // The resulting TableName may lack a db qualification. This is
 // valid if e.g. the name refers to a in-query table alias
 // (AS) or is qualified later using the QualifyWithDatabase method.
-func (n UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) {
-	if len(n) == 0 || len(n) > 3 {
+func (n *UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) {
+	if len(*n) == 0 || len(*n) > 3 {
 		return res, NewInvalidNameErrorf("invalid table name: %q", ErrString(n))
 	}
 
-	name, ok := n[len(n)-1].(Name)
+	name, ok := (*n)[len(*n)-1].(*Name)
 	if !ok {
 		return res, NewInvalidNameErrorf("invalid table name: %q", ErrString(n))
 	}
 
-	if len(name) == 0 {
+	if len(*name) == 0 {
 		return res, NewInvalidNameErrorf("empty table name: %q", ErrString(n))
 	}
 
-	res = TableName{TableName: name, DBNameOriginallyOmitted: true}
+	res = TableName{TableName: *name, DBNameOriginallyOmitted: true}
 
-	if len(n) > 1 {
-		res.DatabaseName, ok = n[len(n)-2].(Name)
+	if len(*n) > 1 {
+		ndb, ok := (*n)[len(*n)-2].(*Name)
 		if !ok {
-			return res, NewInvalidNameErrorf("invalid database name: %q", ErrString(n[len(n)-2]))
+			return res, NewInvalidNameErrorf("invalid database name: %q", ErrString((*n)[len(*n)-2]))
 		}
+		res.DatabaseName = *ndb
 
 		if len(res.DatabaseName) == 0 {
 			return res, NewInvalidNameErrorf("empty database name: %q", ErrString(n))
@@ -177,12 +178,12 @@ func (n UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) {
 
 		res.DBNameOriginallyOmitted = false
 
-		if len(n) > 2 {
-			res.PrefixName, ok = n[len(n)-3].(Name)
-
+		if len(*n) > 2 {
+			pn, ok := (*n)[len(*n)-3].(*Name)
 			if !ok {
-				return res, NewInvalidNameErrorf("invalid prefix: %q", ErrString(n[len(n)-3]))
+				return res, NewInvalidNameErrorf("invalid prefix: %q", ErrString((*n)[len(*n)-3]))
 			}
+			res.PrefixName = *pn
 
 			res.PrefixOriginallySpecified = true
 		}
@@ -192,7 +193,7 @@ func (n UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) {
 }
 
 // NormalizeTableName implements the TableNameReference interface.
-func (n UnresolvedName) NormalizeTableName() (*TableName, error) {
+func (n *UnresolvedName) NormalizeTableName() (*TableName, error) {
 	tn, err := n.normalizeTableNameAsValue()
 	if err != nil {
 		return nil, err
@@ -220,27 +221,27 @@ func (t *TableName) QualifyWithDatabase(database string) error {
 type TableNames []TableName
 
 // Format implements the NodeFormatter interface.
-func (ts TableNames) Format(ctx *FmtCtx) {
-	for i := range ts {
+func (ts *TableNames) Format(ctx *FmtCtx) {
+	for i := range *ts {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(&ts[i])
+		ctx.FormatNode(&(*ts)[i])
 	}
 }
-func (ts TableNames) String() string { return AsString(ts) }
+func (ts *TableNames) String() string { return AsString(ts) }
 
 // TableNameReferences corresponds to a comma-delimited
 // list of table name references.
 type TableNameReferences []TableNameReference
 
 // Format implements the NodeFormatter interface.
-func (t TableNameReferences) Format(ctx *FmtCtx) {
-	for i, t := range t {
+func (t *TableNameReferences) Format(ctx *FmtCtx) {
+	for i, tr := range *t {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(t)
+		ctx.FormatNode(tr)
 	}
 }
 
@@ -263,7 +264,7 @@ func (n *TableNameWithIndex) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&n.Table)
 	if n.Index != "" {
 		ctx.WriteByte('@')
-		ctx.FormatNode(n.Index)
+		ctx.FormatNode(&n.Index)
 	}
 }
 
@@ -273,8 +274,8 @@ func (n *TableNameWithIndex) String() string { return AsString(n) }
 type TableNameWithIndexList []*TableNameWithIndex
 
 // Format implements the NodeFormatter interface.
-func (n TableNameWithIndexList) Format(ctx *FmtCtx) {
-	for i, e := range n {
+func (n *TableNameWithIndexList) Format(ctx *FmtCtx) {
+	for i, e := range *n {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}

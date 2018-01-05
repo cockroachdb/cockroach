@@ -109,7 +109,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 					if f.usedBy.Len() > 0 {
 						f.usedBy.WriteString(", ")
 					}
-					f.ctx.FormatNode(tree.Name(db.Name))
+					f.ctx.FormatNameP(&db.Name)
 				}
 			}
 			return nil
@@ -144,7 +144,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 			if i > 0 {
 				fnl.nameList.WriteString(", ")
 			}
-			fnl.ctx.FormatNode(tree.Name(name))
+			fnl.ctx.FormatName(name)
 		}
 		return pgerror.NewErrorf(pgerror.CodeGroupingError,
 			"cannot drop user%s or role%s %s: grants still exist on %s",

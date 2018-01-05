@@ -32,9 +32,9 @@ type RenameDatabase struct {
 // Format implements the NodeFormatter interface.
 func (node *RenameDatabase) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" RENAME TO ")
-	ctx.FormatNode(node.NewName)
+	ctx.FormatNode(&node.NewName)
 }
 
 // RenameTable represents a RENAME TABLE or RENAME VIEW statement.
@@ -81,7 +81,7 @@ func (node *RenameIndex) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.Index)
 	ctx.WriteString(" RENAME TO ")
-	ctx.FormatNode(node.NewName)
+	ctx.FormatNode(&node.NewName)
 }
 
 // RenameColumn represents a RENAME COLUMN statement.
@@ -101,7 +101,7 @@ func (node *RenameColumn) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(&node.Table)
 	ctx.WriteString(" RENAME COLUMN ")
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" TO ")
-	ctx.FormatNode(node.NewName)
+	ctx.FormatNode(&node.NewName)
 }

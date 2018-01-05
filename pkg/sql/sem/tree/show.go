@@ -178,7 +178,7 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TABLES")
 	if node.Database != "" {
 		ctx.WriteString(" FROM ")
-		ctx.FormatNode(node.Database)
+		ctx.FormatNode(&node.Database)
 	}
 }
 
@@ -198,7 +198,7 @@ func (node *ShowGrants) Format(ctx *FmtCtx) {
 	}
 	if node.Grantees != nil {
 		ctx.WriteString(" FOR ")
-		ctx.FormatNode(node.Grantees)
+		ctx.FormatNode(&node.Grantees)
 	}
 }
 

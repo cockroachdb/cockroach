@@ -121,7 +121,8 @@ func (eh *exprHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum
 
 // IndexedVarNodeFormatter is part of the parser.IndexedVarContainer interface.
 func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return tree.Name(fmt.Sprintf("$%d", idx))
+	n := tree.Name(fmt.Sprintf("$%d", idx))
+	return &n
 }
 
 func (eh *exprHelper) init(

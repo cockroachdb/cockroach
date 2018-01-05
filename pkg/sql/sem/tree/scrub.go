@@ -48,19 +48,19 @@ func (n *Scrub) Format(ctx *FmtCtx) {
 		n.Table.Format(ctx)
 	case ScrubDatabase:
 		ctx.WriteString("DATABASE ")
-		ctx.FormatNode(n.Database)
+		ctx.FormatNode(&n.Database)
 	default:
 		panic("Unhandled ScrubType")
 	}
 
 	if n.AsOf.Expr != nil {
 		ctx.WriteByte(' ')
-		ctx.FormatNode(n.AsOf)
+		ctx.FormatNode(&n.AsOf)
 	}
 
 	if len(n.Options) > 0 {
 		ctx.WriteString(" WITH OPTIONS ")
-		ctx.FormatNode(n.Options)
+		ctx.FormatNode(&n.Options)
 	}
 }
 
@@ -68,8 +68,8 @@ func (n *Scrub) Format(ctx *FmtCtx) {
 type ScrubOptions []ScrubOption
 
 // Format implements the NodeFormatter interface.
-func (n ScrubOptions) Format(ctx *FmtCtx) {
-	for i, option := range n {
+func (n *ScrubOptions) Format(ctx *FmtCtx) {
+	for i, option := range *n {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
@@ -77,7 +77,7 @@ func (n ScrubOptions) Format(ctx *FmtCtx) {
 	}
 }
 
-func (n ScrubOptions) String() string { return AsString(n) }
+func (n *ScrubOptions) String() string { return AsString(n) }
 
 // ScrubOption represents a scrub option.
 type ScrubOption interface {
@@ -106,7 +106,7 @@ func (n *ScrubOptionIndex) Format(ctx *FmtCtx) {
 	ctx.WriteString("INDEX ")
 	if n.IndexNames != nil {
 		ctx.WriteByte('(')
-		ctx.FormatNode(n.IndexNames)
+		ctx.FormatNode(&n.IndexNames)
 		ctx.WriteByte(')')
 	} else {
 		ctx.WriteString("ALL")
@@ -131,7 +131,7 @@ func (n *ScrubOptionConstraint) Format(ctx *FmtCtx) {
 	ctx.WriteString("CONSTRAINT ")
 	if n.ConstraintNames != nil {
 		ctx.WriteByte('(')
-		ctx.FormatNode(n.ConstraintNames)
+		ctx.FormatNode(&n.ConstraintNames)
 		ctx.WriteByte(')')
 	} else {
 		ctx.WriteString("ALL")

@@ -28,7 +28,7 @@ type Prepare struct {
 // Format implements the NodeFormatter interface.
 func (node *Prepare) Format(ctx *FmtCtx) {
 	ctx.WriteString("PREPARE ")
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	if len(node.Types) > 0 {
 		ctx.WriteString(" (")
 		for i, t := range node.Types {
@@ -52,10 +52,10 @@ type Execute struct {
 // Format implements the NodeFormatter interface.
 func (node *Execute) Format(ctx *FmtCtx) {
 	ctx.WriteString("EXECUTE ")
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	if len(node.Params) > 0 {
 		ctx.WriteString(" (")
-		ctx.FormatNode(node.Params)
+		ctx.FormatNode(&node.Params)
 		ctx.WriteByte(')')
 	}
 }
@@ -71,6 +71,6 @@ func (node *Deallocate) Format(ctx *FmtCtx) {
 	if node.Name == "" {
 		ctx.WriteString("ALL")
 	} else {
-		ctx.FormatNode(node.Name)
+		ctx.FormatNode(&node.Name)
 	}
 }

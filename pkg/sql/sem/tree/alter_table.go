@@ -28,15 +28,15 @@ func (node *AlterTable) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF EXISTS ")
 	}
 	ctx.FormatNode(&node.Table)
-	ctx.FormatNode(node.Cmds)
+	ctx.FormatNode(&node.Cmds)
 }
 
 // AlterTableCmds represents a list of table alterations.
 type AlterTableCmds []AlterTableCmd
 
 // Format implements the NodeFormatter interface.
-func (node AlterTableCmds) Format(ctx *FmtCtx) {
-	for i, n := range node {
+func (node *AlterTableCmds) Format(ctx *FmtCtx) {
+	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(",")
 		}
@@ -138,7 +138,7 @@ func (node *AlterTableDropColumn) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Column)
+	ctx.FormatNode(&node.Column)
 	if node.DropBehavior != DropDefault {
 		ctx.Printf(" %s", node.DropBehavior)
 	}
@@ -157,7 +157,7 @@ func (node *AlterTableDropConstraint) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Constraint)
+	ctx.FormatNode(&node.Constraint)
 	if node.DropBehavior != DropDefault {
 		ctx.Printf(" %s", node.DropBehavior)
 	}
@@ -171,7 +171,7 @@ type AlterTableValidateConstraint struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableValidateConstraint) Format(ctx *FmtCtx) {
 	ctx.WriteString(" VALIDATE CONSTRAINT ")
-	ctx.FormatNode(node.Constraint)
+	ctx.FormatNode(&node.Constraint)
 }
 
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
@@ -193,7 +193,7 @@ func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
 	if node.ColumnKeyword {
 		ctx.WriteString("COLUMN ")
 	}
-	ctx.FormatNode(node.Column)
+	ctx.FormatNode(&node.Column)
 	if node.Default == nil {
 		ctx.WriteString(" DROP DEFAULT")
 	} else {
@@ -220,7 +220,7 @@ func (node *AlterTableDropNotNull) Format(ctx *FmtCtx) {
 	if node.ColumnKeyword {
 		ctx.WriteString("COLUMN ")
 	}
-	ctx.FormatNode(node.Column)
+	ctx.FormatNode(&node.Column)
 	ctx.WriteString(" DROP NOT NULL")
 }
 
