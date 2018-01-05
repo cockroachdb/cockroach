@@ -264,7 +264,8 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		ag.buckets = nil
 
 		ag.accumulating = false
-		log.VEvent(ag.ctx, 1, "accumulation complete")
+		// HACK: causes panic in this workload
+		// log.VEvent(ag.ctx, 1, "accumulation complete")
 
 		ag.row = make(sqlbase.EncDatumRow, len(ag.funcs))
 	}

@@ -2482,6 +2482,7 @@ func (s *Store) Send(
 			// the above timestamp to the returned response or error. The caller
 			// can use it to shorten its uncertainty interval when it comes back to
 			// this node.
+			log.Infof(ctx, "GREPME %s %s %s %v %v", ba.Txn.ID.Short(), ba.Summary(), ba.Txn.MaxTimestamp, ba.Txn.ObservedTimestamps, pErr)
 			if pErr != nil {
 				pErr.OriginNode = ba.Replica.NodeID
 				if txn := pErr.GetTxn(); txn != nil {
