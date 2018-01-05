@@ -40,6 +40,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/kv"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/sillyseq"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

@@ -1,0 +1,119 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+
+package sillyseq
+
+import (
+	"context"
+	gosql "database/sql"
+	"fmt"
+	"math/rand"
+	"strconv"
+
+	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
+)
+
+const (
+	schema   = `(k BIGINT NOT NULL PRIMARY KEY, v BIGINT NOT NULL)`
+	rowCount = 100
+)
+
+type sillyseq struct {
+	flags *pflag.FlagSet
+}
+
+func init() {
+	workload.Register(generator)
+}
+
+func generator() workload.Generator {
+	g := &sillyseq{}
+	g.flags = pflag.NewFlagSet(g.Name(), pflag.ContinueOnError)
+	return g
+}
+
+// Name implements the Generator interface.
+func (*sillyseq) Name() string { return `sillyseq` }
+
+// Flags implements the Generator interface.
+func (g *sillyseq) Flags() *pflag.FlagSet {
+	return g.flags
+}
+
+// Configure implements the Generator interface.
+func (g *sillyseq) Configure(flags []string) error {
+	return nil
+}
+
+// Tables implements the Generator interface.
+func (g *sillyseq) Tables() []workload.Table {
+	table := workload.Table{
+		Name:            g.Name(),
+		Schema:          schema,
+		InitialRowCount: rowCount,
+		InitialRowFn: func(i int) []string {
+			s := strconv.Itoa(i)
+			return []string{s, "0"}
+		},
+	}
+	return []workload.Table{table}
+}
+
+// Ops implements the Generator interface.
+func (g *sillyseq) Ops() []workload.Operation {
+	table := g.Name()
+	qRead := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, table)
+	qWrite := fmt.Sprintf(`INSERT INTO %s VALUES ($1, $2) ON CONFLICT(k) DO UPDATE SET v = %s.v + 1`, table, table)
+	opFn := func(db *gosql.DB) (func(context.Context) error, error) {
+		f := func(ctx context.Context) error {
+			txn, err := db.Begin()
+			defer func() {
+				// Always close the txn, or many early returns leak a connection and
+				// things will soon lock up.
+				_ = txn.Rollback()
+			}()
+			if err != nil {
+				return err
+			}
+
+			// Touch-all read phase that should run into lots of read uncertainty.
+			rows, err := txn.Query(qRead)
+			if err != nil {
+				return err
+			}
+			for rows.Next() {
+			}
+			if err := rows.Err(); err != nil {
+				return errors.Wrap(err, "on read")
+			}
+
+			// Write phase.
+			i := rand.Intn(rowCount)
+			if _, err := txn.Exec(qWrite, i, 1); err != nil {
+				return errors.Wrap(err, "on write")
+			}
+			return txn.Commit()
+		}
+		return f, nil
+	}
+
+	return []workload.Operation{{
+		Name: g.Name(),
+		Fn:   opFn,
+	}}
+}
