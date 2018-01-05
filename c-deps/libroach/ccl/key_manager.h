@@ -28,10 +28,12 @@ static const std::string kKeyRegistryFilename = "COCKROACHDB_DATA_KEYS";
 namespace KeyManagerUtils {
 
 // Read key from a file.
-rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path, enginepbccl::SecretKey* key);
+rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path,
+                            enginepbccl::SecretKey* key);
 
 // Generate a key based on the characteristics of `store_info`.
-rocksdb::Status KeyFromKeyInfo(rocksdb::Env* env, const enginepbccl::KeyInfo& store_info, enginepbccl::SecretKey* key);
+rocksdb::Status KeyFromKeyInfo(rocksdb::Env* env, const enginepbccl::KeyInfo& store_info,
+                               enginepbccl::SecretKey* key);
 
 // Validate a registry. This should be called before using a registry.
 rocksdb::Status ValidateRegistry(enginepbccl::DataKeysRegistry* registry);
@@ -79,7 +81,8 @@ class KeyManager {
 class FileKeyManager : public KeyManager {
  public:
   // `env` is owned by the caller.
-  explicit FileKeyManager(rocksdb::Env* env, const std::string& active_key_path, const std::string& old_key_path)
+  explicit FileKeyManager(rocksdb::Env* env, const std::string& active_key_path,
+                          const std::string& old_key_path)
       : env_(env), active_key_path_(active_key_path), old_key_path_(old_key_path) {}
 
   // LoadKeys tells the key manager to read and validate the key files.
@@ -92,7 +95,8 @@ class FileKeyManager : public KeyManager {
 
   virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override {
     if (active_key_ != nullptr && active_key_->info().key_id() == id) {
-      return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*active_key_.get()));
+      return std::unique_ptr<enginepbccl::SecretKey>(
+          new enginepbccl::SecretKey(*active_key_.get()));
     }
     if (old_key_ != nullptr && old_key_->info().key_id() == id) {
       return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*old_key_.get()));
@@ -142,8 +146,8 @@ class DataKeyManager : public KeyManager {
   std::string registry_path_;
   int64_t rotation_period_;
 
-  // The registry is read-only and can only be swapped for another one, it cannot be mutated in place.
-  // mu_ must be held for any registry access.
+  // The registry is read-only and can only be swapped for another one, it cannot be mutated in
+  // place. mu_ must be held for any registry access.
   // TODO(mberhault): use a shared_mutex for multiple read-only holders.
   std::mutex mu_;
   std::unique_ptr<enginepbccl::DataKeysRegistry> registry_;

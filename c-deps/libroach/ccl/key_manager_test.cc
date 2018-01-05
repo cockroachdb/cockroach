@@ -99,13 +99,15 @@ struct testKey {
   testKey() : testKey("") {}
   // Copy constructor.
   testKey(const testKey& k)
-      : testKey(k.id, k.key, k.type, k.approximate_timestamp, k.source, k.was_exposed, k.parent_key_id) {}
+      : testKey(k.id, k.key, k.type, k.approximate_timestamp, k.source, k.was_exposed,
+                k.parent_key_id) {}
   // Key ID only (to test key existence).
   testKey(std::string id) : testKey(id, "", enginepbccl::Plaintext, 0, "") {}
-  testKey(std::string id, std::string key, enginepbccl::EncryptionType type, int64_t timestamp, std::string source)
+  testKey(std::string id, std::string key, enginepbccl::EncryptionType type, int64_t timestamp,
+          std::string source)
       : testKey(id, key, type, timestamp, source, false, "") {}
-  testKey(std::string id, std::string key, enginepbccl::EncryptionType type, int64_t timestamp, std::string source,
-          bool exposed, std::string parent)
+  testKey(std::string id, std::string key, enginepbccl::EncryptionType type, int64_t timestamp,
+          std::string source, bool exposed, std::string parent)
       : id(id),
         key(key),
         type(type),
@@ -131,28 +133,30 @@ enginepbccl::SecretKey secretKeyFromTestKey(const testKey& k) {
   return sk;
 }
 
-rocksdb::Status compareNonRandomKeyInfo(const enginepbccl::KeyInfo& actual, const testKey& expected) {
+rocksdb::Status compareNonRandomKeyInfo(const enginepbccl::KeyInfo& actual,
+                                        const testKey& expected) {
   if (actual.encryption_type() != expected.type) {
-    return rocksdb::Status::InvalidArgument(
-        fmt::StringPrintf("actual type %d does not match expected type %d", actual.encryption_type(), expected.type));
+    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
+        "actual type %d does not match expected type %d", actual.encryption_type(), expected.type));
   }
 
   auto diff = actual.creation_time() - expected.approximate_timestamp;
   if (diff > 5 || diff < -5) {
     return rocksdb::Status::InvalidArgument(
-        fmt::StringPrintf("actual creation time %lld does not match expected timestamp %lld", actual.creation_time(),
-                          expected.approximate_timestamp));
+        fmt::StringPrintf("actual creation time %lld does not match expected timestamp %lld",
+                          actual.creation_time(), expected.approximate_timestamp));
   }
 
   if (actual.source() != expected.source) {
     return rocksdb::Status::InvalidArgument(
-        fmt::StringPrintf("actual source \"%s\" does not match expected source \"%s\"", actual.source().c_str(),
-                          expected.source.c_str()));
+        fmt::StringPrintf("actual source \"%s\" does not match expected source \"%s\"",
+                          actual.source().c_str(), expected.source.c_str()));
   }
 
   if (actual.was_exposed() != expected.was_exposed) {
-    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
-        "actual was_exposed %d does not match expected was_exposed %d", actual.was_exposed(), expected.was_exposed));
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("actual was_exposed %d does not match expected was_exposed %d",
+                          actual.was_exposed(), expected.was_exposed));
   }
   return rocksdb::Status::OK();
 }
@@ -164,16 +168,18 @@ rocksdb::Status compareKeyInfo(const enginepbccl::KeyInfo& actual, const testKey
   }
 
   if (actual.key_id() != expected.id) {
-    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
-        "actual key_id \"%s\" does not match expected key_id \"%s\"", actual.key_id().c_str(), expected.id.c_str()));
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("actual key_id \"%s\" does not match expected key_id \"%s\"",
+                          actual.key_id().c_str(), expected.id.c_str()));
   }
   return rocksdb::Status::OK();
 }
 
 rocksdb::Status compareKey(const enginepbccl::SecretKey& actual, const testKey& expected) {
   if (actual.key() != expected.key) {
-    return rocksdb::Status::InvalidArgument(fmt::StringPrintf("actual key \"%s\" does not match expected key \"%s\"",
-                                                              actual.key().c_str(), expected.key.c_str()));
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("actual key \"%s\" does not match expected key \"%s\"",
+                          actual.key().c_str(), expected.key.c_str()));
   }
   return compareKeyInfo(actual.info(), expected);
 }
@@ -378,11 +384,14 @@ TEST(DataKeyManager, KeyFromKeyInfo) {
       {testKey("plain", "", enginepbccl::Plaintext, now, "plain"), "",
        testKey("plain", "", enginepbccl::Plaintext, now, "data key manager", true, "plain")},
       {testKey(key_id_128, "", enginepbccl::AES128_CTR, now - 86400, "128.key"), "",
-       testKey("someid", "somekey", enginepbccl::AES128_CTR, now, "data key manager", false, key_id_128)},
+       testKey("someid", "somekey", enginepbccl::AES128_CTR, now, "data key manager", false,
+               key_id_128)},
       {testKey(key_id_192, "", enginepbccl::AES192_CTR, now + 86400, "192.key"), "",
-       testKey("someid", "somekey", enginepbccl::AES192_CTR, now, "data key manager", false, key_id_192)},
+       testKey("someid", "somekey", enginepbccl::AES192_CTR, now, "data key manager", false,
+               key_id_192)},
       {testKey(key_id_256, "", enginepbccl::AES256_CTR, 0, "256.key"), "",
-       testKey("someid", "somekey", enginepbccl::AES256_CTR, now, "data key manager", false, key_id_256)},
+       testKey("someid", "somekey", enginepbccl::AES256_CTR, now, "data key manager", false,
+               key_id_256)},
   };
 
   int test_num = 0;
@@ -390,7 +399,8 @@ TEST(DataKeyManager, KeyFromKeyInfo) {
     SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
 
     enginepbccl::SecretKey new_key;
-    auto status = KeyManagerUtils::KeyFromKeyInfo(env.get(), keyInfoFromTestKey(t.store_info), &new_key);
+    auto status =
+        KeyManagerUtils::KeyFromKeyInfo(env.get(), keyInfoFromTestKey(t.store_info), &new_key);
     EXPECT_ERR(status, t.error);
     if (!status.ok()) {
       continue;
@@ -451,23 +461,27 @@ TEST(DataKeyManager, SetStoreKey) {
       {
           testKey(key_id_128, "", enginepbccl::AES128_CTR, now - 86400, "128.key"),
           "",
-          testKey(key_id_128, "", enginepbccl::AES128_CTR, now, "data key manager", false, key_id_128),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, now, "data key manager", false,
+                  key_id_128),
       },
       {
           // Setting the same store key does nothing.
           testKey(key_id_128, "", enginepbccl::AES128_CTR, now - 86400, "128.key"),
           "",
           // We add it again because we don't have a "skip" thing. It's find if it's there twice.
-          testKey(key_id_128, "", enginepbccl::AES128_CTR, now, "data key manager", false, key_id_128),
+          testKey(key_id_128, "", enginepbccl::AES128_CTR, now, "data key manager", false,
+                  key_id_128),
       },
       {
           testKey(key_id_256, "", enginepbccl::AES256_CTR, now - 86400, "256.key"),
           "",
-          testKey(key_id_256, "", enginepbccl::AES256_CTR, now, "data key manager", false, key_id_256),
+          testKey(key_id_256, "", enginepbccl::AES256_CTR, now, "data key manager", false,
+                  key_id_256),
       },
       {
           testKey(key_id_128, "", enginepbccl::AES128_CTR, now - 86400, "128.key"),
-          fmt::StringPrintf("new active store key ID %s already exists as an inactive key. This is really dangerous.",
+          fmt::StringPrintf("new active store key ID %s already exists as an inactive key. This is "
+                            "really dangerous.",
                             key_id_128.c_str()),
           {},
       },
@@ -486,7 +500,8 @@ TEST(DataKeyManager, SetStoreKey) {
     SCOPED_TRACE(fmt::StringPrintf("Testing #%d", test_num++));
 
     // Set new active store key.
-    auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
+    auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
+        new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
     auto status = dkm.SetActiveStoreKey(std::move(store_info));
     EXPECT_ERR(status, t.error);
     if (status.ok()) {
@@ -565,19 +580,22 @@ TEST(DataKeyManager, RotateKey) {
           // New key on store key change.
           testKey(key_id_128, "", enginepbccl::AES128_CTR, 0, "128.key"),
           20,
-          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 20, "data key manager", false, key_id_128),
+          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 20, "data key manager",
+                  false, key_id_128),
       },
       {
           // Less than 10 seconds: no change.
           testKey(key_id_128, "", enginepbccl::AES128_CTR, 0, "128.key"),
           29,
-          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 20, "data key manager", false, key_id_128),
+          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 20, "data key manager",
+                  false, key_id_128),
       },
       {
           // Exactly 10 seconds: new key.
           testKey(key_id_128, "", enginepbccl::AES128_CTR, 0, "128.key"),
           30,
-          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 30, "data key manager", false, key_id_128),
+          testKey("not checked", "not checked", enginepbccl::AES128_CTR, 30, "data key manager",
+                  false, key_id_128),
       },
   };
 
@@ -590,7 +608,8 @@ TEST(DataKeyManager, RotateKey) {
     env->SetCurrentTime(t.current_time);
 
     // Set new active store key.
-    auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
+    auto store_info = std::unique_ptr<enginepbccl::KeyInfo>(
+        new enginepbccl::KeyInfo(keyInfoFromTestKey(t.store_info)));
     auto status = dkm.SetActiveStoreKey(std::move(store_info));
     ASSERT_OK(status);
 

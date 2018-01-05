@@ -15,8 +15,9 @@
 std::string HexString(const std::string& s) {
   std::string value;
 
-  CryptoPP::StringSource ss(s, true /* PumpAll */,
-                            new CryptoPP::HexEncoder(new CryptoPP::StringSink(value), false /* uppercase */));
+  CryptoPP::StringSource ss(
+      s, true /* PumpAll */,
+      new CryptoPP::HexEncoder(new CryptoPP::StringSink(value), false /* uppercase */));
 
   return value;
 }

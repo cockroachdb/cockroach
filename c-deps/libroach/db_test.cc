@@ -25,5 +25,6 @@ TEST(Libroach, DBOpenHook) {
 
   // Try extra_options with anything at all.
   db_opts.extra_options = ToDBSlice("blah");
-  EXPECT_ERR(DBOpenHook("", db_opts), "DBOptions has extra_options, but OSS code cannot handle them");
+  EXPECT_ERR(DBOpenHook("", db_opts),
+             "DBOptions has extra_options, but OSS code cannot handle them");
 }

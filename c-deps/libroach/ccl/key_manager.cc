@@ -15,7 +15,8 @@ static const std::string kFilenamePlain = "plain";
 
 namespace KeyManagerUtils {
 
-rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path, enginepbccl::SecretKey* key) {
+rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path,
+                            enginepbccl::SecretKey* key) {
   int64_t now;
   auto status = env->GetCurrentTime(&now);
   if (!status.ok()) {
@@ -52,9 +53,10 @@ rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path, enginepb
     info->set_encryption_type(enginepbccl::AES256_CTR);
     break;
   default:
-    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
-        "file %s is %llu bytes long, it must be <key ID length (%llu)> + <key size (16, 24, or 32)> long", path.c_str(),
-        contents.size(), kKeyIDLength));
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("file %s is %llu bytes long, it must be <key ID length (%llu)> + <key "
+                          "size (16, 24, or 32)> long",
+                          path.c_str(), contents.size(), kKeyIDLength));
   }
 
   // Fill in the key and ID: first kKeyIDLength are the ID, the rest are the key.
@@ -66,7 +68,8 @@ rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path, enginepb
   return rocksdb::Status::OK();
 }
 
-rocksdb::Status KeyFromKeyInfo(rocksdb::Env* env, const enginepbccl::KeyInfo& store_info, enginepbccl::SecretKey* key) {
+rocksdb::Status KeyFromKeyInfo(rocksdb::Env* env, const enginepbccl::KeyInfo& store_info,
+                               enginepbccl::SecretKey* key) {
   int64_t now;
   auto status = env->GetCurrentTime(&now);
   if (!status.ok()) {
@@ -99,8 +102,9 @@ rocksdb::Status KeyFromKeyInfo(rocksdb::Env* env, const enginepbccl::KeyInfo& st
     length = 32;
     break;
   default:
-    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
-        "unknown encryption type %d for key ID %s", store_info.encryption_type(), store_info.key_id().c_str()));
+    return rocksdb::Status::InvalidArgument(
+        fmt::StringPrintf("unknown encryption type %d for key ID %s", store_info.encryption_type(),
+                          store_info.key_id().c_str()));
   }
   key->set_key(RandomBytes(length));
   // Assign a random ID to the key.
@@ -168,8 +172,11 @@ rocksdb::Status FileKeyManager::LoadKeys() {
   return rocksdb::Status::OK();
 }
 
-DataKeyManager::DataKeyManager(rocksdb::Env* env, const std::string& db_dir, int64_t rotation_period)
-    : env_(env), registry_path_(db_dir + "/" + kKeyRegistryFilename), rotation_period_(rotation_period) {}
+DataKeyManager::DataKeyManager(rocksdb::Env* env, const std::string& db_dir,
+                               int64_t rotation_period)
+    : env_(env),
+      registry_path_(db_dir + "/" + kKeyRegistryFilename),
+      rotation_period_(rotation_period) {}
 
 rocksdb::Status DataKeyManager::LoadKeysHelper(enginepbccl::DataKeysRegistry* registry) {
   rocksdb::Status status = env_->FileExists(registry_path_);
@@ -274,7 +281,8 @@ rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {
   }
 
   // We need a new key. Copy the registry first.
-  auto new_registry = std::unique_ptr<enginepbccl::DataKeysRegistry>(new enginepbccl::DataKeysRegistry(*registry_));
+  auto new_registry =
+      std::unique_ptr<enginepbccl::DataKeysRegistry>(new enginepbccl::DataKeysRegistry(*registry_));
 
   // Generate and store a new data key.
   status = KeyManagerUtils::GenerateDataKey(env_, new_registry.get());
@@ -285,7 +293,8 @@ rocksdb::Status DataKeyManager::MaybeRotateKeyLocked() {
   return PersistRegistryLocked(std::move(new_registry));
 }
 
-rocksdb::Status DataKeyManager::SetActiveStoreKey(std::unique_ptr<enginepbccl::KeyInfo> store_info) {
+rocksdb::Status
+DataKeyManager::SetActiveStoreKey(std::unique_ptr<enginepbccl::KeyInfo> store_info) {
   std::unique_lock<std::mutex> l(mu_);
 
   assert(registry_ != nullptr);
@@ -299,20 +308,22 @@ rocksdb::Status DataKeyManager::SetActiveStoreKey(std::unique_ptr<enginepbccl::K
     // If we are not currently using plaintext, we're ok overwriting an older "plain" key.
     // TODO(mberhault): Are there cases we may want to allow?
     if (registry_->store_keys().find(store_info->key_id()) != registry_->store_keys().cend()) {
-      return rocksdb::Status::InvalidArgument(
-          fmt::StringPrintf("new active store key ID %s already exists as an inactive key. This is really dangerous.",
-                            store_info->key_id().c_str()));
+      return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
+          "new active store key ID %s already exists as an inactive key. This is really dangerous.",
+          store_info->key_id().c_str()));
     }
   }
 
   // Make a copy of the registry, add store key info to the list of store keys, and mark as active.
-  auto new_registry = std::unique_ptr<enginepbccl::DataKeysRegistry>(new enginepbccl::DataKeysRegistry(*registry_));
+  auto new_registry =
+      std::unique_ptr<enginepbccl::DataKeysRegistry>(new enginepbccl::DataKeysRegistry(*registry_));
   (*new_registry->mutable_store_keys())[store_info->key_id()] = *store_info;
   new_registry->set_active_store_key(store_info->key_id());
 
   if (store_info->encryption_type() == enginepbccl::Plaintext) {
     // This is a plaintext store key: mark all data keys as exposed.
-    for (auto it = new_registry->mutable_data_keys()->begin(); it != new_registry->mutable_data_keys()->end(); ++it) {
+    for (auto it = new_registry->mutable_data_keys()->begin();
+         it != new_registry->mutable_data_keys()->end(); ++it) {
       it->second.mutable_info()->set_was_exposed(true);
     }
   }
@@ -326,7 +337,8 @@ rocksdb::Status DataKeyManager::SetActiveStoreKey(std::unique_ptr<enginepbccl::K
   return PersistRegistryLocked(std::move(new_registry));
 }
 
-rocksdb::Status DataKeyManager::PersistRegistryLocked(std::unique_ptr<enginepbccl::DataKeysRegistry> reg) {
+rocksdb::Status
+DataKeyManager::PersistRegistryLocked(std::unique_ptr<enginepbccl::DataKeysRegistry> reg) {
   // Validate before writing.
   auto status = KeyManagerUtils::ValidateRegistry(reg.get());
   if (!status.ok()) {

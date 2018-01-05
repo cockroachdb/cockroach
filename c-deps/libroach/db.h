@@ -52,5 +52,5 @@ const ::rocksdb::Comparator* CockroachComparator();
 
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.
-MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start, DBKey end,
-                                         int64_t now_nanos);
+MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start,
+                                         DBKey end, int64_t now_nanos);
