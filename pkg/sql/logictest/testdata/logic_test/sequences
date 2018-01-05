@@ -521,3 +521,17 @@ ALTER TABLE drop_col_test_tbl DROP COLUMN foo
 
 statement ok
 DROP SEQUENCE drop_col_test_seq
+
+# Sequence deletion is prevented when a sequence-using column is added to a table.
+
+statement ok
+CREATE TABLE add_col_test_tbl (id INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE add_col_test_seq
+
+statement ok
+ALTER TABLE add_col_test_tbl ADD COLUMN foo INT DEFAULT nextval('add_col_test_seq')
+
+statement error pq: cannot drop sequence add_col_test_seq because other objects depend on it
+DROP SEQUENCE add_col_test_seq
