@@ -463,15 +463,6 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	f.doneFn = nil
 }
 
-// RunSync runs the processors in the flow in order (serially), in the same
-// context (no goroutines are spawned).
-func (f *Flow) RunSync(ctx context.Context) {
-	for _, p := range f.processors {
-		p.Run(nil)
-	}
-	f.Cleanup(ctx)
-}
-
 // cancel iterates through all unconnected streams of this flow and marks them canceled.
 // If the syncFlowConsumer is of type CancellableRowReceiver, mark it as canceled.
 // This function is called in Wait() after the associated context has been canceled.
@@ -506,5 +497,3 @@ func (f *Flow) cancel() {
 		}
 	}
 }
-
-var _ = (*Flow).RunSync
