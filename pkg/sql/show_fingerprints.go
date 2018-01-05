@@ -54,7 +54,7 @@ type showFingerprintsNode struct {
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}

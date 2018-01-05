@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -77,13 +78,23 @@ type runParams struct {
 	// context.Context for this method call.
 	ctx context.Context
 
-	// evalCtx is the tree.EvalContext associated with this execution.
+	// extendedEvalCtx groups fields useful for this execution.
 	// Used during local execution and distsql physical planning.
-	evalCtx *tree.EvalContext
+	extendedEvalCtx *extendedEvalContext
 
 	// planner associated with this execution. Only used during local
 	// execution.
 	p *planner
+}
+
+// EvalContext() gives convenient access to the runParam's EvalContext().
+func (r *runParams) EvalContext() *tree.EvalContext {
+	return &r.extendedEvalCtx.EvalContext
+}
+
+// SessionData gives convenient access to the runParam's SessionData.
+func (r *runParams) SessionData() *sessiondata.SessionData {
+	return &r.extendedEvalCtx.SessionData
 }
 
 // planNode defines the interface for executing a query or portion of a query.
@@ -198,7 +209,7 @@ var _ planNodeFastPath = &setZoneConfigNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
-	plan, err := p.newPlan(ctx, stmt.AST, nil)
+	plan, err := p.newPlan(ctx, stmt.AST, nil /* desiredTypes */)
 	if err != nil {
 		return nil, err
 	}

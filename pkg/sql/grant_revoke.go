@@ -70,7 +70,8 @@ func (p *planner) changePrivileges(
 		}
 	}
 
-	descriptors, err := getDescriptorsFromTargetList(ctx, p.txn, p.getVirtualTabler(), p.session.Database, targets)
+	descriptors, err := getDescriptorsFromTargetList(
+		ctx, p.txn, p.getVirtualTabler(), p.SessionData().Database, targets)
 	if err != nil {
 		return nil, err
 	}
