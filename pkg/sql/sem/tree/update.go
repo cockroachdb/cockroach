@@ -40,9 +40,9 @@ func (node *Update) Format(ctx *FmtCtx) {
 	ctx.WriteString("UPDATE ")
 	ctx.FormatNode(node.Table)
 	ctx.WriteString(" SET ")
-	ctx.FormatNode(node.Exprs)
+	ctx.FormatNode(&node.Exprs)
 	ctx.FormatNode(node.Where)
-	ctx.FormatNode(node.OrderBy)
+	ctx.FormatNode(&node.OrderBy)
 	ctx.FormatNode(node.Limit)
 	ctx.FormatNode(node.Returning)
 }
@@ -51,8 +51,8 @@ func (node *Update) Format(ctx *FmtCtx) {
 type UpdateExprs []*UpdateExpr
 
 // Format implements the NodeFormatter interface.
-func (node UpdateExprs) Format(ctx *FmtCtx) {
-	for i, n := range node {
+func (node *UpdateExprs) Format(ctx *FmtCtx) {
+	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
@@ -74,7 +74,7 @@ func (node *UpdateExpr) Format(ctx *FmtCtx) {
 		open, close = "(", ")"
 	}
 	ctx.WriteString(open)
-	ctx.FormatNode(node.Names)
+	ctx.FormatNode(&node.Names)
 	ctx.WriteString(close)
 	ctx.WriteString(" = ")
 	ctx.FormatNode(node.Expr)

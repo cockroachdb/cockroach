@@ -27,7 +27,7 @@ func (node *CopyFrom) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Table)
 	if len(node.Columns) > 0 {
 		ctx.WriteString(" (")
-		ctx.FormatNode(node.Columns)
+		ctx.FormatNode(&node.Columns)
 		ctx.WriteString(")")
 	}
 	ctx.WriteString(" FROM ")

@@ -295,7 +295,8 @@ func (tc *typeContainer) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (tc *typeContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return tree.Name(fmt.Sprintf("$%d", idx+1))
+	n := tree.Name(fmt.Sprintf("$%d", idx+1))
+	return &n
 }
 
 // MakeTypeIndexedVarHelper returns an IndexedVarHelper which creates IndexedVars

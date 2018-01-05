@@ -51,7 +51,7 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	if node.Template != "" {
 		ctx.WriteString(" TEMPLATE = ")
 		lex.EncodeSQLStringWithFlags(ctx.Buffer, node.Template, ctx.flags.EncodeFlags())
@@ -77,8 +77,8 @@ type IndexElem struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node IndexElem) Format(ctx *FmtCtx) {
-	ctx.FormatNode(node.Column)
+func (node *IndexElem) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&node.Column)
 	if node.Direction != DefaultDirection {
 		ctx.WriteByte(' ')
 		ctx.WriteString(node.Direction.String())
@@ -90,12 +90,12 @@ type IndexElemList []IndexElem
 
 // Format pretty-prints the contained names separated by commas.
 // Format implements the NodeFormatter interface.
-func (l IndexElemList) Format(ctx *FmtCtx) {
-	for i, indexElem := range l {
+func (l *IndexElemList) Format(ctx *FmtCtx) {
+	for i := range *l {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(indexElem)
+		ctx.FormatNode(&(*l)[i])
 	}
 }
 
@@ -128,17 +128,17 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	if node.Name != "" {
-		ctx.FormatNode(node.Name)
+		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}
 	ctx.WriteString("ON ")
 	ctx.FormatNode(&node.Table)
 	ctx.WriteString(" (")
-	ctx.FormatNode(node.Columns)
+	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
 	if len(node.Storing) > 0 {
 		ctx.WriteString(" STORING (")
-		ctx.FormatNode(node.Storing)
+		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
 	}
 	if node.Interleave != nil {
@@ -169,8 +169,8 @@ func (*FamilyTableDef) tableDef() {}
 type TableDefs []TableDef
 
 // Format implements the NodeFormatter interface.
-func (node TableDefs) Format(ctx *FmtCtx) {
-	for i, n := range node {
+func (node *TableDefs) Format(ctx *FmtCtx) {
+	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
@@ -346,12 +346,12 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 
 // Format implements the NodeFormatter interface.
 func (node *ColumnTableDef) Format(ctx *FmtCtx) {
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	ctx.WriteByte(' ')
 	node.Type.Format(ctx.Buffer, ctx.flags.EncodeFlags())
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
 		ctx.WriteString(" CONSTRAINT ")
-		ctx.FormatNode(node.Nullable.ConstraintName)
+		ctx.FormatNode(&node.Nullable.ConstraintName)
 	}
 	switch node.Nullable.Nullability {
 	case Null:
@@ -367,7 +367,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	if node.HasDefaultExpr() {
 		if node.DefaultExpr.ConstraintName != "" {
 			ctx.WriteString(" CONSTRAINT ")
-			ctx.FormatNode(node.DefaultExpr.ConstraintName)
+			ctx.FormatNode(&node.DefaultExpr.ConstraintName)
 		}
 		ctx.WriteString(" DEFAULT ")
 		ctx.FormatNode(node.DefaultExpr.Expr)
@@ -375,7 +375,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	for _, checkExpr := range node.CheckExprs {
 		if checkExpr.ConstraintName != "" {
 			ctx.WriteString(" CONSTRAINT ")
-			ctx.FormatNode(checkExpr.ConstraintName)
+			ctx.FormatNode(&checkExpr.ConstraintName)
 		}
 		ctx.WriteString(" CHECK (")
 		ctx.FormatNode(checkExpr.Expr)
@@ -384,16 +384,16 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	if node.HasFKConstraint() {
 		if node.References.ConstraintName != "" {
 			ctx.WriteString(" CONSTRAINT ")
-			ctx.FormatNode(node.References.ConstraintName)
+			ctx.FormatNode(&node.References.ConstraintName)
 		}
 		ctx.WriteString(" REFERENCES ")
 		ctx.FormatNode(&node.References.Table)
 		if node.References.Col != "" {
 			ctx.WriteString(" (")
-			ctx.FormatNode(node.References.Col)
+			ctx.FormatNode(&node.References.Col)
 			ctx.WriteByte(')')
 		}
-		ctx.FormatNode(node.References.Actions)
+		ctx.FormatNode(&node.References.Actions)
 	}
 	if node.HasColumnFamily() {
 		if node.Family.Create {
@@ -405,7 +405,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FAMILY")
 		if len(node.Family.Name) > 0 {
 			ctx.WriteByte(' ')
-			ctx.FormatNode(node.Family.Name)
+			ctx.FormatNode(&node.Family.Name)
 		}
 	}
 }
@@ -490,15 +490,15 @@ func (node *IndexTableDef) SetName(name Name) {
 func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteString("INDEX ")
 	if node.Name != "" {
-		ctx.FormatNode(node.Name)
+		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}
 	ctx.WriteByte('(')
-	ctx.FormatNode(node.Columns)
+	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
 	if node.Storing != nil {
 		ctx.WriteString(" STORING (")
-		ctx.FormatNode(node.Storing)
+		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
 	}
 	if node.Interleave != nil {
@@ -534,7 +534,7 @@ type UniqueConstraintTableDef struct {
 func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
-		ctx.FormatNode(node.Name)
+		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}
 	if node.PrimaryKey {
@@ -543,11 +543,11 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString("UNIQUE ")
 	}
 	ctx.WriteByte('(')
-	ctx.FormatNode(node.Columns)
+	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
 	if node.Storing != nil {
 		ctx.WriteString(" STORING (")
-		ctx.FormatNode(node.Storing)
+		ctx.FormatNode(&node.Storing)
 		ctx.WriteByte(')')
 	}
 	if node.Interleave != nil {
@@ -591,7 +591,7 @@ type ReferenceActions struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node ReferenceActions) Format(ctx *FmtCtx) {
+func (node *ReferenceActions) Format(ctx *FmtCtx) {
 	if node.Delete != NoAction {
 		ctx.WriteString(" ON DELETE ")
 		ctx.WriteString(node.Delete.String())
@@ -615,22 +615,22 @@ type ForeignKeyConstraintTableDef struct {
 func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
-		ctx.FormatNode(node.Name)
+		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}
 	ctx.WriteString("FOREIGN KEY (")
-	ctx.FormatNode(node.FromCols)
+	ctx.FormatNode(&node.FromCols)
 	ctx.WriteString(") REFERENCES ")
 	ctx.FormatNode(&node.Table)
 
 	if len(node.ToCols) > 0 {
 		ctx.WriteByte(' ')
 		ctx.WriteByte('(')
-		ctx.FormatNode(node.ToCols)
+		ctx.FormatNode(&node.ToCols)
 		ctx.WriteByte(')')
 	}
 
-	ctx.FormatNode(node.Actions)
+	ctx.FormatNode(&node.Actions)
 }
 
 // SetName implements the TableDef interface.
@@ -660,7 +660,7 @@ func (node *CheckConstraintTableDef) SetName(name Name) {
 func (node *CheckConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
-		ctx.FormatNode(node.Name)
+		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}
 	ctx.WriteString("CHECK (")
@@ -684,11 +684,11 @@ func (node *FamilyTableDef) SetName(name Name) {
 func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 	ctx.WriteString("FAMILY ")
 	if node.Name != "" {
-		ctx.FormatNode(node.Name)
+		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}
 	ctx.WriteByte('(')
-	ctx.FormatNode(node.Columns)
+	ctx.FormatNode(&node.Columns)
 	ctx.WriteByte(')')
 }
 
@@ -705,11 +705,11 @@ func (node *InterleaveDef) Format(ctx *FmtCtx) {
 	ctx.WriteString(" INTERLEAVE IN PARENT ")
 	ctx.FormatNode(node.Parent)
 	ctx.WriteString(" (")
-	for i, field := range node.Fields {
+	for i := range node.Fields {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(field)
+		ctx.FormatNode(&node.Fields[i])
 	}
 	ctx.WriteString(")")
 	if node.DropBehavior != DropDefault {
@@ -748,19 +748,19 @@ func (node *PartitionBy) Format(ctx *FmtCtx) {
 	} else if len(node.Range) > 0 {
 		ctx.WriteString(` PARTITION BY RANGE (`)
 	}
-	ctx.FormatNode(node.Fields)
+	ctx.FormatNode(&node.Fields)
 	ctx.WriteString(`) (`)
-	for i, p := range node.List {
+	for i := range node.List {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(p)
+		ctx.FormatNode(&node.List[i])
 	}
-	for i, p := range node.Range {
+	for i := range node.Range {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(p)
+		ctx.FormatNode(&node.Range[i])
 	}
 	ctx.WriteString(`)`)
 }
@@ -773,11 +773,11 @@ type ListPartition struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node ListPartition) Format(ctx *FmtCtx) {
+func (node *ListPartition) Format(ctx *FmtCtx) {
 	ctx.WriteString(`PARTITION `)
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	ctx.WriteString(` VALUES IN (`)
-	ctx.FormatNode(node.Exprs)
+	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
 	if node.Subpartition != nil {
 		ctx.FormatNode(node.Subpartition)
@@ -792,9 +792,9 @@ type RangePartition struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node RangePartition) Format(ctx *FmtCtx) {
+func (node *RangePartition) Format(ctx *FmtCtx) {
 	ctx.WriteString(`PARTITION `)
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(&node.Name)
 	ctx.WriteString(` VALUES < `)
 	ctx.FormatNode(node.Expr)
 	if node.Subpartition != nil {
@@ -829,14 +829,14 @@ func (node *CreateTable) Format(ctx *FmtCtx) {
 	if node.As() {
 		if len(node.AsColumnNames) > 0 {
 			ctx.WriteString(" (")
-			ctx.FormatNode(node.AsColumnNames)
+			ctx.FormatNode(&node.AsColumnNames)
 			ctx.WriteByte(')')
 		}
 		ctx.WriteString(" AS ")
 		ctx.FormatNode(node.AsSource)
 	} else {
 		ctx.WriteString(" (")
-		ctx.FormatNode(node.Defs)
+		ctx.FormatNode(&node.Defs)
 		ctx.WriteByte(')')
 		if node.Interleave != nil {
 			ctx.FormatNode(node.Interleave)
@@ -861,15 +861,16 @@ func (node *CreateSequence) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(&node.Name)
-	ctx.FormatNode(node.Options)
+	ctx.FormatNode(&node.Options)
 }
 
 // SequenceOptions represents a list of sequence options.
 type SequenceOptions []SequenceOption
 
 // Format implements the NodeFormatter interface.
-func (node SequenceOptions) Format(ctx *FmtCtx) {
-	for _, option := range node {
+func (node *SequenceOptions) Format(ctx *FmtCtx) {
+	for i := range *node {
+		option := &(*node)[i]
 		ctx.WriteByte(' ')
 		switch option.Name {
 		case SeqOptMaxValue, SeqOptMinValue:
@@ -1005,7 +1006,7 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 	if len(node.ColumnNames) > 0 {
 		ctx.WriteByte(' ')
 		ctx.WriteByte('(')
-		ctx.FormatNode(node.ColumnNames)
+		ctx.FormatNode(&node.ColumnNames)
 		ctx.WriteByte(')')
 	}
 
@@ -1026,7 +1027,7 @@ func (node *CreateStats) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 
 	ctx.WriteString(" ON ")
-	ctx.FormatNode(node.ColumnNames)
+	ctx.FormatNode(&node.ColumnNames)
 
 	ctx.WriteString(" FROM ")
 	ctx.FormatNode(&node.Table)

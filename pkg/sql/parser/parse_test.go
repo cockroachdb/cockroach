@@ -1346,7 +1346,7 @@ func TestParse2(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := tree.AsStringWithFlags(stmts, tree.FmtShowPasswords)
+		s := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1377,7 +1377,7 @@ func TestParseTree(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := tree.AsStringWithFlags(stmts, tree.FmtAlwaysGroupExprs)
+		s := tree.AsStringWithFlags(&stmts, tree.FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}

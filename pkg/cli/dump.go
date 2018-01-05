@@ -226,13 +226,14 @@ func getMetadataForTable(
 	name := &tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
 
 	// Fetch table ID.
+	dbNameStr := tree.NameString(dbName)
 	vals, err := conn.QueryRow(fmt.Sprintf(`
 		SELECT table_id
 		FROM %s.crdb_internal.tables
 		AS OF SYSTEM TIME '%s'
 		WHERE DATABASE_NAME = $1
 			AND NAME = $2
-		`, tree.Name(dbName).String(), ts), []driver.Value{dbName, tableName})
+		`, dbNameStr, ts), []driver.Value{dbName, tableName})
 	if err != nil {
 		if err == io.EOF {
 			return tableMetadata{}, errors.Errorf("relation %s does not exist", name)
@@ -278,7 +279,7 @@ func getMetadataForTable(
 		if f.colnames.Len() > 0 {
 			f.colnames.WriteString(", ")
 		}
-		f.ctx.FormatNode(tree.Name(name))
+		f.ctx.FormatName(name)
 	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
@@ -290,7 +291,7 @@ func getMetadataForTable(
 		AS OF SYSTEM TIME '%s'
 		WHERE descriptor_name = $1
 			AND database_name = $2
-		`, tree.Name(dbName).String(), ts), []driver.Value{tableName, dbName})
+		`, dbNameStr, ts), []driver.Value{tableName, dbName})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -302,7 +303,7 @@ func getMetadataForTable(
 		FROM %s.crdb_internal.backward_dependencies
 		AS OF SYSTEM TIME '%s'
 		WHERE descriptor_id = $1
-		`, tree.Name(dbName).String(), ts), []driver.Value{tableID})
+		`, dbNameStr, ts), []driver.Value{tableID})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -517,7 +518,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 }
 
 func writeInserts(w io.Writer, md tableMetadata, inserts []string) {
-	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
+	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", &md.name.TableName, md.columnNames)
 	for idx, values := range inserts {
 		if idx > 0 {
 			fmt.Fprint(w, ",")

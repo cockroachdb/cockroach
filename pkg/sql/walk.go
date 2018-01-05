@@ -203,9 +203,9 @@ func (v *planVisitor) visit(plan planNode) {
 				}
 				f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
 				f.buf.WriteByte('(')
-				f.ctx.FormatNode(n.pred.leftColNames)
+				f.ctx.FormatNode(&n.pred.leftColNames)
 				f.buf.WriteString(") = (")
-				f.ctx.FormatNode(n.pred.rightColNames)
+				f.ctx.FormatNode(&n.pred.rightColNames)
 				f.buf.WriteByte(')')
 				v.observer.attr(name, "equality", f.buf.String())
 			}

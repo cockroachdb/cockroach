@@ -74,9 +74,10 @@ type columnProps struct {
 
 func (c columnProps) String() string {
 	if c.table == "" {
-		return tree.Name(c.name).String()
+		return tree.NameString(string(c.name))
 	}
-	return fmt.Sprintf("%s.%s", tree.Name(c.table), tree.Name(c.name))
+	return fmt.Sprintf("%s.%s",
+		tree.NameString(string(c.table)), tree.NameString(string(c.name)))
 }
 
 // relationalProps holds properties of a relational expression.

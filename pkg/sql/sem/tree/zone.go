@@ -37,7 +37,7 @@ func (node ZoneSpecifier) TargetsIndex() bool {
 }
 
 // Format implements the NodeFormatter interface.
-func (node ZoneSpecifier) Format(ctx *FmtCtx) {
+func (node *ZoneSpecifier) Format(ctx *FmtCtx) {
 	if node.Partition != "" {
 		ctx.WriteString("PARTITION ")
 		ctx.FormatNode(&node.Partition)
@@ -59,7 +59,7 @@ func (node ZoneSpecifier) Format(ctx *FmtCtx) {
 	}
 }
 
-func (node ZoneSpecifier) String() string { return AsString(node) }
+func (node *ZoneSpecifier) String() string { return AsString(node) }
 
 // ShowZoneConfig represents an EXPERIMENTAL SHOW ZONE CONFIGURATION...
 // statement.
@@ -73,7 +73,7 @@ func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 		ctx.WriteString("EXPERIMENTAL SHOW ZONE CONFIGURATIONS")
 	} else {
 		ctx.WriteString("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR ")
-		ctx.FormatNode(node.ZoneSpecifier)
+		ctx.FormatNode(&node.ZoneSpecifier)
 	}
 }
 
@@ -87,7 +87,7 @@ type SetZoneConfig struct {
 // Format implements the NodeFormatter interface.
 func (node *SetZoneConfig) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
-	ctx.FormatNode(node.ZoneSpecifier)
+	ctx.FormatNode(&node.ZoneSpecifier)
 	ctx.WriteString(" EXPERIMENTAL CONFIGURE ZONE ")
 	ctx.FormatNode(node.YAMLConfig)
 }

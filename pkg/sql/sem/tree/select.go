@@ -51,7 +51,7 @@ type Select struct {
 func (node *Select) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.With)
 	ctx.FormatNode(node.Select)
-	ctx.FormatNode(node.OrderBy)
+	ctx.FormatNode(&node.OrderBy)
 	ctx.FormatNode(node.Limit)
 }
 
@@ -90,12 +90,12 @@ func (node *SelectClause) Format(ctx *FmtCtx) {
 		if node.Distinct {
 			ctx.WriteString("DISTINCT ")
 		}
-		ctx.FormatNode(node.Exprs)
+		ctx.FormatNode(&node.Exprs)
 		ctx.FormatNode(node.From)
 		ctx.FormatNode(node.Where)
-		ctx.FormatNode(node.GroupBy)
+		ctx.FormatNode(&node.GroupBy)
 		ctx.FormatNode(node.Having)
-		ctx.FormatNode(node.Window)
+		ctx.FormatNode(&node.Window)
 	}
 }
 
@@ -103,12 +103,12 @@ func (node *SelectClause) Format(ctx *FmtCtx) {
 type SelectExprs []SelectExpr
 
 // Format implements the NodeFormatter interface.
-func (node SelectExprs) Format(ctx *FmtCtx) {
-	for i, n := range node {
+func (node *SelectExprs) Format(ctx *FmtCtx) {
+	for i := range *node {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(n)
+		ctx.FormatNode(&(*node)[i])
 	}
 }
 
@@ -140,11 +140,11 @@ func StarSelectExpr() SelectExpr {
 }
 
 // Format implements the NodeFormatter interface.
-func (node SelectExpr) Format(ctx *FmtCtx) {
+func (node *SelectExpr) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Expr)
 	if node.As != "" {
 		ctx.WriteString(" AS ")
-		ctx.FormatNode(node.As)
+		ctx.FormatNode(&node.As)
 	}
 }
 
@@ -156,12 +156,12 @@ type AliasClause struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (a AliasClause) Format(ctx *FmtCtx) {
-	ctx.FormatNode(a.Alias)
+func (a *AliasClause) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&a.Alias)
 	if len(a.Cols) != 0 {
 		// Format as "alias (col1, col2, ...)".
 		ctx.WriteString(" (")
-		ctx.FormatNode(a.Cols)
+		ctx.FormatNode(&a.Cols)
 		ctx.WriteByte(')')
 	}
 }
@@ -172,7 +172,7 @@ type AsOfClause struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (a AsOfClause) Format(ctx *FmtCtx) {
+func (a *AsOfClause) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS OF SYSTEM TIME ")
 	ctx.FormatNode(a.Expr)
 }
@@ -185,10 +185,10 @@ type From struct {
 
 // Format implements the NodeFormatter interface.
 func (node *From) Format(ctx *FmtCtx) {
-	ctx.FormatNode(node.Tables)
+	ctx.FormatNode(&node.Tables)
 	if node.AsOf.Expr != nil {
 		ctx.WriteByte(' ')
-		ctx.FormatNode(node.AsOf)
+		ctx.FormatNode(&node.AsOf)
 	}
 }
 
@@ -196,10 +196,10 @@ func (node *From) Format(ctx *FmtCtx) {
 type TableExprs []TableExpr
 
 // Format implements the NodeFormatter interface.
-func (node TableExprs) Format(ctx *FmtCtx) {
-	if len(node) != 0 {
+func (node *TableExprs) Format(ctx *FmtCtx) {
+	if len(*node) != 0 {
 		ctx.WriteString(" FROM ")
-		for i, n := range node {
+		for i, n := range *node {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
@@ -252,7 +252,7 @@ func (n *IndexHints) Format(ctx *FmtCtx) {
 	if !n.NoIndexJoin {
 		ctx.WriteByte('@')
 		if n.Index != "" {
-			ctx.FormatNode(n.Index)
+			ctx.FormatNode(&n.Index)
 		} else {
 			ctx.Printf("[%d]", n.IndexID)
 		}
@@ -262,7 +262,7 @@ func (n *IndexHints) Format(ctx *FmtCtx) {
 		} else {
 			ctx.WriteString("@{FORCE_INDEX=")
 			if n.Index != "" {
-				ctx.FormatNode(n.Index)
+				ctx.FormatNode(&n.Index)
 			} else {
 				ctx.Printf("[%d]", n.IndexID)
 			}
@@ -291,7 +291,7 @@ func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
 	}
 	if node.As.Alias != "" {
 		ctx.WriteString(" AS ")
-		ctx.FormatNode(node.As)
+		ctx.FormatNode(&node.As)
 	}
 }
 
@@ -386,7 +386,7 @@ type UsingJoinCond struct {
 // Format implements the NodeFormatter interface.
 func (node *UsingJoinCond) Format(ctx *FmtCtx) {
 	ctx.WriteString(" USING (")
-	ctx.FormatNode(node.Cols)
+	ctx.FormatNode(&node.Cols)
 	ctx.WriteByte(')')
 }
 
@@ -425,9 +425,9 @@ func (node *Where) Format(ctx *FmtCtx) {
 type GroupBy []Expr
 
 // Format implements the NodeFormatter interface.
-func (node GroupBy) Format(ctx *FmtCtx) {
+func (node *GroupBy) Format(ctx *FmtCtx) {
 	prefix := " GROUP BY "
-	for _, n := range node {
+	for _, n := range *node {
 		ctx.WriteString(prefix)
 		ctx.FormatNode(n)
 		prefix = ", "
@@ -438,9 +438,9 @@ func (node GroupBy) Format(ctx *FmtCtx) {
 type DistinctOn []Expr
 
 // Format implements the NodeFormatter interface.
-func (node DistinctOn) Format(ctx *FmtCtx) {
+func (node *DistinctOn) Format(ctx *FmtCtx) {
 	prefix := " DISTINCT ON "
-	for _, n := range node {
+	for _, n := range *node {
 		ctx.WriteString(prefix)
 		ctx.FormatNode(n)
 		prefix = ", "
@@ -451,9 +451,9 @@ func (node DistinctOn) Format(ctx *FmtCtx) {
 type OrderBy []*Order
 
 // Format implements the NodeFormatter interface.
-func (node OrderBy) Format(ctx *FmtCtx) {
+func (node *OrderBy) Format(ctx *FmtCtx) {
 	prefix := " ORDER BY "
-	for _, n := range node {
+	for _, n := range *node {
 		ctx.WriteString(prefix)
 		ctx.FormatNode(n)
 		prefix = ", "
@@ -516,7 +516,7 @@ func (node *Order) Format(ctx *FmtCtx) {
 			ctx.WriteString("INDEX ")
 			ctx.FormatNode(&node.Table)
 			ctx.WriteByte('@')
-			ctx.FormatNode(node.Index)
+			ctx.FormatNode(&node.Index)
 		}
 	}
 	if node.Direction != DefaultDirection {
@@ -548,11 +548,11 @@ func (node *Limit) Format(ctx *FmtCtx) {
 type Window []*WindowDef
 
 // Format implements the NodeFormatter interface.
-func (node Window) Format(ctx *FmtCtx) {
+func (node *Window) Format(ctx *FmtCtx) {
 	prefix := " WINDOW "
-	for _, n := range node {
+	for _, n := range *node {
 		ctx.WriteString(prefix)
-		ctx.FormatNode(n.Name)
+		ctx.FormatNode(&n.Name)
 		ctx.WriteString(" AS ")
 		ctx.FormatNode(n)
 		prefix = ", "
@@ -572,7 +572,7 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 	ctx.WriteRune('(')
 	needSpaceSeparator := false
 	if node.RefName != "" {
-		ctx.FormatNode(node.RefName)
+		ctx.FormatNode(&node.RefName)
 		needSpaceSeparator = true
 	}
 	if node.Partitions != nil {
@@ -580,12 +580,12 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 			ctx.WriteRune(' ')
 		}
 		ctx.WriteString("PARTITION BY ")
-		ctx.FormatNode(node.Partitions)
+		ctx.FormatNode(&node.Partitions)
 		needSpaceSeparator = true
 	}
 	if node.OrderBy != nil {
 		if needSpaceSeparator {
-			ctx.FormatNode(node.OrderBy)
+			ctx.FormatNode(&node.OrderBy)
 		} else {
 			// We need to remove the initial space produced by OrderBy.Format.
 			// TODO(knz): this code is horrendous. Figure a way to remove it.
@@ -594,7 +594,7 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 				ctx FmtCtx
 			}
 			f.ctx = MakeFmtCtx(&f.buf, ctx.flags)
-			f.ctx.FormatNode(node.OrderBy)
+			f.ctx.FormatNode(&node.OrderBy)
 			ctx.WriteString(f.buf.String()[1:])
 		}
 		needSpaceSeparator = true

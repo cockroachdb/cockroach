@@ -34,7 +34,8 @@ func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (d testVarContainer) IndexedVarNodeFormatter(idx int) NodeFormatter {
-	return Name(fmt.Sprintf("var%d", idx))
+	n := Name(fmt.Sprintf("var%d", idx))
+	return &n
 }
 
 func TestIndexedVars(t *testing.T) {

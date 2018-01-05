@@ -486,7 +486,7 @@ func (expr *ArrayFlatten) Walk(v Visitor) Expr {
 func (expr UnqualifiedStar) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr UnresolvedName) Walk(_ Visitor) Expr { return expr }
+func (expr *UnresolvedName) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *AllColumnsSelector) Walk(_ Visitor) Expr { return expr }

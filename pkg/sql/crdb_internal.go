@@ -912,13 +912,13 @@ CREATE TABLE crdb_internal.create_statements (
 				typeSequence := tree.DString("sequence")
 				if table.IsView() {
 					descType = &typeView
-					stmt, err = p.showCreateView(ctx, tree.Name(table.Name), table)
+					stmt, err = p.showCreateView(ctx, (*tree.Name)(&table.Name), table)
 				} else if table.IsSequence() {
 					descType = &typeSequence
-					stmt, err = p.showCreateSequence(ctx, tree.Name(table.Name), table)
+					stmt, err = p.showCreateSequence(ctx, (*tree.Name)(&table.Name), table)
 				} else {
 					descType = &typeTable
-					stmt, err = p.showCreateTable(ctx, tree.Name(table.Name), prefix, table)
+					stmt, err = p.showCreateTable(ctx, (*tree.Name)(&table.Name), prefix, table)
 				}
 				if err != nil {
 					return err
@@ -1499,7 +1499,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 				if err := addRow(
 					r[0], // id
-					tree.NewDString(config.CLIZoneSpecifier(zs)),
+					tree.NewDString(config.CLIZoneSpecifier(&zs)),
 					tree.NewDBytes(tree.DBytes(configYAML)),
 					tree.NewDBytes(tree.DBytes(configBytes)),
 				); err != nil {
@@ -1530,7 +1530,7 @@ CREATE TABLE crdb_internal.zones (
 					}
 					if err := addRow(
 						r[0], // id
-						tree.NewDString(config.CLIZoneSpecifier(zs)),
+						tree.NewDString(config.CLIZoneSpecifier(&zs)),
 						tree.NewDBytes(tree.DBytes(configYAML)),
 						tree.NewDBytes(tree.DBytes(configBytes)),
 					); err != nil {

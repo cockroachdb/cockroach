@@ -202,7 +202,8 @@ func (p *planner) validateForeignKey(
 	}
 
 	escape := func(s string) string {
-		return tree.Name(s).String()
+		n := tree.Name(s)
+		return n.String()
 	}
 
 	prefix := len(srcIdx.ColumnNames)
