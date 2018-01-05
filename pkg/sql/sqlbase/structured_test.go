@@ -977,7 +977,7 @@ func TestValidatePartitioning(t *testing.T) {
 				},
 			},
 		},
-		{"values must be strictly increasing",
+		{"partitions p1 and p2 overlap",
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
@@ -986,8 +986,8 @@ func TestValidatePartitioning(t *testing.T) {
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
 						Range: []PartitioningDescriptor_Range{
-							{Name: "p1", UpperBound: []byte{0x03, 0x04}},
-							{Name: "p2", UpperBound: []byte{0x03, 0x02}},
+							{Name: "p1", FromInclusive: []byte{0x03, 0x02}, ToExclusive: []byte{0x03, 0x04}},
+							{Name: "p2", FromInclusive: []byte{0x03, 0x02}, ToExclusive: []byte{0x03, 0x04}},
 						},
 					},
 				},

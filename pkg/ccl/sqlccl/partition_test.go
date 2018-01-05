@@ -400,8 +400,8 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		{
 			name: `single col range partitioning`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
-				PARTITION p3 VALUES < 3,
-				PARTITION p4 VALUES < 4
+				PARTITION p3 VALUES FROM (MINVALUE) TO (3),
+				PARTITION p4 VALUES FROM (3) TO (4)
 			)`,
 			configs: []string{`@primary:+n1`, `.p3:+n2`, `.p4:+n3`},
 			generatedSpans: []string{
@@ -416,19 +416,41 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
+			name: `sparse single col range partitioning`,
+			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+				PARTITION p1 VALUES FROM (1) TO (2),
+				PARTITION p3 VALUES FROM (3) TO (4)
+			)`,
+			configs: []string{`@primary:+n1`, `.p1:+n2`, `.p3:+n3`},
+			generatedSpans: []string{
+				`@primary /1-/1/1`,
+				`     .p1 /1/1-/1/2`,
+				`@primary /1/2-/1/3`,
+				`     .p3 /1/3-/1/4`,
+				`@primary /1/4-/2`,
+			},
+			scans: map[string]string{
+				`a < 1`:            `n1`,
+				`a >= 1 AND a < 2`: `n2`,
+				`a >= 2 AND a < 3`: `n1`,
+				`a >= 3 AND a < 4`: `n3`,
+				`a > 4`:            `n1`,
+			},
+		},
+		{
 			// Intentionally a little different than `single col range
 			// partitioning` for the repartitioning tests.
 			name: `single col range partitioning - MAXVALUE`,
 			schema: `CREATE TABLE %s (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
-				PARTITION p4 VALUES < 4,
-				PARTITION p5 VALUES < 5,
-				PARTITION pm VALUES < MAXVALUE
+				PARTITION p4 VALUES FROM (MINVALUE) TO (4),
+				PARTITION p5 VALUES FROM (4) TO (5),
+				PARTITION px VALUES FROM (5) TO (MAXVALUE)
 			)`,
-			configs: []string{`@primary`, `.p4:+n1`, `.p5:+n2`, `.pm:+n3`},
+			configs: []string{`@primary`, `.p4:+n1`, `.p5:+n2`, `.px:+n3`},
 			generatedSpans: []string{
 				`.p4 /1-/1/4`,
 				`.p5 /1/4-/1/5`,
-				`.pm /1/5-/2`,
+				`.px /1/5-/2`,
 			},
 			scans: map[string]string{
 				`a < 4`:            `n1`,
@@ -439,9 +461,9 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		{
 			name: `multi col range partitioning`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
-				PARTITION p34 VALUES < (3, 4),
-				PARTITION p56 VALUES < (5, 6),
-				PARTITION p57 VALUES < (5, 7)
+				PARTITION p34 VALUES FROM (MINVALUE, MINVALUE) TO (3, 4),
+				PARTITION p56 VALUES FROM (3, 4) TO (5, 6),
+				PARTITION p57 VALUES FROM (5, 6) TO (5, 7)
 			)`,
 			configs: []string{`@primary:+n1`, `.p34:+n2`, `.p56:+n3`, `.p57:+n1`},
 			generatedSpans: []string{
@@ -458,26 +480,48 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 		},
 		{
+			name: `sparse multi col range partitioning`,
+			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+				PARTITION p34  VALUES FROM (1, 2) TO (3, 4),
+				PARTITION p78 VALUES FROM (5, 6) TO (7, 8)
+			)`,
+			configs: []string{`@primary:+n1`, `.p34:+n2`, `.p78:+n3`},
+			generatedSpans: []string{
+				`@primary /1-/1/1/2`,
+				`    .p34 /1/1/2-/1/3/4`,
+				`@primary /1/3/4-/1/5/6`,
+				`    .p78 /1/5/6-/1/7/8`,
+				`@primary /1/7/8-/2`,
+			},
+			scans: map[string]string{
+				`(a, b) < (1, 2)`:                      `n1`,
+				`(a, b) >= (1, 2) AND (a, b) < (3, 4)`: `n2`,
+				`(a, b) >= (3, 4) AND (a, b) < (5, 6)`: `n1`,
+				`(a, b) >= (5, 6) AND (a, b) < (7, 8)`: `n3`,
+				`(a, b) >= (7, 8)`:                     `n1`,
+			},
+		},
+		{
 			// Intentionally a little different than `multi col range
 			// partitioning` for the repartitioning tests.
 			name: `multi col range partitioning - MAXVALUE`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
-				PARTITION p34 VALUES < (3, 4),
-				PARTITION p3m VALUES < (3, MAXVALUE),
-				PARTITION p56 VALUES < (5, 6),
-				PARTITION p57 VALUES < (5, 7)
+				PARTITION p3n VALUES FROM (MINVALUE, MINVALUE) TO (3, MINVALUE),
+				PARTITION p3x VALUES FROM (3, MINVALUE) TO (3, MAXVALUE),
+				PARTITION p56 VALUES FROM (3, MAXVALUE) TO (5, 6),
+				PARTITION p57 VALUES FROM (5, 6) TO (5, 7)
 			)`,
-			configs: []string{`@primary:+n1`, `.p34:+n2`, `.p3m:+n3`, `.p56:+n1`, `.p57:+n2`},
+			configs: []string{`@primary:+n1`, `.p3n:+n2`, `.p3x:+n3`, `.p56:+n1`, `.p57:+n2`},
 			generatedSpans: []string{
-				`    .p34 /1-/1/3/4`,
-				`    .p3m /1/3/4-/1/4`,
+				`    .p3n /1-/1/3`,
+				`    .p3x /1/3-/1/4`,
 				`    .p56 /1/4-/1/5/6`,
 				`    .p57 /1/5/6-/1/5/7`,
 				`@primary /1/5/7-/2`,
 			},
 			scans: map[string]string{
-				`(a, b) < (3, 4)`:                      `n2`,
-				`(a, b) >= (3, 4) AND a < 4`:           `n3`,
+				`a < 3`:                                `n2`,
+				`a >= 3 AND a < 4`:                     `n3`,
 				`a >= 4 AND (a, b) < (5, 6)`:           `n1`,
 				`(a, b) >= (5, 6) AND (a, b) < (5, 7)`: `n2`,
 				`(a, b) >= (5, 7)`:                     `n1`,
@@ -486,19 +530,19 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		{
 			name: `multi col range partitioning - MAXVALUE MAXVALUE`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
-				PARTITION p34 VALUES < (3, 4),
-				PARTITION p3m VALUES < (3, MAXVALUE),
-				PARTITION p56 VALUES < (5, 6),
-				PARTITION p57 VALUES < (5, 7),
-				PARTITION pm VALUES < (MAXVALUE, MAXVALUE)
+				PARTITION p34 VALUES FROM (MINVALUE, MINVALUE) TO (3, 4),
+				PARTITION p3x VALUES FROM (3, 4) TO (3, MAXVALUE),
+				PARTITION p56 VALUES FROM (3, MAXVALUE) TO (5, 6),
+				PARTITION p57 VALUES FROM (5, 6) TO (5, 7),
+				PARTITION pxx VALUES FROM (5, 7) TO (MAXVALUE, MAXVALUE)
 			)`,
-			configs: []string{`@primary`, `.p34:+n1`, `.p3m:+n2`, `.p56:+n3`, `.p57:+n1`, `.pm:+n2`},
+			configs: []string{`@primary`, `.p34:+n1`, `.p3x:+n2`, `.p56:+n3`, `.p57:+n1`, `.pxx:+n2`},
 			generatedSpans: []string{
 				`.p34 /1-/1/3/4`,
-				`.p3m /1/3/4-/1/4`,
+				`.p3x /1/3/4-/1/4`,
 				`.p56 /1/4-/1/5/6`,
 				`.p57 /1/5/6-/1/5/7`,
-				` .pm /1/5/7-/2`,
+				`.pxx /1/5/7-/2`,
 			},
 			scans: map[string]string{
 				`(a, b) < (3, 4)`:                      `n1`,
@@ -549,11 +593,11 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			name: `list-range partitioning`,
 			schema: `CREATE TABLE %s (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
 				PARTITION p3 VALUES IN (3) PARTITION BY RANGE (b) (
-					PARTITION p34 VALUES < 4
+					PARTITION p34 VALUES FROM (MINVALUE) TO (4)
 				),
 				PARTITION p5 VALUES IN (5) PARTITION BY RANGE (b) (
-					PARTITION p56 VALUES < 6,
-					PARTITION p5d VALUES < MAXVALUE
+					PARTITION p56 VALUES FROM (MINVALUE) TO (6),
+					PARTITION p5d VALUES FROM (6) TO (MAXVALUE)
 				),
 				PARTITION pd VALUES IN (DEFAULT)
 			)`,
