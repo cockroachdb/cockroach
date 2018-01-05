@@ -486,9 +486,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if dropped {
 				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 			}
-			if err := applyColumnMutation(
-				&col, t, &params.p.semaCtx, params.EvalContext(),
-			); err != nil {
+			if err := applyColumnMutation(n.tableDesc, &col, t, params); err != nil {
 				return err
 			}
 			n.tableDesc.UpdateColumnDescriptor(col)
@@ -580,25 +578,45 @@ func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterTableNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterTableNode) Close(context.Context)        {}
 
+// applyColumnMutation applies the mutation specified in `mut` to the given
+// columnDescriptor, and saves the containing table descriptor. If the column's
+// dependencies on sequences change, it updates them as well.
 func applyColumnMutation(
+	tableDesc *sqlbase.TableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	params runParams,
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableSetDefault:
+		if col.UsesSequenceId != nil {
+			if err := removeSequenceDependency(tableDesc, col, params); err != nil {
+				return err
+			}
+		}
 		if t.Default == nil {
 			col.DefaultExpr = nil
 		} else {
 			colDatumType := col.Type.ToDatumType()
-			if _, err := sqlbase.SanitizeVarFreeExpr(
-				t.Default, colDatumType, "DEFAULT", semaCtx, evalCtx,
-			); err != nil {
+			expr, err := sqlbase.SanitizeVarFreeExpr(
+				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, params.EvalContext(),
+			)
+			if err != nil {
 				return err
 			}
 			s := tree.Serialize(t.Default)
 			col.DefaultExpr = &s
+			// Add reference to the sequence descriptor this column is now using.
+			changedSeqDesc, err := maybeAddSequenceDependency(tableDesc, col, expr, params.EvalContext())
+			if err != nil {
+				return err
+			}
+			if changedSeqDesc != nil {
+				if err := params.p.writeTableDesc(params.ctx, changedSeqDesc); err != nil {
+					return err
+				}
+				params.p.notifySchemaChange(changedSeqDesc, sqlbase.InvalidMutationID)
+			}
 		}
 
 	case *tree.AlterTableDropNotNull:
