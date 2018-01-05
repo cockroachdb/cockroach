@@ -1686,9 +1686,16 @@ func (e *Executor) execStmtInOpenTxn(
 
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
+		// BeginTransaction is executed fully here; there's no planNode for it
+		// and a planner is not involved at all.
 		if !firstInTxn {
 			return errTransactionInProgress
 		}
+		res.BeginResult((*tree.BeginTransaction)(nil))
+		if err := session.TxnState.setTransactionModes(s.Modes); err != nil {
+			return err
+		}
+		return res.CloseResult()
 
 	case *tree.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no planNode for it

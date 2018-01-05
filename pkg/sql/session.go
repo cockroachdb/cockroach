@@ -1309,6 +1309,63 @@ func (ts *txnState) isSerializableRestart() bool {
 	return txn.IsSerializableRestart()
 }
 
+func (ts *txnState) setTransactionModes(modes tree.TransactionModes) error {
+	if err := ts.setSQLIsolationLevel(modes.Isolation); err != nil {
+		return err
+	}
+	if err := ts.setUserPriority(modes.UserPriority); err != nil {
+		return err
+	}
+	return ts.setReadWriteMode(modes.ReadWriteMode)
+}
+
+func (ts *txnState) setSQLIsolationLevel(level tree.IsolationLevel) error {
+	var iso enginepb.IsolationType
+	switch level {
+	case tree.UnspecifiedIsolation:
+		return nil
+	case tree.SnapshotIsolation:
+		iso = enginepb.SNAPSHOT
+	case tree.SerializableIsolation:
+		iso = enginepb.SERIALIZABLE
+	default:
+		return errors.Errorf("unknown isolation level: %s", level)
+	}
+
+	return ts.setIsolationLevel(iso)
+}
+
+func (ts *txnState) setUserPriority(userPriority tree.UserPriority) error {
+	var up roachpb.UserPriority
+	switch userPriority {
+	case tree.UnspecifiedUserPriority:
+		return nil
+	case tree.Low:
+		up = roachpb.MinUserPriority
+	case tree.Normal:
+		up = roachpb.NormalUserPriority
+	case tree.High:
+		up = roachpb.MaxUserPriority
+	default:
+		return errors.Errorf("unknown user priority: %s", userPriority)
+	}
+	return ts.setPriority(up)
+}
+
+func (ts *txnState) setReadWriteMode(readWriteMode tree.ReadWriteMode) error {
+	switch readWriteMode {
+	case tree.UnspecifiedReadWriteMode:
+		return nil
+	case tree.ReadOnly:
+		ts.setReadOnly(true)
+	case tree.ReadWrite:
+		ts.setReadOnly(false)
+	default:
+		return errors.Errorf("unknown read mode: %s", readWriteMode)
+	}
+	return nil
+}
+
 type schemaChangerCollection struct {
 	// A schemaChangerCollection accumulates schemaChangers from potentially
 	// multiple user requests, part of the same SQL transaction. We need to
