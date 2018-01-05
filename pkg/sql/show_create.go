@@ -368,13 +368,20 @@ func ShowCreatePartitioning(
 		}
 		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
 		fmt.Fprintf(buf, part.Name)
-		buf.WriteString(` VALUES < `)
-		tuple, _, err := sqlbase.DecodePartitionTuple(
-			a, tableDesc, idxDesc, partDesc, part.UpperBound, fakePrefixDatums)
+		buf.WriteString(" VALUES FROM ")
+		fromTuple, _, err := sqlbase.DecodePartitionTuple(
+			a, tableDesc, idxDesc, partDesc, part.From, fakePrefixDatums)
 		if err != nil {
 			return err
 		}
-		tuple.Format(buf)
+		fromTuple.Format(buf)
+		buf.WriteString(" TO ")
+		toTuple, _, err := sqlbase.DecodePartitionTuple(
+			a, tableDesc, idxDesc, partDesc, part.To, fakePrefixDatums)
+		if err != nil {
+			return err
+		}
+		toTuple.Format(buf)
 	}
 	fmt.Fprintf(buf, "\n%s)", indentStr)
 	return nil
