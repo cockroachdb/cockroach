@@ -516,6 +516,8 @@ type fkUpdateHelper struct {
 	inbound  fkDeleteHelper // Check old values are not referenced.
 	outbound fkInsertHelper // Check rows referenced by new values still exist.
 
+	indexIDsToCheck map[IndexID]struct{} // List of Index IDs to check
+
 	checker *fkBatchChecker
 }
 
@@ -526,7 +528,9 @@ func makeFKUpdateHelper(
 	colMap map[ColumnID]int,
 	alloc *DatumAlloc,
 ) (fkUpdateHelper, error) {
-	ret := fkUpdateHelper{}
+	ret := fkUpdateHelper{
+		indexIDsToCheck: make(map[IndexID]struct{}),
+	}
 	var err error
 	if ret.inbound, err = makeFKDeleteHelper(txn, table, otherTables, colMap, alloc); err != nil {
 		return ret, err
@@ -537,13 +541,25 @@ func makeFKUpdateHelper(
 	return ret, err
 }
 
-func (fks fkUpdateHelper) checkIdx(
-	ctx context.Context, idx IndexID, oldValues, newValues tree.Datums,
+func (fks fkUpdateHelper) AddCheckForIndex(indexID IndexID) {
+	fks.indexIDsToCheck[indexID] = struct{}{}
+}
+
+func (fks fkUpdateHelper) RunIndexChecks(
+	ctx context.Context, oldValues, newValues tree.Datums,
 ) error {
-	if err := checkIdx(ctx, fks.checker, fks.inbound.fks, idx, oldValues); err != nil {
-		return err
+	for indexID := range fks.indexIDsToCheck {
+		if err := checkIdx(ctx, fks.checker, fks.inbound.fks, indexID, oldValues); err != nil {
+			return err
+		}
+		if err := checkIdx(ctx, fks.checker, fks.outbound.fks, indexID, newValues); err != nil {
+			return err
+		}
 	}
-	return checkIdx(ctx, fks.checker, fks.outbound.fks, idx, newValues)
+	if len(fks.inbound.fks) == 0 && len(fks.outbound.fks) == 0 {
+		return nil
+	}
+	return fks.checker.runCheck(ctx, oldValues, newValues)
 }
 
 // CollectSpans implements the FkSpanCollector interface.
