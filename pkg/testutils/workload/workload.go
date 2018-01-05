@@ -22,6 +22,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -36,8 +38,9 @@ import (
 // TODO(dan): To support persisted test fixtures, we'll need versioning of
 // Generators.
 type Generator interface {
-	// Name returns a unique and descriptive name for this generator.
-	Name() string
+	// Meta returns meta information about this generator, including a name,
+	// description, and a function to create instances of it.
+	Meta() Meta
 
 	// Flags returns the flags this Generator is configured with.
 	Flags() *pflag.FlagSet
@@ -55,9 +58,16 @@ type Generator interface {
 	Ops() []Operation
 }
 
-// GeneratorFn is used to register a Generator at init time. A slice of string
-// flags are used for configuration, see Generator for details.
-type GeneratorFn func() Generator
+// Meta is used to register a Generator at init time and holds meta information
+// about this generator, including a name, description, and a function to create
+// instances of it.
+type Meta struct {
+	// Name is a unique name for this generator.
+	Name string
+	// Description is a short description of this generator.
+	Description string
+	New         func() Generator
+}
 
 // Table represents a single table in a Generator. Included is a name, schema,
 // and initial data.
@@ -89,34 +99,33 @@ type Operation struct {
 	Fn func(*gosql.DB) (func(context.Context) error, error)
 }
 
-var registered = make(map[string]GeneratorFn)
+var registered = make(map[string]Meta)
 
 // Register is a hook for init-time registration of Generator implementations.
 // This allows only the necessary generators to be compiled into a given binary.
-func Register(fn GeneratorFn) {
-	g := fn()
-	name := g.Name()
-	if _, ok := registered[name]; ok {
-		panic(name + " is already registered")
+func Register(m Meta) {
+	if _, ok := registered[m.Name]; ok {
+		panic(m.Name + " is already registered")
 	}
-	registered[name] = fn
+	registered[m.Name] = m
 }
 
 // Get returns the registered Generator with the given name, if it exists.
-func Get(name string) (GeneratorFn, error) {
-	g, ok := registered[name]
+func Get(name string) (Meta, error) {
+	m, ok := registered[name]
 	if !ok {
-		return nil, errors.Errorf("unknown generator: %s", name)
+		return Meta{}, errors.Errorf("unknown generator: %s", name)
 	}
-	return g, nil
+	return m, nil
 }
 
 // Registered returns all registered Generators.
-func Registered() []GeneratorFn {
-	gens := make([]GeneratorFn, 0, len(registered))
+func Registered() []Meta {
+	gens := make([]Meta, 0, len(registered))
 	for _, gen := range registered {
 		gens = append(gens, gen)
 	}
+	sort.Slice(gens, func(i, j int) bool { return strings.Compare(gens[i].Name, gens[j].Name) < 0 })
 	return gens
 }
 
