@@ -276,7 +276,7 @@ func (tr *tableReader) close() {
 
 // producerMeta constructs the ProducerMetadata after consumption of rows has
 // terminated, either due to being indicated by the consumer, or because the
-// tableReader ran out of rows or encountered an error. It is ok for err to be
+// processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
 func (tr *tableReader) producerMeta(err error) ProducerMetadata {
 	if !tr.closed {
