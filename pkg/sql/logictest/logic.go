@@ -39,6 +39,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 
 	"github.com/pkg/errors"
 
@@ -887,11 +888,11 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		wantedMode := sql.DistSQLExecModeFromString(cfg.overrideDistSQLMode) // off => 0, etc
+		wantedMode := sessiondata.DistSQLExecModeFromString(cfg.overrideDistSQLMode) // off => 0, etc
 		// Wait until all servers are aware of the setting.
 		testutils.SucceedsSoon(t.t, func() error {
 			for i := 0; i < t.cluster.NumServers(); i++ {
-				var m sql.DistSQLExecMode
+				var m sessiondata.DistSQLExecMode
 				err := t.cluster.ServerConn(i % t.cluster.NumServers()).QueryRow(
 					"SHOW CLUSTER SETTING sql.defaults.distsql",
 				).Scan(&m)

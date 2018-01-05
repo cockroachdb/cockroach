@@ -66,7 +66,7 @@ func TestDatabaseAccessors(t *testing.T) {
 		p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
 		defer finishInternalPlanner(p)
 		p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
-		p.session.Database = "test"
+		p.session.data.Database = "test"
 
 		_, err := p.session.tables.databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err

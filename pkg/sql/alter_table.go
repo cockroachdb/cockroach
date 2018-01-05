@@ -39,7 +39,7 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.evalCtx)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, &params.extendedEvalCtx.EvalContext)
 			if err != nil {
 				return err
 			}
@@ -144,8 +144,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				if d.PartitionBy != nil {
-					partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
-						params.evalCtx, n.tableDesc, &idx, d.PartitionBy)
+					partitioning, err := CreatePartitioning(
+						params.ctx, params.p.ExecCfg().Settings,
+						&params.extendedEvalCtx.EvalContext, n.tableDesc, &idx, d.PartitionBy)
 					if err != nil {
 						return err
 					}
@@ -162,7 +163,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
-				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.evalCtx)
+				ck, err := makeCheckConstraint(
+					*n.tableDesc, d, inuseNames, &params.p.semaCtx, &params.extendedEvalCtx.EvalContext)
 				if err != nil {
 					return err
 				}
@@ -171,7 +173,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				descriptorChanged = true
 
 			case *tree.ForeignKeyConstraintTableDef:
-				if _, err := d.Table.NormalizeWithDatabaseName(params.p.session.Database); err != nil {
+				if _, err := d.Table.NormalizeWithDatabaseName(
+					params.extendedEvalCtx.SessionData.Database,
+				); err != nil {
 					return err
 				}
 				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
@@ -191,7 +195,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableDropColumn:
-			if params.p.session.SafeUpdates {
+			if params.extendedEvalCtx.SessionData.SafeUpdates {
 				return pgerror.NewDangerousStatementErrorf("ALTER TABLE DROP COLUMN will remove all data in that column")
 			}
 
@@ -460,7 +464,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 			}
 			if err := applyColumnMutation(
-				&col, t, &params.p.semaCtx, params.evalCtx,
+				&col, t, &params.p.semaCtx, &params.extendedEvalCtx.EvalContext,
 			); err != nil {
 				return err
 			}
@@ -468,8 +472,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		case *tree.AlterTablePartitionBy:
-			partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
-				&params.p.evalCtx, n.tableDesc, &n.tableDesc.PrimaryIndex, t.PartitionBy)
+			partitioning, err := CreatePartitioning(
+				params.ctx, params.p.ExecCfg().Settings,
+				&params.extendedEvalCtx.EvalContext,
+				n.tableDesc, &n.tableDesc.PrimaryIndex, t.PartitionBy)
 			if err != nil {
 				return err
 			}
@@ -524,14 +530,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogAlterTable,
 		int32(n.tableDesc.ID),
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			TableName           string
 			Statement           string
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{n.tableDesc.Name, n.n.String(), params.p.session.User, uint32(mutationID), droppedViews},
+		}{n.tableDesc.Name, n.n.String(), params.extendedEvalCtx.SessionData.User, uint32(mutationID), droppedViews},
 	); err != nil {
 		return err
 	}

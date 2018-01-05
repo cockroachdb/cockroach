@@ -34,7 +34,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+		if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
 			return nil, err
 		}
 
@@ -84,12 +84,12 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 			params.p.txn,
 			EventLogDropSequence,
 			int32(droppedDesc.ID),
-			int32(params.evalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID),
 			struct {
 				SequenceName string
 				Statement    string
 				User         string
-			}{droppedDesc.Name, n.n.String(), params.p.session.User},
+			}{droppedDesc.Name, n.n.String(), params.extendedEvalCtx.SessionData.User},
 		); err != nil {
 			return err
 		}

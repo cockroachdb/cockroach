@@ -112,7 +112,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	joinType := distsqlJoinType(n.joinType)
 
 	post, joinToStreamColMap := joinOutColumns(n, plans[0], plans[1])
-	onExpr := remapOnExpr(planCtx.evalCtx, n, plans[0], plans[1])
+	onExpr := remapOnExpr(&planCtx.extendedEvalCtx.EvalContext, n, plans[0], plans[1])
 
 	ancestor, descendant := n.interleavedNodes()
 

@@ -58,7 +58,7 @@ type setZoneConfigRun struct {
 
 func (n *setZoneConfigNode) startExec(params runParams) error {
 	var yamlConfig *string
-	datum, err := n.yamlConfig.Eval(params.evalCtx)
+	datum, err := n.yamlConfig.Eval(&params.extendedEvalCtx.EvalContext)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
-	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier, params.p.session.Database)
+	targetID, err := resolveZone(
+		params.ctx, params.p.txn, &n.zoneSpecifier, params.extendedEvalCtx.SessionData.Database)
 	if err != nil {
 		return err
 	}

@@ -43,7 +43,7 @@ type createViewNode struct {
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
 func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
-	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	name, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -186,12 +186,12 @@ func (n *createViewNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogCreateView,
 		int32(desc.ID),
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			ViewName  string
 			Statement string
 			User      string
-		}{n.n.Name.String(), n.n.String(), params.p.session.User},
+		}{n.n.Name.String(), n.n.String(), params.extendedEvalCtx.SessionData.User},
 	)
 }
 
@@ -226,7 +226,7 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, params.evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, &params.extendedEvalCtx.EvalContext)
 		if err != nil {
 			return desc, err
 		}

@@ -100,24 +100,25 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 func (n *setVarNode) startExec(params runParams) error {
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
-			d, err := v.Eval(params.evalCtx)
+			d, err := v.Eval(&params.extendedEvalCtx.EvalContext)
 			if err != nil {
 				return err
 			}
 			n.typedValues[i] = d
 		}
-		return n.v.Set(params.ctx, params.p.session, n.typedValues)
+		return n.v.Set(
+			params.ctx, params.p.sessionDataMutator,
+			params.extendedEvalCtx, n.typedValues)
 	}
-	return n.v.Reset(params.p.session)
+	return n.v.Reset(params.p.sessionDataMutator)
 }
 
 func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setVarNode) Values() tree.Datums            { return nil }
 func (n *setVarNode) Close(_ context.Context)        {}
 
-func datumAsString(session *Session, name string, value tree.TypedExpr) (string, error) {
-	evalCtx := session.evalCtx()
-	val, err := value.Eval(&evalCtx)
+func datumAsString(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (string, error) {
+	val, err := value.Eval(evalCtx)
 	if err != nil {
 		return "", err
 	}
@@ -129,26 +130,27 @@ func datumAsString(session *Session, name string, value tree.TypedExpr) (string,
 	return string(s), nil
 }
 
-func getStringVal(session *Session, name string, values []tree.TypedExpr) (string, error) {
+func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (string, error) {
 	if len(values) != 1 {
 		return "", fmt.Errorf("set %s: requires a single string value", name)
 	}
-	return datumAsString(session, name, values[0])
+	return datumAsString(evalCtx, name, values[0])
 }
 
-func setTimeZone(_ context.Context, session *Session, values []tree.TypedExpr) error {
+func setTimeZone(
+	_ context.Context, m sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+) error {
 	if len(values) != 1 {
 		return errors.New("set time zone requires a single argument")
 	}
-	evalCtx := session.evalCtx()
-	d, err := values[0].Eval(&evalCtx)
+	d, err := values[0].Eval(&evalCtx.EvalContext)
 	if err != nil {
 		return err
 	}
 
 	var loc *time.Location
 	var offset int64
-	switch v := tree.UnwrapDatum(&evalCtx, d).(type) {
+	switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
 	case *tree.DString:
 		location := string(*v)
 		loc, err = timeutil.LoadLocation(location)
@@ -191,6 +193,6 @@ func setTimeZone(_ context.Context, session *Session, values []tree.TypedExpr) e
 	if loc == nil {
 		loc = timeutil.FixedOffsetTimeZoneToLocation(int(offset), d.String())
 	}
-	session.Location = loc
+	m.SetLocation(loc)
 	return nil
 }

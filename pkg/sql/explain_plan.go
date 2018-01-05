@@ -82,7 +82,7 @@ func (p *planner) makeExplainPlanNode(
 	)
 	explainer.fmtFlags = noPlaceholderFlags
 	explainer.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
-		d, err := placeholder.Eval(&p.evalCtx)
+		d, err := placeholder.Eval(&p.extendedEvalCtx.EvalContext)
 		if err != nil {
 			// Disable the placeholder formatter so that
 			// we don't recurse infinitely trying to evaluate.

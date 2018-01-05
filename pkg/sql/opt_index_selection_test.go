@@ -170,14 +170,14 @@ func makeConstraints(
 	sel *renderNode,
 ) (orIndexConstraints, tree.TypedExpr) {
 	expr := parseAndNormalizeExpr(t, p, sql, sel)
-	exprs, equiv := decomposeExpr(&p.evalCtx, expr)
+	exprs, equiv := decomposeExpr(&p.extendedEvalCtx.EvalContext, expr)
 
 	c := &indexInfo{
 		desc:     desc,
 		index:    index,
 		covering: true,
 	}
-	c.analyzeExprs(&p.evalCtx, exprs)
+	c.analyzeExprs(&p.extendedEvalCtx.EvalContext, exprs)
 	if equiv && len(exprs) == 1 {
 		expr = joinAndExprs(exprs[0])
 	}
@@ -331,8 +331,8 @@ func TestMakeConstraints(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
@@ -545,8 +545,8 @@ func TestMakeSpans(t *testing.T) {
 				} else {
 					expected = d.expectedDesc
 				}
-				p.evalCtx = tree.MakeTestingEvalContext()
-				defer p.evalCtx.Stop(context.Background())
+				p.extendedEvalCtx = makeTestingExtendedEvalContext()
+				defer p.extendedEvalCtx.Stop(context.Background())
 				sel := makeSelectNode(t, p)
 				columns := strings.Split(d.columns, ",")
 				dirs := make([]encoding.Direction, 0, len(columns))
@@ -555,7 +555,7 @@ func TestMakeSpans(t *testing.T) {
 				}
 				desc, index := makeTestIndex(t, columns, dirs)
 				constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
-				spans, err := makeSpans(&p.evalCtx, constraints, desc, index)
+				spans, err := makeSpans(&p.extendedEvalCtx.EvalContext, constraints, desc, index)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -597,12 +597,12 @@ func TestMakeSpans(t *testing.T) {
 
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
-			spans, err := makeSpans(&p.evalCtx, constraints, desc, index)
+			spans, err := makeSpans(&p.extendedEvalCtx.EvalContext, constraints, desc, index)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -692,12 +692,12 @@ func TestExactPrefix(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
-			prefix := constraints.exactPrefix(&p.evalCtx)
+			prefix := constraints.exactPrefix(&p.extendedEvalCtx.EvalContext)
 			if d.expected != prefix {
 				t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
 			}
@@ -774,12 +774,12 @@ func TestApplyConstraints(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, expr := makeConstraints(t, p, d.expr, desc, index, sel)
-			expr2 := applyIndexConstraints(&p.evalCtx, expr, constraints)
+			expr2 := applyIndexConstraints(&p.extendedEvalCtx.EvalContext, expr, constraints)
 			if s := fmt.Sprint(expr2); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s (constraints %s)", d.expr, d.expected, s, constraints)
 			}

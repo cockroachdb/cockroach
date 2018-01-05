@@ -35,7 +35,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	spans []roachpb.Span,
 	readAsOf hlc.Timestamp,
 ) (physicalPlan, error) {
-	spec, _, err := initTableReaderSpec(n, planCtx.evalCtx)
+	spec, _, err := initTableReaderSpec(n, &planCtx.extendedEvalCtx.EvalContext)
 	if err != nil {
 		return physicalPlan{}, err
 	}

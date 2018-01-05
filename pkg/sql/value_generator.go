@@ -43,7 +43,9 @@ type valueGenerator struct {
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
 func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode, error) {
-	if err := p.txCtx.AssertNoAggregationOrWindowing(t, "FROM", p.session.SearchPath); err != nil {
+	if err := p.txCtx.AssertNoAggregationOrWindowing(
+		t, "FROM", p.SessionData().SearchPath,
+	); err != nil {
 		return nil, err
 	}
 
@@ -80,7 +82,7 @@ type valueGeneratorRun struct {
 }
 
 func (n *valueGenerator) startExec(params runParams) error {
-	expr, err := n.expr.Eval(params.evalCtx)
+	expr, err := n.expr.Eval(&params.extendedEvalCtx.EvalContext)
 	if err != nil {
 		return err
 	}

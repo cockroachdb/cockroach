@@ -86,15 +86,15 @@ func (p *planner) selectIndex(
 ) (planNode, error) {
 	if s.desc.IsEmpty() {
 		// No table.
-		s.initOrdering(0, &p.evalCtx)
+		s.initOrdering(0 /* exactPrefix */, &p.extendedEvalCtx.EvalContext)
 		return s, nil
 	}
 
 	if s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil {
 		// No where-clause, no ordering, and no specified index.
-		s.initOrdering(0, &p.evalCtx)
+		s.initOrdering(0 /* exactPrefix */, &p.extendedEvalCtx.EvalContext)
 		var err error
-		s.spans, err = makeSpans(&p.evalCtx, nil /* constraints */, s.desc, s.index)
+		s.spans, err = makeSpans(&p.extendedEvalCtx.EvalContext, nil /* constraints */, s.desc, s.index)
 		if err != nil {
 			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
 		}
@@ -128,12 +128,14 @@ func (p *planner) selectIndex(
 
 	if useExperimentalIndexConstraints {
 		if s.filter != nil {
-			filterExpr, err := opt.BuildScalarExpr(s.filter, &p.evalCtx)
+			filterExpr, err := opt.BuildScalarExpr(s.filter, &p.extendedEvalCtx.EvalContext)
 			if err != nil {
 				return nil, err
 			}
 			for _, c := range candidates {
-				if err := c.makeIndexConstraintsExperimental(filterExpr, &p.evalCtx); err != nil {
+				if err := c.makeIndexConstraintsExperimental(
+					filterExpr, &p.extendedEvalCtx.EvalContext,
+				); err != nil {
 					return nil, err
 				}
 				if spans, ok := c.ic.Spans(); ok && len(spans) == 0 {
@@ -150,7 +152,7 @@ func (p *planner) selectIndex(
 		// Removes any unnecessary IS NOT NULL filters on non-nullable columns.
 		s.filter = trimUselessIsDistinctFromNullFilter(s, p)
 
-		exprs, equivalent := decomposeExpr(&p.evalCtx, s.filter)
+		exprs, equivalent := decomposeExpr(&p.extendedEvalCtx.EvalContext, s.filter)
 		if log.V(2) {
 			log.Infof(ctx, "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
@@ -186,7 +188,7 @@ func (p *planner) selectIndex(
 		// use.
 
 		for _, c := range candidates {
-			c.analyzeExprs(&p.evalCtx, exprs)
+			c.analyzeExprs(&p.extendedEvalCtx.EvalContext, exprs)
 		}
 	}
 
@@ -216,10 +218,10 @@ func (p *planner) selectIndex(
 		if !useExperimentalIndexConstraints {
 			// Compute the prefix of the index for which we have exact constraints. This
 			// prefix is inconsequential for ordering because the values are identical.
-			c.exactPrefix = c.constraints.exactPrefix(&p.evalCtx)
+			c.exactPrefix = c.constraints.exactPrefix(&p.extendedEvalCtx.EvalContext)
 		}
 		if analyzeOrdering != nil {
-			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching, &p.evalCtx)
+			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching, &p.extendedEvalCtx.EvalContext)
 		}
 	}
 
@@ -248,7 +250,7 @@ func (p *planner) selectIndex(
 		}
 	} else {
 		var err error
-		s.spans, err = makeSpans(&p.evalCtx, c.constraints, c.desc, c.index)
+		s.spans, err = makeSpans(&p.extendedEvalCtx.EvalContext, c.constraints, c.desc, c.index)
 		if err != nil {
 			return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
 				c.constraints, s.desc.ID, s.index.ID)
@@ -265,14 +267,14 @@ func (p *planner) selectIndex(
 		if useExperimentalIndexConstraints {
 			s.filter = c.ic.RemainingFilter(&s.filterVars)
 		} else {
-			s.filter = applyIndexConstraints(&p.evalCtx, s.filter, c.constraints)
+			s.filter = applyIndexConstraints(&p.extendedEvalCtx.EvalContext, s.filter, c.constraints)
 		}
 
 		// Constraint propagation may have produced new constant sub-expressions.
 		// Propagate them and check if s.filter can be applied prematurely.
 		if s.filter != nil {
 			var err error
-			s.filter, err = p.evalCtx.NormalizeExpr(s.filter)
+			s.filter, err = p.extendedEvalCtx.NormalizeExpr(s.filter)
 			if err != nil {
 				return nil, err
 			}
@@ -290,7 +292,7 @@ func (p *planner) selectIndex(
 
 	var plan planNode
 	if c.covering {
-		s.initOrdering(c.exactPrefix, &p.evalCtx)
+		s.initOrdering(c.exactPrefix, &p.extendedEvalCtx.EvalContext)
 		plan = s
 	} else {
 		// Note: makeIndexJoin destroys s and returns a new index scan
@@ -312,7 +314,7 @@ func (p *planner) selectIndex(
 // Removes any unnecessary IS DISTINCT FROM NULL filters on non-nullable columns.
 func trimUselessIsDistinctFromNullFilter(sn *scanNode, p *planner) tree.TypedExpr {
 	var newFilter tree.TypedExpr = tree.DBoolTrue
-	andExprs := splitAndExpr(&p.evalCtx, sn.filter, nil)
+	andExprs := splitAndExpr(&p.extendedEvalCtx.EvalContext, sn.filter, nil /* exprs */)
 	for _, e := range andExprs {
 		if c, cok := e.(*tree.ComparisonExpr); cok &&
 			c.Operator == tree.IsDistinctFrom && c.Right == tree.DNull {

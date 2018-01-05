@@ -228,7 +228,7 @@ func (p *planner) dropIndexByName(
 		p.txn,
 		EventLogDropIndex,
 		int32(tableDesc.ID),
-		int32(p.evalCtx.NodeID),
+		int32(p.extendedEvalCtx.NodeID),
 		struct {
 			TableName           string
 			IndexName           string
@@ -236,7 +236,7 @@ func (p *planner) dropIndexByName(
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{tableDesc.Name, string(idxName), jobDesc, p.session.User, uint32(mutationID),
+		}{tableDesc.Name, string(idxName), jobDesc, p.SessionData().User, uint32(mutationID),
 			droppedViews},
 	); err != nil {
 		return err

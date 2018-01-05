@@ -149,8 +149,8 @@ func insertNodeWithValuesSpans(
 	// Importantly, we only Reset the valuesNode, instead of Closing it when
 	// completed, so that the values don't need to be computed again during
 	// plan execution.
-	rowAcc := params.evalCtx.Mon.MakeBoundAccount()
-	params.evalCtx.ActiveMemAcc = &rowAcc
+	rowAcc := params.extendedEvalCtx.Mon.MakeBoundAccount()
+	params.extendedEvalCtx.ActiveMemAcc = &rowAcc
 	defer rowAcc.Close(params.ctx)
 
 	defer v.Reset(params.ctx)

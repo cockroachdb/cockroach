@@ -54,3 +54,9 @@ func CreateTestTableDescriptor(
 		&evalCtx,
 	)
 }
+
+func makeTestingExtendedEvalContext() extendedEvalContext {
+	return extendedEvalContext{
+		EvalContext: tree.MakeTestingEvalContext(),
+	}
+}

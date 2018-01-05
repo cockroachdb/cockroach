@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -89,57 +90,11 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"Default distributed SQL execution mode",
 	"Auto",
 	map[int64]string{
-		int64(DistSQLOff):  "Off",
-		int64(DistSQLAuto): "Auto",
-		int64(DistSQLOn):   "On",
+		int64(sessiondata.DistSQLOff):  "Off",
+		int64(sessiondata.DistSQLAuto): "Auto",
+		int64(sessiondata.DistSQLOn):   "On",
 	},
 )
-
-// DistSQLExecMode controls if and when the Executor uses DistSQL.
-type DistSQLExecMode int64
-
-const (
-	// DistSQLOff means that we never use distSQL.
-	DistSQLOff DistSQLExecMode = iota
-	// DistSQLAuto means that we automatically decide on a case-by-case basis if
-	// we use distSQL.
-	DistSQLAuto
-	// DistSQLOn means that we use distSQL for queries that are supported.
-	DistSQLOn
-	// DistSQLAlways means that we only use distSQL; unsupported queries fail.
-	DistSQLAlways
-)
-
-func (m DistSQLExecMode) String() string {
-	switch m {
-	case DistSQLOff:
-		return "off"
-	case DistSQLAuto:
-		return "auto"
-	case DistSQLOn:
-		return "on"
-	case DistSQLAlways:
-		return "always"
-	default:
-		return fmt.Sprintf("invalid (%d)", m)
-	}
-}
-
-// DistSQLExecModeFromString converts a string into a DistSQLExecMode
-func DistSQLExecModeFromString(val string) DistSQLExecMode {
-	switch strings.ToUpper(val) {
-	case "OFF":
-		return DistSQLOff
-	case "AUTO":
-		return DistSQLAuto
-	case "ON":
-		return DistSQLOn
-	case "ALWAYS":
-		return DistSQLAlways
-	default:
-		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
-	}
-}
 
 // queryPhase represents a phase during a query's execution.
 type queryPhase int
@@ -184,41 +139,14 @@ func (q *queryMeta) cancel() {
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
-	//
-	// Session parameters, user-configurable.
-	//
-
-	// Database indicates the "current" database for the purpose of
-	// resolving names. See searchAndQualifyDatabase() for details.
-	Database string
-	// DefaultIsolationLevel indicates the default isolation level of
-	// newly created transactions.
-	DefaultIsolationLevel enginepb.IsolationType
-	// DefaultReadOnly indicates the default read-only status of
-	// newly created transactions.
-	DefaultReadOnly bool
-	// DistSQLMode indicates whether to run queries using the distributed
-	// execution engine.
-	DistSQLMode DistSQLExecMode
-	// Location indicates the current time zone.
-	Location *time.Location
-	// SearchPath is a list of databases that will be searched for a table name
-	// before the database. Currently, this is used only for SELECTs.
-	// Names in the search path must have been normalized already.
-	SearchPath tree.SearchPath
-	// User is the name of the user logged into the session.
-	User string
-	// SafeUpdates causes errors when the client
-	// sends syntax that may have unwanted side effects.
-	SafeUpdates bool
+	// data contains user-configurable session-scoped variables. This is the
+	// authoritative copy of these variables; a planner's evalCtx gets a copy.
+	data        sessiondata.SessionData
+	dataMutator sessionDataMutator
 
 	//
 	// Session parameters, non-user-configurable.
 	//
-
-	// defaults is used to restore default configuration values into
-	// SET ... TO DEFAULT statements.
-	defaults sessionDefaults
 
 	// ClientAddr is the client's IP address and port.
 	ClientAddr string
@@ -371,7 +299,7 @@ type Session struct {
 }
 
 // sessionDefaults mirrors fields in Session, for restoring default
-// configuration values in SET ... TO DEFAULT statements.
+// configuration values in SET ... TO DEFAULT (or RESET ...) statements.
 type sessionDefaults struct {
 	applicationName string
 	database        string
@@ -420,7 +348,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	defer r.Unlock()
 
 	for session := range r.store {
-		if !(username == security.RootUser || username == session.User) {
+		if !(username == security.RootUser || username == session.data.User) {
 			// Skip this session.
 			continue
 		}
@@ -458,31 +386,39 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
-	distSQLMode := DistSQLExecMode(DistSQLClusterExecMode.Get(&e.cfg.Settings.SV))
+	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&e.cfg.Settings.SV))
 
 	s := &Session{
-		Database:         args.Database,
-		DistSQLMode:      distSQLMode,
-		SearchPath:       sqlbase.DefaultSearchPath,
-		Location:         time.UTC,
-		User:             args.User,
+		data: sessiondata.SessionData{
+			Database:    args.Database,
+			DistSQLMode: distSQLMode,
+			SearchPath:  sqlbase.DefaultSearchPath,
+			Location:    time.UTC,
+			User:        args.User,
+		},
 		virtualSchemas:   e.virtualSchemas,
 		execCfg:          &e.cfg,
 		distSQLPlanner:   e.distSQLPlanner,
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:       memMetrics,
 		sqlStats:         &e.sqlStats,
-		defaults: sessionDefaults{
-			applicationName: args.ApplicationName,
-			database:        args.Database,
-		},
 		tables: TableCollection{
 			leaseMgr:      e.cfg.LeaseManager,
 			databaseCache: e.getDatabaseCache(),
 		},
 	}
+	s.dataMutator = sessionDataMutator{
+		data: &s.data,
+		s:    s,
+		defaults: sessionDefaults{
+			applicationName: args.ApplicationName,
+			database:        args.Database,
+		},
+		settings:       e.cfg.Settings,
+		curTxnReadOnly: &s.TxnState.readOnly,
+	}
 	s.phaseTimes[sessionInit] = timeutil.Now()
-	s.resetApplicationName(args.ApplicationName)
+	s.dataMutator.SetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 	s.Tracing.session = s
@@ -633,17 +569,19 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(s.Ctx())
 
-	p.semaCtx = tree.MakeSemaContext(s.User == security.RootUser)
-	p.semaCtx.Location = &s.Location
-	p.semaCtx.SearchPath = s.SearchPath
+	p.semaCtx = tree.MakeSemaContext(s.data.User == security.RootUser)
+	p.semaCtx.Location = &s.data.Location
+	p.semaCtx.SearchPath = s.data.SearchPath
 
-	p.evalCtx = s.evalCtx()
-	p.evalCtx.Planner = p
+	p.extendedEvalCtx = s.evalCtx()
+	p.extendedEvalCtx.Planner = p
 	if e != nil {
-		p.evalCtx.ClusterID = e.cfg.ClusterID()
-		p.evalCtx.NodeID = e.cfg.NodeID.Get()
-		p.evalCtx.ReCache = e.reCache
+		p.extendedEvalCtx.ClusterID = e.cfg.ClusterID()
+		p.extendedEvalCtx.NodeID = e.cfg.NodeID.Get()
+		p.extendedEvalCtx.ReCache = e.reCache
 	}
+
+	p.sessionDataMutator = s.dataMutator
 
 	p.setTxn(txn)
 }
@@ -680,8 +618,9 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 	return p
 }
 
-// evalCtx creates a tree.EvalContext from the Session's current configuration.
-func (s *Session) evalCtx() tree.EvalContext {
+// evalCtx creates an evaluation contextn from the Session's current
+// configuration.
+func (s *Session) evalCtx() extendedEvalContext {
 	var evalContextTestingKnobs tree.EvalContextTestingKnobs
 	var st *cluster.Settings
 	if s.execCfg != nil {
@@ -690,15 +629,19 @@ func (s *Session) evalCtx() tree.EvalContext {
 		// Perhaps `*Settings` should live somewhere else.
 		st = s.execCfg.Settings
 	}
-	return tree.EvalContext{
-		Settings:     st,
-		Location:     &s.Location,
-		Database:     s.Database,
-		User:         s.User,
-		SearchPath:   s.SearchPath,
-		CtxProvider:  s,
-		Mon:          &s.TxnState.mon,
-		TestingKnobs: evalContextTestingKnobs,
+	return extendedEvalContext{
+		EvalContext: tree.EvalContext{
+			SessionData:     s.data,
+			ApplicationName: s.dataMutator.ApplicationName(),
+			TxnState:        getTransactionState(&s.TxnState),
+			TxnReadOnly:     s.TxnState.readOnly,
+			Settings:        st,
+			CtxProvider:     s,
+			Mon:             &s.TxnState.mon,
+			TestingKnobs:    evalContextTestingKnobs,
+		},
+		VirtualSchemas: &s.virtualSchemas,
+		Tracing:        &s.Tracing,
 	}
 }
 
@@ -874,7 +817,7 @@ func (s *Session) serialize() serverpb.Session {
 	}
 
 	return serverpb.Session{
-		Username:        s.User,
+		Username:        s.data.User,
 		ClientAddress:   s.ClientAddr,
 		ApplicationName: s.mu.ApplicationName,
 		Start:           s.phaseTimes[sessionInit].UTC(),
@@ -1411,7 +1354,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.distSQLPlanner = e.distSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			evalCtx := createSchemaChangeEvalCtx(e.cfg.Clock.Now())
-			if err := sc.exec(ctx, true /* inSession */, evalCtx); err != nil {
+			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
@@ -1511,6 +1454,11 @@ func (s *Session) maybeRecover(action, stmts string) {
 		// Propagate the (sanitized) panic further.
 		panic(safeErr)
 	}
+}
+
+// Location exports the location session variable.
+func (s *Session) Location() *time.Location {
+	return s.data.Location
 }
 
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
@@ -1902,4 +1850,71 @@ type spanWithIndex struct {
 	// txnIdx is the 0-based index of the transaction in which this span was
 	// recorded.
 	txnIdx int
+}
+
+// sessionDataMutator is the interface used by sessionVars to change the session
+// state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
+// see curTxnReadOnly).
+type sessionDataMutator struct {
+	data     *sessiondata.SessionData
+	s        *Session
+	defaults sessionDefaults
+	settings *cluster.Settings
+	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
+	curTxnReadOnly *bool
+}
+
+// SetApplicationName initializes both Session.mu.ApplicationName and
+// the cached pointer to per-application statistics. It is meant to be
+// used upon session initialization and upon SET APPLICATION_NAME.
+func (m *sessionDataMutator) SetApplicationName(appName string) {
+	s := m.s
+	s.mu.Lock()
+	s.mu.ApplicationName = appName
+	s.mu.Unlock()
+	if s.sqlStats != nil {
+		s.appStats = s.sqlStats.getStatsForApplication(appName)
+	}
+}
+
+// ApplicationName returns the session's "application_name" variable. This is
+// not a setter method, but the method is here nevertheless because
+// ApplicationName is not part of SessionData because accessing it needs
+// locking.
+func (m *sessionDataMutator) ApplicationName() string {
+	m.s.mu.RLock()
+	defer m.s.mu.RUnlock()
+	return m.s.mu.ApplicationName
+}
+
+func (m *sessionDataMutator) SetDatabase(dbName string) {
+	m.data.Database = dbName
+}
+
+func (m *sessionDataMutator) SetDefaultIsolationLevel(iso enginepb.IsolationType) {
+	m.data.DefaultIsolationLevel = iso
+}
+
+func (m *sessionDataMutator) SetDefaultReadOnly(val bool) {
+	m.data.DefaultReadOnly = val
+}
+
+func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
+	m.data.DistSQLMode = val
+}
+
+func (m *sessionDataMutator) SetSafeUpdates(val bool) {
+	m.data.SafeUpdates = val
+}
+
+func (m *sessionDataMutator) SetSearchPath(val sessiondata.SearchPath) {
+	m.data.SearchPath = val
+}
+
+func (m *sessionDataMutator) SetLocation(loc *time.Location) {
+	m.data.Location = loc
+}
+
+func (m *sessionDataMutator) SetReadOnly(val bool) {
+	*m.curTxnReadOnly = val
 }

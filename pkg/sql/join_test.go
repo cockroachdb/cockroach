@@ -37,7 +37,7 @@ func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	scan.initOrdering(0, &p.evalCtx)
+	scan.initOrdering(0 /* exactPrefix */, &p.extendedEvalCtx.EvalContext)
 	return scan, nil
 }
 

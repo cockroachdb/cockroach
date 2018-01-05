@@ -76,5 +76,5 @@ func (p *planner) analyzeExpr(
 	}
 
 	// Normalize.
-	return p.txCtx.NormalizeExpr(&p.evalCtx, typedExpr)
+	return p.txCtx.NormalizeExpr(&p.extendedEvalCtx.EvalContext, typedExpr)
 }

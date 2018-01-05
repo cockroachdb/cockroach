@@ -222,7 +222,7 @@ func (n *sortNode) Next(params runParams) (bool, error) {
 			v := &sortValues{
 				ordering: n.ordering,
 				rows:     vn.rows,
-				evalCtx:  params.evalCtx,
+				evalCtx:  &params.extendedEvalCtx.EvalContext,
 			}
 			n.run.sortStrategy = newSortAllStrategy(v)
 			n.run.sortStrategy.Finish(params.ctx, cancelChecker)
@@ -699,7 +699,7 @@ func (p *planner) newSortValues(
 			sqlbase.ColTypeInfoFromResCols(columns),
 			capacity,
 		),
-		evalCtx: &p.evalCtx,
+		evalCtx: &p.extendedEvalCtx.EvalContext,
 	}
 }
 

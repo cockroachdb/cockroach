@@ -129,12 +129,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogSetClusterSetting,
 		0, /* no target */
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			SettingName string
 			Value       string
 			User        string
-		}{n.name, reportedValue, params.p.session.User},
+		}{n.name, reportedValue, params.p.session.data.User},
 	)
 }
 
@@ -150,7 +150,7 @@ func (p *planner) toSettingString(
 	setting settings.Setting,
 	val tree.TypedExpr,
 ) (string, error) {
-	d, err := val.Eval(&p.evalCtx)
+	d, err := val.Eval(&p.extendedEvalCtx.EvalContext)
 	if err != nil {
 		return "", err
 	}

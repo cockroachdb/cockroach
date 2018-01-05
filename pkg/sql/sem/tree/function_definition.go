@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // FunctionDefinition implements a reference to the (possibly several)
@@ -63,7 +64,9 @@ func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
 // ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
-func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
+func (n *UnresolvedName) ResolveFunction(
+	searchPath sessiondata.SearchPath,
+) (*FunctionDefinition, error) {
 	fn, err := n.normalizeFunctionName()
 	if err != nil {
 		return nil, err

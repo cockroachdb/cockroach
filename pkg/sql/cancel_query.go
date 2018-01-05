@@ -52,7 +52,7 @@ func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNod
 func (n *cancelQueryNode) startExec(params runParams) error {
 	statusServer := params.p.session.execCfg.StatusServer
 
-	queryIDDatum, err := n.queryID.Eval(params.evalCtx)
+	queryIDDatum, err := n.queryID.Eval(&params.extendedEvalCtx.EvalContext)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (n *cancelQueryNode) startExec(params runParams) error {
 	request := &serverpb.CancelQueryRequest{
 		NodeId:   fmt.Sprintf("%d", nodeID),
 		QueryID:  queryIDString,
-		Username: params.p.session.User,
+		Username: params.extendedEvalCtx.SessionData.User,
 	}
 
 	response, err := statusServer.CancelQuery(params.ctx, request)

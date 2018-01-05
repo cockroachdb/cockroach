@@ -87,12 +87,12 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 			params.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
-			int32(params.evalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID),
 			struct {
 				DatabaseName string
 				Statement    string
 				User         string
-			}{n.n.Name.String(), n.n.String(), params.p.session.User},
+			}{n.n.Name.String(), n.n.String(), params.extendedEvalCtx.SessionData.User},
 		); err != nil {
 			return err
 		}
