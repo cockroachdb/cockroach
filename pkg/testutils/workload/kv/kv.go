@@ -33,7 +33,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-const kvSchema = `(k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`
+const (
+	kvSchema = `(k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`
+)
 
 type kv struct {
 	flags *pflag.FlagSet
@@ -47,24 +49,29 @@ type kv struct {
 }
 
 func init() {
-	workload.Register(newKV)
+	workload.Register(kvMeta)
 }
 
-func newKV() workload.Generator {
-	g := &kv{flags: pflag.NewFlagSet(`kv`, pflag.ContinueOnError)}
-	g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to insert in a single SQL statement`)
-	g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1, `Minimum amount of raw data written with each insertion`)
-	g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2, `Maximum amount of raw data written with each insertion`)
-	g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64, `Number of keys repeatedly accessed by each writer`)
-	g.flags.IntVar(&g.readPercent, `read-percent`, 0, `Percent (0-100) of operations that are reads of existing keys`)
-	g.flags.Int64Var(&g.writeSeq, `write-seq`, 0, `Initial write sequence value.`)
-	g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
-	g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
-	return g
+var kvMeta = workload.Meta{
+	Name: `kv`,
+	Description: `KV reads and writes to keys spread (by default, uniformly` +
+		` at random) across the cluster`,
+	New: func() workload.Generator {
+		g := &kv{flags: pflag.NewFlagSet(`kv`, pflag.ContinueOnError)}
+		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to insert in a single SQL statement`)
+		g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1, `Minimum amount of raw data written with each insertion`)
+		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2, `Maximum amount of raw data written with each insertion`)
+		g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64, `Number of keys repeatedly accessed by each writer`)
+		g.flags.IntVar(&g.readPercent, `read-percent`, 0, `Percent (0-100) of operations that are reads of existing keys`)
+		g.flags.Int64Var(&g.writeSeq, `write-seq`, 0, `Initial write sequence value.`)
+		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
+		return g
+	},
 }
 
-// Name implements the Generator interface.
-func (*kv) Name() string { return `kv` }
+// Meta implements the Generator interface.
+func (*kv) Meta() workload.Meta { return kvMeta }
 
 // Flags implements the Generator interface.
 func (w *kv) Flags() *pflag.FlagSet {
