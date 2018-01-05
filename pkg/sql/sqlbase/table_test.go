@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -1444,6 +1445,41 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 			expected := EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.expected))
 			if !expected.Equal(actual) {
 				t.Errorf("expected tightened end key %s, got %s", expected, actual)
+			}
+		})
+	}
+}
+
+func TestDecodeTableValue(t *testing.T) {
+	a := &DatumAlloc{}
+	for _, tc := range []struct {
+		in  tree.Datum
+		typ types.T
+		err string
+	}{
+		// These test cases are not intended to be exhaustive, but rather exercise
+		// the special casing and error handling of DecodeTableValue.
+		{tree.DNull, types.Bool, ""},
+		{tree.DBoolTrue, types.Bool, ""},
+		{tree.NewDInt(tree.DInt(4)), types.Bool, "value type is not True or False: Int"},
+		{tree.DNull, types.Int, ""},
+		{tree.NewDInt(tree.DInt(4)), types.Int, ""},
+		{tree.DBoolTrue, types.Int, "decoding failed"},
+	} {
+		t.Run("", func(t *testing.T) {
+			var prefix, scratch []byte
+			buf, err := EncodeTableValue(prefix, 0 /* colID */, tc.in, scratch)
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, _, err := DecodeTableValue(a, tc.typ, buf)
+			if !testutils.IsError(err, tc.err) {
+				t.Fatalf("expected error %q, but got %v", tc.err, err)
+			} else if err != nil {
+				return
+			}
+			if tc.in.Compare(tree.NewTestingEvalContext(), d) != 0 {
+				t.Fatalf("decoded datum %[1]v (%[1]T) does not match encoded datum %[2]v (%[2]T)", d, tc.in)
 			}
 		})
 	}
