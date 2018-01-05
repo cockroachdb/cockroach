@@ -505,6 +505,9 @@ func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 func (expr MaxVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr MinVal) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *NumVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
