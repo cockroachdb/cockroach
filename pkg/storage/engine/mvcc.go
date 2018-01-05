@@ -802,7 +802,7 @@ func mvccGetInternal(
 			// The reader should try again with a later timestamp than the
 			// one given below.
 			return nil, nil, safeValue, roachpb.NewReadWithinUncertaintyIntervalError(
-				timestamp, metaTimestamp)
+				timestamp, metaTimestamp, txn)
 		}
 
 		// We want to know if anything has been written ahead of timestamp, but
@@ -843,7 +843,7 @@ func mvccGetInternal(
 			// the second case, so the reader will have to come again with a higher
 			// read timestamp.
 			return nil, nil, safeValue, roachpb.NewReadWithinUncertaintyIntervalError(
-				timestamp, unsafeKey.Timestamp)
+				timestamp, unsafeKey.Timestamp, txn)
 		}
 		// Fifth case: There's no value in our future up to MaxTimestamp, and those
 		// are the only ones that we're not certain about. The correct key has
