@@ -202,7 +202,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
 		in := NewRowBuffer(oneIntCol, nil /* rows */, RowBufferArgs{})
-		if status := in.Push(encRow, ProducerMetadata{Err: expectedMetaErr}); status != NeedMoreRows {
+		if status := in.Push(encRow, &ProducerMetadata{Err: expectedMetaErr}); status != NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
 

@@ -34,8 +34,8 @@ func TestRunDrain(t *testing.T) {
 	// A source with no rows and 2 ProducerMetadata messages.
 	src := &RowChannel{}
 	src.InitWithBufSize(nil, 10)
-	src.Push(nil, ProducerMetadata{Err: fmt.Errorf("test")})
-	src.Push(nil, ProducerMetadata{})
+	src.Push(nil /* row */, &ProducerMetadata{Err: fmt.Errorf("test")})
+	src.Push(nil /* row */, nil /* meta */)
 
 	// A receiver that is marked as done consuming rows so that Run will
 	// immediately move from forwarding rows and metadata to draining metadata.
@@ -89,7 +89,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			}
 			b.SetBytes(int64(unsafe.Sizeof(tree.DInt(1))))
 			for i := 0; i < b.N; i++ {
-				_ = rc[0].Push(row, ProducerMetadata{})
+				_ = rc[0].Push(row, nil /* meta */)
 			}
 			rc[0].ProducerDone()
 			wg.Wait()

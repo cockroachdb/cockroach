@@ -120,7 +120,7 @@ func TestSampleAggregator(t *testing.T) {
 		if row == nil {
 			outputs = append(outputs[:i], outputs[i+1:]...)
 		} else {
-			samplerResults.Push(row, ProducerMetadata{})
+			samplerResults.Push(row, nil /* meta */)
 		}
 	}
 

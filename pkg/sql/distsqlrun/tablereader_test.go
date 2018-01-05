@@ -151,7 +151,7 @@ func TestTableReader(t *testing.T) {
 					var res sqlbase.EncDatumRows
 					for {
 						row, meta := out.Next()
-						if !meta.Empty() {
+						if meta != nil {
 							t.Fatalf("unexpected metadata: %+v", meta)
 						}
 						if row == nil {
@@ -238,10 +238,10 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 			}
 
 			var res sqlbase.EncDatumRows
-			var metas []ProducerMetadata
+			var metas []*ProducerMetadata
 			for {
 				row, meta := out.Next()
-				if !meta.Empty() {
+				if meta != nil {
 					metas = append(metas, meta)
 					continue
 				}
@@ -311,7 +311,7 @@ func BenchmarkTableReader(b *testing.B) {
 		}
 		for {
 			row, meta := tr.Next()
-			if !meta.Empty() {
+			if meta != nil {
 				b.Fatalf("unexpected metadata: %+v", meta)
 			}
 			if row == nil {

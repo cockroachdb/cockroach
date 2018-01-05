@@ -35,13 +35,13 @@ func testGetDecodedRows(
 		if err != nil {
 			tb.Fatal(err)
 		}
-		if row == nil && meta.Empty() {
+		if row == nil && meta == nil {
 			break
 		}
 		if row != nil {
 			decodedRows = append(decodedRows, row)
 		} else {
-			metas = append(metas, meta)
+			metas = append(metas, *meta)
 		}
 	}
 	return decodedRows, metas
@@ -139,7 +139,7 @@ func TestEmptyStreamEncodeDecode(t *testing.T) {
 	}
 	if row, meta, err := sd.GetRow(nil /* rowBuf */); err != nil {
 		t.Fatal(err)
-	} else if !meta.Empty() || row != nil {
+	} else if meta != nil || row != nil {
 		t.Errorf("received bogus row %v %v", row, meta)
 	}
 }

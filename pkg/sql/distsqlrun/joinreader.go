@@ -132,7 +132,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// within a certain amount of time).
 		for spans = spans[:0]; len(spans) < joinReaderBatchSize; {
 			row, meta := jr.input.Next()
-			if !meta.Empty() {
+			if meta != nil {
 				if meta.Err != nil {
 					return meta.Err
 				}
@@ -184,7 +184,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			}
 
 			// Emit the row; stop if no more rows are needed.
-			if !emitHelper(ctx, &jr.out, row, ProducerMetadata{}, jr.input) {
+			if !emitHelper(ctx, &jr.out, row, nil /* meta */, jr.input) {
 				return nil
 			}
 		}

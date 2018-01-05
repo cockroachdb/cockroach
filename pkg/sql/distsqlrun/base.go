@@ -81,7 +81,7 @@ type RowReceiver interface {
 	// and they might not all be aware of the last status returned).
 	//
 	// Implementations of Push() must be thread-safe.
-	Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus
+	Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus
 
 	// ProducerDone is called when the producer has pushed all the rows and
 	// metadata; it causes the RowReceiver to process all rows and clean up.
@@ -124,7 +124,7 @@ type RowSource interface {
 	// been skipped in case they continue to consume rows. Usually a consumer
 	// should react to an error by calling ConsumerDone(), thus asking the
 	// RowSource to drain, and separately discard any future data rows.
-	Next() (sqlbase.EncDatumRow, ProducerMetadata)
+	Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 
 	// ConsumerDone lets the source know that we will not need any more data
 	// rows. The source is expected to start draining and only send metadata
@@ -152,7 +152,7 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 	for {
 		row, meta := src.Next()
 		// Emit the row; stop if no more rows are needed.
-		if row != nil || !meta.Empty() {
+		if row != nil || meta != nil {
 			switch dst.Push(row, meta) {
 			case NeedMoreRows:
 				continue
@@ -165,7 +165,7 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 			}
 		}
 		if row == nil {
-			if !meta.Empty() {
+			if meta != nil {
 				DrainAndForwardMetadata(ctx, src, dst)
 			}
 			dst.ProducerDone()
@@ -190,7 +190,7 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 	src.ConsumerDone()
 	for {
 		row, meta := src.Next()
-		if meta.Empty() {
+		if meta == nil {
 			if row == nil {
 				return
 			}
@@ -222,7 +222,7 @@ func getTraceData(ctx context.Context) []tracing.RecordedSpan {
 
 func sendTraceData(ctx context.Context, dst RowReceiver) {
 	if rec := getTraceData(ctx); rec != nil {
-		dst.Push(nil /* row */, ProducerMetadata{TraceData: rec})
+		dst.Push(nil /* row */, &ProducerMetadata{TraceData: rec})
 	}
 }
 
@@ -242,7 +242,7 @@ func DrainAndClose(ctx context.Context, dst RowReceiver, cause error, srcs ...Ro
 	if cause != nil {
 		// We ignore the returned ConsumerStatus and rely on the
 		// DrainAndForwardMetadata() calls below to close srcs in all cases.
-		_ = dst.Push(nil /* row */, ProducerMetadata{Err: cause})
+		_ = dst.Push(nil /* row */, &ProducerMetadata{Err: cause})
 	}
 	if len(srcs) > 0 {
 		var wg sync.WaitGroup
@@ -285,11 +285,11 @@ func MakeNoMetadataRowSource(src RowSource, sink RowReceiver) NoMetadataRowSourc
 func (rs *NoMetadataRowSource) NextRow() (sqlbase.EncDatumRow, error) {
 	for {
 		row, meta := rs.src.Next()
+		if meta == nil {
+			return row, nil
+		}
 		if meta.Err != nil {
 			return nil, meta.Err
-		}
-		if meta.Empty() {
-			return row, nil
 		}
 		// We forward the metadata and ignore the returned ConsumerStatus. There's
 		// no good way to use that status here; eventually the consumer of this
@@ -304,7 +304,7 @@ func (rs *NoMetadataRowSource) NextRow() (sqlbase.EncDatumRow, error) {
 type RowChannelMsg struct {
 	// Only one of these fields will be set.
 	Row  sqlbase.EncDatumRow
-	Meta ProducerMetadata
+	Meta *ProducerMetadata
 }
 
 // ProducerMetadata represents a metadata record flowing through a DistSQL flow.
@@ -317,11 +317,6 @@ type ProducerMetadata struct {
 	Err error
 	// TraceData is sent if snowball tracing is enabled.
 	TraceData []tracing.RecordedSpan
-}
-
-// Empty returns true if none of the fields in metadata are populated.
-func (meta ProducerMetadata) Empty() bool {
-	return meta.Ranges == nil && meta.Err == nil && meta.TraceData == nil
 }
 
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to
@@ -356,7 +351,7 @@ func (rc *RowChannel) Init(types []sqlbase.ColumnType) {
 }
 
 // Push is part of the RowReceiver interface.
-func (rc *RowChannel) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (rc *RowChannel) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	consumerStatus := ConsumerStatus(
 		atomic.LoadUint32((*uint32)(&rc.consumerStatus)))
 	switch consumerStatus {
@@ -364,7 +359,7 @@ func (rc *RowChannel) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Consu
 		rc.dataChan <- RowChannelMsg{Row: row, Meta: meta}
 	case DrainRequested:
 		// If we're draining, only forward metadata.
-		if !meta.Empty() {
+		if meta != nil {
 			rc.dataChan <- RowChannelMsg{Meta: meta}
 		}
 	case ConsumerClosed:
@@ -384,11 +379,11 @@ func (rc *RowChannel) OutputTypes() []sqlbase.ColumnType {
 }
 
 // Next is part of the RowSource interface.
-func (rc *RowChannel) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	d, ok := <-rc.C
 	if !ok {
 		// No more rows.
-		return nil, ProducerMetadata{}
+		return nil, nil
 	}
 	return d.Row, d.Meta
 }
@@ -439,7 +434,7 @@ func (mrc *MultiplexedRowChannel) Init(numSenders int, types []sqlbase.ColumnTyp
 
 // Push is part of the RowReceiver interface.
 func (mrc *MultiplexedRowChannel) Push(
-	row sqlbase.EncDatumRow, meta ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *ProducerMetadata,
 ) ConsumerStatus {
 	return mrc.rowChan.Push(row, meta)
 }
@@ -461,7 +456,7 @@ func (mrc *MultiplexedRowChannel) OutputTypes() []sqlbase.ColumnType {
 }
 
 // Next is part of the RowSource interface.
-func (mrc *MultiplexedRowChannel) Next() (row sqlbase.EncDatumRow, meta ProducerMetadata) {
+func (mrc *MultiplexedRowChannel) Next() (row sqlbase.EncDatumRow, meta *ProducerMetadata) {
 	return mrc.rowChan.Next()
 }
 
@@ -497,7 +492,7 @@ func (mrc *MultiplexedRowChannel) ConsumerClosed() {
 // inside a RowBuffer.
 type BufferedRecord struct {
 	Row  sqlbase.EncDatumRow
-	Meta ProducerMetadata
+	Meta *ProducerMetadata
 }
 
 // RowBuffer is an implementation of RowReceiver that buffers (accumulates)
@@ -547,7 +542,7 @@ type RowBufferArgs struct {
 	// OnNext, if specified, is called as the first thing in the Next() method.
 	// If it returns an empty row and metadata, then RowBuffer.Next() is allowed
 	// to run normally. Otherwise, the values are returned from RowBuffer.Next().
-	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, ProducerMetadata)
+	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, *ProducerMetadata)
 }
 
 // NewRowBuffer creates a RowBuffer with the given schema and initial rows.
@@ -567,7 +562,7 @@ func NewRowBuffer(
 }
 
 // Push is part of the RowReceiver interface.
-func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	if rb.ProducerClosed {
 		panic("Push called after ProducerDone")
 	}
@@ -586,7 +581,7 @@ func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Consum
 		case NeedMoreRows:
 			storeRow()
 		case DrainRequested:
-			if !meta.Empty() {
+			if meta != nil {
 				storeRow()
 			}
 		case ConsumerClosed:
@@ -615,16 +610,16 @@ func (rb *RowBuffer) OutputTypes() []sqlbase.ColumnType {
 //
 // There's no synchronization here with Push(). The assumption is that these
 // two methods are not called concurrently.
-func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if rb.args.OnNext != nil {
 		row, meta := rb.args.OnNext(rb)
-		if row != nil || !meta.Empty() {
+		if row != nil || meta != nil {
 			return row, meta
 		}
 	}
 	if len(rb.mu.records) == 0 {
 		rb.Done = true
-		return nil, ProducerMetadata{}
+		return nil, nil
 	}
 	rec := rb.mu.records[0]
 	rb.mu.records = rb.mu.records[1:]

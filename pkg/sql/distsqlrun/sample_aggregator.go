@@ -129,7 +129,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	var tmpSketch hyperloglog.Sketch
 	for {
 		row, meta := s.input.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
