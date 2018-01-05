@@ -789,10 +789,14 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// re-run as part of a transaction for consistency. The
 			// case where we don't need to re-run is if the read
 			// consistency is not required.
-			if ba.Txn == nil && ba.IsPossibleTransaction() && ba.ReadConsistency != roachpb.INCONSISTENT {
-				// TODO(nvanbenschoten): if this becomes an issue for RangeLookup
-				// scans, we could look into changing IsPossibleTransaction for
-				// ScanRequest/ReverseScanRequest to detect RangeLookups.
+			if ba.Txn == nil &&
+				ba.IsPossibleTransaction() &&
+				// TODO DURING REVIEW: this probably isn't how we should detect
+				// this. Should the check be built in to ba.IsPossibleTransaction?
+				// Should we add another field on to BatchRequest? At the very
+				// least, we should remove "Testing" from this function name.
+				!client.TestingIsRangeLookup(ba) &&
+				ba.ReadConsistency != roachpb.INCONSISTENT {
 				responseCh <- response{pErr: roachpb.NewError(&roachpb.OpRequiresTxnError{})}
 				return
 			}
