@@ -67,3 +67,32 @@ func TestErrorTxn(t *testing.T) {
 		t.Fatalf("wanted name %s, unexpected: %+v", name, txn)
 	}
 }
+
+func TestReadWithinUncertaintyIntervalError(t *testing.T) {
+	{
+		rwueNew := NewReadWithinUncertaintyIntervalError(
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2},
+			&Transaction{
+				MaxTimestamp:       hlc.Timestamp{WallTime: 3},
+				ObservedTimestamps: []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.Timestamp{WallTime: 4}}},
+			})
+		expNew := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
+			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
+			"`t <= 0.000000003,0`; observed timestamps: [{12 0.000000004,0}]"
+		if a := rwueNew.Error(); a != expNew {
+			t.Fatalf("expected: %s\ngot: %s", a, expNew)
+		}
+	}
+
+	{
+		rwueOld := NewReadWithinUncertaintyIntervalError(
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, nil)
+
+		expOld := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
+			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
+			"`t <= <nil>`; observed timestamps: []"
+		if a := rwueOld.Error(); a != expOld {
+			t.Fatalf("expected: %s\ngot: %s", a, expOld)
+		}
+	}
+}

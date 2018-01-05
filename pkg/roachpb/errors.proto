@@ -92,8 +92,14 @@ message RangeKeyMismatchError {
 message ReadWithinUncertaintyIntervalError {
   option (gogoproto.equal) = true;
 
+  // This data below is purely informational and used to taylor the
+  // error message.
   optional util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
+  // The remaining fields may be missing when running in clusters that have
+  // members at below CockroachDB v2.0.
+  optional util.hlc.Timestamp max_timestamp = 3;
+  repeated ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
 }
 
 // A TransactionAbortedError indicates that the transaction was aborted by
