@@ -200,7 +200,8 @@ message PartitioningDescriptor {
     optional string name = 1 [(gogoproto.nullable) = false];
     // Values is an unordered set of the tuples included in this partition. Each
     // tuple is encoded with the EncDatum value encoding. DEFAULT is encoded as
-    // NOT NULL.
+    // NOT NULL followed by PartitionDefaultVal encoded as a non-sorting
+    // uvarint.
     repeated bytes values = 2;
     // Subpartitioning represents a further partitioning of this list partition.
     optional PartitioningDescriptor subpartitioning = 3 [(gogoproto.nullable) = false];
@@ -212,9 +213,14 @@ message PartitioningDescriptor {
   message Range {
     // Name is the partition name.
     optional string name = 1 [(gogoproto.nullable) = false];
-    // UpperBound is the exclusive upper bound of this range partition. It is
-    // encoded with the EncDatum value encoding. MAXVALUE is encoded as NOT NULL.
-    optional bytes upper_bound = 2;
+    // FromInclusive is the inclusive lower bound of this range partition. It is
+    // encoded with the EncDatum value encoding. MINVALUE and MAXVALUE are
+    // encoded as NOT NULL followed by a PartitionSpecialValCode encoded as a
+    // non-sorting uvarint.
+    optional bytes from_inclusive = 3;
+    // ToExclusive is the exclusive upper bound of this range partition. It is
+    // encoded in the same way as From.
+    optional bytes to_exclusive = 2;
   }
 
   // NumColumns is how large of a prefix of the columns in an index are used in

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/pkg/errors"
 )
 
@@ -31,12 +32,16 @@ const (
 	PartitionDefaultVal PartitionSpecialValCode = 0
 	// PartitionMaxVal represents the special MAXVALUE value.
 	PartitionMaxVal = 1
+	// PartitionMinVal represents the special MINVALUE value.
+	PartitionMinVal = 2
 )
 
 func (c PartitionSpecialValCode) String() string {
 	switch c {
 	case PartitionDefaultVal:
 		return (tree.DefaultVal{}).String()
+	case PartitionMinVal:
+		return (tree.MinVal{}).String()
 	case PartitionMaxVal:
 		return (tree.MaxVal{}).String()
 	}
@@ -87,17 +92,18 @@ func (t *PartitionTuple) String() string {
 //
 // For a range partitioning, this returned key can be used as a exclusive end
 // key to select all rows strictly less than ones with the given columns as a
-// prefix (this is true even if the range partitioning contains MAXVALUE).
+// prefix (this is true even if the range partitioning contains MINVALUE or
+// MAXVALUE).
 //
 // Examples of the key returned for a range partitioning:
 //   - (1, 2) -> /table/index/1/3
 //   - (1, MAXVALUE) -> /table/index/2
 //   - (MAXVALUE, MAXVALUE) -> (/table/index).PrefixEnd()
 //
-// NB: It is required elsewhere and assumed here that if an entry for a list
-// partitioning contains DEFAULT, everything in that entry "after" also has to
-// be DEFAULT. So, (1, 2, DEFAULT) is valid but (1, DEFAULT, 2) is not.
-// Similarly for range partitioning and MAXVALUE.
+// NB: It is checked here that if an entry for a list partitioning contains
+// DEFAULT, everything in that entry "after" also has to be DEFAULT. So, (1, 2,
+// DEFAULT) is valid but (1, DEFAULT, 2) is not. Similarly for range
+// partitioning and MINVALUE/MAXVALUE.
 func DecodePartitionTuple(
 	a *DatumAlloc,
 	tableDesc *TableDescriptor,
@@ -124,25 +130,30 @@ func DecodePartitionTuple(
 			return nil, nil, errors.Wrap(err, "decoding")
 		} else if typ == encoding.NotNull {
 			// NOT NULL signals that a PartitionSpecialValCode follows
-			rem, _, valCode, err := encoding.DecodeNonsortingUvarint(valueEncBuf[dataOffset:])
+			var valCode uint64
+			valueEncBuf, _, valCode, err = encoding.DecodeNonsortingUvarint(valueEncBuf[dataOffset:])
 			if err != nil {
 				return nil, nil, err
 			}
-			t.Special = PartitionSpecialValCode(valCode)
+			nextSpecial := PartitionSpecialValCode(valCode)
+			if t.SpecialCount > 0 && t.Special != nextSpecial {
+				return nil, nil, errors.Errorf("non-%[1]s value (%[2]s) not allowed after %[1]s",
+					t.Special, nextSpecial)
+			}
+			t.Special = nextSpecial
 			t.SpecialCount++
-			valueEncBuf = rem
-			continue
+		} else {
+			var datum tree.Datum
+			datum, valueEncBuf, err = DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "decoding")
+			}
+			if t.SpecialCount > 0 {
+				return nil, nil, errors.Errorf("non-%[1]s value (%[2]s) not allowed after %[1]s",
+					t.Special, datum)
+			}
+			t.Datums = append(t.Datums, datum)
 		}
-		var datum tree.Datum
-		datum, valueEncBuf, err = DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "decoding")
-		}
-		if t.SpecialCount > 0 {
-			return nil, nil, errors.Errorf("non-%[1]s value (%[2]s) not allowed after %[1]s",
-				t.Special, datum)
-		}
-		t.Datums = append(t.Datums, datum)
 	}
 	if len(valueEncBuf) > 0 {
 		return nil, nil, errors.New("superfluous data in encoded value")
@@ -176,4 +187,20 @@ func DecodePartitionTuple(
 	}
 
 	return t, key, nil
+}
+
+type partitionInterval struct {
+	name  string
+	start roachpb.Key
+	end   roachpb.Key
+}
+
+var _ interval.Interface = partitionInterval{}
+
+// ID is part of `interval.Interface` but unused in validatePartitioningDescriptor.
+func (ps partitionInterval) ID() uintptr { return 0 }
+
+// Range is part of `interval.Interface`.
+func (ps partitionInterval) Range() interval.Range {
+	return interval.Range{Start: []byte(ps.start), End: []byte(ps.end)}
 }
