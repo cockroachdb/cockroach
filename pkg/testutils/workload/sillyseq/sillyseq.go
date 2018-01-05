@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -77,8 +78,10 @@ func (g *sillyseq) Tables() []workload.Table {
 // Ops implements the Generator interface.
 func (g *sillyseq) Ops() []workload.Operation {
 	table := g.Name()
-	qRead := fmt.Sprintf(`SELECT COUNT(*) FROM %s`, table)
-	qWrite := fmt.Sprintf(`INSERT INTO %s VALUES ($1, $2) ON CONFLICT(k) DO UPDATE SET v = %s.v + 1`, table, table)
+	qRead1 := fmt.Sprintf(`SELECT k FROM test.%s LIMIT 1`, table)
+	qRead2 := fmt.Sprintf(`SELECT COUNT(*) FROM test.%s`, table)
+	qWrite := fmt.Sprintf(`INSERT INTO test.%s VALUES ($1, $2)`, table)
+	//qWrite := fmt.Sprintf(`INSERT INTO test.%s VALUES ($1, $2) ON CONFLICT(k) DO UPDATE SET v = %s.v + 1`, table, table)
 	opFn := func(db *gosql.DB) (func(context.Context) error, error) {
 		f := func(ctx context.Context) error {
 			txn, err := db.Begin()
@@ -92,22 +95,28 @@ func (g *sillyseq) Ops() []workload.Operation {
 			}
 
 			// Touch-all read phase that should run into lots of read uncertainty.
-			rows, err := txn.Query(qRead)
-			if err != nil {
-				return err
-			}
-			for rows.Next() {
-			}
-			if err := rows.Err(); err != nil {
-				return errors.Wrap(err, "on read")
+			// Do it twice so that the second time around, the gateway can't do the
+			// retry for us.
+			if rand.Intn(2) == 0 {
+				var n int
+				if err := txn.QueryRow(qRead1).Scan(&n); err != nil {
+					return errors.Wrap(err, "on read 1")
+				}
+				time.Sleep(100 * time.Millisecond)
+				if err := txn.QueryRow(qRead2).Scan(&n); err != nil {
+					return errors.Wrap(err, "on read 2")
+				}
+				return errors.Wrap(txn.Commit(), "read-commit")
 			}
 
+			fmt.Print(",")
 			// Write phase.
-			i := rand.Intn(rowCount)
-			if _, err := txn.Exec(qWrite, i, 1); err != nil {
+			//i := rand.Intn(rowCount)
+			if _, err := txn.Exec(qWrite, rand.Int63(), 1); err != nil {
+				// if _, err := txn.Exec(qWrite, i, 1); err != nil {
 				return errors.Wrap(err, "on write")
 			}
-			return txn.Commit()
+			return errors.Wrap(txn.Commit(), "write-commit")
 		}
 		return f, nil
 	}
