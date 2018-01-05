@@ -337,7 +337,7 @@ func (p *planner) resolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
-	return resolveFK(ctx, p.txn, &p.session.virtualSchemas, tbl, d, backrefs, mode)
+	return resolveFK(ctx, p.txn, p.getVirtualTabler(), tbl, d, backrefs, mode)
 }
 
 // resolveFK looks up the tables and columns mentioned in a `REFERENCES`
@@ -602,7 +602,7 @@ func (p *planner) addInterleave(
 	interleave *tree.InterleaveDef,
 ) error {
 	return addInterleave(
-		ctx, p.txn, &p.session.virtualSchemas, desc, index,
+		ctx, p.txn, p.getVirtualTabler(), desc, index,
 		interleave, p.SessionData().Database)
 }
 
@@ -1034,7 +1034,7 @@ func (p *planner) makeTableDesc(
 	return MakeTableDesc(
 		ctx,
 		p.txn,
-		&p.session.virtualSchemas,
+		p.getVirtualTabler(),
 		p.ExecCfg().Settings,
 		n,
 		parentID,

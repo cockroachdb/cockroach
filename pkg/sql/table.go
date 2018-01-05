@@ -113,7 +113,7 @@ type SchemaAccessor interface {
 var _ SchemaAccessor = &planner{}
 
 func (p *planner) getVirtualTabler() VirtualTabler {
-	return &p.session.virtualSchemas
+	return p.extendedEvalCtx.VirtualSchemas
 }
 
 // getTableOrViewDesc returns a table descriptor for either a table or view,

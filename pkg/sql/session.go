@@ -163,10 +163,8 @@ type Session struct {
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
 	// virtualSchemas aliases Executor.virtualSchemas.
-	// It is duplicated in Session to provide easier access to
-	// the various methods that need this reference.
-	// TODO(knz): place this in an executionContext parameter-passing
-	// structure.
+	// It is duplicated in Session so that it can find its way to the planners'
+	// EvalContext.
 	virtualSchemas virtualSchemaHolder
 
 	// planner is the "default planner" on a session, to save planner allocations

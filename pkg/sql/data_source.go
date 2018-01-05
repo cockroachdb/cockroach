@@ -271,7 +271,7 @@ func (p *planner) getSources(
 func (p *planner) getVirtualDataSource(
 	ctx context.Context, tn *tree.TableName,
 ) (planDataSource, bool, error) {
-	virtual, err := p.session.virtualSchemas.getVirtualTableEntry(tn)
+	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return planDataSource{}, false, err
 	}
