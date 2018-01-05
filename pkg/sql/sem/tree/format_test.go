@@ -282,10 +282,13 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 	b.Run("format", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			for i, stmt := range stmts {
-				var buf bytes.Buffer
-				fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
-				fmtCtx.FormatNode(stmt)
-				strs[i] = buf.String()
+				var f struct {
+					buf bytes.Buffer
+					ctx tree.FmtCtx
+				}
+				f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
+				f.ctx.FormatNode(stmt)
+				strs[i] = f.buf.String()
 			}
 		}
 	})

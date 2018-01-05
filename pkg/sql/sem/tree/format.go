@@ -272,11 +272,14 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 }
 
 // AsStringWithFlags pretty prints a node to a string given specific flags.
-func AsStringWithFlags(n NodeFormatter, f FmtFlags) string {
-	var buf bytes.Buffer
-	ctx := FmtCtx{Buffer: &buf, flags: f}
-	ctx.FormatNode(n)
-	return buf.String()
+func AsStringWithFlags(n NodeFormatter, fl FmtFlags) string {
+	var f struct {
+		buf bytes.Buffer
+		ctx FmtCtx
+	}
+	f.ctx = MakeFmtCtx(&f.buf, fl)
+	f.ctx.FormatNode(n)
+	return f.buf.String()
 }
 
 // AsString pretty prints a node to a string.

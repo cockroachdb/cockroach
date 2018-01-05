@@ -160,10 +160,13 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 }
 
 func (a *appStats) getStrForStmt(stmt Statement) string {
-	var buf bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtHideConstants)
-	fmtCtx.FormatNode(stmt.AST)
-	return buf.String()
+	var f struct {
+		buf bytes.Buffer
+		ctx tree.FmtCtx
+	}
+	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtHideConstants)
+	f.ctx.FormatNode(stmt.AST)
+	return f.buf.String()
 }
 
 // sqlStats carries per-application statistics for all applications on
@@ -267,9 +270,12 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	}
 
 	// Re-format to remove most names.
-	var buf bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtAnonymize)
-	fmtCtx.WithReformatTableNames(
+	var f struct {
+		buf bytes.Buffer
+		ctx tree.FmtCtx
+	}
+	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtAnonymize)
+	f.ctx.WithReformatTableNames(
 		func(ctx *tree.FmtCtx, t *tree.NormalizableTableName) {
 			tn, err := t.Normalize()
 			if err != nil {
@@ -285,8 +291,8 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 			keepNameCtx := ctx.CopyWithFlags(tree.FmtParsable)
 			keepNameCtx.FormatNode(tn)
 		})
-	fmtCtx.FormatNode(stmt)
-	return buf.String(), true
+	f.ctx.FormatNode(stmt)
+	return f.buf.String(), true
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
