@@ -206,9 +206,9 @@ func (t *partitioningTest) verifyScansFn(ctx context.Context, db *gosql.DB) func
 // make sure each column type is tested are randomized.
 //
 // TODO(dan): It already seems odd to only have one of these sets. The
-// repartitioning & fast path tests only use a subset and a few entries are only
-// present because they're interesting for the before after of a partitioning
-// change. Revisit.
+// repartitioning tests only use a subset and a few entries are only present
+// because they're interesting for the before after of a partitioning change.
+// Revisit.
 func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	tests := []partitioningTest{
 		{
@@ -827,11 +827,6 @@ func allRepartitioningTests(partitioningTests []partitioningTest) ([]repartition
 			new:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
 		},
 		{
-			// NB: Most of these fast path tests are false one way and true the
-			// other because one of them covers a strict superset of the other.
-			// The `multi col range partitioning - MAXVALUE` partition test has
-			// been constructed to cover exactly the same set of values so we
-			// can have a true<->true test case as well.
 			index: `primary`,
 			old:   partitioningTest{name: `multi col range partitioning - MAXVALUE`},
 			new:   partitioningTest{name: `multi col range partitioning`},
