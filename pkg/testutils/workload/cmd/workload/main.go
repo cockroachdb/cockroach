@@ -83,6 +83,12 @@ func main() {
 func init() {
 	for _, genFn := range workload.Registered() {
 		gen := genFn()
+		// Avoid use of `genFn` in the closures below, because it is a) not needed and
+		// b) prevents regression of a bug in which a missing loop-local copy in
+		// the RunE closure below caused the last registered command to be the one
+		// run, whichever generator was specified.
+		genFn = nil
+
 		genFlags := gen.Flags()
 
 		genCmd := &cobra.Command{Use: gen.Name()}
@@ -100,7 +106,6 @@ func init() {
 				flags = append(flags, fmt.Sprintf(`--%s=%s`, f.Name, f.Value))
 			})
 
-			gen := genFn()
 			if err := gen.Configure(flags); err != nil {
 				return err
 			}
