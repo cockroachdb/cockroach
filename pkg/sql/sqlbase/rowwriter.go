@@ -643,19 +643,13 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	if rowPrimaryKeyChanged {
-		if err := ru.Fks.checkIdx(
-			ctx, ru.Helper.TableDesc.PrimaryIndex.ID, oldValues, ru.newValues,
-		); err != nil {
-			return nil, err
-		}
+		ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIndex.ID)
 		for i := range newSecondaryIndexEntries {
 			if !bytes.Equal(newSecondaryIndexEntries[i].Key, secondaryIndexEntries[i].Key) {
-				if err := ru.Fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
-					return nil, err
-				}
+				ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID)
 			}
 		}
-		if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
+		if err := ru.Fks.runIndexChecks(ctx, oldValues, ru.newValues); err != nil {
 			return nil, err
 		}
 
@@ -772,10 +766,7 @@ func (ru *RowUpdater) UpdateRow(
 		secondaryIndexEntry := secondaryIndexEntries[i]
 		var expValue interface{}
 		if !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key) {
-			if err := ru.Fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
-				return nil, err
-			}
-
+			ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID)
 			if traceKV {
 				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], secondaryIndexEntry.Key))
 			}
@@ -793,7 +784,7 @@ func (ru *RowUpdater) UpdateRow(
 			b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 		}
 	}
-	if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
+	if err := ru.Fks.runIndexChecks(ctx, oldValues, ru.newValues); err != nil {
 		return nil, err
 	}
 
