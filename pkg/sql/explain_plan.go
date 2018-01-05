@@ -279,11 +279,14 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
 			fieldName = fmt.Sprintf("%s %d", fieldName, n)
 		}
 
-		var buf bytes.Buffer
-		fmtCtx := tree.MakeFmtCtx(&buf, e.fmtFlags)
-		fmtCtx.WithPlaceholderFormat(e.showPlaceholderValues)
-		fmtCtx.FormatNode(expr)
-		e.attr(nodeName, fieldName, buf.String())
+		var f struct {
+			buf bytes.Buffer
+			ctx tree.FmtCtx
+		}
+		f.ctx = tree.MakeFmtCtx(&f.buf, e.fmtFlags)
+		f.ctx.WithPlaceholderFormat(e.showPlaceholderValues)
+		f.ctx.FormatNode(expr)
+		e.attr(nodeName, fieldName, f.buf.String())
 	}
 }
 
@@ -318,24 +321,27 @@ func (e *explainer) leaveNode(name string, _ planNode) error {
 // planNode to a string. The column types are printed iff the 2nd
 // argument specifies so.
 func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
-	var buf bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
-	buf.WriteByte('(')
+	var f struct {
+		buf bytes.Buffer
+		ctx tree.FmtCtx
+	}
+	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
+	f.buf.WriteByte('(')
 	for i, rCol := range cols {
 		if i > 0 {
-			buf.WriteString(", ")
+			f.buf.WriteString(", ")
 		}
-		fmtCtx.FormatNode(tree.Name(rCol.Name))
+		f.ctx.FormatNode(tree.Name(rCol.Name))
 		// Output extra properties like [hidden,omitted].
 		hasProps := false
 		outputProp := func(prop string) {
 			if hasProps {
-				buf.WriteByte(',')
+				f.buf.WriteByte(',')
 			} else {
-				buf.WriteByte('[')
+				f.buf.WriteByte('[')
 			}
 			hasProps = true
-			buf.WriteString(prop)
+			f.buf.WriteString(prop)
 		}
 		if rCol.Hidden {
 			outputProp("hidden")
@@ -344,14 +350,14 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 			outputProp("omitted")
 		}
 		if hasProps {
-			buf.WriteByte(']')
+			f.buf.WriteByte(']')
 		}
 
 		if printTypes {
-			buf.WriteByte(' ')
-			buf.WriteString(rCol.Typ.String())
+			f.buf.WriteByte(' ')
+			f.buf.WriteString(rCol.Typ.String())
 		}
 	}
-	buf.WriteByte(')')
-	return buf.String()
+	f.buf.WriteByte(')')
+	return f.buf.String()
 }
