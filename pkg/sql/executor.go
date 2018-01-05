@@ -674,7 +674,7 @@ func (e *Executor) execPrepared(
 	}
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execParsed(session, stmts, pinfo, copyMsgNone)
+	return e.execParsed(session, stmts, pinfo)
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
@@ -741,7 +741,7 @@ func (e *Executor) execRequest(
 		}
 		return err
 	}
-	return e.execParsed(session, stmts, pinfo, copymsg)
+	return e.execParsed(session, stmts, pinfo)
 }
 
 // RecordError is called by the common error handling routine in pgwire. Since
@@ -761,7 +761,7 @@ func (e *Executor) RecordError(err error) {
 // execParsed executes a batch of statements received as a unit from the client
 // and returns query execution errors and communication errors.
 func (e *Executor) execParsed(
-	session *Session, stmts StatementList, pinfo *tree.PlaceholderInfo, copymsg copyMsg,
+	session *Session, stmts StatementList, pinfo *tree.PlaceholderInfo,
 ) error {
 	var avoidCachedDescriptors bool
 	var asOfSystemTime bool
