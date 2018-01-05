@@ -79,7 +79,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		case tree.DropDefault:
 			// The default is CASCADE, however be cautious if CASCADE was
 			// not specified explicitly.
-			if p.session.SafeUpdates {
+			if p.SessionData().SafeUpdates {
 				return nil, pgerror.NewDangerousStatementErrorf(
 					"DROP DATABASE on non-empty database without explicit CASCADE")
 			}
@@ -172,13 +172,13 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		p.txn,
 		EventLogDropDatabase,
 		int32(n.dbDesc.ID),
-		int32(p.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			DatabaseName          string
 			Statement             string
 			User                  string
 			DroppedTablesAndViews []string
-		}{n.n.Name.String(), n.n.String(), p.session.User, tbNameStrings},
+		}{n.n.Name.String(), n.n.String(), p.SessionData().User, tbNameStrings},
 	)
 }
 

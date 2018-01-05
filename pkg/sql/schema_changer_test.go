@@ -2350,7 +2350,7 @@ CREATE TABLE d.t (
 	}
 }
 
-// Test that a backfill is executed with an EvalContext generated on the
+// Test that a backfill is executed with an EvalContext() generated on the
 // gateway. We assert that by checking that the same timestamp is used by all
 // the backfilled columns.
 func TestSchemaChangeEvalContext(t *testing.T) {

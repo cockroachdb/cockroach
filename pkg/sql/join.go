@@ -541,7 +541,7 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 		// on condition, if the on condition passes we add it to the buffer.
 		foundMatch := false
 		for idx, rrow := range b.Rows() {
-			passesOnCond, err := n.pred.eval(params.evalCtx, n.run.output, lrow, rrow)
+			passesOnCond, err := n.pred.eval(params.EvalContext(), n.run.output, lrow, rrow)
 			if err != nil {
 				return false, err
 			}

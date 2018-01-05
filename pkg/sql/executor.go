@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -509,7 +510,7 @@ func (e *Executor) Prepare(
 		// session.TxnState.mu.txn, but more thought needs to be put into whether that
 		// is really needed.
 		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
-		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
+		if err := txn.SetIsolation(session.data.DefaultIsolationLevel); err != nil {
 			panic(fmt.Errorf("cannot set up txn for prepare %q: %v", stmtStr, err))
 		}
 		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
@@ -517,8 +518,8 @@ func (e *Executor) Prepare(
 
 	planner := session.newPlanner(e, txn)
 	planner.semaCtx.Placeholders.SetTypeHints(placeholderHints)
-	planner.evalCtx.PrepareOnly = true
-	planner.evalCtx.ActiveMemAcc = &prepared.memAcc
+	planner.extendedEvalCtx.PrepareOnly = true
+	planner.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
 
 	if protoTS != nil {
 		planner.asOfSystemTime = true
@@ -819,9 +820,9 @@ func (e *Executor) execParsed(
 				autoCommit, /* implicitTxn */
 				false,      /* retryIntent */
 				e.cfg.Clock.PhysicalTime(), /* sqlTimestamp */
-				session.DefaultIsolationLevel,
+				session.data.DefaultIsolationLevel,
 				roachpb.NormalUserPriority,
-				session.DefaultReadOnly,
+				session.data.DefaultReadOnly,
 			)
 		}
 
@@ -1802,10 +1803,10 @@ func (e *Executor) execStmtInOpenTxn(
 		p = &session.planner
 		session.resetPlanner(p, e, txnState.mu.txn)
 	}
-	p.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	p.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
+	p.extendedEvalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
+	p.extendedEvalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 	p.semaCtx.Placeholders.Assign(pinfo)
-	p.evalCtx.Placeholders = &p.semaCtx.Placeholders
+	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.asOfSystemTime = asOfSystemTime
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
@@ -1820,8 +1821,8 @@ func (e *Executor) execStmtInOpenTxn(
 
 	// constantMemAcc accounts for all constant folded values that are computed
 	// prior to any rows being computed.
-	constantMemAcc := p.evalCtx.Mon.MakeBoundAccount()
-	p.evalCtx.ActiveMemAcc = &constantMemAcc
+	constantMemAcc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+	p.extendedEvalCtx.ActiveMemAcc = &constantMemAcc
 	defer constantMemAcc.Close(session.Ctx())
 
 	if runInParallel {
@@ -2011,7 +2012,7 @@ func (e *Executor) execDistSQL(
 		},
 	)
 	if err := e.distSQLPlanner.PlanAndRun(
-		ctx, planner.txn, tree, &recv, planner.evalCtx,
+		ctx, planner.txn, tree, &recv, &planner.extendedEvalCtx,
 	); err != nil {
 		return err
 	}
@@ -2029,14 +2030,14 @@ func (e *Executor) execClassic(
 	ctx := planner.session.Ctx()
 
 	// Create a BoundAccount to track the memory usage of each row.
-	rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
-	planner.evalCtx.ActiveMemAcc = &rowAcc
+	rowAcc := planner.extendedEvalCtx.Mon.MakeBoundAccount()
+	planner.extendedEvalCtx.ActiveMemAcc = &rowAcc
 	defer rowAcc.Close(ctx)
 
 	params := runParams{
-		ctx:     ctx,
-		evalCtx: &planner.evalCtx,
-		p:       planner,
+		ctx:             ctx,
+		extendedEvalCtx: &planner.extendedEvalCtx,
+		p:               planner,
 	}
 
 	if err := startPlan(params, plan); err != nil {
@@ -2074,8 +2075,8 @@ func forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
 	next, err := p.Next(params)
 	for ; next; next, err = p.Next(params) {
 		// If we're tracking memory, clear the previous row's memory account.
-		if params.evalCtx.ActiveMemAcc != nil {
-			params.evalCtx.ActiveMemAcc.Clear(params.ctx)
+		if params.extendedEvalCtx.ActiveMemAcc != nil {
+			params.extendedEvalCtx.ActiveMemAcc.Clear(params.ctx)
 		}
 
 		if err := f(p.Values()); err != nil {
@@ -2106,12 +2107,12 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 // on the session settings.
 func shouldUseDistSQL(
 	ctx context.Context,
-	distSQLMode DistSQLExecMode,
+	distSQLMode sessiondata.DistSQLExecMode,
 	dp *DistSQLPlanner,
 	planner *planner,
 	plan planNode,
 ) (bool, error) {
-	if distSQLMode == DistSQLOff {
+	if distSQLMode == sessiondata.DistSQLOff {
 		return false, nil
 	}
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
@@ -2138,7 +2139,7 @@ func shouldUseDistSQL(
 
 	if err != nil {
 		// If the distSQLMode is ALWAYS, reject anything but SET.
-		if distSQLMode == DistSQLAlways && err != setNotSupportedError {
+		if distSQLMode == sessiondata.DistSQLAlways && err != setNotSupportedError {
 			return false, err
 		}
 		// Don't use distSQL for this request.
@@ -2146,7 +2147,7 @@ func shouldUseDistSQL(
 		return false, nil
 	}
 
-	if distSQLMode == DistSQLAuto && !distribute {
+	if distSQLMode == sessiondata.DistSQLAuto && !distribute {
 		log.VEventf(ctx, 1, "not distributing query")
 		return false, nil
 	}
@@ -2198,7 +2199,7 @@ func (e *Executor) execStmt(
 	}
 
 	useDistSQL, err := shouldUseDistSQL(
-		session.Ctx(), session.DistSQLMode, e.distSQLPlanner, planner, plan,
+		session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, plan,
 	)
 	if err != nil {
 		return err
@@ -2245,9 +2246,9 @@ func (e *Executor) execStmtInParallel(
 	session := planner.session
 	ctx := session.Ctx()
 	params := runParams{
-		ctx:     ctx,
-		evalCtx: &planner.evalCtx,
-		p:       planner,
+		ctx:             ctx,
+		extendedEvalCtx: &planner.extendedEvalCtx,
+		p:               planner,
 	}
 
 	plan, err := planner.makePlan(ctx, stmt)
@@ -2568,8 +2569,8 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 		return nil, nil
 	}
 
-	evalCtx := session.evalCtx()
-	ts, err := EvalAsOfTimestamp(&evalCtx, asOf, max)
+	evalCtx := session.extendedEvalCtx()
+	ts, err := EvalAsOfTimestamp(&evalCtx.EvalContext, asOf, max)
 	return &ts, err
 }
 

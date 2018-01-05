@@ -69,9 +69,11 @@ func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
 }
 
 func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan planNode, exec func(planNode) error) {
+	p := makeTestPlanner()
 	params := runParams{
-		ctx: context.TODO(),
-		p:   makeTestPlanner(),
+		ctx:             context.TODO(),
+		p:               p,
+		extendedEvalCtx: &p.extendedEvalCtx,
 	}
 	if err := pq.Add(params, plan, exec); err != nil {
 		t.Fatalf("ParallelizeQueue.Add failed: %v", err)
@@ -317,7 +319,12 @@ func planQuery(
 	txn.Proto().OrigTimestamp = s.Clock().Now()
 	p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
 	p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
-	p.session.Database = "test"
+	p.session.dataMutator.SetDatabase("test")
+	// HACK: the internal planner is not really meant to execute more than one
+	// statement, but here we neede to set the session database, so we did that by
+	// accessing the session directly. That requires us to reset the planner, so
+	// that its copy of the session variable is reset.
+	p.session.resetPlanner(p, nil /* executor*/, txn)
 
 	stmts, err := p.parser.Parse(sql)
 	if err != nil {
@@ -457,9 +464,9 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 				planAndAnalyze := func(q string) (planNode, func()) {
 					p, plan, finish := planQuery(t, s, q)
 					params := runParams{
-						ctx:     context.TODO(),
-						evalCtx: &p.evalCtx,
-						p:       p,
+						ctx:             context.TODO(),
+						extendedEvalCtx: &p.extendedEvalCtx,
+						p:               p,
 					}
 
 					if err := da.Analyze(params, plan); err != nil {

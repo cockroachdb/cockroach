@@ -99,7 +99,7 @@ func (l *DistLoader) LoadCSV(
 	ctx context.Context,
 	job *jobs.Job,
 	db *client.DB,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 	thisNode roachpb.NodeID,
 	nodes []roachpb.NodeDescriptor,
 	resultRows *RowResultWriter,
@@ -219,7 +219,7 @@ func (l *DistLoader) LoadCSV(
 		return nil
 	})
 
-	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, &evalCtx, nil)
+	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, evalCtx, nil /* txn */)
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range nodes {

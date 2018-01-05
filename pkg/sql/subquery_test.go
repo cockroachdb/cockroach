@@ -40,7 +40,7 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	params := runParams{ctx: context.TODO(), p: p}
+	params := runParams{ctx: context.TODO(), p: p, extendedEvalCtx: &p.extendedEvalCtx}
 	if err := startPlan(params, plan); !testutils.IsError(err, `forced`) {
 		t.Fatalf("expected error from force_error(), got: %v", err)
 	}

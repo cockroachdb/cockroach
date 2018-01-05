@@ -1363,9 +1363,9 @@ func (c *v3Conn) AddRow(ctx context.Context, row tree.Datums) error {
 		}
 		switch fmtCode {
 		case formatText:
-			c.writeBuf.writeTextDatum(ctx, col, c.session.Location)
+			c.writeBuf.writeTextDatum(ctx, col, c.session.Location())
 		case formatBinary:
-			c.writeBuf.writeBinaryDatum(ctx, col, c.session.Location)
+			c.writeBuf.writeBinaryDatum(ctx, col, c.session.Location())
 		default:
 			c.writeBuf.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}

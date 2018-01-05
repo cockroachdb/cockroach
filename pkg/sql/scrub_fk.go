@@ -109,7 +109,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 		o.colIDToRowIdx[id] = i
 	}
 
-	planCtx := params.p.session.distSQLPlanner.newPlanningCtx(ctx, params.evalCtx, params.p.txn)
+	planCtx := params.p.session.distSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, params.p, plan)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		tree.NewDString(o.tableName.Database()),
 		tree.NewDString(o.tableName.Table()),
 		tree.NewDString(primaryKeyDatums.String()),
-		tree.MakeDTimestamp(params.evalCtx.GetStmtTimestamp(), time.Nanosecond),
+		tree.MakeDTimestamp(params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond),
 		tree.DBoolFalse,
 		detailsJSON,
 	}, nil

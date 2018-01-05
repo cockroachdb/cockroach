@@ -17,13 +17,14 @@ package transform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // IsAggregateVisitor checks if walked expressions contain aggregate functions.
 type IsAggregateVisitor struct {
 	Aggregated bool
 	// searchPath is used to search for unqualified function names.
-	searchPath tree.SearchPath
+	searchPath sessiondata.SearchPath
 }
 
 var _ tree.Visitor = &IsAggregateVisitor{}

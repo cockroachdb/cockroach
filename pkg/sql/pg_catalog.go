@@ -1428,7 +1428,7 @@ CREATE TABLE pg_catalog.pg_settings (
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
-			value := gen.Get(p.session)
+			value := gen.Get(&p.extendedEvalCtx)
 			valueDatum := tree.NewDString(value)
 			if err := addRow(
 				tree.NewDString(strings.ToLower(vName)), // name

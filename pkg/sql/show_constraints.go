@@ -29,7 +29,7 @@ import (
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
