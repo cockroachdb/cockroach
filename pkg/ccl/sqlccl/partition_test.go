@@ -105,7 +105,8 @@ type repartitioningTest struct {
 
 // parse fills in the various fields of `partitioningTest.parsed`.
 func (t *partitioningTest) parse() error {
-	t.parsed.tableName = tree.Name(t.name).String()
+	tn := tree.Name(t.name)
+	t.parsed.tableName = tn.String()
 	t.parsed.createStmt = fmt.Sprintf(t.schema, t.parsed.tableName)
 
 	{
@@ -154,7 +155,7 @@ func (t *partitioningTest) parse() error {
 			if len(constraints) > 0 {
 				fmt.Fprintf(&zoneConfigStmts,
 					`ALTER INDEX %s@%s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
-					tree.Name(t.name), idxDesc.Name, constraints,
+					t.parsed.tableName, idxDesc.Name, constraints,
 				)
 			}
 		} else if strings.HasPrefix(subzoneShort, ".") {
@@ -165,7 +166,7 @@ func (t *partitioningTest) parse() error {
 			if len(constraints) > 0 {
 				fmt.Fprintf(&zoneConfigStmts,
 					`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
-					subzone.PartitionName, tree.Name(t.name), constraints,
+					subzone.PartitionName, t.parsed.tableName, constraints,
 				)
 			}
 		}
@@ -194,7 +195,8 @@ func (t *partitioningTest) parse() error {
 func (t *partitioningTest) verifyScansFn(ctx context.Context, db *gosql.DB) func() error {
 	return func() error {
 		for where, expectedNodes := range t.scans {
-			query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, tree.Name(t.name), where)
+			tn := tree.Name(t.name)
+			query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, &tn, where)
 			log.Infof(ctx, "query: %s", query)
 			if err := verifyScansOnNode(db, query, expectedNodes); err != nil {
 				if log.V(1) {

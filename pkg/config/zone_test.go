@@ -311,7 +311,7 @@ func TestZoneSpecifiers(t *testing.T) {
 				if e, a := tc.id, int(id); a != e {
 					t.Errorf("path %d did not match expected path %d", a, e)
 				}
-				if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(zs); e != a {
+				if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(&zs); e != a {
 					t.Errorf("expected %q to roundtrip, but got %q", e, a)
 				}
 				return nil
@@ -348,7 +348,7 @@ func TestZoneSpecifiers(t *testing.T) {
 			if tc.err != "" {
 				return
 			}
-			if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(zs); e != a {
+			if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(&zs); e != a {
 				t.Errorf("expected %q specifier for ID %d, but got %q", e, tc.id, a)
 			}
 		})

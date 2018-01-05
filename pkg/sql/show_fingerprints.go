@@ -101,15 +101,15 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 
 	cols := make([]string, 0, len(n.tableDesc.Columns))
 	addColumn := func(col sqlbase.ColumnDescriptor) {
-
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
+		cn := tree.Name(col.Name)
 		switch col.Type.SemanticType {
 		case sqlbase.ColumnType_BYTES:
-			cols = append(cols, fmt.Sprintf("%s:::bytes", tree.Name(col.Name)))
+			cols = append(cols, fmt.Sprintf("%s:::bytes", &cn))
 		default:
-			cols = append(cols, fmt.Sprintf("%s::string::bytes", tree.Name(col.Name)))
+			cols = append(cols, fmt.Sprintf("%s::string::bytes", &cn))
 		}
 	}
 

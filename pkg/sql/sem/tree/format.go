@@ -217,6 +217,12 @@ type NodeFormatter interface {
 	Format(ctx *FmtCtx)
 }
 
+// FormatName formats a string as a name.
+func (ctx *FmtCtx) FormatName(s string) {
+	n := Name(s)
+	ctx.FormatNode(&n)
+}
+
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {

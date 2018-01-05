@@ -73,7 +73,7 @@ type VarName interface {
 	NormalizeVarName() (VarName, error)
 }
 
-var _ VarName = UnresolvedName{}
+var _ VarName = &UnresolvedName{}
 var _ VarName = UnqualifiedStar{}
 var _ VarName = &AllColumnsSelector{}
 var _ VarName = &ColumnItem{}
@@ -95,14 +95,14 @@ func (UnqualifiedStar) ResolvedType() types.T {
 func (UnqualifiedStar) Variable() {}
 
 // ResolvedType implements the TypedExpr interface.
-func (UnresolvedName) ResolvedType() types.T {
+func (*UnresolvedName) ResolvedType() types.T {
 	panic("unresolved names ought to be replaced before this point")
 }
 
 // Variable implements the VariableExpr interface.  Although, the
 // UnresolvedName ought to be replaced to an IndexedVar before the points the
 // VariableExpr interface is used.
-func (UnresolvedName) Variable() {}
+func (*UnresolvedName) Variable() {}
 
 // AllColumnsSelector corresponds to a selection of all
 // columns in a table when used in a SELECT clause.
@@ -114,10 +114,10 @@ type AllColumnsSelector struct {
 // Format implements the NodeFormatter interface.
 func (a *AllColumnsSelector) Format(ctx *FmtCtx) {
 	if !a.TableName.DBNameOriginallyOmitted {
-		ctx.FormatNode(a.TableName.DatabaseName)
+		ctx.FormatNode(&a.TableName.DatabaseName)
 		ctx.WriteByte('.')
 	}
-	ctx.FormatNode(a.TableName.TableName)
+	ctx.FormatNode(&a.TableName.TableName)
 	ctx.WriteString(".*")
 }
 func (a *AllColumnsSelector) String() string { return AsString(a) }
@@ -151,18 +151,18 @@ type ColumnItem struct {
 func (c *ColumnItem) Format(ctx *FmtCtx) {
 	if c.TableName.TableName != "" {
 		if !c.TableName.DBNameOriginallyOmitted {
-			ctx.FormatNode(c.TableName.DatabaseName)
+			ctx.FormatNode(&c.TableName.DatabaseName)
 			ctx.WriteByte('.')
 		}
-		ctx.FormatNode(c.TableName.TableName)
+		ctx.FormatNode(&c.TableName.TableName)
 		ctx.WriteByte('.')
 	}
-	ctx.FormatNode(c.ColumnName)
+	ctx.FormatNode(&c.ColumnName)
 	if len(c.Selector) > 0 {
 		if _, ok := c.Selector[0].(*ArraySubscript); !ok {
 			ctx.WriteByte('.')
 		}
-		ctx.FormatNode(c.Selector)
+		ctx.FormatNode(&c.Selector)
 	}
 }
 func (c *ColumnItem) String() string { return AsString(c) }
@@ -194,22 +194,24 @@ func newInvColRef(fmt string, args ...interface{}) error {
 
 // NormalizeVarName normalizes a UnresolvedName for all the forms it can have
 // inside an expression context.
-func (n UnresolvedName) NormalizeVarName() (VarName, error) {
-	if len(n) == 0 {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid name: %q", n)
+func (n *UnresolvedName) NormalizeVarName() (VarName, error) {
+	if len(*n) == 0 {
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid name: %q", *n)
 	}
 
-	if s, isStar := n[len(n)-1].(UnqualifiedStar); isStar {
+	ln := len(*n)
+	if s, isStar := (*n)[ln-1].(UnqualifiedStar); isStar {
 		// Either a single '*' or a name of the form [db.]table.*
 
-		if len(n) == 1 {
+		if ln == 1 {
 			return s, nil
 		}
 
 		// The prefix before the star must be a valid table name.  Use the
 		// existing normalize code to enforce that, since we can reuse the
 		// resulting TableName.
-		t, err := n[:len(n)-1].normalizeTableNameAsValue()
+		tPref := (*n)[:ln-1]
+		t, err := tPref.normalizeTableNameAsValue()
 		if err != nil {
 			return nil, err
 		}
@@ -221,8 +223,8 @@ func (n UnresolvedName) NormalizeVarName() (VarName, error) {
 	// followed by a column name, followed by some additional selector.
 
 	// Find the first array subscript, if any.
-	i := len(n)
-	for j, p := range n {
+	i := ln
+	for j, p := range *n {
 		if _, ok := p.(*ArraySubscript); ok {
 			i = j
 			break
@@ -231,24 +233,25 @@ func (n UnresolvedName) NormalizeVarName() (VarName, error) {
 	// The element at position i - 1 must be the column name.
 	// (We don't support record types yet.)
 	if i == 0 {
-		return nil, newInvColRef("invalid column name: %q", n)
+		return nil, newInvColRef("invalid column name: %q", *n)
 	}
-	colName, ok := n[i-1].(Name)
+	colName, ok := (*n)[i-1].(*Name)
 	if !ok {
-		return nil, newInvColRef("invalid column name: %q", n[:i])
+		return nil, newInvColRef("invalid column name: %q", (*n)[:i])
 	}
-	if len(colName) == 0 {
-		return nil, newInvColRef("empty column name: %q", n)
+	if len(*colName) == 0 {
+		return nil, newInvColRef("empty column name: %q", *n)
 	}
 
 	// Everything afterwards is the selector.
-	res := &ColumnItem{ColumnName: colName, Selector: NameParts(n[i:])}
+	res := &ColumnItem{ColumnName: *colName, Selector: NameParts((*n)[i:])}
 
 	if i-1 > 0 {
 		// What's before must be a valid table name.  Use the existing
 		// normalize code to enforce that, since we can reuse the
 		// resulting TableName.
-		t, err := n[:i-1].normalizeTableNameAsValue()
+		tPref := (*n)[:i-1]
+		t, err := tPref.normalizeTableNameAsValue()
 		if err != nil {
 			return nil, err
 		}
@@ -261,20 +264,20 @@ func (n UnresolvedName) NormalizeVarName() (VarName, error) {
 // NormalizeUnqualifiedColumnItem normalizes a UnresolvedName for all
 // the forms it can have inside a context that requires an unqualified
 // column item (e.g. UPDATE LHS, INSERT, etc.).
-func (n UnresolvedName) NormalizeUnqualifiedColumnItem() (*ColumnItem, error) {
-	if len(n) == 0 {
-		return nil, newInvColRef("invalid column name: %q", n)
+func (n *UnresolvedName) NormalizeUnqualifiedColumnItem() (*ColumnItem, error) {
+	if len(*n) == 0 {
+		return nil, newInvColRef("invalid column name: %q", *n)
 	}
 
-	colName, ok := n[0].(Name)
+	colName, ok := (*n)[0].(*Name)
 	if !ok {
-		return nil, newInvColRef("invalid column name: %q", n)
+		return nil, newInvColRef("invalid column name: %q", *n)
 	}
 
-	if colName == "" {
-		return nil, newInvColRef("empty column name: %q", n)
+	if *colName == "" {
+		return nil, newInvColRef("empty column name: %q", *n)
 	}
 
 	// Remainder is a selector.
-	return &ColumnItem{ColumnName: colName, Selector: NameParts(n[1:])}, nil
+	return &ColumnItem{ColumnName: *colName, Selector: NameParts((*n)[1:])}, nil
 }

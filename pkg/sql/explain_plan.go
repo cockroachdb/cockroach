@@ -331,7 +331,7 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 		if i > 0 {
 			f.buf.WriteString(", ")
 		}
-		f.ctx.FormatNode(tree.Name(rCol.Name))
+		f.ctx.FormatName(rCol.Name)
 		// Output extra properties like [hidden,omitted].
 		hasProps := false
 		outputProp := func(prop string) {

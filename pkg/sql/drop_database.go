@@ -73,9 +73,10 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	if len(tbNames) > 0 {
 		switch n.DropBehavior {
 		case tree.DropRestrict:
+			n := tree.Name(dbDesc.Name)
 			return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
 				"database %q is not empty and RESTRICT was specified",
-				tree.ErrString(tree.Name(dbDesc.Name)))
+				tree.ErrString(&n))
 		case tree.DropDefault:
 			// The default is CASCADE, however be cautious if CASCADE was
 			// not specified explicitly.

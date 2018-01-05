@@ -28,20 +28,20 @@ var _ Statement = &Backup{}
 // Format implements the NodeFormatter interface.
 func (node *Backup) Format(ctx *FmtCtx) {
 	ctx.WriteString("BACKUP ")
-	ctx.FormatNode(node.Targets)
+	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" TO ")
 	ctx.FormatNode(node.To)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
-		ctx.FormatNode(node.AsOf)
+		ctx.FormatNode(&node.AsOf)
 	}
 	if node.IncrementalFrom != nil {
 		ctx.WriteString(" INCREMENTAL FROM ")
-		ctx.FormatNode(node.IncrementalFrom)
+		ctx.FormatNode(&node.IncrementalFrom)
 	}
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")
-		ctx.FormatNode(node.Options)
+		ctx.FormatNode(&node.Options)
 	}
 }
 
@@ -58,16 +58,16 @@ var _ Statement = &Restore{}
 // Format implements the NodeFormatter interface.
 func (node *Restore) Format(ctx *FmtCtx) {
 	ctx.WriteString("RESTORE ")
-	ctx.FormatNode(node.Targets)
+	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" FROM ")
-	ctx.FormatNode(node.From)
+	ctx.FormatNode(&node.From)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" EXPERIMENTAL ")
-		ctx.FormatNode(node.AsOf)
+		ctx.FormatNode(&node.AsOf)
 	}
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")
-		ctx.FormatNode(node.Options)
+		ctx.FormatNode(&node.Options)
 	}
 }
 
@@ -81,12 +81,12 @@ type KVOption struct {
 type KVOptions []KVOption
 
 // Format implements the NodeFormatter interface.
-func (o KVOptions) Format(ctx *FmtCtx) {
-	for i, n := range o {
+func (o *KVOptions) Format(ctx *FmtCtx) {
+	for i, n := range *o {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(n.Key)
+		ctx.FormatNode(&n.Key)
 		if n.Value != nil {
 			ctx.WriteString(` = `)
 			ctx.FormatNode(n.Value)

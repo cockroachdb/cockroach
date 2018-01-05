@@ -1499,7 +1499,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 				if err := addRow(
 					r[0], // id
-					tree.NewDString(config.CLIZoneSpecifier(zs)),
+					tree.NewDString(config.CLIZoneSpecifier(&zs)),
 					tree.NewDBytes(tree.DBytes(configYAML)),
 					tree.NewDBytes(tree.DBytes(configBytes)),
 				); err != nil {
@@ -1530,7 +1530,7 @@ CREATE TABLE crdb_internal.zones (
 					}
 					if err := addRow(
 						r[0], // id
-						tree.NewDString(config.CLIZoneSpecifier(zs)),
+						tree.NewDString(config.CLIZoneSpecifier(&zs)),
 						tree.NewDBytes(tree.DBytes(configYAML)),
 						tree.NewDBytes(tree.DBytes(configBytes)),
 					); err != nil {

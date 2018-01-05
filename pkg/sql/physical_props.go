@@ -261,7 +261,7 @@ func (pp *physicalProps) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 		if columns == nil || colIdx >= len(columns) {
 			fmt.Fprintf(buf, "@%d", colIdx+1)
 		} else {
-			fmtCtx.FormatNode(tree.Name(columns[colIdx].Name))
+			fmtCtx.FormatName(columns[colIdx].Name)
 		}
 	}
 

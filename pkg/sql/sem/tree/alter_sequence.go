@@ -30,5 +30,5 @@ func (node *AlterSequence) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF EXISTS ")
 	}
 	ctx.FormatNode(&node.Name)
-	ctx.FormatNode(node.Options)
+	ctx.FormatNode(&node.Options)
 }

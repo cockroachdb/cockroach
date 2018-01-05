@@ -44,11 +44,11 @@ func NewStatementList(stmts tree.StatementList) StatementList {
 	return sl
 }
 
-func (l StatementList) String() string { return tree.AsString(l) }
+func (l *StatementList) String() string { return tree.AsString(l) }
 
 // Format implements the NodeFormatter interface.
-func (l StatementList) Format(ctx *tree.FmtCtx) {
-	for i, s := range l {
+func (l *StatementList) Format(ctx *tree.FmtCtx) {
+	for i, s := range *l {
 		if i > 0 {
 			ctx.WriteString("; ")
 		}

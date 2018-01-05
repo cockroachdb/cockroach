@@ -45,7 +45,7 @@ func (node *Insert) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Table)
 	if node.Columns != nil {
 		ctx.WriteByte('(')
-		ctx.FormatNode(node.Columns)
+		ctx.FormatNode(&node.Columns)
 		ctx.WriteByte(')')
 	}
 	if node.DefaultValues() {
@@ -58,14 +58,14 @@ func (node *Insert) Format(ctx *FmtCtx) {
 		ctx.WriteString(" ON CONFLICT")
 		if len(node.OnConflict.Columns) > 0 {
 			ctx.WriteString(" (")
-			ctx.FormatNode(node.OnConflict.Columns)
+			ctx.FormatNode(&node.OnConflict.Columns)
 			ctx.WriteString(")")
 		}
 		if node.OnConflict.DoNothing {
 			ctx.WriteString(" DO NOTHING")
 		} else {
 			ctx.WriteString(" DO UPDATE SET ")
-			ctx.FormatNode(node.OnConflict.Exprs)
+			ctx.FormatNode(&node.OnConflict.Exprs)
 			if node.OnConflict.Where != nil {
 				ctx.FormatNode(node.OnConflict.Where)
 			}

@@ -89,9 +89,9 @@ func (node *Scatter) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SCATTER")
 	if node.From != nil {
 		ctx.WriteString(" FROM (")
-		ctx.FormatNode(node.From)
+		ctx.FormatNode(&node.From)
 		ctx.WriteString(") TO (")
-		ctx.FormatNode(node.To)
+		ctx.FormatNode(&node.To)
 		ctx.WriteString(")")
 	}
 }

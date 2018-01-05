@@ -34,12 +34,12 @@ func (node *SetVar) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET ")
 	if node.Name == nil {
 		ctx.WriteString("ROW (")
-		ctx.FormatNode(node.Values)
+		ctx.FormatNode(&node.Values)
 		ctx.WriteString(")")
 	} else {
 		ctx.FormatNode(node.Name)
 		ctx.WriteString(" = ")
-		ctx.FormatNode(node.Values)
+		ctx.FormatNode(&node.Values)
 	}
 }
 

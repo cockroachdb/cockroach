@@ -35,7 +35,7 @@ func (node *With) Format(ctx *FmtCtx) {
 		if i != 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(cte.Name)
+		ctx.FormatNode(&cte.Name)
 		ctx.WriteString(" AS (")
 		ctx.FormatNode(cte.Stmt)
 		ctx.WriteString(") ")
