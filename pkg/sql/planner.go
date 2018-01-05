@@ -48,6 +48,10 @@ type extendedEvalContext struct {
 
 	// StatusServer gives access to the Status service. Used to cancel queries.
 	StatusServer serverpb.StatusServer
+
+	// MemMetrics represent the group of metrics to which execution should
+	// contribute.
+	MemMetrics *MemoryMetrics
 }
 
 // planner is the centerpiece of SQL statement execution combining session
