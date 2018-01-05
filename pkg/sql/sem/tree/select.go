@@ -589,10 +589,13 @@ func (node *WindowDef) Format(ctx *FmtCtx) {
 		} else {
 			// We need to remove the initial space produced by OrderBy.Format.
 			// TODO(knz): this code is horrendous. Figure a way to remove it.
-			var tmpBuf bytes.Buffer
-			tmpCtx := MakeFmtCtx(&tmpBuf, ctx.flags)
-			tmpCtx.FormatNode(node.OrderBy)
-			ctx.WriteString(tmpBuf.String()[1:])
+			var f struct {
+				buf bytes.Buffer
+				ctx FmtCtx
+			}
+			f.ctx = MakeFmtCtx(&f.buf, ctx.flags)
+			f.ctx.FormatNode(node.OrderBy)
+			ctx.WriteString(f.buf.String()[1:])
 		}
 		needSpaceSeparator = true
 		_ = needSpaceSeparator // avoid compiler warning until TODO below is addressed.

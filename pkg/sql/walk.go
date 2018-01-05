@@ -197,14 +197,17 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "type", jType)
 
 			if len(n.pred.leftColNames) > 0 {
-				var buf bytes.Buffer
-				fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
-				buf.WriteByte('(')
-				fmtCtx.FormatNode(n.pred.leftColNames)
-				buf.WriteString(") = (")
-				fmtCtx.FormatNode(n.pred.rightColNames)
-				buf.WriteByte(')')
-				v.observer.attr(name, "equality", buf.String())
+				var f struct {
+					buf bytes.Buffer
+					ctx tree.FmtCtx
+				}
+				f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
+				f.buf.WriteByte('(')
+				f.ctx.FormatNode(n.pred.leftColNames)
+				f.buf.WriteString(") = (")
+				f.ctx.FormatNode(n.pred.rightColNames)
+				f.buf.WriteByte(')')
+				v.observer.attr(name, "equality", f.buf.String())
 			}
 			if len(n.mergeJoinOrdering) > 0 {
 				// The ordering refers to equality columns
