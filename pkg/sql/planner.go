@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -44,6 +45,9 @@ type extendedEvalContext struct {
 
 	// Tracing provides access to the session's tracing interface.
 	Tracing *SessionTracing
+
+	// StatusServer gives access to the Status service. Used to cancel queries.
+	StatusServer serverpb.StatusServer
 }
 
 // planner is the centerpiece of SQL statement execution combining session
