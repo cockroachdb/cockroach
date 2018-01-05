@@ -1217,6 +1217,7 @@ CockroachDB supports the following flags:
 			Category:   categorySystemInfo,
 			Impure:     true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				time.Sleep(100 * time.Millisecond)
 				return ctx.GetClusterTimestamp(), nil
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",

@@ -80,10 +80,10 @@ func (g *sillyseq) Ops() []workload.Operation {
 	table := g.Name()
 	// No RWU:
 	// qRead1 = `SELECT 1`
-	// Lots of RWU with distsql=auto, very few with distsql=on
-	qRead1 := fmt.Sprintf(`SELECT k FROM test.%s LIMIT 1`, table)
-	// Basically no RWUs, no matter the distsql mode.
-	// qRead1 := "SELECT CASE WHEN cluster_logical_timestamp()::string = 'foo' THEN 1 ELSE 0 END"
+	// Lots of RWU unless distsql=on
+	// qRead1 := fmt.Sprintf(`SELECT k FROM test.%s LIMIT 1`, table)
+	// Lots of RWUs unless distsql=on, but need to `time.Sleep(100*time.Millsecond)` in `cluster_logical_timestamp`.
+	qRead1 := "SELECT CASE WHEN cluster_logical_timestamp()::string = 'foo' THEN 1 ELSE 0 END"
 	// Nearly no RWUs, surprisingly:
 	// qRead1 := fmt.Sprintf(`SELECT COUNT(*) FROM test.%s`, table) // 6-10 over 1.6k ops. less with distsql off (0-3)
 	qRead2 := fmt.Sprintf(`SELECT COUNT(*) FROM test.%s`, table)
