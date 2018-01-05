@@ -81,10 +81,25 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, _, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
 				return err
 			}
+			// If the new column has a DEFAULT expression that uses a sequence, add references between
+			// its descriptor and this column descriptor.
+			if d.HasDefaultExpr() {
+				seqDesc, err := maybeAddSequenceDependency(n.tableDesc, col, expr, params.EvalContext())
+				if err != nil {
+					return err
+				}
+				if seqDesc != nil {
+					if err := params.p.writeTableDesc(params.ctx, seqDesc); err != nil {
+						return err
+					}
+					params.p.notifySchemaChange(seqDesc, sqlbase.InvalidMutationID)
+				}
+			}
+
 			// We're checking to see if a user is trying add a non-nullable column without a default to a
 			// non empty table by scanning the primary index span with a limit of 1 to see if any key exists.
 			if !col.Nullable && col.DefaultExpr == nil {
