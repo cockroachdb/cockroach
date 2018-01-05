@@ -402,7 +402,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	); err != nil {
 		if f.syncFlowConsumer != nil {
 			// For sync flows, the error goes to the consumer.
-			f.syncFlowConsumer.Push(nil /* row */, ProducerMetadata{Err: err})
+			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
@@ -494,7 +494,7 @@ func (f *Flow) cancel() {
 			// receiver and prevent it from being connected.
 			is.receiver.Push(
 				nil, /* row */
-				ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
+				&ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
 			is.receiver.ProducerDone()
 			f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
 		}

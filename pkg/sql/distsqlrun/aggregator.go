@@ -210,12 +210,13 @@ func (ag *aggregator) close() {
 // valuesProcessor ran out of rows or encountered an error. It is ok for err to
 // be nil indicating that we're done producing rows even though no error
 // occurred.
-func (ag *aggregator) producerMeta(err error) ProducerMetadata {
-	var meta ProducerMetadata
+func (ag *aggregator) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
 	if !ag.closed {
-		meta = ProducerMetadata{Err: err}
-		if err == nil {
-			meta.TraceData = getTraceData(ag.ctx)
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(ag.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
@@ -225,7 +226,7 @@ func (ag *aggregator) producerMeta(err error) ProducerMetadata {
 }
 
 // Next is part of the RowSource interface.
-func (ag *aggregator) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if ag.maybeStart("aggregator", "Agg") {
 		log.VEventf(ag.ctx, 2, "starting aggregation process")
 		ag.accumulating = true
@@ -234,7 +235,7 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 	if ag.accumulating {
 		for {
 			row, meta := ag.input.Next()
-			if !meta.Empty() {
+			if meta != nil {
 				if meta.Err != nil {
 					return nil, ag.producerMeta(meta.Err)
 				}
@@ -296,7 +297,7 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 
 		outRow, status, err := ag.out.ProcessRow(ag.ctx, ag.row)
 		if outRow != nil {
-			return outRow, ProducerMetadata{}
+			return outRow, nil
 		}
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue

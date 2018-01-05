@@ -58,7 +58,7 @@ func (s *streamGroupAccumulator) advanceGroup(
 			if meta.Err != nil {
 				return nil, meta.Err
 			}
-			_ = metadataSink.Push(nil /* row */, *meta)
+			_ = metadataSink.Push(nil /* row */, meta)
 			continue
 		}
 		return batch, nil
@@ -76,12 +76,8 @@ func (s *streamGroupAccumulator) nextGroup(
 
 	for {
 		row, meta := s.src.Next()
-		if !meta.Empty() {
-			// Return a new pointer. Doing this copy manually is much better than
-			// returning &meta because it doesn't force meta on to the heap.
-			t := &ProducerMetadata{}
-			*t = meta
-			return nil, t
+		if meta != nil {
+			return nil, meta
 		}
 		if row == nil {
 			s.srcConsumed = true

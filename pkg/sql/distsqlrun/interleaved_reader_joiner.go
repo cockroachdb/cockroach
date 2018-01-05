@@ -218,7 +218,7 @@ func (irj *interleavedReaderJoiner) sendMisplannedRangesMetadata(ctx context.Con
 	misplannedRanges := misplannedRanges(ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
 
 	if len(misplannedRanges) != 0 {
-		irj.out.output.Push(nil /* row */, ProducerMetadata{Ranges: misplannedRanges})
+		irj.out.output.Push(nil /* row */, &ProducerMetadata{Ranges: misplannedRanges})
 	}
 }
 
@@ -251,7 +251,7 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 		ctx, txn, irj.allSpans, true /* limit batches */, irj.limitHint, false, /* traceKV */
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
-		irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+		irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 		irj.out.Close()
 		return
 	}
@@ -261,13 +261,13 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 		if err != nil || row == nil {
 			if err != nil {
 				err = scrub.UnwrapScrubError(err)
-				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 			} else if irj.ancestorRow != nil && !irj.ancestorJoined {
 				// If the last row read is a parent, we may need to
 				// emit it unmatched for OUTER joins.
 				_, err := irj.maybeEmitUnmatchedRow(ctx, irj.ancestorRow, irj.ancestorJoinSide)
 				if err != nil {
-					irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+					irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 				}
 			}
 			break
@@ -290,7 +290,7 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 		tableRow, consumerStatus, err := tInfo.post.ProcessRow(ctx, row)
 		if err != nil || consumerStatus != NeedMoreRows {
 			if err != nil {
-				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 			}
 			break
 		}
@@ -342,7 +342,7 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 			&irj.flowCtx.EvalCtx,
 		)
 		if err != nil {
-			irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 			break
 		}
 
@@ -352,14 +352,14 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 		if cmp == 0 {
 			renderedRow, err := irj.render(lrow, rrow)
 			if err != nil {
-				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 				break
 			}
 			if renderedRow != nil {
 				consumerStatus, err = irj.out.EmitRow(ctx, renderedRow)
 				if err != nil || consumerStatus != NeedMoreRows {
 					if err != nil {
-						irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+						irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 					}
 					break
 				}
@@ -389,7 +389,7 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 		needMoreRows, err := irj.maybeEmitUnmatchedRow(ctx, tableRow, irj.descendantJoinSide)
 		if !needMoreRows || err != nil {
 			if err != nil {
-				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 			}
 			break
 		}
@@ -409,7 +409,7 @@ func (irj *interleavedReaderJoiner) maybeEmitUnmatchedAncestor(
 		needMoreRows, err := irj.maybeEmitUnmatchedRow(ctx, irj.ancestorRow, irj.ancestorJoinSide)
 		if !needMoreRows || err != nil {
 			if err != nil {
-				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
+				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 			}
 			return false
 		}

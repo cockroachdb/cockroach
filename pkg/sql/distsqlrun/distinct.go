@@ -132,12 +132,13 @@ func (d *distinct) close() {
 // valuesProcessor ran out of rows or encountered an error. It is ok for err to
 // be nil indicating that we're done producing rows even though no error
 // occurred.
-func (d *distinct) producerMeta(err error) ProducerMetadata {
-	var meta ProducerMetadata
+func (d *distinct) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
 	if !d.closed {
-		meta = ProducerMetadata{Err: err}
-		if err == nil {
-			meta.TraceData = getTraceData(d.ctx)
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(d.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
@@ -147,14 +148,14 @@ func (d *distinct) producerMeta(err error) ProducerMetadata {
 }
 
 // Next is part of the RowSource interface.
-func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if d.maybeStart("distinct", "Distinct") {
 		d.evalCtx = d.flowCtx.NewEvalCtx()
 	}
 
 	for {
 		row, meta := d.input.Next()
-		if d.closed || !meta.Empty() {
+		if d.closed || meta != nil {
 			return nil, meta
 		}
 		if row == nil {
@@ -210,7 +211,7 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 			continue
 		}
 
-		return outRow, ProducerMetadata{}
+		return outRow, nil
 	}
 }
 
