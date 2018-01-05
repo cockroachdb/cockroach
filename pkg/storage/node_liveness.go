@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -120,6 +121,7 @@ type NodeLiveness struct {
 	db                *client.DB
 	gossip            *gossip.Gossip
 	livenessThreshold time.Duration
+	renewalDuration   time.Duration
 	heartbeatInterval time.Duration
 	pauseHeartbeat    atomic.Value // contains a bool
 	selfSem           chan struct{}
@@ -152,6 +154,7 @@ func NewNodeLiveness(
 		db:                db,
 		gossip:            g,
 		livenessThreshold: livenessThreshold,
+		renewalDuration:   renewalDuration,
 		heartbeatInterval: livenessThreshold - renewalDuration,
 		selfSem:           make(chan struct{}, 1),
 		otherSem:          make(chan struct{}, 1),
@@ -169,6 +172,9 @@ func NewNodeLiveness(
 
 	livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 	nl.gossip.RegisterCallback(livenessRegex, nl.livenessGossipUpdate)
+
+	livenessSelfReportedRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessSelfReportedPrefix)
+	nl.gossip.RegisterCallback(livenessSelfReportedRegex, nl.livenessSelfReportedGossipUpdate)
 
 	return nl
 }
@@ -338,17 +344,16 @@ func (nl *NodeLiveness) StartHeartbeat(
 	stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("hb", nil)
-		ticker := time.NewTicker(nl.heartbeatInterval)
-		defer ticker.Stop()
-		incrementEpoch := true
+		var timer timeutil.Timer
+		defer timer.Stop()
+		firstHeartbeat := true
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				func() {
 					// Give the context a timeout approximately as long as the time we
 					// have left before our liveness entry expires.
-					ctx, cancel := context.WithTimeout(context.Background(), nl.livenessThreshold-nl.heartbeatInterval)
-					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "heartbeat")
-					defer cancel()
+					var sp opentracing.Span
+					ctx, sp = ambient.AnnotateCtxWithSpan(context.Background(), "heartbeat")
 					defer sp.Finish()
 
 					// Retry heartbeat in the event the conditional put fails.
@@ -357,21 +362,49 @@ func (nl *NodeLiveness) StartHeartbeat(
 						if err != nil && err != ErrNoLivenessRecord {
 							log.Errorf(ctx, "unexpected error getting liveness: %v", err)
 						}
-						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
-							if err == ErrEpochIncremented {
-								log.Infof(ctx, "%s; retrying", err)
-								continue
+						// Self-report this liveness via gossip optimistically. This prevents
+						// other nodes from incrementing our epoch in the event that the
+						// heartbeat is too slow due to excessive load on the liveness range.
+						if err == nil && !firstHeartbeat {
+							key := gossip.MakeNodeLivenessSelfReportedKey(liveness.NodeID)
+							if err := nl.gossip.AddInfoProto(key, liveness, 0); err != nil {
+								log.Warningf(ctx, "failed to gossip self-reported node liveness (%+v): %v", liveness, err)
 							}
-							log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
+						}
+						// Create a context with timeout for the actual node liveness.
+						ctxWithTimeout, cancel := context.WithTimeout(ctx, nl.renewalDuration)
+						err = nl.heartbeatInternal(ctxWithTimeout, liveness, firstHeartbeat /* incrementEpoch */)
+						cancel()
+						if err != nil {
+							if err == ErrEpochIncremented || err == context.Canceled {
+								log.Infof(ctx, "%s; retrying immediately", err)
+								r.Reset()
+							}
+							log.Warningf(ctx, "failed node liveness heartbeat (retrying): %v", err)
+							continue
 						} else {
-							incrementEpoch = false // don't increment epoch after first heartbeat
+							firstHeartbeat = false // don't increment epoch after first heartbeat
 						}
 						break
 					}
 				}()
 			}
+
+			// Compute our next heartbeat based on current expiration.
+			heartbeatIn := nl.heartbeatInterval
+			if liveness, err := nl.Self(); err != nil {
+				log.Errorf(ctx, "unexpected error getting liveness: %v", err)
+			} else {
+				expiresIn := time.Duration(liveness.Expiration.WallTime - nl.clock.Now().WallTime)
+				if expiresIn < nl.livenessThreshold {
+					heartbeatIn = expiresIn - nl.renewalDuration
+				}
+			}
+
+			timer.Reset(heartbeatIn)
 			select {
-			case <-ticker.C:
+			case <-timer.C:
+				timer.Read = true
 			case <-nl.triggerHeartbeat:
 			case <-stopper.ShouldStop():
 				return
@@ -761,6 +794,28 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	}
 
 	nl.maybeUpdate(liveness)
+}
+
+// livenessSelfReportedGossipUpdate is the gossip callback for
+// liveness information self-reported optimistically by nodes in
+// advance of sending a liveness heartbeat. The liveness of any nodes
+// other than self is updated, giving other nodes the benefit of the
+// doubt when considering whether they're not live and should have
+// their epochs incremented.
+func (nl *NodeLiveness) livenessSelfReportedGossipUpdate(key string, content roachpb.Value) {
+	var liveness Liveness
+	if err := content.GetProto(&liveness); err != nil {
+		log.Error(context.TODO(), err)
+		return
+	}
+
+	// Only update other nodes' liveness records to give them the
+	// benefit of the doubt. We must never do so with our own, which we
+	// use as a guarantee of our ability to act based on epoch range
+	// leases.
+	if liveness.NodeID != nl.gossip.NodeID.Get() {
+		nl.maybeUpdate(liveness)
+	}
 }
 
 // numLiveNodes is used to populate a metric that tracks the number of live
