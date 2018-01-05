@@ -97,16 +97,19 @@ func (n *DropUserNode) startExec(params runParams) error {
 		userNames[normalizedUsername] = struct{}{}
 	}
 
-	var usedBy bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&usedBy, tree.FmtSimple)
+	var f struct {
+		usedBy bytes.Buffer
+		ctx    tree.FmtCtx
+	}
+	f.ctx = tree.MakeFmtCtx(&f.usedBy, tree.FmtSimple)
 	if err := forEachDatabaseDesc(params.ctx, params.p,
 		func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
-					if usedBy.Len() > 0 {
-						usedBy.WriteString(", ")
+					if f.usedBy.Len() > 0 {
+						f.usedBy.WriteString(", ")
 					}
-					fmtCtx.FormatNode(tree.Name(db.Name))
+					f.ctx.FormatNode(tree.Name(db.Name))
 				}
 			}
 			return nil
@@ -121,28 +124,32 @@ func (n *DropUserNode) startExec(params runParams) error {
 						DatabaseName: tree.Name(db.Name),
 						TableName:    tree.Name(table.Name),
 					}
-					if usedBy.Len() > 0 {
-						usedBy.WriteString(", ")
+					if f.usedBy.Len() > 0 {
+						f.usedBy.WriteString(", ")
 					}
-					fmtCtx.FormatNode(&tn)
+					f.ctx.FormatNode(&tn)
 				}
 			}
 			return nil
 		}); err != nil {
 		return err
 	}
-	if usedBy.Len() > 0 {
-		var nameList bytes.Buffer
-		nameListFmtCtx := tree.MakeFmtCtx(&nameList, tree.FmtSimple)
+	if f.usedBy.Len() > 0 {
+		var fnl struct {
+			nameList bytes.Buffer
+			ctx      tree.FmtCtx
+		}
+		fnl.ctx = tree.MakeFmtCtx(&fnl.nameList, tree.FmtSimple)
 		for i, name := range names {
 			if i > 0 {
-				nameList.WriteString(", ")
+				fnl.nameList.WriteString(", ")
 			}
-			nameListFmtCtx.FormatNode(tree.Name(name))
+			fnl.ctx.FormatNode(tree.Name(name))
 		}
 		return pgerror.NewErrorf(pgerror.CodeGroupingError,
 			"cannot drop user%s or role%s %s: grants still exist on %s",
-			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))), nameList.String(), usedBy.String(),
+			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
+			fnl.nameList.String(), f.usedBy.String(),
 		)
 	}
 

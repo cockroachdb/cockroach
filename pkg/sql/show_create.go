@@ -92,19 +92,22 @@ func (p *planner) ShowCreateSequence(
 func (p *planner) showCreateView(
 	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
-	var buf bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
-	buf.WriteString("CREATE VIEW ")
-	fmtCtx.FormatNode(tn)
-	buf.WriteString(" (")
+	var f struct {
+		buf bytes.Buffer
+		ctx tree.FmtCtx
+	}
+	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
+	f.buf.WriteString("CREATE VIEW ")
+	f.ctx.FormatNode(tn)
+	f.buf.WriteString(" (")
 	for i, col := range desc.Columns {
 		if i > 0 {
-			buf.WriteString(", ")
+			f.buf.WriteString(", ")
 		}
-		fmtCtx.FormatNode(tree.Name(col.Name))
+		f.ctx.FormatNode(tree.Name(col.Name))
 	}
-	fmt.Fprintf(&buf, ") AS %s", desc.ViewQuery)
-	return buf.String(), nil
+	fmt.Fprintf(&f.buf, ") AS %s", desc.ViewQuery)
+	return f.buf.String(), nil
 }
 
 func (p *planner) printForeignKeyConstraint(
@@ -151,19 +154,22 @@ func (p *planner) printForeignKeyConstraint(
 func (p *planner) showCreateSequence(
 	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
-	var buf bytes.Buffer
-	buf.WriteString("CREATE SEQUENCE ")
-	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
-	fmtCtx.FormatNode(tn)
-	opts := desc.SequenceOpts
-	fmt.Fprintf(&buf, " MINVALUE %d", opts.MinValue)
-	fmt.Fprintf(&buf, " MAXVALUE %d", opts.MaxValue)
-	fmt.Fprintf(&buf, " INCREMENT %d", opts.Increment)
-	fmt.Fprintf(&buf, " START %d", opts.Start)
-	if opts.Cycle {
-		buf.WriteString(" CYCLE")
+	var f struct {
+		buf bytes.Buffer
+		ctx tree.FmtCtx
 	}
-	return buf.String(), nil
+	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
+	f.buf.WriteString("CREATE SEQUENCE ")
+	f.ctx.FormatNode(tn)
+	opts := desc.SequenceOpts
+	fmt.Fprintf(&f.buf, " MINVALUE %d", opts.MinValue)
+	fmt.Fprintf(&f.buf, " MAXVALUE %d", opts.MaxValue)
+	fmt.Fprintf(&f.buf, " INCREMENT %d", opts.Increment)
+	fmt.Fprintf(&f.buf, " START %d", opts.Start)
+	if opts.Cycle {
+		f.buf.WriteString(" CYCLE")
+	}
+	return f.buf.String(), nil
 }
 
 // showCreateTable returns a valid SQL representation of the CREATE
