@@ -103,7 +103,7 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 	var res sqlbase.EncDatumRows
 	for {
 		row, meta := out.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			return nil, errors.Errorf("unexpected metadata: %v", meta)
 		}
 		if row == nil {

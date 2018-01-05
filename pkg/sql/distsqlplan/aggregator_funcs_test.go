@@ -85,7 +85,7 @@ func runTestFlow(
 	var res sqlbase.EncDatumRows
 	for {
 		row, meta := rowBuf.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			t.Fatalf("unexpected metadata: %v", meta)
 		}
 		if row == nil {

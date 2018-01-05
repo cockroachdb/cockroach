@@ -612,7 +612,7 @@ func checkExpectedRows(
 	var rets []string
 	for {
 		row, meta := results.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			return errors.Errorf("unexpected metadata: %v", meta)
 		}
 		if row == nil {
@@ -791,14 +791,14 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		rightInputDrainNotification <- nil
 	}
 	rightErrorReturned := false
-	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, ProducerMetadata) {
+	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, *ProducerMetadata) {
 		if !rightErrorReturned {
 			rightErrorReturned = true
 			// The right input is going to return an error as the first thing.
-			return nil, ProducerMetadata{Err: errors.Errorf("Test error. Please drain.")}
+			return nil, &ProducerMetadata{Err: errors.Errorf("Test error. Please drain.")}
 		}
 		// Let RowBuffer.Next() do its usual thing.
-		return nil, ProducerMetadata{}
+		return nil, nil
 	}
 	leftInput := NewRowBuffer(
 		oneIntCol,

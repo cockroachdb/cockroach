@@ -275,7 +275,7 @@ func (h *hashJoiner) receiveRow(
 	for {
 		row, meta := src.Next()
 		if row == nil {
-			if meta.Empty() {
+			if meta == nil {
 				// Done.
 				return nil, false, nil
 			}

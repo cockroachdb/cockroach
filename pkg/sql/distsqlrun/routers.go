@@ -78,7 +78,7 @@ type routerOutput struct {
 		cond         *sync.Cond
 		streamStatus ConsumerStatus
 
-		metadataBuf []ProducerMetadata
+		metadataBuf []*ProducerMetadata
 		// The "level 1" row buffer is used first, to avoid going through the row
 		// container if we don't need to buffer many rows. The buffer is a circular
 		// FIFO queue, with rowBufLen elements and the left-most (oldest) element at
@@ -97,7 +97,7 @@ type routerOutput struct {
 	// false-sharing?
 }
 
-func (ro *routerOutput) addMetadataLocked(meta ProducerMetadata) {
+func (ro *routerOutput) addMetadataLocked(meta *ProducerMetadata) {
 	// We don't need any fancy buffering because normally there is not a lot of
 	// metadata being passed around.
 	ro.mu.metadataBuf = append(ro.mu.metadataBuf, meta)
@@ -227,7 +227,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					m := ro.mu.metadataBuf[0]
 					// Reset the value so any objects it refers to can be garbage
 					// collected.
-					ro.mu.metadataBuf[0] = ProducerMetadata{}
+					ro.mu.metadataBuf[0] = nil
 					ro.mu.metadataBuf = ro.mu.metadataBuf[1:]
 
 					ro.mu.Unlock()
@@ -248,7 +248,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					ro.mu.Unlock()
 					rb.semaphore <- struct{}{}
 					for _, row := range rows {
-						status := ro.stream.Push(row, ProducerMetadata{})
+						status := ro.stream.Push(row, nil)
 						rb.updateStreamState(&streamStatus, status)
 					}
 					<-rb.semaphore
@@ -306,8 +306,8 @@ func (rb *routerBase) updateStreamState(streamStatus *ConsumerStatus, newState C
 
 // fwdMetadata forwards a metadata record to the first stream that's still
 // accepting data.
-func (rb *routerBase) fwdMetadata(meta ProducerMetadata) {
-	if meta.Empty() {
+func (rb *routerBase) fwdMetadata(meta *ProducerMetadata) {
+	if meta == nil {
 		log.Fatalf(context.TODO(), "asked to fwd empty metadata")
 	}
 
@@ -384,9 +384,9 @@ func makeMirrorRouter(rb routerBase) (router, error) {
 }
 
 // Push is part of the RowReceiver interface.
-func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	aggStatus := mr.aggStatus()
-	if !meta.Empty() {
+	if meta != nil {
 		mr.fwdMetadata(meta)
 		return aggStatus
 	}
@@ -408,7 +408,7 @@ func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Con
 			if useSema {
 				<-mr.semaphore
 			}
-			mr.fwdMetadata(ProducerMetadata{Err: err})
+			mr.fwdMetadata(&ProducerMetadata{Err: err})
 			atomic.StoreUint32(&mr.aggregatedStatus, uint32(ConsumerClosed))
 			return ConsumerClosed
 		}
@@ -436,9 +436,9 @@ func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
 //
 // If, according to the hash, the row needs to go to a consumer that's draining
 // or closed, the row is silently dropped.
-func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	aggStatus := hr.aggStatus()
-	if !meta.Empty() {
+	if meta != nil {
 		hr.fwdMetadata(meta)
 		// fwdMetadata can change the status, re-read it.
 		return hr.aggStatus()
@@ -464,7 +464,7 @@ func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Consu
 		<-hr.semaphore
 	}
 	if err != nil {
-		hr.fwdMetadata(ProducerMetadata{Err: err})
+		hr.fwdMetadata(&ProducerMetadata{Err: err})
 		atomic.StoreUint32(&hr.aggregatedStatus, uint32(ConsumerClosed))
 		return ConsumerClosed
 	}
@@ -522,9 +522,9 @@ func makeRangeRouter(rb routerBase, spec OutputRouterSpec_RangeRouterSpec) (*ran
 	}, nil
 }
 
-func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	aggStatus := rr.aggStatus()
-	if !meta.Empty() {
+	if meta != nil {
 		rr.fwdMetadata(meta)
 		// fwdMetadata can change the status, re-read it.
 		return rr.aggStatus()
@@ -547,7 +547,7 @@ func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Cons
 		<-rr.semaphore
 	}
 	if err != nil {
-		rr.fwdMetadata(ProducerMetadata{Err: err})
+		rr.fwdMetadata(&ProducerMetadata{Err: err})
 		atomic.StoreUint32(&rr.aggregatedStatus, uint32(ConsumerClosed))
 		return ConsumerClosed
 	}

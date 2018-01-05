@@ -41,7 +41,7 @@ func ProcessInboundStream(
 	// as the last record that the producer gets.
 	if err != nil {
 		log.VEventf(ctx, 1, "inbound stream error: %s", err)
-		dst.Push(nil, ProducerMetadata{Err: err})
+		dst.Push(nil, &ProducerMetadata{Err: err})
 		dst.ProducerDone()
 		return err
 	}
@@ -99,7 +99,7 @@ func processInboundStreamHelper(
 			if err != nil {
 				return err
 			}
-			if row == nil && meta.Empty() {
+			if row == nil && meta == nil {
 				// No more rows in the last message.
 				break
 			}
@@ -110,7 +110,7 @@ func processInboundStreamHelper(
 				}
 				log.Infof(ctx, "inbound stream pushing row %s", row.String(types))
 			}
-			if draining && meta.Empty() {
+			if draining && meta == nil {
 				// Don't forward data rows when we're draining.
 				continue
 			}
