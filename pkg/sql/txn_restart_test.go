@@ -129,7 +129,7 @@ func injectErrors(
 		// injection for some additional randomness.
 		injections := injectionApproaches{
 			{counts: magicVals.restartCounts, errFn: func() error {
-				return roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{})
+				return roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil)
 			}},
 			{counts: magicVals.abortCounts, errFn: func() error {
 				return roachpb.NewTransactionAbortedError()
@@ -1311,7 +1311,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 					txn.ResetObservedTimestamps()
 					now := s.Clock().Now()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), txn)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now, txn), txn)
 				}
 			}
 			return nil
@@ -1379,7 +1379,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 					txn.ResetObservedTimestamps()
 					now := s.Clock().Now()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), txn)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now, txn), txn)
 				}
 			}
 			return nil
@@ -1471,7 +1471,8 @@ func TestDistSQLRetryableError(t *testing.T) {
 									restarted = true
 									err := roachpb.NewReadWithinUncertaintyIntervalError(
 										fArgs.Hdr.Timestamp, /* readTS */
-										hlc.Timestamp{})
+										hlc.Timestamp{},
+										nil)
 									errTxn := fArgs.Hdr.Txn.Clone()
 									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.Timestamp{})
 									pErr := roachpb.NewErrorWithTxn(err, &errTxn)
