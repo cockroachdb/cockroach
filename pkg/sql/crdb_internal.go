@@ -674,7 +674,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "node_queries"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
+		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -688,7 +688,7 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
+		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -767,7 +767,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
+		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -781,7 +781,7 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
+		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}

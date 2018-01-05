@@ -50,7 +50,7 @@ func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNod
 }
 
 func (n *cancelQueryNode) startExec(params runParams) error {
-	statusServer := params.p.session.execCfg.StatusServer
+	statusServer := params.extendedEvalCtx.StatusServer
 
 	queryIDDatum, err := n.queryID.Eval(params.EvalContext())
 	if err != nil {

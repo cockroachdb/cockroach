@@ -623,11 +623,13 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 func (s *Session) extendedEvalCtx() extendedEvalContext {
 	var evalContextTestingKnobs tree.EvalContextTestingKnobs
 	var st *cluster.Settings
+	var statusServer serverpb.StatusServer
 	if s.execCfg != nil {
 		evalContextTestingKnobs = s.execCfg.EvalContextTestingKnobs
 		// TODO(tschottdorf): it looks like this should always be provided.
 		// Perhaps `*Settings` should live somewhere else.
 		st = s.execCfg.Settings
+		statusServer = s.execCfg.StatusServer
 	}
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
@@ -642,6 +644,7 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 		},
 		VirtualSchemas: &s.virtualSchemas,
 		Tracing:        &s.Tracing,
+		StatusServer:   statusServer,
 	}
 }
 
