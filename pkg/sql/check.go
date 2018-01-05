@@ -161,9 +161,9 @@ func (p *planner) validateCheckExpr(
 		return err
 	}
 	params := runParams{
-		ctx:     ctx,
-		evalCtx: &p.evalCtx,
-		p:       p,
+		ctx:             ctx,
+		extendedEvalCtx: &p.extendedEvalCtx,
+		p:               p,
 	}
 	if err := startPlan(params, rows); err != nil {
 		return err

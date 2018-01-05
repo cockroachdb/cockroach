@@ -44,7 +44,7 @@ func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error
 
 	p.semaCtx.Placeholders.Assign(newPInfo)
 
-	return p.newPlan(ctx, ps.Statement, nil)
+	return p.newPlan(ctx, ps.Statement, nil /* desiredTypes */)
 }
 
 // getPreparedStatementForExecute implements the EXECUTE foo(args) SQL
@@ -75,7 +75,7 @@ func getPreparedStatementForExecute(
 		if err != nil {
 			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
-		if err := t.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
+		if err := t.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.data.SearchPath); err != nil {
 			return ps, pInfo, err
 		}
 		qArgs[idx] = typedExpr

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -342,7 +343,7 @@ func (r *renderNode) Next(params runParams) (bool, error) {
 
 	r.run.curSourceRow = r.source.plan.Values()
 
-	err := r.renderRow(params.evalCtx)
+	err := r.renderRow(params.EvalContext())
 	return err == nil, err
 }
 
@@ -381,7 +382,7 @@ func (p *planner) initTargets(
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we rewrite SRFs below.
-		outputName, err := getRenderColName(p.session.SearchPath, target, &r.ivarHelper)
+		outputName, err := getRenderColName(p.SessionData().SearchPath, target, &r.ivarHelper)
 		if err != nil {
 			return err
 		}
@@ -483,7 +484,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
 		// subqueries or view queries) but they must all point to the same
 		// timestamp.
-		ts, err := EvalAsOfTimestamp(&p.evalCtx, asOf, hlc.MaxTimestamp)
+		ts, err := EvalAsOfTimestamp(p.EvalContext(), asOf, hlc.MaxTimestamp)
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}
@@ -506,7 +507,7 @@ type srfExtractionVisitor struct {
 	err        error
 	srf        *tree.FuncExpr
 	ivarHelper *tree.IndexedVarHelper
-	searchPath tree.SearchPath
+	searchPath sessiondata.SearchPath
 }
 
 var _ tree.Visitor = &srfExtractionVisitor{}
@@ -556,7 +557,7 @@ func (p *planner) rewriteSRFs(
 		err:        nil,
 		srf:        nil,
 		ivarHelper: &r.ivarHelper,
-		searchPath: p.session.SearchPath,
+		searchPath: p.SessionData().SearchPath,
 	}
 	expr, _ := tree.WalkExpr(v, target.Expr)
 	if v.err != nil {
@@ -614,7 +615,7 @@ func (p *planner) initWhere(
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
 		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			f.filter, "WHERE", p.session.SearchPath,
+			f.filter, "WHERE", p.SessionData().SearchPath,
 		); err != nil {
 			return nil, err
 		}
@@ -630,7 +631,7 @@ func (p *planner) initWhere(
 
 // getRenderColName returns the output column name for a render expression.
 func getRenderColName(
-	searchPath tree.SearchPath, target tree.SelectExpr, helper *tree.IndexedVarHelper,
+	searchPath sessiondata.SearchPath, target tree.SelectExpr, helper *tree.IndexedVarHelper,
 ) (string, error) {
 	if target.As != "" {
 		return string(target.As), nil

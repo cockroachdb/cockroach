@@ -73,7 +73,7 @@ func (p *planner) Values(
 
 		for i, expr := range tuple.Exprs {
 			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				expr, "VALUES", p.session.SearchPath,
+				expr, "VALUES", p.SessionData().SearchPath,
 			); err != nil {
 				return nil, err
 			}
@@ -141,7 +141,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
-		params.evalCtx.Mon.MakeBoundAccount(),
+		params.extendedEvalCtx.Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
 		len(n.n.Tuples),
 	)
@@ -153,7 +153,7 @@ func (n *valuesNode) startExec(params runParams) error {
 				row[i] = tree.DNull
 			} else {
 				var err error
-				row[i], err = typedExpr.Eval(params.evalCtx)
+				row[i], err = typedExpr.Eval(params.EvalContext())
 				if err != nil {
 					return err
 				}

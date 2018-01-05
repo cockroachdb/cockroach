@@ -27,9 +27,9 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 	// Ensure both versions stay in sync.
 	switch n.Modes.Isolation {
 	case tree.SerializableIsolation:
-		p.session.DefaultIsolationLevel = enginepb.SERIALIZABLE
+		p.sessionDataMutator.SetDefaultIsolationLevel(enginepb.SERIALIZABLE)
 	case tree.SnapshotIsolation:
-		p.session.DefaultIsolationLevel = enginepb.SNAPSHOT
+		p.sessionDataMutator.SetDefaultIsolationLevel(enginepb.SNAPSHOT)
 	case tree.UnspecifiedIsolation:
 	default:
 		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Modes.Isolation)
@@ -37,9 +37,9 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 
 	switch n.Modes.ReadWriteMode {
 	case tree.ReadOnly:
-		p.session.DefaultReadOnly = true
+		p.sessionDataMutator.SetDefaultReadOnly(true)
 	case tree.ReadWrite:
-		p.session.DefaultReadOnly = false
+		p.sessionDataMutator.SetDefaultReadOnly(false)
 	case tree.UnspecifiedReadWriteMode:
 	default:
 		return nil, fmt.Errorf("unsupported default read write mode: %s", n.Modes.ReadWriteMode)

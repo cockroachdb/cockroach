@@ -94,13 +94,13 @@ func (ie InternalExecutor) GetTableSpan(
 }
 
 func (ie InternalExecutor) initSession(p *planner) {
-	p.evalCtx.NodeID = ie.LeaseManager.LeaseStore.nodeID.Get()
+	p.extendedEvalCtx.NodeID = ie.LeaseManager.LeaseStore.nodeID.Get()
 	p.session.tables.leaseMgr = ie.LeaseManager
 }
 
 // getTableID retrieves the table ID for the specified table.
 func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID, error) {
-	if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+	if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
 		return 0, err
 	}
 

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -259,11 +260,13 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	evalCtx := tree.EvalContext{
-		Settings:     ds.ServerConfig.Settings,
-		Location:     &location,
-		Database:     req.EvalContext.Database,
-		User:         req.EvalContext.User,
-		SearchPath:   tree.MakeSearchPath(req.EvalContext.SearchPath),
+		Settings: ds.ServerConfig.Settings,
+		SessionData: sessiondata.SessionData{
+			Location:   location,
+			Database:   req.EvalContext.Database,
+			User:       req.EvalContext.User,
+			SearchPath: sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+		},
 		ClusterID:    ds.ServerConfig.ClusterID,
 		NodeID:       nodeID,
 		ReCache:      ds.regexpCache,

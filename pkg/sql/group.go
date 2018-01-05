@@ -103,7 +103,7 @@ func (p *planner) groupBy(
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
-	if isAggregate := p.txCtx.IsAggregate(n, p.session.SearchPath); !isAggregate {
+	if isAggregate := p.txCtx.IsAggregate(n, p.SessionData().SearchPath); !isAggregate {
 		return nil, nil, nil
 	}
 
@@ -164,7 +164,7 @@ func (p *planner) groupBy(
 		}
 
 		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			expr, "GROUP BY", p.session.SearchPath,
+			expr, "GROUP BY", p.SessionData().SearchPath,
 		); err != nil {
 			return nil, nil, err
 		}
@@ -321,7 +321,7 @@ func (p *planner) groupBy(
 		log.Infof(ctx, "Group: %s", strings.Join(strs, ", "))
 	}
 
-	group.desiredOrdering = group.desiredAggregateOrdering(&p.evalCtx)
+	group.desiredOrdering = group.desiredAggregateOrdering(p.EvalContext())
 
 	return plan, group, nil
 }
@@ -394,7 +394,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 				value = values[f.argRenderIdx]
 			}
 
-			if err := f.add(params.ctx, params.evalCtx, bucket, value); err != nil {
+			if err := f.add(params.ctx, params.EvalContext(), bucket, value); err != nil {
 				return false, err
 			}
 		}
@@ -421,7 +421,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			// No input for this bucket (possible if f has a FILTER).
 			// In most cases the result is NULL but there are exceptions
 			// (like COUNT).
-			aggregateFunc = f.create(params.evalCtx)
+			aggregateFunc = f.create(params.EvalContext())
 		}
 		var err error
 		n.run.values[i], err = aggregateFunc.Result()
@@ -554,7 +554,8 @@ func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *tree.
 	// We care about the name of the groupNode columns as an optimization: we want
 	// them to match the post-render node's columns if the post-render expressions
 	// are trivial (so the renderNode can be elided).
-	colName, err := getRenderColName(v.planner.session.SearchPath, tree.SelectExpr{Expr: f.expr}, &v.preRender.ivarHelper)
+	colName, err := getRenderColName(
+		v.planner.SessionData().SearchPath, tree.SelectExpr{Expr: f.expr}, &v.preRender.ivarHelper)
 	if err != nil {
 		colName = fmt.Sprintf("agg%d", renderIdx)
 	} else if strings.ToLower(colName) == "count_rows()" {
@@ -612,7 +613,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					argExpr,
 					fmt.Sprintf("the argument of %s()", &t.Func),
-					v.planner.session.SearchPath,
+					v.planner.SessionData().SearchPath,
 				); err != nil {
 					v.err = err
 					return false, expr
@@ -648,7 +649,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 				filterExpr := t.Filter.(tree.TypedExpr)
 
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
-					filterExpr, "FILTER", v.planner.session.SearchPath,
+					filterExpr, "FILTER", v.planner.SessionData().SearchPath,
 				); err != nil {
 					v.err = err
 					return false, expr

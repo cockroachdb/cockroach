@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // SemaContext defines the context in which to perform semantic analysis on an
@@ -41,7 +42,7 @@ type SemaContext struct {
 	// SearchPath indicates where to search for unqualified function
 	// names. The path elements must be normalized via Name.Normalize()
 	// already.
-	SearchPath SearchPath
+	SearchPath sessiondata.SearchPath
 
 	// privileged, if true, enables "unsafe" builtins, e.g. those
 	// from the crdb_internal namespace. Must be set only for
@@ -453,7 +454,7 @@ var (
 
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	var searchPath SearchPath
+	var searchPath sessiondata.SearchPath
 	if ctx != nil {
 		searchPath = ctx.SearchPath
 	}

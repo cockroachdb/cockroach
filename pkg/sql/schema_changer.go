@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -387,7 +388,9 @@ func (sc *SchemaChanger) maybeAddDropRename(
 // Execute the entire schema change in steps.
 // inSession is set to false when this is called from the asynchronous
 // schema change execution path.
-func (sc *SchemaChanger) exec(ctx context.Context, inSession bool, evalCtx tree.EvalContext) error {
+func (sc *SchemaChanger) exec(
+	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
+) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
@@ -489,7 +492,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 	ctx context.Context,
 	err error,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 ) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
 	if err := sc.job.Failed(ctx, err, jobs.NoopFn); err != nil {
@@ -507,7 +510,9 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 
 	// After this point the schema change has been reversed and any retry
 	// of the schema change will act upon the reversed schema change.
-	if errPurge := sc.runStateMachineAndBackfill(ctx, lease, evalCtx, true /* isRollback */); errPurge != nil {
+	if errPurge := sc.runStateMachineAndBackfill(
+		ctx, lease, evalCtx, true, /* isRollback */
+	); errPurge != nil {
 		// Don't return this error because we do want the caller to know
 		// that an integrity constraint was violated with the original
 		// schema change. The reversed schema change will be
@@ -692,7 +697,7 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
 func (sc *SchemaChanger) runStateMachineAndBackfill(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 	isRollback bool,
 ) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
@@ -1126,7 +1131,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						evalCtx := createSchemaChangeEvalCtx(s.clock.Now())
 
 						execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
-						err := sc.exec(execCtx, false /* inSession */, evalCtx)
+						err := sc.exec(execCtx, false /* inSession */, &evalCtx)
 						cleanup()
 
 						// Advance the execAfter time so that this schema
@@ -1162,24 +1167,28 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 	})
 }
 
-// createSchemaChangeEvalCtx creates an EvalContext to be used for backfills.
+// createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
 //
-// TODO(andrei): This EvalContext will be broken for backfills trying to use
+// TODO(andrei): This EvalContext() will be broken for backfills trying to use
 // functions marked with distsqlBlacklist.
-func createSchemaChangeEvalCtx(ts hlc.Timestamp) tree.EvalContext {
+func createSchemaChangeEvalCtx(ts hlc.Timestamp) extendedEvalContext {
 	dummyLocation := time.UTC
-	evalCtx := tree.EvalContext{
-		SearchPath: sqlbase.DefaultSearchPath,
-		Location:   &dummyLocation,
-		// The database is not supposed to be needed in schema changes, as there
-		// shouldn't be unqualified identifiers in backfills, and the pure functions
-		// that need it should have already been evaluated.
-		//
-		// TODO(andrei): find a way to assert that this field is indeed not used.
-		// And in fact it is used by `current_schemas()`, which, although is a pure
-		// function, takes arguments which might be impure (so it can't always be
-		// pre-evaluated).
-		Database: "",
+	evalCtx := extendedEvalContext{
+		EvalContext: tree.EvalContext{
+			SessionData: sessiondata.SessionData{
+				SearchPath: sqlbase.DefaultSearchPath,
+				Location:   dummyLocation,
+				// The database is not supposed to be needed in schema changes, as there
+				// shouldn't be unqualified identifiers in backfills, and the pure functions
+				// that need it should have already been evaluated.
+				//
+				// TODO(andrei): find a way to assert that this field is indeed not used.
+				// And in fact it is used by `current_schemas()`, which, although is a pure
+				// function, takes arguments which might be impure (so it can't always be
+				// pre-evaluated).
+				Database: "",
+			},
+		},
 	}
 	// The backfill is going to use the current timestamp for the various
 	// functions, like now(), that need it.  It's possible that the backfill has

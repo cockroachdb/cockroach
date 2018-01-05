@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -2003,10 +2004,30 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
-// ATTENTION: Fields from this struct are also represented in
-// distsqlrun.EvalContext. Make sure to keep the two in sync.
+// ATTENTION: Some fields from this struct (particularly, but not exclusively,
+// from SessionData) are also represented in distsqlrun.EvalContext. Whenever
+// something that affects DistSQL execution is added, it needs to be marshaled
+// through that proto too.
 // TODO(andrei): remove or limit the duplication.
+//
+// NOTE(andrei): EvalContext is dusty; it started as a collection of fields
+// needed by expression evaluation, but it has grown quite large; some of the
+// things in it don't seem to belong in this low-level package (e.g. Planner).
+// In the sql package it is embedded by extendedEvalContext, which adds some
+// more fields from the sql package. Through that extendedEvalContext, this
+// struct now generally used by planNodes.
 type EvalContext struct {
+	// Session variables. This is a read-only copy of the values owned by the
+	// Session.
+	SessionData sessiondata.SessionData
+	// ApplicationName is a session variable, but it is not part of SessionData.
+	// See its definition in Session for details.
+	ApplicationName string
+	// TxnState is a string representation of the current transactional state.
+	TxnState string
+	// TxnReadOnly specifies if the current transaction is read-only.
+	TxnReadOnly bool
+
 	Settings  *cluster.Settings
 	ClusterID uuid.UUID
 	NodeID    roachpb.NodeID
@@ -2020,16 +2041,6 @@ type EvalContext struct {
 	// The cluster timestamp. Needs to be stable for the lifetime of the
 	// transaction. Used for cluster_logical_timestamp().
 	clusterTimestamp hlc.Timestamp
-	// Location references the *Location on the current Session.
-	Location **time.Location
-	// Database is the database in the current Session.
-	Database string
-	// User is the user in the current Session.
-	User string
-	// SearchPath is the search path for databases used when encountering an
-	// unqualified table name. Names in the search path are normalized already.
-	// This must not be modified (this is shared from the session).
-	SearchPath SearchPath
 
 	// Placeholders relates placeholder names to their type and, later, value.
 	// This pointer should always be set to the location of the PlaceholderInfo
@@ -2089,7 +2100,7 @@ func MakeTestingEvalContext() EvalContext {
 		-1,            /* increment */
 		math.MaxInt64, /* noteworthy */
 	)
-	monitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = &monitor
 	ctx.CtxProvider = backgroundCtxProvider{}
 	acc := monitor.MakeBoundAccount()
@@ -2218,10 +2229,10 @@ func (ctx *EvalContext) SetClusterTimestamp(ts hlc.Timestamp) {
 
 // GetLocation returns the session timezone.
 func (ctx *EvalContext) GetLocation() *time.Location {
-	if ctx.Location == nil || *ctx.Location == nil {
+	if ctx.SessionData.Location == nil {
 		return time.UTC
 	}
-	return *ctx.Location
+	return ctx.SessionData.Location
 }
 
 // Ctx returns the session's context.
@@ -2827,7 +2838,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				for i := range substrs {
 					name = append(name, (*Name)(&substrs[i]))
 				}
-				funcDef, err := name.ResolveFunction(ctx.SearchPath)
+				funcDef, err := name.ResolveFunction(ctx.SessionData.SearchPath)
 				if err != nil {
 					return nil, err
 				}

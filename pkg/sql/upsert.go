@@ -90,7 +90,8 @@ func (p *planner) makeUpsertHelper(
 	upsertConflictIndex *sqlbase.IndexDescriptor,
 	whereClause *tree.Where,
 ) (*upsertHelper, error) {
-	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.txCtx, &p.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(
+		updateCols, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +152,7 @@ func (p *planner) makeUpsertHelper(
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
 		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			whereExpr, "WHERE", p.session.SearchPath,
+			whereExpr, "WHERE", p.SessionData().SearchPath,
 		); err != nil {
 			return nil, err
 		}
@@ -176,10 +177,10 @@ func (uh *upsertHelper) eval(insertRow tree.Datums, existingRow tree.Datums) (tr
 
 	var err error
 	ret := make([]tree.Datum, len(uh.evalExprs))
-	uh.p.evalCtx.IVarHelper = uh.ivarHelper
-	defer func() { uh.p.evalCtx.IVarHelper = nil }()
+	uh.p.extendedEvalCtx.IVarHelper = uh.ivarHelper
+	defer func() { uh.p.extendedEvalCtx.IVarHelper = nil }()
 	for i, evalExpr := range uh.evalExprs {
-		ret[i], err = evalExpr.Eval(&uh.p.evalCtx)
+		ret[i], err = evalExpr.Eval(uh.p.EvalContext())
 		if err != nil {
 			return nil, err
 		}
@@ -193,9 +194,9 @@ func (uh *upsertHelper) shouldUpdate(insertRow tree.Datums, existingRow tree.Dat
 	uh.curSourceRow = existingRow
 	uh.curExcludedRow = insertRow
 
-	uh.p.evalCtx.IVarHelper = uh.ivarHelper
-	defer func() { uh.p.evalCtx.IVarHelper = nil }()
-	return sqlbase.RunFilter(uh.whereExpr, &uh.p.evalCtx)
+	uh.p.extendedEvalCtx.IVarHelper = uh.ivarHelper
+	defer func() { uh.p.extendedEvalCtx.IVarHelper = nil }()
+	return sqlbase.RunFilter(uh.whereExpr, uh.p.EvalContext())
 }
 
 // upsertExprsAndIndex returns the upsert conflict index and the (possibly

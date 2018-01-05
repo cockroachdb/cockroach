@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // Function names are used in expressions in the FuncExpr node.
@@ -44,7 +45,9 @@ func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }
 
 // Resolve checks if the function name is already resolved and
 // resolves it as necessary.
-func (fn *ResolvableFunctionReference) Resolve(searchPath SearchPath) (*FunctionDefinition, error) {
+func (fn *ResolvableFunctionReference) Resolve(
+	searchPath sessiondata.SearchPath,
+) (*FunctionDefinition, error) {
 	switch t := fn.FunctionReference.(type) {
 	case *FunctionDefinition:
 		return t, nil
