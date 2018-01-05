@@ -70,9 +70,8 @@ func (v *valuesProcessor) close() {
 
 // producerMeta constructs the ProducerMetadata after consumption of rows has
 // terminated, either due to being indicated by the consumer, or because the
-// valuesProcessor ran out of rows or encountered an error. It is ok for err to
-// be nil indicating that we're done producing rows even though no error
-// occurred.
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
 func (v *valuesProcessor) producerMeta(err error) ProducerMetadata {
 	var meta ProducerMetadata
 	if !v.closed {
