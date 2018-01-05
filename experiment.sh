@@ -17,6 +17,9 @@ sleep 1
 
 ./cockroach init --insecure
 
+./cockroach sql --insecure -e "set cluster setting sql.defaults.distsql = on"
+./cockroach sql --insecure -e "set cluster setting trace.debug.enable = on"
+
 go run pkg/testutils/workload/cmd/workload/*.go sillyseq \
   --concurrency 24 --duration 10s \
   --tolerate-errors \

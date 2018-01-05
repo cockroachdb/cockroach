@@ -78,21 +78,29 @@ func (g *sillyseq) Tables() []workload.Table {
 // Ops implements the Generator interface.
 func (g *sillyseq) Ops() []workload.Operation {
 	table := g.Name()
+	// No RWU:
+	// qRead1 = `SELECT 1`
+	// Lots of RWU with distsql=auto, very few with distsql=on
 	qRead1 := fmt.Sprintf(`SELECT k FROM test.%s LIMIT 1`, table)
+	// Need to test:
+	// qRead1 := "SELECT cluster_logical_timestamp()"
+	// Nearly no RWUs, surprisingly:
+	// qRead1 := fmt.Sprintf(`SELECT COUNT(*) FROM test.%s`, table) // 6-10 over 1.6k ops. less with distsql off (0-3)
 	qRead2 := fmt.Sprintf(`SELECT COUNT(*) FROM test.%s`, table)
 	qWrite := fmt.Sprintf(`INSERT INTO test.%s VALUES ($1, $2)`, table)
 	//qWrite := fmt.Sprintf(`INSERT INTO test.%s VALUES ($1, $2) ON CONFLICT(k) DO UPDATE SET v = %s.v + 1`, table, table)
 	opFn := func(db *gosql.DB) (func(context.Context) error, error) {
 		f := func(ctx context.Context) error {
 			txn, err := db.Begin()
+
+			if err != nil {
+				return err
+			}
 			defer func() {
 				// Always close the txn, or many early returns leak a connection and
 				// things will soon lock up.
 				_ = txn.Rollback()
 			}()
-			if err != nil {
-				return err
-			}
 
 			// Touch-all read phase that should run into lots of read uncertainty.
 			// Do it twice so that the second time around, the gateway can't do the
