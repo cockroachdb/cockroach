@@ -1429,8 +1429,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		if err != nil {
 			return nil, b, err
 		}
-		d := tree.DBool(data)
-		return &d, b, nil
+		return tree.MakeDBool(tree.DBool(data)), b, nil
 	case types.Float:
 		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
 		if err != nil {
