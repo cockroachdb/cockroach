@@ -244,7 +244,7 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 	log.Info(ctx, buf.String())
 }
 
-func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
+func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	// Re-parse the statement to obtain its AST.
 	stmt, err := parser.ParseOne(key)
 	if err != nil {
@@ -288,7 +288,7 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 		hashedApp := HashAppName(appName)
 		a.Lock()
 		for q, stats := range a.stmts {
-			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
+			scrubbed, ok := scrubStmtStatKey(&vt, q.stmt)
 			if ok {
 				k := roachpb.StatementStatisticsKey{
 					Query:   scrubbed,

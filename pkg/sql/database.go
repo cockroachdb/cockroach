@@ -307,7 +307,7 @@ func (dc *databaseCache) getDatabaseID(
 func (p *planner) createDatabase(
 	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
 ) (bool, error) {
-	if p.session.virtualSchemas.isVirtualDatabase(desc.Name) {
+	if p.getVirtualTabler().isVirtualDatabase(desc.Name) {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -325,7 +325,7 @@ func (p *planner) renameDatabase(
 		return fmt.Errorf("the new database name %q already exists", newName)
 	}
 
-	if p.session.virtualSchemas.isVirtualDatabase(newName) {
+	if p.getVirtualTabler().isVirtualDatabase(newName) {
 		return onAlreadyExists()
 	}
 
