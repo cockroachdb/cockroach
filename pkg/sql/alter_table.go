@@ -210,6 +210,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if dropped {
 				continue
 			}
+
+			// If the dropped column uses a sequence, remove references to it from that sequence.
+			if col.UsesSequenceId != nil {
+				if err := removeSequenceDependency(n.tableDesc, &col, params); err != nil {
+					return err
+				}
+			}
+
 			// You can't drop a column depended on by a view unless CASCADE was
 			// specified.
 			for _, ref := range n.tableDesc.DependedOnBy {
