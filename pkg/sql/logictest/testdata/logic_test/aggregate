@@ -949,8 +949,10 @@ SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
 ----
 false true
 
+# TODO(radu): this used to be `WHERE b` but that doesn't currently
+# delete any rows.
 statement OK
-DELETE FROM bools WHERE b
+DELETE FROM bools WHERE b = true
 
 query BB
 SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
