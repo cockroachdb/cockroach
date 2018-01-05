@@ -2875,6 +2875,173 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	finishWG.Wait()
 }
 
+// TestEstimatedCommitIndexAfterRestart tests that after a restart, replicas
+// won't be considered behind and block preemptive snapshots for long.
+func TestEstimatedCommitIndexAfterRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	// Split so we can rely on RHS not receiving any background traffic.
+	// We use UserTableDataMin to avoid having the range activated to
+	// gossip system table data.
+	splitKey := keys.UserTableDataMin
+	splitArgs := adminSplitArgs(splitKey)
+	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Then put the range on all three nodes.
+	splitKeyAddr, err := keys.Addr(splitKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replica := mtc.stores[0].LookupReplica(splitKeyAddr, nil)
+	if replica == nil {
+		t.Fatalf("lookup replica at key %q returned nil", splitKey)
+	}
+	rangeID := replica.RangeID
+	mtc.replicateRange(rangeID, 1, 2)
+
+	rep, err := mtc.stores[2].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until the replica is caught up, and grab its current commit index.
+	var index uint64
+	var behindCount int64
+	testutils.SucceedsSoon(t, func() error {
+		index, behindCount = rep.GetEstimatedCommitIndex()
+		if behindCount != 0 {
+			return fmt.Errorf("expected replica to be caught up, got index=%d, behindCount=%d", index, behindCount)
+		}
+		return nil
+	})
+
+	// Stop store 2 and bring it right back up, then make sure that its estimated
+	// commit index catches up with the leader and where it used to be.
+	mtc.stopStore(2)
+	mtc.restartStore(2)
+
+	// At first, the replica doesn't know where the leader is, and hasn't been
+	// around long enough to be able to campaign.
+	rep, err = mtc.stores[2].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newIndex, newBehindCount := rep.GetEstimatedCommitIndex()
+	if newIndex != 0 {
+		t.Errorf("expected EstimatedCommitIndex=0, got index=%d, behindCount=%d",
+			newIndex, newBehindCount)
+	}
+	if expected := int64(storage.ProhibitRebalancesBehindThreshold + 1); newBehindCount != expected {
+		t.Errorf("expected EstimatedBehindCount=%d, got index=%d, behindCount=%d",
+			expected, newIndex, newBehindCount)
+	}
+
+	// After an election timeout passes, the replica shouldn't consider itself
+	// behind anymore.
+	testutils.SucceedsSoon(t, func() error {
+		newIndex, newBehindCount := rep.GetEstimatedCommitIndex()
+		if newBehindCount != 0 {
+			return fmt.Errorf("expected EstimatedBehindCount=0, got index=%d, behindCount=%d",
+				newIndex, newBehindCount)
+		}
+		return nil
+	})
+}
+
+// TestEstimatedCommitIndexHeartbeat verifies that raft MsgHeartbeats, not just
+// MsgApps, increase a replica's estimated commit index such that they aren't
+// considered so far behind that preemptive snapshots should be rejected.
+func TestEstimatedCommitIndexHeartbeat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := storage.TestStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	// First put the range on all three nodes.
+	rangeID := roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2)
+
+	// Make sure the replica is caught up, and grab its current commit index.
+	rep, err := mtc.stores[2].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, behindCount := rep.GetEstimatedCommitIndex()
+	if behindCount != 0 {
+		t.Fatalf("expected replica to be caught up, got index=%d, behindCount=%d", index, behindCount)
+	}
+
+	// Stop all the stores (to avoid raft messages not controlled by the test),
+	// then bring node 2 back up to test how it responds to heartbeats.
+	mtc.stopStore(0)
+	mtc.stopStore(1)
+	mtc.stopStore(2)
+	mtc.storeConfig.TestingKnobs.DisableProcessRaft = false
+	mtc.restartStoreWithoutHeartbeat(2)
+	mtc.stores[2].NotifyBootstrapped()
+
+	rep, err = mtc.stores[2].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newIndex, newBehindCount := rep.GetEstimatedCommitIndex()
+	if newIndex != 0 {
+		t.Errorf(
+			"expected EstimatedCommitIndex of restarted replica to be 0, got index=%d, behindCount=%d",
+			newIndex, newBehindCount)
+	}
+	if newBehindCount != 0 {
+		t.Errorf(
+			"expected EstimatedBehindCount of restarted replica to be 0, got index=%d, behindCount=%d",
+			newIndex, newBehindCount)
+	}
+
+	// After sending a heartbeat with Commit=index, the replica should be
+	// caught up.
+	replicaID := rep.ReplicaID()
+	raftReq := &storage.RaftMessageRequest{
+		RangeID: rangeID,
+		FromReplica: roachpb.ReplicaDescriptor{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1},
+		ToReplica: roachpb.ReplicaDescriptor{
+			NodeID:    mtc.stores[2].Ident.NodeID,
+			StoreID:   mtc.stores[2].Ident.StoreID,
+			ReplicaID: replicaID,
+		},
+		Message: raftpb.Message{
+			Type:   raftpb.MsgHeartbeat,
+			To:     uint64(replicaID),
+			Commit: index,
+		},
+	}
+	if err := mtc.stores[2].HandleRaftRequest(context.TODO(), raftReq, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	newIndex, newBehindCount = rep.GetEstimatedCommitIndex()
+	if newIndex != index {
+		t.Errorf(
+			"expected EstimatedCommitIndex of heartbeated replica to be %d, got index=%d, behindCount=%d",
+			index, newIndex, newBehindCount)
+	}
+	if newBehindCount != 0 {
+		t.Errorf(
+			"expected EstimatedBehindCount of heartbeated replica to be 0, got index=%d, behindCount=%d",
+			newIndex, newBehindCount)
+	}
+}
+
 type errorChannelTestHandler chan *roachpb.Error
 
 func (errorChannelTestHandler) HandleRaftRequest(
