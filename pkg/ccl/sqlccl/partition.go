@@ -54,15 +54,17 @@ func valueEncodePartitionTuple(
 			if typ != tree.PartitionByList {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
-			// NOT NULL is used to signal DEFAULT.
+			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
+			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionDefaultVal))
 			continue
 		case tree.MaxVal:
 			if typ != tree.PartitionByRange {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
-			// NOT NULL is used to signal MAXVALUE.
+			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
+			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMaxVal))
 			continue
 		case *tree.Placeholder:
 			return nil, pgerror.UnimplementedWithIssueErrorf(
