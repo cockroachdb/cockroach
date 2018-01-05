@@ -46,7 +46,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+		if err := tn.QualifyWithDatabase(p.evalCtx.SessData.Database); err != nil {
 			return nil, err
 		}
 
@@ -128,7 +128,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 				Statement           string
 				User                string
 				CascadeDroppedViews []string
-			}{droppedDesc.Name, n.n.String(), params.p.session.User, droppedViews},
+			}{droppedDesc.Name, n.n.String(), params.p.evalCtx.SessData.User, droppedViews},
 		); err != nil {
 			return err
 		}

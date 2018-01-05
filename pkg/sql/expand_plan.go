@@ -489,7 +489,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *filterNode:
 		n.source.plan = p.simplifyOrderings(n.source.plan, usefulOrdering)
-		n.computePhysicalProps(&p.evalCtx)
+		n.computePhysicalProps(&p.evalCtx.EvalContext)
 
 	case *joinNode:
 		// In DistSQL, we may take advantage of matching orderings on equality

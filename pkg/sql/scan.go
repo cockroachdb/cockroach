@@ -187,7 +187,7 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 		params.evalCtx.IVarHelper = &n.filterVars
-		passesFilter, err := sqlbase.RunFilter(n.filter, params.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(n.filter, &params.evalCtx.EvalContext)
 		if err != nil {
 			return false, err
 		}

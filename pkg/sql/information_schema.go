@@ -866,7 +866,7 @@ func forEachTableDescWithTableLookupInternal(
 	}
 	sort.Strings(dbNames)
 	for _, dbName := range dbNames {
-		if !isDatabaseVisible(dbName, prefix, p.session.User) {
+		if !isDatabaseVisible(dbName, prefix, p.evalCtx.SessData.User) {
 			continue
 		}
 		db := databases[dbName]

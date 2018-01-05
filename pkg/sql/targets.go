@@ -39,7 +39,7 @@ func (p *planner) computeRender(
 	// column name, we determine the name before we perform any manipulations to
 	// the expression.
 	if outputName == autoGenerateRenderOutputName {
-		if outputName, err = getRenderColName(p.session.SearchPath, target, &ivarHelper); err != nil {
+		if outputName, err = getRenderColName(p.evalCtx.SessData.SearchPath, target, &ivarHelper); err != nil {
 			return sqlbase.ResultColumn{}, nil, err
 		}
 	}

@@ -33,6 +33,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+// extendedEvalCtx extends tree.EvalContext with fields that are just needed in
+// the sql package.
+type extendedEvalContext struct {
+	tree.EvalContext
+
+	// VirtualSchemas can be used to access virtual tables.
+	VirtualSchemas VirtualTabler
+
+	// Tracing provides access to the session's tracing interface.
+	Tracing *SessionTracing
+}
+
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution. It is logically
 // scoped to the execution of a single statement, and should not be used to
@@ -44,7 +56,7 @@ import (
 type planner struct {
 	txn *client.Txn
 
-	// As the planner executes statements, it may change the current user session.
+	// session is the Session on whose behalf this planner is working.
 	session *Session
 
 	// Reference to the corresponding sql Statement for this query.
@@ -52,7 +64,11 @@ type planner struct {
 
 	// Contexts for different stages of planning and execution.
 	semaCtx tree.SemaContext
-	evalCtx tree.EvalContext
+	evalCtx extendedEvalContext
+
+	// sessionDataMutator is used to mutate the session variables. Read
+	// access to them is provided through evalCtx.
+	sessionDataMutator sessionDataMutator
 
 	// asOfSystemTime indicates whether the transaction timestamp was
 	// forced to a specific value (in which case that value is stored in
@@ -148,12 +164,26 @@ func makeInternalPlanner(
 	// looks in the session for the current database.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
 
-	s := &Session{
+	data := tree.SessionData{
 		Location: time.UTC,
 		User:     user,
+	}
+
+	s := &Session{
+		data:     data,
 		TxnState: txnState{Ctx: ctx},
 		context:  ctx,
 		tables:   TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
+	}
+	s.dataMutator = sessionDataMutator{
+		data: &s.data,
+		s:    s,
+		defaults: sessionDefaults{
+			applicationName: "crdb-internal",
+			database:        "",
+		},
+		settings:       nil,
+		curTxnReadOnly: &s.TxnState.readOnly,
 	}
 	s.mon = mon.MakeUnlimitedMonitor(ctx,
 		"internal-root",
@@ -175,7 +205,7 @@ func makeInternalPlanner(
 		-1, noteworthyInternalMemoryUsageBytes/5)
 	s.TxnState.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
-	p := s.newPlanner(nil, txn)
+	p := s.newPlanner(nil /* executor */, txn)
 
 	if txn != nil {
 		if txn.Proto().OrigTimestamp == (hlc.Timestamp{}) {
@@ -207,10 +237,10 @@ func (p *planner) LeaseMgr() *LeaseManager {
 }
 
 func (p *planner) User() string {
-	return p.session.User
+	return p.evalCtx.SessData.User
 }
 
-func (p *planner) EvalContext() tree.EvalContext {
+func (p *planner) EvalContext() extendedEvalContext {
 	return p.evalCtx
 }
 
@@ -385,7 +415,7 @@ func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 		return nil, err
 	}
 	fn := func() (string, error) {
-		d, err := typedE.Eval(&p.evalCtx)
+		d, err := typedE.Eval(&p.evalCtx.EvalContext)
 		if err != nil {
 			return "", err
 		}
@@ -435,7 +465,7 @@ func (p *planner) TypeAsStringOpts(
 				res[name] = ""
 				continue
 			}
-			d, err := e.Eval(&p.evalCtx)
+			d, err := e.Eval(&p.evalCtx.EvalContext)
 			if err != nil {
 				return nil, err
 			}
@@ -465,7 +495,7 @@ func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]stri
 	fn := func() ([]string, error) {
 		strs := make([]string, len(exprs))
 		for i := range exprs {
-			d, err := typedExprs[i].Eval(&p.evalCtx)
+			d, err := typedExprs[i].Eval(&p.evalCtx.EvalContext)
 			if err != nil {
 				return nil, err
 			}

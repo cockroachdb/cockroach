@@ -729,14 +729,15 @@ func (p *planner) addJoinFilter(
 	//     on the equality columns (see expandOnCond).
 	//  4. Propagate the filter and ON condition depending on the join type.
 	numLeft := len(n.left.info.sourceColumns)
-	extraFilter = n.pred.iVarHelper.Rebind(extraFilter, true, false)
+	extraFilter = n.pred.iVarHelper.Rebind(
+		extraFilter, true /* alsoReset */, false /* normalizeToNonNil */)
 
-	onAndExprs := splitAndExpr(&p.evalCtx, n.pred.onCond, nil)
+	onAndExprs := splitAndExpr(&p.evalCtx.EvalContext, n.pred.onCond, nil /* exprs */)
 
 	// Step 1: for inner joins, incorporate the filter into the ON condition.
 	if n.joinType == joinTypeInner {
 		// Split the filter into conjunctions and append them to onAndExprs.
-		onAndExprs = splitAndExpr(&p.evalCtx, extraFilter, onAndExprs)
+		onAndExprs = splitAndExpr(&p.evalCtx.EvalContext, extraFilter, onAndExprs)
 		extraFilter = nil
 	}
 
@@ -753,7 +754,7 @@ func (p *planner) addJoinFilter(
 	// constraints can be pushed down. This is not useful for FULL OUTER
 	// joins, where nothing can be pushed down.
 	if n.joinType != joinTypeFullOuter {
-		onCond = expandOnCond(n, onCond, &p.evalCtx)
+		onCond = expandOnCond(n, onCond, &p.evalCtx.EvalContext)
 	}
 
 	// Step 4: propagate the filter and ON conditions as allowed by the join type.

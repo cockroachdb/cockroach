@@ -74,7 +74,7 @@ func loadBackupDescs(
 func selectTargets(
 	p sql.PlanHookState, backupDescs []BackupDescriptor, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
-	sessionDatabase := p.EvalContext().Database
+	sessionDatabase := p.EvalContext().SessData.Database
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
 	matched, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
 	if err != nil {
@@ -1068,7 +1068,9 @@ func doRestorePlan(
 	opts map[string]string,
 	resultsCh chan<- tree.Datums,
 ) error {
-	if err := restoreStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
+	if err := restoreStmt.Targets.NormalizeTablesWithDatabase(
+		p.EvalContext().SessData.Database,
+	); err != nil {
 		return err
 	}
 	backupDescs, err := loadBackupDescs(ctx, from, p.ExecCfg().Settings)

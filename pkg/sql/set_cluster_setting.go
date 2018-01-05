@@ -134,7 +134,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			SettingName string
 			Value       string
 			User        string
-		}{n.name, reportedValue, params.p.session.User},
+		}{n.name, reportedValue, params.p.session.data.User},
 	)
 }
 
@@ -150,7 +150,7 @@ func (p *planner) toSettingString(
 	setting settings.Setting,
 	val tree.TypedExpr,
 ) (string, error) {
-	d, err := val.Eval(&p.evalCtx)
+	d, err := val.Eval(&p.evalCtx.EvalContext)
 	if err != nil {
 		return "", err
 	}

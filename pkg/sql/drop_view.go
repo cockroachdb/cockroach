@@ -42,7 +42,7 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+		if err := tn.QualifyWithDatabase(p.evalCtx.SessData.Database); err != nil {
 			return nil, err
 		}
 
@@ -110,7 +110,7 @@ func (n *dropViewNode) startExec(params runParams) error {
 				Statement           string
 				User                string
 				CascadeDroppedViews []string
-			}{droppedDesc.Name, n.n.String(), params.p.session.User, cascadeDroppedViews},
+			}{droppedDesc.Name, n.n.String(), params.p.evalCtx.SessData.User, cascadeDroppedViews},
 		); err != nil {
 			return err
 		}

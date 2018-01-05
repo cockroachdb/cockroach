@@ -33,7 +33,7 @@ import (
 func (p *planner) showTableDetails(
 	ctx context.Context, showType string, t tree.NormalizableTableName, query string,
 ) (planNode, error) {
-	tn, err := t.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := t.NormalizeWithDatabaseName(p.evalCtx.SessData.Database)
 	if err != nil {
 		return nil, err
 	}

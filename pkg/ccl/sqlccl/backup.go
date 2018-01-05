@@ -388,7 +388,7 @@ func resolveTargetsToDescriptors(
 		}
 	}
 
-	sessionDatabase := p.EvalContext().Database
+	sessionDatabase := p.EvalContext().SessData.Database
 
 	var matched descriptorsMatched
 	if matched, err = descriptorsMatchingTargets(sessionDatabase, allDescs, targets); err != nil {
@@ -659,7 +659,9 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := backupStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
+		if err := backupStmt.Targets.NormalizeTablesWithDatabase(
+			p.EvalContext().SessData.Database,
+		); err != nil {
 			return err
 		}
 

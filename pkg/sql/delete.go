@@ -56,7 +56,7 @@ func (p *planner) Delete(
 		defer resetter(p)
 	}
 
-	if n.Where == nil && p.session.SafeUpdates {
+	if n.Where == nil && p.evalCtx.SessData.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
 	}
 

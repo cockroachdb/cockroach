@@ -509,7 +509,7 @@ func (e *Executor) Prepare(
 		// session.TxnState.mu.txn, but more thought needs to be put into whether that
 		// is really needed.
 		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
-		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
+		if err := txn.SetIsolation(session.data.DefaultIsolationLevel); err != nil {
 			panic(fmt.Errorf("cannot set up txn for prepare %q: %v", stmtStr, err))
 		}
 		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
@@ -819,9 +819,9 @@ func (e *Executor) execParsed(
 				autoCommit, /* implicitTxn */
 				false,      /* retryIntent */
 				e.cfg.Clock.PhysicalTime(), /* sqlTimestamp */
-				session.DefaultIsolationLevel,
+				session.data.DefaultIsolationLevel,
 				roachpb.NormalUserPriority,
-				session.DefaultReadOnly,
+				session.data.DefaultReadOnly,
 			)
 		}
 
@@ -2004,7 +2004,7 @@ func (e *Executor) execDistSQL(
 		},
 	)
 	if err := e.distSQLPlanner.PlanAndRun(
-		ctx, planner.txn, tree, &recv, planner.evalCtx,
+		ctx, planner.txn, tree, &recv, &planner.evalCtx,
 	); err != nil {
 		return err
 	}
@@ -2099,12 +2099,12 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 // on the session settings.
 func shouldUseDistSQL(
 	ctx context.Context,
-	distSQLMode DistSQLExecMode,
+	distSQLMode tree.DistSQLExecMode,
 	dp *DistSQLPlanner,
 	planner *planner,
 	plan planNode,
 ) (bool, error) {
-	if distSQLMode == DistSQLOff {
+	if distSQLMode == tree.DistSQLOff {
 		return false, nil
 	}
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
@@ -2131,7 +2131,7 @@ func shouldUseDistSQL(
 
 	if err != nil {
 		// If the distSQLMode is ALWAYS, reject anything but SET.
-		if distSQLMode == DistSQLAlways && err != setNotSupportedError {
+		if distSQLMode == tree.DistSQLAlways && err != setNotSupportedError {
 			return false, err
 		}
 		// Don't use distSQL for this request.
@@ -2139,7 +2139,7 @@ func shouldUseDistSQL(
 		return false, nil
 	}
 
-	if distSQLMode == DistSQLAuto && !distribute {
+	if distSQLMode == tree.DistSQLAuto && !distribute {
 		log.VEventf(ctx, 1, "not distributing query")
 		return false, nil
 	}
@@ -2191,7 +2191,7 @@ func (e *Executor) execStmt(
 	}
 
 	useDistSQL, err := shouldUseDistSQL(
-		session.Ctx(), session.DistSQLMode, e.distSQLPlanner, planner, plan,
+		session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, plan,
 	)
 	if err != nil {
 		return err
@@ -2562,7 +2562,7 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 	}
 
 	evalCtx := session.evalCtx()
-	ts, err := EvalAsOfTimestamp(&evalCtx, asOf, max)
+	ts, err := EvalAsOfTimestamp(&evalCtx.EvalContext, asOf, max)
 	return &ts, err
 }
 

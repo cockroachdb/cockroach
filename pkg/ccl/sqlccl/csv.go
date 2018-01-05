@@ -562,7 +562,7 @@ func convertRecord(
 	}
 
 	var txCtx transform.ExprTransformContext
-	evalCtx := tree.EvalContext{Location: &time.UTC}
+	evalCtx := tree.EvalContext{SessData: tree.SessionData{Location: time.UTC}}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
@@ -943,7 +943,7 @@ func importPlanHook(
 		var targetDB string
 		if !transformOnly {
 			if override, ok := opts[restoreOptIntoDB]; !ok {
-				if session := p.EvalContext().Database; session != "" {
+				if session := p.EvalContext().SessData.Database; session != "" {
 					targetDB = session
 				} else {
 					return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
@@ -1171,7 +1171,7 @@ func doDistributedCSVTransform(
 		ctx,
 		job,
 		p.ExecCfg().DB,
-		evalCtx,
+		&evalCtx,
 		p.ExecCfg().NodeID.Get(),
 		nodes,
 		sql.NewRowResultWriter(tree.Rows, rows),

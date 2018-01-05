@@ -109,7 +109,7 @@ func (dsp *DistSQLPlanner) Run(
 	txn *client.Txn,
 	plan *physicalPlan,
 	recv *distSQLReceiver,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 ) error {
 	ctx := planCtx.ctx
 
@@ -139,8 +139,8 @@ func (dsp *DistSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx)
-	iter := evalCtx.SearchPath.Iter()
+	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx.EvalContext)
+	iter := evalCtx.SessData.SearchPath.Iter()
 	for s, ok := iter(); ok; s, ok = iter() {
 		evalCtxProto.SearchPath = append(evalCtxProto.SearchPath, s)
 	}
@@ -437,9 +437,9 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	txn *client.Txn,
 	tree planNode,
 	recv *distSQLReceiver,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 ) error {
-	planCtx := dsp.newPlanningCtx(ctx, &evalCtx, txn)
+	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 

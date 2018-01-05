@@ -59,7 +59,7 @@ func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) 
 		columns: n.Columns,
 	}
 
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.evalCtx.SessData.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (s *Session) ProcessCopyData(
 		var err error
 		// If there's a line in the buffer without \n at EOL, add it here.
 		if buf.Len() > 0 {
-			err = cf.addRow(ctx, buf.Bytes(), &evalCtx)
+			err = cf.addRow(ctx, buf.Bytes(), &evalCtx.EvalContext)
 		}
 		return StatementList{{AST: CopyDataBlock{Done: true}}}, err
 	default:
@@ -161,7 +161,7 @@ func (s *Session) ProcessCopyData(
 		if buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
 			break
 		}
-		if err := cf.addRow(ctx, line, &evalCtx); err != nil {
+		if err := cf.addRow(ctx, line, &evalCtx.EvalContext); err != nil {
 			return nil, err
 		}
 	}

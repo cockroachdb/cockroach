@@ -223,7 +223,7 @@ func (p *planner) resolveNames(
 		err:                nil,
 		sources:            sources,
 		iVarHelper:         ivarHelper,
-		searchPath:         p.session.SearchPath,
+		searchPath:         p.evalCtx.SessData.SearchPath,
 		foundDependentVars: false,
 	}
 	colOffset := 0

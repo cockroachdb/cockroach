@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,14 +82,14 @@ func TestMonotonicInserts(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	for _, distSQLMode := range []sql.DistSQLExecMode{sql.DistSQLOff, sql.DistSQLOn} {
+	for _, distSQLMode := range []tree.DistSQLExecMode{tree.DistSQLOff, tree.DistSQLOn} {
 		t.Run(fmt.Sprintf("distsql=%s", distSQLMode), func(t *testing.T) {
 			testMonotonicInserts(t, distSQLMode)
 		})
 	}
 }
 
-func testMonotonicInserts(t *testing.T, distSQLMode sql.DistSQLExecMode) {
+func testMonotonicInserts(t *testing.T, distSQLMode tree.DistSQLExecMode) {
 	defer leaktest.AfterTest(t)()
 
 	if testing.Short() {

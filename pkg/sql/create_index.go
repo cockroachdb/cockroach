@@ -34,7 +34,7 @@ type createIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.evalCtx.SessData.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 	if n.n.PartitionBy != nil {
 		partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
-			params.evalCtx, n.tableDesc, &indexDesc, n.n.PartitionBy)
+			&params.evalCtx.EvalContext, n.tableDesc, &indexDesc, n.n.PartitionBy)
 		if err != nil {
 			return err
 		}
@@ -140,7 +140,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 			Statement  string
 			User       string
 			MutationID uint32
-		}{n.tableDesc.Name, n.n.Name.String(), n.n.String(), params.p.session.User, uint32(mutationID)},
+		}{
+			n.tableDesc.Name, n.n.Name.String(), n.n.String(),
+			params.p.evalCtx.SessData.User, uint32(mutationID),
+		},
 	); err != nil {
 		return err
 	}

@@ -60,7 +60,9 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
 			partitioning, err := CreatePartitioning(
-				params.ctx, params.p.evalCtx.Settings, &params.p.evalCtx, n.tableDesc, n.indexDesc, t.PartitionBy)
+				params.ctx, params.p.evalCtx.Settings,
+				&params.p.evalCtx.EvalContext,
+				n.tableDesc, n.indexDesc, t.PartitionBy)
 			if err != nil {
 				return err
 			}
@@ -112,7 +114,10 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			Statement  string
 			User       string
 			MutationID uint32
-		}{n.tableDesc.Name, n.indexDesc.Name, n.n.String(), params.p.session.User, uint32(mutationID)},
+		}{
+			n.tableDesc.Name, n.indexDesc.Name, n.n.String(),
+			params.p.evalCtx.SessData.User, uint32(mutationID),
+		},
 	); err != nil {
 		return err
 	}

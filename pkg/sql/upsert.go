@@ -90,7 +90,7 @@ func (p *planner) makeUpsertHelper(
 	upsertConflictIndex *sqlbase.IndexDescriptor,
 	whereClause *tree.Where,
 ) (*upsertHelper, error) {
-	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.txCtx, &p.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.txCtx, &p.evalCtx.EvalContext)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (p *planner) makeUpsertHelper(
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
 		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			whereExpr, "WHERE", p.session.SearchPath,
+			whereExpr, "WHERE", p.evalCtx.SessData.SearchPath,
 		); err != nil {
 			return nil, err
 		}
@@ -179,7 +179,7 @@ func (uh *upsertHelper) eval(insertRow tree.Datums, existingRow tree.Datums) (tr
 	uh.p.evalCtx.IVarHelper = uh.ivarHelper
 	defer func() { uh.p.evalCtx.IVarHelper = nil }()
 	for i, evalExpr := range uh.evalExprs {
-		ret[i], err = evalExpr.Eval(&uh.p.evalCtx)
+		ret[i], err = evalExpr.Eval(&uh.p.evalCtx.EvalContext)
 		if err != nil {
 			return nil, err
 		}
@@ -195,7 +195,7 @@ func (uh *upsertHelper) shouldUpdate(insertRow tree.Datums, existingRow tree.Dat
 
 	uh.p.evalCtx.IVarHelper = uh.ivarHelper
 	defer func() { uh.p.evalCtx.IVarHelper = nil }()
-	return sqlbase.RunFilter(uh.whereExpr, &uh.p.evalCtx)
+	return sqlbase.RunFilter(uh.whereExpr, &uh.p.evalCtx.EvalContext)
 }
 
 // upsertExprsAndIndex returns the upsert conflict index and the (possibly

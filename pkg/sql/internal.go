@@ -100,7 +100,7 @@ func (ie InternalExecutor) initSession(p *planner) {
 
 // getTableID retrieves the table ID for the specified table.
 func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID, error) {
-	if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+	if err := tn.QualifyWithDatabase(p.evalCtx.SessData.Database); err != nil {
 		return 0, err
 	}
 

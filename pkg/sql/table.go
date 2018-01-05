@@ -591,7 +591,7 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 	if !ok {
 		return nil, nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	tn, err := table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := table.NormalizeWithDatabaseName(p.evalCtx.SessData.Database)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -725,8 +725,8 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableNa
 		descFunc = getTableOrViewDesc
 	}
 
-	if p.session.Database != "" {
-		t.DatabaseName = tree.Name(p.session.Database)
+	if p.evalCtx.SessData.Database != "" {
+		t.DatabaseName = tree.Name(p.evalCtx.SessData.Database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
@@ -740,7 +740,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableNa
 
 	// Not found using the current session's database, so try
 	// the search path instead.
-	iter := p.session.SearchPath.Iter()
+	iter := p.evalCtx.SessData.SearchPath.Iter()
 	for database, ok := iter(); ok; database, ok = iter() {
 		t.DatabaseName = tree.Name(database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
@@ -829,7 +829,7 @@ func (p *planner) findTableContainingIndex(
 func (p *planner) expandIndexName(
 	ctx context.Context, index *tree.TableNameWithIndex, requireTable bool,
 ) (*tree.TableName, error) {
-	tn, err := index.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := index.Table.NormalizeWithDatabaseName(p.evalCtx.SessData.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -879,7 +879,7 @@ func (p *planner) getTableAndIndex(
 	var err error
 	if tableWithIndex == nil {
 		// Variant: ALTER TABLE
-		tn, err = table.NormalizeWithDatabaseName(p.session.Database)
+		tn, err = table.NormalizeWithDatabaseName(p.evalCtx.SessData.Database)
 	} else {
 		// Variant: ALTER INDEX
 		tn, err = p.expandIndexName(ctx, tableWithIndex, true /* requireTable */)

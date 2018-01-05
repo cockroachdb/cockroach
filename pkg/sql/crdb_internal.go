@@ -389,7 +389,7 @@ CREATE TABLE crdb_internal.jobs (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		p = makeInternalPlanner("jobs", p.txn, p.evalCtx.User, p.session.memMetrics)
+		p = makeInternalPlanner("jobs", p.txn, p.evalCtx.SessData.User, p.session.memMetrics)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, status, created, payload FROM system.jobs`)
 		if err != nil {
@@ -642,7 +642,7 @@ CREATE TABLE crdb_internal.session_variables (
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
-			value := gen.Get(p.session)
+			value := gen.Get(&p.evalCtx)
 			if err := addRow(
 				tree.NewDString(vName),
 				tree.NewDString(value),
@@ -673,7 +673,7 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "node_queries"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.session.User}
+		req := serverpb.ListSessionsRequest{Username: p.evalCtx.SessData.User}
 		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
@@ -687,7 +687,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.session.User}
+		req := serverpb.ListSessionsRequest{Username: p.evalCtx.SessData.User}
 		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
@@ -766,7 +766,7 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.session.User}
+		req := serverpb.ListSessionsRequest{Username: p.evalCtx.SessData.User}
 		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
@@ -780,7 +780,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.session.User}
+		req := serverpb.ListSessionsRequest{Username: p.evalCtx.SessData.User}
 		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
@@ -1465,7 +1465,7 @@ CREATE TABLE crdb_internal.zones (
 			return 0, "", fmt.Errorf("object with ID %d does not exist", id)
 		}
 
-		p = makeInternalPlanner("zones", p.txn, p.evalCtx.User, p.session.memMetrics)
+		p = makeInternalPlanner("zones", p.txn, p.evalCtx.SessData.User, p.session.memMetrics)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, config FROM system.zones`)
 		if err != nil {

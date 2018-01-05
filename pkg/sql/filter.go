@@ -58,7 +58,7 @@ func (f *filterNode) Next(params runParams) (bool, error) {
 		}
 
 		params.evalCtx.IVarHelper = &f.ivarHelper
-		passesFilter, err := sqlbase.RunFilter(f.filter, params.evalCtx)
+		passesFilter, err := sqlbase.RunFilter(f.filter, &params.evalCtx.EvalContext)
 		params.evalCtx.IVarHelper = nil
 		if err != nil {
 			return false, err

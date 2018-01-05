@@ -40,7 +40,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if err != nil {
 		return physicalPlan{}, err
 	}
-	scan.spans, err = makeSpans(planCtx.evalCtx, nil /* constraints */, desc, scan.index)
+	scan.spans, err = makeSpans(&planCtx.evalCtx.EvalContext, nil /* constraints */, desc, scan.index)
 	if err != nil {
 		return physicalPlan{}, err
 	}

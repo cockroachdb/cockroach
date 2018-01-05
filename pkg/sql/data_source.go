@@ -297,7 +297,7 @@ func (p *planner) getVirtualDataSource(
 		// this.
 		prefix := string(tn.PrefixName)
 		if !tn.PrefixOriginallySpecified {
-			prefix = p.session.Database
+			prefix = p.evalCtx.SessData.Database
 			if prefix == "" && p.RequireSuperUser("access virtual tables across all databases") != nil {
 				prefix = sqlbase.SystemDB.Name
 			}
@@ -345,7 +345,7 @@ func (p *planner) getDataSourceAsOneColumn(
 
 	// We use the name of the function to determine the name of the
 	// rendered column.
-	fd, err := src.Func.Resolve(p.session.SearchPath)
+	fd, err := src.Func.Resolve(p.evalCtx.SessData.SearchPath)
 	if err != nil {
 		return planDataSource{}, err
 	}

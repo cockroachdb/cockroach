@@ -92,7 +92,7 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 				DatabaseName string
 				Statement    string
 				User         string
-			}{n.n.Name.String(), n.n.String(), params.p.session.User},
+			}{n.n.Name.String(), n.n.String(), params.p.evalCtx.SessData.User},
 		); err != nil {
 			return err
 		}

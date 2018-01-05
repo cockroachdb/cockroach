@@ -236,7 +236,7 @@ func (p *planner) dropIndexByName(
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{tableDesc.Name, string(idxName), jobDesc, p.session.User, uint32(mutationID),
+		}{tableDesc.Name, string(idxName), jobDesc, p.evalCtx.SessData.User, uint32(mutationID),
 			droppedViews},
 	); err != nil {
 		return err

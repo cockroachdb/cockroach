@@ -30,7 +30,7 @@ type createSequenceNode struct {
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
-	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	name, err := n.Name.NormalizeWithDatabaseName(p.evalCtx.SessData.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.n.Name.String(), n.n.String(), params.p.session.User},
+		}{n.n.Name.String(), n.n.String(), params.p.evalCtx.SessData.User},
 	)
 }
 

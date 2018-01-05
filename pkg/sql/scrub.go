@@ -101,11 +101,11 @@ type scrubRun struct {
 func (n *scrubNode) startExec(params runParams) error {
 	switch n.n.Typ {
 	case tree.ScrubTable:
-		tableName, err := n.n.Table.NormalizeWithDatabaseName(params.p.session.Database)
+		tableName, err := n.n.Table.NormalizeWithDatabaseName(params.p.evalCtx.SessData.Database)
 		if err != nil {
 			return err
 		}
-		if err := tableName.QualifyWithDatabase(params.p.session.Database); err != nil {
+		if err := tableName.QualifyWithDatabase(params.p.evalCtx.SessData.Database); err != nil {
 			return err
 		}
 		// If the tableName provided refers to a view and error will be
@@ -566,7 +566,7 @@ func scrubRunDistSQL(
 		},
 	)
 
-	if err := p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, p.evalCtx); err != nil {
+	if err := p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, &p.evalCtx); err != nil {
 		return rows, err
 	} else if recv.err != nil {
 		return rows, recv.err

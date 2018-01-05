@@ -73,7 +73,7 @@ func (p *planner) Values(
 
 		for i, expr := range tuple.Exprs {
 			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				expr, "VALUES", p.session.SearchPath,
+				expr, "VALUES", p.evalCtx.SessData.SearchPath,
 			); err != nil {
 				return nil, err
 			}
@@ -153,7 +153,7 @@ func (n *valuesNode) startExec(params runParams) error {
 				row[i] = tree.DNull
 			} else {
 				var err error
-				row[i], err = typedExpr.Eval(params.evalCtx)
+				row[i], err = typedExpr.Eval(&params.evalCtx.EvalContext)
 				if err != nil {
 					return err
 				}

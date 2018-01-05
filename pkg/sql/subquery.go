@@ -162,7 +162,7 @@ func (s *subquery) doEval(ctx context.Context, p *planner) (result tree.Datum, e
 			rows.SetSorted()
 		}
 		if s.execMode == execModeAllRowsNormalized {
-			rows.Normalize(&p.evalCtx)
+			rows.Normalize(&p.evalCtx.EvalContext)
 		}
 		result = &rows
 

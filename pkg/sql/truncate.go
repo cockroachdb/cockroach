@@ -48,7 +48,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+		if err := tn.QualifyWithDatabase(p.evalCtx.SessData.Database); err != nil {
 			return nil, err
 		}
 

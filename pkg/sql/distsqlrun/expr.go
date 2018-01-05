@@ -139,7 +139,7 @@ func (eh *exprHelper) init(
 		return err
 	}
 	var t transform.ExprTransformContext
-	if t.AggregateInExpr(eh.expr, evalCtx.SearchPath) {
+	if t.AggregateInExpr(eh.expr, evalCtx.SessData.SearchPath) {
 		return errors.Errorf("expression '%s' has aggregate", eh.expr)
 	}
 	return nil

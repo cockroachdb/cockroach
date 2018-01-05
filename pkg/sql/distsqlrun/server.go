@@ -259,11 +259,13 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	evalCtx := tree.EvalContext{
-		Settings:     ds.ServerConfig.Settings,
-		Location:     &location,
-		Database:     req.EvalContext.Database,
-		User:         req.EvalContext.User,
-		SearchPath:   tree.MakeSearchPath(req.EvalContext.SearchPath),
+		Settings: ds.ServerConfig.Settings,
+		SessData: tree.SessionData{
+			Location:   location,
+			Database:   req.EvalContext.Database,
+			User:       req.EvalContext.User,
+			SearchPath: tree.MakeSearchPath(req.EvalContext.SearchPath),
+		},
 		ClusterID:    ds.ServerConfig.ClusterID,
 		NodeID:       nodeID,
 		ReCache:      ds.regexpCache,

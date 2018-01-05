@@ -82,7 +82,7 @@ func (p *planner) makeExplainPlanNode(
 	)
 	explainer.fmtFlags = tree.FmtPlaceholderFormat(noPlaceholderFlags,
 		func(buf *bytes.Buffer, f tree.FmtFlags, placeholder *tree.Placeholder) {
-			d, err := placeholder.Eval(&p.evalCtx)
+			d, err := placeholder.Eval(&p.evalCtx.EvalContext)
 			if err != nil {
 				placeholder.Format(buf, noPlaceholderFlags)
 				return
