@@ -448,8 +448,6 @@ func (p *planner) newPlan(
 		return p.AlterSequence(ctx, n)
 	case *tree.AlterUserSetPassword:
 		return p.AlterUserSetPassword(ctx, n)
-	case *tree.BeginTransaction:
-		return p.BeginTransaction(n)
 	case *tree.CancelQuery:
 		return p.CancelQuery(ctx, n)
 	case *tree.CancelJob:
