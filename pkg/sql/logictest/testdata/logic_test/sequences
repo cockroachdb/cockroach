@@ -507,3 +507,17 @@ DROP SEQUENCE drop_prevention_test
 
 statement error pq: unknown function: nxtvl()
 CREATE TABLE seq_using_table (id INT PRIMARY KEY DEFAULT nxtvl('foo'))
+
+# Sequence deletion is allowed once the sequence-using column is removed.
+
+statement ok
+CREATE SEQUENCE drop_col_test_seq
+
+statement ok
+CREATE TABLE drop_col_test_tbl (id INT PRIMARY KEY, foo INT DEFAULT nextval('drop_col_test_seq'))
+
+statement ok
+ALTER TABLE drop_col_test_tbl DROP COLUMN foo
+
+statement ok
+DROP SEQUENCE drop_col_test_seq

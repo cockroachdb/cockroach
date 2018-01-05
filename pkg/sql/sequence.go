@@ -246,6 +246,42 @@ func maybeAddSequenceDependency(
 	return seqDesc, nil
 }
 
+// removeSequenceDependency:
+//   - removes the reference from the column descriptor to the sequence descriptor.
+//   - removes the reference from the sequence descriptor to the column descriptor.
+//   - writes the sequence descriptor and notifies a schema change.
+// The column is mutated but not saved to persistent storage; the caller must save
+// the modified column descriptor.
+func removeSequenceDependency(
+	tableDesc *sqlbase.TableDescriptor, col *sqlbase.ColumnDescriptor, params runParams,
+) error {
+	// Get the sequence descriptor so we can remove the reference from it.
+	seqDesc := sqlbase.TableDescriptor{}
+	if err := getDescriptorByID(params.ctx, params.p.txn, *col.UsesSequenceId, &seqDesc); err != nil {
+		return err
+	}
+	// Find an item in seqDesc.DependedOnBy which references tableDesc.
+	refIdx := -1
+	for i := 0; i < len(seqDesc.DependedOnBy); i++ {
+		reference := seqDesc.DependedOnBy[i]
+		if reference.ID == tableDesc.ID {
+			refIdx = i
+		}
+	}
+	if refIdx == -1 {
+		return pgerror.NewError(
+			pgerror.CodeInternalError, "couldn't find reference from sequence to this column")
+	}
+	seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:refIdx], seqDesc.DependedOnBy[refIdx+1:]...)
+	if err := params.p.writeTableDesc(params.ctx, &seqDesc); err != nil {
+		return err
+	}
+	params.p.notifySchemaChange(&seqDesc, sqlbase.InvalidMutationID)
+	// Remove the reference from the column descriptor to the sequence descriptor.
+	col.UsesSequenceId = nil
+	return nil
+}
+
 // getUsedSequenceName returns the name of the sequence passed to
 // a call to nextval in the given expression, or nil if there is
 // no call to nextval.
