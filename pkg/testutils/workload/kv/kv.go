@@ -33,7 +33,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-const kvSchema = `(k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`
+const (
+	kvSchema      = `(k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`
+	kvDescription = `KV reads and writes to keys spread uniformly at random` +
+		` across the cluster`
+)
 
 type kv struct {
 	flags *pflag.FlagSet
@@ -63,8 +67,8 @@ func newKV() workload.Generator {
 	return g
 }
 
-// Name implements the Generator interface.
-func (*kv) Name() string { return `kv` }
+// Meta implements the Generator interface.
+func (*kv) Meta() (string, string) { return `kv`, kvDescription }
 
 // Flags implements the Generator interface.
 func (w *kv) Flags() *pflag.FlagSet {

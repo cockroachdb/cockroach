@@ -16,6 +16,7 @@ package bank
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"encoding/hex"
 	"fmt"
@@ -31,9 +32,18 @@ import (
 )
 
 const (
+	bankSchema = `(
+		id INT PRIMARY KEY,
+		balance INT,
+		payload STRING,
+		FAMILY (id, balance, payload)
+	)`
+	bankDescription = `Bank models a set of accounts with currency balances`
+
 	defaultRows         = 1000
 	defaultPayloadBytes = 100
 	defaultRanges       = 10
+	maxTransfer         = 999
 )
 
 type bank struct {
@@ -78,8 +88,8 @@ func FromConfig(rows int, payloadBytes int, ranges int) workload.Generator {
 }
 
 // Name implements the Generator interface.
-func (*bank) Name() string {
-	return `bank`
+func (*bank) Meta() (string, string) {
+	return `bank`, bankDescription
 }
 
 // Flags implements the Generator interface.
@@ -123,9 +133,34 @@ func (b *bank) Tables() []workload.Table {
 }
 
 // Tables implements the Generator interface.
-func (*bank) Ops() []workload.Operation {
+func (b *bank) Ops() []workload.Operation {
 	// TODO(dan): Move the various queries in the backup/restore tests here.
-	return nil
+	op := workload.Operation{
+		Name: `balance transfers`,
+		Fn: func(sqlDB *gosql.DB) (func(context.Context) error, error) {
+			rng := rand.New(rand.NewSource(b.seed))
+			updateStmt, err := sqlDB.Prepare(`
+				UPDATE bank
+				SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+				WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank WHERE id = $1)
+			`)
+			if err != nil {
+				return nil, err
+			}
+
+			return func(ctx context.Context) error {
+				from := rng.Intn(b.rows)
+				to := rng.Intn(b.rows - 1)
+				for from == to && b.rows != 1 {
+					to = rng.Intn(b.rows - 1)
+				}
+				amount := rand.Intn(maxTransfer)
+				_, err := updateStmt.ExecContext(ctx, from, to, amount)
+				return err
+			}, nil
+		},
+	}
+	return []workload.Operation{op}
 }
 
 // Split creates the configured number of ranges in an already created version

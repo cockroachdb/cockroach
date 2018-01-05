@@ -36,8 +36,8 @@ import (
 // TODO(dan): To support persisted test fixtures, we'll need versioning of
 // Generators.
 type Generator interface {
-	// Name returns a unique and descriptive name for this generator.
-	Name() string
+	// Meta returns a unique name for this generator as well as a description.
+	Meta() (name string, description string)
 
 	// Flags returns the flags this Generator is configured with.
 	Flags() *pflag.FlagSet
@@ -95,7 +95,7 @@ var registered = make(map[string]GeneratorFn)
 // This allows only the necessary generators to be compiled into a given binary.
 func Register(fn GeneratorFn) {
 	g := fn()
-	name := g.Name()
+	name, _ := g.Meta()
 	if _, ok := registered[name]; ok {
 		panic(name + " is already registered")
 	}
