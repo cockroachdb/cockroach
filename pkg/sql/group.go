@@ -586,7 +586,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			groupIdx,
 			true, /* ident */
 			builtins.NewIdentAggregate,
-			v.planner.session.TxnState.makeBoundAccount(),
+			v.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 
 		return false, v.addAggregation(f)
@@ -604,7 +604,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 					noRenderIdx,
 					false, /* not ident */
 					agg,
-					v.planner.session.TxnState.makeBoundAccount(),
+					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
 
 			case 1:
@@ -632,7 +632,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 					argRenderIdx,
 					false, /* not ident */
 					agg,
-					v.planner.session.TxnState.makeBoundAccount(),
+					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
 
 			default:

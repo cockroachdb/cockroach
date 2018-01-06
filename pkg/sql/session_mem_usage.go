@@ -75,7 +75,3 @@ func (s *Session) deriveAndStartMonitors() {
 func (s *Session) makeBoundAccount() mon.BoundAccount {
 	return s.sessionMon.MakeBoundAccount()
 }
-
-func (ts *txnState) makeBoundAccount() mon.BoundAccount {
-	return ts.mon.MakeBoundAccount()
-}
