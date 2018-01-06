@@ -119,7 +119,7 @@ func (p *planner) window(
 
 	window.replaceIndexVarsAndAggFuncs(s)
 
-	acc := p.session.TxnState.makeBoundAccount()
+	acc := p.EvalContext().Mon.MakeBoundAccount()
 	window.run.wrappedRenderVals = sqlbase.NewRowContainer(
 		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
 	)
@@ -158,7 +158,7 @@ type windowRun struct {
 }
 
 func (n *windowNode) startExec(params runParams) error {
-	n.run.windowsAcc = params.p.session.TxnState.makeBoundAccount()
+	n.run.windowsAcc = params.EvalContext().Mon.MakeBoundAccount()
 	return nil
 }
 
@@ -178,7 +178,7 @@ func (n *windowNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			n.run.values.rows = sqlbase.NewRowContainer(
-				params.p.session.TxnState.makeBoundAccount(),
+				params.EvalContext().Mon.MakeBoundAccount(),
 				sqlbase.ColTypeInfoFromResCols(n.run.values.columns),
 				n.run.wrappedRenderVals.Len(),
 			)

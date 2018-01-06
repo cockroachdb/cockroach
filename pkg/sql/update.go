@@ -265,7 +265,7 @@ func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(params.p.txn, &params.p.session.TxnState.mon)
+	return u.run.tw.init(params.p.txn, params.EvalContext().Mon)
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {
@@ -276,7 +276,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			_, err = u.tw.finalize(params.ctx, params.p.extendedEvalCtx.Tracing.KVTracingEnabled())
+			_, err = u.tw.finalize(params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}

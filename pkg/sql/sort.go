@@ -695,7 +695,7 @@ func (p *planner) newSortValues(
 	return &sortValues{
 		ordering: ordering,
 		rows: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(),
+			p.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(columns),
 			capacity,
 		),

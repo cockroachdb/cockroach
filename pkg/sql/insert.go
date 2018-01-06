@@ -317,7 +317,7 @@ func (n *insertNode) startExec(params runParams) error {
 		return err
 	}
 
-	return n.run.tw.init(params.p.txn, &params.p.session.TxnState.mon)
+	return n.run.tw.init(params.p.txn, params.EvalContext().Mon)
 }
 
 func (n *insertNode) Next(params runParams) (bool, error) {
@@ -387,7 +387,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 
 			if n.run.isUpsertReturning {
 				n.run.rowsUpserted = sqlbase.NewRowContainer(
-					params.p.session.TxnState.makeBoundAccount(),
+					params.EvalContext().Mon.MakeBoundAccount(),
 					sqlbase.ColTypeInfoFromResCols(n.rh.columns),
 					rows.Len(),
 				)

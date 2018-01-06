@@ -148,7 +148,7 @@ func (d *deleteNode) startExec(params runParams) error {
 		return d.fastDelete(params, scan)
 	}
 
-	return d.run.tw.init(d.p.txn, &params.p.session.TxnState.mon)
+	return d.run.tw.init(d.p.txn, params.EvalContext().Mon)
 }
 
 func (d *deleteNode) Next(params runParams) (bool, error) {
@@ -236,13 +236,14 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
 		return err
 	}
 
-	if err := d.tw.init(params.p.txn, &params.p.session.TxnState.mon); err != nil {
+	if err := d.tw.init(params.p.txn, params.EvalContext().Mon); err != nil {
 		return err
 	}
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return err
 	}
-	rowCount, err := d.tw.fastDelete(params.ctx, scan, params.p.session.Tracing.KVTracingEnabled())
+	rowCount, err := d.tw.fastDelete(
+		params.ctx, scan, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 	if err != nil {
 		return err
 	}
