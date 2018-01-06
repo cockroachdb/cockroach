@@ -922,6 +922,12 @@ func TestEval(t *testing.T) {
 		{`'3 hours'::interval / 2`, `'1h30m'`},
 		{`'3 hours'::interval * 2.5`, `'7h30m'`},
 		{`'3 hours'::interval / 2.5`, `'1h12m'`},
+		{`'1h2m'::interval * 4.5`, `'4h39m'`},
+		{`4.5 * '1h2m'::interval`, `'4h39m'`},
+		{`5.0 * '1h2m'::interval`, `'5h10m'`},
+		{`'1h2m'::interval * 5.0`, `'5h10m'`},
+		{`'1h2m'::interval * 0.0`, `'0s'`},
+		{`00.0 * '1h2m'::interval`, `'0s'`},
 		// Conditional expressions.
 		{`IF(true, 1, 2/0)`, `1`},
 		{`IF(false, 1/0, 2)`, `2`},
