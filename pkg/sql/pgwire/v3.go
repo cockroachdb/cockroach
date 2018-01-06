@@ -176,7 +176,7 @@ type v3Conn struct {
 	wr          *bufio.Writer
 	executor    *sql.Executor
 	readBuf     readBuffer
-	writeBuf    writeBuffer
+	writeBuf    *writeBuffer
 	tagBuf      [64]byte
 	sessionArgs sql.SessionArgs
 	session     *sql.Session
@@ -255,11 +255,13 @@ func (s *streamingState) reset(formatCodes []formatCode, sendDescription bool, l
 func makeV3Conn(
 	conn net.Conn, metrics *ServerMetrics, sqlMemoryPool *mon.BytesMonitor, executor *sql.Executor,
 ) v3Conn {
+	wb := newWriteBuffer()
+	wb.bytecount = metrics.BytesOutCount
 	return v3Conn{
 		conn:          conn,
 		rd:            bufio.NewReader(conn),
 		wr:            bufio.NewWriter(conn),
-		writeBuf:      writeBuffer{bytecount: metrics.BytesOutCount},
+		writeBuf:      wb,
 		metrics:       metrics,
 		executor:      executor,
 		sqlMemoryPool: sqlMemoryPool,
