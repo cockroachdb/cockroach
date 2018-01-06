@@ -15,7 +15,6 @@
 package tree_test
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -124,9 +123,9 @@ func TestFormatTableName(t *testing.T) {
 		// `GRANT SELECT ON xoxoxo TO foo`},
 	}
 
-	var buf bytes.Buffer
-	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtSimple)
-	fmtCtx.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.NormalizableTableName) {
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	defer f.Close()
+	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.NormalizableTableName) {
 		ctx.WriteString("xoxoxo")
 	})
 
@@ -136,9 +135,9 @@ func TestFormatTableName(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			buf.Reset()
-			fmtCtx.FormatNode(stmt)
-			stmtStr := buf.String()
+			f.Reset()
+			f.FormatNode(stmt)
+			stmtStr := f.String()
 			if stmtStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
 			}
@@ -282,13 +281,9 @@ func BenchmarkFormatRandomStatements(b *testing.B) {
 	b.Run("format", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			for i, stmt := range stmts {
-				var f struct {
-					buf bytes.Buffer
-					ctx tree.FmtCtx
-				}
-				f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
-				f.ctx.FormatNode(stmt)
-				strs[i] = f.buf.String()
+				f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+				f.FormatNode(stmt)
+				strs[i] = f.CloseAndGetString()
 			}
 		}
 	})
