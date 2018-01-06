@@ -183,17 +183,6 @@ func (expr *ComparisonExpr) Walk(v Visitor) Expr {
 	return expr
 }
 
-// Walk implements the Expr interface.
-func (expr *ExistsExpr) Walk(v Visitor) Expr {
-	e, changed := WalkExpr(v, expr.Subquery)
-	if changed {
-		exprCopy := *expr
-		exprCopy.Subquery = e
-		return &exprCopy
-	}
-	return expr
-}
-
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *FuncExpr) CopyNode() *FuncExpr {
 	exprCopy := *expr
