@@ -35,7 +35,6 @@ func valueEncodePartitionTuple(
 	maybeTuple tree.Expr,
 	cols []sqlbase.ColumnDescriptor,
 ) ([]byte, error) {
-	maybeTuple = tree.StripParens(maybeTuple)
 	tuple, ok := maybeTuple.(*tree.Tuple)
 	if !ok {
 		// If we don't already have a tuple, promote whatever we have to a 1-tuple.
@@ -49,20 +48,31 @@ func valueEncodePartitionTuple(
 
 	var value, scratch []byte
 	for i, expr := range tuple.Exprs {
+		expr = tree.StripParens(expr)
 		switch expr.(type) {
 		case tree.DefaultVal:
 			if typ != tree.PartitionByList {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
-			// NOT NULL is used to signal DEFAULT.
+			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
+			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionDefaultVal))
+			continue
+		case tree.MinVal:
+			if typ != tree.PartitionByRange {
+				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
+			}
+			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
+			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
+			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMinVal))
 			continue
 		case tree.MaxVal:
 			if typ != tree.PartitionByRange {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
-			// NOT NULL is used to signal MAXVALUE.
+			// NOT NULL is used to signal that a PartitionSpecialValCode follows.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
+			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMaxVal))
 			continue
 		case *tree.Placeholder:
 			return nil, pgerror.UnimplementedWithIssueErrorf(
@@ -167,15 +177,20 @@ func createPartitioningImpl(
 		p := sqlbase.PartitioningDescriptor_Range{
 			Name: string(r.Name),
 		}
-		encodedTuple, err := valueEncodePartitionTuple(
-			tree.PartitionByRange, evalCtx, r.Expr, cols)
+		var err error
+		p.From, err = valueEncodePartitionTuple(
+			tree.PartitionByRange, evalCtx, r.From, cols)
+		if err != nil {
+			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
+		}
+		p.To, err = valueEncodePartitionTuple(
+			tree.PartitionByRange, evalCtx, r.To, cols)
 		if err != nil {
 			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
 			return partDesc, errors.Errorf("PARTITION %s: cannot subpartition a range partition", p.Name)
 		}
-		p.UpperBound = encodedTuple
 		partDesc.Range = append(partDesc.Range, p)
 	}
 
@@ -327,18 +342,18 @@ func selectPartitionExprsByName(
 
 		for _, l := range partDesc.List {
 			for _, valueEncBuf := range l.Values {
-				datums, _, err := sqlbase.TranslateValueEncodingToSpan(
+				t, _, err := sqlbase.DecodePartitionTuple(
 					a, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return err
 				}
-				allDatums := append(prefixDatums, datums...)
+				allDatums := append(prefixDatums, t.Datums...)
 
 				// When len(allDatums) < len(colVars), the missing elements are DEFAULTs, so
 				// we can simply exclude them from the expr.
 				partValueExpr := tree.NewTypedComparisonExpr(tree.EQ,
 					tree.NewTypedTuple(colVars[:len(allDatums)]), tree.NewDTuple(allDatums...))
-				partValueExprs[len(datums)] = append(partValueExprs[len(datums)], exprAndPartName{
+				partValueExprs[len(t.Datums)] = append(partValueExprs[len(t.Datums)], exprAndPartName{
 					expr: partValueExpr,
 					name: l.Name,
 				})

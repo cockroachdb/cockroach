@@ -3220,12 +3220,13 @@ range_partitions:
   }
 
 range_partition:
-  partition VALUES '<' a_expr opt_partition_by
+  partition VALUES FROM '(' expr_list ')' TO '(' expr_list ')' opt_partition_by
   {
     $$.val = tree.RangePartition{
       Name: tree.UnrestrictedName($1),
-      Expr: $4.expr(),
-      Subpartition: $5.partitionBy(),
+      From: &tree.Tuple{Exprs: $5.exprs()},
+      To: &tree.Tuple{Exprs: $9.exprs()},
+      Subpartition: $11.partitionBy(),
     }
   }
 
@@ -6010,6 +6011,10 @@ a_expr:
   {
     $$.val = tree.MaxVal{}
   }
+| MINVALUE
+  {
+    $$.val = tree.MinVal{}
+  }
 // | UNIQUE select_with_parens { return unimplemented(sqllex) }
 
 // Restricted expressions
@@ -7233,7 +7238,6 @@ unreserved_keyword:
 | LOW
 | MATCH
 | MINUTE
-| MINVALUE
 | MONTH
 | NAMES
 | NAN
@@ -7421,7 +7425,7 @@ col_name_keyword:
 // productions in a_expr to support the goofy SQL9x argument syntax.
 // - thomas 2000-11-28
 //
-// TODO(dan): see if we can move MAXVALUE to a less restricted list
+// TODO(dan): see if we can move MAXVALUE and MINVALUE to a less restricted list
 type_func_name_keyword:
   COLLATION
 | CROSS
@@ -7434,6 +7438,7 @@ type_func_name_keyword:
 | LEFT
 | LIKE
 | MAXVALUE
+| MINVALUE
 | NATURAL
 | OUTER
 | OVERLAPS

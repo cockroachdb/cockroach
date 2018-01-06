@@ -663,6 +663,14 @@ func (node MaxVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("MAXVALUE")
 }
 
+// MinVal represents the MINVALUE expression.
+type MinVal struct{}
+
+// Format implements the NodeFormatter interface.
+func (node MinVal) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("MINVALUE")
+}
+
 // Placeholder represents a named placeholder.
 type Placeholder struct {
 	Name string
@@ -1400,6 +1408,7 @@ func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
 func (node MaxVal) String() string            { return AsString(node) }
+func (node MinVal) String() string            { return AsString(node) }
 func (node *Placeholder) String() string      { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
 func (list NameList) String() string          { return AsString(list) }
