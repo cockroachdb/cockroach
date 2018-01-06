@@ -167,14 +167,14 @@ func (r *Replica) computeChecksumPostApply(
 		result, err := r.sha512(ctx, desc, snap, snapshot)
 		if err != nil {
 			log.Errorf(ctx, "%v", err)
-			result = &replicaHash{}
+			result = nil
 		}
-		r.computeChecksumDone(ctx, id, *result, snapshot)
+		r.computeChecksumDone(ctx, id, result, snapshot)
 	}); err != nil {
 		defer snap.Close()
 		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", id))
 		// Set checksum to nil.
-		r.computeChecksumDone(ctx, id, replicaHash{}, nil)
+		r.computeChecksumDone(ctx, id, nil, nil)
 	}
 }
 
