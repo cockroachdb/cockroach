@@ -278,7 +278,7 @@ func (tr *tableReader) close() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (tr *tableReader) producerMeta(err error) ProducerMetadata {
+func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 	if !tr.closed {
 		if err != nil {
 			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{Err: err})
@@ -294,15 +294,15 @@ func (tr *tableReader) producerMeta(err error) ProducerMetadata {
 		tr.close()
 	}
 	if len(tr.trailingMetadata) > 0 {
-		meta := tr.trailingMetadata[0]
+		meta := &tr.trailingMetadata[0]
 		tr.trailingMetadata = tr.trailingMetadata[1:]
 		return meta
 	}
-	return ProducerMetadata{}
+	return nil
 }
 
 // Next is part of the RowSource interface.
-func (tr *tableReader) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if tr.maybeStart("table reader", "TableReader") {
 		if tr.flowCtx.txn == nil {
 			log.Fatalf(tr.ctx, "tableReader outside of txn")
@@ -361,7 +361,7 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 
 		outRow, status, err := tr.out.ProcessRow(tr.ctx, row)
 		if outRow != nil {
-			return outRow, ProducerMetadata{}
+			return outRow, nil
 		}
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue

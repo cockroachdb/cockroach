@@ -110,12 +110,13 @@ func (m *mergeJoiner) close() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (m *mergeJoiner) producerMeta(err error) ProducerMetadata {
-	var meta ProducerMetadata
+func (m *mergeJoiner) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
 	if !m.closed {
-		meta = ProducerMetadata{Err: err}
-		if err == nil {
-			meta.TraceData = getTraceData(m.ctx)
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(m.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
@@ -124,7 +125,7 @@ func (m *mergeJoiner) producerMeta(err error) ProducerMetadata {
 	return meta
 }
 
-func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if m.maybeStart("merge joiner", "MergeJoiner") {
 		m.evalCtx = m.flowCtx.NewEvalCtx()
 		m.cancelChecker = sqlbase.NewCancelChecker(m.ctx)
@@ -134,7 +135,7 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 	for {
 		row, meta := m.nextRow()
 		if m.closed || meta != nil {
-			return nil, *meta
+			return nil, meta
 		}
 		if row == nil {
 			return nil, m.producerMeta(nil /* err */)
@@ -158,7 +159,7 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 			m.rightSource.ConsumerDone()
 			continue
 		}
-		return outRow, ProducerMetadata{}
+		return outRow, nil
 	}
 }
 

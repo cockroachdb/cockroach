@@ -121,7 +121,7 @@ func TestOrderedSync(t *testing.T) {
 		var retRows sqlbase.EncDatumRows
 		for {
 			row, meta := src.Next()
-			if !meta.Empty() {
+			if meta != nil {
 				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			if row == nil {
@@ -151,7 +151,7 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				if status := mrc.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+				if status := mrc.Push(row, nil /* meta */); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
 				}
 			}
@@ -161,7 +161,7 @@ func TestUnorderedSync(t *testing.T) {
 	var retRows sqlbase.EncDatumRows
 	for {
 		row, meta := mrc.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			t.Fatalf("unexpected metadata: %v", meta)
 		}
 		if row == nil {
@@ -199,13 +199,13 @@ func TestUnorderedSync(t *testing.T) {
 				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
-				if status := mrc.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+				if status := mrc.Push(row, nil /* meta */); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
 				}
 			}
 			if i == 3 {
 				err := fmt.Errorf("Test error")
-				mrc.Push(nil /* row */, ProducerMetadata{Err: err})
+				mrc.Push(nil /* row */, &ProducerMetadata{Err: err})
 			}
 			mrc.ProducerDone()
 		}(i)
@@ -213,14 +213,14 @@ func TestUnorderedSync(t *testing.T) {
 	foundErr := false
 	for {
 		row, meta := mrc.Next()
-		if meta.Err != nil {
+		if meta != nil && meta.Err != nil {
 			if meta.Err.Error() != "Test error" {
 				t.Error(meta.Err)
 			} else {
 				foundErr = true
 			}
 		}
-		if row == nil && meta.Empty() {
+		if row == nil && meta == nil {
 			break
 		}
 	}

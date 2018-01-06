@@ -149,7 +149,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	var buf []byte
 	for {
 		row, meta := s.input.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
@@ -193,7 +193,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
-		if !emitHelper(ctx, &s.out, outRow, ProducerMetadata{}, s.input) {
+		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.input) {
 			return true, nil
 		}
 	}
@@ -214,7 +214,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 			return false, err
 		}
 		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
-		if !emitHelper(ctx, &s.out, outRow, ProducerMetadata{}, s.input) {
+		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.input) {
 			return true, nil
 		}
 	}
