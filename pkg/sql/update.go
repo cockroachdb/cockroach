@@ -276,7 +276,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			_, err = u.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			_, err = u.tw.finalize(params.ctx, params.p.extendedEvalCtx.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -325,7 +325,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 
 	// Update the row values.
 	newValues, err := u.tw.row(
-		params.ctx, append(oldValues, updateValues...), params.p.session.Tracing.KVTracingEnabled(),
+		params.ctx, append(oldValues, updateValues...), params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return false, err

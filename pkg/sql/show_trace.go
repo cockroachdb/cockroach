@@ -196,10 +196,10 @@ type traceRun struct {
 }
 
 func (n *showTraceNode) startExec(params runParams) error {
-	if params.p.session.Tracing.Enabled() {
+	if params.extendedEvalCtx.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
-	if err := params.p.session.Tracing.StartTracing(
+	if err := params.extendedEvalCtx.Tracing.StartTracing(
 		tracing.SnowballRecording, n.kvTracingEnabled,
 	); err != nil {
 		return err
@@ -261,7 +261,7 @@ func (n *showTraceNode) Next(params runParams) (bool, error) {
 		n.run.stopTracing = nil
 
 		var err error
-		n.run.traceRows, err = params.p.session.Tracing.generateSessionTraceVTable()
+		n.run.traceRows, err = params.extendedEvalCtx.Tracing.generateSessionTraceVTable()
 		if err != nil {
 			return false, err
 		}
