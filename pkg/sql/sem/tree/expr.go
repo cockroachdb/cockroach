@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Expr represents an expression.
@@ -741,6 +742,23 @@ func (node *Tuple) Truncate(prefix int) *Tuple {
 		Row:   node.Row,
 		types: append(types.TTuple(nil), node.types[:prefix]...),
 	}
+}
+
+// Project returns a new Tuple that contains a subset of the original
+// expressions. E.g.
+//  Tuple:           (1, 2, 3)
+//  Project({0, 2}): (1, 3)
+func (node *Tuple) Project(set util.FastIntSet) *Tuple {
+	t := &Tuple{
+		Exprs: make(Exprs, 0, set.Len()),
+		Row:   node.Row,
+		types: make(types.TTuple, 0, set.Len()),
+	}
+	for i, ok := set.Next(0); ok; i, ok = set.Next(i + 1) {
+		t.Exprs = append(t.Exprs, node.Exprs[i])
+		t.types = append(t.types, node.types[i])
+	}
+	return t
 }
 
 // Array represents an array constructor.

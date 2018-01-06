@@ -180,6 +180,8 @@ func tryTruncateTupleComparison(
 	t *tree.ComparisonExpr, conv varConvertFunc, weaker bool,
 ) tree.TypedExpr {
 	switch t.Operator {
+	case tree.EQ, tree.NE:
+		return tryTruncateTupleEqOrNe(t, conv, weaker)
 	case tree.LT, tree.GT, tree.LE, tree.GE:
 	default:
 		return nil
@@ -201,20 +203,17 @@ func tryTruncateTupleComparison(
 		}
 	}
 
-	newOp := &tree.ComparisonExpr{}
-	*newOp = *t
-
-	switch prefix {
-	case 0:
+	if prefix == 0 {
 		// Not even the first tuple members are useful.
 		return nil
+	}
+	newOp := *t
 
-	case 1:
+	if prefix == 1 {
 		// Simplify to a non-tuple comparison.
 		newOp.Left = left.Exprs[0]
 		newOp.Right = right.D[0]
-
-	case 2:
+	} else {
 		// Preserve a prefix of the tuples.
 		newOp.Left = left.Truncate(prefix)
 		newOp.Right = &tree.DTuple{
@@ -243,7 +242,62 @@ func tryTruncateTupleComparison(
 			newOp.Operator = tree.GT
 		}
 	}
-	return exprConvertVars(newOp, conv)
+	return exprConvertVars(&newOp, conv)
+}
+
+// If the given expression is a tuple EQ or NE, extract a comparison that
+// contains only variables known to the conversion function. See
+// truTruncateTupleComparison for information on "weaker".
+func tryTruncateTupleEqOrNe(
+	t *tree.ComparisonExpr, conv varConvertFunc, weaker bool,
+) tree.TypedExpr {
+	// In the "normal" case where we want a weaker expression:
+	//  - we can convert (a, b, x) = (1, 2, 3) to (a, b) = (1, 2).
+	//  - we can't convert (a, b, x) != (1, 2, 3).
+	//
+	// In the "inverted" case where we want a stronger expression:
+	//  - we can't convert (a, b, x) = (1, 2, 3).
+	//  - we can convert (a, b, x) != (1, 2, 3) to (a, b) != (1, 2).
+	if (t.Operator == tree.EQ) != weaker {
+		return nil
+	}
+	left, leftOk := t.Left.(*tree.Tuple)
+	right, rightOk := t.Right.(*tree.DTuple)
+	// TODO(radu): we should also support Tuple on both sides.
+	if !leftOk || !rightOk {
+		return nil
+	}
+	if len(left.Exprs) != len(right.D) {
+		panic(fmt.Sprintf("invalid tuple comparison %s", t))
+	}
+	var convertible util.FastIntSet
+	for i, e := range left.Exprs {
+		if exprCheckVars(e, conv) {
+			convertible.Add(i)
+		}
+	}
+	if convertible.Empty() {
+		return nil
+	}
+
+	newOp := *t
+	if convertible.Len() == 1 {
+		// Simplify to a non-tuple comparison.
+		idx, _ := convertible.Next(0)
+		newOp.Left = left.Exprs[idx]
+		newOp.Right = right.D[idx]
+	} else {
+		newOp.Left = left.Project(convertible)
+		dTuple := &tree.DTuple{
+			D:      make(tree.Datums, 0, convertible.Len()),
+			Sorted: right.Sorted,
+		}
+		for i, ok := convertible.Next(0); ok; i, ok = convertible.Next(i + 1) {
+			dTuple.D = append(dTuple.D, right.D[i])
+		}
+		newOp.Right = dTuple
+	}
+	return exprConvertVars(&newOp, conv)
 }
 
 // splitBoolExpr splits a boolean expression E into two boolean expressions RES and REM such that:
