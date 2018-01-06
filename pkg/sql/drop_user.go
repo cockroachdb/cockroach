@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/pkg/errors"
@@ -97,19 +96,17 @@ func (n *DropUserNode) startExec(params runParams) error {
 		userNames[normalizedUsername] = struct{}{}
 	}
 
-	var f struct {
-		usedBy bytes.Buffer
-		ctx    tree.FmtCtx
-	}
-	f.ctx = tree.MakeFmtCtx(&f.usedBy, tree.FmtSimple)
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	defer f.Close()
+
 	if err := forEachDatabaseDesc(params.ctx, params.p,
 		func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
-					if f.usedBy.Len() > 0 {
-						f.usedBy.WriteString(", ")
+					if f.Len() > 0 {
+						f.WriteString(", ")
 					}
-					f.ctx.FormatNameP(&db.Name)
+					f.FormatNameP(&db.Name)
 				}
 			}
 			return nil
@@ -124,32 +121,29 @@ func (n *DropUserNode) startExec(params runParams) error {
 						DatabaseName: tree.Name(db.Name),
 						TableName:    tree.Name(table.Name),
 					}
-					if f.usedBy.Len() > 0 {
-						f.usedBy.WriteString(", ")
+					if f.Len() > 0 {
+						f.WriteString(", ")
 					}
-					f.ctx.FormatNode(&tn)
+					f.FormatNode(&tn)
 				}
 			}
 			return nil
 		}); err != nil {
 		return err
 	}
-	if f.usedBy.Len() > 0 {
-		var fnl struct {
-			nameList bytes.Buffer
-			ctx      tree.FmtCtx
-		}
-		fnl.ctx = tree.MakeFmtCtx(&fnl.nameList, tree.FmtSimple)
+	if f.Len() > 0 {
+		fnl := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+		defer fnl.Close()
 		for i, name := range names {
 			if i > 0 {
-				fnl.nameList.WriteString(", ")
+				fnl.WriteString(", ")
 			}
-			fnl.ctx.FormatName(name)
+			fnl.FormatName(name)
 		}
 		return pgerror.NewErrorf(pgerror.CodeGroupingError,
 			"cannot drop user%s or role%s %s: grants still exist on %s",
 			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
-			fnl.nameList.String(), f.usedBy.String(),
+			fnl.String(), f.String(),
 		)
 	}
 

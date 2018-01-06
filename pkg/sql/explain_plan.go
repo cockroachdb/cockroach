@@ -280,14 +280,10 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
 			fieldName = fmt.Sprintf("%s %d", fieldName, n)
 		}
 
-		var f struct {
-			buf bytes.Buffer
-			ctx tree.FmtCtx
-		}
-		f.ctx = tree.MakeFmtCtx(&f.buf, e.fmtFlags)
-		f.ctx.WithPlaceholderFormat(e.showPlaceholderValues)
-		f.ctx.FormatNode(expr)
-		e.attr(nodeName, fieldName, f.buf.String())
+		f := tree.NewFmtCtxWithBuf(e.fmtFlags)
+		f.WithPlaceholderFormat(e.showPlaceholderValues)
+		f.FormatNode(expr)
+		e.attr(nodeName, fieldName, f.CloseAndGetString())
 	}
 }
 
@@ -322,28 +318,24 @@ func (e *explainer) leaveNode(name string, _ planNode) error {
 // planNode to a string. The column types are printed iff the 2nd
 // argument specifies so.
 func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
-	var f struct {
-		buf bytes.Buffer
-		ctx tree.FmtCtx
-	}
-	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
-	f.buf.WriteByte('(')
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f.WriteByte('(')
 	for i := range cols {
 		rCol := &cols[i]
 		if i > 0 {
-			f.buf.WriteString(", ")
+			f.WriteString(", ")
 		}
-		f.ctx.FormatNameP(&rCol.Name)
+		f.FormatNameP(&rCol.Name)
 		// Output extra properties like [hidden,omitted].
 		hasProps := false
 		outputProp := func(prop string) {
 			if hasProps {
-				f.buf.WriteByte(',')
+				f.WriteByte(',')
 			} else {
-				f.buf.WriteByte('[')
+				f.WriteByte('[')
 			}
 			hasProps = true
-			f.buf.WriteString(prop)
+			f.WriteString(prop)
 		}
 		if rCol.Hidden {
 			outputProp("hidden")
@@ -352,14 +344,14 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 			outputProp("omitted")
 		}
 		if hasProps {
-			f.buf.WriteByte(']')
+			f.WriteByte(']')
 		}
 
 		if printTypes {
-			f.buf.WriteByte(' ')
-			f.buf.WriteString(rCol.Typ.String())
+			f.WriteByte(' ')
+			f.WriteString(rCol.Typ.String())
 		}
 	}
-	f.buf.WriteByte(')')
-	return f.buf.String()
+	f.WriteByte(')')
+	return f.CloseAndGetString()
 }

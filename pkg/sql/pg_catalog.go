@@ -530,15 +530,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
-					var f struct {
-						buf bytes.Buffer
-						ctx tree.FmtCtx
-					}
-					f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
-					f.buf.WriteString("UNIQUE (")
-					c.Index.ColNamesFormat(&f.ctx)
-					f.buf.WriteByte(')')
-					condef = tree.NewDString(f.buf.String())
+					f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+					f.WriteString("UNIQUE (")
+					c.Index.ColNamesFormat(f)
+					f.WriteByte(')')
+					condef = tree.NewDString(f.CloseAndGetString())
 
 				case sqlbase.ConstraintTypeCheck:
 					oid = h.CheckConstraintOid(db, table, c.CheckConstraint)

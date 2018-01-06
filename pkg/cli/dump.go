@@ -15,7 +15,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"database/sql/driver"
 	"fmt"
@@ -255,11 +254,8 @@ func getMetadataForTable(
 	}
 	vals = make([]driver.Value, 2)
 	coltypes := make(map[string]string)
-	var f struct {
-		colnames bytes.Buffer
-		ctx      tree.FmtCtx
-	}
-	f.ctx = tree.MakeFmtCtx(&f.colnames, tree.FmtSimple)
+	colnames := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	defer colnames.Close()
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
@@ -276,10 +272,10 @@ func getMetadataForTable(
 			return tableMetadata{}, fmt.Errorf("unexpected value: %T", typI)
 		}
 		coltypes[name] = typ
-		if f.colnames.Len() > 0 {
-			f.colnames.WriteString(", ")
+		if colnames.Len() > 0 {
+			colnames.WriteString(", ")
 		}
-		f.ctx.FormatName(name)
+		colnames.FormatName(name)
 	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
@@ -326,7 +322,7 @@ func getMetadataForTable(
 	return tableMetadata{
 		ID:          tableID,
 		name:        name,
-		columnNames: f.colnames.String(),
+		columnNames: colnames.String(),
 		columnTypes: coltypes,
 		createStmt:  create,
 		dependsOn:   refs,
@@ -398,17 +394,14 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	g.Go(func() error {
 		// Convert SQL rows into VALUE strings.
 		defer close(stringsCh)
-		var f struct {
-			ivals bytes.Buffer
-			ctx   tree.FmtCtx
-		}
-		f.ctx = tree.MakeFmtCtx(&f.ivals, tree.FmtParsable)
+		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		defer f.Close()
 		for vals := range valsCh {
-			f.ivals.Reset()
+			f.Reset()
 			// Values need to be correctly encoded for INSERT statements in a text file.
 			for si, sv := range vals {
 				if si > 0 {
-					f.ivals.WriteString(", ")
+					f.WriteString(", ")
 				}
 				var d tree.Datum
 				switch t := sv.(type) {
@@ -489,12 +482,12 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 				default:
 					return errors.Errorf("unknown field type: %T (%s)", t, cols[si])
 				}
-				d.Format(&f.ctx)
+				d.Format(&f.FmtCtx)
 			}
 			select {
 			case <-done:
 				return ctx.Err()
-			case stringsCh <- f.ivals.String():
+			case stringsCh <- f.String():
 			}
 		}
 		return nil

@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"testing"
@@ -76,16 +75,15 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	// Test formatting using the indexed var format interceptor.
-	var buf bytes.Buffer
-	fmtCtx := MakeFmtCtx(&buf, FmtSimple)
-	fmtCtx.WithIndexedVarFormat(
+	f := NewFmtCtxWithBuf(FmtSimple)
+	f.WithIndexedVarFormat(
 		func(ctx *FmtCtx, idx int) {
 			ctx.Printf("customVar%d", idx)
 		},
 	)
-	fmtCtx.FormatNode(typedExpr)
+	f.FormatNode(typedExpr)
+	str = f.CloseAndGetString()
 
-	str = buf.String()
 	expectedStr = "customVar0 + (customVar1 * customVar2)"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)

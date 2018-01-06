@@ -286,13 +286,9 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 
 // AsStringWithFlags pretty prints a node to a string given specific flags.
 func AsStringWithFlags(n NodeFormatter, fl FmtFlags) string {
-	var f struct {
-		buf bytes.Buffer
-		ctx FmtCtx
-	}
-	f.ctx = MakeFmtCtx(&f.buf, fl)
-	f.ctx.FormatNode(n)
-	return f.buf.String()
+	ctx := NewFmtCtxWithBuf(fl)
+	ctx.FormatNode(n)
+	return ctx.CloseAndGetString()
 }
 
 // AsString pretty prints a node to a string.
@@ -310,4 +306,65 @@ func ErrString(n NodeFormatter) string {
 // into expressions.
 func Serialize(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtParsable)
+}
+
+// FmtCtxWithBuf is a combination of FmtCtx and bytes.Buffer, meant
+// for use in the following pattern:
+//
+// f := NewFmtCtxWithBuf(flags)
+// f.FormatNode(...)
+// f.WriteString(...)
+// ... etc ...
+// return f.CloseAndGetString()
+//
+// Users must either call Close() or CloseAndGetString().
+//
+// It implements the interface of FmtCtx, which in turn implements
+// that of bytes.Buffer. Therefore, the String() method works and can
+// be used multiple times. The CloseAndGetString() method is meant to
+// combine Close() and String().
+type FmtCtxWithBuf struct {
+	FmtCtx
+	buf bytes.Buffer
+}
+
+// TODO(nathan/peter): the tests break horribly when the following code is enabled:
+//
+// var fmtCtxWithBufPool = sync.Pool{
+// 	New: func() interface{} {
+// 		f := &FmtCtxWithBuf{}
+// 		f.FmtCtx.Buffer = &f.buf
+// 		return f
+// 	},
+// }
+//
+// // NewFmtCtxWithBuf returns a FmtCtxWithBuf ready for use.
+// func NewFmtCtxWithBuf(f FmtFlags) *FmtCtxWithBuf {
+// 	ctx := fmtCtxWithBufPool.Get().(*FmtCtxWithBuf)
+// 	ctx.FmtCtx.flags = f
+// 	return ctx
+// }
+//
+// // Close releases the FmtCtxWithBuf.
+// func (f *FmtCtxWithBuf) Close() {
+// 	f.Reset()
+// 	fmtCtxWithBufPool.Put(f)
+// }
+
+// NewFmtCtxWithBuf returns a FmtCtxWithBuf ready for use.
+func NewFmtCtxWithBuf(f FmtFlags) *FmtCtxWithBuf {
+	ctx := &FmtCtxWithBuf{}
+	ctx.FmtCtx.Buffer = &ctx.buf
+	ctx.FmtCtx.flags = f
+	return ctx
+}
+
+// Close releases the FmtCtxWithBuf.
+func (f *FmtCtxWithBuf) Close() {}
+
+// CloseAndGetString combines Close() and String().
+func (f *FmtCtxWithBuf) CloseAndGetString() string {
+	s := f.buf.String()
+	f.Close()
+	return s
 }
