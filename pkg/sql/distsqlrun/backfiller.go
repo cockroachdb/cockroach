@@ -87,7 +87,7 @@ func (b *backfiller) Run(wg *sync.WaitGroup) {
 	}
 
 	if err := b.mainLoop(ctx); err != nil {
-		b.output.Push(nil /* row */, ProducerMetadata{Err: err})
+		b.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 	}
 	sendTraceData(ctx, b.output)
 	b.output.ProducerDone()

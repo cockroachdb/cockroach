@@ -199,14 +199,14 @@ func emitHelper(
 	ctx context.Context,
 	output *ProcOutputHelper,
 	row sqlbase.EncDatumRow,
-	meta ProducerMetadata,
+	meta *ProducerMetadata,
 	inputs ...RowSource,
 ) bool {
 	if output.output == nil {
 		panic("output RowReceiver not initialized for emitting")
 	}
 	var consumerStatus ConsumerStatus
-	if !meta.Empty() {
+	if meta != nil {
 		if row != nil {
 			panic("both row data and metadata in the same emitHelper call")
 		}
@@ -216,7 +216,7 @@ func emitHelper(
 		var err error
 		consumerStatus, err = output.EmitRow(ctx, row)
 		if err != nil {
-			output.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			output.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 			for _, input := range inputs {
 				input.ConsumerClosed()
 			}
@@ -271,7 +271,7 @@ func (h *ProcOutputHelper) EmitRow(
 	if log.V(3) {
 		log.InfofDepth(ctx, 1, "pushing row %s", outRow)
 	}
-	if r := h.output.Push(outRow, ProducerMetadata{}); r != NeedMoreRows {
+	if r := h.output.Push(outRow, nil); r != NeedMoreRows {
 		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
 			r == DrainRequested)
 		return r, nil
@@ -506,12 +506,13 @@ func (n *noopProcessor) close() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (n *noopProcessor) producerMeta(err error) ProducerMetadata {
-	var meta ProducerMetadata
+func (n *noopProcessor) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
 	if !n.closed {
-		meta = ProducerMetadata{Err: err}
-		if err == nil {
-			meta.TraceData = getTraceData(n.ctx)
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(n.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
@@ -521,12 +522,12 @@ func (n *noopProcessor) producerMeta(err error) ProducerMetadata {
 }
 
 // Next is part of the RowSource interface.
-func (n *noopProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	n.maybeStart("noop", "" /* logTag */)
 
 	for {
 		row, meta := n.input.Next()
-		if n.closed || !meta.Empty() {
+		if n.closed || meta != nil {
 			return nil, meta
 		}
 		if row == nil {
@@ -546,7 +547,7 @@ func (n *noopProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 			n.input.ConsumerDone()
 			continue
 		}
-		return outRow, ProducerMetadata{}
+		return outRow, nil
 	}
 }
 

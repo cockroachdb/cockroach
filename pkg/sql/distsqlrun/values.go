@@ -72,12 +72,13 @@ func (v *valuesProcessor) close() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (v *valuesProcessor) producerMeta(err error) ProducerMetadata {
-	var meta ProducerMetadata
+func (v *valuesProcessor) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
 	if !v.closed {
-		meta = ProducerMetadata{Err: err}
-		if err == nil {
-			meta.TraceData = getTraceData(v.ctx)
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(v.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
@@ -87,7 +88,7 @@ func (v *valuesProcessor) producerMeta(err error) ProducerMetadata {
 }
 
 // Next is part of the RowSource interface.
-func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if v.maybeStart("values", "" /* logTag */) {
 		// Add a bogus header to apease the StreamDecoder, which wants to receive a
 		// header before any data.
@@ -107,9 +108,9 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 			return nil, v.producerMeta(err)
 		}
 
-		if row == nil && meta.Empty() {
+		if row == nil && meta == nil {
 			if len(v.data) == 0 {
-				return nil, ProducerMetadata{}
+				return nil, nil
 			}
 			// Push a chunk of data to the stream decoder.
 			m := &ProducerMessage{}
@@ -137,7 +138,7 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 			case DrainRequested:
 				continue
 			}
-			return outRow, ProducerMetadata{}
+			return outRow, nil
 		}
 
 		return nil, meta
