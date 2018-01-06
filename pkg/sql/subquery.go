@@ -304,25 +304,24 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 			t.Subquery = result
 		}
 
-	case *tree.ExistsExpr:
-		if sub, ok := t.Subquery.(*tree.Subquery); ok {
-			result, err := v.replaceSubquery(sub, true /* multi-row */, -1 /* desired-columns */)
-			if err != nil {
-				v.err = err
-				return false, expr
-			}
-			result.execMode = execModeExists
-			result.typ = types.Bool
-			expr = result
-		}
-
 	case *tree.Subquery:
-		result, err := v.replaceSubquery(t, false /* multi-row */, v.columns /* desired-columns */)
+		multiRow := false
+		desiredColumns := v.columns
+		if t.Exists {
+			multiRow = true
+			desiredColumns = -1
+		}
+		result, err := v.replaceSubquery(t, multiRow, desiredColumns)
 		if err != nil {
 			v.err = err
 			return false, expr
 		}
-		result.execMode = execModeOneRow
+		if t.Exists {
+			result.execMode = execModeExists
+			result.typ = types.Bool
+		} else {
+			result.execMode = execModeOneRow
+		}
 		expr = result
 
 	case *tree.ComparisonExpr:

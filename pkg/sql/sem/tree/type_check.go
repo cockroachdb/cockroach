@@ -432,17 +432,6 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedE
 	return expr, err
 }
 
-// TypeCheck implements the Expr interface.
-func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	subqueryTyped, err := expr.Subquery.TypeCheck(ctx, types.Any)
-	if err != nil {
-		return nil, err
-	}
-	expr.Subquery = subqueryTyped
-	expr.typ = types.Bool
-	return expr, nil
-}
-
 var (
 	errOrderByIndexInWindow = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "ORDER BY INDEX in window definition is not supported")
 	errFilterWithinWindow   = pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "FILTER within a window function call is not yet supported")

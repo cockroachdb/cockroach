@@ -6196,7 +6196,7 @@ c_expr:
 | case_expr
 | EXISTS select_with_parens
   {
-    $$.val = &tree.ExistsExpr{Subquery: &tree.Subquery{Select: $2.selectStmt()}}
+    $$.val = &tree.Subquery{Select: $2.selectStmt(), Exists: true}
   }
 
 // Productions that can be followed by a postfix operator.
