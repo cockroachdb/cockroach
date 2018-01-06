@@ -1689,9 +1689,9 @@ DBStatus DBSyncWAL(DBEngine* db) {
 #endif
 }
 
-DBStatus DBCompact(DBEngine* db) { return DBCompactRange(db, DBKey(), DBKey()); }
+DBStatus DBCompact(DBEngine* db) { return DBCompactRange(db, DBSlice(), DBSlice()); }
 
-DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end) {
+DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end) {
   rocksdb::CompactRangeOptions options;
   // By default, RocksDB doesn't recompact the bottom level (unless
   // there is a compaction filter, which we don't use). However,
@@ -1710,14 +1710,14 @@ DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end) {
   std::vector<rocksdb::LiveFileMetaData> metadata;
   db->rep->GetLiveFilesMetaData(&all_metadata);
 
-  const std::string start_key(EncodeKey(start));
-  const std::string end_key(EncodeKey(end));
+  const std::string start_key(ToString(start));
+  const std::string end_key(ToString(end));
 
   int max_level = 0;
   for (int i = 0; i < all_metadata.size(); i++) {
     // Skip any SSTables which fall outside the specified range, if a
     // range was specified.
-    if ((!start_key.empty() > 0 && all_metadata[i].largestkey < start_key) ||
+    if ((!start_key.empty() && all_metadata[i].largestkey < start_key) ||
         (!end_key.empty() && all_metadata[i].smallestkey >= end_key)) {
       continue;
     }

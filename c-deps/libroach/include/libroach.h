@@ -112,7 +112,7 @@ DBStatus DBCompact(DBEngine* db);
 // Forces an immediate compaction over keys in the specified range.
 // Note that if start is empty, it indicates the start of the database.
 // If end is empty, it indicates the end of the database.
-DBStatus DBCompactRange(DBEngine* db, DBKey start, DBKey end);
+DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end);
 
 // Stores the approximate on-disk size of the given key range into the
 // supplied uint64.

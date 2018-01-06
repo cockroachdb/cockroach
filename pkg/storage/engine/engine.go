@@ -235,7 +235,7 @@ type Engine interface {
 	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
-	CompactRange(start, end MVCCKey) error
+	CompactRange(start, end roachpb.Key) error
 }
 
 // WithSSTables extends the Engine interface with a method to get info

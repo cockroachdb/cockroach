@@ -848,8 +848,8 @@ func (r *RocksDB) Compact() error {
 }
 
 // CompactRange forces compaction over a specified range of keys in the database.
-func (r *RocksDB) CompactRange(start, end MVCCKey) error {
-	return statusToError(C.DBCompactRange(r.rdb, goToCKey(start), goToCKey(end)))
+func (r *RocksDB) CompactRange(start, end roachpb.Key) error {
+	return statusToError(C.DBCompactRange(r.rdb, goToCSlice(start), goToCSlice(end)))
 }
 
 // ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
