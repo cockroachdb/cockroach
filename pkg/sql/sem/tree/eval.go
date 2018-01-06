@@ -2990,12 +2990,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
-	// Exists expressions are handled during subquery expansion.
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", t)
-}
-
-// Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 	args := NewDTupleWithCap(len(expr.Exprs))
 	for _, e := range expr.Exprs {

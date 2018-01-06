@@ -556,19 +556,6 @@ func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
-// ExistsExpr represents an EXISTS expression.
-type ExistsExpr struct {
-	Subquery Expr
-
-	typeAnnotation
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ExistsExpr) Format(ctx *FmtCtx) {
-	ctx.WriteString("EXISTS ")
-	exprFmtWithParen(ctx, node.Subquery)
-}
-
 // IfExpr represents an IF expression.
 type IfExpr struct {
 	Cond Expr
@@ -799,6 +786,7 @@ func (node *TypedExprs) String() string {
 // Subquery represents a subquery.
 type Subquery struct {
 	Select SelectStatement
+	Exists bool
 }
 
 // Variable implements the VariableExpr interface.
@@ -806,6 +794,9 @@ func (*Subquery) Variable() {}
 
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(ctx *FmtCtx) {
+	if node.Exists {
+		ctx.WriteString("EXISTS ")
+	}
 	ctx.FormatNode(node.Select)
 }
 
@@ -1380,7 +1371,6 @@ func (node *DArray) String() string           { return AsString(node) }
 func (node *DTable) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
-func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
