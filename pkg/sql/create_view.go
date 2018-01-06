@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -64,25 +63,24 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	// merely as a traversal method; its output buffer is discarded
 	// immediately after the traversal because it is not needed further.
 	var fmtErr error
-	var f struct {
-		queryBuf bytes.Buffer // unused
-		ctx      tree.FmtCtx
+	{
+		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		f.WithReformatTableNames(
+			func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
+				tn, err := p.QualifyWithDatabase(ctx, t)
+				if err != nil {
+					log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
+						tree.ErrString(t), err)
+					fmtErr = err
+					return
+				}
+				// Persist the database prefix expansion.
+				tn.DBNameOriginallyOmitted = false
+			},
+		)
+		f.FormatNode(n.AsSource)
+		f.Close() // We don't need the string.
 	}
-	f.ctx = tree.MakeFmtCtx(&f.queryBuf, tree.FmtParsable)
-	f.ctx.WithReformatTableNames(
-		func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
-			tn, err := p.QualifyWithDatabase(ctx, t)
-			if err != nil {
-				log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
-					tree.ErrString(t), err)
-				fmtErr = err
-				return
-			}
-			// Persist the database prefix expansion.
-			tn.DBNameOriginallyOmitted = false
-		},
-	)
-	f.ctx.FormatNode(n.AsSource)
 
 	if fmtErr != nil {
 		return nil, fmtErr

@@ -92,22 +92,18 @@ func (p *planner) ShowCreateSequence(
 func (p *planner) showCreateView(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
-	var f struct {
-		buf bytes.Buffer
-		ctx tree.FmtCtx
-	}
-	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
-	f.buf.WriteString("CREATE VIEW ")
-	f.ctx.FormatNode(tn)
-	f.buf.WriteString(" (")
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f.WriteString("CREATE VIEW ")
+	f.FormatNode(tn)
+	f.WriteString(" (")
 	for i := range desc.Columns {
 		if i > 0 {
-			f.buf.WriteString(", ")
+			f.WriteString(", ")
 		}
-		f.ctx.FormatNameP(&desc.Columns[i].Name)
+		f.FormatNameP(&desc.Columns[i].Name)
 	}
-	fmt.Fprintf(&f.buf, ") AS %s", desc.ViewQuery)
-	return f.buf.String(), nil
+	f.Printf(") AS %s", desc.ViewQuery)
+	return f.CloseAndGetString(), nil
 }
 
 func (p *planner) printForeignKeyConstraint(
@@ -154,22 +150,18 @@ func (p *planner) printForeignKeyConstraint(
 func (p *planner) showCreateSequence(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
-	var f struct {
-		buf bytes.Buffer
-		ctx tree.FmtCtx
-	}
-	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
-	f.buf.WriteString("CREATE SEQUENCE ")
-	f.ctx.FormatNode(tn)
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f.WriteString("CREATE SEQUENCE ")
+	f.FormatNode(tn)
 	opts := desc.SequenceOpts
-	fmt.Fprintf(&f.buf, " MINVALUE %d", opts.MinValue)
-	fmt.Fprintf(&f.buf, " MAXVALUE %d", opts.MaxValue)
-	fmt.Fprintf(&f.buf, " INCREMENT %d", opts.Increment)
-	fmt.Fprintf(&f.buf, " START %d", opts.Start)
+	f.Printf(" MINVALUE %d", opts.MinValue)
+	f.Printf(" MAXVALUE %d", opts.MaxValue)
+	f.Printf(" INCREMENT %d", opts.Increment)
+	f.Printf(" START %d", opts.Start)
 	if opts.Cycle {
-		f.buf.WriteString(" CYCLE")
+		f.WriteString(" CYCLE")
 	}
-	return f.buf.String(), nil
+	return f.CloseAndGetString(), nil
 }
 
 // showCreateTable returns a valid SQL representation of the CREATE
@@ -265,18 +257,14 @@ func (p *planner) showCreateTable(
 
 // quoteNames quotes and adds commas between names.
 func quoteNames(names ...string) string {
-	var f struct {
-		buf bytes.Buffer
-		ctx tree.FmtCtx
-	}
-	f.ctx = tree.MakeFmtCtx(&f.buf, tree.FmtSimple)
-	for i, name := range names {
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	for i := range names {
 		if i > 0 {
-			f.buf.WriteString(", ")
+			f.WriteString(", ")
 		}
-		f.ctx.FormatName(name)
+		f.FormatNameP(&names[i])
 	}
-	return f.buf.String()
+	return f.CloseAndGetString()
 }
 
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
