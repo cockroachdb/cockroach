@@ -2446,3 +2446,25 @@ func (desc *TableDescriptor) NumColumns() int {
 func (desc *TableDescriptor) Column(i int) optbase.Column {
 	return &desc.Columns[i]
 }
+
+// PartitionNames returns a slice containing the name of every partition and
+// subpartition in an arbitrary order.
+func (desc *TableDescriptor) PartitionNames() (names []string) {
+	for _, index := range desc.AllNonDropIndexes() {
+		names = append(names, index.Partitioning.PartitionNames()...)
+	}
+	return names
+}
+
+// PartitionNames returns a slice containing the name of every partition and
+// subpartition in an arbitrary order.
+func (desc *PartitioningDescriptor) PartitionNames() (names []string) {
+	for _, l := range desc.List {
+		names = append(names, l.Name)
+		names = append(names, l.Subpartitioning.PartitionNames()...)
+	}
+	for _, r := range desc.Range {
+		names = append(names, r.Name)
+	}
+	return names
+}

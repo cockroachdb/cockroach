@@ -1199,10 +1199,42 @@ func TestRepartitioning(t *testing.T) {
 					t.Fatalf("%s: %+v", repartition.String(), err)
 				}
 
-				// NB: The old zone configurations are not removed. This will
-				// overwrite any with the same name and the repartitioning
-				// removes any for partitions that no longer exists, but there
-				// could still be some sitting around. This is intentional.
+				// Verify that repartitioning removes zone configs for partitions that
+				// have been removed.
+				newPartitionNames := map[string]struct{}{}
+				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
+					newPartitionNames[name] = struct{}{}
+				}
+				rows := sqlDB.Query(t, "SELECT cli_specifier FROM [EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
+				defer rows.Close()
+				for rows.Next() {
+					var cliSpecifier string
+					if err := rows.Scan(&cliSpecifier); err != nil {
+						t.Fatal(err)
+					}
+					zs, err := config.ParseCLIZoneSpecifier(cliSpecifier)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !zs.TargetsTable() {
+						continue
+					}
+					tn, err := zs.TableOrIndex.Table.Normalize()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if tn.Table() != test.new.parsed.tableName || zs.Partition == "" {
+						continue
+					}
+					if _, ok := newPartitionNames[string(zs.Partition)]; !ok {
+						t.Errorf("zone config for removed partition %q exists after repartitioning", zs.Partition)
+					}
+				}
+
+				// NB: Not all old zone configurations are removed. This statement will
+				// overwrite any with the same name and the repartitioning removes any
+				// for partitions that no longer exist, but there could still be some
+				// sitting around. This is intentional.
 				sqlDB.Exec(t, test.new.parsed.zoneConfigStmts)
 
 				testutils.SucceedsSoon(t, test.new.verifyScansFn(ctx, sqlDB.DB))
