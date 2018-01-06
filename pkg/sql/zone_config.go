@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -227,4 +228,38 @@ func resolveSubzone(
 		return table, index, partitionName, nil
 	}
 	return table, nil, "", nil
+}
+
+func deleteRemovedPartitionZoneConfigs(
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	leaseMgr *LeaseManager,
+	tableDesc *sqlbase.TableDescriptor,
+	idxDesc *sqlbase.IndexDescriptor,
+	oldPartDesc *sqlbase.PartitioningDescriptor,
+	newPartDesc *sqlbase.PartitioningDescriptor,
+) error {
+	newNames := map[string]struct{}{}
+	for _, n := range newPartDesc.PartitionNames() {
+		newNames[n] = struct{}{}
+	}
+	removedNames := []string{}
+	for _, n := range oldPartDesc.PartitionNames() {
+		if _, exists := newNames[n]; !exists {
+			removedNames = append(removedNames, n)
+		}
+	}
+	if len(removedNames) == 0 {
+		return nil
+	}
+	zone, err := getZoneConfigRaw(ctx, txn, tableDesc.ID)
+	if err != nil {
+		return err
+	}
+	for _, n := range removedNames {
+		zone.DeleteSubzone(uint32(idxDesc.ID), n)
+	}
+	_, err = writeZoneConfig(ctx, txn, settings, leaseMgr, tableDesc.ID, tableDesc, zone)
+	return err
 }
