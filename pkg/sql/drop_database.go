@@ -140,7 +140,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 
 	b := &client.Batch{}
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
 		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)

@@ -156,7 +156,7 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 
-	traceKV := d.p.session.Tracing.KVTracingEnabled()
+	traceKV := d.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
 	next, err := d.run.rows.Next(params)
 	if !next {

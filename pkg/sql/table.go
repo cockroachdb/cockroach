@@ -671,7 +671,7 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	descVal := sqlbase.WrapDescriptor(tableDesc)
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
 	}
 	return p.txn.Put(ctx, descKey, descVal)
