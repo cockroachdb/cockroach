@@ -160,13 +160,22 @@ type writeBuffer struct {
 	// We keep both of these because there are operations that are only possible to
 	// perform (efficiently) with one or the other, such as strconv.AppendInt with
 	// putbuf or Datum.Format with variablePutbuf.
-	putbuf         [64]byte
-	variablePutbuf bytes.Buffer
+	putbuf          [64]byte
+	variablePutbuf  bytes.Buffer
+	simpleFormatter tree.FmtCtx
+	arrayFormatter  tree.FmtCtx
 
 	// bytecount counts the number of bytes written across all pgwire connections, not just this
 	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
 	// socket, reducing the onus on the many callers of finishMsg.
 	bytecount *metric.Counter
+}
+
+func newWriteBuffer() *writeBuffer {
+	b := &writeBuffer{}
+	b.simpleFormatter = tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtSimple)
+	b.arrayFormatter = tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtArrays)
+	return b
 }
 
 // Write implements the io.Write interface.

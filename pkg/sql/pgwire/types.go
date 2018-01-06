@@ -183,7 +183,6 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 
 	case *tree.DTuple:
 		b.variablePutbuf.WriteString("(")
-		fmtCtx := tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtSimple)
 		for i, d := range v.D {
 			if i > 0 {
 				b.variablePutbuf.WriteString(",")
@@ -192,7 +191,7 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 				// Emit nothing on NULL.
 				continue
 			}
-			fmtCtx.FormatNode(d)
+			b.simpleFormatter.FormatNode(d)
 		}
 		b.variablePutbuf.WriteString(")")
 		b.writeLengthPrefixedVariablePutbuf()
@@ -208,13 +207,12 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 		}
 
 		b.variablePutbuf.WriteString(begin)
-		fmtCtx := tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtArrays)
 		for i, d := range v.Array {
 			if i > 0 {
 				b.variablePutbuf.WriteString(sep)
 			}
 			// TODO(justin): add a test for nested arrays.
-			fmtCtx.FormatNode(d)
+			b.arrayFormatter.FormatNode(d)
 		}
 		b.variablePutbuf.WriteString(end)
 		b.writeLengthPrefixedVariablePutbuf()
@@ -390,7 +388,7 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
 			return
 		}
-		subWriter := &writeBuffer{}
+		subWriter := newWriteBuffer()
 		// Put the number of dimensions. We currently support 1d arrays only.
 		subWriter.putInt32(1)
 		hasNulls := 0
