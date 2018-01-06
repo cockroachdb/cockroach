@@ -14,13 +14,69 @@ export function isLeaf<T>(t: TreeNode<T>): boolean {
 
 interface LayoutNode<T> {
   width: number;
-  depth: number;
+  depth: number; // Depth of this subtree. Leaves have a depth of 1.
   path: TreePath;
   isCollapsed: boolean;
   isPlaceholder: boolean;
   data: T;
 }
 
+/**
+ * layoutTree turns a tree into a tabular, horizontal layout.
+ * For instance, the tree
+ *
+ *   (a [b c])
+ *
+ * becomes:
+ *
+ *   |   a   |
+ *   | b | c |
+ *
+ * The layout is returned as a 2d array of LayoutNodes:
+ *
+ *   [ [             <LayoutNode for a>         ],
+ *     [ <LayoutNode for b>, <LayoutNode for c> ] ]
+ *
+ * If the tree is of uneven depth, placeholder elements
+ * are returned to maintain the rectangularity of the table.
+ *
+ * For instance, the tree
+ *
+ * (a [(b [c d]) e])
+ *
+ * becomes:
+ *
+ *   |      a      |
+ *   |   b   |  e  |
+ *   | c | d | <P> |
+ *
+ * Where <P> is a LayoutNode with `isPlaceholder: true`.
+ *
+ * Further, if part of the tree is collapsed (specified by
+ * the `collapsedPaths` argument), its LayoutNodes are
+ * returned with `isCollapsed: true`, and placeholders are
+ * returned to maintain rectangularity.
+ *
+ * The tree
+ *
+ *   (a [(b [c d]) (e [f g])])
+ *
+ * without anything collapsed becomes:
+ *
+ *   |       a       |
+ *   |   b   |   e   |
+ *   | c | d | f | g |
+ *
+ * Collapsing `e` yields:
+ *
+ *   |       a       |
+ *   |   b   |   e   |
+ *   | c | d |  <P>  |
+ *
+ * Where <P> is a LayoutNode with `isPlaceholder: true`
+ * and e is a LayoutNode with `isCollapsed: true`.
+ *
+ */
 export function layoutTree<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): LayoutNode<T>[][] {
   const depth = getDepth(root);
   function recur(node: TreeNode<T>, pathToThis: TreePath): LayoutNode<T>[][] {
@@ -41,7 +97,6 @@ export function layoutTree<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): La
 
     const isCollapsed = deepIncludes(collapsedPaths, pathToThis);
     if (isCollapsed) {
-      // debugger;
       const depthUnderThis = depth - pathToThis.length;
       const placeholderRows = _.range(depthUnderThis).reverse().map((thisDepth) => (
         [
@@ -121,6 +176,51 @@ export interface FlattenedNode<T> {
   path: TreePath;
 }
 
+/**
+ * flatten takes a tree and returns it as an array with depth information.
+ *
+ * E.g. the tree
+ *
+ *   (a [b c])
+ *
+ * Becomes (with includeNodes = true):
+ *
+ *   a (depth: 0)
+ *     b (depth: 1)
+ *     c (depth: 1)
+ *
+ * Or (with includeNodes = false):
+ *
+ *     b (depth: 1)
+ *     c (depth: 1)
+ *
+ * Collapsed nodes (specified with the `collapsedPaths` argument)
+ * are returned with `isCollapsed: true`; their children are not
+ * returned.
+ *
+ * E.g. the tree
+ *
+ *   (a [(b [c d]) (e [f g])])
+ *
+ * without anything collapsed becomes:
+ *
+ *   a
+ *     b
+ *       c
+ *       d
+ *     e
+ *       f
+ *       g
+ *
+ * With b collapsed, it becomes:
+ *
+ *   a
+ *     b (isCollapsed: true)
+ *     e
+ *       f
+ *       g
+ *
+ */
 export function flatten<T>(
   tree: TreeNode<T>,
   collapsedPaths: TreePath[],
@@ -156,7 +256,10 @@ export function flatten<T>(
   return output;
 }
 
-// mutates `tree`.
+/**
+ * setAtPath mutates `tree`, inserting `node` at `path`. If nodes along the path
+ * don't exist, they're created, like `mkdir -p`.
+ */
 export function setAtPath<T>(tree: TreeNode<T>, path: TreePath, node: TreeNode<T>) {
   if (path.length === 0) {
     tree.children.push(node);
@@ -175,19 +278,26 @@ export function setAtPath<T>(tree: TreeNode<T>, path: TreePath, node: TreeNode<T
   setAtPath(nextChild, path.slice(1), node);
 }
 
-// throws an error if not found
-function nodeAtPath<T>(node: TreeNode<T>, path: TreePath): TreeNode<T> {
+/**
+ * nodeAtPath returns the node found under `root` at `path`, throwing
+ * an error if nothing is found.
+ */
+function nodeAtPath<T>(root: TreeNode<T>, path: TreePath): TreeNode<T> {
   if (path.length === 0) {
-    return node;
+    return root;
   }
   const pathSegment = path[0];
-  const child = node.children.find((c) => (c.name === pathSegment));
+  const child = root.children.find((c) => (c.name === pathSegment));
   if (child === undefined) {
     throw new Error(`not found: ${path}`);
   }
   return nodeAtPath(child, path.slice(1));
 }
 
+/**
+ * visitNodes invokes `f` on each node in the tree in pre-order
+ * (`f` is invoked on a node before being invoked on its children).
+ */
 function visitNodes<T>(root: TreeNode<T>, f: (node: TreeNode<T>, path: TreePath) => void) {
   function recur(node: TreeNode<T>, path: TreePath) {
     f(node, path);
@@ -204,6 +314,20 @@ function getDepth<T>(root: TreeNode<T>): number {
   return _.max(getLeafPaths(root).map((p) => p.length));
 }
 
+/**
+ * getLeafPathsUnderPath returns paths to all leaf nodes under the given
+ * `path` in `root`.
+ *
+ * E.g. for the tree
+ *
+ *   T = (a [(b [c d]) (e [f g])])
+ *
+ * getLeafPaths(T, ['a', 'b']) yields:
+ *
+ *   [ ['a', 'b', 'c'],
+ *     ['a', 'b', 'd'] ]
+ *
+ */
 function getLeafPathsUnderPath<T>(root: TreeNode<T>, path: TreePath): TreePath[] {
   const atPath = nodeAtPath(root, path);
   const output: TreePath[] = [];
@@ -215,10 +339,25 @@ function getLeafPathsUnderPath<T>(root: TreeNode<T>, path: TreePath): TreePath[]
   return output;
 }
 
+/**
+ * getLeafPaths returns paths to all leaves under `root`.
+ */
 export function getLeafPaths<T>(root: TreeNode<T>): TreePath[] {
   return getLeafPathsUnderPath(root, []);
 }
 
+/**
+ * cartProd returns all combinations of elements in `as` and `bs`.
+ *
+ * e.g. cartProd([1, 2], ['a', 'b'])
+ * yields:
+ * [
+ *   {a: 1, b: 'a'},
+ *   {a: 1, b: 'b'},
+ *   {a: 2, b: 'a'},
+ *   {a: 2, b: 'b'},
+ * ]
+ */
 function cartProd<A, B>(as: A[], bs: B[]): {a: A, b: B}[] {
   const output: {a: A, b: B}[] = [];
   as.forEach((a) => {
@@ -229,6 +368,34 @@ function cartProd<A, B>(as: A[], bs: B[]): {a: A, b: B}[] {
   return output;
 }
 
+/**
+ * sumValuesUnderPaths returns the sum of `getValue(R, C)`
+ * for all leaf paths R under `rowPath` in `rowTree`,
+ * and all leaf paths C under `colPath` in `rowTree`.
+ *
+ * e.g. in the matrix
+ *
+ *  |       |    C_1    |
+ *  |       | C_2 | C_3 |
+ *  |-------|-----|-----|
+ *  | R_a   |     |     |
+ *  |   R_b |  1  |  2  |
+ *  |   R_c |  3  |  4  |
+ *
+ * Represented by
+ *
+ *   rowTree = (R_a [R_b R_c])
+ *   colTree = (C_1 [C_2 C_3])
+ *
+ * Calling sumValuesUnderPath(rowTree, colTree, ['R_a'], ['C_b'], getValue)
+ * sums up all the cells in the matrix, yielding
+ * yielding 1 + 2 + 3 + 4 = 9
+ *
+ * And calling sumValuesUnderPath(rowTree, colTree, ['R_a', 'R_b'], ['C_b'], getValue)
+ * sums up only the cells under R_b,
+ * yielding 1 + 2 = 3.
+ *
+ */
 export function sumValuesUnderPaths<R, C>(
   rowTree: TreeNode<R>,
   colTree: TreeNode<C>,
@@ -246,28 +413,10 @@ export function sumValuesUnderPaths<R, C>(
   return sum;
 }
 
-// utilities that should be in lodash...
-
+/**
+ * deepIncludes returns true if `array` contains `val`, doing
+ * a deep equality comparison.
+ */
 export function deepIncludes<T>(array: T[], val: T): boolean {
   return _.some(array, (v) => _.isEqual(val, v));
-}
-
-export function hasPrefix<T>(array: T[], prefix: T[]): boolean {
-  if (prefix.length > array.length) {
-    return false;
-  }
-  for (let i = 0; i < prefix.length; i++) {
-    if (prefix[i] !== array[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function repeat<T>(v: T, n: number): T[] {
-  const output = [];
-  for (let i = 0; i < n; i++) {
-    output.push(v);
-  }
-  return output;
 }

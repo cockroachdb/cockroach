@@ -8,8 +8,6 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
-import {cockroach} from "oss/src/js/protos";
-import ReplicaMatrixRequest = cockroach.server.serverpb.ReplicaMatrixRequest;
 
 export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
 export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;

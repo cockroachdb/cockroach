@@ -1,19 +1,20 @@
 import _ from "lodash";
 import React from "react";
 import Link from "react-router/lib/Link";
-import {connect} from "react-redux";
+import { connect } from "react-redux";
 import { AdminUIState } from "oss/src/redux/state";
 import { refreshReplicaMatrix, refreshNodes } from "src/redux/apiReducers";
 import { cockroach } from "oss/src/js/protos";
 import { NodeStatus$Properties } from "src/util/proto";
 import Matrix from "./Matrix";
 import ZoneConfigList from "./ZoneConfigList";
-import {TreeNode, setAtPath, TreePath} from "./tree";
+import { TreeNode, setAtPath, TreePath } from "./tree";
 import "./index.styl";
-import ReplicaMatrixResponse = cockroach.server.serverpb.ReplicaMatrixResponse;
-import NodeDescriptor = cockroach.roachpb.NodeDescriptor$Properties;
 
-interface ReplicaMatrixProps {
+type ReplicaMatrixResponse = cockroach.server.serverpb.ReplicaMatrixResponse;
+type NodeDescriptor = cockroach.roachpb.NodeDescriptor$Properties;
+
+interface DataDistributionProps {
   replicaMatrix: ReplicaMatrixResponse;
   nodes: NodeStatus$Properties[];
   refreshReplicaMatrix: typeof refreshReplicaMatrix;
@@ -45,7 +46,7 @@ function makeNodeTree(nodes: NodeDescriptor[]): TreeNode<NodeDescriptor> {
 const ZONE_CONFIGS_DOCS_URL =
   "https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html";
 
-class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
+class DataDistribution extends React.Component<DataDistributionProps, {}> {
   render() {
     if (!this.props.replicaMatrix || !this.props.nodes) {
       return (<p>Loading...</p>);
@@ -53,8 +54,11 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
 
     const byDbByTableByNode: {[db: string]: { [table: string]: {[node: string]: Long} }} = {};
     this.props.replicaMatrix.cells.forEach((cell) => {
-      // TODO(vilterp): avoid putting "n" in the node id here
-      _.set(byDbByTableByNode, [cell.database_name, cell.table_name, `n${cell.node_id}`], cell.count);
+      _.set(
+        byDbByTableByNode,
+        [cell.database_name, cell.table_name, `n${cell.node_id}`],
+        cell.count,
+      );
     });
 
     const nodeTree = makeNodeTree(this.props.nodes.map((n) => n.desc));
@@ -100,7 +104,7 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
               </h2>
               <ZoneConfigList />
             </td>
-            <td>
+            <td style={{ verticalAlign: "top" }}>
               <ReplicaMatrix
                 label={<em># Replicas</em>}
                 cols={nodeTree}
@@ -112,8 +116,8 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
                   isPlaceholder
                     ? ""
                     : node === null
-                    ? path[path.length - 1]
-                    : `n${node.node_id.toString()}`
+                      ? path[path.length - 1]
+                      : `n${node.node_id.toString()}`
                 )}
                 rowNodeLabel={(row: TableDesc) => (`DB: ${row.dbName}`)}
                 rowLeafLabel={(row: TableDesc) => (row.tableName)}
@@ -127,7 +131,7 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
   }
 }
 
-class ReplicaMatrixMain extends React.Component<ReplicaMatrixProps, {}> {
+class DataDistributionPage extends React.Component<DataDistributionProps, {}> {
   componentDidMount() {
     this.props.refreshReplicaMatrix();
     this.props.refreshNodes();
@@ -136,19 +140,22 @@ class ReplicaMatrixMain extends React.Component<ReplicaMatrixProps, {}> {
   render() {
     return (
       <div>
-        <div className="section">
+        <section className="section parent-link">
+          <Link to="/cluster">&lt; Back to Cluster</Link>
+        </section>
+        <section className="section">
           <h1>Data Distribution</h1>
-        </div>
-        <div className="section">
-          <ReplicaMatrix {...this.props} />
-        </div>
+        </section>
+        <section className="section">
+          <DataDistribution {...this.props} />
+        </section>
       </div>
     );
   }
 }
 
 // tslint:disable-next-line:variable-name
-const ReplicaMatrixMainConnected = connect(
+const DataDistributionPageConnected = connect(
   (state: AdminUIState) => {
     return {
       replicaMatrix: state.cachedData.replicaMatrix.data,
@@ -159,17 +166,6 @@ const ReplicaMatrixMainConnected = connect(
     refreshReplicaMatrix,
     refreshNodes,
   },
-)(ReplicaMatrixMain);
+)(DataDistributionPage);
 
-function ReplicaMatrixPage() {
-  return (
-    <div>
-      <section className="section parent-link">
-        <Link to="/cluster">&lt; Back to Cluster</Link>
-      </section>
-      <ReplicaMatrixMainConnected />
-    </div>
-  );
-}
-
-export default ReplicaMatrixPage;
+export default DataDistributionPageConnected;

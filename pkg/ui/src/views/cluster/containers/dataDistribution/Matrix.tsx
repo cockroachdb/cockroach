@@ -36,27 +36,25 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
     };
   }
 
-  // TODO(vilterp): DRY these up somehow
-
-  _handleUnCollapseRow(path: TreePath) {
+  expandRow = (path: TreePath) => {
     this.setState({
       collapsedRows: this.state.collapsedRows.filter((tp) => !_.isEqual(tp, path)),
     });
   }
 
-  _handleCollapseRow(path: TreePath) {
+  collapseRow = (path: TreePath) => {
     this.setState({
       collapsedRows: [...this.state.collapsedRows, path],
     });
   }
 
-  _handleUnCollapseCol(path: TreePath) {
+  expandCol = (path: TreePath) => {
     this.setState({
       collapsedCols: this.state.collapsedCols.filter((tp) => !_.isEqual(tp, path)),
     });
   }
 
-  _handleCollapseCol(path: TreePath) {
+  collapseCol = (path: TreePath) => {
     this.setState({
       collapsedCols: [...this.state.collapsedCols, path],
     });
@@ -78,13 +76,6 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
       collapsedCols,
     } = this.state;
 
-    // TODO(vilterp): bind these in the constructor or something
-    // shouldn't do this here every frame
-    const handleCollapseRow = this._handleCollapseRow.bind(this);
-    const handleUnCollapseRow = this._handleUnCollapseRow.bind(this);
-    const handleCollapseCol = this._handleCollapseCol.bind(this);
-    const handleUnCollapseCol = this._handleUnCollapseCol.bind(this);
-
     const flattenedRows = flatten(rows, collapsedRows, true /* includeNodes */);
     const headerRows = layoutTree(cols, collapsedCols);
     const flattenedCols = flatten(cols, collapsedCols, false /* includeNodes */);
@@ -104,12 +95,11 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
                 <th
                   key={col.path.join("/")}
                   colSpan={col.width}
-                  style={{fontWeight: "bold"}}
                   className={classNames("matrix-column-header", { toggleable: col.depth > 1 })}
                   onClick={() => (
                     colIsCollapsed
-                      ? handleUnCollapseCol(col.path)
-                      : handleCollapseCol(col.path)
+                      ? this.expandCol(col.path)
+                      : this.collapseCol(col.path)
                   )}
                 >
                   {col.isPlaceholder
@@ -133,8 +123,8 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
               className={classNames("matrix-row", { node: !row.isLeaf })}
               onClick={() => (
                 rowIsCollapsed
-                  ? handleUnCollapseRow(row.path)
-                  : handleCollapseRow(row.path)
+                  ? this.expandRow(row.path)
+                  : this.collapseRow(row.path)
               )}
             >
               <th
