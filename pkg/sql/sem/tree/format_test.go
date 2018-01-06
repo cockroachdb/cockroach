@@ -17,12 +17,16 @@ package tree_test
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestFormatStatement(t *testing.T) {
@@ -209,4 +213,56 @@ func TestFormatExpr(t *testing.T) {
 			}
 		})
 	}
+}
+
+// BenchmarkFormatRandomStatements measures the time needed to format
+// 1000 random statements.
+func BenchmarkFormatRandomStatements(b *testing.B) {
+	// Generate a bunch of random statements.
+	yBytes, err := ioutil.ReadFile(filepath.Join("..", "..", "parser", "sql.y"))
+	if err != nil {
+		b.Fatalf("error reading grammar: %v", err)
+	}
+	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes))
+	if err != nil {
+		b.Fatalf("error instantiating RSG: %v", err)
+	}
+	strs := make([]string, 1000)
+	stmts := make(tree.StatementList, 1000)
+	for i := 0; i < 1000; {
+		rdm := r.Generate("stmt", 20)
+		stmt, err := parser.ParseOne(rdm)
+		if err != nil {
+			// Some statements (e.g. those containing error terminals) do
+			// not parse.  It's all right. Just ignore this and continue
+			// until we have all we want.
+			continue
+		}
+		strs[i] = rdm
+		stmts[i] = stmt
+		i++
+	}
+
+	// Benchmark the parses.
+	b.Run("parse", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, sql := range strs {
+				_, err := parser.ParseOne(sql)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	})
+
+	// Benchmark the formats.
+	b.Run("format", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for i, stmt := range stmts {
+				var buf bytes.Buffer
+				tree.FormatNode(&buf, tree.FmtSimple, stmt)
+				strs[i] = buf.String()
+			}
+		}
+	})
 }
