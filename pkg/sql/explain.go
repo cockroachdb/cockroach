@@ -117,6 +117,7 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 		mode = explainPlan
 	}
 
+	defer func(save bool) { p.evalCtx.SkipNormalize = save }(p.evalCtx.SkipNormalize)
 	p.evalCtx.SkipNormalize = !normalizeExprs
 
 	plan, err := p.newPlan(ctx, n.Statement, nil)
