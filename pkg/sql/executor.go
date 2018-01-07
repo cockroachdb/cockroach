@@ -537,20 +537,20 @@ func (e *Executor) Prepare(
 		}
 	}
 
-	plan, err := planner.prepare(session.Ctx(), stmt.AST)
-	if err != nil {
+	if err := planner.prepare(session.Ctx(), stmt.AST); err != nil {
 		return nil, err
 	}
-	if plan == nil {
+	if planner.curPlan.plan == nil {
+		// The statement cannot be prepared. Nothing to do.
 		return prepared, nil
 	}
 	defer func() {
-		plan.Close(session.Ctx())
+		planner.curPlan.close(session.Ctx())
 		// NB: if we start caching the plan, we'll want to keep around the memory
 		// account used for the plan, rather than clearing it.
 		prepared.memAcc.Clear(session.Ctx())
 	}()
-	prepared.Columns = planColumns(plan)
+	prepared.Columns = planner.curPlan.columns()
 	for _, c := range prepared.Columns {
 		if err := checkResultType(c.Typ); err != nil {
 			return nil, err
@@ -1997,10 +1997,10 @@ func commitSQLTransaction(
 	return transition
 }
 
-// exectDistSQL converts a classic plan to a distributed SQL physical plan and
-// runs it.
+// exectDistSQL converts the current logical plan to a distributed SQL
+// physical plan and runs it.
 func (e *Executor) execDistSQL(
-	planner *planner, tree planNode, rowResultWriter StatementResult,
+	planner *planner, plan planNode, rowResultWriter StatementResult,
 ) error {
 	ctx := planner.EvalContext().Ctx()
 	recv := makeDistSQLReceiver(
@@ -2012,7 +2012,7 @@ func (e *Executor) execDistSQL(
 		},
 	)
 	if err := e.distSQLPlanner.PlanAndRun(
-		ctx, planner.txn, tree, &recv, &planner.extendedEvalCtx,
+		ctx, planner.txn, plan, &recv, &planner.extendedEvalCtx,
 	); err != nil {
 		return err
 	}
@@ -2040,7 +2040,7 @@ func (e *Executor) execLocal(
 		p:               planner,
 	}
 
-	if err := startPlan(params, plan); err != nil {
+	if err := planner.curPlan.start(params); err != nil {
 		return err
 	}
 
@@ -2053,12 +2053,12 @@ func (e *Executor) execLocal(
 		rowResultWriter.IncrementRowsAffected(count)
 
 	case tree.Rows:
-		for _, c := range planColumns(plan) {
+		for _, c := range planner.curPlan.columns() {
 			if err := checkResultType(c.Typ); err != nil {
 				return err
 			}
 		}
-		if err := forEachRow(params, plan, func(values tree.Datums) error {
+		if err := forEachRow(params, planner.curPlan.plan, func(values tree.Datums) error {
 			return rowResultWriter.AddRow(ctx, values)
 		}); err != nil {
 			return err
@@ -2102,8 +2102,8 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	return count, err
 }
 
-// shouldUseDistSQL determines whether we should use DistSQL for a plan, based
-// on the session settings.
+// shouldUseDistSQL determines whether we should use DistSQL for the
+// given logical plan, based on the session settings.
 func shouldUseDistSQL(
 	ctx context.Context,
 	distSQLMode sessiondata.DistSQLExecMode,
@@ -2114,6 +2114,7 @@ func shouldUseDistSQL(
 	if distSQLMode == sessiondata.DistSQLOff {
 		return false, nil
 	}
+
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
 	if _, ok := plan.(*zeroNode); ok {
 		return false, nil
@@ -2179,31 +2180,32 @@ func (e *Executor) execStmt(
 	session := planner.session
 	ctx := session.Ctx()
 
+	// Perform logical planning and measure the duration of that phase.
 	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
-	plan, err := planner.makePlan(ctx, stmt)
+	err := planner.makePlan(ctx, stmt)
 	planner.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
 	if err != nil {
 		return err
 	}
+	defer planner.curPlan.close(ctx)
 
-	defer plan.Close(ctx)
-
+	// Prepare the result set, and determine the execution parameters.
 	var cols sqlbase.ResultColumns
 	if stmt.AST.StatementType() == tree.Rows {
-		cols = planColumns(plan)
+		cols = planColumns(planner.curPlan.plan)
 	}
 	err = initStatementResult(res, stmt, cols)
 	if err != nil {
 		return err
 	}
 
-	useDistSQL, err := shouldUseDistSQL(
-		session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, plan,
-	)
+	useDistSQL, err := shouldUseDistSQL(session.Ctx(),
+		session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan)
 	if err != nil {
 		return err
 	}
 
+	// Start execution.
 	if e.cfg.TestingKnobs.BeforeExecute != nil {
 		e.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), false /* isParallel */)
 	}
@@ -2211,11 +2213,14 @@ func (e *Executor) execStmt(
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	session.setQueryExecutionMode(stmt.queryID, useDistSQL, false /* isParallel */)
 	if useDistSQL {
-		err = e.execDistSQL(planner, plan, res)
+		err = e.execDistSQL(planner, planner.curPlan.plan, res)
 	} else {
-		err = e.execLocal(planner, plan, res)
+		err = e.execLocal(planner, planner.curPlan.plan, res)
 	}
 	planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+
+	// Complete execution: record results and optionally run the test
+	// hook.
 	recordStatementSummary(
 		planner, stmt, useDistSQL, automaticRetryCount, res, err, &e.EngineMetrics,
 	)
@@ -2250,20 +2255,19 @@ func (e *Executor) execStmtInParallel(
 		p:               planner,
 	}
 
-	plan, err := planner.makePlan(ctx, stmt)
-	if err != nil {
+	if err := planner.makePlan(ctx, stmt); err != nil {
 		return nil, err
 	}
 	var cols sqlbase.ResultColumns
 	if stmt.AST.StatementType() == tree.Rows {
-		cols = planColumns(plan)
+		cols = planner.curPlan.columns()
 	}
 
 	// This ensures we don't unintentionally clean up the queryMeta object when we
 	// send the mock result back to the client.
 	session.setQueryExecutionMode(stmt.queryID, false /* isDistributed */, true /* isParallel */)
 
-	if err := session.parallelizeQueue.Add(params, plan, func(plan planNode) error {
+	if err := session.parallelizeQueue.Add(params, func() error {
 		// TODO(andrei): this should really be a result writer implementation that
 		// does nothing.
 		bufferedWriter := newBufferedWriter(session.makeBoundAccount())
@@ -2277,7 +2281,7 @@ func (e *Executor) execStmtInParallel(
 		}
 
 		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-		err = e.execLocal(planner, plan, bufferedWriter)
+		err = e.execLocal(planner, planner.curPlan.plan, bufferedWriter)
 		planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 		recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err, &e.EngineMetrics)
 		if e.cfg.TestingKnobs.AfterExecute != nil {
