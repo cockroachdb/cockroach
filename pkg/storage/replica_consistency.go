@@ -305,12 +305,14 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksu
 // computeChecksumDone adds the computed checksum, sets a deadline for GCing the
 // checksum, and sends out a notification.
 func (r *Replica) computeChecksumDone(
-	ctx context.Context, id uuid.UUID, result replicaHash, snapshot *roachpb.RaftSnapshotData,
+	ctx context.Context, id uuid.UUID, result *replicaHash, snapshot *roachpb.RaftSnapshotData,
 ) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if c, ok := r.mu.checksums[id]; ok {
-		c.Checksum = result.SHA512[:]
+		if result != nil {
+			c.Checksum = result.SHA512[:]
+		}
 		c.gcTimestamp = timeutil.Now().Add(batcheval.ReplicaChecksumGCInterval)
 		c.Snapshot = snapshot
 		r.mu.checksums[id] = c
