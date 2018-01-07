@@ -15,7 +15,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"database/sql/driver"
 	"fmt"
@@ -226,13 +225,14 @@ func getMetadataForTable(
 	name := &tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
 
 	// Fetch table ID.
+	dbNameStr := tree.NameString(dbName)
 	vals, err := conn.QueryRow(fmt.Sprintf(`
 		SELECT table_id
 		FROM %s.crdb_internal.tables
 		AS OF SYSTEM TIME '%s'
 		WHERE DATABASE_NAME = $1
 			AND NAME = $2
-		`, tree.Name(dbName).String(), ts), []driver.Value{dbName, tableName})
+		`, dbNameStr, ts), []driver.Value{dbName, tableName})
 	if err != nil {
 		if err == io.EOF {
 			return tableMetadata{}, errors.Errorf("relation %s does not exist", name)
@@ -254,7 +254,8 @@ func getMetadataForTable(
 	}
 	vals = make([]driver.Value, 2)
 	coltypes := make(map[string]string)
-	var colnames bytes.Buffer
+	colnames := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	defer colnames.Close()
 	for {
 		if err := rows.Next(vals); err == io.EOF {
 			break
@@ -274,7 +275,7 @@ func getMetadataForTable(
 		if colnames.Len() > 0 {
 			colnames.WriteString(", ")
 		}
-		tree.FormatNode(&colnames, tree.FmtSimple, tree.Name(name))
+		colnames.FormatName(name)
 	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
@@ -286,7 +287,7 @@ func getMetadataForTable(
 		AS OF SYSTEM TIME '%s'
 		WHERE descriptor_name = $1
 			AND database_name = $2
-		`, tree.Name(dbName).String(), ts), []driver.Value{tableName, dbName})
+		`, dbNameStr, ts), []driver.Value{tableName, dbName})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -298,7 +299,7 @@ func getMetadataForTable(
 		FROM %s.crdb_internal.backward_dependencies
 		AS OF SYSTEM TIME '%s'
 		WHERE descriptor_id = $1
-		`, tree.Name(dbName).String(), ts), []driver.Value{tableID})
+		`, dbNameStr, ts), []driver.Value{tableID})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -393,13 +394,14 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	g.Go(func() error {
 		// Convert SQL rows into VALUE strings.
 		defer close(stringsCh)
-		var ivals bytes.Buffer
+		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		defer f.Close()
 		for vals := range valsCh {
-			ivals.Reset()
+			f.Reset()
 			// Values need to be correctly encoded for INSERT statements in a text file.
 			for si, sv := range vals {
 				if si > 0 {
-					ivals.WriteString(", ")
+					f.WriteString(", ")
 				}
 				var d tree.Datum
 				switch t := sv.(type) {
@@ -480,12 +482,12 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 				default:
 					return errors.Errorf("unknown field type: %T (%s)", t, cols[si])
 				}
-				d.Format(&ivals, tree.FmtParsable)
+				d.Format(&f.FmtCtx)
 			}
 			select {
 			case <-done:
 				return ctx.Err()
-			case stringsCh <- ivals.String():
+			case stringsCh <- f.String():
 			}
 		}
 		return nil
@@ -509,7 +511,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 }
 
 func writeInserts(w io.Writer, md tableMetadata, inserts []string) {
-	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
+	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", &md.name.TableName, md.columnNames)
 	for idx, values := range inserts {
 		if idx > 0 {
 			fmt.Fprint(w, ",")

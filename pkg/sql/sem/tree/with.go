@@ -14,10 +14,6 @@
 
 package tree
 
-import (
-	"bytes"
-)
-
 // With represents a WITH statement.
 type With struct {
 	CTEList []*CTE
@@ -30,18 +26,18 @@ type CTE struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *With) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *With) Format(ctx *FmtCtx) {
 	if node == nil {
 		return
 	}
-	buf.WriteString("WITH ")
+	ctx.WriteString("WITH ")
 	for i, cte := range node.CTEList {
 		if i != 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		cte.Name.Format(buf, f)
-		buf.WriteString(" AS (")
-		cte.Stmt.Format(buf, f)
-		buf.WriteString(") ")
+		ctx.FormatNode(&cte.Name)
+		ctx.WriteString(" AS (")
+		ctx.FormatNode(cte.Stmt)
+		ctx.WriteString(") ")
 	}
 }

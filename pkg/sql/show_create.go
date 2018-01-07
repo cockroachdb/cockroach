@@ -90,26 +90,26 @@ func (p *planner) ShowCreateSequence(
 // showCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
 func (p *planner) showCreateView(
-	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
-	var buf bytes.Buffer
-	buf.WriteString("CREATE VIEW ")
-	tn.Format(&buf, tree.FmtSimple)
-	buf.WriteString(" (")
-	for i, col := range desc.Columns {
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f.WriteString("CREATE VIEW ")
+	f.FormatNode(tn)
+	f.WriteString(" (")
+	for i := range desc.Columns {
 		if i > 0 {
-			buf.WriteString(", ")
+			f.WriteString(", ")
 		}
-		tree.Name(col.Name).Format(&buf, tree.FmtSimple)
+		f.FormatNameP(&desc.Columns[i].Name)
 	}
-	fmt.Fprintf(&buf, ") AS %s", desc.ViewQuery)
-	return buf.String(), nil
+	f.Printf(") AS %s", desc.ViewQuery)
+	return f.CloseAndGetString(), nil
 }
 
 func (p *planner) printForeignKeyConstraint(
-	ctx context.Context, buf *bytes.Buffer, dbPrefix string, idx sqlbase.IndexDescriptor,
+	ctx context.Context, buf *bytes.Buffer, dbPrefix string, idx *sqlbase.IndexDescriptor,
 ) error {
-	fk := idx.ForeignKey
+	fk := &idx.ForeignKey
 	if !fk.IsSet() {
 		return nil
 	}
@@ -148,20 +148,20 @@ func (p *planner) printForeignKeyConstraint(
 // showCreateSequence returns a valid SQL representation of the
 // CREATE SEQUENCE statement used to create the given sequence.
 func (p *planner) showCreateSequence(
-	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
-	var buf bytes.Buffer
-	buf.WriteString("CREATE SEQUENCE ")
-	tree.FormatNode(&buf, tree.FmtSimple, tn)
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f.WriteString("CREATE SEQUENCE ")
+	f.FormatNode(tn)
 	opts := desc.SequenceOpts
-	fmt.Fprintf(&buf, " MINVALUE %d", opts.MinValue)
-	fmt.Fprintf(&buf, " MAXVALUE %d", opts.MaxValue)
-	fmt.Fprintf(&buf, " INCREMENT %d", opts.Increment)
-	fmt.Fprintf(&buf, " START %d", opts.Start)
+	f.Printf(" MINVALUE %d", opts.MinValue)
+	f.Printf(" MAXVALUE %d", opts.MaxValue)
+	f.Printf(" INCREMENT %d", opts.Increment)
+	f.Printf(" START %d", opts.Start)
 	if opts.Cycle {
-		buf.WriteString(" CYCLE")
+		f.WriteString(" CYCLE")
 	}
-	return buf.String(), nil
+	return f.CloseAndGetString(), nil
 }
 
 // showCreateTable returns a valid SQL representation of the CREATE
@@ -173,7 +173,7 @@ func (p *planner) showCreateSequence(
 // the prefix when the given table references other tables in the
 // current database.
 func (p *planner) showCreateTable(
-	ctx context.Context, tn tree.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
 
@@ -195,9 +195,11 @@ func (p *planner) showCreateTable(
 		}
 	}
 	buf.WriteString(primary)
-	for _, idx := range append(desc.Indexes, desc.PrimaryIndex) {
-		if fk := idx.ForeignKey; fk.IsSet() {
-			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s ", tree.Name(fk.Name))
+	allIdx := append(desc.Indexes, desc.PrimaryIndex)
+	for i := range allIdx {
+		idx := &allIdx[i]
+		if fk := &idx.ForeignKey; fk.IsSet() {
+			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s ", tree.NameStringP(&fk.Name))
 			if err := p.printForeignKeyConstraint(ctx, &buf, dbPrefix, idx); err != nil {
 				return "", err
 			}
@@ -207,11 +209,11 @@ func (p *planner) showCreateTable(
 			fmt.Fprintf(&buf, ",\n\t%s", idx.SQLString(""))
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
-			if err := p.showCreateInterleave(ctx, &idx, &buf, dbPrefix); err != nil {
+			if err := p.showCreateInterleave(ctx, idx, &buf, dbPrefix); err != nil {
 				return "", err
 			}
 			if err := ShowCreatePartitioning(
-				a, desc, &idx, &idx.Partitioning, &buf, 1 /* indent */, 0, /* colOffset */
+				a, desc, idx, &idx.Partitioning, &buf, 1 /* indent */, 0, /* colOffset */
 			); err != nil {
 				return "", err
 			}
@@ -255,11 +257,14 @@ func (p *planner) showCreateTable(
 
 // quoteNames quotes and adds commas between names.
 func quoteNames(names ...string) string {
-	nameList := make(tree.NameList, len(names))
-	for i, n := range names {
-		nameList[i] = tree.Name(n)
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	for i := range names {
+		if i > 0 {
+			f.WriteString(", ")
+		}
+		f.FormatNameP(&names[i])
 	}
-	return tree.AsString(nameList)
+	return f.CloseAndGetString()
 }
 
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
@@ -336,12 +341,14 @@ func ShowCreatePartitioning(
 		fmt.Fprintf(buf, idxDesc.ColumnNames[colOffset+i])
 	}
 	buf.WriteString(`) (`)
-	for i, part := range partDesc.List {
+	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
+	for i := range partDesc.List {
+		part := &partDesc.List[i]
 		if i != 0 {
 			buf.WriteString(`, `)
 		}
 		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
-		tree.FormatNode(buf, tree.FmtSimple, tree.Name(part.Name))
+		fmtCtx.FormatNameP(&part.Name)
 		buf.WriteString(` VALUES IN (`)
 		for j, values := range part.Values {
 			if j != 0 {

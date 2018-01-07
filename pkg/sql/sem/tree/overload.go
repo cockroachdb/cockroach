@@ -222,7 +222,7 @@ func (v VariadicType) String() string {
 	if len(v.FixedTypes) > 0 {
 		s.WriteString(", ")
 	}
-	s.WriteString(fmt.Sprintf("%s...", v.VarType))
+	fmt.Fprintf(&s, "%s...", v.VarType)
 	return s.String()
 }
 

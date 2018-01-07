@@ -158,7 +158,7 @@ func (p *planner) groupBy(
 				if err != nil {
 					return nil, nil, err
 				}
-				p.hasStar = p.hasStar || hasStar
+				p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 			}
 			groupByExprs[i] = resolvedExpr
 		}
@@ -213,7 +213,7 @@ func (p *planner) groupBy(
 		if err != nil {
 			return nil, nil, err
 		}
-		p.hasStar = p.hasStar || hasStar
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 
 		// GROUP BY (a, b) -> GROUP BY a, b
 		cols, exprs = flattenTuples(cols, exprs, &r.ivarHelper)
@@ -611,7 +611,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					argExpr,
-					fmt.Sprintf("the argument of %s()", t.Func),
+					fmt.Sprintf("the argument of %s()", &t.Func),
 					v.planner.session.SearchPath,
 				); err != nil {
 					v.err = err

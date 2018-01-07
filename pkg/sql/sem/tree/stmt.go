@@ -24,7 +24,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 )
 
@@ -142,12 +141,12 @@ type IndependentFromParallelizedPriors interface {
 type StatementList []Statement
 
 // Format implements the NodeFormatter interface.
-func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, s := range l {
+func (l *StatementList) Format(ctx *FmtCtx) {
+	for i, s := range *l {
 		if i > 0 {
-			buf.WriteString("; ")
+			ctx.WriteString("; ")
 		}
-		FormatNode(buf, f, s)
+		ctx.FormatNode(s)
 	}
 }
 
@@ -814,14 +813,14 @@ func (*UnionClause) StatementType() StatementType { return Rows }
 func (*UnionClause) StatementTag() string { return "UNION" }
 
 // StatementType implements the Statement interface.
-func (ValuesClause) StatementType() StatementType { return Rows }
+func (*ValuesClause) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (ValuesClause) StatementTag() string { return "VALUES" }
+func (*ValuesClause) StatementTag() string { return "VALUES" }
 
 func (n *AlterIndex) String() string                { return AsString(n) }
 func (n *AlterTable) String() string                { return AsString(n) }
-func (n AlterTableCmds) String() string             { return AsString(n) }
+func (n *AlterTableCmds) String() string            { return AsString(n) }
 func (n *AlterTableAddColumn) String() string       { return AsString(n) }
 func (n *AlterTableAddConstraint) String() string   { return AsString(n) }
 func (n *AlterTableDropColumn) String() string      { return AsString(n) }
@@ -908,7 +907,7 @@ func (n *ShowVar) String() string                   { return AsString(n) }
 func (n *ShowZoneConfig) String() string            { return AsString(n) }
 func (n *ShowFingerprints) String() string          { return AsString(n) }
 func (n *Split) String() string                     { return AsString(n) }
-func (l StatementList) String() string              { return AsString(l) }
+func (l *StatementList) String() string             { return AsString(l) }
 func (n *Truncate) String() string                  { return AsString(n) }
 func (n *UnionClause) String() string               { return AsString(n) }
 func (n *Update) String() string                    { return AsString(n) }

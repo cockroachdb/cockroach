@@ -641,7 +641,7 @@ func addInterleave(
 		return pgerror.NewErrorf(
 			pgerror.CodeInvalidSchemaDefinitionError,
 			"declared interleaved columns (%s) must match the parent's primary index (%s)",
-			interleave.Fields,
+			&interleave.Fields,
 			strings.Join(parentIndex.ColumnNames, ", "),
 		)
 	}
@@ -649,7 +649,7 @@ func addInterleave(
 		return pgerror.NewErrorf(
 			pgerror.CodeInvalidSchemaDefinitionError,
 			"declared interleaved columns (%s) must be a prefix of the %s columns being interleaved (%s)",
-			interleave.Fields,
+			&interleave.Fields,
 			typeOfIndex,
 			strings.Join(index.ColumnNames, ", "),
 		)
@@ -668,7 +668,7 @@ func addInterleave(
 			return pgerror.NewErrorf(
 				pgerror.CodeInvalidSchemaDefinitionError,
 				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
-				interleave.Fields,
+				&interleave.Fields,
 				typeOfIndex,
 				strings.Join(index.ColumnNames, ", "),
 			)
@@ -677,7 +677,7 @@ func addInterleave(
 			return pgerror.NewErrorf(
 				pgerror.CodeInvalidSchemaDefinitionError,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
-				interleave.Fields,
+				&interleave.Fields,
 				strings.Join(parentIndex.ColumnNames, ", "),
 			)
 		}
@@ -1051,32 +1051,34 @@ type dummyColumnItem struct {
 }
 
 // String implements the Stringer interface.
-func (d dummyColumnItem) String() string {
-	return fmt.Sprintf("<%s>", d.typ)
+func (d *dummyColumnItem) String() string {
+	return tree.AsString(d)
 }
 
 // Format implements the NodeFormatter interface.
-func (d dummyColumnItem) Format(buf *bytes.Buffer, _ tree.FmtFlags) {
-	buf.WriteString(d.String())
+func (d *dummyColumnItem) Format(ctx *tree.FmtCtx) {
+	ctx.WriteByte('<')
+	ctx.WriteString(d.typ.String())
+	ctx.WriteByte('>')
 }
 
 // Walk implements the Expr interface.
-func (d dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
+func (d *dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
 	return d
 }
 
 // TypeCheck implements the Expr interface.
-func (d dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
 	return d, nil
 }
 
 // Eval implements the TypedExpr interface.
-func (dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (*dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic("dummyColumnItem.Eval() is undefined")
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d dummyColumnItem) ResolvedType() types.T {
+func (d *dummyColumnItem) ResolvedType() types.T {
 	return d.typ
 }
 
@@ -1122,7 +1124,7 @@ func makeCheckConstraint(
 			nameBuf.WriteString(col.Name)
 		}
 		// Convert to a dummy node of the correct type.
-		return nil, false, dummyColumnItem{col.Type.ToDatumType()}
+		return nil, false, &dummyColumnItem{col.Type.ToDatumType()}
 	}
 
 	expr, err := tree.SimpleVisit(d.Expr, preFn)

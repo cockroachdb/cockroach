@@ -23,8 +23,6 @@
 
 package tree
 
-import "bytes"
-
 // Truncate represents a TRUNCATE statement.
 type Truncate struct {
 	Tables       TableNameReferences
@@ -32,16 +30,16 @@ type Truncate struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Truncate) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("TRUNCATE TABLE ")
+func (node *Truncate) Format(ctx *FmtCtx) {
+	ctx.WriteString("TRUNCATE TABLE ")
 	for i, n := range node.Tables {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 	if node.DropBehavior != DropDefault {
-		buf.WriteByte(' ')
-		buf.WriteString(node.DropBehavior.String())
+		ctx.WriteByte(' ')
+		ctx.WriteString(node.DropBehavior.String())
 	}
 }

@@ -27,19 +27,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// exprFmtFlagsBase produces FmtFlags used for serializing expressions; a proper
+// exprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
-func exprFmtFlagsBase(evalCtx *tree.EvalContext) tree.FmtFlags {
-	return tree.FmtPlaceholderFormat(
-		tree.FmtCheckEquivalence,
-		func(buf *bytes.Buffer, flags tree.FmtFlags, p *tree.Placeholder) {
+func exprFmtCtxBase(buf *bytes.Buffer, evalCtx *tree.EvalContext) tree.FmtCtx {
+	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtCheckEquivalence)
+	fmtCtx.WithPlaceholderFormat(
+		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
 			if err != nil {
 				panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
 			}
-			d.Format(buf, flags)
+			d.Format(fmtCtx)
 		})
+	return fmtCtx
 }
 
 // MakeExpression creates a distsqlrun.Expression.
@@ -58,23 +59,20 @@ func MakeExpression(
 	}
 
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
-	var f tree.FmtFlags
-	if indexVarMap == nil {
-		f = exprFmtFlagsBase(evalCtx)
-	} else {
-		f = tree.FmtIndexedVarFormat(
-			exprFmtFlagsBase(evalCtx),
-			func(buf *bytes.Buffer, idx int) {
+	var buf bytes.Buffer
+	fmtCtx := exprFmtCtxBase(&buf, evalCtx)
+	if indexVarMap != nil {
+		fmtCtx.WithIndexedVarFormat(
+			func(ctx *tree.FmtCtx, idx int) {
 				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {
 					panic(fmt.Sprintf("unmapped index %d", idx))
 				}
-				fmt.Fprintf(buf, "@%d", remappedIdx+1)
+				ctx.Printf("@%d", remappedIdx+1)
 			},
 		)
 	}
-	var buf bytes.Buffer
-	tree.FormatNode(&buf, f, expr)
+	fmtCtx.FormatNode(expr)
 	if log.V(1) {
 		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(expr))
 	}

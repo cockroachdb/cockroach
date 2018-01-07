@@ -14,17 +14,15 @@
 
 package tree
 
-import "bytes"
-
 // PauseJob represents a PAUSE JOB statement.
 type PauseJob struct {
 	ID Expr
 }
 
 // Format implements the NodeFormatter interface.
-func (node *PauseJob) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("PAUSE JOB ")
-	FormatNode(buf, f, node.ID)
+func (node *PauseJob) Format(ctx *FmtCtx) {
+	ctx.WriteString("PAUSE JOB ")
+	ctx.FormatNode(node.ID)
 }
 
 // ResumeJob represents a RESUME JOB statement.
@@ -33,9 +31,9 @@ type ResumeJob struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ResumeJob) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("RESUME JOB ")
-	FormatNode(buf, f, node.ID)
+func (node *ResumeJob) Format(ctx *FmtCtx) {
+	ctx.WriteString("RESUME JOB ")
+	ctx.FormatNode(node.ID)
 }
 
 // CancelJob represents a CANCEL JOB statement.
@@ -44,9 +42,9 @@ type CancelJob struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CancelJob) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CANCEL JOB ")
-	FormatNode(buf, f, node.ID)
+func (node *CancelJob) Format(ctx *FmtCtx) {
+	ctx.WriteString("CANCEL JOB ")
+	ctx.FormatNode(node.ID)
 }
 
 // CancelQuery represents a CANCEL QUERY statement.
@@ -55,7 +53,7 @@ type CancelQuery struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CancelQuery) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CANCEL QUERY ")
-	FormatNode(buf, f, node.ID)
+func (node *CancelQuery) Format(ctx *FmtCtx) {
+	ctx.WriteString("CANCEL QUERY ")
+	ctx.FormatNode(node.ID)
 }

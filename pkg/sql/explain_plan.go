@@ -80,15 +80,22 @@ func (p *planner) makeExplainPlanNode(
 	noPlaceholderFlags := tree.FmtExpr(
 		tree.FmtSimple, explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames,
 	)
-	explainer.fmtFlags = tree.FmtPlaceholderFormat(noPlaceholderFlags,
-		func(buf *bytes.Buffer, f tree.FmtFlags, placeholder *tree.Placeholder) {
-			d, err := placeholder.Eval(&p.evalCtx)
-			if err != nil {
-				placeholder.Format(buf, noPlaceholderFlags)
-				return
-			}
-			d.Format(buf, f)
-		})
+	explainer.fmtFlags = noPlaceholderFlags
+	explainer.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
+		d, err := placeholder.Eval(&p.evalCtx)
+		if err != nil {
+			// Disable the placeholder formatter so that
+			// we don't recurse infinitely trying to evaluate.
+			//
+			// We also avoid calling ctx.FormatNode because when
+			// types are visible, this would cause the type information
+			// to be printed twice.
+			nCtx := *ctx
+			placeholder.Format(nCtx.WithPlaceholderFormat(nil))
+			return
+		}
+		ctx.FormatNode(d)
+	}
 
 	node := &explainPlanNode{
 		explainer: explainer,
@@ -149,6 +156,11 @@ type explainer struct {
 
 	// fmtFlags is the formatter to use for pretty-printing expressions.
 	fmtFlags tree.FmtFlags
+
+	// showPlaceholderValues is a formatting overload function
+	// that will try to evaluate the placeholders if possible.
+	// Meant for use with FmtCtx.WithPlaceholderFormat().
+	showPlaceholderValues func(ctx *tree.FmtCtx, placeholder *tree.Placeholder)
 
 	// showTypes indicates whether to print the type of embedded
 	// expressions and result columns.
@@ -260,15 +272,18 @@ func (e *explainer) observer() planObserver {
 func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
 	if e.showExprs && expr != nil {
 		if nodeName == "join" {
-			qualifySave := e.fmtFlags.ShowTableAliases
-			e.fmtFlags.ShowTableAliases = true
-			defer func() { e.fmtFlags.ShowTableAliases = qualifySave }()
+			qualifySave := e.fmtFlags
+			e.fmtFlags.SetFlags(tree.FmtShowTableAliases)
+			defer func(e *explainer, f tree.FmtFlags) { e.fmtFlags = f }(e, qualifySave)
 		}
 		if n >= 0 {
 			fieldName = fmt.Sprintf("%s %d", fieldName, n)
 		}
-		e.attr(nodeName, fieldName,
-			tree.AsStringWithFlags(expr, e.fmtFlags))
+
+		f := tree.NewFmtCtxWithBuf(e.fmtFlags)
+		f.WithPlaceholderFormat(e.showPlaceholderValues)
+		f.FormatNode(expr)
+		e.attr(nodeName, fieldName, f.CloseAndGetString())
 	}
 }
 
@@ -303,23 +318,24 @@ func (e *explainer) leaveNode(name string, _ planNode) error {
 // planNode to a string. The column types are printed iff the 2nd
 // argument specifies so.
 func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
-	var buf bytes.Buffer
-	buf.WriteByte('(')
-	for i, rCol := range cols {
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f.WriteByte('(')
+	for i := range cols {
+		rCol := &cols[i]
 		if i > 0 {
-			buf.WriteString(", ")
+			f.WriteString(", ")
 		}
-		tree.FormatNode(&buf, tree.FmtSimple, tree.Name(rCol.Name))
+		f.FormatNameP(&rCol.Name)
 		// Output extra properties like [hidden,omitted].
 		hasProps := false
 		outputProp := func(prop string) {
 			if hasProps {
-				buf.WriteByte(',')
+				f.WriteByte(',')
 			} else {
-				buf.WriteByte('[')
+				f.WriteByte('[')
 			}
 			hasProps = true
-			buf.WriteString(prop)
+			f.WriteString(prop)
 		}
 		if rCol.Hidden {
 			outputProp("hidden")
@@ -328,14 +344,14 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 			outputProp("omitted")
 		}
 		if hasProps {
-			buf.WriteByte(']')
+			f.WriteByte(']')
 		}
 
 		if printTypes {
-			buf.WriteByte(' ')
-			buf.WriteString(rCol.Typ.String())
+			f.WriteByte(' ')
+			f.WriteString(rCol.Typ.String())
 		}
 	}
-	buf.WriteByte(')')
-	return buf.String()
+	f.WriteByte(')')
+	return f.CloseAndGetString()
 }

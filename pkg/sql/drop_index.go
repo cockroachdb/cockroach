@@ -84,7 +84,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 
 		if err := params.p.dropIndexByName(
 			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
-			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 		); err != nil {
 			return err
 		}

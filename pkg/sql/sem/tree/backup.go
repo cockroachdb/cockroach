@@ -14,8 +14,6 @@
 
 package tree
 
-import "bytes"
-
 // Backup represents a BACKUP statement.
 type Backup struct {
 	Targets         TargetList
@@ -28,22 +26,22 @@ type Backup struct {
 var _ Statement = &Backup{}
 
 // Format implements the NodeFormatter interface.
-func (node *Backup) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("BACKUP ")
-	FormatNode(buf, f, node.Targets)
-	buf.WriteString(" TO ")
-	FormatNode(buf, f, node.To)
+func (node *Backup) Format(ctx *FmtCtx) {
+	ctx.WriteString("BACKUP ")
+	ctx.FormatNode(&node.Targets)
+	ctx.WriteString(" TO ")
+	ctx.FormatNode(node.To)
 	if node.AsOf.Expr != nil {
-		buf.WriteString(" ")
-		FormatNode(buf, f, node.AsOf)
+		ctx.WriteString(" ")
+		ctx.FormatNode(&node.AsOf)
 	}
 	if node.IncrementalFrom != nil {
-		buf.WriteString(" INCREMENTAL FROM ")
-		FormatNode(buf, f, node.IncrementalFrom)
+		ctx.WriteString(" INCREMENTAL FROM ")
+		ctx.FormatNode(&node.IncrementalFrom)
 	}
 	if node.Options != nil {
-		buf.WriteString(" WITH ")
-		FormatNode(buf, f, node.Options)
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
 	}
 }
 
@@ -58,18 +56,18 @@ type Restore struct {
 var _ Statement = &Restore{}
 
 // Format implements the NodeFormatter interface.
-func (node *Restore) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("RESTORE ")
-	FormatNode(buf, f, node.Targets)
-	buf.WriteString(" FROM ")
-	FormatNode(buf, f, node.From)
+func (node *Restore) Format(ctx *FmtCtx) {
+	ctx.WriteString("RESTORE ")
+	ctx.FormatNode(&node.Targets)
+	ctx.WriteString(" FROM ")
+	ctx.FormatNode(&node.From)
 	if node.AsOf.Expr != nil {
-		buf.WriteString(" EXPERIMENTAL ")
-		FormatNode(buf, f, node.AsOf)
+		ctx.WriteString(" EXPERIMENTAL ")
+		ctx.FormatNode(&node.AsOf)
 	}
 	if node.Options != nil {
-		buf.WriteString(" WITH ")
-		FormatNode(buf, f, node.Options)
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
 	}
 }
 
@@ -83,15 +81,16 @@ type KVOption struct {
 type KVOptions []KVOption
 
 // Format implements the NodeFormatter interface.
-func (o KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, n := range o {
+func (o *KVOptions) Format(ctx *FmtCtx) {
+	for i := range *o {
+		n := &(*o)[i]
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, n.Key)
+		ctx.FormatNode(&n.Key)
 		if n.Value != nil {
-			buf.WriteString(` = `)
-			FormatNode(buf, f, n.Value)
+			ctx.WriteString(` = `)
+			ctx.FormatNode(n.Value)
 		}
 	}
 }

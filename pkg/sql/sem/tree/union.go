@@ -24,7 +24,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 )
 
@@ -59,13 +58,13 @@ func (i UnionType) String() string {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *UnionClause) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Left)
-	buf.WriteByte(' ')
-	buf.WriteString(node.Type.String())
+func (node *UnionClause) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.Left)
+	ctx.WriteByte(' ')
+	ctx.WriteString(node.Type.String())
 	if node.All {
-		buf.WriteString(" ALL")
+		ctx.WriteString(" ALL")
 	}
-	buf.WriteByte(' ')
-	FormatNode(buf, f, node.Right)
+	ctx.WriteByte(' ')
+	ctx.FormatNode(node.Right)
 }

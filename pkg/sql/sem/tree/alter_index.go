@@ -14,10 +14,6 @@
 
 package tree
 
-import (
-	"bytes"
-)
-
 // AlterIndex represents an ALTER INDEX statement.
 type AlterIndex struct {
 	IfExists bool
@@ -28,25 +24,25 @@ type AlterIndex struct {
 var _ Statement = &AlterIndex{}
 
 // Format implements the NodeFormatter interface.
-func (node *AlterIndex) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER INDEX ")
+func (node *AlterIndex) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER INDEX ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Index)
-	FormatNode(buf, f, node.Cmds)
+	ctx.FormatNode(node.Index)
+	ctx.FormatNode(&node.Cmds)
 }
 
 // AlterIndexCmds represents a list of index alterations.
 type AlterIndexCmds []AlterIndexCmd
 
 // Format implements the NodeFormatter interface.
-func (node AlterIndexCmds) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, n := range node {
+func (node *AlterIndexCmds) Format(ctx *FmtCtx) {
+	for i, n := range *node {
 		if i > 0 {
-			buf.WriteString(",")
+			ctx.WriteString(",")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 }
 
@@ -69,6 +65,6 @@ type AlterIndexPartitionBy struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterIndexPartitionBy) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.PartitionBy)
+func (node *AlterIndexPartitionBy) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.PartitionBy)
 }

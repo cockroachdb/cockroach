@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -57,14 +56,14 @@ func NewFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
 var FunDefs map[string]*FunctionDefinition
 
 // Format implements the NodeFormatter interface.
-func (fd *FunctionDefinition) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(fd.Name)
+func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
+	ctx.WriteString(fd.Name)
 }
 
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
 // ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
-func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
+func (n *UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
 	fn, err := n.normalizeFunctionName()
 	if err != nil {
 		return nil, err

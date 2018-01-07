@@ -513,14 +513,15 @@ func (p *planner) processColumns(
 
 	cols := make([]sqlbase.ColumnDescriptor, len(node))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(node))
-	for i, n := range node {
-		c, err := n.NormalizeUnqualifiedColumnItem()
+	for i := range node {
+		c, err := node[i].NormalizeUnqualifiedColumnItem()
 		if err != nil {
 			return nil, err
 		}
 
 		if len(c.Selector) > 0 {
-			return nil, pgerror.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", n)
+			return nil, pgerror.UnimplementedWithIssueErrorf(8318,
+				"compound types not supported yet: %q", &node[i])
 		}
 
 		col, err := tableDesc.FindActiveColumnByName(string(c.ColumnName))
@@ -529,7 +530,7 @@ func (p *planner) processColumns(
 		}
 
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, fmt.Errorf("multiple assignments to the same column %q", n)
+			return nil, fmt.Errorf("multiple assignments to the same column %q", &node[i])
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col

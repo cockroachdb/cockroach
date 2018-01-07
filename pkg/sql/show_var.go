@@ -38,10 +38,11 @@ func (p *planner) ShowVar(ctx context.Context, n *tree.ShowVar) (planNode, error
 	}
 
 	varName := lex.EscapeSQLString(name)
+	nm := tree.Name(name)
 	return p.delegateQuery(ctx, "SHOW "+varName,
 		fmt.Sprintf(
 			`SELECT value AS %[1]s FROM crdb_internal.session_variables `+
 				`WHERE variable = %[2]s`,
-			tree.Name(name).String(), varName),
+			nm.String(), varName),
 		nil, nil)
 }
