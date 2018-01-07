@@ -44,9 +44,10 @@ type subquery struct {
 type subqueryExecMode int
 
 const (
+	execModeUnknown subqueryExecMode = iota
 	// Subquery is argument to EXISTS. Only 0 or 1 row is expected.
 	// Result type is Bool.
-	execModeExists subqueryExecMode = iota
+	execModeExists
 	// Subquery is argument to IN, ANY, SOME, or ALL. Any number of rows
 	// expected. Result type is tuple of rows. As a special case, if
 	// there is only one column selected, the result is a tuple of the
