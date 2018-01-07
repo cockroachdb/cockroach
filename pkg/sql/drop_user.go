@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/pkg/errors"
@@ -97,15 +96,17 @@ func (n *DropUserNode) startExec(params runParams) error {
 		userNames[normalizedUsername] = struct{}{}
 	}
 
-	var usedBy bytes.Buffer
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	defer f.Close()
+
 	if err := forEachDatabaseDesc(params.ctx, params.p,
 		func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
-					if usedBy.Len() > 0 {
-						usedBy.WriteString(", ")
+					if f.Len() > 0 {
+						f.WriteString(", ")
 					}
-					tree.Name(db.Name).Format(&usedBy, tree.FmtSimple)
+					f.FormatNameP(&db.Name)
 				}
 			}
 			return nil
@@ -120,27 +121,29 @@ func (n *DropUserNode) startExec(params runParams) error {
 						DatabaseName: tree.Name(db.Name),
 						TableName:    tree.Name(table.Name),
 					}
-					if usedBy.Len() > 0 {
-						usedBy.WriteString(", ")
+					if f.Len() > 0 {
+						f.WriteString(", ")
 					}
-					tn.Format(&usedBy, tree.FmtSimple)
+					f.FormatNode(&tn)
 				}
 			}
 			return nil
 		}); err != nil {
 		return err
 	}
-	if usedBy.Len() > 0 {
-		var nameList bytes.Buffer
+	if f.Len() > 0 {
+		fnl := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+		defer fnl.Close()
 		for i, name := range names {
 			if i > 0 {
-				nameList.WriteString(", ")
+				fnl.WriteString(", ")
 			}
-			tree.Name(name).Format(&nameList, tree.FmtSimple)
+			fnl.FormatName(name)
 		}
 		return pgerror.NewErrorf(pgerror.CodeGroupingError,
 			"cannot drop user%s or role%s %s: grants still exist on %s",
-			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))), nameList.String(), usedBy.String(),
+			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
+			fnl.String(), f.String(),
 		)
 	}
 

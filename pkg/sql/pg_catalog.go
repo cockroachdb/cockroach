@@ -516,7 +516,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 						return err
 					}
 					var buf bytes.Buffer
-					if err := p.printForeignKeyConstraint(ctx, &buf, db.Name, *c.Index); err != nil {
+					if err := p.printForeignKeyConstraint(ctx, &buf, db.Name, c.Index); err != nil {
 						return err
 					}
 					condef = tree.NewDString(buf.String())
@@ -530,11 +530,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
-					var buf bytes.Buffer
-					buf.WriteString("UNIQUE (")
-					c.Index.ColNamesFormat(&buf)
-					buf.WriteByte(')')
-					condef = tree.NewDString(buf.String())
+					f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+					f.WriteString("UNIQUE (")
+					c.Index.ColNamesFormat(f)
+					f.WriteByte(')')
+					condef = tree.NewDString(f.CloseAndGetString())
 
 				case sqlbase.ConstraintTypeCheck:
 					oid = h.CheckConstraintOid(db, table, c.CheckConstraint)

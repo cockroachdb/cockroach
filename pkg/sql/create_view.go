@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -63,13 +62,11 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	// changes are persisted in n.AsSource. We use tree.FormatNode
 	// merely as a traversal method; its output buffer is discarded
 	// immediately after the traversal because it is not needed further.
-	var queryBuf bytes.Buffer
 	var fmtErr error
-	tree.FormatNode(
-		&queryBuf,
-		tree.FmtReformatTableNames(
-			tree.FmtParsable,
-			func(t *tree.NormalizableTableName, buf *bytes.Buffer, f tree.FmtFlags) {
+	{
+		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		f.WithReformatTableNames(
+			func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
 				tn, err := p.QualifyWithDatabase(ctx, t)
 				if err != nil {
 					log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
@@ -80,9 +77,11 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 				// Persist the database prefix expansion.
 				tn.DBNameOriginallyOmitted = false
 			},
-		),
-		n.AsSource,
-	)
+		)
+		f.FormatNode(n.AsSource)
+		f.Close() // We don't need the string.
+	}
+
 	if fmtErr != nil {
 		return nil, fmtErr
 	}

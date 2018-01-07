@@ -24,8 +24,6 @@
 package tree
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
@@ -44,18 +42,18 @@ type TargetList struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (tl TargetList) Format(buf *bytes.Buffer, f FmtFlags) {
+func (tl *TargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
-		buf.WriteString("DATABASE ")
-		FormatNode(buf, f, tl.Databases)
+		ctx.WriteString("DATABASE ")
+		ctx.FormatNode(&tl.Databases)
 	} else {
-		FormatNode(buf, f, tl.Tables)
+		ctx.FormatNode(&tl.Tables)
 	}
 }
 
 // NormalizeTablesWithDatabase normalizes all patterns and qualifies TableNames
 // with the provided db name if non-empty.
-func (tl TargetList) NormalizeTablesWithDatabase(db string) error {
+func (tl *TargetList) NormalizeTablesWithDatabase(db string) error {
 	for i, pattern := range tl.Tables {
 		var err error
 		pattern, err = pattern.NormalizeTablePattern()
@@ -76,11 +74,11 @@ func (tl TargetList) NormalizeTablesWithDatabase(db string) error {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Grant) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("GRANT ")
-	node.Privileges.Format(buf)
-	buf.WriteString(" ON ")
-	FormatNode(buf, f, node.Targets)
-	buf.WriteString(" TO ")
-	FormatNode(buf, f, node.Grantees)
+func (node *Grant) Format(ctx *FmtCtx) {
+	ctx.WriteString("GRANT ")
+	node.Privileges.Format(ctx.Buffer)
+	ctx.WriteString(" ON ")
+	ctx.FormatNode(&node.Targets)
+	ctx.WriteString(" TO ")
+	ctx.FormatNode(&node.Grantees)
 }

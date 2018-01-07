@@ -276,49 +276,53 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 
 // ColNamesFormat writes a string describing the column names and directions
 // in this index to the given buffer.
-func (desc *IndexDescriptor) ColNamesFormat(buf *bytes.Buffer) {
-	for i, name := range desc.ColumnNames {
+func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtxWithBuf) {
+	for i := range desc.ColumnNames {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		tree.Name(name).Format(buf, tree.FmtSimple)
-		buf.WriteByte(' ')
-		buf.WriteString(desc.ColumnDirections[i].String())
+		ctx.FormatNameP(&desc.ColumnNames[i])
+		ctx.WriteByte(' ')
+		ctx.WriteString(desc.ColumnDirections[i].String())
 	}
 }
 
 // ColNamesString returns a string describing the column names and directions
 // in this index.
 func (desc *IndexDescriptor) ColNamesString() string {
-	var buf bytes.Buffer
-	desc.ColNamesFormat(&buf)
-	return buf.String()
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	desc.ColNamesFormat(f)
+	return f.CloseAndGetString()
 }
-
-var isUnique = map[bool]string{true: "UNIQUE "}
 
 // SQLString returns the SQL string describing this index. If non-empty,
 // "ON tableName" is included in the output in the correct place.
 func (desc *IndexDescriptor) SQLString(tableName string) string {
-	var storing string
-	if len(desc.StoreColumnNames) > 0 {
-		colNames := make(tree.NameList, len(desc.StoreColumnNames))
-		for i, n := range desc.StoreColumnNames {
-			colNames[i] = tree.Name(n)
-		}
-		storing = fmt.Sprintf(" STORING (%s)", tree.AsString(colNames))
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	if desc.Unique {
+		f.WriteString("UNIQUE ")
 	}
-	var onTable string
+	f.WriteString("INDEX ")
 	if tableName != "" {
-		onTable = fmt.Sprintf("ON %s ", tableName)
+		f.WriteString("ON ")
+		f.WriteString(tableName)
 	}
-	return fmt.Sprintf("%sINDEX %s%s (%s)%s",
-		isUnique[desc.Unique],
-		onTable,
-		tree.AsString(tree.Name(desc.Name)),
-		desc.ColNamesString(),
-		storing,
-	)
+	f.FormatNameP(&desc.Name)
+	f.WriteString(" (")
+	desc.ColNamesFormat(f)
+	f.WriteByte(')')
+
+	if len(desc.StoreColumnNames) > 0 {
+		f.WriteString(" STORING (")
+		for i := range desc.StoreColumnNames {
+			if i > 0 {
+				f.WriteString(", ")
+			}
+			f.FormatNameP(&desc.StoreColumnNames[i])
+		}
+		f.WriteByte(')')
+	}
+	return f.CloseAndGetString()
 }
 
 // SetID implements the DescriptorProto interface.
@@ -1533,8 +1537,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 
 			rangeValues[string(endKey)] = struct{}{}
 			if bytes.Compare(lastEndKey, endKey) >= 0 {
-				return fmt.Errorf("values must be strictly increasing: %s is out of order",
-					tree.AsString(datums))
+				return fmt.Errorf("values must be strictly increasing: %s is out of order", &datums)
 			}
 			lastEndKey = endKey
 		}
@@ -2518,17 +2521,20 @@ func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
 
 // SQLString returns the SQL statement describing the column.
 func (desc *ColumnDescriptor) SQLString() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s", tree.AsString(tree.Name(desc.Name)), desc.Type.SQLString())
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f.FormatNameP(&desc.Name)
+	f.WriteByte(' ')
+	f.WriteString(desc.Type.SQLString())
 	if desc.Nullable {
-		buf.WriteString(" NULL")
+		f.WriteString(" NULL")
 	} else {
-		buf.WriteString(" NOT NULL")
+		f.WriteString(" NOT NULL")
 	}
 	if desc.DefaultExpr != nil {
-		fmt.Fprintf(&buf, " DEFAULT %s", *desc.DefaultExpr)
+		f.WriteString(" DEFAULT ")
+		f.WriteString(*desc.DefaultExpr)
 	}
-	return buf.String()
+	return f.CloseAndGetString()
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a

@@ -162,7 +162,7 @@ func (p *planner) orderBy(
 			if err != nil {
 				return nil, err
 			}
-			p.hasStar = p.hasStar || hasStar
+			p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 
 			if len(cols) == 0 {
 				// Nothing was expanded! No order here.
@@ -396,7 +396,7 @@ func (p *planner) rewriteIndexOrderings(
 					}
 				}
 				if idxDesc == nil {
-					return nil, errors.Errorf("index %q not found", tree.ErrString(o.Index))
+					return nil, errors.Errorf("index %q not found", tree.ErrString(&o.Index))
 				}
 			}
 
@@ -420,12 +420,12 @@ func (p *planner) rewriteIndexOrderings(
 			}
 
 		default:
-			return nil, errors.Errorf("unknown ORDER BY specification: %s", tree.AsString(orderBy))
+			return nil, errors.Errorf("unknown ORDER BY specification: %s", tree.ErrString(&orderBy))
 		}
 	}
 
 	if log.V(2) {
-		log.Infof(ctx, "rewritten ORDER BY clause: %s", tree.AsString(newOrderBy))
+		log.Infof(ctx, "rewritten ORDER BY clause: %s", tree.ErrString(&newOrderBy))
 	}
 	return newOrderBy, nil
 }

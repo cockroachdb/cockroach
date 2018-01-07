@@ -79,7 +79,7 @@ func (c *sqlConn) ensureConn() error {
 		if c.reconnecting && c.dbName != "" {
 			// Attempt to reset the current database.
 			if _, err := conn.(sqlConnI).Exec(
-				`SET DATABASE = `+tree.Name(c.dbName).String(), nil,
+				`SET DATABASE = `+tree.NameStringP(&c.dbName), nil,
 			); err != nil {
 				fmt.Fprintf(stderr, "warning: unable to restore current database: %v\n", err)
 			}

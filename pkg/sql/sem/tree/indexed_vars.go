@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -93,13 +92,14 @@ func (v *IndexedVar) ResolvedType() types.T {
 }
 
 // Format implements the NodeFormatter interface.
-func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
-	if f.indexedVarFormat != nil {
-		f.indexedVarFormat(buf, v.Idx)
-	} else if f.symbolicVars || v.col == nil {
-		fmt.Fprintf(buf, "@%d", v.Idx+1)
+func (v *IndexedVar) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	if ctx.indexedVarFormat != nil {
+		ctx.indexedVarFormat(ctx, v.Idx)
+	} else if f.HasFlags(fmtSymbolicVars) || v.col == nil {
+		ctx.Printf("@%d", v.Idx+1)
 	} else {
-		v.col.Format(buf, f)
+		v.col.Format(ctx)
 	}
 }
 

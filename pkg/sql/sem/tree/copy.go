@@ -14,8 +14,6 @@
 
 package tree
 
-import "bytes"
-
 // CopyFrom represents a COPY FROM statement.
 type CopyFrom struct {
 	Table   NormalizableTableName
@@ -24,16 +22,16 @@ type CopyFrom struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CopyFrom) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("COPY ")
-	FormatNode(buf, f, &node.Table)
+func (node *CopyFrom) Format(ctx *FmtCtx) {
+	ctx.WriteString("COPY ")
+	ctx.FormatNode(&node.Table)
 	if len(node.Columns) > 0 {
-		buf.WriteString(" (")
-		FormatNode(buf, f, node.Columns)
-		buf.WriteString(")")
+		ctx.WriteString(" (")
+		ctx.FormatNode(&node.Columns)
+		ctx.WriteString(")")
 	}
-	buf.WriteString(" FROM ")
+	ctx.WriteString(" FROM ")
 	if node.Stdin {
-		buf.WriteString("STDIN")
+		ctx.WriteString("STDIN")
 	}
 }

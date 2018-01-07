@@ -15,22 +15,20 @@
 package tree_test
 
 import (
-	"bytes"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestFormatStatement(t *testing.T) {
-	tableFormatter := tree.FmtReformatTableNames(tree.FmtSimple,
-		func(_ *tree.NormalizableTableName, buf *bytes.Buffer, _ tree.FmtFlags) {
-			buf.WriteString("xoxoxo")
-		})
-
 	testData := []struct {
 		stmt     string
 		f        tree.FmtFlags
@@ -38,30 +36,8 @@ func TestFormatStatement(t *testing.T) {
 	}{
 		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtSimple,
 			`CREATE USER 'foo' WITH PASSWORD *****`},
-		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtSimpleWithPasswords,
+		{`CREATE USER foo WITH PASSWORD 'bar'`, tree.FmtShowPasswords,
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
-
-		{`CREATE TABLE foo (x INT)`, tableFormatter,
-			`CREATE TABLE xoxoxo (x INT)`},
-		{`INSERT INTO foo(x) TABLE bar`, tableFormatter,
-			`INSERT INTO xoxoxo(x) TABLE xoxoxo`},
-		{`UPDATE foo SET x = y`, tableFormatter,
-			`UPDATE xoxoxo SET x = y`},
-		{`DELETE FROM foo`, tableFormatter,
-			`DELETE FROM xoxoxo`},
-		{`ALTER TABLE foo RENAME TO bar`, tableFormatter,
-			`ALTER TABLE xoxoxo RENAME TO xoxoxo`},
-		{`SHOW COLUMNS FROM foo`, tableFormatter,
-			`SHOW COLUMNS FROM xoxoxo`},
-		{`SHOW CREATE TABLE foo`, tableFormatter,
-			`SHOW CREATE TABLE xoxoxo`},
-		// TODO(knz): TRUNCATE and GRANT table names are removed by
-		// tree.FmtAnonymize but not processed by table formatters.
-		//
-		// {`TRUNCATE foo`, tableFormatter,
-		// `TRUNCATE TABLE xoxoxo`},
-		// {`GRANT SELECT ON bar TO foo`, tableFormatter,
-		// `GRANT SELECT ON xoxoxo TO foo`},
 
 		{`CREATE TABLE foo (x INT)`, tree.FmtAnonymize,
 			`CREATE TABLE _ (_ INT)`},
@@ -112,6 +88,56 @@ func TestFormatStatement(t *testing.T) {
 				t.Fatal(err)
 			}
 			stmtStr := tree.AsStringWithFlags(stmt, test.f)
+			if stmtStr != test.expected {
+				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
+			}
+		})
+	}
+}
+
+func TestFormatTableName(t *testing.T) {
+	testData := []struct {
+		stmt     string
+		expected string
+	}{
+		{`CREATE TABLE foo (x INT)`,
+			`CREATE TABLE xoxoxo (x INT)`},
+		{`INSERT INTO foo(x) TABLE bar`,
+			`INSERT INTO xoxoxo(x) TABLE xoxoxo`},
+		{`UPDATE foo SET x = y`,
+			`UPDATE xoxoxo SET x = y`},
+		{`DELETE FROM foo`,
+			`DELETE FROM xoxoxo`},
+		{`ALTER TABLE foo RENAME TO bar`,
+			`ALTER TABLE xoxoxo RENAME TO xoxoxo`},
+		{`SHOW COLUMNS FROM foo`,
+			`SHOW COLUMNS FROM xoxoxo`},
+		{`SHOW CREATE TABLE foo`,
+			`SHOW CREATE TABLE xoxoxo`},
+		// TODO(knz): TRUNCATE and GRANT table names are removed by
+		// tree.FmtAnonymize but not processed by table formatters.
+		//
+		// {`TRUNCATE foo`,
+		// `TRUNCATE TABLE xoxoxo`},
+		// {`GRANT SELECT ON bar TO foo`,
+		// `GRANT SELECT ON xoxoxo TO foo`},
+	}
+
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	defer f.Close()
+	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.NormalizableTableName) {
+		ctx.WriteString("xoxoxo")
+	})
+
+	for i, test := range testData {
+		t.Run(fmt.Sprintf("%d %s", i, test.stmt), func(t *testing.T) {
+			stmt, err := parser.ParseOne(test.stmt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.Reset()
+			f.FormatNode(stmt)
+			stmtStr := f.String()
 			if stmtStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
 			}
@@ -209,4 +235,56 @@ func TestFormatExpr(t *testing.T) {
 			}
 		})
 	}
+}
+
+// BenchmarkFormatRandomStatements measures the time needed to format
+// 1000 random statements.
+func BenchmarkFormatRandomStatements(b *testing.B) {
+	// Generate a bunch of random statements.
+	yBytes, err := ioutil.ReadFile(filepath.Join("..", "..", "parser", "sql.y"))
+	if err != nil {
+		b.Fatalf("error reading grammar: %v", err)
+	}
+	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes))
+	if err != nil {
+		b.Fatalf("error instantiating RSG: %v", err)
+	}
+	strs := make([]string, 1000)
+	stmts := make(tree.StatementList, 1000)
+	for i := 0; i < 1000; {
+		rdm := r.Generate("stmt", 20)
+		stmt, err := parser.ParseOne(rdm)
+		if err != nil {
+			// Some statements (e.g. those containing error terminals) do
+			// not parse.  It's all right. Just ignore this and continue
+			// until we have all we want.
+			continue
+		}
+		strs[i] = rdm
+		stmts[i] = stmt
+		i++
+	}
+
+	// Benchmark the parses.
+	b.Run("parse", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, sql := range strs {
+				_, err := parser.ParseOne(sql)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	})
+
+	// Benchmark the formats.
+	b.Run("format", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for i, stmt := range stmts {
+				f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+				f.FormatNode(stmt)
+				strs[i] = f.CloseAndGetString()
+			}
+		}
+	})
 }
