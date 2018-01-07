@@ -751,7 +751,7 @@ type ArrayFlatten struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ArrayFlatten) Format(ctx *FmtCtx) {
-	ctx.WriteString("ARRAY")
+	ctx.WriteString("ARRAY ")
 	exprFmtWithParen(ctx, node.Subquery)
 }
 
