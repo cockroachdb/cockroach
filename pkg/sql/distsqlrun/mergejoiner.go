@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -36,7 +37,8 @@ type mergeJoiner struct {
 	leftSource, rightSource RowSource
 	leftRows, rightRows     []sqlbase.EncDatumRow
 	leftIdx, rightIdx       int
-	matchedRight            []bool
+	emitUnmatchedRight      bool
+	matchedRight            util.FastIntSet
 	matchedRightCount       int
 
 	streamMerger streamMerger
@@ -182,8 +184,8 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
-					if m.matchedRight != nil {
-						m.matchedRight[ridx] = true
+					if m.emitUnmatchedRight {
+						m.matchedRight.Add(ridx)
 					}
 					return renderedRow, nil
 				}
@@ -211,17 +213,18 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		// We've exhausted the left-side batch. If this is a right or full outer
 		// join (and thus matchedRight!=nil), emit unmatched right-side rows.
-		if m.matchedRight != nil {
+		if m.emitUnmatchedRight {
 			for m.rightIdx < len(m.rightRows) {
 				ridx := m.rightIdx
 				m.rightIdx++
-				if m.matchedRight[ridx] {
+				if m.matchedRight.Contains(ridx) {
 					continue
 				}
 				return m.renderUnmatchedRow(m.rightRows[ridx], rightSide), nil
 			}
 
-			m.matchedRight = nil
+			m.matchedRight = util.FastIntSet{}
+			m.emitUnmatchedRight = false
 		}
 
 		// Retrieve the next batch of rows to process.
@@ -235,10 +238,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 
 		// Prepare for processing the next batch.
-		m.matchedRight = nil
-		if shouldEmitUnmatchedRow(rightSide, m.joinType) {
-			m.matchedRight = make([]bool, len(m.rightRows))
-		}
+		m.emitUnmatchedRight = shouldEmitUnmatchedRow(rightSide, m.joinType)
 		m.leftIdx, m.rightIdx = 0, 0
 	}
 }
