@@ -154,7 +154,7 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 		return false, expr
 	}
 	switch t := expr.(type) {
-	case *subquery, *tree.Subquery:
+	case *tree.Subquery:
 		v.err = newQueryNotSupportedError("subqueries not supported yet")
 		return false, expr
 

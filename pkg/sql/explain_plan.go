@@ -32,6 +32,9 @@ type explainPlanNode struct {
 	// plan is the sub-node being explained.
 	plan planNode
 
+	// subqueryPlans contains the subquery plans for the explained query.
+	subqueryPlans []subquery
+
 	// expanded indicates whether to invoke expandPlan() on the sub-node.
 	expanded bool
 
@@ -69,8 +72,19 @@ var explainPlanVerboseColumns = sqlbase.ResultColumns{
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
 func (p *planner) makeExplainPlanNode(
-	flags explainFlags, expanded, optimized bool, plan planNode,
-) planNode {
+	ctx context.Context, flags explainFlags, expanded, optimized bool, origStmt tree.Statement,
+) (planNode, error) {
+	// Build the plan for the query being explained.  We want to capture
+	// all the analyzed sub-queries in the explain node, so we are going
+	// to override the planner's subquery plan slice.
+	defer func(s []subquery) { p.curPlan.subqueryPlans = s }(p.curPlan.subqueryPlans)
+	p.curPlan.subqueryPlans = nil
+
+	plan, err := p.newPlan(ctx, origStmt, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	columns := explainPlanColumns
 
 	if flags.showMetadata {
@@ -80,7 +94,7 @@ func (p *planner) makeExplainPlanNode(
 	e := explainer{explainFlags: flags}
 
 	noPlaceholderFlags := tree.FmtExpr(
-		tree.FmtSimple, flags.showTypes, flags.symbolicVars, flags.qualifyNames,
+		tree.FmtSymbolicSubqueries, flags.showTypes, flags.symbolicVars, flags.qualifyNames,
 	)
 	e.fmtFlags = noPlaceholderFlags
 	e.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
@@ -100,15 +114,16 @@ func (p *planner) makeExplainPlanNode(
 	}
 
 	node := &explainPlanNode{
-		explainer: e,
-		expanded:  expanded,
-		optimized: optimized,
-		plan:      plan,
+		explainer:     e,
+		expanded:      expanded,
+		optimized:     optimized,
+		plan:          plan,
+		subqueryPlans: p.curPlan.subqueryPlans,
 		run: explainPlanRun{
 			results: p.newContainerValuesNode(columns, 0),
 		},
 	}
-	return node
+	return node, nil
 }
 
 // explainPlanRun is the run-time state of explainPlanNode during local execution.
@@ -118,7 +133,21 @@ type explainPlanRun struct {
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan)
+	// The sub-plan's subqueries have been captured local to the EXPLAIN
+	// node so that they would not be automatically started for
+	// execution by planTop.start(). But this also means they were not
+	// yet processed by makePlan()/optimizePlan(). Do it here.
+	for i := range e.subqueryPlans {
+		if err := params.p.optimizeSubquery(params.ctx, &e.subqueryPlans[i]); err != nil {
+			return err
+		}
+
+		// Trigger limit propagation. This would be done otherwise when
+		// starting the plan. However we do not want to start the plan.
+		params.p.setUnlimited(e.subqueryPlans[i].plan)
+	}
+
+	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan, e.subqueryPlans)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
@@ -126,6 +155,9 @@ func (e *explainPlanNode) Values() tree.Datums                 { return e.run.re
 
 func (e *explainPlanNode) Close(ctx context.Context) {
 	e.plan.Close(ctx)
+	for i := range e.subqueryPlans {
+		e.subqueryPlans[i].plan.Close(ctx)
+	}
 	e.run.results.Close(ctx)
 }
 
@@ -184,11 +216,12 @@ type explainer struct {
 var emptyString = tree.NewDString("")
 
 // populateExplain walks the plan and generates rows in a valuesNode.
+// The subquery plans, if any are known to the planner, are printed
+// at the bottom.
 func (p *planner) populateExplain(
-	ctx context.Context, e *explainer, v *valuesNode, plan planNode,
+	ctx context.Context, e *explainer, v *valuesNode, plan planNode, subqueryPlans []subquery,
 ) error {
-	e.entries = nil
-	_ = walkPlan(ctx, plan, e.observer())
+	e.populateEntries(ctx, plan, subqueryPlans)
 
 	tp := treeprinter.New()
 	// n keeps track of the current node on each level.
@@ -238,17 +271,51 @@ func (p *planner) populateExplain(
 	return nil
 }
 
-// planToString uses walkPlan() to build a string representation of the planNode.
-func planToString(ctx context.Context, plan planNode) string {
+func (e *explainer) populateEntries(ctx context.Context, plan planNode, subqueryPlans []subquery) {
+	e.entries = nil
+	observer := e.observer()
+
+	// If there are any subqueries in the plan, we enclose both the main
+	// plan and the sub-queries as children of a virtual "root"
+	// node. This is not introduced in the common case where there are
+	// no subqueries.
+	if len(subqueryPlans) > 0 {
+		_, _ = e.enterNode(ctx, "root", plan)
+	}
+
+	// Explain the main plan.
+	_ = walkPlan(ctx, plan, observer)
+
+	// Explain the subqueries.
+	for i := range subqueryPlans {
+		_, _ = e.enterNode(ctx, "subquery", plan)
+		e.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
+		e.attr("subquery", "sql", subqueryPlans[i].subquery.String())
+		e.attr("subquery", "exec mode", execModeNames[subqueryPlans[i].execMode])
+		if subqueryPlans[i].plan != nil {
+			_ = walkPlan(ctx, subqueryPlans[i].plan, observer)
+		} else if subqueryPlans[i].started {
+			e.expr("subquery", "result", -1, subqueryPlans[i].result)
+		}
+		_ = e.leaveNode("subquery", subqueryPlans[i].plan)
+	}
+
+	if len(subqueryPlans) > 0 {
+		_ = e.leaveNode("root", plan)
+	}
+}
+
+// planToString uses explain() to build a string representation of the planNode.
+func planToString(ctx context.Context, plan planNode, subqueryPlans []subquery) string {
 	e := explainer{
 		explainFlags: explainFlags{
 			showMetadata: true,
 			showExprs:    true,
 			showTypes:    true,
 		},
-		fmtFlags: tree.FmtExpr(tree.FmtSimple, true, true, true),
+		fmtFlags: tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true),
 	}
-	_ = walkPlan(ctx, plan, e.observer())
+	e.populateEntries(ctx, plan, subqueryPlans)
 	var buf bytes.Buffer
 	for _, e := range e.entries {
 		field := e.field

@@ -232,9 +232,10 @@ type planTop struct {
 	// logical plan construction. This is used by CREATE VIEW until
 	// #10028 is addressed.
 	hasStar bool
-	// hasSubqueries collects whether any subqueries expansion has
-	// occurred during logical plan construction.
-	hasSubqueries bool
+
+	// subqueryPlans contains all the sub-query plans.
+	subqueryPlans []subquery
+
 	// plannedExecute is true if this planner has planned an EXECUTE statement.
 	plannedExecute bool
 }
@@ -251,11 +252,12 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	// Reinitialize.
 	p.curPlan = planTop{}
 
-	plan, err := p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
+	var err error
+	p.curPlan.plan, err = p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
 	if err != nil {
 		return err
 	}
-	cols := planColumns(plan)
+	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
 			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
@@ -263,33 +265,39 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 		}
 	}
 	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
+		// We need to close in case there were any subqueries created.
+		p.curPlan.close(ctx)
 		return err
 	}
 
 	// Ensure that any hidden result column is effectively hidden.
 	// We do this before optimization below so that the needed
 	// column optimization kills the hidden columns.
-	plan, err = p.hideHiddenColumns(ctx, plan, cols)
+	p.curPlan.plan, err = p.hideHiddenColumns(ctx, p.curPlan.plan, cols)
 	if err != nil {
-		plan.Close(ctx)
+		p.curPlan.close(ctx)
 		return err
 	}
 
-	needed := allColumns(plan)
-	plan, err = p.optimizePlan(ctx, plan, needed)
+	needed := allColumns(p.curPlan.plan)
+	p.curPlan.plan, err = p.optimizePlan(ctx, p.curPlan.plan, needed)
 	if err != nil {
-		// Once the plan has undergone optimization, it may contain
-		// monitor-registered memory, even in case of error.
-		plan.Close(ctx)
+		p.curPlan.close(ctx)
 		return err
+	}
+
+	// Now do the same work for all sub-queries.
+	for i := range p.curPlan.subqueryPlans {
+		if err := p.optimizeSubquery(ctx, &p.curPlan.subqueryPlans[i]); err != nil {
+			p.curPlan.close(ctx)
+			return err
+		}
 	}
 
 	if log.V(3) {
-		log.Infof(ctx, "statement %s compiled to:\n%s", stmt, planToString(ctx, plan))
+		log.Infof(ctx, "statement %s compiled to:\n%s", stmt,
+			planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans))
 	}
-
-	// Store the plan for later use.
-	p.curPlan.plan = plan
 
 	return nil
 }
@@ -325,11 +333,26 @@ func (p *planner) hideHiddenColumns(
 
 // close ensures that the plan's resources have been deallocated.
 func (p *planTop) close(ctx context.Context) {
-	p.plan.Close(ctx)
+	if p.plan != nil {
+		p.plan.Close(ctx)
+		p.plan = nil
+	}
+
+	for i := range p.subqueryPlans {
+		// Once a subquery plan has been evaluated, it already closes its
+		// plan.
+		if p.subqueryPlans[i].plan != nil {
+			p.subqueryPlans[i].plan.Close(ctx)
+			p.subqueryPlans[i].plan = nil
+		}
+	}
 }
 
 // start starts the plan.
 func (p *planTop) start(params runParams) error {
+	if err := p.evalSubqueries(params); err != nil {
+		return err
+	}
 	return startPlan(params, p.plan)
 }
 
@@ -340,11 +363,15 @@ func (p *planTop) columns() sqlbase.ResultColumns {
 
 // startPlan starts the given plan and all its sub-query nodes.
 func startPlan(params runParams, plan planNode) error {
+	// Now start execution.
 	if err := startExec(params, plan); err != nil {
 		return err
 	}
-	// Trigger limit propagation through the plan and sub-queries.
+
+	// Finally, trigger limit propagation through the plan.  The actual
+	// LIMIT values will have been evaluated by startExec().
 	params.p.setUnlimited(plan)
+
 	return nil
 }
 
@@ -394,23 +421,6 @@ func startExec(params runParams, plan planNode) error {
 		leaveNode: func(_ string, n planNode) error {
 			if s, ok := n.(execStartable); ok {
 				return s.startExec(params)
-			}
-			return nil
-		},
-		subqueryNode: func(ctx context.Context, sq *subquery) error {
-			if !sq.expanded {
-				panic("subquery was not expanded properly")
-			}
-			if !sq.started {
-				if err := startExec(params, sq.plan); err != nil {
-					return err
-				}
-				sq.started = true
-				res, err := sq.doEval(ctx, params.p)
-				if err != nil {
-					return err
-				}
-				sq.result = res
 			}
 			return nil
 		},

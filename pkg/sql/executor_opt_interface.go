@@ -80,11 +80,15 @@ func (en *execNode) Explain() ([]tree.Datums, error) {
 		showExprs:    true,
 		qualifyNames: true,
 	}
+	explainNode, err := en.planner.makeExplainPlanNode(
+		context.TODO(), flags, false /* expanded */, false /* optimized */, en.plan,
+	)
+	if err != nil {
+		return nil, err
+	}
 	explainNode := execNode{
 		execFactory: en.execFactory,
-		plan: en.planner.makeExplainPlanNode(
-			flags, false /* expanded */, false /* optimized */, en.plan,
-		),
+		plan:        explainNode,
 	}
 	return explainNode.Run()
 }

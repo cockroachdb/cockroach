@@ -77,6 +77,10 @@ const (
 	// FmtShowTableAliases reveals the table aliases.
 	FmtShowTableAliases
 
+	// FmtSymbolicSubqueries indicates that subqueries must be pretty-printed
+	// using numeric notation (@S123).
+	FmtSymbolicSubqueries
+
 	// If set, strings will be formatted for being contents of ARRAYs.
 	// Used internally in combination with FmtArrays defined below.
 	fmtWithinArray
@@ -150,12 +154,6 @@ func MakeFmtCtx(buf *bytes.Buffer, f FmtFlags) FmtCtx {
 func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *NormalizableTableName)) *FmtCtx {
 	ctx.tableNameFormatter = fn
 	return ctx
-}
-
-// StripTypeFormatting removes the flag that extracts types from the format flags,
-// so as to enable rendering expressions for which types have not been computed yet.
-func (ctx *FmtCtx) StripTypeFormatting() {
-	ctx.flags &= ^FmtShowTypes
 }
 
 // CopyWithFlags creates a new FmtCtx with different formatting flags
