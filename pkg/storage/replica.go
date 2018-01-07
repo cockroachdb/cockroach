@@ -2015,12 +2015,12 @@ type endCmds struct {
 // done removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
-	// Update the timestamp cache if the command succeeded and is not
-	// being retried. Each request is considered in turn; only those
-	// marked as affecting the cache are processed. Inconsistent reads
-	// are excluded.
-	if pErr == nil && retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
-		ec.repl.updateTimestampCache(&ec.ba, br)
+	// Update the timestamp cache if the command is not being
+	// retried. Each request is considered in turn; only those marked as
+	// affecting the cache are processed. Inconsistent reads are
+	// excluded.
+	if retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
+		ec.repl.updateTimestampCache(&ec.ba, br, pErr)
 	}
 
 	if fn := ec.repl.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
@@ -2032,7 +2032,9 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 // updateTimestampCache updates the timestamp cache in order to set a low water
 // mark for the timestamp at which mutations to keys overlapping the provided
 // request can write, such that they don't re-write history.
-func (r *Replica) updateTimestampCache(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) {
+func (r *Replica) updateTimestampCache(
+	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+) {
 	readOnlyUseReadCache := true
 	if r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
 		// Clockless mode: all reads count as writes.
@@ -2048,6 +2050,14 @@ func (r *Replica) updateTimestampCache(ba *roachpb.BatchRequest, br *roachpb.Bat
 	for i, union := range ba.Requests {
 		args := union.GetInner()
 		if roachpb.UpdatesTimestampCache(args) {
+			// Skip update if there's an error and it's not for this index
+			// or the request doesn't update the timestamp cache on errors.
+			if pErr != nil {
+				if index := pErr.Index; !roachpb.UpdatesTimestampCacheOnError(args) ||
+					index == nil || int32(i) != index.Index {
+					continue
+				}
+			}
 			header := args.Header()
 			start, end := header.Key, header.EndKey
 			switch args.(type) {
@@ -2061,6 +2071,14 @@ func (r *Replica) updateTimestampCache(ba *roachpb.BatchRequest, br *roachpb.Bat
 				// record with WriteTooOld set.
 				key := keys.TransactionKey(start, txnID)
 				tc.Add(key, nil, ts, txnID, false /* readCache */)
+			case *roachpb.ConditionalPutRequest:
+				if pErr != nil {
+					// ConditionalPut still updates on ConditionFailedErrors.
+					if _, ok := pErr.GetDetail().(*roachpb.ConditionFailedError); !ok {
+						continue
+					}
+				}
+				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
 			case *roachpb.ScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&

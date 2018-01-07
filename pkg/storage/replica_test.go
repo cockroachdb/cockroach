@@ -3201,6 +3201,76 @@ func TestReplicaUseTSCache(t *testing.T) {
 	}
 }
 
+func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	// Set clock to time 1s and do the conditional put.
+	t0 := 1 * time.Second
+	tc.manualClock.Set(t0.Nanoseconds())
+
+	// CPut args which expect value "1" to write "0".
+	key := []byte("a")
+	cpArgs := cPutArgs(key, []byte("1"), []byte("0"))
+	_, pErr := tc.SendWrapped(&cpArgs)
+	cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError)
+	if !ok {
+		t.Errorf("expected ConditionFailedError; got %v", pErr)
+	}
+	if cfErr.ActualValue != nil {
+		t.Errorf("expected empty actual value; got %s", cfErr.ActualValue)
+	}
+
+	// Try a transactional put at a lower timestamp and ensure it is pushed.
+	pArgs := putArgs(key, []byte("value"))
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+	txn.OrigTimestamp, txn.Timestamp = makeTS(1, 0), makeTS(1, 0)
+	h := roachpb.Header{Txn: txn}
+	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), h, &pArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if respH.Txn.Timestamp.WallTime != t0.Nanoseconds() {
+		t.Errorf("expected write timestamp to upgrade to 1s; got %s", respH.Txn.Timestamp)
+	}
+
+	// Try a conditional put at a later timestamp which will fail
+	// because there's now a transaction intent. This failure will
+	// not update the timestamp cache.
+	t1 := 2 * time.Second
+	tc.manualClock.Set(t1.Nanoseconds())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	_, pErr = tc.SendWrapped(&cpArgs)
+	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+		t.Errorf("expected WriteIntentError; got %v", pErr)
+	}
+
+	// Abort the intent and try to write again to ensure the timestamp
+	// cache wasn't updated by the second failed conditional put.
+	rArgs := &roachpb.ResolveIntentRequest{
+		Span:      pArgs.Header(),
+		IntentTxn: txn.TxnMeta,
+		Status:    roachpb.ABORTED,
+	}
+	txn.Sequence++
+	h = roachpb.Header{Timestamp: txn.Timestamp}
+	if _, pErr = tc.SendWrappedWith(h, rArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	_, respH, pErr = SendWrapped(context.Background(), tc.Sender(), h, &pArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if respH.Timestamp.WallTime != t0.Nanoseconds() {
+		t.Errorf("expected write timestamp to succeed at 1s; got %s", respH.Timestamp)
+	}
+}
+
 // TestReplicaNoTSCacheInconsistent verifies that the timestamp cache
 // is not affected by inconsistent reads.
 func TestReplicaNoTSCacheInconsistent(t *testing.T) {
