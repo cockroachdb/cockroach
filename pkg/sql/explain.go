@@ -131,8 +131,7 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 		}, nil
 
 	case explainPlan:
-		// We may want to show placeholder types, so ensure no values
-		// are missing.
+		// We may want to show placeholder types, so allow missing values.
 		p.semaCtx.Placeholders.PermitUnassigned()
 		return p.makeExplainPlanNode(flags, expanded, optimized, plan), nil
 
