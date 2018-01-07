@@ -1287,7 +1287,7 @@ func TestStopAtRangeBoundary(t *testing.T) {
 					},
 					satisfied: []int{0, 2},
 				},
-				// scanning [<where we left of>,inf)
+				// scanning [<where we left off>,inf)
 				{
 					expResults: map[int][]string{
 						1: {"b1"},
