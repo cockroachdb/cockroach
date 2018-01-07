@@ -46,19 +46,14 @@ type planMaker interface {
 	) (planNode, error)
 
 	// makePlan prepares the query plan for a single SQL statement.  it
-	// calls newPlan() then optimizePlan() on the result.  Execution must
-	// start by calling Start() first and then iterating using Next()
-	// and Values() in order to retrieve matching rows.
+	// calls newPlan() then optimizePlan() on the result.
+	// The logical plan is stored in the planner's curPlan field.
 	//
-	// makePlan starts preparing the query plan for a single SQL
-	// statement.
-	// It performs as many early checks as possible on the structure of
-	// the SQL statement, including verifying permissions and type checking.
-	// The returned plan object is ready to execute. Execution
-	// must start by calling Start() first and then iterating using
-	// Next() and Values() in order to retrieve matching
-	// rows.
-	makePlan(ctx context.Context, stmt Statement) (planNode, error)
+	// Execution must start by calling curPlan.start() first and then
+	// iterating using curPlan.plan.Next() and curPlan.plan.Values() in
+	// order to retrieve matching rows. Finally, the plan must be closed
+	// with curPlan.close().
+	makePlan(ctx context.Context, stmt Statement) error
 
 	// prepare does the same checks as makePlan but skips building some
 	// data structures necessary for execution, based on the assumption
@@ -67,7 +62,8 @@ type planMaker interface {
 	// SQL statement and determine types for placeholders. However it is
 	// not appropriate to call optimizePlan(), Next() or Values() on a plan
 	// object created with prepare().
-	prepare(ctx context.Context, stmt tree.Statement) (planNode, error)
+	// The plan should still be closed with p.curPlan.close() though.
+	prepare(ctx context.Context, stmt tree.Statement) error
 }
 
 var _ planMaker = &planner{}
@@ -103,7 +99,7 @@ func (r *runParams) SessionData() *sessiondata.SessionData {
 // for each type; they thus need to be extended when adding/removing
 // planNode instances:
 // - planMaker.newPlan()
-// - planMaker.prepare()
+// - planMaker.doPrepare()
 // - planMaker.setNeededColumns()  (needed_columns.go)
 // - planMaker.expandPlan()        (expand_plan.go)
 // - planVisitor.visit()           (walk.go)
@@ -207,21 +203,63 @@ var _ planNodeFastPath = &deleteNode{}
 var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
 
-// makePlan implements the Planner interface.
-func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
-	plan, err := p.newPlan(ctx, stmt.AST, nil /* desiredTypes */)
+// planTop is the struct that collects the properties
+// of an entire plan.
+// Note: some additional per-statement state is also stored in
+// semaCtx (placeholders).
+// TODO(jordan): investigate whether/how per-plan state like
+// placeholder data can be concentrated in a single struct.
+type planTop struct {
+	// plan is the top-level node of the logical plan.
+	plan planNode
+
+	// deps, if non-nil, collects the table/view dependencies for this query.
+	// Any planNode constructors that resolves a table name or reference in the query
+	// to a descriptor must register this descriptor into planDeps.
+	// This is (currently) used by CREATE VIEW.
+	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
+	deps planDependencies
+
+	// cteNameEnvironment collects the mapping from common table expression alias
+	// to the planNodes that represent their source.
+	cteNameEnvironment cteNameEnvironment
+
+	// hasStar collects whether any star expansion has occurred during
+	// logical plan construction. This is used by CREATE VIEW until
+	// #10028 is addressed.
+	hasStar bool
+	// hasSubqueries collects whether any subqueries expansion has
+	// occurred during logical plan construction.
+	hasSubqueries bool
+	// plannedExecute is true if this planner has planned an EXECUTE statement.
+	plannedExecute bool
+}
+
+// makePlan implements the Planner interface. It populates the
+// planner's curPlan field.
+//
+// The caller is responsible for populating the placeholders
+// beforehand (currently in semaCtx.Placeholders).
+//
+// After makePlan(), the caller should be careful to also call
+// p.curPlan.Close().
+func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
+	// Reinitialize.
+	p.curPlan = planTop{}
+
+	plan, err := p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	cols := planColumns(plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return nil, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
 	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Ensure that any hidden result column is effectively hidden.
@@ -230,7 +268,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 	plan, err = p.hideHiddenColumns(ctx, plan, cols)
 	if err != nil {
 		plan.Close(ctx)
-		return nil, err
+		return err
 	}
 
 	needed := allColumns(plan)
@@ -239,13 +277,17 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 		// Once the plan has undergone optimization, it may contain
 		// monitor-registered memory, even in case of error.
 		plan.Close(ctx)
-		return nil, err
+		return err
 	}
 
 	if log.V(3) {
 		log.Infof(ctx, "statement %s compiled to:\n%s", stmt, planToString(ctx, plan))
 	}
-	return plan, nil
+
+	// Store the plan for later use.
+	p.curPlan.plan = plan
+
+	return nil
 }
 
 // hideHiddenColumn ensures that if the plan is returning some hidden
@@ -277,7 +319,22 @@ func (p *planner) hideHiddenColumns(
 	return newPlan, nil
 }
 
-// startPlan starts the plan and all its sub-query nodes.
+// close ensures that the plan's resources have been deallocated.
+func (p *planTop) close(ctx context.Context) {
+	p.plan.Close(ctx)
+}
+
+// start starts the plan.
+func (p *planTop) start(params runParams) error {
+	return startPlan(params, p.plan)
+}
+
+// columns retrieves the plan's columns.
+func (p *planTop) columns() sqlbase.ResultColumns {
+	return planColumns(p.plan)
+}
+
+// startPlan starts the given plan and all its sub-query nodes.
 func startPlan(params runParams, plan planNode) error {
 	if err := startExec(params, plan); err != nil {
 		return err
@@ -614,7 +671,24 @@ func (p *planner) newPlan(
 // needed both to type placeholders and to inform pgwire of the types
 // of the result columns. All statements that either support
 // placeholders or have result columns must be handled here.
-func (p *planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, error) {
+// The resulting plan is stored in p.curPlan.
+func (p *planner) prepare(ctx context.Context, stmt tree.Statement) error {
+	// Reinitialize.
+	p.curPlan = planTop{}
+
+	// Prepare the plan.
+	plan, err := p.doPrepare(ctx, stmt)
+	if err != nil {
+		return err
+	}
+
+	// Store the plan for later use.
+	p.curPlan.plan = plan
+
+	return nil
+}
+
+func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode, error) {
 	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
 		return plan, err
 	}

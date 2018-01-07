@@ -120,33 +120,7 @@ type planner struct {
 	// curPlan collects the properties of the current plan being prepared. This state
 	// is undefined at the beginning of the planning of each new statement, and cannot
 	// be reused for an old prepared statement after a new statement has been prepared.
-	//
-	// Note: some additional per-statement state is also stored in
-	// semaCtx (placeholders).
-	// TODO(jordan): investigate whether/how per-plan state like
-	// placeholder data can be concentrated in a single struct.
-	curPlan struct {
-		// deps, if non-nil, collects the table/view dependencies for this query.
-		// Any planNode constructors that resolves a table name or reference in the query
-		// to a descriptor must register this descriptor into planDeps.
-		// This is (currently) used by CREATE VIEW.
-		// TODO(knz): Remove this in favor of a better encapsulated mechanism.
-		deps planDependencies
-
-		// cteNameEnvironment collects the mapping from common table expression alias
-		// to the planNodes that represent their source.
-		cteNameEnvironment cteNameEnvironment
-
-		// hasStar collects whether any star expansion has occurred during
-		// logical plan construction. This is used by CREATE VIEW until
-		// #10028 is addressed.
-		hasStar bool
-		// hasSubqueries collects whether any subqueries expansion has
-		// occurred during logical plan construction.
-		hasSubqueries bool
-		// plannedExecute is true if this planner has planned an EXECUTE statement.
-		plannedExecute bool
-	}
+	curPlan planTop
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
@@ -283,16 +257,15 @@ func (p *planner) setTxn(txn *client.Txn) {
 	}
 }
 
-// makeInternalPlan initializes a planNode from a SQL statement string.
-// Close() must be called on the returned planNode after use.
+// makeInternalPlan initializes a plan from a SQL statement string.
+// This clobbers p.curPlan.
+// p.curPlan.Close() must be called after use.
 // This function changes the planner's placeholder map. It is the caller's
 // responsibility to save and restore the old map if desired.
 // This function is not suitable for use in the planNode constructors directly:
 // the returned planNode has already been optimized.
 // Consider also (*planner).delegateQuery(...).
-func (p *planner) makeInternalPlan(
-	ctx context.Context, sql string, args ...interface{},
-) (planNode, error) {
+func (p *planner) makeInternalPlan(ctx context.Context, sql string, args ...interface{}) error {
 	if log.V(2) {
 		log.Infof(ctx, "internal query: %s", sql)
 		if len(args) > 0 {
@@ -301,7 +274,7 @@ func (p *planner) makeInternalPlan(
 	}
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
@@ -342,25 +315,28 @@ func (p *planner) QueryRow(
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
 ) ([]tree.Datums, error) {
-	oldPlaceholders := p.semaCtx.Placeholders
-	defer func() { p.semaCtx.Placeholders = oldPlaceholders }()
+	// makeInternalPlan() clobbers p.curplan and the placeholder info
+	// map, so we have to save/restore them here.
+	defer func(psave planTop, pisave tree.PlaceholderInfo) {
+		p.semaCtx.Placeholders = pisave
+		p.curPlan = psave
+	}(p.curPlan, p.semaCtx.Placeholders)
 
-	plan, err := p.makeInternalPlan(ctx, sql, args...)
-	if err != nil {
+	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
 		return nil, err
 	}
-	defer plan.Close(ctx)
+	defer p.curPlan.close(ctx)
 
 	params := runParams{
 		ctx:             ctx,
 		extendedEvalCtx: &p.extendedEvalCtx,
 		p:               p,
 	}
-	if err := startPlan(params, plan); err != nil {
+	if err := p.curPlan.start(params); err != nil {
 		return nil, err
 	}
 	var rows []tree.Datums
-	if err = forEachRow(params, plan, func(values tree.Datums) error {
+	if err := forEachRow(params, p.curPlan.plan, func(values tree.Datums) error {
 		if values != nil {
 			valCopy := append(tree.Datums(nil), values...)
 			rows = append(rows, valCopy)
@@ -375,23 +351,27 @@ func (p *planner) queryRows(
 // exec executes a SQL query string and returns the number of rows
 // affected.
 func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
-	oldPlaceholders := p.semaCtx.Placeholders
-	defer func() { p.semaCtx.Placeholders = oldPlaceholders }()
-	plan, err := p.makeInternalPlan(ctx, sql, args...)
-	if err != nil {
+	// makeInternalPlan() clobbers p.curplan and the placeholder info
+	// map, so we have to save/restore them here.
+	defer func(psave planTop, pisave tree.PlaceholderInfo) {
+		p.semaCtx.Placeholders = pisave
+		p.curPlan = psave
+	}(p.curPlan, p.semaCtx.Placeholders)
+
+	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
 		return 0, err
 	}
-	defer plan.Close(ctx)
+	defer p.curPlan.close(ctx)
 
 	params := runParams{
 		ctx:             ctx,
 		extendedEvalCtx: &p.extendedEvalCtx,
 		p:               p,
 	}
-	if err := startPlan(params, plan); err != nil {
+	if err := p.curPlan.start(params); err != nil {
 		return 0, err
 	}
-	return countRowsAffected(params, plan)
+	return countRowsAffected(params, p.curPlan.plan)
 }
 
 func (p *planner) lookupFKTable(
