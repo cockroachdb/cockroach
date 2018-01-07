@@ -672,11 +672,13 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	// Read with transaction, should get error back.
 	if _, _, err := MVCCGet(context.Background(), engine, testKey2, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
-	} else if e, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
-		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", e)
+	} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 	}
 	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
+	} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 	}
 	// Adjust MaxTimestamp and retry.
 	txn.MaxTimestamp = hlc.Timestamp{WallTime: 7}
@@ -700,9 +702,13 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	}
 	if _, _, _, err := MVCCScan(context.Background(), engine, testKey3, testKey3.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
+	} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 	}
 	if _, _, err := MVCCGet(context.Background(), engine, testKey3, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatalf("wanted an error")
+	} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 	}
 }
 
@@ -1006,8 +1012,6 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(kvs, scan.expValues) {
-			t.Errorf("%s(%d): expected no values; got %+v", cStr, i, kvs)
-		} else if !reflect.DeepEqual(kvs, scan.expValues) {
 			t.Errorf("%s(%d): expected values %+v; got %+v", cStr, i, scan.expValues, kvs)
 		}
 	}
@@ -1894,7 +1898,10 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 			Value: value6,
 		},
 	}
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, err := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if a, e := len(kvs), len(expectedKvs); a != e {
 		t.Fatalf("engine scan found %d keys; expected %d", a, e)
 	}

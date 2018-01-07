@@ -14,6 +14,7 @@
 
 #include "db.h"
 #include <algorithm>
+#include <chrono>
 #include <google/protobuf/stubs/stringprintf.h>
 #include <mutex>
 #include <rocksdb/cache.h>
@@ -23,6 +24,7 @@
 #include <rocksdb/ldb_tool.h>
 #include <rocksdb/merge_operator.h>
 #include <rocksdb/options.h>
+#include <rocksdb/perf_context.h>
 #include <rocksdb/slice_transform.h>
 #include <rocksdb/sst_file_writer.h>
 #include <rocksdb/statistics.h>
@@ -204,6 +206,8 @@ struct DBSnapshot : public DBEngine {
 
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
+  std::unique_ptr<rocksdb::WriteBatch> kvs;
+  std::unique_ptr<rocksdb::WriteBatch> intents;
 };
 
 std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
@@ -213,6 +217,35 @@ std::string ToString(DBString s) { return std::string(s.data, s.len); }
 rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data, s.len); }
 
 rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data, s.len); }
+
+const DBTimestamp kZeroTimestamp = {0, 0};
+
+DBTimestamp ToDBTimestamp(const cockroach::util::hlc::LegacyTimestamp& timestamp) {
+  return DBTimestamp{timestamp.wall_time(), timestamp.logical()};
+}
+
+DBTimestamp PrevTimestamp(DBTimestamp ts) {
+  if (ts.logical > 0) {
+    --ts.logical;
+  } else if (ts.wall_time == 0) {
+    fprintf(stderr, "no previous time for zero timestamp\n");
+    abort();
+  } else {
+    --ts.wall_time;
+    ts.logical = std::numeric_limits<int32_t>::max();
+  }
+  return ts;
+}
+
+inline bool operator<(const DBTimestamp& a, const DBTimestamp& b) {
+  return a.wall_time < b.wall_time || (a.wall_time == b.wall_time && a.logical < b.logical);
+}
+
+inline bool operator>(const DBTimestamp& a, const DBTimestamp& b) { return b < a; }
+
+inline bool operator<=(const DBTimestamp& a, const DBTimestamp& b) { return !(b < a); }
+
+inline bool operator>=(const DBTimestamp& a, const DBTimestamp& b) { return b <= a; }
 
 const int kMVCCVersionTimestampSize = 12;
 
@@ -233,38 +266,25 @@ std::string EncodeTimestamp(DBTimestamp ts) {
 // MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.
-std::string EncodeKey(DBKey k) {
+std::string EncodeKey(const rocksdb::Slice& key, int64_t wall_time, int32_t logical) {
   std::string s;
-  const bool ts = k.wall_time != 0 || k.logical != 0;
-  s.reserve(k.key.len + 1 + (ts ? 1 + kMVCCVersionTimestampSize : 0));
-  s.append(k.key.data, k.key.len);
+  const bool ts = wall_time != 0 || logical != 0;
+  s.reserve(key.size() + 1 + (ts ? 1 + kMVCCVersionTimestampSize : 0));
+  s.append(key.data(), key.size());
   if (ts) {
     // Add a NUL prefix to the timestamp data. See DBPrefixExtractor.Transform
     // for more details.
     s.push_back(0);
-    EncodeTimestamp(s, k.wall_time, k.logical);
+    EncodeTimestamp(s, wall_time, logical);
   }
-  s.push_back(char(s.size() - k.key.len));
+  s.push_back(char(s.size() - key.size()));
   return s;
 }
 
-// When we're performing a prefix scan, we want to limit the scan to
-// the keys that have the matching prefix. Prefix in this case refers
-// to an exact match on the non-timestamp portion of a key. We do this
-// by constructing an encoded mvcc key which has a zero timestamp
-// (hence the trailing 0) and is the "next" key (thus the additional
-// 0). See EncodeKey and SplitKey for more details on the encoded key
-// format.
-std::string EncodePrefixNextKey(DBSlice k) {
-  std::string s;
-  if (k.len > 0) {
-    s.reserve(k.len + 2);
-    s.append(k.data, k.len);
-    s.push_back(0);
-    s.push_back(0);
-  }
-  return s;
-}
+// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
+// custom RocksDB comparator (DBComparator) is used to maintain the desired
+// ordering as these keys do not sort lexicographically correctly.
+std::string EncodeKey(DBKey k) { return EncodeKey(ToSlice(k.key), k.wall_time, k.logical); }
 
 WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
                                  rocksdb::Slice* timestamp) {
@@ -311,8 +331,8 @@ WARN_UNUSED_RESULT bool DecodeHLCTimestamp(rocksdb::Slice buf,
   return true;
 }
 
-WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, int64_t* wall_time,
-                                  int32_t* logical) {
+WARN_UNUSED_RESULT inline bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key,
+                                         int64_t* wall_time, int32_t* logical) {
   key->clear();
 
   rocksdb::Slice timestamp;
@@ -326,6 +346,10 @@ WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, int64
     }
   }
   return timestamp.empty();
+}
+
+WARN_UNUSED_RESULT bool inline DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, DBTimestamp* ts) {
+  return DecodeKey(buf, key, &ts->wall_time, &ts->logical);
 }
 
 rocksdb::Slice KeyPrefix(const rocksdb::Slice& src) {
@@ -2490,6 +2514,372 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
   }
   *split_key = ToDBString(best_split_key);
   return kSuccess;
+}
+
+class mvccScanner {
+  // kMaxItersBeforeSeek is the number of calls to iter->Next() to
+  // perform when looking for the next key or a particular version
+  // before calling iter->Seek().
+  //
+  // TODO(peter): There is a trade-off here between iteration via
+  // Next() which is cheap and calling Seek() which is expensive, but
+  // necessary at some number of versions. Experimentation has shown
+  // that calling Next up to 10 times is a win vs calling Seek
+  // once. And calling Next up to 100 times is a loss vs calling
+  // Seek. The specific cut-over point requires more experimentation.
+  //
+  // This also highlights the expense of keeping old versions inline
+  // with the most recent version.
+  static const int kMaxItersBeforeSeek = 10;
+
+ public:
+  mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
+              DBTxn txn, bool consistent)
+      : iter_(iter),
+        iter_rep_(iter->rep.get()),
+        start_key_(ToSlice(start)),
+        end_key_(ToSlice(end)),
+        max_keys_(max_keys),
+        timestamp_(timestamp),
+        txn_id_(ToSlice(txn.id)),
+        txn_epoch_(txn.epoch),
+        txn_max_timestamp_(txn.max_timestamp),
+        consistent_(consistent),
+        check_uncertainty_(timestamp < txn.max_timestamp),
+        kvs_(new rocksdb::WriteBatch),
+        intents_(new rocksdb::WriteBatch) {
+    memset(&results_, 0, sizeof(results_));
+    results_.status = kSuccess;
+
+    iter_->kvs.reset();
+    iter_->intents.reset();
+  }
+
+  // The MVCC data is sorted by key and descending timestamp. If a key
+  // has a write intent (i.e. an uncommitted transaction has written
+  // to the key) a key with a zero timestamp, with an MVCCMetadata
+  // value, will appear. We arrange for the keys to be sorted such
+  // that the intent sorts first. For example:
+  //
+  //   A @ T3
+  //   A @ T2
+  //   A @ T1
+  //   B <intent @ T2>
+  //   B @ T2
+  //
+  // Here we have 2 keys, A and B. Key A has 3 versions, T3, T2 and
+  // T1. Key B has 1 version, T1, and an intent. Scanning involves
+  // looking for values at a particular timestamp. For example, let's
+  // consider scanning this entire range at T2. We'll first seek to A,
+  // discover the value @ T3. This value is newer than our read
+  // timestamp so we'll iterate to find a value newer than our read
+  // timestamp (the value @ T2). We then iterate to the next key and
+  // discover the intent at B. What happens with the intent depends on
+  // the mode we're reading in and the timestamp of the intent. In
+  // this case, the intent as at our read timestamp. If we're
+  // performing an inconsistent read we'll return the intent and read
+  // at the instant of time just before the intent (for only that
+  // key). If we're reading consistently, we'll either return the
+  // intent along with an error or read the intent value if we're
+  // reading transactionally and we own the intent.
+
+  const DBScanResults& get() {
+    if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
+      return results_;
+    }
+    if (cur_key_ == start_key_) {
+      getAndAdvance();
+    }
+    return fillResults();
+  }
+
+  const DBScanResults& scan() {
+    // TODO(peter): Remove this timing/debugging code.
+    // auto pctx = rocksdb::get_perf_context();
+    // pctx->Reset();
+    // auto start_time = std::chrono::steady_clock::now();
+    // auto elapsed = std::chrono::steady_clock::now() - start_time;
+    // auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    // printf("seek %d: %s\n", int(micros), pctx->ToString(true).c_str());
+
+    if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
+      return results_;
+    }
+
+    for (;;) {
+      if (cur_key_.compare(end_key_) >= 0) {
+        break;
+      }
+      if (!getAndAdvance()) {
+        break;
+      }
+    }
+
+    return fillResults();
+  }
+
+ private:
+  const DBScanResults& fillResults() {
+    if (results_.status.len == 0) {
+      if (kvs_->Count() > 0) {
+        results_.data = ToDBSlice(kvs_->Data());
+      }
+      if (intents_->Count() > 0) {
+        results_.intents = ToDBSlice(intents_->Data());
+      }
+      iter_->kvs.reset(kvs_.release());
+      iter_->intents.reset(intents_.release());
+    }
+    return results_;
+  }
+
+  bool uncertaintyError(DBTimestamp ts) {
+    results_.uncertainty_timestamp = ts;
+    kvs_->Clear();
+    intents_->Clear();
+    return false;
+  }
+
+  bool getAndAdvance() {
+    const bool is_value = (cur_timestamp_.wall_time != 0 || cur_timestamp_.logical != 0);
+    const rocksdb::Slice key = iter_rep_->key();
+    const rocksdb::Slice value = iter_rep_->value();
+
+    if (is_value) {
+      if (timestamp_ >= cur_timestamp_) {
+        // 1. Fast path: there is no intent and our read timestamp is
+        // newer than the value's timestamp.
+        return addAndAdvance(value);
+      }
+
+      if (check_uncertainty_) {
+        // 2. Our txn's read timestamp is less than the max timestamp
+        // seen by the txn. We need to check for clock uncertainty
+        // errors.
+        if (txn_max_timestamp_ >= cur_timestamp_) {
+          return uncertaintyError(cur_timestamp_);
+        }
+        return seekVersion(txn_max_timestamp_, true);
+      }
+
+      // 3. Our txn's read timestamp is greater than or equal to the
+      // max timestamp seen by the txn so clock uncertainty checks are
+      // unnecessary. We need to seek to the desired version of the
+      // value (i.e. one with a timestamp earlier than our read
+      // timestamp).
+      return seekVersion(timestamp_, false);
+    }
+
+    if (!meta_.ParseFromArray(value.data(), value.size())) {
+      results_.status = FmtStatus("unable to decode MVCCMetadata");
+      return false;
+    }
+
+    if (meta_.has_raw_bytes()) {
+      // 4. Emit immediately if the value is inline.
+      return addAndAdvance(meta_.raw_bytes());
+    }
+
+    if (!meta_.has_txn()) {
+      results_.status = FmtStatus("intent without transaction");
+      return false;
+    }
+
+    const bool own_intent = (meta_.txn().id() == txn_id_);
+    const DBTimestamp meta_timestamp = ToDBTimestamp(meta_.timestamp());
+    if (timestamp_ < meta_timestamp && !own_intent) {
+      // 5. The key contains an intent, but we're reading before the
+      // intent. Seek to the desired version. Note that if we own the
+      // intent (i.e. we're reading transactionally) we want to read
+      // the intent regardless of our read timestamp and fall into
+      // case 8 below.
+      return seekVersion(timestamp_, false);
+    }
+
+    if (!consistent_) {
+      // 6. The key contains an intent and we're doing an inconsistent
+      // read at a timestamp newer than the intent. We ignore the
+      // intent by insisting that the timestamp we're reading at is a
+      // historical timestamp < the intent timestamp. However, we
+      // return the intent separately; the caller may want to resolve
+      // it.
+      intents_->Put(key, value);
+      return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
+    }
+
+    if (!own_intent) {
+      // 7. The key contains an intent which was not written by our
+      // transaction and our read timestamp is newer than when the
+      // intent was written.
+      intents_->Put(key, value);
+      return nextKey();
+    }
+
+    if (txn_epoch_ == meta_.txn().epoch()) {
+      // 8. We're reading our own txn's intent. Note that we read at
+      // the intent timestamp, not at our read timestamp as the intent
+      // timestamp may have been pushed forward by another
+      // transaction. Txn's always need to read their own writes.
+      return seekVersion(meta_timestamp, false);
+    }
+
+    if (txn_epoch_ < meta_.txn().epoch()) {
+      // 9. We're reading our own txn's intent but the current txn has
+      // an earlier epoch than the intent. Return an error so that
+      // earlier incarnation of our transaction aborts (presumably
+      // this is some operation that was retried).
+      results_.status =
+          FmtStatus("failed to read with epoch %u due to a write intent with epoch %u", txn_epoch_,
+                    meta_.txn().epoch());
+      return false;
+    }
+
+    // 10. We're reading our own txn's intent but the current txn has a
+    // later epoch than the intent. This can happen if the txn was
+    // restarted and an earlier iteration wrote the value we're now
+    // reading. In this case, we ignore the intent and read the
+    // previous value as if the transaction were starting fresh.
+    return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
+  }
+
+  // nextKey advances the iterator to point the next MVCC key greater
+  // than cur_key_. Returns false if the iterator is exhausted or an
+  // error occurs.
+  bool nextKey() {
+    // Check to see if the next key is the end key.
+    if (cur_key_.size() + 1 == end_key_.size() && end_key_.starts_with(cur_key_) &&
+        end_key_[cur_key_.size()] == '\0') {
+      return false;
+    }
+
+    // Now seek to next key.
+    key_buf_.assign(cur_key_.data(), cur_key_.size());
+
+    for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
+      if (!iterNext()) {
+        return false;
+      }
+      if (cur_key_ != key_buf_) {
+        return true;
+      }
+    }
+
+    // We're pointed at a different version of the same key. Fall back
+    // to seeking to the next key. We append 2 NULs to account for the
+    // "next-key" and a trailing zero timestamp. See EncodeKey and
+    // SplitKey for more details on the encoded key format.
+    key_buf_.append("\0\0", 2);
+    return iterSeek(key_buf_);
+  }
+
+  bool addAndAdvance(const rocksdb::Slice& value) {
+    if (value.size() > 0) {
+      kvs_->Put(iter_rep_->key(), value);
+      if (kvs_->Count() > max_keys_) {
+        return false;
+      }
+    }
+    return nextKey();
+  }
+
+  // seekVersion advances the iterator to point to an MVCC version for
+  // the specified key that is earlier than <ts_wall_time,
+  // ts_logical>. Returns false if the iterator is exhausted or an
+  // error occurs. On success, advances the iterator to the next key.
+  bool seekVersion(DBTimestamp timestamp, bool check_uncertainty) {
+    key_buf_.assign(cur_key_.data(), cur_key_.size());
+
+    for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
+      if (!iterNext()) {
+        return false;
+      }
+      if (cur_key_ != key_buf_) {
+        // We've iterated to the next MVCC key.
+        return true;
+      }
+      if (timestamp >= cur_timestamp_) {
+        if (check_uncertainty && timestamp_ < cur_timestamp_) {
+          return uncertaintyError(cur_timestamp_);
+        }
+        return addAndAdvance(iter_rep_->value());
+      }
+    }
+
+    if (!iterSeek(EncodeKey(key_buf_, timestamp.wall_time, timestamp.logical))) {
+      return false;
+    }
+    if (cur_key_ != key_buf_) {
+      // We've seeked to the next MVCC key.
+      return true;
+    }
+    if (timestamp >= cur_timestamp_) {
+      if (check_uncertainty && timestamp_ < cur_timestamp_) {
+        return uncertaintyError(cur_timestamp_);
+      }
+      return addAndAdvance(iter_rep_->value());
+    }
+    return nextKey();
+  }
+
+  bool updateCurrent() {
+    if (!iter_rep_->Valid()) {
+      return false;
+    }
+    cur_timestamp_ = kZeroTimestamp;
+    if (!DecodeKey(iter_rep_->key(), &cur_key_, &cur_timestamp_)) {
+      results_.status = FmtStatus("failed to split mvcc key");
+      return false;
+    }
+    return true;
+  }
+
+  bool iterSeek(const rocksdb::Slice& key) {
+    iter_rep_->Seek(key);
+    return updateCurrent();
+  }
+
+  bool iterNext() {
+    iter_rep_->Next();
+    return updateCurrent();
+  }
+
+ public:
+  DBIterator* const iter_;
+  rocksdb::Iterator* const iter_rep_;
+  const rocksdb::Slice start_key_;
+  const rocksdb::Slice end_key_;
+  const int64_t max_keys_;
+  const DBTimestamp timestamp_;
+  const rocksdb::Slice txn_id_;
+  const uint32_t txn_epoch_;
+  const DBTimestamp txn_max_timestamp_;
+  const bool consistent_;
+  const bool check_uncertainty_;
+  DBScanResults results_;
+  std::unique_ptr<rocksdb::WriteBatch> kvs_;
+  std::unique_ptr<rocksdb::WriteBatch> intents_;
+  std::string key_buf_;
+  cockroach::storage::engine::enginepb::MVCCMetadata meta_;
+  rocksdb::Slice cur_key_;
+  DBTimestamp cur_timestamp_;
+};
+
+DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
+                      bool consistent) {
+  // Get is implemented as a scan where we retrieve a single key. Note
+  // that the semantics of max_keys is that we retrieve one more key
+  // than is specified in order to maintain the existing semantics of
+  // resume span. See storage/engine/mvcc.go:MVCCScan.
+  const DBSlice end = {0, 0};
+  mvccScanner scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent);
+  return scanner.get();
+}
+
+DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
+                       int64_t max_keys, DBTxn txn, bool consistent, bool reverse) {
+  // TODO(peter): Support reverse iteration.
+  mvccScanner scanner(iter, start, end, timestamp, max_keys, txn, consistent);
+  return scanner.scan();
 }
 
 // DBGetStats queries the given DBEngine for various operational stats and

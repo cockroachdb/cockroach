@@ -25,12 +25,15 @@ import (
 )
 
 func setupMVCCRocksDB(b testing.TB, dir string) Engine {
+	cache := NewRocksDBCache(1 << 30 /* 1GB */)
+	defer cache.Release()
+
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
 			Settings: cluster.MakeTestingClusterSettings(),
 			Dir:      dir,
 		},
-		RocksDBCache{},
+		cache,
 	)
 	if err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
