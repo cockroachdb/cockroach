@@ -2045,15 +2045,14 @@ func (e *Executor) execLocal(
 		rowResultWriter.IncrementRowsAffected(count)
 
 	case tree.Rows:
-		err := forEachRow(params, plan, func(values tree.Datums) error {
-			for _, val := range values {
-				if err := checkResultType(val.ResolvedType()); err != nil {
-					return err
-				}
+		for _, c := range planner.curPlan.columns() {
+			if err := checkResultType(c.Typ); err != nil {
+				return err
 			}
+		}
+		if err := forEachRow(params, plan, func(values tree.Datums) error {
 			return rowResultWriter.AddRow(ctx, values)
-		})
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 	}
