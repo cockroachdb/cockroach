@@ -151,17 +151,27 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testin
 	eng, _ := setupMVCCData(emk, numVersions, numKeys, valueSize, b)
 	defer eng.Close()
 
+	{
+		// Pull all of the sstables into the RocksDB cache.
+		iter := eng.NewIterator(false)
+		_, _ = iter.ComputeStats(MakeMVCCMetadataKey(roachpb.KeyMin), MakeMVCCMetadataKey(roachpb.KeyMax), 0)
+		iter.Close()
+	}
+
 	b.SetBytes(int64(numRows * valueSize))
 	b.ResetTimer()
 
-	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+	startKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+	endKeyBuf := append(make([]byte, 0, 64), []byte("key-")...)
 	for i := 0; i < b.N; i++ {
 		// Choose a random key to start scan.
 		keyIdx := rand.Int31n(int32(numKeys - numRows))
-		startKey := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
+		startKey := roachpb.Key(encoding.EncodeUvarintAscending(startKeyBuf[:4], uint64(keyIdx)))
+		endKey := roachpb.Key(encoding.EncodeUvarintAscending(endKeyBuf[:4], uint64(keyIdx+int32(numRows)-1)))
+		endKey = endKey.Next()
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		kvs, _, _, err := MVCCScan(context.Background(), eng, startKey, keyMax, int64(numRows), ts, true, nil)
+		kvs, _, _, err := MVCCScan(context.Background(), eng, startKey, endKey, int64(numRows), ts, true, nil)
 		if err != nil {
 			b.Fatalf("failed scan: %s", err)
 		}
@@ -176,10 +186,11 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testin
 // runMVCCGet first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCGets.
 func runMVCCGet(emk engineMaker, numVersions, valueSize int, b *testing.B) {
-	const targetSize = 512 << 20 // 512 MB
-	// Adjust the number of keys so that each test has approximately the same
-	// amount of data.
-	numKeys := targetSize / ((overhead + valueSize) * (1 + (numVersions-1)/2))
+	// Use the same number of keys for all of the mvcc scan
+	// benchmarks. Using a different number of keys per test gives
+	// preferential treatment to tests with fewer keys. Note that the
+	// datasets all fit in cache and the cache is pre-warmed.
+	const numKeys = 100000
 
 	eng, _ := setupMVCCData(emk, numVersions, numKeys, valueSize, b)
 	defer eng.Close()

@@ -1326,6 +1326,27 @@ func (r *rocksDBBatchIterator) FindSplitKey(
 	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize, allowMeta2Splits)
 }
 
+func (r *rocksDBBatchIterator) MVCCGet(
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	txn *roachpb.Transaction,
+	consistent bool,
+) (kv []byte, intent []byte, err error) {
+	r.batch.flushMutations()
+	return r.iter.MVCCGet(key, timestamp, txn, consistent)
+}
+
+func (r *rocksDBBatchIterator) MVCCScan(
+	start, end roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	txn *roachpb.Transaction,
+	consistent, reverse bool,
+) (kvs []byte, intents []byte, err error) {
+	r.batch.flushMutations()
+	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse)
+}
+
 func (r *rocksDBBatchIterator) Key() MVCCKey {
 	return r.iter.Key()
 }
@@ -1931,6 +1952,72 @@ func (r *rocksDBIterator) FindSplitKey(
 	return MVCCKey{Key: cStringToGoBytes(splitKey)}, nil
 }
 
+func (r *rocksDBIterator) MVCCGet(
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	txn *roachpb.Transaction,
+	consistent bool,
+) (kv []byte, intent []byte, err error) {
+	if !consistent && txn != nil {
+		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(key) == 0 {
+		return nil, nil, emptyKeyError()
+	}
+
+	state := C.MVCCGet(
+		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
+		goToCTxn(txn), C.bool(consistent),
+	)
+
+	if err := statusToError(state.status); err != nil {
+		return nil, nil, err
+	}
+	if state.uncertainty_timestamp.wall_time != 0 || state.uncertainty_timestamp.logical != 0 {
+		return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
+			timestamp, hlc.Timestamp{
+				WallTime: int64(state.uncertainty_timestamp.wall_time),
+				Logical:  int32(state.uncertainty_timestamp.logical),
+			},
+			txn)
+	}
+	return cSliceToGoBytes(state.data), cSliceToGoBytes(state.intents), nil
+}
+
+func (r *rocksDBIterator) MVCCScan(
+	start, end roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	txn *roachpb.Transaction,
+	consistent, reverse bool,
+) (kvs []byte, intents []byte, err error) {
+	if !consistent && txn != nil {
+		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(end) == 0 {
+		return nil, nil, emptyKeyError()
+	}
+
+	state := C.MVCCScan(
+		r.iter, goToCSlice(start), goToCSlice(end),
+		goToCTimestamp(timestamp), C.int64_t(max),
+		goToCTxn(txn), C.bool(consistent), C.bool(reverse),
+	)
+
+	if err := statusToError(state.status); err != nil {
+		return nil, nil, err
+	}
+	if state.uncertainty_timestamp.wall_time != 0 || state.uncertainty_timestamp.logical != 0 {
+		return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
+			timestamp, hlc.Timestamp{
+				WallTime: int64(state.uncertainty_timestamp.wall_time),
+				Logical:  int32(state.uncertainty_timestamp.logical),
+			},
+			txn)
+	}
+	return cSliceToGoBytes(state.data), cSliceToGoBytes(state.intents), nil
+}
+
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {
 	ms := enginepb.MVCCStats{}
 	if err := statusToError(stats.status); err != nil {
@@ -2046,6 +2133,16 @@ func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
 		wall_time: C.int64_t(ts.WallTime),
 		logical:   C.int32_t(ts.Logical),
 	}
+}
+
+func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
+	var r C.DBTxn
+	if txn != nil {
+		r.id = goToCSlice(txn.ID.GetBytes())
+		r.epoch = C.uint32_t(txn.Epoch)
+		r.max_timestamp = goToCTimestamp(txn.MaxTimestamp)
+	}
+	return r
 }
 
 func statusToError(s C.DBStatus) error {

@@ -236,6 +236,27 @@ bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
 DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
                           int64_t target_size, bool allow_meta2_splits, DBString* split_key);
 
+typedef struct {
+  DBSlice id;
+  uint32_t epoch;
+  DBTimestamp max_timestamp;
+} DBTxn;
+
+// DBScanResults contains the key/value pairs and intents encoded
+// using the RocksDB batch repr format.
+typedef struct {
+  DBStatus status;
+  DBSlice data;
+  DBSlice intents;
+  DBTimestamp uncertainty_timestamp;
+} DBScanResults;
+
+DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp,
+                      DBTxn txn, bool consistent);
+DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end,
+                       DBTimestamp timestamp, int64_t max_keys,
+                       DBTxn txn, bool consistent, bool reverse);
+
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
   int64_t block_cache_hits;

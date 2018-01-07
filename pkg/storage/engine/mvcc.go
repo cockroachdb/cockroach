@@ -592,10 +592,27 @@ func MVCCGet(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
-	iter := engine.NewIterator(true)
-	defer iter.Close()
+	// TODO(peter): delete the old code.
+	if false {
+		iter := engine.NewIterator(true)
+		defer iter.Close()
+		return mvccGetUsingIter(ctx, iter, key, timestamp, consistent, txn)
+	}
 
-	return mvccGetUsingIter(ctx, iter, key, timestamp, consistent, txn)
+	iter := engine.NewIterator(true)
+	kvData, intentData, err := iter.MVCCGet(key, timestamp, txn, consistent)
+	iter.Close()
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	kvs, _, intents, err := buildScanResults(kvData, intentData, math.MaxInt64, consistent)
+	var value *roachpb.Value
+	if len(kvs) > 0 {
+		value = &kvs[0].Value
+	}
+	return value, intents, err
 }
 
 func mvccGetUsingIter(
@@ -1635,6 +1652,90 @@ func mvccScanInternal(
 	return res, resumeSpan, intents, nil
 }
 
+func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	reader, err := NewRocksDBBatchReader(data)
+	if err != nil {
+		return nil, err
+	}
+
+	intents := make([]roachpb.Intent, 0, reader.Count())
+	var meta enginepb.MVCCMetadata
+	for reader.Next() {
+		key, err := reader.MVCCKey()
+		if err != nil {
+			return nil, err
+		}
+		if err := protoutil.Unmarshal(reader.Value(), &meta); err != nil {
+			return nil, err
+		}
+		intents = append(intents, roachpb.Intent{
+			Span:   roachpb.Span{Key: key.Key},
+			Status: roachpb.PENDING,
+			Txn:    *meta.Txn,
+		})
+	}
+
+	if err := reader.Error(); err != nil {
+		return nil, err
+	}
+	return intents, nil
+}
+
+func buildScanResults(
+	kvData, intentData []byte, max int64, consistent bool,
+) ([]roachpb.KeyValue, roachpb.Key, []roachpb.Intent, error) {
+	intents, err := buildScanIntents(intentData)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if consistent && len(intents) > 0 {
+		return nil, nil, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+	if len(kvData) == 0 {
+		return nil, nil, intents, nil
+	}
+
+	reader, err := NewRocksDBBatchReader(kvData)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	kvs := make([]roachpb.KeyValue, 0, reader.Count())
+	var resumeKey roachpb.Key
+	for reader.Next() {
+		key, err := reader.MVCCKey()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if int64(len(kvs)) == max {
+			resumeKey = key.Key
+			break
+		}
+		kvs = append(kvs, roachpb.KeyValue{
+			Key:   key.Key,
+			Value: roachpb.Value{RawBytes: reader.Value(), Timestamp: key.Timestamp},
+		})
+	}
+
+	if err := reader.Error(); err != nil {
+		return nil, nil, nil, err
+	}
+
+	// TODO(peter): The checksum verification causes a 10-20% slowdown for
+	// large scans. See what we can do about that. Perhaps move the
+	// verification into C++.
+	if err := roachpb.VerifyValues(kvs); err != nil {
+		return nil, nil, nil, err
+	}
+
+	return kvs, resumeKey, intents, nil
+
+}
+
 // MVCCScan scans the key range [key,endKey) key up to some maximum number of
 // results in ascending order. If it hits max, it returns a span to be used in
 // the next call to this function. Use MaxInt64 for not limit. If the limit is
@@ -1650,8 +1751,31 @@ func MVCCScan(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
-		consistent, txn, false /* reverse */)
+	// TODO(peter): delete the old code.
+	if false {
+		return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
+			consistent, txn, false /* reverse */)
+	}
+
+	if max == 0 {
+		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
+	}
+
+	iter := engine.NewIterator(false)
+	kvData, intentData, err := iter.MVCCScan(
+		key, endKey, max, timestamp, txn, consistent, false /* reverse */)
+	iter.Close()
+
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	kvs, resumeKey, intents, err := buildScanResults(kvData, intentData, max, consistent)
+	var resumeSpan *roachpb.Span
+	if resumeKey != nil {
+		resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: endKey}
+	}
+	return kvs, resumeSpan, intents, err
 }
 
 // MVCCReverseScan scans the key range [start,end) key up to some maximum
@@ -1667,6 +1791,7 @@ func MVCCReverseScan(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
+	// TODO(peter): Support reverse scans.
 	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
 		consistent, txn, true /* reverse */)
 }
