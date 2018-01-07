@@ -1,0 +1,48 @@
+# LogicTest: default
+
+query IITTI colnames
+SELECT * FROM crdb_internal.partitions
+----
+table_id  index_id  parent_name  name  columns
+
+statement ok
+CREATE TABLE t1 (
+  a INT,
+  b INT,
+  c INT,
+  PRIMARY KEY (a, b, c),
+  INDEX (a, b) PARTITION BY LIST (a, b) (
+    PARTITION p00 VALUES IN ((0, 0))
+  )
+) PARTITION BY LIST (a) (
+    PARTITION p12 VALUES IN (1, 2) PARTITION BY LIST (b) (
+        PARTITION p12p3 VALUES IN (3) PARTITION BY LIST (c) (
+            PARTITION p12p3p8 VALUES IN (8)
+        ),
+        PARTITION pd VALUES IN (DEFAULT)
+    ),
+    PARTITION p6 VALUES IN (6) PARTITION BY RANGE (b) (
+        PARTITION p6p7 VALUES FROM (MINVALUE) TO (7),
+        PARTITION p6p8 VALUES FROM (7) TO (8),
+        PARTITION p6px VALUES FROM (8) TO (MAXVALUE)
+    )
+)
+
+statement ok
+CREATE table t2 (a STRING PRIMARY KEY) PARTITION BY LIST (a) (
+  PARTITION pfoo VALUES IN ('foo')
+)
+
+query IITTI
+SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
+----
+51  1  NULL  p12      1
+51  1  p12   p12p3    1
+51  1  p12p3 p12p3p8  1
+51  1  NULL  p6       1
+51  1  p6    p6p7     1
+51  1  p6    p6p8     1
+51  1  p6    p6px     1
+51  1  p12   pd       1
+51  2  NULL  p00      2
+52  1  NULL  pfoo     1

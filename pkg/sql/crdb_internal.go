@@ -68,6 +68,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalLeasesTable,
 		crdbInternalLocalQueriesTable,
 		crdbInternalLocalSessionsTable,
+		crdbInternalPartitionsTable,
 		crdbInternalRangesTable,
 		crdbInternalRuntimeInfoTable,
 		crdbInternalSchemaChangesTable,
@@ -1653,5 +1654,73 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			}
 		}
 		return nil
+	},
+}
+
+func addPartitioningRows(
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	partitioning *sqlbase.PartitioningDescriptor,
+	parentName tree.Datum,
+	colOffset int,
+	addRow func(...tree.Datum) error,
+) error {
+	tableID := tree.NewDInt(tree.DInt(table.ID))
+	indexID := tree.NewDInt(tree.DInt(index.ID))
+	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
+
+	for _, l := range partitioning.List {
+		name := tree.NewDString(l.Name)
+		if err := addRow(
+			tableID,
+			indexID,
+			parentName,
+			name,
+			numColumns,
+		); err != nil {
+			return err
+		}
+		err := addPartitioningRows(table, index, &l.Subpartitioning, name,
+			colOffset+int(partitioning.NumColumns), addRow)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, r := range partitioning.Range {
+		if err := addRow(
+			tableID,
+			indexID,
+			parentName,
+			tree.NewDString(r.Name),
+			numColumns,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// crdbInternalPartitionsTable decodes and exposes the partitions of each
+// table.
+var crdbInternalPartitionsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.partitions (
+	table_id    INT NOT NULL,
+	index_id    INT NOT NULL,
+	parent_name STRING,
+	name        STRING NOT NULL,
+	columns     INT NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, prefix,
+			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+					return addPartitioningRows(table, index, &index.Partitioning,
+						tree.DNull /* parentName */, 0 /* colOffset */, addRow)
+				})
+			})
 	},
 }
