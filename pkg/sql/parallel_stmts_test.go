@@ -68,12 +68,13 @@ func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
 	}
 }
 
-func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan planNode, exec func(planNode) error) {
+func (pq *ParallelizeQueue) MustAdd(t *testing.T, plan planNode, exec func() error) {
 	params := runParams{
 		ctx: context.TODO(),
 		p:   makeTestPlanner(),
 	}
-	if err := pq.Add(params, plan, exec); err != nil {
+	params.p.curPlan.plan = plan
+	if err := pq.Add(params, exec); err != nil {
 		t.Fatalf("ParallelizeQueue.Add failed: %v", err)
 	}
 }
@@ -89,20 +90,20 @@ func TestParallelizeQueueNoDependencies(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		<-run1
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		close(run3)
 		return nil
 	})
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		<-run2
 		res = append(res, 2)
 		assertLenEventually(t, &pq, 1)
 		return nil
 	})
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		<-run3
 		res = append(res, 3)
 		assertLenEventually(t, &pq, 2)
@@ -132,18 +133,18 @@ func TestParallelizeQueueAllDependent(t *testing.T) {
 
 	// Executes: plan1 -> plan2 -> plan3.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		<-run
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		return nil
 	})
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		res = append(res, 2)
 		assertLen(t, &pq, 2)
 		return nil
 	})
-	pq.MustAdd(t, newPlanNode(), func(plan planNode) error {
+	pq.MustAdd(t, newPlanNode(), func() error {
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
 		return nil
@@ -176,18 +177,18 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func() error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return nil
 	})
-	pq.MustAdd(t, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func() error {
 		res = append(res, 2)
 		assertLen(t, &pq, 1)
 		return nil
 	})
-	pq.MustAdd(t, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func() error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -222,19 +223,19 @@ func TestParallelizeQueueError(t *testing.T) {
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
 	pq := MakeParallelizeQueue(analyzer)
-	pq.MustAdd(t, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func() error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return planErr
 	})
-	pq.MustAdd(t, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func() error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
 		return nil
 	})
-	pq.MustAdd(t, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func() error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -267,7 +268,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.MustAdd(t, plan1, func(plan planNode) error {
+	pq.MustAdd(t, plan1, func() error {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
 		return planErr
@@ -281,7 +282,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		return nil
 	})
 
-	pq.MustAdd(t, plan2, func(plan planNode) error {
+	pq.MustAdd(t, plan2, func() error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
@@ -295,7 +296,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErrs)
 	}
 
-	pq.MustAdd(t, plan3, func(plan planNode) error {
+	pq.MustAdd(t, plan3, func() error {
 		// Will be called, because the error is cleared when Wait is called.
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
@@ -309,9 +310,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 	}
 }
 
-func planQuery(
-	t *testing.T, s serverutils.TestServerInterface, sql string,
-) (*planner, planNode, func()) {
+func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*planner, func()) {
 	kvDB := s.KVClient().(*client.DB)
 	txn := client.NewTxn(kvDB, s.NodeID())
 	txn.Proto().OrigTimestamp = s.Clock().Now()
@@ -327,12 +326,11 @@ func planQuery(
 		t.Fatalf("expected to parse 1 statement, got: %d", len(stmts))
 	}
 	stmt := stmts[0]
-	plan, err := p.makePlan(context.TODO(), Statement{AST: stmt})
-	if err != nil {
+	if err := p.makePlan(context.TODO(), Statement{AST: stmt}); err != nil {
 		t.Fatal(err)
 	}
-	return p, plan, func() {
-		plan.Close(context.TODO())
+	return p, func() {
+		p.curPlan.close(context.TODO())
 		finishInternalPlanner(p)
 	}
 }
@@ -455,20 +453,20 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 				da := NewSpanBasedDependencyAnalyzer()
 
 				planAndAnalyze := func(q string) (planNode, func()) {
-					p, plan, finish := planQuery(t, s, q)
+					p, finish := planQuery(t, s, q)
 					params := runParams{
 						ctx:     context.TODO(),
 						evalCtx: &p.evalCtx,
 						p:       p,
 					}
 
-					if err := da.Analyze(params, plan); err != nil {
+					if err := da.Analyze(params); err != nil {
 						t.Fatalf("plan analysis failed: %v", err)
 					}
 
-					return plan, func() {
+					return p.curPlan.plan, func() {
 						finish()
-						da.Clear(plan)
+						da.Clear(p.curPlan.plan)
 					}
 				}
 
