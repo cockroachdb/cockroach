@@ -306,10 +306,7 @@ func (c *Compactor) processCompaction(
 	if shouldProcess {
 		startTime := timeutil.Now()
 		log.Eventf(ctx, "processing compaction %s", aggr)
-		if err := c.eng.CompactRange(
-			engine.MVCCKey{Key: aggr.StartKey},
-			engine.MVCCKey{Key: aggr.EndKey},
-		); err != nil {
+		if err := c.eng.CompactRange(aggr.StartKey, aggr.EndKey); err != nil {
 			return 0, errors.Wrapf(err, "unable to compact range %+v", aggr)
 		}
 		c.Metrics.BytesCompacted.Inc(aggr.Bytes)
