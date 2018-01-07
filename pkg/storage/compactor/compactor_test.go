@@ -73,11 +73,11 @@ func (we *wrappedEngine) GetSSTables() engine.SSTableInfos {
 	return ssti
 }
 
-func (we *wrappedEngine) CompactRange(start, end engine.MVCCKey) error {
+func (we *wrappedEngine) CompactRange(start, end roachpb.Key) error {
 	we.mu.Lock()
 	defer we.mu.Unlock()
 	time.Sleep(testCompactionLatency)
-	we.mu.compactions = append(we.mu.compactions, roachpb.Span{Key: start.Key, EndKey: end.Key})
+	we.mu.compactions = append(we.mu.compactions, roachpb.Span{Key: start, EndKey: end})
 	return nil
 }
 
