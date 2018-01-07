@@ -160,13 +160,17 @@ INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 query TTT
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
-split                         ·           ·
- └── values                   ·           ·
-      │                       size        1 column, 1 row
-      │                       subqueries  1
-      └── limit               ·           ·
-           └── render         ·           ·
-                └── emptyrow  ·           ·
+root                          ·          ·
+ ├── split                    ·          ·
+ │    └── values              ·          ·
+ │                            size       1 column, 1 row
+ └── subquery                 ·          ·
+      │                       id         @S1
+      │                       sql        (SELECT 42)
+      │                       exec mode  one row
+      └── limit               ·          ·
+           └── render         ·          ·
+                └── emptyrow  ·          ·
 
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
@@ -193,14 +197,19 @@ SELECT (SELECT a FROM abc)
 query TTT
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
-render               ·           ·
- │                   subqueries  1
- ├── limit           ·           ·
- │    └── render     ·           ·
- │         └── scan  ·           ·
- │                   table       abc@primary
- │                   spans       ALL
- └── emptyrow        ·           ·
+root                      ·          ·
+ ├── render               ·          ·
+ │    └── emptyrow        ·          ·
+ └── subquery             ·          ·
+      │                   id         @S1
+      │                   sql        EXISTS (SELECT a FROM abc)
+      │                   exec mode  exists
+      └── limit           ·          ·
+           └── render     ·          ·
+                └── scan  ·          ·
+·                         table      abc@primary
+·                         spans      ALL
+·                         limit      1
 
 query I
 SELECT (SELECT a FROM abc WHERE false)
@@ -457,15 +466,19 @@ true
 query TITTTTT
 EXPLAIN (METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
 ----
-render               0  render  ·           ·            (x)  x!=NULL; key(x)
- └── scan            1  scan    ·           ·            (x)  x!=NULL; key(x)
-      │              1  ·       table       xyz@primary  ·    ·
-      │              1  ·       spans       ALL          ·    ·
-      │              1  ·       subqueries  1            ·    ·
-      └── render     2  render  ·           ·            (x)  x!=NULL; key(x)
-           └── scan  3  scan    ·           ·            (x)  x!=NULL; key(x)
-·                    3  ·       table       xyz@primary  ·    ·
-·                    3  ·       spans       ALL          ·    ·
+root                 0  root      ·          ·                    (x)  x!=NULL; key(x)
+ ├── render          1  render    ·          ·                    (x)  x!=NULL; key(x)
+ │    └── scan       2  scan      ·          ·                    (x)  x!=NULL; key(x)
+ │                   2  ·         table      xyz@primary          ·    ·
+ │                   2  ·         spans      ALL                  ·    ·
+ └── subquery        1  subquery  ·          ·                    (x)  x!=NULL; key(x)
+      │              1  ·         id         @S1                  ·    ·
+      │              1  ·         sql        (SELECT x FROM xyz)  ·    ·
+      │              1  ·         exec mode  all rows normalized  ·    ·
+      └── render     2  render    ·          ·                    (x)  x!=NULL; key(x)
+           └── scan  3  scan      ·          ·                    (x)  x!=NULL; key(x)
+·                    3  ·         table      xyz@primary          ·    ·
+·                    3  ·         spans      ALL                  ·    ·
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not
@@ -486,12 +499,16 @@ SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col
 query TTT
 EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
-render               ·           ·
- └── scan            ·           ·
-      │              table       tab4@primary
-      │              spans       ALL
-      │              subqueries  1
-      └── render     ·           ·
-           └── scan  ·           ·
-·                    table       tab4@primary
-·                    spans       ALL
+root                 ·          ·
+ ├── render          ·          ·
+ │    └── scan       ·          ·
+ │                   table      tab4@primary
+ │                   spans      ALL
+ └── subquery        ·          ·
+      │              id         @S1
+      │              sql        (SELECT col1 FROM tab4 WHERE col1 > 8.27)
+      │              exec mode  all rows normalized
+      └── render     ·          ·
+           └── scan  ·          ·
+·                    table      tab4@primary
+·                    spans      ALL

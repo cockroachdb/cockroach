@@ -701,8 +701,9 @@ func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *Subquery) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
-	panic("subquery nodes must be replaced before type checking")
+func (expr *Subquery) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) {
+	expr.assertTyped()
+	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.

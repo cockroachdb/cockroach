@@ -813,6 +813,18 @@ func (node *TypedExprs) String() string {
 type Subquery struct {
 	Select SelectStatement
 	Exists bool
+
+	// Idx is a query-unique index for the subquery.
+	// Subqueries are 1-indexed to ensure that the default
+	// value 0 can be used to detect uninitialized subqueries.
+	Idx int
+
+	typeAnnotation
+}
+
+// SetType forces the type annotation on the Subquery node.
+func (node *Subquery) SetType(t types.T) {
+	node.typ = t
 }
 
 // Variable implements the VariableExpr interface.
@@ -820,10 +832,19 @@ func (*Subquery) Variable() {}
 
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(ctx *FmtCtx) {
-	if node.Exists {
-		ctx.WriteString("EXISTS ")
+	if ctx.HasFlags(FmtSymbolicSubqueries) {
+		ctx.Printf("@S%d", node.Idx)
+	} else {
+		// Ensure that type printing is disabled during the recursion, as
+		// the type annotations are not available in subqueries.
+		noTypesCtx := *ctx
+		noTypesCtx.flags &= ^FmtShowTypes
+
+		if node.Exists {
+			noTypesCtx.WriteString("EXISTS ")
+		}
+		noTypesCtx.FormatNode(node.Select)
 	}
-	ctx.FormatNode(node.Select)
 }
 
 // BinaryOperator represents a binary operator.

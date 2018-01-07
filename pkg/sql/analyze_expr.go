@@ -43,7 +43,7 @@ func (p *planner) analyzeExpr(
 	// is expected. Tell this to replaceSubqueries.  (See UPDATE for a
 	// counter-example; cases where a subquery is an operand of a
 	// comparison are handled specially in the subqueryVisitor already.)
-	replaced, err := p.replaceSubqueries(ctx, raw, 1 /* one value expected */)
+	replaced, err := p.analyzeSubqueries(ctx, raw, 1 /* one value expected */)
 	if err != nil {
 		return nil, err
 	}
