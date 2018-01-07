@@ -68,6 +68,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalLeasesTable,
 		crdbInternalLocalQueriesTable,
 		crdbInternalLocalSessionsTable,
+		crdbInternalPartitionsTable,
 		crdbInternalRangesTable,
 		crdbInternalRuntimeInfoTable,
 		crdbInternalSchemaChangesTable,
@@ -1653,5 +1654,111 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			}
 		}
 		return nil
+	},
+}
+
+func addPartitioningRows(
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	partitioning *sqlbase.PartitioningDescriptor,
+	parentName tree.Datum,
+	colOffset int,
+	addRow func(...tree.Datum) error,
+) error {
+	a := &sqlbase.DatumAlloc{}
+	tableID := tree.NewDInt(tree.DInt(table.ID))
+	indexID := tree.NewDInt(tree.DInt(index.ID))
+	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
+
+	// We don't need real prefixes in the DecodePartitionTuple calls because we
+	// only use the tree.Datums part of the output.
+	fakePrefixDatums := make(tree.Datums, colOffset)
+	for i := 0; i < colOffset; i++ {
+		fakePrefixDatums[i] = tree.DNull
+	}
+
+	for _, l := range partitioning.List {
+		name := tree.NewDString(l.Name)
+		listValues := tree.NewDArray(types.String)
+		for _, value := range l.Values {
+			tuple, _, err := sqlbase.DecodePartitionTuple(
+				a, table, index, partitioning, value, fakePrefixDatums)
+			if err != nil {
+				return err
+			}
+			if err := listValues.Append(tree.NewDString(tuple.String())); err != nil {
+				return err
+			}
+		}
+		if err := addRow(
+			tableID,
+			indexID,
+			parentName,
+			name,
+			numColumns,
+			listValues,
+			tree.DNull, /* range_from */
+			tree.DNull, /* range_to */
+		); err != nil {
+			return err
+		}
+		err := addPartitioningRows(table, index, &l.Subpartitioning, name,
+			colOffset+int(partitioning.NumColumns), addRow)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, r := range partitioning.Range {
+		fromTuple, _, err := sqlbase.DecodePartitionTuple(
+			a, table, index, partitioning, r.FromInclusive, fakePrefixDatums)
+		if err != nil {
+			return err
+		}
+		toTuple, _, err := sqlbase.DecodePartitionTuple(
+			a, table, index, partitioning, r.ToExclusive, fakePrefixDatums)
+		if err != nil {
+			return err
+		}
+		if err := addRow(
+			tableID,
+			indexID,
+			parentName,
+			tree.NewDString(r.Name),
+			numColumns,
+			tree.DNull, /* list_values */
+			tree.NewDString(fromTuple.String()),
+			tree.NewDString(toTuple.String()),
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// crdbInternalPartitionsTable decodes and exposes the partitions of each
+// table.
+var crdbInternalPartitionsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.partitions (
+	table_id    INT NOT NULL,
+	index_id    INT NOT NULL,
+	parent_name STRING,
+	name        STRING NOT NULL,
+	columns     INT NOT NULL,
+	list_values STRING[],
+	range_from  STRING,
+	range_to    STRING
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, prefix,
+			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+					return addPartitioningRows(table, index, &index.Partitioning,
+						tree.DNull /* parentName */, 0 /* colOffset */, addRow)
+				})
+			})
 	},
 }
