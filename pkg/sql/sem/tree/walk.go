@@ -402,7 +402,9 @@ func (expr *RangeCond) Walk(v Visitor) Expr {
 func (expr *Subquery) Walk(v Visitor) Expr {
 	sel, changed := WalkStmt(v, expr.Select)
 	if changed {
-		return &Subquery{sel.(SelectStatement)}
+		exprCopy := *expr
+		exprCopy.Select = sel.(SelectStatement)
+		return &exprCopy
 	}
 	return expr
 }
