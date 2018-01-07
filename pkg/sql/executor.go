@@ -2032,9 +2032,9 @@ func (e *Executor) execDistSQL(
 	return nil
 }
 
-// execClassic runs a plan using the classic (non-distributed) SQL
-// implementation.
-func (e *Executor) execClassic(
+// execLocal runs the given logical plan using the local
+// (non-distributed) SQL implementation.
+func (e *Executor) execLocal(
 	planner *planner, plan planNode, rowResultWriter StatementResult,
 ) error {
 	ctx := planner.EvalContext().Ctx()
@@ -2224,7 +2224,7 @@ func (e *Executor) execStmt(
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, res)
 	} else {
-		err = e.execClassic(planner, plan, res)
+		err = e.execLocal(planner, plan, res)
 	}
 	planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 	recordStatementSummary(
@@ -2249,7 +2249,7 @@ func (e *Executor) execStmt(
 // results. This will be nil if the query's result is of type "RowsAffected".
 //
 // TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
-// queries, so this method can only be used with classical SQL.
+// queries, so this method can only be used with local SQL execution.
 func (e *Executor) execStmtInParallel(
 	stmt Statement, planner *planner,
 ) (sqlbase.ResultColumns, error) {
@@ -2288,7 +2288,7 @@ func (e *Executor) execStmtInParallel(
 		}
 
 		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-		err = e.execClassic(planner, plan, bufferedWriter)
+		err = e.execLocal(planner, plan, bufferedWriter)
 		planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 		recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err, &e.EngineMetrics)
 		if e.cfg.TestingKnobs.AfterExecute != nil {
