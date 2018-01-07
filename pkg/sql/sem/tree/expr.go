@@ -787,6 +787,25 @@ func (node *TypedExprs) String() string {
 type Subquery struct {
 	Select SelectStatement
 	Exists bool
+
+	// Idx indicates the known number of the sub-query in the top-level
+	// plan.
+	Idx int
+
+	// Typ is exposed to be populated by sql.replaceSubqueries().
+	Typ types.T
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (node *Subquery) ResolvedType() types.T {
+	node.assertTyped()
+	return node.Typ
+}
+
+func (node *Subquery) assertTyped() {
+	if node.Typ == nil {
+		panic("subquery was not processed yet")
+	}
 }
 
 // Variable implements the VariableExpr interface.
@@ -794,10 +813,19 @@ func (*Subquery) Variable() {}
 
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(ctx *FmtCtx) {
-	if node.Exists {
-		ctx.WriteString("EXISTS ")
+	if ctx.HasFlags(FmtSymbolicSubqueries) {
+		ctx.Printf("@S%d", node.Idx)
+	} else {
+		// Ensure that type printing is disabled during the recursion, as
+		// the type annotations are not available in subqueries.
+		noTypesCtx := *ctx
+		noTypesCtx.flags &= ^FmtShowTypes
+
+		if node.Exists {
+			noTypesCtx.WriteString("EXISTS ")
+		}
+		noTypesCtx.FormatNode(node.Select)
 	}
-	ctx.FormatNode(node.Select)
 }
 
 // BinaryOperator represents a binary operator.

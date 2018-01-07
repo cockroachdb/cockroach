@@ -285,6 +285,11 @@ func (p *planner) propagateFilters(
 			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 				return plan, extraFilter, err
 			}
+			for i := range n.sqPlans {
+				if n.sqPlans[i].plan, err = p.triggerFilterPropagation(ctx, n.sqPlans[i].plan); err != nil {
+					return plan, extraFilter, err
+				}
+			}
 		}
 
 	case *showTraceNode:
@@ -356,7 +361,7 @@ func (p *planner) triggerFilterPropagation(ctx context.Context, plan planNode) (
 
 	if !isFilterTrue(remainingFilter) {
 		panic(fmt.Sprintf("propagateFilters on \n%s\n spilled a non-trivial remaining filter: %s",
-			planToString(ctx, plan), remainingFilter))
+			planToString(ctx, plan, nil), remainingFilter))
 	}
 
 	return newPlan, nil
