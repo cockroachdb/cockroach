@@ -93,13 +93,17 @@ nosort                   0  nosort    ·      ·   (x)  x=CONST
 query TITTTTT
 EXPLAIN (METADATA) SELECT 1 = (SELECT 2 AS x FROM (SELECT 3 AS s)) AS y
 ----
-render                        0  render    ·           ·  (y)  y=CONST
- │                            0  ·         subqueries  1  ·    ·
- ├── limit                    1  limit     ·           ·  (y)  y=CONST
- │    └── render              2  render    ·           ·  (y)  y=CONST
- │         └── render         3  render    ·           ·  (y)  y=CONST
- │              └── emptyrow  4  emptyrow  ·           ·  (y)  y=CONST
- └── emptyrow                 1  emptyrow  ·           ·  (y)  y=CONST
+root                               0  root      ·          ·                                     (y)  y=CONST
+ ├── render                        1  render    ·          ·                                     (y)  y=CONST
+ │    └── emptyrow                 2  emptyrow  ·          ·                                     (y)  y=CONST
+ └── subquery                      1  subquery  ·          ·                                     (y)  y=CONST
+      │                            1  ·         id         @S1                                   ·    ·
+      │                            1  ·         sql        (SELECT 2 AS x FROM (SELECT 3 AS s))  ·    ·
+      │                            1  ·         exec mode  one row                               ·    ·
+      └── limit                    2  limit     ·          ·                                     (y)  y=CONST
+           └── render              3  render    ·          ·                                     (y)  y=CONST
+                └── render         4  render    ·          ·                                     (y)  y=CONST
+                     └── emptyrow  5  emptyrow  ·          ·                                     (y)  y=CONST
 
 # Propagation through table scans.
 statement ok

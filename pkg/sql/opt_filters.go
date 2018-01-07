@@ -361,7 +361,7 @@ func (p *planner) triggerFilterPropagation(ctx context.Context, plan planNode) (
 
 	if !isFilterTrue(remainingFilter) {
 		panic(fmt.Sprintf("propagateFilters on \n%s\n spilled a non-trivial remaining filter: %s",
-			planToString(ctx, plan), remainingFilter))
+			planToString(ctx, plan, nil), remainingFilter))
 	}
 
 	return newPlan, nil
