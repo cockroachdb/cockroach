@@ -73,7 +73,7 @@ func (v *varConvertVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree
 	if varExpr, ok := expr.(tree.VariableExpr); ok {
 		// Ignore sub-queries and placeholders
 		switch expr.(type) {
-		case *subquery, *tree.Placeholder:
+		case *tree.Subquery, *tree.Placeholder:
 			return false, expr
 		}
 

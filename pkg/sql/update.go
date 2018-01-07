@@ -79,8 +79,8 @@ func (p *planner) Update(
 
 	setExprs := make([]*tree.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
-		// Replace the sub-query nodes.
-		newExpr, err := p.replaceSubqueries(ctx, expr.Expr, len(expr.Names))
+		// Analyze the sub-query nodes.
+		newExpr, err := p.analyzeSubqueries(ctx, expr.Expr, len(expr.Names))
 		if err != nil {
 			return nil, err
 		}
@@ -183,7 +183,7 @@ func (p *planner) Update(
 
 					currentUpdateIdx++
 				}
-			case *subquery:
+			case *tree.Subquery:
 				selectExpr := tree.SelectExpr{Expr: t}
 				desiredTupleType := make(types.TTuple, len(setExpr.Names))
 				for i := range setExpr.Names {
@@ -506,8 +506,8 @@ func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.UnresolvedNames, e
 		if expr.Tuple {
 			n := -1
 			switch t := expr.Expr.(type) {
-			case *subquery:
-				if tup, ok := t.typ.(types.TTuple); ok {
+			case *tree.Subquery:
+				if tup, ok := t.ResolvedType().(types.TTuple); ok {
 					n = len(tup)
 				}
 			case *tree.Tuple:
