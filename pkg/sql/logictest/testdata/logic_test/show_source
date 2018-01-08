@@ -94,6 +94,7 @@ sql.trace.log_statement_execute                    false          b     set to t
 sql.trace.session_eventlog.enabled                 false          b     set to true to enable session tracing
 sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)
 timeseries.resolution_10s.storage_duration         720h0m0s       d     the amount of time to store timeseries data
+timeseries.storage.enabled                         true           b     if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere
 trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
 trace.lightstep.token                              ·              s     if set, traces go to Lightstep using this token
 trace.zipkin.collector                             ·              s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
