@@ -18,13 +18,19 @@ root
 testuser
 user1
 
-statement error user user1 already exists
+statement error a role named admin already exists
+CREATE USER admin
+
+statement error a role named admin already exists
+CREATE USER IF NOT EXISTS admin
+
+statement error a user named user1 already exists
 CREATE USER user1
 
 statement ok
 CREATE USER IF NOT EXISTS user1
 
-statement error user user1 already exists
+statement error a user named user1 already exists
 CREATE USER UsEr1
 
 statement ok

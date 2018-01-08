@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -25,7 +26,6 @@ import (
 
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
@@ -197,7 +197,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
-	escDBName := tree.Name(req.Database).String()
+	escDBName := tree.NameStringP(&req.Database)
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
@@ -296,14 +296,14 @@ func (s *adminServer) TableDetails(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
-	escDBName := tree.Name(req.Database).String()
+	escDBName := tree.NameStringP(&req.Database)
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
-	escTableName := tree.Name(req.Table).String()
+	escTableName := tree.NameStringP(&req.Table)
 	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %[1]s; SHOW INDEX FROM %[1]s; SHOW GRANTS ON TABLE %[1]s; SHOW CREATE TABLE %[1]s;",
 		escQualTable)
@@ -505,7 +505,7 @@ func (s *adminServer) TableDetails(
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
-	escDBName := tree.Name(req.Database).String()
+	escDBName := tree.NameStringP(&req.Database)
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}

@@ -15,11 +15,11 @@
 package sql
 
 import (
+	"context"
 	"sync/atomic"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -310,9 +310,9 @@ func makeDistSQLReceiver(
 
 // Push is part of the RowReceiver interface.
 func (r *distSQLReceiver) Push(
-	row sqlbase.EncDatumRow, meta distsqlrun.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *distsqlrun.ProducerMetadata,
 ) distsqlrun.ConsumerStatus {
-	if !meta.Empty() {
+	if meta != nil {
 		if meta.Err != nil && r.err == nil {
 			if r.txn != nil {
 				if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {

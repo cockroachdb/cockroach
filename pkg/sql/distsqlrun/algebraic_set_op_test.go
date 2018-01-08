@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type testCase struct {
@@ -85,14 +85,17 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 	inR := NewRowBuffer(types, tc.inputRight, RowBufferArgs{})
 	out := NewRowBuffer(types, nil /* rows */, RowBufferArgs{})
 
-	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings()}
+	flowCtx := FlowCtx{
+		Ctx:      context.Background(),
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
 
 	s, err := newAlgebraicSetOp(&flowCtx, &tc.spec, inL, inR, &PostProcessSpec{}, out)
 	if err != nil {
 		return nil, err
 	}
 
-	s.Run(context.Background(), nil)
+	s.Run(nil)
 	if !out.ProducerClosed {
 		return nil, errors.Errorf("output RowReceiver not closed")
 	}
@@ -100,7 +103,7 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 	var res sqlbase.EncDatumRows
 	for {
 		row, meta := out.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			return nil, errors.Errorf("unexpected metadata: %v", meta)
 		}
 		if row == nil {

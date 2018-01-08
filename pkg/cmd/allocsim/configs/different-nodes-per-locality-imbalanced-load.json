@@ -1,0 +1,49 @@
+{
+  "Localities": [
+    {
+      "Name": "1",
+      "NumNodes": 2,
+      "NumWorkers": 0,
+      "OutgoingLatencies": [
+        {
+          "Name": "2",
+          "Latency": "50ms"
+        },
+        {
+          "Name": "3",
+          "Latency": "50ms"
+        }
+      ]
+    },
+    {
+      "Name": "2",
+      "NumNodes": 2,
+      "NumWorkers": 32,
+      "OutgoingLatencies": [
+        {
+          "Name": "1",
+          "Latency": "50ms"
+        },
+        {
+          "Name": "3",
+          "Latency": "50ms"
+        }
+      ]
+    },
+    {
+      "Name": "3",
+      "NumNodes": 4,
+      "NumWorkers": 0,
+      "OutgoingLatencies": [
+        {
+          "Name": "1",
+          "Latency": "50ms"
+        },
+        {
+          "Name": "2",
+          "Latency": "50ms"
+        }
+      ]
+    }
+  ]
+}

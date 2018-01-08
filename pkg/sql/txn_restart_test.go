@@ -16,6 +16,7 @@ package sql_test
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
@@ -29,7 +30,6 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

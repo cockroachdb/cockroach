@@ -9,7 +9,6 @@ stmt ::=
 	| alter_stmt
 	| backup_stmt
 	| cancel_stmt
-	| scrub_stmt
 	| copy_from_stmt
 	| create_stmt
 	| deallocate_stmt
@@ -27,6 +26,7 @@ stmt ::=
 	| resume_stmt
 	| revoke_stmt
 	| savepoint_stmt
+	| scrub_stmt
 	| select_stmt
 	| release_stmt
 	| reset_stmt
@@ -49,10 +49,6 @@ cancel_stmt ::=
 	cancel_job_stmt
 	| cancel_query_stmt
 
-scrub_stmt ::=
-	scrub_table_stmt
-	| scrub_database_stmt
-
 copy_from_stmt ::=
 	'COPY' qualified_name 'FROM' 'STDIN'
 	| 'COPY' qualified_name '(' ')' 'FROM' 'STDIN'
@@ -60,6 +56,7 @@ copy_from_stmt ::=
 
 create_stmt ::=
 	create_user_stmt
+	| create_role_stmt
 	| create_ddl_stmt
 	| create_stats_stmt
 
@@ -70,13 +67,14 @@ deallocate_stmt ::=
 	| 'DEALLOCATE' 'PREPARE' 'ALL'
 
 delete_stmt ::=
-	'DELETE' 'FROM' relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'DELETE' 'FROM' relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
 
 discard_stmt ::=
 	'DISCARD' 'ALL'
 
 drop_stmt ::=
 	drop_ddl_stmt
+	| drop_role_stmt
 	| drop_user_stmt
 
 execute_stmt ::=
@@ -90,8 +88,8 @@ grant_stmt ::=
 	'GRANT' privileges 'ON' targets 'TO' grantee_list
 
 insert_stmt ::=
-	'INSERT' 'INTO' insert_target insert_rest returning_clause
-	| 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
+	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
+	| opt_with_clause 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
 
 import_stmt ::=
 	'IMPORT' 'TABLE' any_name 'CREATE' 'USING' string_or_placeholder import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
@@ -116,6 +114,10 @@ revoke_stmt ::=
 savepoint_stmt ::=
 	'SAVEPOINT' name
 
+scrub_stmt ::=
+	scrub_table_stmt
+	| scrub_database_stmt
+
 select_stmt ::=
 	select_no_parens
 	| select_with_parens
@@ -138,6 +140,7 @@ show_stmt ::=
 	| show_constraints_stmt
 	| show_create_table_stmt
 	| show_create_view_stmt
+	| show_create_sequence_stmt
 	| show_csettings_stmt
 	| show_databases_stmt
 	| show_grants_stmt
@@ -163,10 +166,10 @@ truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
 
 update_stmt ::=
-	'UPDATE' relation_expr_opt_alias 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'UPDATE' relation_expr_opt_alias 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
 
 upsert_stmt ::=
-	'UPSERT' 'INTO' insert_target insert_rest returning_clause
+	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
 
 alter_ddl_stmt ::=
 	alter_table_stmt
@@ -206,12 +209,6 @@ cancel_job_stmt ::=
 cancel_query_stmt ::=
 	'CANCEL' 'QUERY' a_expr
 
-scrub_table_stmt ::=
-	'EXPERIMENTAL' 'SCRUB' 'TABLE' qualified_name opt_as_of_clause opt_scrub_options_clause
-
-scrub_database_stmt ::=
-	'EXPERIMENTAL' 'SCRUB' 'DATABASE' name opt_as_of_clause
-
 qualified_name ::=
 	name
 	| name qname_indirection
@@ -222,6 +219,10 @@ qualified_name_list ::=
 create_user_stmt ::=
 	'CREATE' 'USER' string_or_placeholder opt_password
 	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_password
+
+create_role_stmt ::=
+	'CREATE' 'ROLE' string_or_placeholder
+	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' string_or_placeholder
 
 create_ddl_stmt ::=
 	create_database_stmt
@@ -238,6 +239,10 @@ name ::=
 	'identifier'
 	| unreserved_keyword
 	| col_name_keyword
+
+opt_with_clause ::=
+	with_clause
+	| 
 
 relation_expr_opt_alias ::=
 	relation_expr
@@ -267,6 +272,10 @@ drop_ddl_stmt ::=
 	| drop_table_stmt
 	| drop_view_stmt
 	| drop_sequence_stmt
+
+drop_role_stmt ::=
+	'DROP' 'ROLE' string_or_placeholder_list
+	| 'DROP' 'ROLE' 'IF' 'EXISTS' string_or_placeholder_list
 
 drop_user_stmt ::=
 	'DROP' 'USER' string_or_placeholder_list
@@ -332,7 +341,9 @@ preparable_stmt ::=
 	| backup_stmt
 	| cancel_stmt
 	| create_user_stmt
+	| create_role_stmt
 	| delete_stmt
+	| drop_role_stmt
 	| drop_user_stmt
 	| import_stmt
 	| insert_stmt
@@ -350,10 +361,19 @@ preparable_stmt ::=
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const
 
+scrub_table_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'TABLE' qualified_name opt_as_of_clause opt_scrub_options_clause
+
+scrub_database_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'DATABASE' name opt_as_of_clause
+
 select_no_parens ::=
 	simple_select
 	| select_clause sort_clause
 	| select_clause opt_sort_clause select_limit
+	| with_clause select_clause
+	| with_clause select_clause sort_clause
+	| with_clause select_clause opt_sort_clause select_limit
 
 select_with_parens ::=
 	'(' select_no_parens ')'
@@ -398,6 +418,9 @@ show_create_table_stmt ::=
 
 show_create_view_stmt ::=
 	'SHOW' 'CREATE' 'VIEW' var_name
+
+show_create_sequence_stmt ::=
+	'SHOW' 'CREATE' 'SEQUENCE' var_name
 
 show_csettings_stmt ::=
 	'SHOW' 'CLUSTER' 'SETTING' any_name
@@ -490,7 +513,8 @@ alter_table_stmt ::=
 	| alter_rename_table_stmt
 
 alter_index_stmt ::=
-	alter_split_index_stmt
+	alter_oneindex_stmt
+	| alter_split_index_stmt
 	| alter_scatter_index_stmt
 	| alter_rename_index_stmt
 
@@ -520,10 +544,6 @@ non_reserved_word_or_sconst ::=
 
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
-
-opt_scrub_options_clause ::=
-	'WITH' 'OPTIONS' scrub_option_list
-	| 
 
 qname_indirection ::=
 	( name_indirection_elem ) ( ( name_indirection_elem ) )*
@@ -572,6 +592,7 @@ unreserved_keyword ::=
 	| 'CASCADE'
 	| 'CLUSTER'
 	| 'COLUMNS'
+	| 'COMMENT'
 	| 'COMMIT'
 	| 'COMMITTED'
 	| 'COMPACT'
@@ -706,6 +727,7 @@ unreserved_keyword ::=
 	| 'STORING'
 	| 'STRICT'
 	| 'SPLIT'
+	| 'SYNTAX'
 	| 'SYSTEM'
 	| 'TABLES'
 	| 'TEMP'
@@ -799,6 +821,9 @@ col_name_keyword ::=
 	| 'UUID'
 	| 'VALUES'
 	| 'VARCHAR'
+
+with_clause ::=
+	'WITH' cte_list
 
 relation_expr ::=
 	qualified_name
@@ -916,6 +941,10 @@ a_expr_const ::=
 	| 'FALSE'
 	| 'NULL'
 
+opt_scrub_options_clause ::=
+	'WITH' 'OPTIONS' scrub_option_list
+	| 
+
 simple_select ::=
 	simple_select_clause
 	| values_clause
@@ -1005,6 +1034,10 @@ alter_rename_table_stmt ::=
 	| 'ALTER' 'TABLE' relation_expr 'RENAME' opt_column name 'TO' name
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr 'RENAME' opt_column name 'TO' name
 
+alter_oneindex_stmt ::=
+	'ALTER' 'INDEX' table_name_with_index alter_index_cmds
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name_with_index alter_index_cmds
+
 alter_split_index_stmt ::=
 	'ALTER' 'INDEX' table_name_with_index 'SPLIT' 'AT' select_stmt
 
@@ -1048,9 +1081,6 @@ kv_option ::=
 	| name
 	| 'SCONST' '=' string_or_placeholder
 	| 'SCONST'
-
-scrub_option_list ::=
-	( scrub_option ) ( ( ',' scrub_option ) )*
 
 name_indirection_elem ::=
 	glob_indirection
@@ -1114,6 +1144,9 @@ opt_column_list ::=
 opt_sequence_option_list ::=
 	sequence_option_list
 	| 
+
+cte_list ::=
+	( common_table_expr ) ( ( ',' common_table_expr ) )*
 
 sortby_list ::=
 	( sortby ) ( ( ',' sortby ) )*
@@ -1355,6 +1388,9 @@ const_typename ::=
 interval ::=
 	const_interval 'SCONST' opt_interval
 
+scrub_option_list ::=
+	( scrub_option ) ( ( ',' scrub_option ) )*
+
 simple_select_clause ::=
 	'SELECT' opt_all_clause target_list from_clause where_clause group_clause having_clause window_clause
 	| 'SELECT' distinct_clause target_list from_clause where_clause group_clause having_clause window_clause
@@ -1405,6 +1441,9 @@ table_name_with_index ::=
 	qualified_name '@' unrestricted_name
 	| qualified_name
 
+alter_index_cmds ::=
+	( alter_index_cmd ) ( ( ',' alter_index_cmd ) )*
+
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
 
@@ -1413,13 +1452,6 @@ name_indirection ::=
 
 glob_indirection ::=
 	'.' '*'
-
-scrub_option ::=
-	'INDEX' 'ALL'
-	| 'INDEX' '(' name_list ')'
-	| 'CONSTRAINT' 'ALL'
-	| 'CONSTRAINT' '(' name_list ')'
-	| 'PHYSICAL'
 
 opt_equal ::=
 	'='
@@ -1436,6 +1468,10 @@ partition_by ::=
 	'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'
 	| 'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')'
 	| 'PARTITION' 'BY' 'NOTHING'
+
+common_table_expr ::=
+	name 'AS' '(' preparable_stmt ')'
+	| name '(' name_list ')' 'AS' '(' preparable_stmt ')'
 
 sortby ::=
 	a_expr opt_asc_desc
@@ -1556,6 +1592,13 @@ const_character ::=
 	character_with_length
 	| character_without_length
 
+scrub_option ::=
+	'INDEX' 'ALL'
+	| 'INDEX' '(' name_list ')'
+	| 'CONSTRAINT' 'ALL'
+	| 'CONSTRAINT' '(' name_list ')'
+	| 'PHYSICAL'
+
 opt_all_clause ::=
 	'ALL'
 	| 
@@ -1622,6 +1665,9 @@ alter_table_cmd ::=
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' name opt_drop_behavior
 	| 'DROP' 'CONSTRAINT' name opt_drop_behavior
 	| partition_by
+
+alter_index_cmd ::=
+	partition_by
 
 sequence_option_elem ::=
 	'INCREMENT' signed_iconst64

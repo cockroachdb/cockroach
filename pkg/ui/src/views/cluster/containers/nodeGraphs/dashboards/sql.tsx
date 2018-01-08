@@ -174,7 +174,7 @@ export default function (props: GraphDashboardProps) {
       title="Execution Latency: 99th percentile"
       tooltip={
         `The 99th percentile of latency between query requests and responses over a
-          1 minute period. Values are displayed individually for each node on each node.`
+          1 minute period. Values are displayed individually for each node.`
       }
     >
       <Axis units={AxisUnits.Duration} label="execution latency">
@@ -196,7 +196,7 @@ export default function (props: GraphDashboardProps) {
       title="Execution Latency: 90th percentile"
       tooltip={
         `The 90th percentile of latency between query requests and responses over a
-           1 minute period. Values are displayed individually for each node on each node.`
+           1 minute period. Values are displayed individually for each node.`
       }
     >
       <Axis units={AxisUnits.Duration} label="execution latency">

@@ -15,10 +15,10 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -75,6 +75,11 @@ type unionNode struct {
 	// emit contains the rows seen on the right so far and performs the
 	// selection/filtering logic.
 	emit unionNodeEmit
+
+	// unionType is the type of operation (UNION, INTERSECT, EXCEPT)
+	unionType tree.UnionType
+	// all indicates if the operation is the ALL or DISTINCT version
+	all bool
 
 	run unionRun
 }
@@ -149,11 +154,13 @@ func (p *planner) Union(
 	}
 
 	node := &unionNode{
-		right:    right,
-		left:     left,
-		inverted: inverted,
-		emitAll:  emitAll,
-		emit:     emit,
+		right:     right,
+		left:      left,
+		inverted:  inverted,
+		emitAll:   emitAll,
+		emit:      emit,
+		unionType: n.Type,
+		all:       n.All,
 	}
 	return node, nil
 }

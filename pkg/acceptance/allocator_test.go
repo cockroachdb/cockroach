@@ -18,14 +18,13 @@ package acceptance
 // acceptance.sh. See instructions therein.
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math"
 	"net/http"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/montanaflynn/stats"
 	"github.com/pkg/errors"

@@ -1,37 +1,37 @@
 insert_stmt ::=
-	'INSERT' 'INTO' qualified_name select_stmt 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name select_stmt 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name select_stmt 
-	| 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt 
-	| 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' 
-	| 'INSERT' 'INTO' qualified_name 'AS' name select_stmt 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name 'AS' name select_stmt 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name 'AS' name select_stmt 
-	| 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt 
-	| 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' 
-	| 'INSERT' 'INTO' qualified_name select_stmt on_conflict 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name select_stmt on_conflict 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name select_stmt on_conflict 
-	| 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt on_conflict 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt on_conflict 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt on_conflict 
-	| 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' on_conflict 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' on_conflict 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' on_conflict 
-	| 'INSERT' 'INTO' qualified_name 'AS' name select_stmt on_conflict 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name 'AS' name select_stmt on_conflict 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name 'AS' name select_stmt on_conflict 
-	| 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt on_conflict 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt on_conflict 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt on_conflict 
-	| 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' on_conflict 'RETURNING' target_list
-	| 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' on_conflict 'RETURNING' 'NOTHING'
-	| 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' on_conflict 
+	opt_with_clause 'INSERT' 'INTO' qualified_name select_stmt 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name select_stmt 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name select_stmt 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name select_stmt 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name select_stmt 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name select_stmt 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name select_stmt on_conflict 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name select_stmt on_conflict 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name select_stmt on_conflict 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt on_conflict 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt on_conflict 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name '(' qualified_name_list ')' select_stmt on_conflict 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' on_conflict 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' on_conflict 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'DEFAULT' 'VALUES' on_conflict 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name select_stmt on_conflict 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name select_stmt on_conflict 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name select_stmt on_conflict 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt on_conflict 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt on_conflict 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name '(' qualified_name_list ')' select_stmt on_conflict 
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' on_conflict 'RETURNING' target_list
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' on_conflict 'RETURNING' 'NOTHING'
+	| opt_with_clause 'INSERT' 'INTO' qualified_name 'AS' name 'DEFAULT' 'VALUES' on_conflict 

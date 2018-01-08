@@ -101,3 +101,10 @@ func (e *protoEncoder) Encode(v interface{}) error {
 	}
 	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
+
+var _ gwruntime.Delimited = (*ProtoPb)(nil)
+
+// Delimiter implements gwruntime.Delimited.
+func (*ProtoPb) Delimiter() []byte {
+	return nil
+}

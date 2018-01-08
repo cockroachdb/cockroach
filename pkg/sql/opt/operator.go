@@ -25,7 +25,13 @@ type operator uint8
 const (
 	unknownOp operator = iota
 
-	// TODO(radu): no relational operators yet.
+	// -- Relational operators --
+	// This list will grow significantly as we implement new operators.
+	// The only relational operator implemented so far is scanOp.
+
+	// scan is the lowest level relational operator, responsible for scanning
+	// tables.
+	scanOp
 
 	// -- Scalar operators --
 
@@ -36,11 +42,8 @@ const (
 	// constOp is a leaf expression that has a constant value.
 	constOp
 
-	// listOp is an unordered list of expressions. Currently unused.
-	listOp
-
-	// orderedListOp is an ordered list of expressions. Currently unused.
-	orderedListOp
+	// tupleOp is a list of scalar expressions.
+	tupleOp
 
 	andOp
 	orOp
@@ -64,10 +67,15 @@ const (
 	notRegMatchOp
 	regIMatchOp
 	notRegIMatchOp
-	isDistinctFromOp
-	isNotDistinctFromOp
+
+	// isOp implements the SQL operator IS, as well as its extended
+	// version IS NOT DISTINCT FROM.
 	isOp
+
+	// isNotOp implements the SQL operator IS NOT, as well as its extended
+	// version IS DISTINCT FROM.
 	isNotOp
+
 	anyOp
 	someOp
 	allOp
@@ -92,6 +100,10 @@ const (
 
 	functionCallOp
 
+	// unsupportedScalarOp is a temporary facility to pass through an unsupported
+	// TypedExpr (like a subquery) through MakeIndexConstraints.
+	unsupportedScalarOp
+
 	// This should be last.
 	numOperators
 )
@@ -103,7 +115,7 @@ type operatorInfo struct {
 	// class of the operator (see operatorClass).
 	class operatorClass
 
-	normalizeFn func(*expr)
+	normalizeFn func(*Expr)
 }
 
 // operatorTab stores static information about all operators.
@@ -129,5 +141,5 @@ func registerOperator(op operator, info operatorInfo) {
 // operators.
 type operatorClass interface {
 	// format outputs information about the expr tree to a treePrinter.
-	format(e *expr, tp treeprinter.Node)
+	format(e *Expr, tp treeprinter.Node)
 }

@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -38,10 +37,10 @@ type ResolvableFunctionReference struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (fn ResolvableFunctionReference) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, fn.FunctionReference)
+func (fn *ResolvableFunctionReference) Format(ctx *FmtCtx) {
+	ctx.FormatNode(fn.FunctionReference)
 }
-func (fn ResolvableFunctionReference) String() string { return AsString(fn) }
+func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }
 
 // Resolve checks if the function name is already resolved and
 // resolves it as necessary.
@@ -49,7 +48,7 @@ func (fn *ResolvableFunctionReference) Resolve(searchPath SearchPath) (*Function
 	switch t := fn.FunctionReference.(type) {
 	case *FunctionDefinition:
 		return t, nil
-	case UnresolvedName:
+	case *UnresolvedName:
 		fd, err := t.ResolveFunction(searchPath)
 		if err != nil {
 			return nil, err
@@ -80,7 +79,7 @@ type FunctionReference interface {
 	functionReference()
 }
 
-func (UnresolvedName) functionReference()      {}
+func (*UnresolvedName) functionReference()     {}
 func (*FunctionDefinition) functionReference() {}
 
 // functionName implements a structured function name. It is an
@@ -93,15 +92,15 @@ type functionName struct {
 }
 
 // normalizeFunctionName transforms an UnresolvedName to a functionName.
-func (n UnresolvedName) normalizeFunctionName() (functionName, error) {
-	if len(n) == 0 {
+func (n *UnresolvedName) normalizeFunctionName() (functionName, error) {
+	if len(*n) == 0 {
 		return functionName{}, pgerror.NewErrorf(
 			pgerror.CodeInvalidNameError, "invalid function name: %s", n)
 	}
 
 	// Find the first array subscript, if any.
-	i := len(n)
-	for j, p := range n {
+	i := len(*n)
+	for j, p := range *n {
 		if _, ok := p.(*ArraySubscript); ok {
 			i = j
 			break
@@ -117,7 +116,8 @@ func (n UnresolvedName) normalizeFunctionName() (functionName, error) {
 	// The function name, together with its prefix, must /look/ like a
 	// table name. (We don't support record types yet.)  Reuse the
 	// existing normalization code.
-	tn, err := n[:i].normalizeTableNameAsValue()
+	fPref := (*n)[:i]
+	tn, err := fPref.normalizeTableNameAsValue()
 	if err != nil {
 		// Override the error, so as to not confuse the user.
 		return functionName{}, pgerror.NewErrorf(
@@ -128,7 +128,7 @@ func (n UnresolvedName) normalizeFunctionName() (functionName, error) {
 	return functionName{
 		prefixName:   tn.DatabaseName,
 		functionName: tn.TableName,
-		selector:     NameParts(n[i:]),
+		selector:     NameParts((*n)[i:]),
 	}, nil
 }
 

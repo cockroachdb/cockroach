@@ -15,6 +15,7 @@
 package sql_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
@@ -25,7 +26,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -554,7 +555,16 @@ func TestRaceWithBackfill(t *testing.T) {
 	var mu syncutil.Mutex
 	var backfillNotification chan struct{}
 
-	const numNodes, chunkSize, maxValue = 5, 100, 4000
+	const numNodes = 5
+	var chunkSize int64 = 100
+	var maxValue = 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows and a
+		// correspondingly smaller chunk size.
+		chunkSize = 5
+		maxValue = 200
+	}
+
 	params, _ := tests.CreateTestServerParams()
 	initBackfillNotification := func() chan struct{} {
 		mu.Lock()
@@ -1235,6 +1245,52 @@ func dropIndexSchemaChange(
 	}
 }
 
+// TestDropColumn tests that dropped columns properly drop their Table's CHECK constraints
+func TestDropColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (
+  k INT PRIMARY KEY,
+  v INT CONSTRAINT check_v CHECK (v >= 0),
+  a INT DEFAULT 0 CONSTRAINT check_av CHECK (a <= v),
+  b INT DEFAULT 100 CONSTRAINT check_ab CHECK (b > a)
+);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read table descriptor.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(tableDesc.Checks) != 3 {
+		t.Fatalf("Expected 3 checks but got %d ", len(tableDesc.Checks))
+	}
+
+	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP v"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-read table descriptor.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Only check_ab should remain
+	if len(tableDesc.Checks) != 1 {
+		checkExprs := make([]string, 0)
+		for i := range tableDesc.Checks {
+			checkExprs = append(checkExprs, tableDesc.Checks[i].Expr)
+		}
+		t.Fatalf("Expected 1 check but got %d with CHECK expr %s ", len(tableDesc.Checks), strings.Join(checkExprs, ", "))
+	}
+
+	if tableDesc.Checks[0].Name != "check_ab" {
+		t.Fatalf("Only check_ab should remain, got: %s ", tableDesc.Checks[0].Name)
+	}
+}
+
 // Test schema changes are retried and complete properly. This also checks
 // that a mutation checkpoint reduces the number of chunks operated on during
 // a retry.
@@ -1762,10 +1818,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 }
 
 // This test checks backward compatibility with old data that contains
-// sentinel k:v pairs at the start of each table row. Cockroachdb used
+// sentinel kv pairs at the start of each table row. Cockroachdb used
 // to write table rows with sentinel values in the past. When a new column
 // is added to such a table with the new column included in the same
-// column family as the primary key columns, the sentinel k:v pairs
+// column family as the primary key columns, the sentinel kv pairs
 // start representing this new column. This test checks that the sentinel
 // values represent NULL column values, and that an UPDATE to such
 // a column works correctly.

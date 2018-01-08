@@ -4954,6 +4954,7 @@ const int Lease::kReplicaFieldNumber;
 const int Lease::kDeprecatedStartStasisFieldNumber;
 const int Lease::kProposedTsFieldNumber;
 const int Lease::kEpochFieldNumber;
+const int Lease::kSequenceFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Lease::Lease()
@@ -4994,14 +4995,16 @@ Lease::Lease(const Lease& from)
   } else {
     proposed_ts_ = NULL;
   }
-  epoch_ = from.epoch_;
+  ::memcpy(&epoch_, &from.epoch_,
+    static_cast<size_t>(reinterpret_cast<char*>(&sequence_) -
+    reinterpret_cast<char*>(&epoch_)) + sizeof(sequence_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Lease)
 }
 
 void Lease::SharedCtor() {
   ::memset(&start_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&epoch_) -
-      reinterpret_cast<char*>(&start_)) + sizeof(epoch_));
+      reinterpret_cast<char*>(&sequence_) -
+      reinterpret_cast<char*>(&start_)) + sizeof(sequence_));
   _cached_size_ = 0;
 }
 
@@ -5062,7 +5065,9 @@ void Lease::Clear() {
     delete proposed_ts_;
   }
   proposed_ts_ = NULL;
-  epoch_ = GOOGLE_LONGLONG(0);
+  ::memset(&epoch_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&sequence_) -
+      reinterpret_cast<char*>(&epoch_)) + sizeof(sequence_));
   _internal_metadata_.Clear();
 }
 
@@ -5151,6 +5156,19 @@ bool Lease::MergePartialFromCodedStream(
         break;
       }
 
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(56u /* 56 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &sequence_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -5207,6 +5225,10 @@ void Lease::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt64(6, this->epoch(), output);
   }
 
+  if (this->sequence() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(7, this->sequence(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Lease)
@@ -5255,6 +5277,12 @@ size_t Lease::ByteSizeLong() const {
         this->epoch());
   }
 
+  if (this->sequence() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->sequence());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = cached_size;
@@ -5292,6 +5320,9 @@ void Lease::MergeFrom(const Lease& from) {
   if (from.epoch() != 0) {
     set_epoch(from.epoch());
   }
+  if (from.sequence() != 0) {
+    set_sequence(from.sequence());
+  }
 }
 
 void Lease::CopyFrom(const Lease& from) {
@@ -5317,6 +5348,7 @@ void Lease::InternalSwap(Lease* other) {
   swap(deprecated_start_stasis_, other->deprecated_start_stasis_);
   swap(proposed_ts_, other->proposed_ts_);
   swap(epoch_, other->epoch_);
+  swap(sequence_, other->sequence_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   swap(_cached_size_, other->_cached_size_);
 }
@@ -5535,6 +5567,19 @@ void Lease::set_epoch(::google::protobuf::int64 value) {
   
   epoch_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.epoch)
+}
+
+void Lease::clear_sequence() {
+  sequence_ = GOOGLE_LONGLONG(0);
+}
+::google::protobuf::int64 Lease::sequence() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.sequence)
+  return sequence_;
+}
+void Lease::set_sequence(::google::protobuf::int64 value) {
+  
+  sequence_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.sequence)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

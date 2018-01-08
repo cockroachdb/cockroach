@@ -15,7 +15,7 @@
 package kv
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

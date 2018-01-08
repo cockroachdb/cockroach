@@ -18,14 +18,13 @@ package sql_test
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"

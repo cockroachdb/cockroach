@@ -15,12 +15,12 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -64,7 +64,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 			for i, expr := range n.Values {
 				// Special rule for SET: because SET doesn't apply in the context
 				// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
-				if s, ok := expr.(tree.UnresolvedName); ok {
+				if s, ok := expr.(*tree.UnresolvedName); ok {
 					expr = tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
 				}
 

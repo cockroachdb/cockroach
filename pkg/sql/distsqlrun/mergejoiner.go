@@ -18,12 +18,10 @@ import (
 	"errors"
 	"sync"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // mergeJoiner performs merge join, it has two input row sources with the same
@@ -33,15 +31,21 @@ import (
 type mergeJoiner struct {
 	joinerBase
 
-	flowCtx *FlowCtx
-	evalCtx *tree.EvalContext
+	evalCtx       *tree.EvalContext
+	cancelChecker *sqlbase.CancelChecker
 
 	leftSource, rightSource RowSource
+	leftRows, rightRows     []sqlbase.EncDatumRow
+	leftIdx, rightIdx       int
+	emitUnmatchedRight      bool
+	matchedRight            util.FastIntSet
+	matchedRightCount       int
 
 	streamMerger streamMerger
 }
 
 var _ Processor = &mergeJoiner{}
+var _ RowSource = &mergeJoiner{}
 
 func newMergeJoiner(
 	flowCtx *FlowCtx,
@@ -58,12 +62,13 @@ func newMergeJoiner(
 	}
 
 	m := &mergeJoiner{
-		flowCtx:     flowCtx,
 		leftSource:  leftSource,
 		rightSource: rightSource,
 	}
 	// TODO: Adapt MergeJoiner to new joinerBase constructor.
-	err := m.joinerBase.init(flowCtx, leftSource.Types(), rightSource.Types(), spec.Type, spec.OnExpr, nil, nil, 0, post, output)
+	err := m.joinerBase.init(flowCtx,
+		leftSource.OutputTypes(), rightSource.OutputTypes(),
+		spec.Type, spec.OnExpr, nil, nil, 0, post, output)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +78,6 @@ func newMergeJoiner(
 		convertToColumnOrdering(spec.LeftOrdering),
 		rightSource,
 		convertToColumnOrdering(spec.RightOrdering),
-		output, /*metadataSync*/
 		spec.NullEquality,
 	)
 	if err != nil {
@@ -84,91 +88,169 @@ func newMergeJoiner(
 }
 
 // Run is part of the processor interface.
-func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
+	if m.out.output == nil {
+		panic("mergeJoiner output not initialized for emitting rows")
+	}
+	Run(m.flowCtx.Ctx, m, m.out.output)
 	if wg != nil {
-		defer wg.Done()
+		wg.Done()
 	}
-
-	ctx = log.WithLogTag(ctx, "MergeJoiner", nil)
-	ctx, span := processorSpan(ctx, "merge joiner")
-	defer tracing.FinishSpan(span)
-	log.VEventf(ctx, 2, "starting merge joiner run")
-
-	cancelChecker := sqlbase.NewCancelChecker(ctx)
-	m.evalCtx = m.flowCtx.NewEvalCtx()
-
-	for {
-		moreBatches, err := m.outputBatch(ctx, cancelChecker)
-		if err != nil || !moreBatches {
-			DrainAndClose(
-				ctx, m.out.output, err, m.leftSource, m.rightSource)
-			break
-		}
-	}
-	log.VEventf(ctx, 2, "exiting merge joiner run")
 }
 
-// outputBatch outputs all the rows corresponding to a streamMerger batch (the
-// cross-product of two groups of matching rows).
-//
-// Returns true if more batches are available and needed. If false is returned,
-// the caller should drain the inputs (as the termination condition might have
-// been dictated by the consumer saying that no more rows are needed) and close
-// the output.
-func (m *mergeJoiner) outputBatch(
-	ctx context.Context, cancelChecker *sqlbase.CancelChecker,
-) (bool, error) {
-	leftRows, rightRows, err := m.streamMerger.NextBatch(m.evalCtx)
-	if err != nil {
-		return false, err
+func (m *mergeJoiner) close() {
+	if !m.closed {
+		log.VEventf(m.ctx, 2, "exiting merge joiner run")
 	}
-	if leftRows == nil && rightRows == nil {
-		return false, nil
+	if m.internalClose() {
+		m.leftSource.ConsumerClosed()
+		m.rightSource.ConsumerClosed()
 	}
-	var matchedRight []bool
-	if m.joinType == fullOuter || m.joinType == rightOuter {
-		matchedRight = make([]bool, len(rightRows))
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
+func (m *mergeJoiner) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
+	if !m.closed {
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(m.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
+		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		m.close()
+	}
+	return meta
+}
+
+func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	if m.maybeStart("merge joiner", "MergeJoiner") {
+		m.evalCtx = m.flowCtx.NewEvalCtx()
+		m.cancelChecker = sqlbase.NewCancelChecker(m.ctx)
+		log.VEventf(m.ctx, 2, "starting merge joiner run")
 	}
 
-	for _, lrow := range leftRows {
-		matched := false
-		for rIdx, rrow := range rightRows {
-			if err := cancelChecker.Check(); err != nil {
-				return false, err
-			}
-			renderedRow, err := m.render(lrow, rrow)
-			if err != nil {
-				return false, err
-			}
-			if renderedRow != nil {
-				matched = true
-				if matchedRight != nil {
-					matchedRight[rIdx] = true
-				}
-				consumerStatus, err := m.out.EmitRow(ctx, renderedRow)
-				if err != nil || consumerStatus != NeedMoreRows {
-					return false, err
-				}
-			}
+	for {
+		row, meta := m.nextRow()
+		if m.closed || meta != nil {
+			return nil, meta
 		}
-		if !matched {
-			needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, lrow, leftSide)
-			if !needMoreRows || err != nil {
-				return false, err
-			}
+		if row == nil {
+			return nil, m.producerMeta(nil /* err */)
 		}
-	}
 
-	if matchedRight != nil {
-		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
-		for rIdx, rrow := range rightRows {
-			if !matchedRight[rIdx] {
-				needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, rrow, rightSide)
-				if !needMoreRows || err != nil {
-					return false, err
+		outRow, status, err := m.out.ProcessRow(m.ctx, row)
+		if err != nil {
+			return nil, m.producerMeta(err)
+		}
+		switch status {
+		case NeedMoreRows:
+			if outRow == nil && err == nil {
+				continue
+			}
+		case DrainRequested:
+			// TODO(peter): Could we be calling ConsumerDone twice on the inputs?
+			// Looks like it can happen here and in response to
+			// mergeJoiner.ConsumerDone(). This also affects distinct and
+			// noopProcessor.
+			m.leftSource.ConsumerDone()
+			m.rightSource.ConsumerDone()
+			continue
+		}
+		return outRow, nil
+	}
+}
+
+func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	// The loops below form a restartable state machine that iterates over a
+	// batch of rows from the left and right side of the join. The state machine
+	// returns a result for every row that should be output.
+
+	for {
+		for m.leftIdx < len(m.leftRows) {
+			// We have unprocessed rows from the left-side batch.
+			lrow := m.leftRows[m.leftIdx]
+			for m.rightIdx < len(m.rightRows) {
+				// We have unprocessed rows from the right-side batch.
+				ridx := m.rightIdx
+				m.rightIdx++
+				renderedRow, err := m.render(lrow, m.rightRows[ridx])
+				if err != nil {
+					return nil, &ProducerMetadata{Err: err}
+				}
+				if renderedRow != nil {
+					m.matchedRightCount++
+					if m.emitUnmatchedRight {
+						m.matchedRight.Add(ridx)
+					}
+					return renderedRow, nil
 				}
 			}
+
+			// Perform the cancellation check. We don't perform this on every row,
+			// but once for every iteration through the right-side batch.
+			if err := m.cancelChecker.Check(); err != nil {
+				return nil, &ProducerMetadata{Err: err}
+			}
+
+			// We've exhausted the right-side batch. Adjust the indexes for the next
+			// row from the left-side of the batch.
+			m.rightIdx = 0
+			m.leftIdx++
+
+			// If we didn't match any rows on the right-side of the batch and this is
+			// a left or full outer join, emit an unmatched left-side row.
+			if m.matchedRightCount == 0 && shouldEmitUnmatchedRow(leftSide, m.joinType) {
+				return m.renderUnmatchedRow(lrow, leftSide), nil
+			}
+
+			m.matchedRightCount = 0
 		}
+
+		// We've exhausted the left-side batch. If this is a right or full outer
+		// join (and thus matchedRight!=nil), emit unmatched right-side rows.
+		if m.emitUnmatchedRight {
+			for m.rightIdx < len(m.rightRows) {
+				ridx := m.rightIdx
+				m.rightIdx++
+				if m.matchedRight.Contains(ridx) {
+					continue
+				}
+				return m.renderUnmatchedRow(m.rightRows[ridx], rightSide), nil
+			}
+
+			m.matchedRight = util.FastIntSet{}
+			m.emitUnmatchedRight = false
+		}
+
+		// Retrieve the next batch of rows to process.
+		var meta *ProducerMetadata
+		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.evalCtx)
+		if meta != nil {
+			return nil, meta
+		}
+		if m.leftRows == nil && m.rightRows == nil {
+			return nil, nil
+		}
+
+		// Prepare for processing the next batch.
+		m.emitUnmatchedRight = shouldEmitUnmatchedRow(rightSide, m.joinType)
+		m.leftIdx, m.rightIdx = 0, 0
 	}
-	return true, nil
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (m *mergeJoiner) ConsumerDone() {
+	m.leftSource.ConsumerDone()
+	m.rightSource.ConsumerDone()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (m *mergeJoiner) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	m.close()
 }

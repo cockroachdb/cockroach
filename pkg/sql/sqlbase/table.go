@@ -15,13 +15,13 @@
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -1313,15 +1313,15 @@ func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []b
 	if err != nil {
 		return nil, b, err
 	}
-	// NULL, true, and false are special, because their values are fully encoded by their value tag.
+	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
 		return tree.DNull, b[dataOffset:], nil
-	} else if typ == encoding.True {
-		return tree.MakeDBool(tree.DBool(true)), b[dataOffset:], nil
-	} else if typ == encoding.False {
-		return tree.MakeDBool(tree.DBool(false)), b[dataOffset:], nil
 	}
-	return decodeUntaggedDatum(a, valType, b[dataOffset:])
+	// Bool is special because the value is stored in the value tag.
+	if valType != types.Bool {
+		b = b[dataOffset:]
+	}
+	return decodeUntaggedDatum(a, valType, b)
 }
 
 type arrayHeader struct {
@@ -1405,6 +1405,9 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []by
 // decodeUntaggedDatum is used to decode a Datum whose type is known, and which
 // doesn't have a value tag (either due to it having been consumed already or
 // not having one in the first place).
+//
+// If t is types.Bool, the value tag must be present, as its value is encoded in
+// the tag directly.
 func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []byte, error) {
 	switch t {
 	case types.Int:
@@ -1420,14 +1423,13 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		}
 		return a.NewDString(tree.DString(data)), b, nil
 	case types.Bool:
-		// The value of booleans are encoded in their tag, so we don't have an
+		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
 		b, data, err := encoding.DecodeBoolValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		d := tree.DBool(data)
-		return &d, b, nil
+		return tree.MakeDBool(tree.DBool(data)), b, nil
 	case types.Float:
 		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
 		if err != nil {

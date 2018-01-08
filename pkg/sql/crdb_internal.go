@@ -16,6 +16,7 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -24,11 +25,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -58,6 +61,8 @@ var crdbInternal = virtualSchema{
 		crdbInternalClusterSettingsTable,
 		crdbInternalCreateStmtsTable,
 		crdbInternalForwardDependenciesTable,
+		crdbInternalGossipNodes,
+		crdbInternalGossipLiveness,
 		crdbInternalIndexColumnsTable,
 		crdbInternalJobsTable,
 		crdbInternalLeasesTable,
@@ -902,14 +907,18 @@ CREATE TABLE crdb_internal.create_statements (
 				var descType tree.Datum
 				var stmt string
 				var err error
-				var typeView = tree.DString("view")
-				var typeTable = tree.DString("table")
+				typeView := tree.DString("view")
+				typeTable := tree.DString("table")
+				typeSequence := tree.DString("sequence")
 				if table.IsView() {
 					descType = &typeView
-					stmt, err = p.showCreateView(ctx, tree.Name(table.Name), table)
+					stmt, err = p.showCreateView(ctx, (*tree.Name)(&table.Name), table)
+				} else if table.IsSequence() {
+					descType = &typeSequence
+					stmt, err = p.showCreateSequence(ctx, (*tree.Name)(&table.Name), table)
 				} else {
 					descType = &typeTable
-					stmt, err = p.showCreateTable(ctx, tree.Name(table.Name), prefix, table)
+					stmt, err = p.showCreateTable(ctx, (*tree.Name)(&table.Name), prefix, table)
 				}
 				if err != nil {
 					return err
@@ -1490,7 +1499,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 				if err := addRow(
 					r[0], // id
-					tree.NewDString(config.CLIZoneSpecifier(zs)),
+					tree.NewDString(config.CLIZoneSpecifier(&zs)),
 					tree.NewDBytes(tree.DBytes(configYAML)),
 					tree.NewDBytes(tree.DBytes(configBytes)),
 				); err != nil {
@@ -1521,13 +1530,126 @@ CREATE TABLE crdb_internal.zones (
 					}
 					if err := addRow(
 						r[0], // id
-						tree.NewDString(config.CLIZoneSpecifier(zs)),
+						tree.NewDString(config.CLIZoneSpecifier(&zs)),
 						tree.NewDBytes(tree.DBytes(configYAML)),
 						tree.NewDBytes(tree.DBytes(configBytes)),
 					); err != nil {
 						return err
 					}
 				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipNodes exposes local information about the cluster nodes.
+var crdbInternalGossipNodes = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_nodes (
+  node_id  INT NOT NULL,
+  network  STRING NOT NULL,
+  address  STRING NOT NULL,
+  attrs    JSON NOT NULL,
+  locality STRING NOT NULL,
+  version  STRING NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.gossip_nodes"); err != nil {
+			return err
+		}
+
+		g := p.session.execCfg.Gossip
+		var descriptors []roachpb.NodeDescriptor
+		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+
+			var d roachpb.NodeDescriptor
+			if err := protoutil.Unmarshal(bytes, &d); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			descriptors = append(descriptors, d)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		sort.Slice(descriptors, func(i, j int) bool {
+			return descriptors[i].NodeID < descriptors[j].NodeID
+		})
+
+		for _, d := range descriptors {
+			var attrs []json.JSON
+			for _, a := range d.Attrs.Attrs {
+				attrs = append(attrs, json.FromString(a))
+			}
+
+			if err := addRow(
+				tree.NewDInt(tree.DInt(d.NodeID)),
+				tree.NewDString(d.Address.NetworkField),
+				tree.NewDString(d.Address.AddressField),
+				tree.NewDJSON(json.FromArrayOfJSON(attrs)),
+				tree.NewDString(d.Locality.String()),
+				tree.NewDString(d.ServerVersion.String()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipLiveness exposes local information about the nodes liveness.
+var crdbInternalGossipLiveness = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_liveness (
+  node_id         INT NOT NULL,
+  epoch           INT NOT NULL,
+  expiration      STRING NOT NULL,
+  draining        BOOL NOT NULL,
+  decommissioning BOOL NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.gossip_liveness"); err != nil {
+			return err
+		}
+
+		g := p.session.execCfg.Gossip
+		var livenesses []storage.Liveness
+		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+
+			var l storage.Liveness
+			if err := protoutil.Unmarshal(bytes, &l); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			livenesses = append(livenesses, l)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		sort.Slice(livenesses, func(i, j int) bool {
+			return livenesses[i].NodeID < livenesses[j].NodeID
+		})
+
+		for _, l := range livenesses {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(l.NodeID)),
+				tree.NewDInt(tree.DInt(l.Epoch)),
+				tree.NewDString(l.Expiration.String()),
+				tree.MakeDBool(tree.DBool(l.Draining)),
+				tree.MakeDBool(tree.DBool(l.Decommissioning)),
+			); err != nil {
+				return err
 			}
 		}
 		return nil

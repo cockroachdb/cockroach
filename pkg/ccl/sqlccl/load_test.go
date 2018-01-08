@@ -15,8 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -47,21 +47,15 @@ func TestImportOutOfOrder(t *testing.T) {
 	ctx, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
 	defer cleanupFn()
 
-	bankData := sampledataccl.Bank(2, 0, 0)
-	row1, ok := bankData.NextRow()
-	if !ok {
-		t.Fatalf("expected 2 rows")
-	}
-	row2, ok := bankData.NextRow()
-	if !ok {
-		t.Fatalf("expected 2 rows")
-	}
+	bankData := bank.FromRows(2).Tables()[0]
+	row1 := bankData.InitialRowFn(0)
+	row2 := bankData.InitialRowFn(1)
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name(), bankData.Schema())
+	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
 	// Intentionally write the rows out of order.
-	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name(), strings.Join(row2, `,`))
-	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name(), strings.Join(row1, `,`))
+	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row2, `,`))
+	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row1, `,`))
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 	_, err := sqlccl.Load(ctx, sqlDB.DB, &buf, "data", localFoo, ts, 0, dir)

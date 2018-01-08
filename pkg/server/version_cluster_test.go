@@ -15,12 +15,11 @@
 package server_test
 
 import (
+	"context"
 	"os"
 	"testing"
 
 	gosql "database/sql"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

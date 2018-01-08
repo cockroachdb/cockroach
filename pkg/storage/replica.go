@@ -16,6 +16,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -32,7 +33,6 @@ import (
 	"github.com/kr/pretty"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -178,18 +178,15 @@ type proposalResult struct {
 
 // ReplicaChecksum contains progress on a replica checksum computation.
 type ReplicaChecksum struct {
+	CollectChecksumResponse
 	// started is true if the checksum computation has started.
 	started bool
-	// Computed checksum. This is set to nil on error.
-	checksum []byte
 	// If gcTimestamp is nonzero, GC this checksum after gcTimestamp. gcTimestamp
 	// is zero if and only if the checksum computation is in progress.
 	gcTimestamp time.Time
 	// This channel is closed after the checksum is computed, and is used
 	// as a notification.
 	notify chan struct{}
-	// Some debug output that can be added to the CollectChecksumResponse.
-	snapshot *roachpb.RaftSnapshotData
 }
 
 type atomicDescString struct {
@@ -778,10 +775,21 @@ func (r *Replica) destroyDataRaftMuLocked(
 
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
-	if err := clearRangeData(ctx, r.Desc(), ms.KeyCount, r.store.Engine(), batch); err != nil {
+	desc := r.Desc()
+	if err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch); err != nil {
 		return err
 	}
 	clearTime := timeutil.Now()
+
+	// Suggest the cleared range to the compactor queue.
+	r.store.compactor.SuggestCompaction(ctx, storagebase.SuggestedCompaction{
+		StartKey: roachpb.Key(desc.StartKey),
+		EndKey:   roachpb.Key(desc.EndKey),
+		Compaction: storagebase.Compaction{
+			Bytes:            ms.Total(),
+			SuggestedAtNanos: clearTime.UnixNano(),
+		},
+	})
 
 	// Save a tombstone to ensure that replica IDs never get reused.
 	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
@@ -1101,15 +1109,15 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	minIndex := status.Commit
 	for _, rep := range r.mu.state.Desc.Replicas {
 		// Only consider followers that that have "healthy" RPC connections.
-		if r.store.cfg.Transport.resolver != nil {
-			addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
-			if err != nil {
-				continue
-			}
-			if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
-				continue
-			}
+
+		addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
+		if err != nil {
+			continue
 		}
+		if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
+			continue
+		}
+
 		// Only consider followers that are active.
 		if !r.isFollowerActiveLocked(ctx, rep.ReplicaID) {
 			continue
@@ -2916,7 +2924,22 @@ func (r *Replica) insertProposalLocked(
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	proposal.command.ProposerReplica = proposerReplica
-	proposal.command.ProposerLease = proposerLease
+
+	// If the proposerLease has a sequence number then we can send this through
+	// Raft instead of sending the entire Lease through Raft.
+	//
+	// NB: We can't check IsMinSupported(VersionLeaseSequence) here because its
+	// value may not have been the same when a lease request was evaluated,
+	// meaning that we have no guarantee that a new lease isn't being proposed
+	// without a sequence number. If we started sending only lease sequence
+	// numbers in this case, we wouldn't be able to distinguish the old and the
+	// new lease.
+	if proposerLease.Sequence != 0 {
+		proposal.command.ProposerLeaseSequence = proposerLease.Sequence
+	} else {
+		proposal.command.DeprecatedProposerLease = &proposerLease
+	}
+
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
@@ -3141,13 +3164,11 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	if false {
 		log.Infof(p.ctx, `%s: proposal: %d
   RaftCommand.ProposerReplica:               %d
-  RaftCommand.ProposerLease:                 %d
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
 `, p.Request.Summary(), len(data),
 			p.command.ProposerReplica.Size(),
-			p.command.ProposerLease.Size(),
 			p.command.ReplicatedEvalResult.Size(),
 			p.command.ReplicatedEvalResult.Delta.Size(),
 			p.command.WriteBatch.Size(),
@@ -4384,47 +4405,55 @@ func (r *Replica) checkForcedErrLocked(
 	if isLeaseRequest {
 		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
 	}
-	var forcedErr *roachpb.Error
 	if idKey == "" {
 		// This is an empty Raft command (which is sent by Raft after elections
 		// to trigger reproposals or during concurrent configuration changes).
 		// Nothing to do here except making sure that the corresponding batch
 		// (which is bogus) doesn't get executed (for it is empty and so
 		// properties like key range are undefined).
-		forcedErr = roachpb.NewErrorf("no-op on empty Raft entry")
-	} else if !raftCmd.ProposerLease.Equivalent(*r.mu.state.Lease) {
-		// Verify the lease matches the proposer's expectation. We rely on
-		// the proposer's determination of whether the existing lease is
-		// held, and can be used, or is expired, and can be replaced.
-		// Verify checks that the lease has not been modified since proposal
-		// due to Raft delays / reorderings.
-		// To understand why this lease verification is necessary, see comments on the
-		// proposer_lease field in the proto.
+		return leaseIndex, proposalNoRetry, roachpb.NewErrorf("no-op on empty Raft entry")
+	}
 
+	// Verify the lease matches the proposer's expectation. We rely on
+	// the proposer's determination of whether the existing lease is
+	// held, and can be used, or is expired, and can be replaced.
+	// Verify checks that the lease has not been modified since proposal
+	// due to Raft delays / reorderings.
+	// To understand why this lease verification is necessary, see comments on the
+	// proposer_lease field in the proto.
+	leaseMismatch := false
+	if raftCmd.DeprecatedProposerLease != nil {
+		// VersionLeaseSequence must not have been active when this was proposed.
+		leaseMismatch = !raftCmd.DeprecatedProposerLease.Equivalent(*r.mu.state.Lease)
+	} else {
+		leaseMismatch = raftCmd.ProposerLeaseSequence != r.mu.state.Lease.Sequence
+	}
+	if leaseMismatch {
 		log.VEventf(
 			ctx, 1,
-			"command proposed from replica %+v with %v incompatible to %v",
-			raftCmd.ProposerReplica, raftCmd.ProposerLease, *r.mu.state.Lease,
+			"command proposed from replica %+v with lease #%d incompatible to %v",
+			raftCmd.ProposerReplica, raftCmd.ProposerLeaseSequence, *r.mu.state.Lease,
 		)
-		if !isLeaseRequest {
-			// We return a NotLeaseHolderError so that the DistSender retries.
-			nlhe := newNotLeaseHolderError(
-				r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
-			nlhe.CustomMsg = fmt.Sprintf(
-				"stale proposal: command was proposed under lease %s but is being applied "+
-					"under lease: %s", raftCmd.ProposerLease, r.mu.state.Lease)
-			forcedErr = roachpb.NewError(nlhe)
-		} else {
+		if isLeaseRequest {
 			// For lease requests we return a special error that
 			// redirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
-			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
+			return leaseIndex, proposalNoRetry, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
 				Message:   "proposed under invalid lease",
 			})
 		}
-	} else if isLeaseRequest {
+		// We return a NotLeaseHolderError so that the DistSender retries.
+		nlhe := newNotLeaseHolderError(
+			r.mu.state.Lease, raftCmd.ProposerReplica.StoreID, r.mu.state.Desc)
+		nlhe.CustomMsg = fmt.Sprintf(
+			"stale proposal: command was proposed under lease #%d but is being applied "+
+				"under lease: %s", raftCmd.ProposerLeaseSequence, r.mu.state.Lease)
+		return leaseIndex, proposalNoRetry, roachpb.NewError(nlhe)
+	}
+
+	if isLeaseRequest {
 		// Lease commands are ignored by the counter (and their MaxLeaseIndex is ignored). This
 		// makes sense since lease commands are proposed by anyone, so we can't expect a coherent
 		// MaxLeaseIndex. Also, lease proposals are often replayed, so not making them update the
@@ -4433,7 +4462,7 @@ func (r *Replica) checkForcedErrLocked(
 		// However, leases get special vetting to make sure we don't give one to a replica that was
 		// since removed (see #15385 and a comment in redirectOnOrAcquireLease).
 		if _, ok := r.mu.state.Desc.GetReplicaDescriptor(requestedLease.Replica.StoreID); !ok {
-			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
+			return leaseIndex, proposalNoRetry, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
 				Message:   "replica not part of range",
@@ -4455,20 +4484,20 @@ func (r *Replica) checkForcedErrLocked(
 		// The command is trying to apply at a past log position. That's
 		// unfortunate and hopefully rare; the client on the proposer will try
 		// again. Note that in this situation, the leaseIndex does not advance.
-		forcedErr = roachpb.NewErrorf(
-			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
-		)
-
+		retry := proposalNoRetry
 		if proposedLocally {
 			log.VEventf(
 				ctx, 1,
 				"retry proposal %x: applied at lease index %d, required <= %d",
 				proposal.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
-			return leaseIndex, proposalIllegalLeaseIndex, forcedErr
+			retry = proposalIllegalLeaseIndex
 		}
+		return leaseIndex, retry, roachpb.NewErrorf(
+			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
+		)
 	}
-	return leaseIndex, proposalNoRetry, forcedErr
+	return leaseIndex, proposalNoRetry, nil
 }
 
 // processRaftCommand processes a raft command by unpacking the
@@ -4877,6 +4906,9 @@ func (r *Replica) applyRaftCommand(
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	deltaStats := rResult.Delta.ToStats()
+	// Note that calling ms.Add will never result in ms.LastUpdateNanos
+	// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
+	// across all deltaStats).
 	ms.Add(deltaStats)
 	if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to update MVCCStats")

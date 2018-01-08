@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 
@@ -101,18 +100,18 @@ type TransactionModes struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *TransactionModes) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *TransactionModes) Format(ctx *FmtCtx) {
 	var sep string
 	if node.Isolation != UnspecifiedIsolation {
-		fmt.Fprintf(buf, " ISOLATION LEVEL %s", node.Isolation)
+		ctx.Printf(" ISOLATION LEVEL %s", node.Isolation)
 		sep = ","
 	}
 	if node.UserPriority != UnspecifiedUserPriority {
-		fmt.Fprintf(buf, "%s PRIORITY %s", sep, node.UserPriority)
+		ctx.Printf("%s PRIORITY %s", sep, node.UserPriority)
 		sep = ","
 	}
 	if node.ReadWriteMode != UnspecifiedReadWriteMode {
-		fmt.Fprintf(buf, "%s READ %s", sep, node.ReadWriteMode)
+		ctx.Printf("%s READ %s", sep, node.ReadWriteMode)
 	}
 }
 
@@ -152,25 +151,25 @@ type BeginTransaction struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *BeginTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("BEGIN TRANSACTION")
-	node.Modes.Format(buf, f)
+func (node *BeginTransaction) Format(ctx *FmtCtx) {
+	ctx.WriteString("BEGIN TRANSACTION")
+	node.Modes.Format(ctx)
 }
 
 // CommitTransaction represents a COMMIT statement.
 type CommitTransaction struct{}
 
 // Format implements the NodeFormatter interface.
-func (node *CommitTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("COMMIT TRANSACTION")
+func (node *CommitTransaction) Format(ctx *FmtCtx) {
+	ctx.WriteString("COMMIT TRANSACTION")
 }
 
 // RollbackTransaction represents a ROLLBACK statement.
 type RollbackTransaction struct{}
 
 // Format implements the NodeFormatter interface.
-func (node *RollbackTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ROLLBACK TRANSACTION")
+func (node *RollbackTransaction) Format(ctx *FmtCtx) {
+	ctx.WriteString("ROLLBACK TRANSACTION")
 }
 
 // RestartSavepointName is the only savepoint name that we accept, modulo
@@ -194,9 +193,9 @@ type Savepoint struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Savepoint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("SAVEPOINT ")
-	buf.WriteString(node.Name)
+func (node *Savepoint) Format(ctx *FmtCtx) {
+	ctx.WriteString("SAVEPOINT ")
+	ctx.WriteString(node.Name)
 }
 
 // ReleaseSavepoint represents a RELEASE SAVEPOINT <name> statement.
@@ -205,9 +204,9 @@ type ReleaseSavepoint struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ReleaseSavepoint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("RELEASE SAVEPOINT ")
-	buf.WriteString(node.Savepoint)
+func (node *ReleaseSavepoint) Format(ctx *FmtCtx) {
+	ctx.WriteString("RELEASE SAVEPOINT ")
+	ctx.WriteString(node.Savepoint)
 }
 
 // RollbackToSavepoint represents a ROLLBACK TO SAVEPOINT <name> statement.
@@ -216,7 +215,7 @@ type RollbackToSavepoint struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *RollbackToSavepoint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ROLLBACK TRANSACTION TO SAVEPOINT ")
-	buf.WriteString(node.Savepoint)
+func (node *RollbackToSavepoint) Format(ctx *FmtCtx) {
+	ctx.WriteString("ROLLBACK TRANSACTION TO SAVEPOINT ")
+	ctx.WriteString(node.Savepoint)
 }

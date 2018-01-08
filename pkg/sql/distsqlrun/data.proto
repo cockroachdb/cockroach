@@ -53,7 +53,11 @@ message Expression {
 // Ordering defines an order - specifically a list of column indices and
 // directions. See sqlbase.ColumnOrdering.
 message Ordering {
+  option (gogoproto.equal) = true;
+
   message Column {
+    option (gogoproto.equal) = true;
+
     // The direction of the desired ordering for a column.
     enum Direction {
       ASC = 0;

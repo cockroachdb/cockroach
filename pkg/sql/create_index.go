@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -72,14 +71,12 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 	if n.n.PartitionBy != nil {
-		partitioning, _, err := createPartitionedBy(params.ctx, params.p.ExecCfg().Settings,
+		partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
 			params.evalCtx, n.tableDesc, &indexDesc, n.n.PartitionBy)
 		if err != nil {
 			return err
 		}
 		indexDesc.Partitioning = partitioning
-		// TODO(benesch): install CHECK constraint to exclude rows that do not
-		// belong to any partition of the index.
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
@@ -120,7 +117,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
-		tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
+		tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 	if err != nil {
 		return err
 	}

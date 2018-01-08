@@ -16,10 +16,10 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -368,6 +368,14 @@ func (p *planner) getDataSource(
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *tree.NormalizableTableName:
+		// If there's a CTE with this name, it takes priority over the normal flow.
+		ds, foundCTE, err := p.getCTEDataSource(t)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		if foundCTE {
+			return ds, nil
+		}
 		// Usual case: a table.
 		tn, err := p.QualifyWithDatabase(ctx, t)
 		if err != nil {
@@ -407,8 +415,13 @@ func (p *planner) getDataSource(
 		if err != nil {
 			return planDataSource{}, err
 		}
+		cols := planColumns(plan)
+		if len(cols) == 0 {
+			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"statement source \"%v\" does not return any columns", t.Statement)
+		}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
+			info: newSourceInfoForSingleTable(anonymousTable, cols),
 			plan: plan,
 		}, nil
 
@@ -540,7 +553,7 @@ func renameSource(
 				if tableAlias.DatabaseName != "" {
 					srcName = tree.ErrString(&tableAlias)
 				} else {
-					srcName = tree.ErrString(tableAlias.TableName)
+					srcName = tree.ErrString(&tableAlias.TableName)
 				}
 
 				return planDataSource{}, errors.Errorf(
@@ -650,20 +663,20 @@ func (p *planner) getViewPlan(
 	}
 
 	// Register the dependency to the planner, if requested.
-	if p.planDeps != nil {
+	if p.curPlan.deps != nil {
 		usedColumns := make([]sqlbase.ColumnID, len(desc.Columns))
 		for i := range desc.Columns {
 			usedColumns[i] = desc.Columns[i].ID
 		}
-		deps := p.planDeps[desc.ID]
+		deps := p.curPlan.deps[desc.ID]
 		deps.desc = desc
 		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{ColumnIDs: usedColumns})
-		p.planDeps[desc.ID] = deps
+		p.curPlan.deps[desc.ID] = deps
 
 		// We are only interested in the dependency to this view descriptor. Any
 		// further dependency by the view's query should not be tracked in this planner.
-		defer func(prev planDependencies) { p.planDeps = prev }(p.planDeps)
-		p.planDeps = nil
+		defer func(prev planDependencies) { p.curPlan.deps = prev }(p.curPlan.deps)
+		p.curPlan.deps = nil
 	}
 
 	plan, err := p.newPlan(ctx, sel, nil)
@@ -758,8 +771,8 @@ func newUnknownSourceError(tn *tree.TableName) error {
 		"source name %q not found in FROM clause", tree.ErrString(tn))
 }
 
-func newAmbiguousSourceError(t tree.Name, dbContext tree.Name) error {
-	if dbContext == "" {
+func newAmbiguousSourceError(t *tree.Name, dbContext *tree.Name) error {
+	if *dbContext == "" {
 		return pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
 			"ambiguous source name: %q", tree.ErrString(t))
 
@@ -779,7 +792,7 @@ func (sources multiSourceInfo) checkDatabaseName(tn tree.TableName) (tree.TableN
 			for _, alias := range src.sourceAliases {
 				if alias.name.TableName == tn.TableName {
 					if found {
-						return tree.TableName{}, newAmbiguousSourceError(tn.TableName, "")
+						return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tree.NoName)
 					}
 					tn.DatabaseName = alias.name.DatabaseName
 					found = true
@@ -797,7 +810,7 @@ func (sources multiSourceInfo) checkDatabaseName(tn tree.TableName) (tree.TableN
 	for _, src := range sources {
 		if _, ok := src.sourceAliases.srcIdx(tn); ok {
 			if found {
-				return tree.TableName{}, newAmbiguousSourceError(tn.TableName, tn.DatabaseName)
+				return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tn.DatabaseName)
 			}
 			found = true
 		}
@@ -817,7 +830,7 @@ func (src *dataSourceInfo) checkDatabaseName(tn tree.TableName) (tree.TableName,
 		for _, alias := range src.sourceAliases {
 			if alias.name.TableName == tn.TableName {
 				if found {
-					return tree.TableName{}, newAmbiguousSourceError(tn.TableName, "")
+					return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tree.NoName)
 				}
 				found = true
 				tn.DatabaseName = alias.name.DatabaseName
@@ -930,17 +943,17 @@ type varFormatter struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (c *varFormatter) Format(buf *bytes.Buffer, f tree.FmtFlags) {
-	if f.ShowTableAliases && c.TableName.TableName != "" {
+func (c *varFormatter) Format(ctx *tree.FmtCtx) {
+	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.TableName != "" {
 		if c.TableName.DatabaseName != "" {
-			tree.FormatNode(buf, f, c.TableName.DatabaseName)
-			buf.WriteByte('.')
+			ctx.FormatNode(&c.TableName.DatabaseName)
+			ctx.WriteByte('.')
 		}
 
-		tree.FormatNode(buf, f, c.TableName.TableName)
-		buf.WriteByte('.')
+		ctx.FormatNode(&c.TableName.TableName)
+		ctx.WriteByte('.')
 	}
-	tree.FormatNode(buf, f, c.ColumnName)
+	ctx.FormatNode(&c.ColumnName)
 }
 
 // NodeFormatter returns a tree.NodeFormatter that, when formatted,

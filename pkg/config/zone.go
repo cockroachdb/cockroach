@@ -105,17 +105,18 @@ func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 	}
 	parsed.SearchTable = false
 	var partition tree.Name
-	if un := parsed.Table.TableNameReference.(tree.UnresolvedName); len(un) == 1 {
+	if un := parsed.Table.TableNameReference.(*tree.UnresolvedName); len(*un) == 1 {
 		// Unlike in SQL, where a name with one part indicates a table in the
 		// current database, if a CLI specifier has just one name part, it indicates
 		// a database.
-		return tree.ZoneSpecifier{Database: un[0].(tree.Name)}, nil
-	} else if len(un) == 3 {
+		return tree.ZoneSpecifier{Database: *(*un)[0].(*tree.Name)}, nil
+	} else if len(*un) == 3 {
 		// If a CLI specifier has three name parts, the last name is a partition.
 		// Pop it off so TableNameReference.Normalize sees only the table name
 		// below.
-		partition = un[2].(tree.Name)
-		parsed.Table.TableNameReference = un[:2]
+		partition = *(*un)[2].(*tree.Name)
+		tPref := (*un)[:2]
+		parsed.Table.TableNameReference = &tPref
 	}
 	// We've handled the special cases for named zones, databases and partitions;
 	// have TableNameReference.Normalize tell us whether what remains is a valid
@@ -135,7 +136,7 @@ func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 
 // CLIZoneSpecifier converts a tree.ZoneSpecifier to a CLI zone specifier as
 // described in ParseCLIZoneSpecifier.
-func CLIZoneSpecifier(zs tree.ZoneSpecifier) string {
+func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 	if zs.NamedZone != "" {
 		return "." + string(zs.NamedZone)
 	}
@@ -146,18 +147,20 @@ func CLIZoneSpecifier(zs tree.ZoneSpecifier) string {
 	if zs.Partition != "" {
 		tn := ti.Table.TableName()
 		ti.Table = tree.NormalizableTableName{
-			TableNameReference: tree.UnresolvedName{tn.DatabaseName, tn.TableName, zs.Partition},
+			TableNameReference: &tree.UnresolvedName{&tn.DatabaseName, &tn.TableName, &zs.Partition},
 		}
 		// The index is redundant when the partition is specified, so omit it.
 		ti.Index = ""
 	}
-	return ti.String()
+	return tree.AsStringWithFlags(&ti, tree.FmtAlwaysQualifyTableNames)
 }
 
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
 // zone whose config applies.
 func ResolveZoneSpecifier(
-	zs *tree.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
+	zs *tree.ZoneSpecifier,
+	sessionDB string,
+	resolveName func(parentID uint32, name string) (id uint32, err error),
 ) (uint32, error) {
 	if zs.NamedZone != "" {
 		if zs.NamedZone == DefaultZoneName {
@@ -173,7 +176,7 @@ func ResolveZoneSpecifier(
 		return resolveName(keys.RootNamespaceID, string(zs.Database))
 	}
 
-	tn, err := zs.TableOrIndex.Table.Normalize()
+	tn, err := zs.TableOrIndex.Table.NormalizeWithDatabaseName(sessionDB)
 	if err != nil {
 		return 0, err
 	}
@@ -403,6 +406,19 @@ func (z *ZoneConfig) DeleteSubzone(indexID uint32, partition string) bool {
 		}
 	}
 	return false
+}
+
+// DeleteIndexSubzones deletes all subzones that refer to the index with the
+// specified ID. This includes subzones for partitions of the index as well as
+// the index subzone itself.
+func (z *ZoneConfig) DeleteIndexSubzones(indexID uint32) {
+	subzones := z.Subzones[:0]
+	for _, s := range z.Subzones {
+		if s.IndexID != indexID {
+			subzones = append(subzones, s)
+		}
+	}
+	z.Subzones = subzones
 }
 
 func (z ZoneConfig) subzoneSplits() []roachpb.RKey {

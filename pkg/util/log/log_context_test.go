@@ -15,12 +15,11 @@
 package log
 
 import (
+	"context"
 	"testing"
 
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
-
-	"golang.org/x/net/context"
 )
 
 func TestLogContext(t *testing.T) {

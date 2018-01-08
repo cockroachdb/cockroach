@@ -208,7 +208,7 @@ select crdb_internal.set_vmodule('')
 query T
 select crdb_internal.node_executable_version()
 ----
-1.1-7
+1.1-8
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -226,6 +226,18 @@ node_id  component  field   value
 1        UI         Host    127.0.0.1
 1        UI         Port    <port>
 1        UI         URI     /
+
+query ITTTTT colnames
+SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(version, '^\d+\.\d+(-\d+)?$', '<version>') as version FROM crdb_internal.gossip_nodes WHERE node_id = 1
+----
+node_id  network  address           attrs  locality  version
+1        tcp      127.0.0.1:<port>  []     ·         <version>
+
+query IITBB colnames
+SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning FROM crdb_internal.gossip_liveness WHERE node_id = 1
+----
+node_id  epoch  expiration    draining  decommissioning
+1        1      <timestamp>   false     false
 
 # Check that privileged builtins are only allowed for 'root'
 user testuser
@@ -248,8 +260,14 @@ select * from crdb_internal.node_runtime_info
 query error pq: only root is allowed to read crdb_internal.ranges
 select * from crdb_internal.ranges
 
+query error pq: only root is allowed to read crdb_internal.gossip_nodes
+select * from crdb_internal.gossip_nodes
+
+query error pq: only root is allowed to read crdb_internal.gossip_liveness
+select * from crdb_internal.gossip_liveness
+
 # Anyone can see the executable version.
 query T
 select crdb_internal.node_executable_version()
 ----
-1.1-7
+1.1-8

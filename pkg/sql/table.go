@@ -16,10 +16,10 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -651,6 +651,7 @@ func (p *planner) notifySchemaChange(
 		leaseHolderCache:     p.ExecCfg().LeaseHolderCache,
 		rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
 		clock:                p.ExecCfg().Clock,
+		settings:             p.ExecCfg().Settings,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
 }

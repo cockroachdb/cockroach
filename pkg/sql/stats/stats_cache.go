@@ -15,9 +15,8 @@
 package stats
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

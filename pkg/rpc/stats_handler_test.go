@@ -15,11 +15,11 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/stats"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"

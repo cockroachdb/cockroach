@@ -15,12 +15,11 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

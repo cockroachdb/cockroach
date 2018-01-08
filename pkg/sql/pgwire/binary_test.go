@@ -16,6 +16,7 @@ package pgwire
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,8 +27,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"

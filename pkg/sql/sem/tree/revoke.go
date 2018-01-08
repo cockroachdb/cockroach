@@ -24,8 +24,6 @@
 package tree
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
@@ -38,11 +36,11 @@ type Revoke struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Revoke) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("REVOKE ")
-	node.Privileges.Format(buf)
-	buf.WriteString(" ON ")
-	FormatNode(buf, f, node.Targets)
-	buf.WriteString(" FROM ")
-	FormatNode(buf, f, node.Grantees)
+func (node *Revoke) Format(ctx *FmtCtx) {
+	ctx.WriteString("REVOKE ")
+	node.Privileges.Format(ctx.Buffer)
+	ctx.WriteString(" ON ")
+	ctx.FormatNode(&node.Targets)
+	ctx.WriteString(" FROM ")
+	ctx.FormatNode(&node.Grantees)
 }

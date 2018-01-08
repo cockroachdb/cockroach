@@ -9,9 +9,8 @@
 package sqlccl
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

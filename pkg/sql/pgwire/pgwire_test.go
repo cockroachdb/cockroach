@@ -16,6 +16,7 @@ package pgwire_test
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"database/sql/driver"
 	"encoding/json"
@@ -32,7 +33,6 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -877,7 +877,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		// #14238
 		"EXPLAIN SELECT 1": {
-			baseTest.SetArgs().Results(0, "render", "", "").Results(1, "emptyrow", "", ""),
+			baseTest.SetArgs().Results("render", "", "").Results(" └── emptyrow", "", ""),
 		},
 		// #14245
 		"SELECT 1::oid = $1": {

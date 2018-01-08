@@ -136,7 +136,7 @@ CREATE TABLE users (
 where the partition column `continent` appears first in the key.
 
 Note that this usage of composite primary keys is somewhat unusual. See the
-"Partitioning key selection" section below for a discussion.
+[Partitioning key selection] section below for a discussion.
 
 Since it’s not currently possible to change a table’s primary key, the partition
 columns included in the primary key when the table is created must be granular
@@ -387,13 +387,6 @@ section for a discussion of why this approach was chosen.
   partitions and the corresponding zone configs together. In the meantime, users
   can create an empty partition, apply a zone config, then repartition.
 
-- List partitioning without a  `DEFAULT` clause will error on any queries
-  producing rows that don’t have a matching partition. This means that
-  repartitioning a table may require validating the existing data. There are a
-  number of fast paths that don’t require the validation: empty tables, a list
-  repartitioning with values that are a superset of the previous partitioning,
-  any range partitioning, a list partitioning with a `DEFAULT` clause.
-
 - After a table is partitioned, its partitions can be targeted by zone
   constraints via the existing CLI, e.g.  `./cockroach zone set
   database.table --partition=partition -f zone.yml`.
@@ -512,6 +505,8 @@ upper bound (`TO`) is exclusive. Note also that a `NULL` value in a
 range-partitioned column sorts into the first range, which is consistent with
 our key encoding ordering and `ORDER BY` behavior.
 
+### SELECT FROM PARTITION
+
 To allow reads to target only selected partitions, we propose to extend table
 names (not arbitrary table expressions) with a `PARTITION` clause. For example:
 
@@ -526,17 +521,28 @@ SELECT *
   ON a.id = b.article_id
 ```
 
-The implementation can simply transform each `PARTITION` clause into an
-additional constraint. The join query above, for example, would be rewritten to
-include `WHERE user_views.country IN ('CA', 'MX', 'US') AND
-articles.published >= 'recent cutoff'`;
+The implementation is purely syntatic sugar and simply transforms each
+`PARTITION` clause into an additional constraint. The join query above, for
+example, would be rewritten to include `WHERE user_views.country IN ('CA', 'MX',
+'US') AND articles.published >= 'recent cutoff'`.
+
+This is only a sugar, but it's an important one. For example, in
+geopartitioning, it is expected that there will be many more countries than
+partitions, so it is much easier to specify partition restrictions with this
+than the de-sugared `WHERE`.
+
+Note that a list partitioning without a `DEFAULT` is an enum. The user can use
+this syntax with all partitions specified to force the planner to turn a query
+like `SELECT * FROM roachmart.users WHERE email = "..."` (and no country
+specified) from a full table scan into a point lookup per `country` in the
+partitioning.
 
 
 ### Subpartitioning
 
 Subpartitioning allows partitioning along several axes simultaneously. The
-`PARTITION BY` syntax presented above is recursive so that partitions can be
-themselves partitioned any number of times, using either list or range
+`PARTITION BY` syntax presented above is recursive so that list partitions can
+be themselves partitioned any number of times, using either list or range
 partitioning. Note that the subpartition columns must be a prefix of the columns
 in the primary key that have not been consumed by parent partitions.
 
@@ -594,8 +600,8 @@ message PartitioningDescriptor {
 
   message Range {
     optional string name = 1;
-    optional bytes values_less_than = 2;
-    optional PartitioningDescriptor subpartition = 3;
+    optional bytes inclusive_lower_bound = 2;
+    optional bytes exclusive_upper_bound = 3;
   }
 
   optional uint32 num_columns = 1;
@@ -724,13 +730,14 @@ will address these issues, so the following are out of scope of this RFC:
 
 - Raising global and per-table limitations on the number of partitions
 
-- Requesting that a majority (but not all) of a ranges replica's be served out
-  of a particular region
+- Direct replica-level control of data placement
 
 - Partition configs outside of the database+table scoping. This could be useful
   for allowing partitioning in a shared CockroachDB offering with static, preset
   zone configs.
 
+- The ability to define a partition and specify a zone config for it at the same
+  time.
 
 ## Range splits and schema changes
 
@@ -743,12 +750,12 @@ own range. This happens regardless of whether any zone configs are added to
 target that table specifically. Each partition could similarly be asynchronously
 split after being defined.
 
-Unfortunately, this may create extra ranges if a table is partitioned,
-repartitioned, and only then given zone configs (though this problem goes away
-when we support range merges). We could instead lazily split a partition only
-when a zone config is added for it. However this both deviates from the table
-behavior and would violate a user’s likely expectation of partitions living on
-separate ranges, so we'll use `PARTITION BY` as the trigger.
+This may create extra ranges if a table is partitioned, repartitioned, and only
+then given zone configs (though this problem goes away when we support range
+merges). We address this by lazily splitting a partition only when a zone config
+is added for it. This deviates a bit from the table behavior and may violate a
+user’s expectation of partitions living on separate ranges, but the tradeoff was
+deemed worth it.
 
 A table’s partitions can have a large influence on sql planning, so any changes
 should be broadcast immediately. Further, our schema changes and table leasing
@@ -816,35 +823,34 @@ above we will very strongly urge the user to specify the entire primary key.
 1. The developer could create a global index on just `id`, but in the common
    case this requires a cross-datacenter request for the index lookup.
 
-2. If  `LIMIT 1` is added to the query and no sort is requested, the planner is
+2. If `LIMIT 1` is added to the query and no sort is requested, the planner is
    free to return the first result it finds and cancel the rest of the work. If
    a uniqueness constraint exists on `id`, the `LIMIT 1` can be assumed. This
    latter is an optimization that may be helpful in general.
 
-3. A list partitioning without a `DEFAULT` is an enum. In this case, before the
-   query gets to the planner, a synthetic `AND country IN ('CA', 'MX','US', …)`
-   clause could be added. This would turn the query into a point lookup per
-   unique value in `country`. If `DEFAULT` is present, the non-default cases
-   could optimistically be checked first.
+3. A list partitioning without a `DEFAULT` is an enum. The user can use the
+   [SELECT FROM PARTITION] syntax with all partitions specified. Internally, the
+   planner will turn this into an `AND country IN ('CA', 'MX','US', …)` clause
+   in the `WHERE`, which turns the query from a full table scan into a point
+   lookup per `country` in the partitioning. If `DEFAULT` is present, the
+   non-default cases could optimistically be checked first. If some future
+   version of CockroachDB supports enum types, the user would get this behavior
+   even without using the `SELECT FROM PARTITION` syntax.
 
-4. Other partitioning implementations allow for the user to explicitly limit a
-   query to only fetch from a set of partitions via `SELECT * FROM
-   roachmart.users PARTITION (north_america, australia)`.
-
-5. This is not a full table scan in other partitioning implementations because
+4. This is not a full table scan in other partitioning implementations because
    they don’t require the `(country, id)` primary key, instead indexing `(id)`
    as normal inside each partition. A query on `id` without the partition
    information then becomes a point lookup per partition. This can be simulated
    in CockroachDB by introducing and partitioning on a derived `partition_id`
-   column that is 1:1 with partitions. This may be sufficient justification to
-   prioritize building computed columns.
+   column that is 1:1 with partitions. This is sufficient justification to
+   prioritize building [computed columns].
 
    Concretely, the `roachmart.users` table above could have PRIMARY KEY
    (continent, country, id) and PARTITION BY LIST (continent) to start, so there
    is only one key value per partition. Later, when/if it is needed, it could
    change to PARTITION BY LIST (continent, country)
 
-6. 4+5 could allow a user to issue one query to optimistically try a point
+6. 3+4 could allow a user to issue one query to optimistically try a point
    lookup in the local partition before trying a point lookup in all partitions.
 
 
@@ -861,9 +867,8 @@ also need to learn to display `PARTITION BY` clauses.
 partitioning is used to locate `roachmart.users` records in the nearest
 datacenter and interleaved tables are used to locate the data associated with
 that user (orders, etc) near it. A geographically partitioned user can be moved
-with one `UPDATE` , but this doesn’t move that user’s orders until we support
-`ON UPDATE CASCADE`. This is not a new problem, but it will be more obvious when
-combined with partitioned tables.
+with one `UPDATE`, and the user’s orders (plus the rest of the interleave
+hierarchy) can be moved with `ON UPDATE CASCADE`.
 
 
 # Drawbacks
@@ -929,9 +934,9 @@ added, the effect is amplified.
 
 This is unfortunate but should be fine in larger tables. It can be worked around
 by introducing and partitioning on a `partition_id` column, which is derived
-from country. (Computed columns are a natural choice for this once we implement
-them.) The tradeoff here is that repartitioning will necessitate rewriting rows
-instead of just updating range metadata.
+from country. (Computed columns are a natural choice for this.) The tradeoff
+here is that repartitioning will necessitate rewriting rows instead of just
+updating range metadata.
 
 Note that repartitioning could make this worse, especially until we support
 range merges. As discussed in [Range splits and schema changes], list
@@ -1039,6 +1044,7 @@ CREATE TABLE articles (id int PRIMARY KEY, published DATE) ON sch (published);
 [#14113]: https://github.com/cockroachdb/cockroach/issues/14113
 [#18683]: https://github.com/cockroachdb/cockroach/pull/18683
 [#19141]: https://github.com/cockroachdb/cockroach/issues/19141
+[computed columns]: https://github.com/cockroachdb/cockroach/pull/20735
 [example: date partitioning]: #example-date-partitioning
 [example: geographic partitioning]: #example-geographic-partitioning
 [index key prefix]: https://github.com/cockroachdb/cockroach/blob/1f3c72f17546f944490e0a4dcd928fd96a375987/docs/RFCS/sql_partitioning.md#key-encoding
@@ -1046,7 +1052,9 @@ CREATE TABLE articles (id int PRIMARY KEY, published DATE) ON sch (published);
 [leases follow the sun]: https://github.com/cockroachdb/cockroach/blob/763d21e6fad69728a523d3cdd8b449c8513094b7/docs/RFCS/20170125_leaseholder_locality.md
 [locality–resilience tradeoff]: #usage-localityresilience-tradeoff
 [partitioning and index columns]: #partitioning-and-index-columns
+[partitioning key selection]: #partitioning-key-selection
 [range splits and schema changes]: #range-splits-and-schema-changes
 [range splits]: #range-splits
+[select from partition]: #select-from-partition
 [system.subzones]: https://github.com/cockroachdb/cockroach/blob/1f3c72f17546f944490e0a4dcd928fd96a375987/docs/RFCS/sql_partitioning.md#table-subzones
 [zone config]: https://www.cockroachlabs.com/docs/stable/configure-replication-zones.html

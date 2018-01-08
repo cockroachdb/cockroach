@@ -15,10 +15,10 @@
 package sql
 
 import (
+	"context"
 	"sort"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"fmt"
 
@@ -36,6 +36,7 @@ const (
 var informationSchema = virtualSchema{
 	name: informationSchemaName,
 	tables: []virtualSchemaTable{
+		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
 		informationSchemaKeyColumnUsageTable,
 		informationSchemaSchemataTable,
@@ -98,6 +99,47 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 	return tree.DNull
 }
 
+var informationSchemaColumnPrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.column_privileges (
+	GRANTOR STRING NOT NULL DEFAULT '',
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	COLUMN_NAME STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
+			for _, u := range table.Privileges.Users {
+				for _, privilege := range columndata {
+					if privilege.Mask()&u.Privileges != 0 {
+						for _, cd := range table.Columns {
+							if err := addRow(
+								tree.DNull,                          // grantor
+								tree.NewDString(u.User),             // grantee
+								defString,                           // table_catalog
+								tree.NewDString(db.Name),            // table_schema
+								tree.NewDString(table.Name),         // table_name
+								tree.NewDString(cd.Name),            // column_name
+								tree.NewDString(privilege.String()), // privilege_type
+								tree.DNull,                          // is_grantable
+							); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
+			return nil
+		})
+	},
+}
+
 var informationSchemaColumnsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.columns (
@@ -113,7 +155,10 @@ CREATE TABLE information_schema.columns (
 	CHARACTER_OCTET_LENGTH INT,
 	NUMERIC_PRECISION INT,
 	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT
+	DATETIME_PRECISION INT,
+	CHARACTER_SET_CATALOG STRING,
+	CHARACTER_SET_SCHEMA STRING,
+	CHARACTER_SET_NAME STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -136,6 +181,9 @@ CREATE TABLE information_schema.columns (
 					numericPrecision(column.Type),            // numeric_precision
 					numericScale(column.Type),                // numeric_scale
 					datetimePrecision(column.Type),           // datetime_precision
+					tree.DNull,                               // character_set_catalog
+					tree.DNull,                               // character_set_schema
+					tree.DNull,                               // character_set_name
 				)
 			})
 		})
@@ -259,7 +307,7 @@ CREATE TABLE information_schema.schema_privileges (
 				for _, privilege := range u.Privileges {
 					if err := addRow(
 						tree.NewDString(u.User),    // grantee
-						defString,                  // table_catalog,
+						defString,                  // table_catalog
 						tree.NewDString(db.Name),   // table_schema
 						tree.NewDString(privilege), // privilege_type
 						tree.DNull,                 // is_grantable
@@ -507,14 +555,14 @@ CREATE TABLE information_schema.table_privileges (
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			for _, u := range table.Privileges.Show() {
-				for _, privilege := range u.Privileges {
+				for _, priv := range u.Privileges {
 					if err := addRow(
 						tree.DNull,                  // grantor
 						tree.NewDString(u.User),     // grantee
-						defString,                   // table_catalog,
+						defString,                   // table_catalog
 						tree.NewDString(db.Name),    // table_schema
 						tree.NewDString(table.Name), // table_name
-						tree.NewDString(privilege),  // privilege_type
+						tree.NewDString(priv),       // privilege_type
 						tree.DNull,                  // is_grantable
 						tree.DNull,                  // with_hierarchy
 					); err != nil {

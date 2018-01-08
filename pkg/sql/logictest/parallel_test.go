@@ -22,6 +22,7 @@
 package logictest
 
 import (
+	"context"
 	gosql "database/sql"
 	"flag"
 	"fmt"
@@ -30,8 +31,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"gopkg.in/yaml.v2"
 

@@ -16,10 +16,9 @@ package sql_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"

@@ -15,11 +15,10 @@
 package kv
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"unsafe"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"

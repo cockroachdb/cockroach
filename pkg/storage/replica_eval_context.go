@@ -15,7 +15,7 @@
 package storage
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"

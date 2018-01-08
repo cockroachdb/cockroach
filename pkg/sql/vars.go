@@ -15,13 +15,12 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -214,7 +213,7 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(session *Session) string { return formatBoolAsPostgresSetting(session.DefaultReadOnly) },
 		Reset: func(session *Session) error {
-			session.DefaultIsolationLevel = enginepb.IsolationType(0)
+			session.DefaultReadOnly = false
 			return nil
 		},
 	},

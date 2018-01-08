@@ -16,10 +16,9 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -643,7 +641,7 @@ func addInterleave(
 		return pgerror.NewErrorf(
 			pgerror.CodeInvalidSchemaDefinitionError,
 			"declared interleaved columns (%s) must match the parent's primary index (%s)",
-			interleave.Fields,
+			&interleave.Fields,
 			strings.Join(parentIndex.ColumnNames, ", "),
 		)
 	}
@@ -651,7 +649,7 @@ func addInterleave(
 		return pgerror.NewErrorf(
 			pgerror.CodeInvalidSchemaDefinitionError,
 			"declared interleaved columns (%s) must be a prefix of the %s columns being interleaved (%s)",
-			interleave.Fields,
+			&interleave.Fields,
 			typeOfIndex,
 			strings.Join(index.ColumnNames, ", "),
 		)
@@ -670,7 +668,7 @@ func addInterleave(
 			return pgerror.NewErrorf(
 				pgerror.CodeInvalidSchemaDefinitionError,
 				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
-				interleave.Fields,
+				&interleave.Fields,
 				typeOfIndex,
 				strings.Join(index.ColumnNames, ", "),
 			)
@@ -679,7 +677,7 @@ func addInterleave(
 			return pgerror.NewErrorf(
 				pgerror.CodeInvalidSchemaDefinitionError,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
-				interleave.Fields,
+				&interleave.Fields,
 				strings.Join(parentIndex.ColumnNames, ", "),
 			)
 		}
@@ -744,263 +742,18 @@ func (p *planner) finalizeInterleave(
 	return nil
 }
 
-// valueEncodePartitionTuple typechecks the datums in maybeTuple. It returns the
-// typed datums and the concatenation of these datums, each encoded using the
-// table "value" encoding. The special values of DEFAULT (for list) and MAXVALUE
-// (for range) are encoded as NOT NULL.
-//
-// TODO(dan): The typechecking here should be run during plan construction, so
-// we can support placeholders.
-func valueEncodePartitionTuple(
-	typ tree.PartitionByType,
-	evalCtx *tree.EvalContext,
-	maybeTuple tree.Expr,
-	cols []sqlbase.ColumnDescriptor,
-) (tree.Datums, []byte, error) {
-	maybeTuple = tree.StripParens(maybeTuple)
-	tuple, ok := maybeTuple.(*tree.Tuple)
-	if !ok {
-		// If we don't already have a tuple, promote whatever we have to a 1-tuple.
-		tuple = &tree.Tuple{Exprs: []tree.Expr{maybeTuple}}
-	}
-
-	if len(tuple.Exprs) != len(cols) {
-		return nil, nil, errors.Errorf("partition has %d columns but %d values were supplied",
-			len(cols), len(tuple.Exprs))
-	}
-
-	var datums tree.Datums
-	var value, scratch []byte
-	for i, expr := range tuple.Exprs {
-		switch expr.(type) {
-		case tree.DefaultVal:
-			if typ != tree.PartitionByList {
-				return nil, nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
-			}
-			// NOT NULL is used to signal DEFAULT.
-			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
-			continue
-		case tree.MaxVal:
-			if typ != tree.PartitionByRange {
-				return nil, nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
-			}
-			// NOT NULL is used to signal MAXVALUE.
-			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
-			continue
-		case *tree.Placeholder:
-			return nil, nil, pgerror.UnimplementedWithIssueErrorf(
-				19464, "placeholders are not supported in PARTITION BY")
-		default:
-			// Fall-through.
-		}
-
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(expr, cols[i].Type.ToDatumType(), "partition",
-			nil /* semaCtx */, evalCtx)
-		if err != nil {
-			return nil, nil, err
-		}
-		if !tree.IsConst(evalCtx, typedExpr) {
-			return nil, nil, fmt.Errorf("%s: partition values must be constant", typedExpr)
-		}
-		datum, err := typedExpr.Eval(evalCtx)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, typedExpr.String())
-		}
-		if err := sqlbase.CheckColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
-			return nil, nil, err
-		}
-		datums = append(datums, datum)
-		value, err = sqlbase.EncodeTableValue(
-			value, sqlbase.ColumnID(encoding.NoColumnID), datum, scratch,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	return datums, value, nil
-}
-
-func createPartitionedByImpl(
-	ctx context.Context,
-	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
-	partBy *tree.PartitionBy,
-	colOffset int,
-) (sqlbase.PartitioningDescriptor, tree.TypedExpr, error) {
-	partDesc := sqlbase.PartitioningDescriptor{}
-	if partBy == nil {
-		return partDesc, nil, nil
-	}
-	partDesc.NumColumns = uint32(len(partBy.Fields))
-
-	colMismatchErr := func() error {
-		// We don't have the fields for our parent partitions handy, but we can use
-		// the names from the index we're partitioning. They must have matched or we
-		// would have already returned an error.
-		partCols := append([]string(nil), indexDesc.ColumnNames[:colOffset]...)
-		for _, p := range partBy.Fields {
-			partCols = append(partCols, string(p))
-		}
-		return fmt.Errorf("declared partition columns (%s) are not a prefix of index being partitioned (%s)",
-			strings.Join(partCols, ", "), strings.Join(indexDesc.ColumnNames, ", "))
-	}
-
-	var cols []sqlbase.ColumnDescriptor
-	for i := 0; i < len(partBy.Fields); i++ {
-		if colOffset+i >= len(indexDesc.ColumnNames) {
-			return partDesc, nil, colMismatchErr()
-		}
-		// Search by name because some callsites of this method have not
-		// allocated ids yet (so they are still all the 0 value).
-		col, err := tableDesc.FindActiveColumnByName(indexDesc.ColumnNames[colOffset+i])
-		if err != nil {
-			return partDesc, nil, err
-		}
-		cols = append(cols, col)
-		if string(partBy.Fields[i]) != col.Name {
-			return partDesc, nil, colMismatchErr()
-		}
-	}
-
-	colVars := make(tree.TypedExprs, len(cols))
-	for i := range cols {
-		colVars[i] = tree.NewTypedOrdinalReference(i+colOffset, cols[i].Type.ToDatumType())
-	}
-
-	var checkExpr tree.TypedExpr
-	if len(partBy.List) > 0 {
-		// List partitionings are not required to cover all values, so we start from
-		// "no values allowed" and build up a whitelist of allowed values while
-		// iterating the partitions below.
-		checkExpr = tree.DBoolFalse
-	} else {
-		// TODO(benesch): handle range partitions. Holding off on the implementation
-		// until we support non-contiguous range partitions or explicitly decide to
-		// ship without support for non-contiguous partitions.
-		checkExpr = tree.DBoolTrue
-	}
-
-	for _, l := range partBy.List {
-		p := sqlbase.PartitioningDescriptor_List{
-			Name: string(l.Name),
-		}
-		partCheckExpr := tree.TypedExpr(tree.DBoolFalse)
-		for _, expr := range l.Exprs {
-			datums, encodedTuple, err := valueEncodePartitionTuple(
-				tree.PartitionByList, evalCtx, expr, cols)
-			if err != nil {
-				return partDesc, nil, errors.Wrapf(err, "PARTITION %s", p.Name)
-			}
-			p.Values = append(p.Values, encodedTuple)
-			// When len(datums) < len(colVars), the missing elements are DEFAULTs, so
-			// we can simply exclude them from the CHECK comparison.
-			partCheckExpr = tree.NewTypedOrExpr(partCheckExpr, tree.NewTypedComparisonExpr(tree.EQ,
-				tree.NewTypedTuple(colVars[:len(datums)]), tree.NewDTuple(datums...)))
-		}
-		if l.Subpartition != nil {
-			newColOffset := colOffset + int(partDesc.NumColumns)
-			subpartitioning, subCheckExpr, err := createPartitionedByImpl(
-				ctx, evalCtx, tableDesc, indexDesc, l.Subpartition, newColOffset)
-			if err != nil {
-				return partDesc, nil, err
-			}
-			p.Subpartitioning = subpartitioning
-			partCheckExpr = tree.NewTypedAndExpr(partCheckExpr, subCheckExpr)
-		}
-		partDesc.List = append(partDesc.List, p)
-		checkExpr = tree.NewTypedOrExpr(checkExpr, partCheckExpr)
-	}
-
-	for _, r := range partBy.Range {
-		p := sqlbase.PartitioningDescriptor_Range{
-			Name: string(r.Name),
-		}
-		_, encodedTuple, err := valueEncodePartitionTuple(
-			tree.PartitionByRange, evalCtx, r.Expr, cols)
-		if err != nil {
-			return partDesc, nil, errors.Wrapf(err, "PARTITION %s", p.Name)
-		}
-		if r.Subpartition != nil {
-			return partDesc, nil, errors.Errorf("PARTITION %s: cannot subpartition a range partition", p.Name)
-		}
-		p.UpperBound = encodedTuple
-		partDesc.Range = append(partDesc.Range, p)
-	}
-
-	return partDesc, checkExpr, nil
-}
-
-// createPartitionedBy constructs the partitioning descriptor for an index that
-// is partitioned into ranges, each addressable by zone configs. It additionally
-// returns a CHECK constraint that can be used to prevent rows that do not
-// belong to any partition from being inserted into the index's table.
-func createPartitionedBy(
+// CreatePartitioning constructs the partitioning descriptor for an index that
+// is partitioned into ranges, each addressable by zone configs.
+var CreatePartitioning = func(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
-) (sqlbase.PartitioningDescriptor, *sqlbase.TableDescriptor_CheckConstraint, error) {
-	if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
-		return sqlbase.PartitioningDescriptor{}, nil,
-			errors.New("cluster version does not support partitioning")
-	}
-
-	partitioning, checkExpr, err := createPartitionedByImpl(
-		ctx, evalCtx, tableDesc, indexDesc, partBy, 0 /* colOffset */)
-	if err != nil {
-		return partitioning, nil, err
-	}
-	var checkConstraint *sqlbase.TableDescriptor_CheckConstraint
-	if checkExpr != nil && checkExpr != tree.DBoolTrue {
-		if e, equiv := simplifyExpr(evalCtx, checkExpr); equiv {
-			checkExpr = e
-		}
-		checkExpr, err = evalCtx.NormalizeExpr(checkExpr)
-		if err != nil {
-			return partitioning, nil, err
-		}
-		// In order to typecheck during simplification and normalization, we used
-		// dummy IndexVars. Swap them out for actual column references.
-		finalCheckExpr, err := tree.SimpleVisit(checkExpr, func(e tree.Expr) (error, bool, tree.Expr) {
-			if ivar, ok := e.(*tree.IndexedVar); ok {
-				return nil, false, &tree.ColumnItem{
-					ColumnName: tree.Name(indexDesc.ColumnNames[ivar.Idx]),
-				}
-			}
-			return nil, true, e
-		})
-		if err != nil {
-			return partitioning, nil, err
-		}
-		if finalCheckExpr != tree.DBoolTrue {
-			checkConstraint = &sqlbase.TableDescriptor_CheckConstraint{
-				Name:    "check_partition",
-				Expr:    tree.Serialize(finalCheckExpr),
-				Derived: true,
-			}
-		}
-	}
-	return partitioning, checkConstraint, nil
-}
-
-// RepartitioningFastPathAvailable returns true when the schema change to
-// validate existing data can be skipped.
-//
-// Each partitioned index guarantees that all rows in that index belong to one
-// of its partitions. Certain repartitionings (removing partitioning entirely, a
-// LIST partitioning that is a superset of the previous partitioning, etc) can
-// assume the the existing data meets this guarantee without checking it via a
-// sort of "inductive proof".
-var RepartitioningFastPathAvailable = func(
-	oldTableDesc, newTableDesc *sqlbase.TableDescriptor,
-) (bool, error) {
-	// TODO(dan): non-ccl binaries should be able to removing partitionings. The
-	// logic for this is simple, but I'm intentionally leaving it unimplemented
-	// until there is a test for it.
-	return false, errors.New("repartitioning in a non-ccl binary is currently unimplimented")
+) (sqlbase.PartitioningDescriptor, error) {
+	return sqlbase.PartitioningDescriptor{}, sqlbase.NewCCLRequiredError(errors.New(
+		"creating or manipulating partitions requires a CCL binary"))
 }
 
 func initTableDescriptor(
@@ -1125,13 +878,11 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PartitionBy != nil {
-				partitioning, _, err := createPartitionedBy(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
+				partitioning, err := CreatePartitioning(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
 				if err != nil {
 					return desc, err
 				}
 				idx.Partitioning = partitioning
-				// TODO(benesch): install CHECK constraint to exclude rows that do
-				// not belong to any partition of the unique constraint.
 			}
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
@@ -1149,13 +900,11 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PartitionBy != nil {
-				partitioning, _, err := createPartitionedBy(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
+				partitioning, err := CreatePartitioning(ctx, st, evalCtx, &desc, &idx, d.PartitionBy)
 				if err != nil {
 					return desc, err
 				}
 				idx.Partitioning = partitioning
-				// TODO(benesch): install CHECK constraint to exclude rows that do
-				// not belong to any partition of the unique constraint.
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err
@@ -1211,15 +960,12 @@ func MakeTableDesc(
 	}
 
 	if n.PartitionBy != nil {
-		partitioning, check, err := createPartitionedBy(
+		partitioning, err := CreatePartitioning(
 			ctx, st, evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy)
 		if err != nil {
 			return desc, err
 		}
 		desc.PrimaryIndex.Partitioning = partitioning
-		if check != nil {
-			desc.Checks = append(desc.Checks, check)
-		}
 	}
 
 	// With all structural elements in place and IDs allocated, we can resolve the
@@ -1305,32 +1051,34 @@ type dummyColumnItem struct {
 }
 
 // String implements the Stringer interface.
-func (d dummyColumnItem) String() string {
-	return fmt.Sprintf("<%s>", d.typ)
+func (d *dummyColumnItem) String() string {
+	return tree.AsString(d)
 }
 
 // Format implements the NodeFormatter interface.
-func (d dummyColumnItem) Format(buf *bytes.Buffer, _ tree.FmtFlags) {
-	buf.WriteString(d.String())
+func (d *dummyColumnItem) Format(ctx *tree.FmtCtx) {
+	ctx.WriteByte('<')
+	ctx.WriteString(d.typ.String())
+	ctx.WriteByte('>')
 }
 
 // Walk implements the Expr interface.
-func (d dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
+func (d *dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
 	return d
 }
 
 // TypeCheck implements the Expr interface.
-func (d dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
 	return d, nil
 }
 
 // Eval implements the TypedExpr interface.
-func (dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+func (*dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic("dummyColumnItem.Eval() is undefined")
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d dummyColumnItem) ResolvedType() types.T {
+func (d *dummyColumnItem) ResolvedType() types.T {
 	return d.typ
 }
 
@@ -1376,7 +1124,7 @@ func makeCheckConstraint(
 			nameBuf.WriteString(col.Name)
 		}
 		// Convert to a dummy node of the correct type.
-		return nil, false, dummyColumnItem{col.Type.ToDatumType()}
+		return nil, false, &dummyColumnItem{col.Type.ToDatumType()}
 	}
 
 	expr, err := tree.SimpleVisit(d.Expr, preFn)

@@ -16,12 +16,13 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -143,14 +144,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				if d.PartitionBy != nil {
-					partitioning, _, err := createPartitionedBy(params.ctx, params.p.ExecCfg().Settings,
+					partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
 						params.evalCtx, n.tableDesc, &idx, d.PartitionBy)
 					if err != nil {
 						return err
 					}
 					idx.Partitioning = partitioning
-					// TODO(benesch): install CHECK constraint to exclude rows that do not
-					// belong to any partition of the index.
 				}
 				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
@@ -299,7 +298,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						if err := params.p.dropIndexByName(
 							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
 							t.DropBehavior, ignoreIdxConstraint,
-							tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
+							tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 						); err != nil {
 							return err
 						}
@@ -308,6 +307,34 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 			}
+
+			// Drop check constraints which reference the column.
+			// For every check on the table, walk the check expr
+			// and ensure any check which references the column
+			// is removed from the table descriptor.
+			validChecks := n.tableDesc.Checks[:0]
+
+			for _, check := range n.tableDesc.Checks {
+				expr, err := parser.ParseExpr(check.Expr)
+				if err != nil {
+					return err
+				}
+
+				exprDoesReferenceColumn, err := exprContainsColumnName(expr, col)
+				if err != nil {
+					return err
+				}
+
+				if !exprDoesReferenceColumn {
+					validChecks = append(validChecks, check)
+				}
+			}
+
+			if len(validChecks) != len(n.tableDesc.Checks) {
+				n.tableDesc.Checks = validChecks
+				descriptorChanged = true
+			}
+
 			found := false
 			for i := range n.tableDesc.Columns {
 				if n.tableDesc.Columns[i].ID == col.ID {
@@ -342,9 +369,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case sqlbase.ConstraintTypeCheck:
 				for i := range n.tableDesc.Checks {
 					if n.tableDesc.Checks[i].Name == name {
-						if n.tableDesc.Checks[i].Derived {
-							return fmt.Errorf("cannot drop derived constraint %q", name)
-						}
 						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
 						descriptorChanged = true
 						break
@@ -444,42 +468,20 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		case *tree.AlterTablePartitionBy:
-			previousTableDesc := *n.tableDesc
-			partitioning, _, err := createPartitionedBy(params.ctx, params.p.ExecCfg().Settings,
+			partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
 				&params.p.evalCtx, n.tableDesc, &n.tableDesc.PrimaryIndex, t.PartitionBy)
 			if err != nil {
 				return err
 			}
-			n.tableDesc.PrimaryIndex.Partitioning = partitioning
-			// TODO(benesch): install CHECK constraint to exclude rows that do
-			// not belong to any partition of the unique constraint.
-			//
-			// TODO(dan): This checks TableDescriptors instead of
-			// PartitioningDescriptors to mirror the fast path check. Of course,
-			// RepartitioningFastPathAvailable could also be acting on
-			// PartitioningDescriptors but then it would need a complicated
-			// method signature and it felt weird to impose that on the
-			// sql<->sqlccl hook. Revisit?
 			descriptorChanged = !proto.Equal(
-				&previousTableDesc.PrimaryIndex.Partitioning,
 				&n.tableDesc.PrimaryIndex.Partitioning,
+				&partitioning,
 			)
-			if descriptorChanged {
-				// TODO(dan): Consider the case of a table that is repartitioned
-				// when it has not finished the schema change for adding the
-				// partitioning CHECK constraint from the last partitioning.
-				fastPath, err := RepartitioningFastPathAvailable(&previousTableDesc, n.tableDesc)
-				if err != nil {
-					return err
-				}
-				if !fastPath {
-					return fmt.Errorf("data validation is required for this repartitioning, but is currently unimplemented")
-				}
-				// TODO(dan): Remove zone configs which no longer point at a
-				// partition. This also needs to be done for indexes.
-			}
+			n.tableDesc.PrimaryIndex.Partitioning = partitioning
+			// TODO(dan): Remove zone configs which no longer point at a
+			// partition. This also needs to be done for indexes.
 		default:
-			return fmt.Errorf("unsupported alter cmd: %T", cmd)
+			return fmt.Errorf("unsupported alter command: %T", cmd)
 		}
 	}
 	// Were some changes made?
@@ -502,7 +504,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	var err error
 	if addedMutations {
 		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
-			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
@@ -581,4 +583,46 @@ func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) strin
 		s.WriteString(values[i].String())
 	}
 	return s.String()
+}
+
+// exprContainsColumnNames determines whether the given column occurs in the
+// given expression.
+// It achieves this using a lexical comparison without considering scoping.
+// WARNING: this logic only works for 'simple' expressions.
+// If/when CHECK expressions are extended to also support subqueries,
+// this logic will need to be amended.
+func exprContainsColumnName(expr tree.Expr, col sqlbase.ColumnDescriptor) (bool, error) {
+	exprContainsColumnName := false
+
+	preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		if string(c.ColumnName) == col.Name {
+			// This is a CHECK constraint which contains the column to be dropped
+			exprContainsColumnName = true
+		}
+		// Convert to a dummy node of the correct type.
+		return nil, false, &dummyColumnItem{col.Type.ToDatumType()}
+	}
+
+	_, err := tree.SimpleVisit(expr, preFn)
+	if err != nil {
+		return false, err
+	}
+
+	return exprContainsColumnName, nil
 }

@@ -16,20 +16,18 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -102,7 +99,7 @@ func (n mvccKeys) Len() int           { return len(n) }
 func (n mvccKeys) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n mvccKeys) Less(i, j int) bool { return n[i].Less(n[j]) }
 
-func TestMVCCStatsAddSubAgeTo(t *testing.T) {
+func TestMVCCStatsAddSubForward(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	goldMS := enginepb.MVCCStats{
 		ContainsEstimates: true,
@@ -125,6 +122,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	}
 
 	cmp := func(act, exp enginepb.MVCCStats) {
+		t.Helper()
 		f, l, _ := caller.Lookup(1)
 		if !reflect.DeepEqual(act, exp) {
 			t.Fatalf("%s:%d: wanted %+v back, got %+v", f, l, exp, act)
@@ -151,7 +149,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	ms.Subtract(goldMS)
 	cmp(ms, zeroWithLU)
 
-	// Run some checks for AgeTo.
+	// Run some checks for Forward.
 	goldDelta := enginepb.MVCCStats{
 		KeyBytes:        42,
 		IntentCount:     11,
@@ -185,12 +183,25 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 	expDelta.IntentAge += 11
 	cmp(delta, expDelta)
 
+	{
+		// Verify that AgeTo can go backwards in time.
+		// Works on a copy.
+		tmpDelta := delta
+		expDelta := expDelta
+
+		tmpDelta.AgeTo(2E9 - 1)
+		expDelta.LastUpdateNanos = 2E9 - 1
+		expDelta.GCBytesAge -= 42
+		expDelta.IntentAge -= 11
+		cmp(tmpDelta, expDelta)
+	}
+
 	delta.AgeTo(3E9 - 1)
-	delta.AgeTo(5) // should be noop
+	delta.Forward(5) // should be noop
 	expDelta.LastUpdateNanos = 3E9 - 1
 	cmp(delta, expDelta)
 
-	// Check that Add calls AgeTo appropriately.
+	// Check that Add calls Forward appropriately.
 	mss := []enginepb.MVCCStats{goldMS, goldMS}
 
 	mss[0].LastUpdateNanos = 2E9 - 1
@@ -208,7 +219,7 @@ func TestMVCCStatsAddSubAgeTo(t *testing.T) {
 		cmp(ms, expMS)
 	}
 
-	// Finally, check AgeTo with negative counts (can happen).
+	// Finally, check Forward with negative counts (can happen).
 	neg := zeroWithLU
 	neg.Subtract(goldMS)
 	exp := neg
@@ -3411,404 +3422,6 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 	}
 }
 
-func verifyStats(debug string, ms, expMS *enginepb.MVCCStats, t *testing.T) {
-	if ms.ContainsEstimates != expMS.ContainsEstimates {
-		t.Errorf("%s: mvcc contains estimates %t; expected %t", debug, ms.ContainsEstimates, expMS.ContainsEstimates)
-	}
-	if ms.LiveBytes != expMS.LiveBytes {
-		t.Errorf("%s: mvcc live bytes %d; expected %d", debug, ms.LiveBytes, expMS.LiveBytes)
-	}
-	if ms.KeyBytes != expMS.KeyBytes {
-		t.Errorf("%s: mvcc keyBytes %d; expected %d", debug, ms.KeyBytes, expMS.KeyBytes)
-	}
-	if ms.ValBytes != expMS.ValBytes {
-		t.Errorf("%s: mvcc valBytes %d; expected %d", debug, ms.ValBytes, expMS.ValBytes)
-	}
-	if ms.IntentBytes != expMS.IntentBytes {
-		t.Errorf("%s: mvcc intentBytes %d; expected %d", debug, ms.IntentBytes, expMS.IntentBytes)
-	}
-	if ms.LiveCount != expMS.LiveCount {
-		t.Errorf("%s: mvcc liveCount %d; expected %d", debug, ms.LiveCount, expMS.LiveCount)
-	}
-	if ms.KeyCount != expMS.KeyCount {
-		t.Errorf("%s: mvcc keyCount %d; expected %d", debug, ms.KeyCount, expMS.KeyCount)
-	}
-	if ms.ValCount != expMS.ValCount {
-		t.Errorf("%s: mvcc valCount %d; expected %d", debug, ms.ValCount, expMS.ValCount)
-	}
-	if ms.IntentCount != expMS.IntentCount {
-		t.Errorf("%s: mvcc intentCount %d; expected %d", debug, ms.IntentCount, expMS.IntentCount)
-	}
-	if ms.LastUpdateNanos != expMS.LastUpdateNanos {
-		t.Errorf("%s: mvcc lastUpdateNanos %d; expected %d", debug, ms.LastUpdateNanos, expMS.LastUpdateNanos)
-	}
-	if ms.IntentAge != expMS.IntentAge {
-		t.Errorf("%s: mvcc intentAge %d; expected %d", debug, ms.IntentAge, expMS.IntentAge)
-	}
-	if ms.GCBytesAge != expMS.GCBytesAge {
-		t.Errorf("%s: mvcc gcBytesAge %d; expected %d", debug, ms.GCBytesAge, expMS.GCBytesAge)
-	}
-	if ms.SysBytes != expMS.SysBytes {
-		t.Errorf("%s: mvcc sysBytes %d; expected %d", debug, ms.SysBytes, expMS.SysBytes)
-	}
-	if ms.SysCount != expMS.SysCount {
-		t.Errorf("%s: mvcc sysCount %d; expected %d", debug, ms.SysCount, expMS.SysCount)
-	}
-}
-
-// TestMVCCStatsBasic writes a value, then deletes it as an intent via
-// a transaction, then resolves the intent, manually verifying the
-// mvcc stats at each step.
-func TestMVCCStatsBasic(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	engine := createTestEngine()
-	defer engine.Close()
-
-	ms := &enginepb.MVCCStats{}
-
-	// Verify size of mvccVersionTimestampSize.
-	ts := hlc.Timestamp{WallTime: 1 * 1E9}
-	key := roachpb.Key("a")
-	keySize := int64(mvccVersionKey(key, ts).EncodedSize() - mvccKey(key).EncodedSize())
-	if keySize != mvccVersionTimestampSize {
-		t.Errorf("expected version timestamp size %d; got %d", mvccVersionTimestampSize, keySize)
-	}
-
-	// Put a value.
-	value := roachpb.MakeValueFromString("value")
-	if err := MVCCPut(context.Background(), engine, ms, key, ts, value, nil); err != nil {
-		t.Fatal(err)
-	}
-	mKeySize := int64(mvccKey(key).EncodedSize())
-	vKeySize := mvccVersionTimestampSize
-	vValSize := int64(len(value.RawBytes))
-
-	expMS := enginepb.MVCCStats{
-		LiveBytes:       mKeySize + vKeySize + vValSize,
-		LiveCount:       1,
-		KeyBytes:        mKeySize + vKeySize,
-		KeyCount:        1,
-		ValBytes:        vValSize,
-		ValCount:        1,
-		LastUpdateNanos: 1E9,
-	}
-	verifyStats("after put", ms, &expMS, t)
-	if e, a := int64(0), ms.GCBytes(); e != a {
-		t.Fatalf("GCBytes: expected %d, got %d", e, a)
-	}
-
-	// Delete the value using a transaction.
-	txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: hlc.Timestamp{WallTime: 1 * 1E9}}}
-	ts2 := hlc.Timestamp{WallTime: 2 * 1E9}
-	if err := MVCCDelete(context.Background(), engine, ms, key, ts2, txn); err != nil {
-		t.Fatal(err)
-	}
-	m2ValSize := int64((&enginepb.MVCCMetadata{
-		Timestamp: hlc.LegacyTimestamp(ts2),
-		Deleted:   true,
-		Txn:       &txn.TxnMeta,
-	}).Size())
-	v2KeySize := mvccVersionTimestampSize
-	v2ValSize := int64(0)
-
-	expMS2 := enginepb.MVCCStats{
-		KeyBytes:        mKeySize + vKeySize + v2KeySize,
-		KeyCount:        1,
-		ValBytes:        m2ValSize + vValSize + v2ValSize,
-		ValCount:        2,
-		IntentBytes:     v2KeySize + v2ValSize,
-		IntentCount:     1,
-		IntentAge:       0,
-		GCBytesAge:      vValSize + vKeySize, // immediately recognizes GC'able bytes from old value at 1E9
-		LastUpdateNanos: 2E9,
-	}
-	verifyStats("after delete", ms, &expMS2, t)
-	// This is expMS2.KeyBytes + expMS2.ValBytes - expMS2.LiveBytes
-	expGC2 := mKeySize + vKeySize + v2KeySize + m2ValSize + vValSize + v2ValSize
-	if a := ms.GCBytes(); expGC2 != a {
-		t.Fatalf("GCBytes: expected %d, got %d", expGC2, a)
-	}
-
-	// Resolve the deletion by aborting it.
-	txn.Status = roachpb.ABORTED
-	txn.Timestamp.Forward(ts2)
-	if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
-		t.Fatal(err)
-	}
-	// Stats should equal same as before the deletion after aborting the intent.
-	expMS.LastUpdateNanos = 2E9
-	verifyStats("after abort", ms, &expMS, t)
-
-	// Re-delete, but this time, we're going to commit it.
-	txn.Status = roachpb.PENDING
-	ts3 := hlc.Timestamp{WallTime: 3 * 1E9}
-	txn.Timestamp.Forward(ts3)
-	if err := MVCCDelete(context.Background(), engine, ms, key, ts3, txn); err != nil {
-		t.Fatal(err)
-	}
-	// GCBytesAge will now count the deleted value from ts=1E9 to ts=3E9.
-	expMS2.GCBytesAge = (vValSize + vKeySize) * 2
-	expMS2.LastUpdateNanos = 3E9
-	verifyStats("after 2nd delete", ms, &expMS2, t) // should be same as before.
-	if a := ms.GCBytes(); expGC2 != a {
-		t.Fatalf("GCBytes: expected %d, got %d", expGC2, a)
-	}
-
-	// Write a second transactional value (i.e. an intent).
-	ts4 := hlc.Timestamp{WallTime: 4 * 1E9}
-	txn.Timestamp = ts4
-	key2 := roachpb.Key("b")
-	value2 := roachpb.MakeValueFromString("value")
-	if err := MVCCPut(context.Background(), engine, ms, key2, ts4, value2, txn); err != nil {
-		t.Fatal(err)
-	}
-	mKey2Size := int64(mvccKey(key2).EncodedSize())
-	mVal2Size := int64((&enginepb.MVCCMetadata{
-		Timestamp: hlc.LegacyTimestamp(ts4),
-		Txn:       &txn.TxnMeta,
-	}).Size())
-	vKey2Size := mvccVersionTimestampSize
-	vVal2Size := int64(len(value2.RawBytes))
-	expMS3 := enginepb.MVCCStats{
-		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
-		KeyCount:    2,
-		ValBytes:    m2ValSize + vValSize + v2ValSize + mVal2Size + vVal2Size,
-		ValCount:    3,
-		LiveBytes:   mKey2Size + vKey2Size + mVal2Size + vVal2Size,
-		LiveCount:   1,
-		IntentBytes: v2KeySize + v2ValSize + vKey2Size + vVal2Size,
-		IntentCount: 2,
-		IntentAge:   1,
-		// It gets interesting: The first term is the contribution from the
-		// deletion of the first put (written at 1s, deleted at 3s). From 3s
-		// to 4s, on top of that we age the intent's meta entry plus deletion
-		// tombstone on top of that (expGC2).
-		GCBytesAge:      (vValSize+vKeySize)*2 + expGC2,
-		LastUpdateNanos: 4E9,
-	}
-
-	expGC3 := expGC2 // no change, didn't delete anything
-	verifyStats("after 2nd put", ms, &expMS3, t)
-	if a := ms.GCBytes(); expGC3 != a {
-		t.Fatalf("GCBytes: expected %d, got %d", expGC3, a)
-	}
-
-	// Now commit both values.
-	txn.Status = roachpb.COMMITTED
-	if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
-		t.Fatal(err)
-	}
-	expMS4 := enginepb.MVCCStats{
-		KeyBytes:    mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
-		KeyCount:    2,
-		ValBytes:    vValSize + v2ValSize + mVal2Size + vVal2Size,
-		ValCount:    3,
-		LiveBytes:   mKey2Size + vKey2Size + mVal2Size + vVal2Size,
-		LiveCount:   1,
-		IntentBytes: vKey2Size + vVal2Size,
-		IntentCount: 1,
-		// The commit turned the explicit deletion intent meta back into an
-		// implicit one; so we see the originally written value which is now 3s
-		// old, plus the implicit meta key contribution (basically the key
-		// prefix) along with the deletion tombstone kv pair.
-		// You could also write this as
-		//	(vValSize+vKeySize)*2 + (expGC3 - m2ValSize)
-		// as we do in the second commit.
-		GCBytesAge:      (vValSize+vKeySize)*3 + (mKeySize + v2ValSize + v2KeySize),
-		LastUpdateNanos: 4E9,
-	}
-	verifyStats("after first commit", ms, &expMS4, t)
-
-	// With commit of the deletion intent, what really happens is that the
-	// explicit meta (carrying the intent) becomes implicit (so its key
-	// gets counted in the same way by convention, but its value is now empty).
-	expGC4 := expGC3 - m2ValSize
-	if a := ms.GCBytes(); expGC4 != a {
-		t.Fatalf("GCBytes: expected %d, got %d", expGC4, a)
-	}
-
-	if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key2}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
-		t.Fatal(err)
-	}
-	expMS4 = enginepb.MVCCStats{
-		KeyBytes:        mKeySize + vKeySize + v2KeySize + mKey2Size + vKey2Size,
-		KeyCount:        2,
-		ValBytes:        vValSize + v2ValSize + vVal2Size,
-		ValCount:        3,
-		LiveBytes:       mKey2Size + vKey2Size + vVal2Size,
-		LiveCount:       1,
-		IntentAge:       0,
-		GCBytesAge:      (vValSize+vKeySize)*2 + (expGC3 - m2ValSize),
-		LastUpdateNanos: 4E9,
-	}
-	verifyStats("after second commit", ms, &expMS4, t)
-	if a := ms.GCBytes(); expGC4 != a { // no change here
-		t.Fatalf("GCBytes: expected %d, got %d", expGC4, a)
-	}
-
-	// Write over existing value to create GC'able bytes.
-	ts5 := hlc.Timestamp{WallTime: 10 * 1E9} // skip ahead 6s
-	if err := MVCCPut(context.Background(), engine, ms, key2, ts5, value2, nil); err != nil {
-		t.Fatal(err)
-	}
-	expMS5 := expMS4
-	expMS5.KeyBytes += vKey2Size
-	expMS5.ValBytes += vVal2Size
-	expMS5.ValCount = 4
-	// The age increases: 6 seconds for each key2 and key.
-	expMS5.GCBytesAge += (vKey2Size+vVal2Size)*6 + expGC4*6
-	expMS5.LastUpdateNanos = 10E9
-	verifyStats("after overwrite", ms, &expMS5, t)
-
-	// Write a transaction record which is a system-local key.
-	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	txnVal := roachpb.MakeValueFromString("txn-data")
-	if err := MVCCPut(context.Background(), engine, ms, txnKey, hlc.Timestamp{}, txnVal, nil); err != nil {
-		t.Fatal(err)
-	}
-	txnKeySize := int64(mvccKey(txnKey).EncodedSize())
-	txnValSize := int64((&enginepb.MVCCMetadata{RawBytes: txnVal.RawBytes}).Size())
-	expMS6 := expMS5
-	expMS6.SysBytes += txnKeySize + txnValSize
-	expMS6.SysCount++
-	verifyStats("after sys-local key", ms, &expMS6, t)
-}
-
-var mvccStatsTests = []struct {
-	name string
-	fn   func(Iterator, MVCCKey, MVCCKey, int64) (enginepb.MVCCStats, error)
-}{
-	{
-		name: "ComputeStats",
-		fn: func(iter Iterator, start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
-			return iter.ComputeStats(start, end, nowNanos)
-		},
-	},
-	{
-		name: "ComputeStatsGo",
-		fn: func(iter Iterator, start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error) {
-			return ComputeStatsGo(iter, start, end, nowNanos)
-		},
-	},
-}
-
-// TestMVCCStatsWithRandomRuns creates a random sequence of puts,
-// deletes and delete ranges and at each step verifies that the mvcc
-// stats match a manual computation of range stats via a scan of the
-// underlying engine.
-func TestMVCCStatsWithRandomRuns(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	seed := randutil.NewPseudoSeed()
-	log.Infof(context.Background(), "using pseudo random number generator with seed %d", seed)
-
-	for _, mvccStatsTest := range mvccStatsTests {
-		t.Run(mvccStatsTest.name, func(t *testing.T) {
-			rng := rand.New(rand.NewSource(seed))
-
-			engine := createTestEngine()
-			defer engine.Close()
-
-			ms := &enginepb.MVCCStats{}
-
-			// Now, generate a random sequence of puts, deletes and resolves.
-			// Each put and delete may or may not involve a txn. Resolves may
-			// either commit or abort.
-			keys := map[int32][]byte{}
-			var lastWT int64
-			for i := int32(0); i < int32(1000); i++ {
-				// Create random future timestamp, up to a few seconds ahead.
-				ts := hlc.Timestamp{WallTime: lastWT + int64(rng.Float32()*4E9), Logical: int32(rng.Int())}
-				lastWT = ts.WallTime
-
-				if log.V(1) {
-					log.Infof(context.Background(), "*** cycle %d @ %s", i, ts)
-				}
-				// Manually advance aggregate intent age based on one extra second of simulation.
-				// Same for aggregate gc'able bytes age.
-				key := []byte(fmt.Sprintf("%s-%d", randutil.RandBytes(rng, int(rng.Int31n(32))), i))
-				keys[i] = key
-
-				var txn *roachpb.Transaction
-				if rng.Int31n(2) == 0 { // create a txn with 50% prob
-					txn = &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), Timestamp: ts}}
-				}
-				// With 25% probability, put a new value; otherwise, delete an earlier
-				// key. Because an earlier step in this process may have itself been
-				// a delete, we could end up deleting a non-existent key, which is good;
-				// we don't mind testing that case as well.
-				isDelete := rng.Int31n(4) == 0
-				if i > 0 && isDelete {
-					idx := rng.Int31n(i)
-					if log.V(1) {
-						log.Infof(context.Background(), "*** DELETE index %d", idx)
-					}
-					if err := MVCCDelete(context.Background(), engine, ms, keys[idx], ts, txn); err != nil {
-						// Abort any write intent on an earlier, unresolved txn.
-						if wiErr, ok := err.(*roachpb.WriteIntentError); ok {
-							wiErr.Intents[0].Status = roachpb.ABORTED
-							if log.V(1) {
-								log.Infof(context.Background(), "*** ABORT index %d", idx)
-							}
-							// Note that this already incorporates committing an intent
-							// at a later time (since we use a potentially later ts here
-							// for the resolution).
-							if err := MVCCResolveWriteIntent(context.Background(), engine, ms, wiErr.Intents[0]); err != nil {
-								t.Fatal(err)
-							}
-							// Now, re-delete.
-							if log.V(1) {
-								log.Infof(context.Background(), "*** RE-DELETE index %d", idx)
-							}
-							if err := MVCCDelete(context.Background(), engine, ms, keys[idx], ts, txn); err != nil {
-								t.Fatal(err)
-							}
-						} else {
-							t.Fatal(err)
-						}
-					}
-				} else {
-					rngVal := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, int(rng.Int31n(128))))
-					if log.V(1) {
-						log.Infof(context.Background(), "*** PUT index %d; TXN=%t", i, txn != nil)
-					}
-					if err := MVCCPut(context.Background(), engine, ms, key, ts, rngVal, txn); err != nil {
-						t.Fatal(err)
-					}
-				}
-				if !isDelete && txn != nil && rng.Int31n(2) == 0 { // resolve txn with 50% prob
-					txn.Status = roachpb.COMMITTED
-					if rng.Int31n(10) == 0 { // abort txn with 10% prob
-						txn.Status = roachpb.ABORTED
-					}
-					if log.V(1) {
-						log.Infof(context.Background(), "*** RESOLVE index %d; COMMIT=%t", i, txn.Status == roachpb.COMMITTED)
-					}
-					if err := MVCCResolveWriteIntent(context.Background(), engine, ms, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
-						t.Fatal(err)
-					}
-				}
-
-				ms.AgeTo(ts.WallTime) // a noop may not have updated the stats
-				// Every 10th step, verify the stats via manual engine scan.
-				if i%10 == 0 {
-					// Compute the stats manually.
-					iter := engine.NewIterator(false)
-					expMS, err := mvccStatsTest.fn(iter, mvccKey(roachpb.KeyMin),
-						mvccKey(roachpb.KeyMax), ts.WallTime)
-					iter.Close()
-					if err != nil {
-						t.Fatal(err)
-					}
-					verifyStats(fmt.Sprintf("cycle %d", i), ms, &expMS, t)
-					if t.Failed() {
-						t.Fatal("giving up")
-					}
-				}
-			}
-		})
-	}
-}
-
 // TestMVCCGarbageCollect writes a series of gc'able bytes and then
 // sends an MVCC GC request and verifies cleared values and updated
 // stats.
@@ -3881,7 +3494,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 		{Key: roachpb.Key("inline-bad"), Timestamp: hlc.Timestamp{}},
 	}
 	if err := MVCCGarbageCollect(
-		context.Background(), engine, ms, keys, ts3, math.MaxInt64,
+		context.Background(), engine, ms, keys, ts3,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -3915,30 +3528,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			verifyStats("verification", ms, &expMS, t)
-		})
-	}
-}
-
-func TestMVCCComputeStatsError(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	engine := createTestEngine()
-	defer engine.Close()
-
-	// Write a MVCC metadata key where the value is not an encoded MVCCMetadata
-	// protobuf.
-	if err := engine.Put(mvccKey(roachpb.Key("garbage")), []byte("garbage")); err != nil {
-		t.Fatal(err)
-	}
-
-	iter := engine.NewIterator(false)
-	defer iter.Close()
-	for _, mvccStatsTest := range mvccStatsTests {
-		t.Run(mvccStatsTest.name, func(t *testing.T) {
-			_, err := mvccStatsTest.fn(iter, mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 100)
-			if e := "unable to decode MVCCMetadata"; !testutils.IsError(err, e) {
-				t.Fatalf("expected %s, got %v", e, err)
-			}
+			assertEq(t, engine, "verification", ms, &expMS)
 		})
 	}
 }
@@ -3977,7 +3567,7 @@ func TestMVCCGarbageCollectNonDeleted(t *testing.T) {
 		keys := []roachpb.GCRequest_GCKey{
 			{Key: test.key, Timestamp: ts2},
 		}
-		err := MVCCGarbageCollect(context.Background(), engine, nil, keys, ts2, math.MaxInt64)
+		err := MVCCGarbageCollect(context.Background(), engine, nil, keys, ts2)
 		if !testutils.IsError(err, test.expError) {
 			t.Fatalf("expected error %q when garbage collecting a non-deleted live value, found %v", test.expError, err)
 		}
@@ -4009,7 +3599,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 		{Key: key, Timestamp: ts2},
 	}
 	if err := MVCCGarbageCollect(
-		context.Background(), engine, nil, keys, ts2, math.MaxInt64,
+		context.Background(), engine, nil, keys, ts2,
 	); err == nil {
 		t.Fatal("expected error garbage collecting an intent")
 	}
@@ -4124,36 +3714,4 @@ func TestWillOverflow(t *testing.T) {
 			t.Errorf("%d: overflow recognition error", i)
 		}
 	}
-}
-
-// BenchmarkMVCCStats set MVCCStats values.
-func BenchmarkMVCCStats(b *testing.B) {
-	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
-	defer rocksdb.Close()
-
-	ms := enginepb.MVCCStats{
-		LiveBytes:       1,
-		KeyBytes:        1,
-		ValBytes:        1,
-		IntentBytes:     1,
-		LiveCount:       1,
-		KeyCount:        1,
-		ValCount:        1,
-		IntentCount:     1,
-		IntentAge:       1,
-		GCBytesAge:      1,
-		SysBytes:        1,
-		SysCount:        1,
-		LastUpdateNanos: 1,
-	}
-	b.SetBytes(int64(unsafe.Sizeof(ms)))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		if err := MVCCSetRangeStats(context.Background(), rocksdb, 1, &ms); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.StopTimer()
 }

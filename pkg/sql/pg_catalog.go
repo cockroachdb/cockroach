@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -26,8 +27,9 @@ import (
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/text/collate"
+
+	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -40,6 +42,8 @@ var (
 	oidZero   = tree.NewDOid(0)
 	zeroVal   = tree.DZero
 	negOneVal = tree.NewDInt(-1)
+
+	passwdStarString = tree.NewDString("********")
 )
 
 const (
@@ -64,19 +68,25 @@ var pgCatalog = virtualSchema{
 		pgCatalogDescriptionTable,
 		pgCatalogEnumTable,
 		pgCatalogExtensionTable,
+		pgCatalogForeignDataWrapperTable,
 		pgCatalogForeignServerTable,
 		pgCatalogForeignTableTable,
 		pgCatalogIndexTable,
 		pgCatalogIndexesTable,
 		pgCatalogInheritsTable,
 		pgCatalogNamespaceTable,
+		pgCatalogOperatorTable,
 		pgCatalogProcTable,
 		pgCatalogRangeTable,
+		pgCatalogRewriteTable,
 		pgCatalogRolesTable,
 		pgCatalogSequencesTable,
 		pgCatalogSettingsTable,
+		pgCatalogUserTable,
+		pgCatalogUserMappingTable,
 		pgCatalogTablesTable,
 		pgCatalogTablespaceTable,
+		pgCatalogTriggerTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
 	},
@@ -160,9 +170,9 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attislocal BOOL,
 	attinhcount INT,
 	attcollation OID,
-	attacl STRING,
-	attoptions STRING,
-	attfdwoptions STRING
+	attacl STRING[],
+	attoptions STRING[],
+	attfdwoptions STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -259,8 +269,8 @@ CREATE TABLE pg_catalog.pg_class (
 	relhastriggers BOOL,
 	relhassubclass BOOL,
 	relfrozenxid INT,
-	relacl STRING,
-	reloptions STRING
+	relacl STRING[],
+	reloptions STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -432,12 +442,15 @@ CREATE TABLE pg_catalog.pg_constraint (
 	connoinherit BOOL,
 	conkey INT[],
 	confkey INT[],
-	conpfeqop STRING,
-	conppeqop STRING,
-	conffeqop STRING,
-	conexclop STRING,
+	conpfeqop OID[],
+	conppeqop OID[],
+	conffeqop OID[],
+	conexclop OID[],
 	conbin STRING,
-	consrc STRING
+	consrc STRING,
+	-- condef is a CockroachDB extension that provides a SHOW CREATE CONSTRAINT
+	-- style string, for use by pg_get_constraintdef().
+	condef STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -463,6 +476,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 				conkey := tree.DNull
 				confkey := tree.DNull
 				consrc := tree.DNull
+				conbin := tree.DNull
+				condef := tree.DNull
 
 				// Determine constraint kind-specific fields.
 				switch c.Kind {
@@ -476,6 +491,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					condef = tree.NewDString(table.PrimaryKeyString())
 
 				case sqlbase.ConstraintTypeFK:
 					referencedDB, _ := tableLookup(c.ReferencedTable.ID)
@@ -499,6 +515,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					var buf bytes.Buffer
+					if err := p.printForeignKeyConstraint(ctx, &buf, db.Name, c.Index); err != nil {
+						return err
+					}
+					condef = tree.NewDString(buf.String())
 
 				case sqlbase.ConstraintTypeUnique:
 					oid = h.UniqueConstraintOid(db, table, c.Index)
@@ -509,6 +530,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					if err != nil {
 						return err
 					}
+					f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+					f.WriteString("UNIQUE (")
+					c.Index.ColNamesFormat(f)
+					f.WriteByte(')')
+					condef = tree.NewDString(f.CloseAndGetString())
 
 				case sqlbase.ConstraintTypeCheck:
 					oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
@@ -517,6 +543,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 					// constraint. We should add an array of column indexes to
 					// sqlbase.TableDescriptor_CheckConstraint and use that here.
 					consrc = tree.NewDString(c.Details)
+					conbin = consrc
+					condef = tree.NewDString(fmt.Sprintf("CHECK (%s)", c.Details))
 				}
 
 				if err := addRow(
@@ -543,8 +571,9 @@ CREATE TABLE pg_catalog.pg_constraint (
 					tree.DNull,                                 // conppeqop
 					tree.DNull,                                 // conffeqop
 					tree.DNull,                                 // conexclop
-					consrc,                                     // conbin
+					conbin,                                     // conbin
 					consrc,                                     // consrc
+					condef,                                     // condef
 				); err != nil {
 					return err
 				}
@@ -599,7 +628,7 @@ CREATE TABLE pg_catalog.pg_database (
 	datfrozenxid INT,
 	datminmxid INT,
 	dattablespace OID,
-	datacl STRING
+	datacl STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -783,6 +812,25 @@ CREATE TABLE pg_catalog.pg_extension (
 	},
 }
 
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-foreign-data-wrapper.html
+var pgCatalogForeignDataWrapperTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
+  oid OID,
+  fdwname NAME,
+  fdwowner OID,
+  fdwhandler OID,
+  fdwvalidator OID,
+  fdwacl STRING[],
+  fdwoptions STRING[]
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// Foreign data wrappers are not supported.
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-server.html.
 var pgCatalogForeignServerTable = virtualSchemaTable{
 	schema: `
@@ -793,8 +841,8 @@ CREATE TABLE pg_catalog.pg_foreign_server (
   srvfdw OID,
   srvtype STRING,
   srvversion STRING,
-  srvacl STRING,
-  srvoptions STRING
+  srvacl STRING[],
+  srvoptions STRING[]
 );
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -809,7 +857,7 @@ var pgCatalogForeignTableTable = virtualSchemaTable{
 CREATE TABLE pg_catalog.pg_foreign_table (
   ftrelid OID,
   ftserver OID,
-  ftoptions STRING
+  ftoptions STRING[]
 );
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1006,7 +1054,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 	oid OID,
 	nspname NAME NOT NULL,
 	nspowner OID,
-	nspacl STRING
+	nspacl STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1019,6 +1067,32 @@ CREATE TABLE pg_catalog.pg_namespace (
 				tree.DNull,               // nspacl
 			)
 		})
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-operator.html.
+var pgCatalogOperatorTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_operator (
+	oid OID,
+  oprname NAME,
+  oprnamespace OID,
+  oprowner OID,
+  oprkind TEXT,
+  oprcanmerge BOOL,
+  oprcanhash BOOL,
+  oprleft OID,
+  oprright OID,
+  oprresult OID,
+  oprcom OID,
+  oprnegate OID,
+  oprcode OID,
+  oprrest OID,
+  oprjoin OID
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		return nil
 	},
 }
 
@@ -1065,15 +1139,15 @@ CREATE TABLE pg_catalog.pg_proc (
 	pronargdefaults INT,
 	prorettype OID,
 	proargtypes STRING,
-	proallargtypes STRING,
+	proallargtypes STRING[],
 	proargmodes STRING[],
-	proargnames STRING,
+	proargnames STRING[],
 	proargdefaults STRING,
-	protrftypes STRING,
+	protrftypes OID[],
 	prosrc STRING,
 	probin STRING,
-	proconfig STRING,
-	proacl STRING
+	proconfig STRING[],
+	proacl STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1219,6 +1293,26 @@ CREATE TABLE pg_catalog.pg_range (
 	},
 }
 
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-rewrite.html.
+var pgCatalogRewriteTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_rewrite (
+  oid OID,
+  rulename NAME,
+  ev_class OID,
+  ev_type TEXT,
+  ev_enabled TEXT,
+  is_instead BOOL,
+  ev_qual TEXT,
+  ev_action TEXT
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// Rewrite rules are not supported.
+		return nil
+	},
+}
+
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-roles.html.
 var pgCatalogRolesTable = virtualSchemaTable{
 	schema: `
@@ -1236,7 +1330,7 @@ CREATE TABLE pg_catalog.pg_roles (
 	rolpassword STRING,
 	rolvaliduntil TIMESTAMPTZ,
 	rolbypassrls BOOL,
-	rolconfig STRING
+	rolconfig STRING[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1249,20 +1343,20 @@ CREATE TABLE pg_catalog.pg_roles (
 			func(username string, isRole tree.DBool) error {
 				isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
 				return addRow(
-					h.UserOid(username),         // oid
-					tree.NewDName(username),     // rolname
-					tree.MakeDBool(isRoot),      // rolsuper
-					tree.MakeDBool(isRole),      // rolinherit. Roles inherit by default.
-					tree.MakeDBool(isRoot),      // rolcreaterole
-					tree.MakeDBool(isRoot),      // rolcreatedb
-					tree.DBoolFalse,             // rolcatupdate
-					tree.MakeDBool(!isRole),     // rolcanlogin. Only users can login.
-					tree.DBoolFalse,             // rolreplication
-					negOneVal,                   // rolconnlimit
-					tree.NewDString("********"), // rolpassword
-					tree.DNull,                  // rolvaliduntil
-					tree.DBoolFalse,             // rolbypassrls
-					tree.NewDString("{}"),       // rolconfig
+					h.UserOid(username),     // oid
+					tree.NewDName(username), // rolname
+					tree.MakeDBool(isRoot),  // rolsuper
+					tree.MakeDBool(isRole),  // rolinherit. Roles inherit by default.
+					tree.MakeDBool(isRoot),  // rolcreaterole
+					tree.MakeDBool(isRoot),  // rolcreatedb
+					tree.DBoolFalse,         // rolcatupdate
+					tree.MakeDBool(!isRole), // rolcanlogin. Only users can login.
+					tree.DBoolFalse,         // rolreplication
+					negOneVal,               // rolconnlimit
+					passwdStarString,        // rolpassword
+					tree.DNull,              // rolvaliduntil
+					tree.DBoolFalse,         // rolbypassrls
+					tree.DNull,              // rolconfig
 				)
 			})
 	},
@@ -1403,8 +1497,8 @@ CREATE TABLE pg_catalog.pg_tablespace (
   spcname NAME,
   spcowner OID,
   spclocation TEXT,
-  spcacl STRING,
-  spcoptions TEXT
+  spcacl TEXT[],
+  spcoptions TEXT[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -1416,6 +1510,36 @@ CREATE TABLE pg_catalog.pg_tablespace (
 			tree.DNull,                    // spcacl
 			tree.DNull,                    // spcoptions
 		)
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-trigger.html
+var pgCatalogTriggerTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_trigger (
+  oid OID,
+  tgrelid OID,
+  tgname NAME,
+  tgfoid OID,
+  tgtype INT,
+  tgenabled TEXT,
+  tgisinternal BOOL,
+  tgconstrrelid OID,
+  tgconstrindid OID,
+  tgconstraint OID,
+  tgdeferrable BOOL,
+  tginitdeferred BOOL,
+  tgnargs INT,
+  tgattr INT2VECTOR,
+  tgargs BYTEA,
+  tgqual TEXT,
+  tgoldtable NAME,
+  tgnewtable NAME
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		// Triggers are unsupported.
+		return nil
 	},
 }
 
@@ -1499,7 +1623,7 @@ CREATE TABLE pg_catalog.pg_type (
 	typcollation OID,
 	typdefaultbin STRING,
 	typdefault STRING,
-	typacl STRING
+	typacl STRING[]
 );
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -1566,6 +1690,61 @@ CREATE TABLE pg_catalog.pg_type (
 				return err
 			}
 		}
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/view-pg-user.html
+var pgCatalogUserTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_user (
+  usename NAME,
+  usesysid OID,
+  usecreatedb BOOL,
+  usesuper BOOL,
+  userepl  BOOL,
+  usebypassrls BOOL,
+  passwd TEXT,
+  valuntil TIMESTAMP,
+  useconfig TEXT[]
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachRole(ctx, p,
+			func(username string, isRole tree.DBool) error {
+				if isRole {
+					return nil
+				}
+				isRoot := tree.DBool(username == security.RootUser)
+				return addRow(
+					tree.NewDName(username), // usename
+					h.UserOid(username),     // usesysid
+					tree.MakeDBool(isRoot),  // usecreatedb
+					tree.MakeDBool(isRoot),  // usesuper
+					tree.DBoolFalse,         // userepl
+					tree.DBoolFalse,         // usebypassrls
+					passwdStarString,        // passwd
+					tree.DNull,              // valuntil
+					tree.DNull,              // useconfig
+				)
+			})
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/view-pg-user.html
+var pgCatalogUserMappingTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_user_mapping (
+  oid OID,
+  umuser OID,
+  umserver OID,
+  umoptions TEXT[]
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		// This table stores the mapping to foreign server users.
+		// Foreign servers are not supported.
 		return nil
 	},
 }

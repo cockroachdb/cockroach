@@ -19,8 +19,7 @@ package distsqlrun
 
 import (
 	"container/heap"
-
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -94,8 +93,8 @@ type orderedSynchronizer struct {
 
 var _ RowSource = &orderedSynchronizer{}
 
-// Types is part of the RowSource interface.
-func (s *orderedSynchronizer) Types() []sqlbase.ColumnType {
+// OutputTypes is part of the RowSource interface.
+func (s *orderedSynchronizer) OutputTypes() []sqlbase.ColumnType {
 	return s.types
 }
 
@@ -190,18 +189,18 @@ const (
 func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadataOption) error {
 	for {
 		row, meta := src.src.Next()
-		if meta.Err != nil && mode == stopOnRowOrError {
-			return meta.Err
-		}
-		if !meta.Empty() {
-			s.metadata = append(s.metadata, &meta)
+		if meta != nil {
+			if meta.Err != nil && mode == stopOnRowOrError {
+				return meta.Err
+			}
+			s.metadata = append(s.metadata, meta)
 			continue
 		}
 		if mode == stopOnRowOrError {
 			src.row = row
 			return nil
 		}
-		if row == nil && meta.Empty() {
+		if row == nil && meta == nil {
 			return nil
 		}
 	}
@@ -261,11 +260,11 @@ func (s *orderedSynchronizer) drainSources() {
 }
 
 // Next is part of the RowSource interface.
-func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.state == notInitialized {
 		if err := s.initHeap(); err != nil {
 			s.ConsumerDone()
-			return nil, ProducerMetadata{Err: err}
+			return nil, &ProducerMetadata{Err: err}
 		}
 		s.state = returningRows
 	} else if s.state == returningRows && s.needsAdvance {
@@ -273,7 +272,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		// the next row for that source.
 		if err := s.advanceRoot(); err != nil {
 			s.ConsumerDone()
-			return nil, ProducerMetadata{Err: err}
+			return nil, &ProducerMetadata{Err: err}
 		}
 	}
 
@@ -291,15 +290,15 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		var meta *ProducerMetadata
 		meta, s.metadata = s.metadata[0], s.metadata[1:]
 		s.needsAdvance = false
-		return nil, *meta
+		return nil, meta
 	}
 
 	if len(s.heap) == 0 {
-		return nil, ProducerMetadata{}
+		return nil, nil
 	}
 
 	s.needsAdvance = true
-	return s.sources[s.heap[0]].row, ProducerMetadata{}
+	return s.sources[s.heap[0]].row, nil
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -347,7 +346,7 @@ func makeOrderedSync(
 	s := &orderedSynchronizer{
 		state:    notInitialized,
 		sources:  make([]srcInfo, len(sources)),
-		types:    sources[0].Types(),
+		types:    sources[0].OutputTypes(),
 		heap:     make([]srcIdx, 0, len(sources)),
 		ordering: ordering,
 		evalCtx:  evalCtx,

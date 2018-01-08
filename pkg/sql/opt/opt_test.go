@@ -25,7 +25,7 @@ package opt
 //
 // The supported commands are:
 //
-//  - legacy-normalize
+//  - semtree-normalize
 //
 //    Builds an expression tree from a scalar SQL expression and runs the
 //    TypedExpr normalization code. It must be followed by build-scalar.
@@ -41,6 +41,11 @@ package opt
 //
 //    Normalizes the expression. If present, must follow build-scalar.
 //
+//  - semtree-expr
+//
+//    Converts the scalar expression to a TypedExpr and prints it.
+//    If present, must follow build-scalar or semtree-normalize.
+//
 //  - index-constraints
 //
 //    Creates index constraints on the assumption that the index is formed by
@@ -48,13 +53,20 @@ package opt
 //    If present, build-scalar must have been an earlier command.
 //
 // The supported arguments are:
-//  - columns=(<type> [ascending|asc|descending|desc], ...)
 //
-//    Sets the types of index var columns, and optionally direction.
+//  - vars=(<type>, ...)
+//
+//    Sets the types for the index vars in the expression.
+//
+//  - index=(@<index> [ascending|asc|descending|desc] [not null], ...)
+//
+//    Information for the index (used by index-constraints). Each column of the
+//    index refers to an index var.
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -62,14 +74,23 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
 var (
@@ -181,6 +202,14 @@ func (r *testdataReader) Next(t *testing.T) bool {
 			// Skip comment lines.
 			continue
 		}
+		// Support wrapping directive lines using \, for example:
+		//   build-scalar \
+		//   vars(int)
+		for strings.HasSuffix(line, `\`) && r.scanner.Scan() {
+			nextLine := r.scanner.Text()
+			r.emit(nextLine)
+			line = strings.TrimSuffix(line, `\`) + " " + strings.TrimSpace(nextLine)
+		}
 
 		fields := splitDirectives(t, line)
 		if len(fields) == 0 {
@@ -261,7 +290,23 @@ func runTest(t *testing.T, path string, f func(d *testdata) string) {
 	}
 }
 
+// testCatalog implements the sqlbase.Catalog interface.
+type testCatalog struct {
+	kvDB *client.DB
+}
+
+// FindTable implements the sqlbase.Catalog interface.
+func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
+	return sqlbase.GetTableDescriptor(c.kvDB, string(name.DatabaseName), string(name.TableName)), nil
+}
+
 func TestOpt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	catalog := testCatalog{kvDB: kvDB}
+
 	paths, err := filepath.Glob(*logicTestData)
 	if err != nil {
 		t.Fatal(err)
@@ -273,9 +318,12 @@ func TestOpt(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			runTest(t, path, func(d *testdata) string {
-				var e *expr
+				var e *Expr
+				var varTypes []types.T
+				var iVarHelper tree.IndexedVarHelper
 				var colInfos []IndexColumnInfo
 				var typedExpr tree.TypedExpr
+				evalCtx := tree.MakeTestingEvalContext()
 
 				for _, arg := range d.cmdArgs {
 					key := arg
@@ -287,10 +335,23 @@ func TestOpt(t *testing.T) {
 					if len(val) > 2 && val[0] == '(' && val[len(val)-1] == ')' {
 						val = val[1 : len(val)-1]
 					}
+					vals := strings.Split(val, ",")
 					switch key {
-					case "columns":
+					case "vars":
+						varTypes, err = parseTypes(vals)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+
+						// Set up the indexed var helper.
+						iv := &indexedVars{types: varTypes}
+						iVarHelper = tree.MakeIndexedVarHelper(iv, len(iv.types))
+					case "index":
+						if varTypes == nil {
+							d.fatalf(t, "vars must precede index")
+						}
 						var err error
-						colInfos, err = parseColumns(strings.Split(val, ","))
+						colInfos, err = parseIndexColumns(varTypes, vals)
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
@@ -298,45 +359,80 @@ func TestOpt(t *testing.T) {
 						d.fatalf(t, "unknown argument: %s", key)
 					}
 				}
-
-				buildScalarFn := func() {
-					defer func() {
-						if r := recover(); r != nil {
-							d.fatalf(t, "buildScalar: %v", r)
-						}
-					}()
-					e = buildScalar(&buildContext{}, typedExpr)
-				}
-
-				evalCtx := tree.MakeTestingEvalContext()
-				var err error
-				typedExpr, err = parseScalarExpr(d.sql, colInfos)
-				if err != nil {
-					d.fatalf(t, "%v", err)
-				}
-				for _, cmd := range strings.Split(d.cmd, ",") {
-					switch cmd {
-					case "legacy-normalize":
-						// Apply the TypedExpr normalization and rebuild the expression.
-						typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+				getTypedExpr := func() tree.TypedExpr {
+					if typedExpr == nil {
+						var err error
+						typedExpr, err = parseScalarExpr(d.sql, &iVarHelper)
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
+					}
+					return typedExpr
+				}
+				buildScalarFn := func() {
+					var err error
+					e, err = buildScalar(getTypedExpr(), &evalCtx)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				for _, cmd := range strings.Split(d.cmd, ",") {
+					switch cmd {
+					case "semtree-normalize":
+						// Apply the TypedExpr normalization and rebuild the expression.
+						typedExpr, err = evalCtx.NormalizeExpr(getTypedExpr())
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+
+					case "exec":
+						_, err := sqlDB.Exec(d.sql)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+						return ""
+
+					case "build":
+						stmt, err := parser.ParseOne(d.sql)
+						if err != nil {
+							d.fatalf(t, "%v", err)
+						}
+						e, err = build(ctx, stmt, catalog, &evalCtx)
+						if err != nil {
+							return fmt.Sprintf("error: %v\n", err)
+						}
+						return e.String()
+
 					case "build-scalar":
 						buildScalarFn()
 
 					case "normalize":
 						normalizeExpr(e)
 
+					case "semtree-expr":
+						expr := scalarToTypedExpr(e, &iVarHelper)
+						return fmt.Sprintf("%s%s\n", e.String(), expr)
+
 					case "index-constraints":
 						if e == nil {
 							d.fatalf(t, "no expression for index-constraints")
 						}
+						var ic IndexConstraints
 
-						spans := MakeIndexConstraints(e, colInfos, &evalCtx)
+						ic.Init(e, colInfos, &evalCtx)
+						spans, ok := ic.Spans()
+
 						var buf bytes.Buffer
+						if !ok {
+							spans = LogicalSpans{MakeFullSpan()}
+						}
 						for _, sp := range spans {
 							fmt.Fprintf(&buf, "%s\n", sp)
+						}
+						remainingFilter := ic.RemainingFilter(&iVarHelper)
+						if remainingFilter != nil {
+							fmt.Fprintf(&buf, "Remaining filter: %s\n", remainingFilter)
 						}
 						return buf.String()
 					default:
@@ -359,27 +455,58 @@ func parseType(typeStr string) (types.T, error) {
 	return coltypes.CastTargetToDatumType(colType), nil
 }
 
-// parseColumns parses descriptions of index columns; each
-// string corresponds to an index column and is of the form:
-//   <type> [ascending|descending]
-func parseColumns(colStrs []string) ([]IndexColumnInfo, error) {
-	res := make([]IndexColumnInfo, len(colStrs))
-	for i := range colStrs {
-		fields := strings.Fields(colStrs[i])
+// parseColumns parses a list of types.
+func parseTypes(colStrs []string) ([]types.T, error) {
+	res := make([]types.T, len(colStrs))
+	for i, s := range colStrs {
 		var err error
-		res[i].typ, err = parseType(fields[0])
+		res[i], err = parseType(s)
 		if err != nil {
 			return nil, err
 		}
-		res[i].direction = encoding.Ascending
-		for _, f := range fields[1:] {
-			switch strings.ToLower(f) {
+	}
+	return res, nil
+}
+
+// parseIndexColumns parses descriptions of index columns; each
+// string corresponds to an index column and is of the form:
+//   <type> [ascending|descending]
+func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumnInfo, error) {
+	res := make([]IndexColumnInfo, len(colStrs))
+	for i := range colStrs {
+		fields := strings.Fields(colStrs[i])
+		if fields[0][0] != '@' {
+			return nil, fmt.Errorf("index column must start with @<index>")
+		}
+		idx, err := strconv.Atoi(fields[0][1:])
+		if err != nil {
+			return nil, err
+		}
+		if idx < 1 || idx > len(indexVarTypes) {
+			return nil, fmt.Errorf("invalid index var @%d", idx)
+		}
+		res[i].VarIdx = idx - 1
+		res[i].Typ = indexVarTypes[res[i].VarIdx]
+		res[i].Direction = encoding.Ascending
+		res[i].Nullable = true
+		fields = fields[1:]
+		for len(fields) > 0 {
+			switch strings.ToLower(fields[0]) {
 			case "ascending", "asc":
 				// ascending is the default.
+				fields = fields[1:]
 			case "descending", "desc":
-				res[i].direction = encoding.Descending
+				res[i].Direction = encoding.Descending
+				fields = fields[1:]
+
+			case "not":
+				if len(fields) < 2 || strings.ToLower(fields[1]) != "null" {
+					return nil, fmt.Errorf("unknown column attribute %s", fields)
+				}
+				res[i].Nullable = false
+				fields = fields[2:]
 			default:
-				return nil, fmt.Errorf("unknown column attribute %s", f)
+				return nil, fmt.Errorf("unknown column attribute %s", fields)
 			}
 		}
 	}
@@ -404,24 +531,17 @@ func (iv *indexedVars) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (*indexedVars) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic("unimplemented")
+	return nil
 }
 
-func parseScalarExpr(sql string, indexVarCols []IndexColumnInfo) (tree.TypedExpr, error) {
+func parseScalarExpr(sql string, ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		return nil, err
 	}
 
-	// Set up an indexed var helper so we can type-check the expression.
-	iv := &indexedVars{types: make([]types.T, len(indexVarCols))}
-	for i, colInfo := range indexVarCols {
-		iv.types[i] = colInfo.typ
-	}
-
 	sema := tree.MakeSemaContext(false /* privileged */)
-	iVarHelper := tree.MakeIndexedVarHelper(iv, len(iv.types))
-	sema.IVarHelper = &iVarHelper
+	sema.IVarHelper = ivh
 
 	return expr.TypeCheck(&sema, types.Any)
 }

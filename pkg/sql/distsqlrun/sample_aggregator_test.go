@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	gosql "database/sql"
 	"reflect"
 	"testing"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"golang.org/x/net/context"
 )
 
 func TestSampleAggregator(t *testing.T) {
@@ -42,6 +42,7 @@ func TestSampleAggregator(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
+		Ctx:      context.Background(),
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 		clientDB: kvDB,
@@ -109,7 +110,7 @@ func TestSampleAggregator(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Run(context.Background(), nil /* wg */)
+		p.Run(nil /* wg */)
 	}
 	// Randomly interleave the output rows from the samplers into a single buffer.
 	samplerResults := NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
@@ -119,7 +120,7 @@ func TestSampleAggregator(t *testing.T) {
 		if row == nil {
 			outputs = append(outputs[:i], outputs[i+1:]...)
 		} else {
-			samplerResults.Push(row, ProducerMetadata{})
+			samplerResults.Push(row, nil /* meta */)
 		}
 	}
 
@@ -136,7 +137,7 @@ func TestSampleAggregator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agg.Run(context.Background(), nil /* wg */)
+	agg.Run(nil /* wg */)
 	// Make sure there was no error.
 	finalOut.GetRowsNoMeta(t)
 	r := sqlutils.MakeSQLRunner(sqlDB)

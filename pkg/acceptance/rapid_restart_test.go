@@ -15,6 +15,7 @@
 package acceptance
 
 import (
+	"context"
 	"math/rand"
 	"net/http"
 	"os"
@@ -23,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pkg/errors"

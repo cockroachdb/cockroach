@@ -15,13 +15,13 @@
 package ts_test
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"

@@ -16,6 +16,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -33,7 +34,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -714,8 +715,8 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	invalidLease.Replica.StoreID += 12345
 
 	raftCmd := storagebase.RaftCommand{
-		ProposerLease:   lease,
-		ProposerReplica: invalidLease.Replica,
+		ProposerLeaseSequence: lease.Sequence,
+		ProposerReplica:       invalidLease.Replica,
 		ReplicatedEvalResult: storagebase.ReplicatedEvalResult{
 			IsLeaseRequest: true,
 			State: &storagebase.ReplicaState{
@@ -5690,7 +5691,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// The initial stats contain no lease, but there will be an initial
 	// nontrivial lease requested with the first write below.
 	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 22,
+		SysBytes: 24,
 	})
 
 	// Our clock might not be set to zero.
@@ -6647,7 +6648,7 @@ func TestProposalOverhead(t *testing.T) {
 	// NB: the expected overhead reflects the space overhead currently present in
 	// Raft commands. This test will fail if that overhead changes. Try to make
 	// this number go down and not up.
-	const expectedOverhead = 105
+	const expectedOverhead = 59
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
@@ -6750,6 +6751,27 @@ func TestReplicaDestroy(t *testing.T) {
 	// Now try a fresh descriptor and succeed.
 	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *repl.Desc(), true); err != nil {
 		t.Fatal(err)
+	}
+
+	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* replicatedOnly */)
+	defer iter.Close()
+	if ok, err := iter.Valid(); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		// If the range is destroyed, only a tombstone key should be there.
+		k1 := iter.Key().Key
+		if tombstoneKey := keys.RaftTombstoneKey(tc.repl.RangeID); !bytes.Equal(k1, tombstoneKey) {
+			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
+		}
+
+		iter.Next()
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			t.Errorf("expected a destroyed replica to have only a tombstone key, but found more")
+		}
+	} else {
+		t.Errorf("expected a tombstone key, but got an empty iteration")
 	}
 }
 
@@ -7114,6 +7136,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			// Pick a key unlikely to be used by background processes.
 			key := []byte("acdfg")
 			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			cfg := TestStoreConfig(nil)
 			if !cancelEarly {
 				cfg.TestingKnobs.TestingProposalFilter =

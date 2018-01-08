@@ -15,11 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -103,11 +102,13 @@ func (m *outbox) init(types []sqlbase.ColumnType) {
 // communication error, in which case the other side of the stream should get it
 // too, or it might be an encoding error, in which case we've forwarded it on
 // the stream.
-func (m *outbox) addRow(ctx context.Context, row sqlbase.EncDatumRow, meta ProducerMetadata) error {
+func (m *outbox) addRow(
+	ctx context.Context, row sqlbase.EncDatumRow, meta *ProducerMetadata,
+) error {
 	mustFlush := false
 	var encodingErr error
-	if !meta.Empty() {
-		m.encoder.AddMetadata(meta)
+	if meta != nil {
+		m.encoder.AddMetadata(*meta)
 		// If we hit an error, let's forward it ASAP. The consumer will probably
 		// close.
 		mustFlush = meta.Err != nil
@@ -230,8 +231,9 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				// No more data.
 				return m.flush(ctx)
 			}
-			if !draining || !msg.Meta.Empty() {
+			if !draining || msg.Meta != nil {
 				// If we're draining, we ignore all the rows and just send metadata.
+
 				err := m.addRow(ctx, msg.Row, msg.Meta)
 				if err != nil {
 					return err

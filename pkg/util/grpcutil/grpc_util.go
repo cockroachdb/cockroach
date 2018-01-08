@@ -15,13 +15,12 @@
 package grpcutil
 
 import (
+	"context"
 	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/pkg/errors"
-
-	"golang.org/x/net/context"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

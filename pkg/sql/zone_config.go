@@ -15,9 +15,7 @@
 package sql
 
 import (
-	"fmt"
-
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -160,7 +158,8 @@ func GetTableDesc(cfg config.SystemConfig, id sqlbase.ID) (*sqlbase.TableDescrip
 var GenerateSubzoneSpans = func(
 	*sqlbase.TableDescriptor, []config.Subzone,
 ) ([]config.SubzoneSpan, error) {
-	return nil, fmt.Errorf("setting zone configs on indexes or partitions requires a CCL binary")
+	return nil, sqlbase.NewCCLRequiredError(errors.New(
+		"setting zone configs on indexes or partitions requires a CCL binary"))
 }
 
 func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
@@ -174,9 +173,11 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 	}
 }
 
-func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
+func resolveZone(
+	ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier, sessionDB string,
+) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
-	id, err := config.ResolveZoneSpecifier(zs,
+	id, err := config.ResolveZoneSpecifier(zs, sessionDB,
 		func(parentID uint32, name string) (uint32, error) {
 			kv, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(sqlbase.ID(parentID), name))
 			if err != nil {

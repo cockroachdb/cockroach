@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -53,7 +52,6 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 		showMetadata: false,
 		showExprs:    false,
 		showTypes:    false,
-		doIndent:     false,
 	}
 
 	for _, opt := range n.Options {
@@ -74,9 +72,6 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 				explainer.showTypes = true
 				// TYPES implies METADATA.
 				explainer.showMetadata = true
-
-			case "indent":
-				explainer.doIndent = true
 
 			case "symvars":
 				explainer.symbolicVars = true

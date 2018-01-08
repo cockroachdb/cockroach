@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -31,7 +32,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -426,8 +426,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 			defer s.Stopper().Stop(context.TODO())
 			ts := s.(*TestServer)
 
-			escDBName := tree.Name(tc.dbName).String()
-			escTblName := tree.Name(tc.tblName).String()
+			escDBName := tree.NameStringP(&tc.dbName)
+			escTblName := tree.NameStringP(&tc.tblName)
 
 			ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
@@ -1038,14 +1038,11 @@ func TestAdminAPIUIData(t *testing.T) {
 
 func TestClusterAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
 	testutils.RunTrueAndFalse(t, "reportingOn", func(t *testing.T, reportingOn bool) {
 		testutils.RunTrueAndFalse(t, "enterpriseOn", func(t *testing.T, enterpriseOn bool) {
-			settings := &s.ClusterSettings().SV
-			log.DiagnosticsReportingEnabled.Override(settings, reportingOn)
-
 			// Override server license check.
 			if enterpriseOn {
 				oldLicenseCheck := LicenseCheckFn
@@ -1057,8 +1054,16 @@ func TestClusterAPI(t *testing.T) {
 				}()
 			}
 
+			if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = $1`, reportingOn); err != nil {
+				t.Fatal(err)
+			}
+
 			// We need to retry, because the cluster ID isn't set until after
-			// bootstrapping.
+			// bootstrapping and because setting a cluster setting isn't necessarily
+			// instantaneous.
+			//
+			// Also note that there's a migration that affects `diagnostics.reporting.enabled`,
+			// so manipulating the cluster setting var directly is a bad idea.
 			testutils.SucceedsSoon(t, func() error {
 				var resp serverpb.ClusterResponse
 				if err := getAdminJSONProto(s, "cluster", &resp); err != nil {

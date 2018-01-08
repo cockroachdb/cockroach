@@ -15,9 +15,8 @@
 package stats
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"time"
 

@@ -16,6 +16,7 @@ package roachpb
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -30,7 +31,6 @@ import (
 	"unicode"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -1068,6 +1068,14 @@ func (crt ChangeReplicasTrigger) String() string {
 	return fmt.Sprintf("%s(%s): updated=%s next=%d", crt.ChangeType, crt.Replica, crt.UpdatedReplicas, crt.NextReplicaID)
 }
 
+// LeaseSequence is a custom type for a lease sequence number.
+type LeaseSequence int64
+
+// String implements the fmt.Stringer interface.
+func (s LeaseSequence) String() string {
+	return strconv.FormatInt(int64(s), 10)
+}
+
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
@@ -1076,9 +1084,9 @@ func (l Lease) String() string {
 		proposedSuffix = fmt.Sprintf(" pro=%s", l.ProposedTS)
 	}
 	if l.Type() == LeaseExpiration {
-		return fmt.Sprintf("repl=%s start=%s exp=%s%s", l.Replica, l.Start, l.Expiration, proposedSuffix)
+		return fmt.Sprintf("repl=%s seq=%s start=%s exp=%s%s", l.Replica, l.Sequence, l.Start, l.Expiration, proposedSuffix)
 	}
-	return fmt.Sprintf("repl=%s start=%s epo=%d%s", l.Replica, l.Start, l.Epoch, proposedSuffix)
+	return fmt.Sprintf("repl=%s seq=%s start=%s epo=%d%s", l.Replica, l.Sequence, l.Start, l.Epoch, proposedSuffix)
 }
 
 // BootstrapLease returns the lease to persist for the range of a freshly bootstrapped store. The
@@ -1129,6 +1137,9 @@ func (l Lease) Equivalent(ol Lease) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, ol.ProposedTS = nil, nil
 	l.DeprecatedStartStasis, ol.DeprecatedStartStasis = nil, nil
+	// Ignore sequence numbers, they are simply a reflection of
+	// the equivalency of other fields.
+	l.Sequence, ol.Sequence = 0, 0
 	// If both leases are epoch-based, we must dereference the epochs
 	// and then set to nil.
 	switch l.Type() {
@@ -1221,6 +1232,9 @@ func (l *Lease) Equal(that interface{}) bool {
 		return false
 	}
 	if l.Epoch != that1.Epoch {
+		return false
+	}
+	if l.Sequence != that1.Sequence {
 		return false
 	}
 	return true

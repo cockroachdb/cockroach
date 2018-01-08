@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -201,7 +200,7 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a < 1 OR a < 2 OR a < 3 OR a < 4 OR a < 5`, `a < 5`, true},
 		{`(a < 1 OR a > 1) AND a >= 1`, `a > 1`, true},
 		{`a < 1 AND (a > 2 AND a < 1)`, `false`, true},
-		{`a < 1 OR (a > 1 OR a < 2)`, `(a < 1) OR (a IS DISTINCT FROM NULL)`, true},
+		{`a < 1 OR (a > 1 OR a < 2)`, `(a < 1) OR (a IS NOT NULL)`, true},
 		{`a < 1 AND length(i) > 0`, `a < 1`, false},
 		{`a < 1 OR length(i) > 0`, `true`, false},
 		{`a <= 5 AND a IN (4, 5, 6)`, `a IN (4, 5)`, true},
@@ -263,16 +262,16 @@ func TestSimplifyExpr(t *testing.T) {
 		{`i SIMILAR TO 'foo%'`, `(i >= 'foo') AND (i < 'fop')`, false},
 		{`i SIMILAR TO '(foo|foobar)%'`, `(i >= 'foo') AND (i < 'fop')`, false},
 
-		{`c IS NULL`, `c IS NOT DISTINCT FROM NULL`, true},
-		{`c IS NOT NULL`, `c IS DISTINCT FROM NULL`, true},
+		{`c IS NULL`, `c IS NULL`, true},
+		{`c IS NOT NULL`, `c IS NOT NULL`, true},
 		{`c IS TRUE`, `c = true`, true},
-		{`c IS NOT TRUE`, `(c < true) OR (c IS NOT DISTINCT FROM NULL)`, true},
+		{`c IS NOT TRUE`, `(c < true) OR (c IS NULL)`, true},
 		{`c IS FALSE`, `c = false`, true},
-		{`c IS NOT FALSE`, `(c > false) OR (c IS NOT DISTINCT FROM NULL)`, true},
-		{`c IS UNKNOWN`, `c IS NOT DISTINCT FROM NULL`, true},
-		{`c IS NOT UNKNOWN`, `c IS DISTINCT FROM NULL`, true},
-		{`a IS DISTINCT FROM NULL`, `a IS DISTINCT FROM NULL`, true},
-		{`a IS NOT DISTINCT FROM NULL`, `a IS NOT DISTINCT FROM NULL`, true},
+		{`c IS NOT FALSE`, `(c > false) OR (c IS NULL)`, true},
+		{`c IS UNKNOWN`, `c IS NULL`, true},
+		{`c IS NOT UNKNOWN`, `c IS NOT NULL`, true},
+		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`, true},
+		{`a IS NOT DISTINCT FROM NULL`, `a IS NULL`, true},
 		{`c IS NOT NULL AND c IS NULL`, `false`, true},
 
 		// From a logic-test expression that we previously failed to simplify.
@@ -283,7 +282,7 @@ func TestSimplifyExpr(t *testing.T) {
 		{`((a < 0) AND (a < 0 AND b > 0)) OR (a > 1 AND a < 0)`,
 			`(a < 0) AND (b > 0)`, true},
 		{`((a < 0) OR (a < 0 OR b > 0)) AND (a > 0 OR a < 1)`,
-			`((a < 0) OR (b > 0)) AND (a IS DISTINCT FROM NULL)`, true},
+			`((a < 0) OR (b > 0)) AND (a IS NOT NULL)`, true},
 
 		// Contains mixed date-type comparisons.
 		{`n >= DATE '1997-01-01' AND n < (DATE '1997-01-01' + INTERVAL '1' year)`,
@@ -304,7 +303,7 @@ func TestSimplifyExpr(t *testing.T) {
 			defer p.evalCtx.ActiveMemAcc.Close(context.Background())
 			p.evalCtx.IVarHelper = &sel.ivarHelper
 			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
-			expr, equiv := simplifyExpr(&p.evalCtx, expr)
+			expr, equiv := SimplifyExpr(&p.evalCtx, expr)
 			if s := expr.String(); d.expected != s {
 				t.Errorf("%s: structure: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -342,9 +341,9 @@ func TestSimplifyNotExpr(t *testing.T) {
 		{`NOT i ~* 'foo'`, `true`, false, false},
 		{`NOT i !~* 'foo'`, `true`, false, false},
 		{`NOT a IS DISTINCT FROM 1`, `a = 1`, true, false},
-		{`NOT a IS NOT DISTINCT FROM 1`, `(a != 1) OR (a IS NOT DISTINCT FROM NULL)`, true, false},
-		{`NOT a IS NULL`, `a IS DISTINCT FROM NULL`, true, true},
-		{`NOT a IS NOT NULL`, `a IS NOT DISTINCT FROM NULL`, true, true},
+		{`NOT a IS NOT DISTINCT FROM 1`, `(a != 1) OR (a IS NULL)`, true, false},
+		{`NOT a IS NULL`, `a IS NOT NULL`, true, true},
+		{`NOT a IS NOT NULL`, `a IS NULL`, true, true},
 		{`NOT (a != 1 AND b != 1)`, `(a = 1) OR (b = 1)`, true, true},
 		{`NOT (a != 1 OR a < 1)`, `a = 1`, true, true},
 		{`NOT NOT a = 1`, `a = 1`, true, true},
@@ -358,7 +357,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
-			expr2, equiv := simplifyExpr(&p.evalCtx, expr1)
+			expr2, equiv := SimplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -396,7 +395,7 @@ func TestSimplifyAndExpr(t *testing.T) {
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
-			expr2, equiv := simplifyExpr(&p.evalCtx, expr1)
+			expr2, equiv := SimplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -466,8 +465,8 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a != 1 AND a IN (1, 2)`, `a IN (2)`, true},
 		{`a != 1 AND a IS NULL`, `false`, true},
 		{`a IS NULL AND a != 1`, `false`, true},
-		{`a != 1 AND a IS NOT NULL`, `(a != 1) AND (a IS DISTINCT FROM NULL)`, true},
-		{`a IS NOT NULL AND a != 1`, `(a IS DISTINCT FROM NULL) AND (a != 1)`, true},
+		{`a != 1 AND a IS NOT NULL`, `(a != 1) AND (a IS NOT NULL)`, true},
+		{`a IS NOT NULL AND a != 1`, `(a IS NOT NULL) AND (a != 1)`, true},
 		{`a != 1 AND a = 1.0`, `false`, true},
 		{`a != 1 AND a != 1.0`, `a != 1`, true},
 
@@ -591,8 +590,8 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a IN (1) AND a IS NOT NULL`, `a IN (1)`, true},
 		{`a IS NOT NULL AND a IN (1)`, `a IN (1)`, true},
 
-		{`a IS NULL AND a IS NULL`, `a IS NOT DISTINCT FROM NULL`, true},
-		{`a IS NOT NULL AND a IS NOT NULL`, `a IS DISTINCT FROM NULL`, true},
+		{`a IS NULL AND a IS NULL`, `a IS NULL`, true},
+		{`a IS NOT NULL AND a IS NOT NULL`, `a IS NOT NULL`, true},
 		{`a IS NULL AND a IS NOT NULL`, `false`, true},
 	}
 	p := makeTestPlanner()
@@ -602,7 +601,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
-			expr2, equiv := simplifyExpr(&p.evalCtx, expr1)
+			expr2, equiv := SimplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -624,7 +623,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 				expr1 = parseAndNormalizeExpr(t, p, d.expr, sel)
 				andExpr := expr1.(*tree.AndExpr)
 				andExpr.Left, andExpr.Right = andExpr.Right, andExpr.Left
-				expr3, equiv := simplifyExpr(&p.evalCtx, andExpr)
+				expr3, equiv := SimplifyExpr(&p.evalCtx, andExpr)
 				if s := expr3.String(); d.expected != s {
 					t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
 				}
@@ -655,7 +654,7 @@ func TestSimplifyOrExpr(t *testing.T) {
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
-			expr2, _ := simplifyExpr(&p.evalCtx, expr1)
+			expr2, _ := SimplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -680,7 +679,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a = 1 OR a = 1`, `a = 1`},
 		{`a = 1 OR a = 2`, `a IN (1, 2)`},
 		{`a = 2 OR a = 1`, `a IN (1, 2)`},
-		{`a = 1 OR a != 1`, `a IS DISTINCT FROM NULL`},
+		{`a = 1 OR a != 1`, `a IS NOT NULL`},
 		{`a = 1 OR a != 2`, `a != 2`},
 		{`a = 2 OR a != 1`, `a != 1`},
 		{`a = 1 OR a > 1`, `a >= 1`},
@@ -700,35 +699,35 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a = 2 OR a IN (1)`, `a IN (1, 2)`},
 		{`a = 1 OR a = 1.0`, `a = 1`},
 
-		{`a != 1 OR a = 1`, `a IS DISTINCT FROM NULL`},
+		{`a != 1 OR a = 1`, `a IS NOT NULL`},
 		{`a != 1 OR a = 2`, `a != 1`},
 		{`a != 2 OR a = 1`, `a != 2`},
 		{`a != 1 OR a != 1`, `a != 1`},
-		{`a != 1 OR a != 2`, `a IS DISTINCT FROM NULL`},
-		{`a != 2 OR a != 1`, `a IS DISTINCT FROM NULL`},
+		{`a != 1 OR a != 2`, `a IS NOT NULL`},
+		{`a != 2 OR a != 1`, `a IS NOT NULL`},
 		{`a != 1 OR a > 1`, `a != 1`},
 		{`a != 1 OR a > 2`, `a != 1`},
-		{`a != 2 OR a > 1`, `a IS DISTINCT FROM NULL`},
-		{`a != 1 OR a >= 1`, `a IS DISTINCT FROM NULL`},
+		{`a != 2 OR a > 1`, `a IS NOT NULL`},
+		{`a != 1 OR a >= 1`, `a IS NOT NULL`},
 		{`a != 1 OR a >= 2`, `a != 1`},
-		{`a != 2 OR a >= 1`, `a IS DISTINCT FROM NULL`},
+		{`a != 2 OR a >= 1`, `a IS NOT NULL`},
 		{`a != 1 OR a < 1`, `a != 1`},
-		{`a != 1 OR a < 2`, `a IS DISTINCT FROM NULL`},
+		{`a != 1 OR a < 2`, `a IS NOT NULL`},
 		{`a != 2 OR a < 1`, `a != 2`},
-		{`a != 1 OR a <= 1`, `a IS DISTINCT FROM NULL`},
-		{`a != 1 OR a <= 2`, `a IS DISTINCT FROM NULL`},
+		{`a != 1 OR a <= 1`, `a IS NOT NULL`},
+		{`a != 1 OR a <= 2`, `a IS NOT NULL`},
 		{`a != 2 OR a <= 1`, `a != 2`},
-		{`a != 1 OR a IN (1)`, `a IS DISTINCT FROM NULL`},
+		{`a != 1 OR a IN (1)`, `a IS NOT NULL`},
 		{`a != 1 OR a IN (2)`, `a != 1`},
-		{`a != 2 OR a IN (1, 2)`, `a IS DISTINCT FROM NULL`},
-		{`a != 1 OR a = 1.0`, `a IS DISTINCT FROM NULL`},
+		{`a != 2 OR a IN (1, 2)`, `a IS NOT NULL`},
+		{`a != 1 OR a = 1.0`, `a IS NOT NULL`},
 		{`a != 1 OR a != 1.0`, `a != 1`},
 
 		{`a > 1 OR a = 1`, `a >= 1`},
 		{`a > 1 OR a = 2`, `a > 1`},
 		{`a > 2 OR a = 1`, `(a > 2) OR (a = 1)`},
 		{`a > 1 OR a != 1`, `a != 1`},
-		{`a > 1 OR a != 2`, `a IS DISTINCT FROM NULL`},
+		{`a > 1 OR a != 2`, `a IS NOT NULL`},
 		{`a > 2 OR a != 1`, `a != 1`},
 		{`a > 1 OR a > 1`, `a > 1`},
 		{`a > 1 OR a > 2`, `a > 1`},
@@ -737,10 +736,10 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a > 1 OR a >= 2`, `a > 1`},
 		{`a > 2 OR a >= 1`, `a >= 1`},
 		{`a > 1 OR a < 1`, `a != 1`},
-		{`a > 1 OR a < 2`, `a IS DISTINCT FROM NULL`},
+		{`a > 1 OR a < 2`, `a IS NOT NULL`},
 		{`a > 2 OR a < 1`, `(a > 2) OR (a < 1)`},
-		{`a > 1 OR a <= 1`, `a IS DISTINCT FROM NULL`},
-		{`a > 1 OR a <= 2`, `a IS DISTINCT FROM NULL`},
+		{`a > 1 OR a <= 1`, `a IS NOT NULL`},
+		{`a > 1 OR a <= 2`, `a IS NOT NULL`},
 		{`a > 2 OR a <= 1`, `(a > 2) OR (a <= 1)`},
 		{`a > 1 OR a IN (1)`, `a >= 1`},
 		{`a > 1 OR a IN (2)`, `a > 1`},
@@ -751,8 +750,8 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a >= 1 OR a = 1`, `a >= 1`},
 		{`a >= 1 OR a = 2`, `a >= 1`},
 		{`a >= 2 OR a = 1`, `(a >= 2) OR (a = 1)`},
-		{`a >= 1 OR a != 1`, `a IS DISTINCT FROM NULL`},
-		{`a >= 1 OR a != 2`, `a IS DISTINCT FROM NULL`},
+		{`a >= 1 OR a != 1`, `a IS NOT NULL`},
+		{`a >= 1 OR a != 2`, `a IS NOT NULL`},
 		{`a >= 2 OR a != 1`, `a != 1`},
 		{`a >= 1 OR a > 1`, `a >= 1`},
 		{`a >= 1 OR a > 2`, `a >= 1`},
@@ -760,11 +759,11 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a >= 1 OR a >= 1`, `a >= 1`},
 		{`a >= 1 OR a >= 2`, `a >= 1`},
 		{`a >= 2 OR a >= 1`, `a >= 1`},
-		{`a >= 1 OR a < 1`, `a IS DISTINCT FROM NULL`},
-		{`a >= 1 OR a < 2`, `a IS DISTINCT FROM NULL`},
+		{`a >= 1 OR a < 1`, `a IS NOT NULL`},
+		{`a >= 1 OR a < 2`, `a IS NOT NULL`},
 		{`a >= 2 OR a < 1`, `(a >= 2) OR (a < 1)`},
-		{`a >= 1 OR a <= 1`, `a IS DISTINCT FROM NULL`},
-		{`a >= 1 OR a <= 2`, `a IS DISTINCT FROM NULL`},
+		{`a >= 1 OR a <= 1`, `a IS NOT NULL`},
+		{`a >= 1 OR a <= 2`, `a IS NOT NULL`},
 		{`a >= 2 OR a <= 1`, `(a >= 2) OR (a <= 1)`},
 		{`a >= 1 OR a IN (1)`, `a >= 1`},
 		{`a >= 1 OR a IN (2)`, `a >= 1`},
@@ -775,13 +774,13 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a < 2 OR a = 1`, `a < 2`},
 		{`a < 1 OR a != 1`, `a != 1`},
 		{`a < 1 OR a != 2`, `a != 2`},
-		{`a < 2 OR a != 1`, `a IS DISTINCT FROM NULL`},
+		{`a < 2 OR a != 1`, `a IS NOT NULL`},
 		{`a < 1 OR a > 1`, `a != 1`},
 		{`a < 1 OR a > 2`, `(a < 1) OR (a > 2)`},
-		{`a < 2 OR a > 1`, `a IS DISTINCT FROM NULL`},
-		{`a < 1 OR a >= 1`, `a IS DISTINCT FROM NULL`},
+		{`a < 2 OR a > 1`, `a IS NOT NULL`},
+		{`a < 1 OR a >= 1`, `a IS NOT NULL`},
 		{`a < 1 OR a >= 2`, `(a < 1) OR (a >= 2)`},
-		{`a < 2 OR a >= 1`, `a IS DISTINCT FROM NULL`},
+		{`a < 2 OR a >= 1`, `a IS NOT NULL`},
 		{`a < 1 OR a < 1`, `a < 1`},
 		{`a < 1 OR a < 2`, `a < 2`},
 		{`a < 2 OR a < 1`, `a < 2`},
@@ -795,15 +794,15 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a <= 1 OR a = 1`, `a <= 1`},
 		{`a <= 1 OR a = 2`, `(a <= 1) OR (a = 2)`},
 		{`a <= 2 OR a = 1`, `a <= 2`},
-		{`a <= 1 OR a != 1`, `a IS DISTINCT FROM NULL`},
+		{`a <= 1 OR a != 1`, `a IS NOT NULL`},
 		{`a <= 1 OR a != 2`, `a != 2`},
-		{`a <= 2 OR a != 1`, `a IS DISTINCT FROM NULL`},
-		{`a <= 1 OR a > 1`, `a IS DISTINCT FROM NULL`},
+		{`a <= 2 OR a != 1`, `a IS NOT NULL`},
+		{`a <= 1 OR a > 1`, `a IS NOT NULL`},
 		{`a <= 1 OR a > 2`, `(a <= 1) OR (a > 2)`},
-		{`a <= 2 OR a > 1`, `a IS DISTINCT FROM NULL`},
-		{`a <= 1 OR a >= 1`, `a IS DISTINCT FROM NULL`},
+		{`a <= 2 OR a > 1`, `a IS NOT NULL`},
+		{`a <= 1 OR a >= 1`, `a IS NOT NULL`},
 		{`a <= 1 OR a >= 2`, `(a <= 1) OR (a >= 2)`},
-		{`a <= 2 OR a >= 1`, `a IS DISTINCT FROM NULL`},
+		{`a <= 2 OR a >= 1`, `a IS NOT NULL`},
 		{`a <= 1 OR a < 1`, `a <= 1`},
 		{`a <= 1 OR a < 2`, `a < 2`},
 		{`a <= 2 OR a < 1`, `a <= 2`},
@@ -818,10 +817,10 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a IN (1) OR a IN (2)`, `a IN (1, 2)`},
 		{`a IN (1) OR a IN (1, 2, 3, 4, 5)`, `a IN (1, 2, 3, 4, 5)`},
 		{`a IN (4, 2) OR a IN (5, 4, 3, 2, 1)`, `a IN (1, 2, 3, 4, 5)`},
-		{`a IN (1) OR a IS NULL`, `(a IN (1)) OR (a IS NOT DISTINCT FROM NULL)`},
+		{`a IN (1) OR a IS NULL`, `(a IN (1)) OR (a IS NULL)`},
 
-		{`a IS NULL OR a IS NULL`, `a IS NOT DISTINCT FROM NULL`},
-		{`a IS NOT NULL OR a IS NOT NULL`, `a IS DISTINCT FROM NULL`},
+		{`a IS NULL OR a IS NULL`, `a IS NULL`},
+		{`a IS NOT NULL OR a IS NOT NULL`, `a IS NOT NULL`},
 		{`a IS NULL OR a IS NOT NULL`, `true`},
 	}
 	p := makeTestPlanner()
@@ -831,7 +830,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
-			expr2, equiv := simplifyExpr(&p.evalCtx, expr1)
+			expr2, equiv := SimplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -850,7 +849,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 				expr1 = parseAndNormalizeExpr(t, p, d.expr, sel)
 				orExpr := expr1.(*tree.OrExpr)
 				orExpr.Left, orExpr.Right = orExpr.Right, orExpr.Left
-				expr3, equiv := simplifyExpr(&p.evalCtx, orExpr)
+				expr3, equiv := SimplifyExpr(&p.evalCtx, orExpr)
 				if s := expr3.String(); d.expected != s {
 					t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
 				}

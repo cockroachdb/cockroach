@@ -109,9 +109,14 @@ DBStatus DBSyncWAL(DBEngine* db);
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
 
+// Forces an immediate compaction over keys in the specified range.
+// Note that if start is empty, it indicates the start of the database.
+// If end is empty, it indicates the end of the database.
+DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end);
+
 // Stores the approximate on-disk size of the given key range into the
 // supplied uint64.
-DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t *size);
+DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size);
 
 // Sets the database entry for "key" to "value".
 DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
@@ -228,8 +233,8 @@ typedef struct {
 MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);
 
 bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split, int64_t target_size,
-                          bool allow_meta2_splits, DBString* split_key);
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
+                          int64_t target_size, bool allow_meta2_splits, DBString* split_key);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
@@ -297,6 +302,16 @@ void DBRunLDB(int argc, char** argv);
 
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
+
+// DBFileLock contains various parameters set during DBLockFile and required for DBUnlockFile.
+typedef void* DBFileLock;
+
+// DBLockFile sets a lock on the specified file using RocksDB's file locking interface.
+DBStatus DBLockFile(DBSlice filename, DBFileLock* lock);
+
+// DBUnlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for
+// the lock.
+DBStatus DBUnlockFile(DBFileLock lock);
 
 #ifdef __cplusplus
 }  // extern "C"

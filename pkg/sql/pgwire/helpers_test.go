@@ -15,9 +15,8 @@
 package pgwire
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 func (s *Server) SetDrainingImpl(

@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"

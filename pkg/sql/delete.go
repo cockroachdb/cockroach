@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -49,6 +48,14 @@ type deleteNode struct {
 func (p *planner) Delete(
 	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
 ) (planNode, error) {
+	resetter, err := p.initWith(ctx, n.With)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
+	}
+
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
 	}
@@ -76,12 +83,16 @@ func (p *planner) Delete(
 	if err != nil {
 		return nil, err
 	}
-	rd, err := sqlbase.MakeRowDeleter(p.txn, en.tableDesc, fkTables, requestedCols,
-		sqlbase.CheckFKs, &p.alloc)
+	rd, err := sqlbase.MakeRowDeleter(
+		p.txn, en.tableDesc, fkTables, requestedCols, sqlbase.CheckFKs, &p.alloc)
 	if err != nil {
 		return nil, err
 	}
-	tw := tableDeleter{rd: rd, autoCommit: p.autoCommit, alloc: &p.alloc}
+	tw := tableDeleter{
+		rd:         rd,
+		autoCommit: p.autoCommit,
+		alloc:      &p.alloc,
+	}
 
 	// TODO(knz): Until we split the creation of the node from Start()
 	// for the SelectClause too, we cannot cache this. This is because
@@ -92,7 +103,7 @@ func (p *planner) Delete(
 		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, n.OrderBy, n.Limit, nil, publicAndNonPublicColumns)
+	}, n.OrderBy, n.Limit, nil, nil, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +148,7 @@ func (d *deleteNode) startExec(params runParams) error {
 		return d.fastDelete(params, scan)
 	}
 
-	return d.run.tw.init(d.p.txn)
+	return d.run.tw.init(d.p.txn, &params.p.session.TxnState.mon)
 }
 
 func (d *deleteNode) Next(params runParams) (bool, error) {
@@ -225,7 +236,7 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
 		return err
 	}
 
-	if err := d.tw.init(params.p.txn); err != nil {
+	if err := d.tw.init(params.p.txn, &params.p.session.TxnState.mon); err != nil {
 		return err
 	}
 	if err := params.p.cancelChecker.Check(); err != nil {

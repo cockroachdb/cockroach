@@ -9,9 +9,8 @@
 package storageccl
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

@@ -15,11 +15,11 @@
 package base_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"golang.org/x/net/context"
 )
 
 func TestNodeIDContainer(t *testing.T) {

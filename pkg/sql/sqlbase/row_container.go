@@ -15,10 +15,9 @@
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"unsafe"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -121,6 +120,22 @@ func (ti ColTypeInfo) Type(idx int) types.T {
 		return ti.resCols[idx].Typ
 	}
 	return ti.colTypes[idx].ToDatumType()
+}
+
+func makeColTypeInfo(
+	tableDesc *TableDescriptor, colIDToRowIndex map[ColumnID]int,
+) (ColTypeInfo, error) {
+	colTypeInfo := ColTypeInfo{
+		colTypes: make([]ColumnType, len(colIDToRowIndex)),
+	}
+	for colID, rowIndex := range colIDToRowIndex {
+		col, err := tableDesc.FindColumnByID(colID)
+		if err != nil {
+			return ColTypeInfo{}, err
+		}
+		colTypeInfo.colTypes[rowIndex] = col.Type
+	}
+	return colTypeInfo, nil
 }
 
 // NewRowContainer allocates a new row container.

@@ -14,8 +14,6 @@
 
 package tree
 
-import "bytes"
-
 // ReturningClause represents the returning clause on a statement.
 type ReturningClause interface {
 	NodeFormatter
@@ -33,9 +31,9 @@ var _ ReturningClause = &NoReturningClause{}
 type ReturningExprs SelectExprs
 
 // Format implements the NodeFormatter interface.
-func (r *ReturningExprs) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(" RETURNING ")
-	FormatNode(buf, f, SelectExprs(*r))
+func (r *ReturningExprs) Format(ctx *FmtCtx) {
+	ctx.WriteString(" RETURNING ")
+	ctx.FormatNode((*SelectExprs)(r))
 }
 
 // ReturningNothingClause is a shared instance to avoid unnecessary allocations.
@@ -45,8 +43,8 @@ var ReturningNothingClause = &ReturningNothing{}
 type ReturningNothing struct{}
 
 // Format implements the NodeFormatter interface.
-func (*ReturningNothing) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(" RETURNING NOTHING")
+func (*ReturningNothing) Format(ctx *FmtCtx) {
+	ctx.WriteString(" RETURNING NOTHING")
 }
 
 // AbsentReturningClause is a ReturningClause variant representing the absence of
@@ -57,7 +55,7 @@ var AbsentReturningClause = &NoReturningClause{}
 type NoReturningClause struct{}
 
 // Format implements the NodeFormatter interface.
-func (*NoReturningClause) Format(buf *bytes.Buffer, f FmtFlags) {}
+func (*NoReturningClause) Format(_ *FmtCtx) {}
 
 // used by parent statements to determine their own StatementType.
 func (*ReturningExprs) statementType() StatementType    { return Rows }

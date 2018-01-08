@@ -15,13 +15,12 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	math "math"
 	"sort"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -537,6 +536,7 @@ func TestHashJoiner(t *testing.T) {
 			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{
+				Ctx:         ctx,
 				Settings:    cluster.MakeTestingClusterSettings(),
 				EvalCtx:     evalCtx,
 				TempStorage: tempEngine,
@@ -550,7 +550,7 @@ func TestHashJoiner(t *testing.T) {
 			}
 			outTypes := h.OutputTypes()
 			setup(h)
-			h.Run(ctx, nil)
+			h.Run(nil)
 
 			if !out.ProducerClosed {
 				return errors.New("output RowReceiver not closed")
@@ -612,7 +612,7 @@ func checkExpectedRows(
 	var rets []string
 	for {
 		row, meta := results.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			return errors.Errorf("unexpected metadata: %v", meta)
 		}
 		if row == nil {
@@ -697,7 +697,11 @@ func TestHashJoinerDrain(t *testing.T) {
 	// it for this test.
 	settings := cluster.MakeTestingClusterSettings()
 	settingUseTempStorageJoins.Override(&settings.SV, false)
-	flowCtx := FlowCtx{Settings: settings, EvalCtx: evalCtx}
+	flowCtx := FlowCtx{
+		Ctx:      ctx,
+		Settings: settings,
+		EvalCtx:  evalCtx,
+	}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
@@ -710,7 +714,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	h.initialBufferSize = 0
 
 	out.ConsumerDone()
-	h.Run(ctx, nil)
+	h.Run(nil)
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
@@ -787,14 +791,14 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		rightInputDrainNotification <- nil
 	}
 	rightErrorReturned := false
-	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, ProducerMetadata) {
+	rightInputNext := func(rb *RowBuffer) (sqlbase.EncDatumRow, *ProducerMetadata) {
 		if !rightErrorReturned {
 			rightErrorReturned = true
 			// The right input is going to return an error as the first thing.
-			return nil, ProducerMetadata{Err: errors.Errorf("Test error. Please drain.")}
+			return nil, &ProducerMetadata{Err: errors.Errorf("Test error. Please drain.")}
 		}
 		// Let RowBuffer.Next() do its usual thing.
-		return nil, ProducerMetadata{}
+		return nil, nil
 	}
 	leftInput := NewRowBuffer(
 		oneIntCol,
@@ -816,7 +820,11 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	)
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
+	flowCtx := FlowCtx{
+		Ctx:      context.Background(),
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
@@ -826,7 +834,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	// Disable initial buffering. We always store the right stream in this case.
 	h.initialBufferSize = 0
 
-	h.Run(context.Background(), nil)
+	h.Run(nil)
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
@@ -861,6 +869,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
+		Ctx:      ctx,
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
@@ -888,7 +897,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				h.Run(ctx, nil)
+				h.Run(nil)
 				leftInput.Reset()
 				rightInput.Reset()
 			}

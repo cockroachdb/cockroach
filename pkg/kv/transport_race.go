@@ -18,13 +18,12 @@
 package kv
 
 import (
+	"context"
 	"encoding/gob"
 	"io/ioutil"
 	"math/rand"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"

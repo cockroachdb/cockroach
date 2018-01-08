@@ -15,6 +15,7 @@
 package tree_test
 
 import (
+	"context"
 	"go/constant"
 	"go/token"
 	"reflect"
@@ -22,8 +23,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 

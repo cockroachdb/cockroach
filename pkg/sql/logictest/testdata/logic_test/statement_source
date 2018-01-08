@@ -1,0 +1,10 @@
+# LogicTest: default parallel-stmts
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, b INT)
+
+query error statement source "INSERT INTO a VALUES \(1, 2\)" does not return any columns
+SELECT 1 FROM [INSERT INTO a VALUES (1, 2)]
+
+query error statement source "DELETE FROM a" does not return any columns
+SELECT 1 FROM [DELETE FROM a]

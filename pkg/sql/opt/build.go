@@ -15,8 +15,10 @@
 package opt
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -40,13 +42,37 @@ var comparisonOpMap = [...]operator{
 	tree.NotRegMatch:       notRegMatchOp,
 	tree.RegIMatch:         regIMatchOp,
 	tree.NotRegIMatch:      notRegIMatchOp,
-	tree.IsDistinctFrom:    isDistinctFromOp,
-	tree.IsNotDistinctFrom: isNotDistinctFromOp,
-	tree.Is:                isOp,
-	tree.IsNot:             isNotOp,
-	tree.Any:               anyOp,
+	tree.IsNotDistinctFrom: isOp,
+	tree.IsDistinctFrom:    isNotOp,
+	tree.Any:               someOp,
 	tree.Some:              someOp,
 	tree.All:               allOp,
+}
+
+var comparisonOpReverseMap = [...]tree.ComparisonOperator{
+	eqOp:           tree.EQ,
+	ltOp:           tree.LT,
+	gtOp:           tree.GT,
+	leOp:           tree.LE,
+	geOp:           tree.GE,
+	neOp:           tree.NE,
+	inOp:           tree.In,
+	notInOp:        tree.NotIn,
+	likeOp:         tree.Like,
+	notLikeOp:      tree.NotLike,
+	iLikeOp:        tree.ILike,
+	notILikeOp:     tree.NotILike,
+	similarToOp:    tree.SimilarTo,
+	notSimilarToOp: tree.NotSimilarTo,
+	regMatchOp:     tree.RegMatch,
+	notRegMatchOp:  tree.NotRegMatch,
+	regIMatchOp:    tree.RegIMatch,
+	notRegIMatchOp: tree.NotRegIMatch,
+	isOp:           tree.IsNotDistinctFrom,
+	isNotOp:        tree.IsDistinctFrom,
+	anyOp:          tree.Any,
+	someOp:         tree.Some,
+	allOp:          tree.All,
 }
 
 // Map from tree.BinaryOperator to operator.
@@ -66,6 +92,22 @@ var binaryOpMap = [...]operator{
 	tree.RShift:   rShiftOp,
 }
 
+var binaryOpReverseMap = [...]tree.BinaryOperator{
+	bitandOp:   tree.Bitand,
+	bitorOp:    tree.Bitor,
+	bitxorOp:   tree.Bitxor,
+	plusOp:     tree.Plus,
+	minusOp:    tree.Minus,
+	multOp:     tree.Mult,
+	divOp:      tree.Div,
+	floorDivOp: tree.FloorDiv,
+	modOp:      tree.Mod,
+	powOp:      tree.Pow,
+	concatOp:   tree.Concat,
+	lShiftOp:   tree.LShift,
+	rShiftOp:   tree.RShift,
+}
+
 // Map from tree.UnaryOperator to operator.
 var unaryOpMap = [...]operator{
 	tree.UnaryPlus:       unaryPlusOp,
@@ -73,13 +115,50 @@ var unaryOpMap = [...]operator{
 	tree.UnaryComplement: unaryComplementOp,
 }
 
-// We allocate *scalarProps and *expr in chunks of these sizes.
+// Map from tree.UnaryOperator to operator.
+var unaryOpReverseMap = [...]tree.UnaryOperator{
+	unaryPlusOp:       tree.UnaryPlus,
+	unaryMinusOp:      tree.UnaryMinus,
+	unaryComplementOp: tree.UnaryComplement,
+}
+
+// We allocate *Expr, *scalarProps and *relationalProps in chunks of these sizes.
 const exprAllocChunk = 16
 const scalarPropsAllocChunk = 16
 
+// TODO(rytaft): Increase the relationalProps chunk size after more relational
+// operators are implemented.
+const relationalPropsAllocChunk = 1
+
 type buildContext struct {
-	preallocScalarProps []scalarProps
-	preallocExprs       []expr
+	ctx     context.Context
+	evalCtx *tree.EvalContext
+	catalog optbase.Catalog
+
+	state queryState
+
+	preallocScalarProps     []scalarProps
+	preallocExprs           []Expr
+	preallocRelationalProps []relationalProps
+}
+
+func makeBuildContext(
+	ctx context.Context, evalCtx *tree.EvalContext, catalog optbase.Catalog,
+) buildContext {
+	return buildContext{
+		ctx:     ctx,
+		evalCtx: evalCtx,
+		catalog: catalog,
+	}
+}
+
+func (bc *buildContext) newRelationalProps() *relationalProps {
+	if len(bc.preallocRelationalProps) == 0 {
+		bc.preallocRelationalProps = make([]relationalProps, relationalPropsAllocChunk)
+	}
+	p := &bc.preallocRelationalProps[0]
+	bc.preallocRelationalProps = bc.preallocRelationalProps[1:]
+	return p
 }
 
 func (bc *buildContext) newScalarProps() *scalarProps {
@@ -91,87 +170,443 @@ func (bc *buildContext) newScalarProps() *scalarProps {
 	return p
 }
 
-// newExpr returns a new *expr with a new, blank scalarProps.
-func (bc *buildContext) newExpr() *expr {
+// newExpr returns a new *Expr.
+func (bc *buildContext) newExpr() *Expr {
 	if len(bc.preallocExprs) == 0 {
-		bc.preallocExprs = make([]expr, exprAllocChunk)
+		bc.preallocExprs = make([]Expr, exprAllocChunk)
 	}
 	e := &bc.preallocExprs[0]
 	bc.preallocExprs = bc.preallocExprs[1:]
+	return e
+}
+
+// newScalarExpr returns a new *Expr with a new, blank scalarProps.
+func (bc *buildContext) newScalarExpr() *Expr {
+	e := bc.newExpr()
 	e.scalarProps = bc.newScalarProps()
 	return e
 }
 
-// buildScalar converts a tree.TypedExpr to an expr tree.
-func buildScalar(buildCtx *buildContext, pexpr tree.TypedExpr) *expr {
-	switch t := pexpr.(type) {
-	case *tree.ParenExpr:
-		return buildScalar(buildCtx, t.TypedInnerExpr())
+// newRelationalExpr returns a new *Expr with a new, blank relationalProps.
+func (bc *buildContext) newRelationalExpr() *Expr {
+	e := bc.newExpr()
+	e.relProps = bc.newRelationalProps()
+	return e
+}
+
+// build converts a tree.Statement to an Expr tree.
+func (bc *buildContext) build(stmt tree.Statement) *Expr {
+	var result *Expr
+	switch stmt := stmt.(type) {
+	case *tree.ParenSelect:
+		result = bc.buildSelect(stmt.Select)
+
+	case *tree.Select:
+		result = bc.buildSelect(stmt)
+
+	default:
+		panic(fmt.Sprintf("unexpected statement: %T", stmt))
 	}
 
-	e := buildCtx.newExpr()
+	return result
+}
+
+// buildSelect converts a tree.Select to an Expr tree. This method will
+// expand significantly once we implement joins, aggregations, filters, etc.
+func (bc *buildContext) buildSelect(stmt *tree.Select) *Expr {
+	var result *Expr
+	switch t := stmt.Select.(type) {
+	case *tree.ParenSelect:
+		result = bc.buildSelect(t.Select)
+
+	case *tree.SelectClause:
+		if t.Where != nil || (t.GroupBy != nil && len(t.GroupBy) > 0) || len(t.Exprs) > 1 || t.Distinct {
+			panic("complex queries not yet supported.")
+		}
+		result = bc.buildFrom(t.From)
+
+	default:
+		panic(fmt.Sprintf("unexpected select statement: %T", stmt.Select))
+	}
+
+	return result
+}
+
+// buildSelect converts a tree.From to an Expr tree. This method
+// will expand significantly once we implement joins and filters.
+func (bc *buildContext) buildFrom(from *tree.From) *Expr {
+	if len(from.Tables) != 1 {
+		panic("joins not yet supported.")
+	}
+	return bc.buildTable(from.Tables[0])
+}
+
+// buildTable converts a tree.TableExpr to an Expr tree.  For example,
+// if the tree.TableExpr consists of a single table, the resulting Expr
+// tree would consist of a single expression with a scanOp operator.
+func (bc *buildContext) buildTable(texpr tree.TableExpr) *Expr {
+	// NB: The case statements are sorted lexicographically.
+	switch source := texpr.(type) {
+	case *tree.AliasedTableExpr:
+		result := bc.buildTable(source.Expr)
+		if source.As.Alias != "" {
+			if n := len(source.As.Cols); n > 0 && n != len(result.relProps.columns) {
+				panic(fmt.Sprintf("rename specified %d columns, but table contains %d",
+					n, len(result.relProps.columns)))
+			}
+
+			for i := range result.relProps.columns {
+				col := &result.relProps.columns[i]
+				if i < len(source.As.Cols) {
+					col.name = columnName(source.As.Cols[i])
+				}
+				col.table = tableName(source.As.Alias)
+			}
+		}
+		return result
+
+	case *tree.FuncExpr:
+		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+
+	case *tree.JoinTableExpr:
+		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+
+	case *tree.NormalizableTableName:
+		tn, err := source.Normalize()
+		if err != nil {
+			panic(fmt.Sprintf("%s", err))
+		}
+		tab, err := bc.catalog.FindTable(bc.ctx, tn)
+		if err != nil {
+			panic(fmt.Sprintf("%s", err))
+		}
+
+		return bc.buildScan(tab)
+
+	case *tree.ParenTableExpr:
+		return bc.buildTable(source.Expr)
+
+	case *tree.StatementSource:
+		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+
+	case *tree.Subquery:
+		return bc.build(source.Select)
+
+	case *tree.TableRef:
+		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+
+	default:
+		panic(fmt.Sprintf("unexpected table expr: %T", texpr))
+	}
+}
+
+// buildScan creates an Expr with a scanOp operator for the given table.
+func (bc *buildContext) buildScan(tab optbase.Table) *Expr {
+	result := bc.newRelationalExpr()
+	initScanExpr(result, tab)
+	result.relProps.columns = make([]columnProps, 0, len(tab.TabName()))
+	props := result.relProps
+
+	// Every reference to a table in the query gets a new set of output column
+	// indexes. Consider the query:
+	//
+	//   SELECT * FROM a AS l JOIN a AS r ON (l.x = r.y)
+	//
+	// In this query, `l.x` is not equivalent to `r.x` and `l.y` is not
+	// equivalent to `r.y`. In order to achieve this, we need to give these
+	// columns different indexes.
+	tabName := tableName(tab.TabName())
+	bc.state.tables[tabName] = append(bc.state.tables[tabName], bc.state.nextColumnIndex)
+
+	for i := 0; i < tab.NumColumns(); i++ {
+		col := tab.Column(i)
+		colProps := columnProps{
+			index: bc.state.nextColumnIndex,
+			name:  columnName(col.ColName()),
+			table: tabName,
+			typ:   col.DatumType(),
+		}
+		props.columns = append(props.columns, colProps)
+		bc.state.nextColumnIndex++
+	}
+
+	// Initialize not-NULL columns from the table schema.
+	for i := 0; i < tab.NumColumns(); i++ {
+		if !tab.Column(i).IsNullable() {
+			props.notNullCols.Add(props.columns[i].index)
+		}
+	}
+
+	result.initProps()
+	return result
+}
+
+// buildScalar converts a tree.TypedExpr to an Expr tree.
+func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
+	switch t := pexpr.(type) {
+	case *tree.ParenExpr:
+		return bc.buildScalar(t.TypedInnerExpr())
+	}
+
+	e := bc.newScalarExpr()
 	e.scalarProps.typ = pexpr.ResolvedType()
 
 	switch t := pexpr.(type) {
 	case *tree.AndExpr:
 		initBinaryExpr(
 			e, andOp,
-			buildScalar(buildCtx, t.TypedLeft()),
-			buildScalar(buildCtx, t.TypedRight()),
+			bc.buildScalar(t.TypedLeft()),
+			bc.buildScalar(t.TypedRight()),
 		)
 	case *tree.OrExpr:
 		initBinaryExpr(
 			e, orOp,
-			buildScalar(buildCtx, t.TypedLeft()),
-			buildScalar(buildCtx, t.TypedRight()),
+			bc.buildScalar(t.TypedLeft()),
+			bc.buildScalar(t.TypedRight()),
 		)
 	case *tree.NotExpr:
-		initUnaryExpr(e, notOp, buildScalar(buildCtx, t.TypedInnerExpr()))
+		initUnaryExpr(e, notOp, bc.buildScalar(t.TypedInnerExpr()))
 
 	case *tree.BinaryExpr:
 		initBinaryExpr(
 			e, binaryOpMap[t.Operator],
-			buildScalar(buildCtx, t.TypedLeft()),
-			buildScalar(buildCtx, t.TypedRight()),
+			bc.buildScalar(t.TypedLeft()),
+			bc.buildScalar(t.TypedRight()),
 		)
 	case *tree.ComparisonExpr:
 		initBinaryExpr(
 			e, comparisonOpMap[t.Operator],
-			buildScalar(buildCtx, t.TypedLeft()),
-			buildScalar(buildCtx, t.TypedRight()),
+			bc.buildScalar(t.TypedLeft()),
+			bc.buildScalar(t.TypedRight()),
 		)
+		e.subOperator = comparisonOpMap[t.SubOperator]
 	case *tree.UnaryExpr:
-		initUnaryExpr(e, unaryOpMap[t.Operator], buildScalar(buildCtx, t.TypedInnerExpr()))
+		initUnaryExpr(e, unaryOpMap[t.Operator], bc.buildScalar(t.TypedInnerExpr()))
 
-	case *tree.FuncExpr:
-		children := make([]*expr, len(t.Exprs))
-		for i, pexpr := range t.Exprs {
-			children[i] = buildScalar(buildCtx, pexpr.(tree.TypedExpr))
-		}
-		initFunctionCallExpr(e, t.ResolvedFunc(), children)
+	// TODO(radu): for now, we pass through FuncExprs as unsupported
+	// expressions.
+	//case *tree.FuncExpr:
+	//	children := make([]*expr, len(t.Exprs))
+	//	for i, pexpr := range t.Exprs {
+	//		children[i] = bc.buildScalar(pexpr.(tree.TypedExpr))
+	//	}
+	//	initFunctionCallExpr(e, t.ResolvedFunc(), children)
 
 	case *tree.IndexedVar:
 		initVariableExpr(e, t.Idx)
 
 	case *tree.Tuple:
-		children := make([]*expr, len(t.Exprs))
+		children := make([]*Expr, len(t.Exprs))
 		for i, e := range t.Exprs {
-			children[i] = buildScalar(buildCtx, e.(tree.TypedExpr))
+			children[i] = bc.buildScalar(e.(tree.TypedExpr))
 		}
 		initTupleExpr(e, children)
 
 	case *tree.DTuple:
-		children := make([]*expr, len(t.D))
+		children := make([]*Expr, len(t.D))
 		for i, d := range t.D {
-			children[i] = buildScalar(buildCtx, d)
+			children[i] = bc.buildScalar(d)
 		}
 		initTupleExpr(e, children)
+
+	// Because Placeholder is also a Datum, it must come before the Datum case.
+	case *tree.Placeholder:
+		d, err := t.Eval(bc.evalCtx)
+		if err != nil {
+			panic(err)
+		}
+		if _, ok := d.(*tree.Placeholder); ok {
+			panic("no placeholder value")
+		}
+		initConstExpr(e, d)
 
 	case tree.Datum:
 		initConstExpr(e, t)
 
 	default:
-		panic(fmt.Sprintf("node %T not supported", t))
+		initUnsupportedExpr(e, t)
 	}
 	return e
+}
+
+// build converts a tree.Statement to an Expr tree.
+func build(
+	ctx context.Context, stmt tree.Statement, catalog optbase.Catalog, evalCtx *tree.EvalContext,
+) (_ *Expr, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+	buildCtx := makeBuildContext(ctx, evalCtx, catalog)
+	buildCtx.state.tables = make(map[tableName][]columnIndex)
+	return buildCtx.build(stmt), nil
+}
+
+// buildScalar converts a tree.TypedExpr to an Expr tree.
+func buildScalar(pexpr tree.TypedExpr, evalCtx *tree.EvalContext) (_ *Expr, err error) {
+	// We use panics in buildScalar code because it makes the code less tedious;
+	// buildScalar doesn't alter global state so catching panics is safe.
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+	buildCtx := makeBuildContext(context.TODO(), evalCtx, nil /* catalog */)
+	return buildCtx.buildScalar(pexpr), nil
+}
+
+var typedExprConvMap [numOperators]func(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr
+
+func init() {
+	// This code is not inline to avoid an initialization loop error (some of the
+	// functions depend on scalarToTypedExpr which depends on typedExprConvMap).
+	typedExprConvMap = [numOperators]func(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr{
+		constOp:    constOpToTypedExpr,
+		variableOp: variableOpToTypedExpr,
+
+		andOp: boolOpToTypedExpr,
+		orOp:  boolOpToTypedExpr,
+		notOp: boolOpToTypedExpr,
+
+		unaryPlusOp:       unaryOpToTypedExpr,
+		unaryMinusOp:      unaryOpToTypedExpr,
+		unaryComplementOp: unaryOpToTypedExpr,
+
+		eqOp:           comparisonOpToTypedExpr,
+		ltOp:           comparisonOpToTypedExpr,
+		gtOp:           comparisonOpToTypedExpr,
+		leOp:           comparisonOpToTypedExpr,
+		geOp:           comparisonOpToTypedExpr,
+		neOp:           comparisonOpToTypedExpr,
+		inOp:           comparisonOpToTypedExpr,
+		notInOp:        comparisonOpToTypedExpr,
+		likeOp:         comparisonOpToTypedExpr,
+		notLikeOp:      comparisonOpToTypedExpr,
+		iLikeOp:        comparisonOpToTypedExpr,
+		notILikeOp:     comparisonOpToTypedExpr,
+		similarToOp:    comparisonOpToTypedExpr,
+		notSimilarToOp: comparisonOpToTypedExpr,
+		regMatchOp:     comparisonOpToTypedExpr,
+		notRegMatchOp:  comparisonOpToTypedExpr,
+		regIMatchOp:    comparisonOpToTypedExpr,
+		notRegIMatchOp: comparisonOpToTypedExpr,
+		isOp:           comparisonOpToTypedExpr,
+		isNotOp:        comparisonOpToTypedExpr,
+		anyOp:          comparisonOpToTypedExpr,
+		someOp:         comparisonOpToTypedExpr,
+		allOp:          comparisonOpToTypedExpr,
+
+		bitandOp:   binaryOpToTypedExpr,
+		bitorOp:    binaryOpToTypedExpr,
+		bitxorOp:   binaryOpToTypedExpr,
+		plusOp:     binaryOpToTypedExpr,
+		minusOp:    binaryOpToTypedExpr,
+		multOp:     binaryOpToTypedExpr,
+		divOp:      binaryOpToTypedExpr,
+		floorDivOp: binaryOpToTypedExpr,
+		modOp:      binaryOpToTypedExpr,
+		powOp:      binaryOpToTypedExpr,
+		concatOp:   binaryOpToTypedExpr,
+		lShiftOp:   binaryOpToTypedExpr,
+		rShiftOp:   binaryOpToTypedExpr,
+
+		tupleOp: tupleOpToTypedExpr,
+
+		unsupportedScalarOp: unsupportedScalarOpToTypedExpr,
+	}
+}
+
+func constOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	return e.private.(tree.Datum)
+}
+
+func variableOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	return ivh.IndexedVar(e.private.(int))
+}
+
+func boolOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	switch e.op {
+	case andOp, orOp:
+		n := scalarToTypedExpr(e.children[0], ivh)
+		for _, child := range e.children[1:] {
+			m := scalarToTypedExpr(child, ivh)
+			if e.op == andOp {
+				n = tree.NewTypedAndExpr(n, m)
+			} else {
+				n = tree.NewTypedOrExpr(n, m)
+			}
+		}
+		return n
+
+	case notOp:
+		return tree.NewTypedNotExpr(scalarToTypedExpr(e.children[0], ivh))
+	default:
+		panic(fmt.Sprintf("invalid op %s", e.op))
+	}
+}
+
+func tupleOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	if isTupleOfConstants(e) {
+		datums := make(tree.Datums, len(e.children))
+		for i, child := range e.children {
+			datums[i] = constOpToTypedExpr(child, ivh).(tree.Datum)
+		}
+		return tree.NewDTuple(datums...)
+	}
+	children := make([]tree.TypedExpr, len(e.children))
+	for i, child := range e.children {
+		children[i] = scalarToTypedExpr(child, ivh)
+	}
+	return tree.NewTypedTuple(children)
+}
+
+func unaryOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	return tree.NewTypedUnaryExpr(
+		unaryOpReverseMap[e.op],
+		scalarToTypedExpr(e.children[0], ivh),
+		e.scalarProps.typ,
+	)
+}
+
+func comparisonOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	return tree.NewTypedComparisonExprWithSubOp(
+		comparisonOpReverseMap[e.op],
+		comparisonOpReverseMap[e.subOperator],
+		scalarToTypedExpr(e.children[0], ivh),
+		scalarToTypedExpr(e.children[1], ivh),
+	)
+}
+
+func binaryOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	return tree.NewTypedBinaryExpr(
+		binaryOpReverseMap[e.op],
+		scalarToTypedExpr(e.children[0], ivh),
+		scalarToTypedExpr(e.children[1], ivh),
+		e.scalarProps.typ,
+	)
+}
+
+func unsupportedScalarOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	return e.private.(tree.TypedExpr)
+}
+
+func scalarToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	if fn := typedExprConvMap[e.op]; fn != nil {
+		return fn(e, ivh)
+	}
+	panic(fmt.Sprintf("unsupported op %s", e.op))
+}
+
+// BuildScalarExpr converts a TypedExpr to a *Expr tree and normalizes it.
+func BuildScalarExpr(typedExpr tree.TypedExpr, evalCtx *tree.EvalContext) (*Expr, error) {
+	if typedExpr == nil {
+		return nil, nil
+	}
+	e, err := buildScalar(typedExpr, evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	normalizeExpr(e)
+	return e, nil
 }

@@ -15,6 +15,8 @@
 package jobs
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"golang.org/x/net/context"
 )
 
 func ResetResumeHooks() func() {

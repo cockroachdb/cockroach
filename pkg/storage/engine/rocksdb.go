@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -24,7 +25,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -32,7 +32,6 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -104,7 +103,7 @@ const (
 	MinimumMaxOpenFiles = 1700
 )
 
-// SSTableInfo contains metadata about a single RocksDB sstable. This mirrors
+// SSTableInfo contains metadata about a single sstable. Note this mirrors
 // the C.DBSSTable struct contents.
 type SSTableInfo struct {
 	Level int
@@ -259,6 +258,131 @@ func (s SSTableInfos) ReadAmplification() int {
 		}
 	}
 	return readAmp
+}
+
+// SSTableInfosByLevel maintains slices of SSTableInfo objects, one
+// per level. The slice for each level contains the SSTableInfo
+// objects for SSTables at that level, sorted by start key.
+type SSTableInfosByLevel struct {
+	// Each level is a slice of SSTableInfos.
+	levels [][]SSTableInfo
+}
+
+// NewSSTableInfosByLevel returns a new SSTableInfosByLevel object
+// based on the supplied SSTableInfos slice.
+func NewSSTableInfosByLevel(s SSTableInfos) SSTableInfosByLevel {
+	var result SSTableInfosByLevel
+	for _, t := range s {
+		for i := len(result.levels); i <= t.Level; i++ {
+			result.levels = append(result.levels, []SSTableInfo{})
+		}
+		result.levels[t.Level] = append(result.levels[t.Level], t)
+	}
+	// Sort each level by start key.
+	for _, l := range result.levels {
+		sort.Slice(l, func(i, j int) bool { return l[i].Start.Less(l[j].Start) })
+	}
+	return result
+}
+
+// MaxLevel returns the maximum level for which there are SSTables.
+func (s *SSTableInfosByLevel) MaxLevel() int {
+	return len(s.levels) - 1
+}
+
+// MaxLevelSpanOverlapsContiguousSSTables returns the maximum level at
+// which the specified key span overlaps either none, one, or at most
+// two contiguous SSTables. Level 0 is returned if no level qualifies.
+//
+// This is useful when considering when to merge two compactions. In
+// this case, the method is called with the "gap" between the two
+// spans to be compacted. When the result is that the gap span touches
+// at most two SSTables at a high level, it suggests that merging the
+// two compactions is a good idea (as the up to two SSTables touched
+// by the gap span, due to containing endpoints of the existing
+// compactions, would be rewritten anyway).
+//
+// As an example, consider the following sstables in a small database:
+//
+// Level 0.
+//  {Level: 0, Size: 20, Start: key("a"), End: key("z")},
+//  {Level: 0, Size: 15, Start: key("a"), End: key("k")},
+// Level 2.
+//  {Level: 2, Size: 200, Start: key("a"), End: key("j")},
+//  {Level: 2, Size: 100, Start: key("k"), End: key("o")},
+//  {Level: 2, Size: 100, Start: key("r"), End: key("t")},
+// Level 6.
+//  {Level: 6, Size: 201, Start: key("a"), End: key("c")},
+//  {Level: 6, Size: 200, Start: key("d"), End: key("f")},
+//  {Level: 6, Size: 300, Start: key("h"), End: key("r")},
+//  {Level: 6, Size: 405, Start: key("s"), End: key("z")},
+//
+// - The span "a"-"c" overlaps only a single SSTable at the max level
+//   (L6). That's great, so we definitely want to compact that.
+// - The span "s"-"t" overlaps zero SSTables at the max level (L6).
+//   Again, great! That means we're going to compact the 3rd L2
+//   SSTable and maybe push that directly to L6.
+func (s *SSTableInfosByLevel) MaxLevelSpanOverlapsContiguousSSTables(span roachpb.Span) int {
+	// Note overlapsMoreTHanTwo should not be called on level 0, where
+	// the SSTables are not guaranteed disjoint.
+	overlapsMoreThanTwo := func(tables []SSTableInfo) bool {
+		// Search to find the first sstable which might overlap the span.
+		i := sort.Search(len(tables), func(i int) bool { return span.Key.Compare(tables[i].End.Key) < 0 })
+		// If no SSTable is overlapped, return false.
+		if i == -1 || i == len(tables) || span.EndKey.Compare(tables[i].Start.Key) < 0 {
+			return false
+		}
+		// Return true if the span is not subsumed by the combination of
+		// this sstable and the next. This logic is complicated and is
+		// covered in the unittest. There are three successive conditions
+		// which together ensure the span doesn't overlap > 2 SSTables.
+		//
+		// - If the first overlapped SSTable is the last.
+		// - If the span does not exceed the end of the next SSTable.
+		// - If the span does not overlap the start of the next next SSTable.
+		if i >= len(tables)-1 {
+			// First overlapped SSTable is the last (right-most) SSTable.
+			//    Span:   [c-----f)
+			//    SSTs: [a---d)
+			// or
+			//    SSTs: [a-----------q)
+			return false
+		}
+		if span.EndKey.Compare(tables[i+1].End.Key) <= 0 {
+			// Span does not reach outside of this SSTable's right neighbor.
+			//    Span:    [c------f)
+			//    SSTs: [a---d) [e-f) ...
+			return false
+		}
+		if i >= len(tables)-2 {
+			// Span reaches outside of this SSTable's right neighbor, but
+			// there are no more SSTables to the right.
+			//    Span:    [c-------------x)
+			//    SSTs: [a---d) [e---q)
+			return false
+		}
+		if span.EndKey.Compare(tables[i+2].Start.Key) <= 0 {
+			// There's another SSTable two to the right, but the span doesn't
+			// reach into it.
+			//    Span:    [c------------x)
+			//    SSTs: [a---d) [e---q) [x--z) ...
+			return false
+		}
+
+		// Touching at least three SSTables.
+		//    Span:    [c-------------y)
+		//    SSTs: [a---d) [e---q) [x--z) ...
+		return true
+	}
+	// Note that we never consider level 0, where SSTables can overlap.
+	// Level 0 is instead returned as a catch-all which means that there
+	// is no level where the span overlaps only two or fewer SSTables.
+	for i := len(s.levels) - 1; i > 0; i-- {
+		if !overlapsMoreThanTwo(s.levels[i]) {
+			return i
+		}
+	}
+	return 0
 }
 
 // RocksDBCache is a wrapper around C.DBCache
@@ -718,9 +842,14 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
-// Compact forces compaction on the database.
+// Compact forces compaction over the entire database.
 func (r *RocksDB) Compact() error {
 	return statusToError(C.DBCompact(r.rdb))
+}
+
+// CompactRange forces compaction over a specified range of keys in the database.
+func (r *RocksDB) CompactRange(start, end roachpb.Key) error {
+	return statusToError(C.DBCompactRange(r.rdb, goToCSlice(start), goToCSlice(end)))
 }
 
 // ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
@@ -1919,30 +2048,6 @@ func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
 	}
 }
 
-// A RocksDBError wraps an error returned from a RocksDB operation.
-type RocksDBError struct {
-	msg string
-}
-
-var _ log.SafeMessager = (*RocksDBError)(nil)
-
-// Error implements the error interface.
-func (err *RocksDBError) Error() string {
-	return err.msg
-}
-
-// SafeMessage implements log.SafeMessager.
-func (err *RocksDBError) SafeMessage() string {
-	// RocksDB errors are of format
-	// <Error Type>: [<Suberror type>] [State]
-	// We extract only the `<Error Type>` part.
-	ps := strings.SplitN(err.msg, ":", 2)
-	if len(ps) < 2 {
-		return "<unknown>"
-	}
-	return ps[0]
-}
-
 func statusToError(s C.DBStatus) error {
 	if s.data == nil {
 		return nil
@@ -2237,4 +2342,15 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 // equal to Meta2KeyMax (\x03\xff\xff) is considered invalid.
 func IsValidSplitKey(key roachpb.Key, allowMeta2Splits bool) bool {
 	return bool(C.MVCCIsValidSplitKey(goToCSlice(key), C._Bool(allowMeta2Splits)))
+}
+
+// lockFile sets a lock on the specified file using RocksDB's file locking interface.
+func lockFile(filename string) (C.DBFileLock, error) {
+	var lock C.DBFileLock
+	return lock, statusToError(C.DBLockFile(goToCSlice([]byte(filename)), &lock))
+}
+
+// unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
+func unlockFile(lock C.DBFileLock) error {
+	return statusToError(C.DBUnlockFile(lock))
 }

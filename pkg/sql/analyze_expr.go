@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -58,7 +58,7 @@ func (p *planner) analyzeExpr(
 		if err != nil {
 			return nil, err
 		}
-		p.hasStar = p.hasStar || hasStar
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 	}
 
 	// Type check.

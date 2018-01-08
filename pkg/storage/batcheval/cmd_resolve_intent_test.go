@@ -15,11 +15,10 @@
 package batcheval
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	opentracing "github.com/opentracing/opentracing-go"
 

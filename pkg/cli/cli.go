@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

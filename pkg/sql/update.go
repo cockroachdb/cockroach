@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -57,6 +56,13 @@ func (p *planner) Update(
 ) (planNode, error) {
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
+	}
+	resetter, err := p.initWith(ctx, n.With)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
 	}
 
 	tracing.AnnotateTrace()
@@ -115,7 +121,10 @@ func (p *planner) Update(
 	if err != nil {
 		return nil, err
 	}
-	tw := tableUpdater{ru: ru, autoCommit: p.autoCommit}
+	tw := tableUpdater{
+		ru:         ru,
+		autoCommit: p.autoCommit,
+	}
 
 	tracing.AnnotateTrace()
 
@@ -125,7 +134,7 @@ func (p *planner) Update(
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, n.OrderBy, n.Limit, nil /*desiredTypes*/, publicAndNonPublicColumns)
+	}, n.OrderBy, n.Limit, nil /* with */, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +264,7 @@ func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(params.p.txn)
+	return u.run.tw.init(params.p.txn, &params.p.session.TxnState.mon)
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {

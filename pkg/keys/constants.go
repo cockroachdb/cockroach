@@ -88,6 +88,16 @@ var (
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
+	// localStoreSuggestedCompactionSuffix stores suggested compactions to
+	// be aggregated and processed on the store.
+	localStoreSuggestedCompactionSuffix = []byte("comp")
+
+	// LocalStoreSuggestedCompactionsMin is the start of the span of
+	// possible suggested compaction keys for a store.
+	LocalStoreSuggestedCompactionsMin = MakeStoreKey(localStoreSuggestedCompactionSuffix, nil)
+	// LocalStoreSuggestedCompactionsMax is the end of the span of
+	// possible suggested compaction keys for a store.
+	LocalStoreSuggestedCompactionsMax = LocalStoreSuggestedCompactionsMin.PrefixEnd()
 
 	// LocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Range ID. The Range ID is appended to this prefix,

@@ -9,6 +9,7 @@
 package sqlccl
 
 import (
+	"context"
 	"math"
 	"runtime"
 	"sort"
@@ -16,7 +17,6 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -89,7 +89,7 @@ func selectTargets(
 		}
 	}
 	if !seenTable {
-		return nil, nil, errors.Errorf("no tables found: %s", tree.AsString(targets))
+		return nil, nil, errors.Errorf("no tables found: %s", &targets)
 	}
 
 	if lastBackupDesc.FormatVersion >= BackupFormatDescriptorTrackingVersion {
@@ -775,7 +775,7 @@ func restoreJobDescription(restore *tree.Restore, from []string) (string, error)
 		r.From[i] = tree.NewDString(sf)
 	}
 
-	return tree.AsStringWithFlags(r, tree.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(r, tree.FmtAlwaysQualifyTableNames), nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable

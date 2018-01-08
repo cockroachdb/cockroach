@@ -19,7 +19,6 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // ScrubTypes is the schema for TableReaders that are doing a SCRUB
@@ -52,8 +50,7 @@ var ScrubTypes = []sqlbase.ColumnType{
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
 	processorBase
-
-	flowCtx *FlowCtx
+	rowSourceBase
 
 	tableDesc sqlbase.TableDescriptor
 	spans     roachpb.Spans
@@ -70,9 +67,14 @@ type tableReader struct {
 	// indexIdx refers to the index being scanned. This is only used
 	// during scrub physical checks.
 	indexIdx int
+
+	// trailingMetadata contains producer metadata that is sent once the consumer
+	// status is not NeedMoreRows.
+	trailingMetadata []ProducerMetadata
 }
 
 var _ Processor = &tableReader{}
+var _ RowSource = &tableReader{}
 
 // newTableReader creates a tableReader.
 func newTableReader(
@@ -82,7 +84,6 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 	tr := &tableReader{
-		flowCtx:   flowCtx,
 		tableDesc: spec.Table,
 		isCheck:   spec.IsCheck,
 		indexIdx:  int(spec.IndexIdx),
@@ -100,7 +101,7 @@ func newTableReader(
 	if spec.IsCheck {
 		types = ScrubTypes
 	}
-	if err := tr.init(post, types, flowCtx, output); err != nil {
+	if err := tr.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 
@@ -186,96 +187,15 @@ func initRowFetcher(
 	return index, isSecondaryIndex, nil
 }
 
-// sendMisplannedRangesMetadata sends information about the non-local ranges
-// that were read by this tableReader. This should be called after the fetcher
-// was used to read everything this tableReader was supposed to read.
-func (tr *tableReader) sendMisplannedRangesMetadata(ctx context.Context) {
-	misplannedRanges := misplannedRanges(ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
-
-	if len(misplannedRanges) != 0 {
-		tr.out.output.Push(nil /* row */, ProducerMetadata{Ranges: misplannedRanges})
-	}
-}
-
 // Run is part of the processor interface.
-func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (tr *tableReader) Run(wg *sync.WaitGroup) {
+	if tr.out.output == nil {
+		panic("tableReader output not initialized for emitting rows")
+	}
+	Run(tr.flowCtx.Ctx, tr, tr.out.output)
 	if wg != nil {
-		defer wg.Done()
+		wg.Done()
 	}
-
-	ctx = log.WithLogTagInt(ctx, "TableReader", int(tr.tableDesc.ID))
-	ctx, span := processorSpan(ctx, "table reader")
-	defer tracing.FinishSpan(span)
-
-	txn := tr.flowCtx.txn
-	if txn == nil {
-		log.Fatalf(ctx, "tableReader outside of txn")
-	}
-
-	log.VEventf(ctx, 1, "starting")
-	if log.V(1) {
-		defer log.Infof(ctx, "exiting")
-	}
-
-	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
-	if err := tr.fetcher.StartScan(
-		ctx, txn, tr.spans, true /* limit batches */, tr.limitHint, false, /* traceKV */
-	); err != nil {
-		log.Errorf(ctx, "scan error: %s", err)
-		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-		tr.out.Close()
-		return
-	}
-
-	for {
-		var row sqlbase.EncDatumRow
-		var err error
-		if !tr.isCheck {
-			row, _, _, err = tr.fetcher.NextRow(ctx)
-		} else {
-			// If we are running a scrub physical check, we use a specialized
-			// procedure that runs additional checks while fetching the row
-			// data.
-			row, err = tr.fetcher.NextRowWithErrors(ctx)
-			// There are four cases that can happen after NextRowWithErrors:
-			// 1) We encounter a ScrubError. We do not propagate the error up,
-			//    but instead generate and emit a row for the final results.
-			// 2) No errors were found. We simply continue scanning the data
-			//    and discard the row values, as they are not needed for any
-			//    results.
-			// 3) A non-scrub error was encountered. This was not considered a
-			//    physical data error, and so we propagate this to the user
-			//    immediately.
-			// 4) There was no error or row data. This signals that there is
-			//    no more data to scan.
-			//
-			// NB: Cases 3 and 4 are handled further below, in the standard
-			// table scanning code path.
-			if v, ok := err.(*scrub.Error); ok {
-				row, err = tr.generateScrubErrorRow(row, v)
-			} else if err == nil && row != nil {
-				continue
-			}
-		}
-		if err != nil || row == nil {
-			if err != nil {
-				err = scrub.UnwrapScrubError(err)
-				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-			}
-			break
-		}
-		// Emit the row; stop if no more rows are needed.
-		consumerStatus, err := tr.out.EmitRow(ctx, row)
-		if err != nil || consumerStatus != NeedMoreRows {
-			if err != nil {
-				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-			}
-			break
-		}
-	}
-	tr.sendMisplannedRangesMetadata(ctx)
-	sendTraceData(ctx, tr.out.output)
-	tr.out.Close()
 }
 
 // generateScrubErrorRow will create an EncDatumRow describing a
@@ -346,4 +266,118 @@ func (tr *tableReader) prettyPrimaryKeyValues(
 	}
 	primaryKeyValues.WriteByte(')')
 	return primaryKeyValues.String()
+}
+
+// close the tableReader and finish any tracing. Any subsequent calls to Next()
+// will return empty data.
+func (tr *tableReader) close() {
+	tr.internalClose()
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
+func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
+	if !tr.closed {
+		if err != nil {
+			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{Err: err})
+		}
+		ranges := misplannedRanges(tr.ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
+		if ranges != nil {
+			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{Ranges: ranges})
+		}
+		traceData := getTraceData(tr.ctx)
+		if traceData != nil {
+			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TraceData: traceData})
+		}
+		tr.close()
+	}
+	if len(tr.trailingMetadata) > 0 {
+		meta := &tr.trailingMetadata[0]
+		tr.trailingMetadata = tr.trailingMetadata[1:]
+		return meta
+	}
+	return nil
+}
+
+// Next is part of the RowSource interface.
+func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	if tr.maybeStart("table reader", "TableReader") {
+		if tr.flowCtx.txn == nil {
+			log.Fatalf(tr.ctx, "tableReader outside of txn")
+		}
+		log.VEventf(tr.ctx, 1, "starting")
+
+		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
+		if err := tr.fetcher.StartScan(
+			tr.ctx, tr.flowCtx.txn, tr.spans,
+			true /* limit batches */, tr.limitHint, false, /* traceKV */
+		); err != nil {
+			log.Errorf(tr.ctx, "scan error: %s", err)
+			return nil, tr.producerMeta(err)
+		}
+	}
+
+	if tr.closed || tr.consumerStatus != NeedMoreRows {
+		return nil, tr.producerMeta(nil /* err */)
+	}
+
+	for {
+		var row sqlbase.EncDatumRow
+		var err error
+		if !tr.isCheck {
+			row, _, _, err = tr.fetcher.NextRow(tr.ctx)
+		} else {
+			// If we are running a scrub physical check, we use a specialized
+			// procedure that runs additional checks while fetching the row
+			// data.
+			row, err = tr.fetcher.NextRowWithErrors(tr.ctx)
+			// There are four cases that can happen after NextRowWithErrors:
+			// 1) We encounter a ScrubError. We do not propagate the error up,
+			//    but instead generate and emit a row for the final results.
+			// 2) No errors were found. We simply continue scanning the data
+			//    and discard the row values, as they are not needed for any
+			//    results.
+			// 3) A non-scrub error was encountered. This was not considered a
+			//    physical data error, and so we propagate this to the user
+			//    immediately.
+			// 4) There was no error or row data. This signals that there is
+			//    no more data to scan.
+			//
+			// NB: Cases 3 and 4 are handled further below, in the standard
+			// table scanning code path.
+			if v, ok := err.(*scrub.Error); ok {
+				row, err = tr.generateScrubErrorRow(row, v)
+			} else if err == nil && row != nil {
+				continue
+			}
+		}
+		if row == nil || err != nil {
+			// This was the last-row or an error was encountered, annotate the
+			// metadata with misplanned ranges and trace data.
+			return nil, tr.producerMeta(scrub.UnwrapScrubError(err))
+		}
+
+		outRow, status, err := tr.out.ProcessRow(tr.ctx, row)
+		if outRow != nil {
+			return outRow, nil
+		}
+		if outRow == nil && err == nil && status == NeedMoreRows {
+			continue
+		}
+		return nil, tr.producerMeta(err)
+	}
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (tr *tableReader) ConsumerDone() {
+	tr.consumerDone("tableReader")
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (tr *tableReader) ConsumerClosed() {
+	tr.consumerClosed("tableReader")
+	// The consumer is done, Next() will not be called again.
+	tr.close()
 }

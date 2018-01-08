@@ -30,10 +30,10 @@ query T
 SELECT * FROM GENERATE_SERIES('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:00:00'::TIMESTAMP, '-1 hour')
 ----
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM GENERATE_SERIES(1, 3)
 ----
-0  generator  ·  ·
+generator  ·  ·
 
 query II colnames
 SELECT * FROM GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
@@ -44,13 +44,13 @@ generate_series  generate_series
 2                1
 2                2
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
 ----
-0  join       ·     ·
-0  ·          type  cross
-1  generator  ·     ·
-1  generator  ·     ·
+join            ·     ·
+ │              type  cross
+ ├── generator  ·     ·
+ └── generator  ·     ·
 
 query I
 SELECT * FROM GENERATE_SERIES(3, 1, -1)
@@ -101,10 +101,10 @@ generate_series
 1
 2
 
-query ITTT
+query TTT
 EXPLAIN SELECT GENERATE_SERIES(1, 3)
 ----
-0  generator  ·  ·
+generator  ·  ·
 
 query II colnames
 SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(3, 4)
@@ -115,13 +115,13 @@ generate_series             generate_series
 2                           3
 2                           4
 
-query ITTT
+query TTT
 EXPLAIN SELECT GENERATE_SERIES(1, 2), GENERATE_SERIES(1, 2)
 ----
-0  join       ·     ·
-0  ·          type  cross
-1  generator  ·     ·
-1  generator  ·     ·
+join            ·     ·
+ │              type  cross
+ ├── generator  ·     ·
+ └── generator  ·     ·
 
 statement ok
 CREATE TABLE t (a string)
@@ -146,30 +146,30 @@ cat  bird  1  4
 cat  bird  2  3
 cat  bird  2  4
 
-query ITTT
+query TTT
 EXPLAIN(EXPRS) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 ----
-0  render     ·         ·
-0  ·          render 0  a
-0  ·          render 1  b
-0  ·          render 2  generate_series
-0  ·          render 3  generate_series
-1  join       ·         ·
-1  ·          type      cross
-2  join       ·         ·
-2  ·          type      cross
-3  join       ·         ·
-3  ·          type      cross
-4  scan       ·         ·
-4  ·          table     t@primary
-4  ·          spans     ALL
-4  scan       ·         ·
-4  ·          table     u@primary
-4  ·          spans     ALL
-3  generator  ·         ·
-3  ·          expr      generate_series(1, 2)
-2  generator  ·         ·
-2  ·          expr      generate_series(3, 4)
+render                    ·         ·
+ │                        render 0  a
+ │                        render 1  b
+ │                        render 2  generate_series
+ │                        render 3  generate_series
+ └── join                 ·         ·
+      │                   type      cross
+      ├── join            ·         ·
+      │    │              type      cross
+      │    ├── join       ·         ·
+      │    │    │         type      cross
+      │    │    ├── scan  ·         ·
+      │    │    │         table     t@primary
+      │    │    │         spans     ALL
+      │    │    └── scan  ·         ·
+      │    │              table     u@primary
+      │    │              spans     ALL
+      │    └── generator  ·         ·
+      │                   expr      generate_series(1, 2)
+      └── generator       ·         ·
+·                         expr      generate_series(3, 4)
 
 query TTII
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b

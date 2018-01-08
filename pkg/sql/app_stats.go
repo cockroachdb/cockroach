@@ -16,12 +16,11 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"strconv"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -161,9 +160,7 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 }
 
 func (a *appStats) getStrForStmt(stmt Statement) string {
-	var buf bytes.Buffer
-	tree.FormatNode(&buf, tree.FmtHideConstants, stmt.AST)
-	return buf.String()
+	return tree.AsStringWithFlags(stmt.AST, tree.FmtHideConstants)
 }
 
 // sqlStats carries per-application statistics for all applications on
@@ -267,22 +264,25 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	}
 
 	// Re-format to remove most names.
-	formatter := tree.FmtReformatTableNames(tree.FmtAnonymize,
-		func(t *tree.NormalizableTableName, buf *bytes.Buffer, f tree.FmtFlags) {
+	f := tree.NewFmtCtxWithBuf(tree.FmtAnonymize)
+	f.WithReformatTableNames(
+		func(ctx *tree.FmtCtx, t *tree.NormalizableTableName) {
 			tn, err := t.Normalize()
 			if err != nil {
-				buf.WriteByte('_')
+				ctx.WriteByte('_')
 				return
 			}
 			virtual, err := vt.getVirtualTableEntry(tn)
 			if err != nil || virtual.desc == nil {
-				buf.WriteByte('_')
+				ctx.WriteByte('_')
 				return
 			}
 			// Virtual table: we want to keep the name.
-			tn.Format(buf, tree.FmtParsable)
+			keepNameCtx := ctx.CopyWithFlags(tree.FmtParsable)
+			keepNameCtx.FormatNode(tn)
 		})
-	return tree.AsStringWithFlags(stmt, formatter), true
+	f.FormatNode(stmt)
+	return f.CloseAndGetString(), true
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the

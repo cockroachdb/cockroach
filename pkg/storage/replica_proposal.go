@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -24,7 +25,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -163,12 +164,12 @@ func (r *Replica) computeChecksumPostApply(
 		if args.Snapshot {
 			snapshot = &roachpb.RaftSnapshotData{}
 		}
-		sha, err := r.sha512(desc, snap, snapshot)
+		result, err := r.sha512(ctx, desc, snap, snapshot)
 		if err != nil {
 			log.Errorf(ctx, "%v", err)
-			sha = nil
+			result = nil
 		}
-		r.computeChecksumDone(ctx, id, sha, snapshot)
+		r.computeChecksumDone(ctx, id, result, snapshot)
 	}); err != nil {
 		defer snap.Close()
 		log.Error(ctx, errors.Wrapf(err, "could not run async checksum computation (ID = %s)", id))
@@ -209,14 +210,39 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		// lease's expiration but instead use the new lease's start to initialize
 		// the timestamp cache low water.
 		desc := r.Desc()
-		for _, keyRange := range makeReplicatedKeyRanges(desc) {
-			r.store.tsCache.SetLowWater(keyRange.start.Key, keyRange.end.Key, newLease.Start)
+		for _, keyRange := range rditer.MakeReplicatedKeyRanges(desc) {
+			r.store.tsCache.SetLowWater(keyRange.Start.Key, keyRange.End.Key, newLease.Start)
 		}
 
 		// Reset the request counts used to make lease placement decisions whenever
 		// starting a new lease.
 		if r.leaseholderStats != nil {
 			r.leaseholderStats.resetRequestCounts()
+		}
+	}
+
+	// Sanity check to make sure that the lease sequence is moving in the right
+	// direction.
+	if s1, s2 := prevLease.Sequence, newLease.Sequence; s1 != 0 {
+		// We're at a version that supports lease sequence numbers.
+		switch {
+		case s2 < s1:
+			log.Fatalf(ctx, "lease sequence inversion, prevLease=%s, newLease=%s", prevLease, newLease)
+		case s2 == s1:
+			// If the sequence numbers are the same, make sure they're actually
+			// the same lease. This can happen when callers are using
+			// leasePostApply for some of its side effects, like with
+			// splitPostApply. It can also happen during lease extensions.
+			if !prevLease.Equivalent(newLease) {
+				log.Fatalf(ctx, "sequence identical for different leases, prevLease=%s, newLease=%s",
+					prevLease, newLease)
+			}
+		case s2 == s1+1:
+			// Lease sequence incremented by 1. Expected case.
+		case s2 > s1+1:
+			// Snapshots will never call leasePostApply, so we always expect
+			// leases to increment one at a time here.
+			log.Fatalf(ctx, "lease sequence jump, prevLease=%s, newLease=%s", prevLease, newLease)
 		}
 	}
 
@@ -632,6 +658,11 @@ func (r *Replica) handleReplicatedEvalResult(
 			r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
 		}
 	}
+
+	for _, sc := range rResult.SuggestedCompactions {
+		r.store.compactor.SuggestCompaction(ctx, sc)
+	}
+	rResult.SuggestedCompactions = nil
 
 	if !rResult.Equal(storagebase.ReplicatedEvalResult{}) {
 		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagebase.ReplicatedEvalResult{}))

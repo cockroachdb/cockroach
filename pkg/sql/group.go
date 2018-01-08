@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -159,7 +158,7 @@ func (p *planner) groupBy(
 				if err != nil {
 					return nil, nil, err
 				}
-				p.hasStar = p.hasStar || hasStar
+				p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 			}
 			groupByExprs[i] = resolvedExpr
 		}
@@ -214,7 +213,7 @@ func (p *planner) groupBy(
 		if err != nil {
 			return nil, nil, err
 		}
-		p.hasStar = p.hasStar || hasStar
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 
 		// GROUP BY (a, b) -> GROUP BY a, b
 		cols, exprs = flattenTuples(cols, exprs, &r.ivarHelper)
@@ -412,6 +411,9 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 	for bucket = range n.run.buckets {
 		break
 	}
+	// TODO(peter): Deleting from the n.run.buckets is fairly slow. The similar
+	// code in distsqlrun.aggregator performs a single step of copying all of the
+	// buckets to a slice and then releasing the buckets map.
 	delete(n.run.buckets, bucket)
 	for i, f := range n.funcs {
 		aggregateFunc, ok := f.run.buckets[bucket]
@@ -609,7 +611,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					argExpr,
-					fmt.Sprintf("the argument of %s()", t.Func),
+					fmt.Sprintf("the argument of %s()", &t.Func),
 					v.planner.session.SearchPath,
 				); err != nil {
 					v.err = err

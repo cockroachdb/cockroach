@@ -18,29 +18,29 @@ INSERT INTO p VALUES ('-0'::float)
 # - `WHERE f = 'NaN'` should also perform a point lookup.
 # - `WHERE isnan(f)` is a function so it can't perform a point lookup.
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p WHERE f IS NaN
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  p@p_f_key
-1  ·       spans  /NaN-/NaN/PrefixEnd
+render     ·      ·
+ └── scan  ·      ·
+·          table  p@p_f_key
+·          spans  /NaN-/NaN/PrefixEnd
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p WHERE f = 'NaN'
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  p@p_f_key
-1  ·       spans  /NaN-/NaN/PrefixEnd
+render     ·      ·
+ └── scan  ·      ·
+·          table  p@p_f_key
+·          spans  /NaN-/NaN/PrefixEnd
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM p WHERE isnan(f)
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  p@p_f_key
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  p@p_f_key
+·          spans  ALL
 
 query R
 SELECT * FROM p WHERE f = 'NaN'

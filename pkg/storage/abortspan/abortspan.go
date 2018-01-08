@@ -15,7 +15,7 @@
 package abortspan
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/pkg/errors"
 

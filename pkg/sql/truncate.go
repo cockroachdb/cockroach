@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -352,7 +353,7 @@ func truncateTableInChunks(
 				return err
 			}
 			td := tableDeleter{rd: rd, alloc: alloc}
-			if err := td.init(txn); err != nil {
+			if err := td.init(txn, nil /* *mon.BytesMonitor */); err != nil {
 				return err
 			}
 			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, traceKV)

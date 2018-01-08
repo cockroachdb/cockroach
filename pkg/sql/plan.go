@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -127,6 +128,9 @@ type planNode interface {
 	Close(ctx context.Context)
 }
 
+// PlanNode is the exported name for planNode. Useful for CCL hooks.
+type PlanNode = planNode
+
 // planNodeFastPath is implemented by nodes that can perform all their
 // work during startPlan(), possibly affecting even multiple rows. For
 // example, DELETE can do this.
@@ -138,6 +142,7 @@ type planNodeFastPath interface {
 	FastPathResults() (int, bool)
 }
 
+var _ planNode = &alterIndexNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &copyNode{}
@@ -181,14 +186,14 @@ var _ planNode = &updateNode{}
 var _ planNode = &valueGenerator{}
 var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
-var _ planNode = &createUserNode{}
-var _ planNode = &dropUserNode{}
+var _ planNode = &CreateUserNode{}
+var _ planNode = &DropUserNode{}
 
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
 var _ planNodeFastPath = &createTableNode{}
-var _ planNodeFastPath = &createUserNode{}
+var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &deleteNode{}
-var _ planNodeFastPath = &dropUserNode{}
+var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
 
 // makePlan implements the Planner interface.
@@ -197,13 +202,23 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 	if err != nil {
 		return nil, err
 	}
+	cols := planColumns(plan)
 	if stmt.ExpectedTypes != nil {
-		if !stmt.ExpectedTypes.TypesEqual(planColumns(plan)) {
+		if !stmt.ExpectedTypes.TypesEqual(cols) {
 			return nil, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
 	if err := p.semaCtx.Placeholders.AssertAllAssigned(); err != nil {
+		return nil, err
+	}
+
+	// Ensure that any hidden result column is effectively hidden.
+	// We do this before optimization below so that the needed
+	// column optimization kills the hidden columns.
+	plan, err = p.hideHiddenColumns(ctx, plan, cols)
+	if err != nil {
+		plan.Close(ctx)
 		return nil, err
 	}
 
@@ -220,6 +235,35 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 		log.Infof(ctx, "statement %s compiled to:\n%s", stmt, planToString(ctx, plan))
 	}
 	return plan, nil
+}
+
+// hideHiddenColumn ensures that if the plan is returning some hidden
+// column(s), it is wrapped into a renderNode which only renders the
+// visible columns.
+func (p *planner) hideHiddenColumns(
+	ctx context.Context, plan planNode, cols sqlbase.ResultColumns,
+) (planNode, error) {
+	hasHidden := false
+	for i := range cols {
+		if cols[i].Hidden {
+			hasHidden = true
+			break
+		}
+	}
+	if !hasHidden {
+		// Nothing to do.
+		return plan, nil
+	}
+
+	var tn tree.TableName
+	newPlan, err := p.insertRender(ctx, plan, &tn)
+	if err != nil {
+		// Don't return a nil plan on error -- the caller must be able to
+		// Close() it even if the replacement fails.
+		return plan, err
+	}
+
+	return newPlan, nil
 }
 
 // startPlan starts the plan and all its sub-query nodes.
@@ -299,6 +343,14 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 			return &hookFnNode{f: fn, header: header}, nil
 		}
 	}
+	for _, planHook := range wrappedPlanHooks {
+		if node, err := planHook(ctx, stmt, p); err != nil {
+			return nil, err
+		} else if node != nil {
+			return node, err
+		}
+	}
+
 	return nil, nil
 }
 
@@ -388,6 +440,8 @@ func (p *planner) newPlan(
 	}
 
 	switch n := stmt.(type) {
+	case *tree.AlterIndex:
+		return p.AlterIndex(ctx, n)
 	case *tree.AlterTable:
 		return p.AlterTable(ctx, n)
 	case *tree.AlterSequence:
@@ -402,7 +456,7 @@ func (p *planner) newPlan(
 		return p.CancelJob(ctx, n)
 	case *tree.Scrub:
 		return p.Scrub(ctx, n)
-	case CopyDataBlock:
+	case *CopyDataBlock:
 		return p.CopyData(ctx, n)
 	case *tree.CopyFrom:
 		return p.Copy(ctx, n)
@@ -469,7 +523,7 @@ func (p *planner) newPlan(
 	case *tree.Select:
 		return p.Select(ctx, n, desiredTypes)
 	case *tree.SelectClause:
-		return p.SelectClause(ctx, n, nil /* orderBy */, nil, /* limit */
+		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, nil, /* with */
 			desiredTypes, publicColumns)
 	case *tree.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)
@@ -493,6 +547,8 @@ func (p *planner) newPlan(
 		return p.ShowCreateTable(ctx, n)
 	case *tree.ShowCreateView:
 		return p.ShowCreateView(ctx, n)
+	case *tree.ShowCreateSequence:
+		return p.ShowCreateSequence(ctx, n)
 	case *tree.ShowDatabases:
 		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
@@ -511,6 +567,8 @@ func (p *planner) newPlan(
 		return p.ShowSessions(ctx, n)
 	case *tree.ShowTableStats:
 		return p.ShowTableStats(ctx, n)
+	case *tree.ShowSyntax:
+		return p.ShowSyntax(ctx, n)
 	case *tree.ShowTables:
 		return p.ShowTables(ctx, n)
 	case *tree.ShowTrace:
@@ -577,7 +635,7 @@ func (p *planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, e
 	case *tree.Select:
 		return p.Select(ctx, n, nil)
 	case *tree.SelectClause:
-		return p.SelectClause(ctx, n, nil /* orderBy */, nil, /* limit */
+		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, nil, /* with */
 			nil /* desiredTypes */, publicColumns)
 	case *tree.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)
@@ -591,6 +649,8 @@ func (p *planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, e
 		return p.ShowCreateTable(ctx, n)
 	case *tree.ShowCreateView:
 		return p.ShowCreateView(ctx, n)
+	case *tree.ShowCreateSequence:
+		return p.ShowCreateSequence(ctx, n)
 	case *tree.ShowColumns:
 		return p.ShowColumns(ctx, n)
 	case *tree.ShowDatabases:

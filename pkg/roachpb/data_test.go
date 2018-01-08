@@ -641,6 +641,7 @@ func TestLeaseEqual(t *testing.T) {
 		DeprecatedStartStasis *hlc.Timestamp
 		ProposedTS            *hlc.Timestamp
 		Epoch                 int64
+		Sequence              LeaseSequence
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
@@ -685,6 +686,7 @@ func TestLeaseEqual(t *testing.T) {
 		{DeprecatedStartStasis: &ts},
 		{ProposedTS: &ts},
 		{Epoch: 1},
+		{Sequence: 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {

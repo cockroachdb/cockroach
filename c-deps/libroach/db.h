@@ -20,7 +20,7 @@
 #include <rocksdb/write_batch_base.h>
 
 // DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
-rocksdb::Status DBOpenHook(const DBOptions opts);
+rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts);
 
 // ToDBSlice returns a DBSlice from a rocksdb::Slice
 DBSlice ToDBSlice(const rocksdb::Slice& s);
@@ -52,5 +52,5 @@ const ::rocksdb::Comparator* CockroachComparator();
 
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.
-MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start, DBKey end,
-                                         int64_t now_nanos);
+MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start,
+                                         DBKey end, int64_t now_nanos);

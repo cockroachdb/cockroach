@@ -15,6 +15,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 var errSentinel = struct{ error }{} // explodes if Error() called

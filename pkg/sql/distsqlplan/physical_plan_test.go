@@ -356,3 +356,44 @@ func TestProjectionAndRendering(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeResultTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	empty := []sqlbase.ColumnType{}
+	null := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_NULL}}
+	typeInt := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+
+	testData := []struct {
+		name     string
+		left     []sqlbase.ColumnType
+		right    []sqlbase.ColumnType
+		expected *[]sqlbase.ColumnType
+		err      bool
+	}{
+		{"both empty", empty, empty, &empty, false},
+		{"left empty", empty, typeInt, nil, true},
+		{"right empty", typeInt, empty, nil, true},
+		{"both null", null, null, &null, false},
+		{"left null", null, typeInt, &typeInt, false},
+		{"right null", typeInt, null, &typeInt, false},
+		{"both int", typeInt, typeInt, &typeInt, false},
+	}
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			result, err := MergeResultTypes(td.left, td.right)
+			if td.err {
+				if err == nil {
+					t.Fatalf("expected error, got %+v", result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if !reflect.DeepEqual(*td.expected, result) {
+				t.Fatalf("expected %+v, got %+v", *td.expected, result)
+			}
+		})
+	}
+}

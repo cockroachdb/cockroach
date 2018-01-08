@@ -9,6 +9,7 @@
 package sqlccl
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

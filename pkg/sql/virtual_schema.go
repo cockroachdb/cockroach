@@ -15,12 +15,11 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"

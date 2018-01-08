@@ -1,0 +1,5 @@
+# LogicTest: default
+
+# Check that we get through parsing and license check.
+statement error pq: failed to read backup descriptor: unsupported storage scheme: ""
+RESTORE foo FROM "bar"

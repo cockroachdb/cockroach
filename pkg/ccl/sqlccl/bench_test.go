@@ -18,19 +18,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func bankBuf(numAccounts int) *bytes.Buffer {
-	bankData := sampledataccl.BankRows(numAccounts)
+	bankData := bank.FromRows(numAccounts).Tables()[0]
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name(), bankData.Schema())
-	for {
-		row, ok := bankData.NextRow()
-		if !ok {
-			break
-		}
-		fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name(), strings.Join(row, `,`))
+	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
+	for rowIdx := 0; rowIdx < bankData.InitialRowCount; rowIdx++ {
+		row := bankData.InitialRowFn(rowIdx)
+		fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row, `,`))
 	}
 	return &buf
 }
@@ -44,7 +42,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	defer cleanupFn()
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
-	bankData := sampledataccl.BankRows(b.N)
+	bankData := bank.FromRows(b.N).Tables()[0]
 	loadDir := filepath.Join(dir, "load")
 	if _, err := sampledataccl.ToBackup(b, bankData, loadDir); err != nil {
 		b.Fatalf("%+v", err)
@@ -77,7 +75,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	defer cleanup()
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
-	bankData := sampledataccl.BankRows(b.N)
+	bankData := bank.FromRows(b.N).Tables()[0]
 	backup, err := sampledataccl.ToBackup(b, bankData, filepath.Join(dir, "foo"))
 	if err != nil {
 		b.Fatalf("%+v", err)
@@ -146,7 +144,7 @@ func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 	restoreDir := filepath.Join(localFoo, "restore")
 	fullDir := filepath.Join(localFoo, "full")
 
-	bankData := sampledataccl.BankRows(numStatements)
+	bankData := bank.FromRows(numStatements).Tables()[0]
 	_, err := sampledataccl.ToBackup(b, bankData, restoreDir)
 	if err != nil {
 		b.Fatalf("%+v", err)

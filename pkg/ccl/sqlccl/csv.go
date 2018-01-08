@@ -10,6 +10,7 @@ package sqlccl
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -21,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -864,7 +864,7 @@ func importJobDescription(
 		stmt.Options = append(stmt.Options, tree.KVOption{Key: importOptionTransformOnly})
 	}
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
-	return tree.AsStringWithFlags(&stmt, tree.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(&stmt, tree.FmtAlwaysQualifyTableNames), nil
 }
 
 const importCSVEnabledSetting = "experimental.importcsv.enabled"
@@ -1012,7 +1012,7 @@ func importPlanHook(
 
 		var create *tree.CreateTable
 		if importStmt.CreateDefs != nil {
-			normName := tree.NormalizableTableName{TableNameReference: importStmt.Table}
+			normName := tree.NormalizableTableName{TableNameReference: &importStmt.Table}
 			create = &tree.CreateTable{Table: normName, Defs: importStmt.CreateDefs}
 		} else {
 			filename, err := createFileFn()
@@ -1234,6 +1234,7 @@ func newReadCSVProcessor(
 	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readCSVProcessor{
+		flowCtx:    flowCtx,
 		csvOptions: spec.Options,
 		sampleSize: spec.SampleSize,
 		tableDesc:  spec.TableDesc,
@@ -1248,6 +1249,7 @@ func newReadCSVProcessor(
 }
 
 type readCSVProcessor struct {
+	flowCtx    *distsqlrun.FlowCtx
 	csvOptions roachpb.CSVOptions
 	sampleSize int32
 	tableDesc  sqlbase.TableDescriptor
@@ -1263,8 +1265,8 @@ func (cp *readCSVProcessor) OutputTypes() []sqlbase.ColumnType {
 	return csvOutputTypes
 }
 
-func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(ctx, "readCSVProcessor")
+func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(cp.flowCtx.Ctx, "readCSVProcessor")
 	defer tracing.FinishSpan(span)
 
 	if wg != nil {
@@ -1388,6 +1390,7 @@ func newSSTWriterProcessor(
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	sp := &sstWriter{
+		flowCtx:     flowCtx,
 		spec:        spec,
 		input:       input,
 		output:      output,
@@ -1401,6 +1404,7 @@ func newSSTWriterProcessor(
 }
 
 type sstWriter struct {
+	flowCtx     *distsqlrun.FlowCtx
 	spec        distsqlrun.SSTWriterSpec
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper
@@ -1415,8 +1419,8 @@ func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
 	return sstOutputTypes
 }
 
-func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(ctx, "sstWriter")
+func (sp *sstWriter) Run(wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(sp.flowCtx.Ctx, "sstWriter")
 	defer tracing.FinishSpan(span)
 
 	if wg != nil {
@@ -1427,7 +1431,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	err := func() error {
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
-		types := sp.input.Types()
+		types := sp.input.OutputTypes()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
 		store := engine.NewRocksDBMultiMap(sp.tempStorage)

@@ -15,12 +15,12 @@
 package mon
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/bits"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"

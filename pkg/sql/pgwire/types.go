@@ -16,6 +16,7 @@ package pgwire
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"math"
@@ -25,8 +26,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -192,7 +191,7 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 				// Emit nothing on NULL.
 				continue
 			}
-			tree.FormatNode(&b.variablePutbuf, tree.FmtSimple, d)
+			b.simpleFormatter.FormatNode(d)
 		}
 		b.variablePutbuf.WriteString(")")
 		b.writeLengthPrefixedVariablePutbuf()
@@ -213,7 +212,7 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 				b.variablePutbuf.WriteString(sep)
 			}
 			// TODO(justin): add a test for nested arrays.
-			tree.FormatNode(&b.variablePutbuf, tree.FmtArrays, d)
+			b.arrayFormatter.FormatNode(d)
 		}
 		b.variablePutbuf.WriteString(end)
 		b.writeLengthPrefixedVariablePutbuf()
@@ -389,7 +388,7 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
 			return
 		}
-		subWriter := &writeBuffer{}
+		subWriter := newWriteBuffer()
 		// Put the number of dimensions. We currently support 1d arrays only.
 		subWriter.putInt32(1)
 		hasNulls := 0

@@ -16,12 +16,11 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 
@@ -235,7 +234,13 @@ func updateStatsOnPut(
 	// Remove current live counts for this key.
 	if orig != nil {
 		if sys {
-			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
+			ms.SysBytes -= origMetaKeySize + origMetaValSize
+			if orig.Txn != nil {
+				// If the original value was an intent, we're replacing the
+				// intent. Note that since it's a system key, it doesn't affect
+				// IntentByte, IntentCount, and correspondingly, IntentAge.
+				ms.SysBytes -= orig.KeyBytes + orig.ValBytes
+			}
 			ms.SysCount--
 		} else {
 			// Move the (so far empty) stats to the timestamp at which the
@@ -268,8 +273,18 @@ func updateStatsOnPut(
 	}
 
 	// Move the stats to the new meta's timestamp. If we had an orig meta, this
-	// ages those original stats by the time which the previous version was live.
+	// ages those original stats by the time which the previous version was
+	// live.
+	//
+	// Note that there is an interesting special case here: it's possible that
+	// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
+	// outside of tests (due to our semantics of txn.OrigTimestamp, which never
+	// decreases) but it sure does happen in randomized testing. An earlier
+	// version of the code used `Forward` here, which is incorrect as it would be
+	// a no-op and fail to subtract out the intent bytes/GC age incurred due to
+	// removing the meta entry at `orig.Timestamp` (when `orig != nil`).
 	ms.AgeTo(meta.Timestamp.WallTime)
+
 	if sys {
 		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
 		ms.SysCount++
@@ -303,32 +318,69 @@ func updateStatsOnResolve(
 	commit bool,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
+
+	// NB: this is logging for ongoing work on #20554.
+	if false {
+		defer func() {
+			log.Infof(context.TODO(), "onResolve\n"+
+				"orig: ts=%d metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
+				"meta: ts=%d metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
+				"%+v",
+				orig.Timestamp.WallTime, origMetaKeySize, origMetaValSize, orig.KeyBytes, orig.ValBytes,
+				meta.Timestamp.WallTime, metaKeySize, metaValSize, meta.KeyBytes, meta.ValBytes,
+				&ms)
+		}()
+	}
+
 	// In this case, we're only removing the contribution from having the
 	// meta key around from orig.Timestamp to meta.Timestamp.
 	ms.AgeTo(orig.Timestamp.WallTime)
 	sys := isSysLocal(key)
 
-	// Always zero.
-	keyDiff := metaKeySize - origMetaKeySize
-	// This is going to be nonpositive: the old meta key was
-	// real, the new one is implicit.
-	valDiff := metaValSize - origMetaValSize
+	if orig.Deleted != meta.Deleted {
+		log.Fatalf(context.TODO(), "on resolve, original meta was deleted=%t, but new one is deleted=%t",
+			orig.Deleted, meta.Deleted)
+	}
 
 	if sys {
-		ms.SysBytes += keyDiff + valDiff
+		ms.SysBytes += (metaKeySize + metaValSize) - (origMetaValSize + origMetaKeySize)
 	} else {
+		// At orig.Timestamp, the original meta key disappears.
+		ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
+		ms.ValBytes -= origMetaValSize + orig.ValBytes
+
+		ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
+		ms.IntentCount--
+
+		// If the old intent is a deletion, then the key already isn't tracked
+		// in LiveBytes any more (and the new intent/value is also a deletion).
+		// If we're looking at a non-deletion intent/value, update the live
+		// bytes to account for the difference between the previous intent and
+		// the new intent/value.
 		if !meta.Deleted {
-			ms.LiveBytes += keyDiff + valDiff
+			ms.LiveBytes -= (origMetaKeySize + origMetaValSize) + (orig.KeyBytes + meta.ValBytes)
 		}
-		ms.KeyBytes += keyDiff
-		ms.ValBytes += valDiff
-		// If committing, subtract out intent counts.
-		if commit {
-			ms.IntentBytes -= (meta.KeyBytes + meta.ValBytes)
-			ms.IntentCount--
+
+		ms.AgeTo(meta.Timestamp.WallTime)
+
+		// At meta.Timestamp, the new meta key appears.
+		ms.KeyBytes += metaKeySize + meta.KeyBytes
+		ms.ValBytes += metaValSize + meta.ValBytes
+
+		if !commit {
+			// If not committing, the intent reappears (but at meta.Timestamp).
+			//
+			// This is the case in which an intent is pushed (a similar case
+			// happens when an intent is overwritten, but that's handled in
+			// updateStatsOnPut, not this method).
+			ms.IntentBytes += meta.KeyBytes + meta.ValBytes
+			ms.IntentCount++
+		}
+
+		if !meta.Deleted {
+			ms.LiveBytes += (metaKeySize + metaValSize) + (meta.KeyBytes + meta.ValBytes)
 		}
 	}
-	ms.AgeTo(meta.Timestamp.WallTime)
 	return ms
 }
 
@@ -1844,6 +1896,24 @@ func MVCCResolveWriteIntentUsingIter(
 		intent, iterAndBuf.buf)
 }
 
+// unsafeNextVersion positions the iterator at the successor to latestKey. If this value
+// exists and is a version of the same key, returns the UnsafeKey() and UnsafeValue() of that
+// key-value pair along with `true`.
+func unsafeNextVersion(iter Iterator, latestKey MVCCKey) (MVCCKey, []byte, bool, error) {
+	// Compute the next possible mvcc value for this key.
+	nextKey := latestKey.Next()
+	iter.Seek(nextKey)
+
+	if ok, err := iter.Valid(); err != nil || !ok || !iter.UnsafeKey().Key.Equal(latestKey.Key) {
+		return MVCCKey{}, nil, false /* never ok */, err
+	}
+	unsafeKey := iter.UnsafeKey()
+	if !unsafeKey.IsValue() {
+		return MVCCKey{}, nil, false, errors.Errorf("expected an MVCC value key: %s", unsafeKey)
+	}
+	return unsafeKey, iter.UnsafeValue(), true, nil
+}
+
 func mvccResolveWriteIntent(
 	ctx context.Context,
 	engine ReadWriter,
@@ -2026,14 +2096,14 @@ func mvccResolveWriteIntent(
 		return err
 	}
 
-	// Compute the next possible mvcc value for this key.
-	nextKey := latestKey.Next()
-	iter.Seek(nextKey)
-
-	// If there is no other version, we should just clean up the key entirely.
-	if ok, err := iter.Valid(); err != nil {
+	unsafeNextKey, unsafeNextValue, ok, err := unsafeNextVersion(iter, latestKey)
+	if err != nil {
 		return err
-	} else if !ok || !iter.UnsafeKey().Key.Equal(intent.Key) {
+	}
+	iter = nil // prevent accidental use below
+
+	if !ok {
+		// If there is no other version, we should just clean up the key entirely.
 		if err = engine.Clear(metaKey); err != nil {
 			return err
 		}
@@ -2044,12 +2114,8 @@ func mvccResolveWriteIntent(
 		return nil
 	}
 
-	unsafeIterKey := iter.UnsafeKey()
-	if !unsafeIterKey.IsValue() {
-		return errors.Errorf("expected an MVCC value key: %s", unsafeIterKey)
-	}
 	// Get the bytes for the next version so we have size for stat counts.
-	valueSize := int64(len(iter.UnsafeValue()))
+	valueSize := int64(len(unsafeNextValue))
 	// Update the keyMetadata with the next version.
 	buf.newMeta = enginepb.MVCCMetadata{
 		Deleted:  valueSize == 0,
@@ -2065,7 +2131,7 @@ func mvccResolveWriteIntent(
 	// Update stat counters with older version.
 	if ms != nil {
 		ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize,
-			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeIterKey.Timestamp.WallTime,
+			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime,
 			intent.Txn.Timestamp.WallTime))
 	}
 
@@ -2169,15 +2235,12 @@ func MVCCResolveWriteIntentRangeUsingIter(
 // keys slice. The engine iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration. The
 // timestamp parameter is used to compute the intent age on GC.
-// Garbage collection stops after clearing maxClears values
-// (to limit the size of the WriteBatch produced).
 func MVCCGarbageCollect(
 	ctx context.Context,
 	engine ReadWriter,
 	ms *enginepb.MVCCStats,
 	keys []roachpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
-	maxClears int64,
 ) error {
 	// We're allowed to use a prefix iterator because we always Seek() the
 	// iterator when handling a new user key.
@@ -2186,7 +2249,7 @@ func MVCCGarbageCollect(
 
 	var count int64
 	defer func(begin time.Time) {
-		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d versions",
+		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
 			len(keys), float64(len(keys))*1E9/float64(timeutil.Since(begin)), count)
 	}(timeutil.Now())
 
@@ -2204,6 +2267,13 @@ func MVCCGarbageCollect(
 		inlinedValue := meta.IsInline()
 		implicitMeta := iter.UnsafeKey().IsValue()
 		// First, check whether all values of the key are being deleted.
+		//
+		// Note that we naively can't terminate GC'ing keys loop early if we
+		// enter this branch, as it will update the stats under the provision
+		// that the (implicit or explicit) meta key (and thus all versions) are
+		// being removed. We had this faulty functionality at some point; it
+		// should no longer be necessary since the higher levels already make
+		// sure each individual GCRequest does bounded work.
 		if !gcKey.Timestamp.Less(hlc.Timestamp(meta.Timestamp)) {
 			// For version keys, don't allow GC'ing the meta key if it's
 			// not marked deleted. However, for inline values we allow it;
@@ -2229,9 +2299,6 @@ func MVCCGarbageCollect(
 					return err
 				}
 				count++
-				if count >= maxClears {
-					return nil
-				}
 			}
 		}
 
@@ -2260,12 +2327,9 @@ func MVCCGarbageCollect(
 						int64(len(iter.UnsafeValue())), nil, unsafeIterKey.Timestamp.WallTime,
 						timestamp.WallTime))
 				}
+				count++
 				if err := engine.Clear(unsafeIterKey); err != nil {
 					return err
-				}
-				count++
-				if count >= maxClears {
-					return nil
 				}
 			}
 		}
@@ -2346,9 +2410,15 @@ func willOverflow(a, b int64) bool {
 // faster.) ComputeStatsGo is here for codepaths that have a pure-go
 // implementation of SimpleIterator.
 //
+// When optional callbacks are specified, they are invoked for each physical
+// key-value pair (i.e. not for implicit meta records), and iteration is aborted
+// on the first error returned from any of them.
+//
+// Callbacks must copy any data they intend to hold on to.
+//
 // This implementation must match engine/db.cc:MVCCComputeStatsInternal.
 func ComputeStatsGo(
-	iter SimpleIterator, start, end MVCCKey, nowNanos int64,
+	iter SimpleIterator, start, end MVCCKey, nowNanos int64, callbacks ...func(MVCCKey, []byte) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
@@ -2368,6 +2438,12 @@ func ComputeStatsGo(
 
 		unsafeKey := iter.UnsafeKey()
 		unsafeValue := iter.UnsafeValue()
+
+		for _, f := range callbacks {
+			if err := f(unsafeKey, unsafeValue); err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+		}
 
 		isSys := bytes.Compare(unsafeKey.Key, keys.LocalMax) < 0
 		isValue := unsafeKey.IsValue()

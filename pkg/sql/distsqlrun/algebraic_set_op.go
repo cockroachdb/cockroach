@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // algebraicSetOp is a processor for the algebraic set operations,
@@ -31,7 +31,6 @@ import (
 type algebraicSetOp struct {
 	processorBase
 
-	flowCtx *FlowCtx
 	evalCtx *tree.EvalContext
 
 	leftSource, rightSource RowSource
@@ -51,7 +50,6 @@ func newAlgebraicSetOp(
 	output RowReceiver,
 ) (*algebraicSetOp, error) {
 	e := &algebraicSetOp{
-		flowCtx:     flowCtx,
 		leftSource:  leftSource,
 		rightSource: rightSource,
 		ordering:    spec.Ordering,
@@ -65,8 +63,8 @@ func newAlgebraicSetOp(
 		return nil, errors.Errorf("cannot create algebraicSetOp for unsupported algebraicSetOpType %v", e.opType)
 	}
 
-	lt := leftSource.Types()
-	rt := rightSource.Types()
+	lt := leftSource.OutputTypes()
+	rt := rightSource.OutputTypes()
 	if len(lt) != len(rt) {
 		return nil, errors.Errorf(
 			"Non union compatible: left and right have different numbers of columns %d and %d",
@@ -81,7 +79,7 @@ func newAlgebraicSetOp(
 	}
 
 	e.types = lt
-	err := e.init(post, e.types, flowCtx, output)
+	err := e.init(post, e.types, flowCtx, nil /* evalCtx */, output)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +87,12 @@ func newAlgebraicSetOp(
 	return e, nil
 }
 
-func (e *algebraicSetOp) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (e *algebraicSetOp) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTag(ctx, "ExceptAll", nil)
+	ctx := log.WithLogTag(e.flowCtx.Ctx, "ExceptAll", nil)
 	ctx, span := processorSpan(ctx, "exceptAll")
 	defer tracing.FinishSpan(span)
 
@@ -120,20 +118,17 @@ func (e *algebraicSetOp) Run(ctx context.Context, wg *sync.WaitGroup) {
 // right stream. It does not remove duplicates.
 func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 	leftGroup := makeStreamGroupAccumulator(
-		MakeNoMetadataRowSource(e.leftSource, e.out.output),
-		convertToColumnOrdering(e.ordering),
+		e.leftSource, convertToColumnOrdering(e.ordering),
 	)
-
 	rightGroup := makeStreamGroupAccumulator(
-		MakeNoMetadataRowSource(e.rightSource, e.out.output),
-		convertToColumnOrdering(e.ordering),
+		e.rightSource, convertToColumnOrdering(e.ordering),
 	)
 
-	leftRows, err := leftGroup.advanceGroup(e.evalCtx)
+	leftRows, err := leftGroup.advanceGroup(e.evalCtx, e.out.output)
 	if err != nil {
 		return err
 	}
-	rightRows, err := rightGroup.advanceGroup(e.evalCtx)
+	rightRows, err := rightGroup.advanceGroup(e.evalCtx, e.out.output)
 	if err != nil {
 		return err
 	}
@@ -203,11 +198,11 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 					}
 				}
 			}
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx)
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
-			rightRows, err = rightGroup.advanceGroup(e.evalCtx)
+			rightRows, err = rightGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
@@ -222,13 +217,13 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 					return err
 				}
 			}
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx)
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
 		}
 		if cmp > 0 {
-			rightRows, err = rightGroup.advanceGroup(e.evalCtx)
+			rightRows, err = rightGroup.advanceGroup(e.evalCtx, e.out.output)
 			if len(rightRows) == 0 {
 				break
 			}
@@ -252,7 +247,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 
 		// Emit all remaining rows.
 		for {
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx)
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			// Emit all left rows until completion/error.
 			if err != nil || len(leftRows) == 0 {
 				return err

@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -85,7 +84,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 
 		if err := params.p.dropIndexByName(
 			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
-			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 		); err != nil {
 			return err
 		}

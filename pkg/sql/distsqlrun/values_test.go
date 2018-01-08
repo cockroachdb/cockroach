@@ -15,10 +15,9 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -71,13 +70,16 @@ func TestValues(t *testing.T) {
 					}
 
 					out := &RowBuffer{}
-					flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings()}
+					flowCtx := FlowCtx{
+						Ctx:      context.Background(),
+						Settings: cluster.MakeTestingClusterSettings(),
+					}
 
 					v, err := newValuesProcessor(&flowCtx, &spec, &PostProcessSpec{}, out)
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.Run(context.Background(), nil)
+					v.Run(nil)
 					if !out.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")
 					}

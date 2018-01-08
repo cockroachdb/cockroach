@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"net"
@@ -25,7 +26,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -97,6 +97,7 @@ func createTestNode(
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(st)
 	active, renewal := cfg.NodeLivenessDurations()
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	cfg.NodeLiveness = storage.NewNodeLiveness(
 		cfg.AmbientCtx,
 		cfg.Clock,
@@ -104,6 +105,7 @@ func createTestNode(
 		cfg.Gossip,
 		active,
 		renewal,
+		cfg.HistogramWindowInterval,
 	)
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
 	cfg.StorePool = storage.NewStorePool(
@@ -390,7 +392,7 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	engines := []engine.Engine{e}
 	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
-	stopper.Stop(context.TODO())
+	defer stopper.Stop(context.TODO())
 	bootstrappedEngines, newEngines, cv, err := inspectEngines(
 		context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion,
 		cfg.Settings.Version.ServerVersion, node.clusterID)

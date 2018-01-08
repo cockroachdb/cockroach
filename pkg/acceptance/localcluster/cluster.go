@@ -16,6 +16,7 @@ package localcluster
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"go/build"
@@ -36,7 +37,6 @@ import (
 	"github.com/pkg/errors"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"

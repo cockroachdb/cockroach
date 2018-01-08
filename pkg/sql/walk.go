@@ -16,11 +16,10 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -198,13 +197,13 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "type", jType)
 
 			if len(n.pred.leftColNames) > 0 {
-				var buf bytes.Buffer
-				buf.WriteByte('(')
-				tree.FormatNode(&buf, tree.FmtSimple, n.pred.leftColNames)
-				buf.WriteString(") = (")
-				tree.FormatNode(&buf, tree.FmtSimple, n.pred.rightColNames)
-				buf.WriteByte(')')
-				v.observer.attr(name, "equality", buf.String())
+				f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+				f.WriteByte('(')
+				f.FormatNode(&n.pred.leftColNames)
+				f.WriteString(") = (")
+				f.FormatNode(&n.pred.rightColNames)
+				f.WriteByte(')')
+				v.observer.attr(name, "equality", f.CloseAndGetString())
 			}
 			if len(n.mergeJoinOrdering) > 0 {
 				// The ordering refers to equality columns
@@ -544,6 +543,7 @@ func nodeName(plan planNode) string {
 // strings are constant and not precomputed so that the type names can
 // be changed without changing the output of "EXPLAIN".
 var planNodeNames = map[reflect.Type]string{
+	reflect.TypeOf(&alterIndexNode{}):           "alter index",
 	reflect.TypeOf(&alterTableNode{}):           "alter table",
 	reflect.TypeOf(&alterSequenceNode{}):        "alter sequence",
 	reflect.TypeOf(&alterUserSetPasswordNode{}): "alter user",
@@ -553,7 +553,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&createDatabaseNode{}):       "create database",
 	reflect.TypeOf(&createIndexNode{}):          "create index",
 	reflect.TypeOf(&createTableNode{}):          "create table",
-	reflect.TypeOf(&createUserNode{}):           "create user",
+	reflect.TypeOf(&CreateUserNode{}):           "create user | role",
 	reflect.TypeOf(&createViewNode{}):           "create view",
 	reflect.TypeOf(&createSequenceNode{}):       "create sequence",
 	reflect.TypeOf(&createStatsNode{}):          "create statistics",
@@ -565,7 +565,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropTableNode{}):            "drop table",
 	reflect.TypeOf(&dropViewNode{}):             "drop view",
 	reflect.TypeOf(&dropSequenceNode{}):         "drop sequence",
-	reflect.TypeOf(&dropUserNode{}):             "drop user",
+	reflect.TypeOf(&DropUserNode{}):             "drop user | role",
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain dist_sql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
 	reflect.TypeOf(&showTraceNode{}):            "show trace for",

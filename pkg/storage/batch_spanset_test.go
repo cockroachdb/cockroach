@@ -17,11 +17,10 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"math"
 	"reflect"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"

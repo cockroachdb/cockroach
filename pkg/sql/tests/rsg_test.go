@@ -15,6 +15,7 @@
 package tests_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"flag"
 	"fmt"
@@ -27,7 +28,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -57,12 +57,12 @@ func verifyFormat(sql string) error {
 		// Cannot serialize a statement list without parsing it.
 		return nil
 	}
-	formattedSQL := tree.AsStringWithFlags(stmts, tree.FmtSimpleWithPasswords)
+	formattedSQL := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
 	formattedStmts, err := parseStatementList(formattedSQL)
 	if err != nil {
 		return errors.Wrapf(err, "cannot parse output of Format: sql=%q, formattedSQL=%q", sql, formattedSQL)
 	}
-	formattedFormattedSQL := tree.AsStringWithFlags(formattedStmts, tree.FmtSimpleWithPasswords)
+	formattedFormattedSQL := tree.AsStringWithFlags(&formattedStmts, tree.FmtShowPasswords)
 	if formattedSQL != formattedFormattedSQL {
 		return errors.Errorf("Parse followed by Format is not idempotent: %q -> %q != %q", sql, formattedSQL, formattedFormattedSQL)
 	}

@@ -15,13 +15,13 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -289,14 +290,14 @@ func makeGCQueueScore(
 func makeGCQueueScoreImpl(
 	ctx context.Context, fuzzSeed int64, now hlc.Timestamp, ms enginepb.MVCCStats, ttlSeconds int32,
 ) gcQueueScore {
-	ms.AgeTo(now.WallTime)
+	ms.Forward(now.WallTime)
 	var r gcQueueScore
 	r.TTL = time.Duration(ttlSeconds) * time.Second
 
 	// Treat a zero TTL as a one-second TTL, which avoids a priority of infinity
 	// and otherwise behaves indistinguishable given that we can't possibly hope
 	// to GC values faster than that.
-	if r.TTL == 0 {
+	if r.TTL <= time.Second {
 		r.TTL = time.Second
 	}
 
@@ -691,7 +692,7 @@ func RunGC(
 	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
 ) (GCInfo, error) {
 
-	iter := NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
+	iter := rditer.NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 
 	var infoMu = lockableGCInfo{}

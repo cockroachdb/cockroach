@@ -15,10 +15,9 @@
 package tree_test
 
 import (
+	"context"
 	"reflect"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -50,7 +49,8 @@ func TestUnresolvedNameString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		q := tree.UnresolvedName{tree.Name(tc.in)}
+		n := tree.Name(tc.in)
+		q := tree.UnresolvedName{&n}
 		if q.String() != tc.out {
 			t.Errorf("expected q.String() == %q, got %q", tc.out, q.String())
 		}

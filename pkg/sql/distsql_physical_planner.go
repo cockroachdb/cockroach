@@ -15,7 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -38,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // DistSQLPlanner is used to generate distributed plans from logical
@@ -359,6 +360,21 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *distinctNode:
 		return dsp.checkSupportForNode(n.plan)
+
+	case *unionNode:
+		// Only UNION and UNION ALL are supported so far.
+		if n.unionType == tree.UnionOp {
+			recLeft, err := dsp.checkSupportForNode(n.left)
+			if err != nil {
+				return 0, err
+			}
+			recRight, err := dsp.checkSupportForNode(n.right)
+			if err != nil {
+				return 0, err
+			}
+			return recLeft.compose(recRight), nil
+		}
+		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 
 	case *valuesNode:
 		if n.n == nil {
@@ -1765,6 +1781,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *distinctNode:
 		return dsp.createPlanForDistinct(planCtx, n)
 
+	case *unionNode:
+		return dsp.createPlanForUnion(planCtx, n)
+
 	case *valuesNode:
 		return dsp.createPlanForValues(planCtx, n)
 
@@ -1897,6 +1916,126 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
 
 	return plan, nil
+}
+
+// isOnlyOnGateway returns true if a physical plan is executed entirely on the
+// gateway node.
+func (dsp *DistSQLPlanner) isOnlyOnGateway(plan *physicalPlan) bool {
+	if len(plan.ResultRouters) == 1 {
+		processorIdx := plan.ResultRouters[0]
+		if plan.Processors[processorIdx].Node == dsp.nodeDesc.NodeID {
+			return true
+		}
+	}
+	return false
+}
+
+func (dsp *DistSQLPlanner) createPlanForUnion(
+	planCtx *planningCtx, n *unionNode,
+) (physicalPlan, error) {
+	leftPlan, err := dsp.createPlanForNode(planCtx, n.left)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	rightPlan, err := dsp.createPlanForNode(planCtx, n.right)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	childPlans := []*physicalPlan{&leftPlan, &rightPlan}
+
+	var distinctSpec distsqlrun.ProcessorCoreUnion
+	if !n.all {
+		// Build a distinct processor spec, which will be used in three places:
+		// on the left plan, on the right, and on the union of the two once the
+		// results have been grouped together.
+		//
+		// Note there is the potential for further network I/O optimization here
+		// since rows are not deduplicated between left and right until the single
+		// group stage. In the worst case (total duplication), this causes double
+		// the amount of data to be streamed as necessary.
+		var distinctColumns []uint32
+		for planCol := range planColumns(n.left) {
+			if streamCol := leftPlan.planToStreamColMap[planCol]; streamCol != -1 {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
+		}
+		distinctSpec = distsqlrun.ProcessorCoreUnion{
+			Distinct: &distsqlrun.DistinctSpec{
+				DistinctColumns: distinctColumns,
+			},
+		}
+
+		for _, plan := range childPlans {
+			if !dsp.isOnlyOnGateway(plan) {
+				// TODO(solon): We could skip this stage if there is a strong key on
+				// the result columns.
+				plan.AddNoGroupingStage(
+					distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+			}
+		}
+	}
+
+	var p physicalPlan
+
+	// Merge the plans' planToStreamColMap, which should be equivalent.
+	// TODO(solon): Are there any valid UNION ALL cases where these differ? If
+	// we encounter any, we could handle them similarly to the differing
+	// ResultTypes case below.
+	if !reflect.DeepEqual(leftPlan.planToStreamColMap, rightPlan.planToStreamColMap) {
+		return physicalPlan{}, errors.Errorf(
+			"planToStreamColMap mismatch: %v, %v", leftPlan.planToStreamColMap,
+			rightPlan.planToStreamColMap)
+	}
+	p.planToStreamColMap = leftPlan.planToStreamColMap
+
+	// Merge the plans' result types and merge ordering.
+	resultTypes, err := distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+	mergeOrdering := leftPlan.MergeOrdering
+	if err != nil || !mergeOrdering.Equal(rightPlan.MergeOrdering) {
+		// The result types or merge ordering can differ between the two sides in
+		// pathological cases, like if they have incompatible ORDER BY clauses.
+		// Resolve this by collecting results on a single node and adding a
+		// projection to the results that will be unioned.
+		columns := make([]uint32, 0, len(p.planToStreamColMap))
+		for _, col := range p.planToStreamColMap {
+			if col < 0 {
+				continue
+			}
+			columns = append(columns, uint32(col))
+		}
+
+		for _, plan := range childPlans {
+			plan.AddSingleGroupStage(
+				dsp.nodeDesc.NodeID,
+				distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+				distsqlrun.PostProcessSpec{},
+				plan.ResultTypes)
+			plan.AddProjection(columns)
+		}
+
+		// Result types should now be mergeable.
+		resultTypes, err = distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		mergeOrdering = distsqlrun.Ordering{}
+	}
+
+	// Merge processors, streams, result routers, and stage counter.
+	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
+	p.PhysicalPlan, leftRouters, rightRouters = distsqlplan.MergePlans(
+		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
+	p.ResultRouters = append(leftRouters, rightRouters...)
+
+	p.ResultTypes = resultTypes
+	p.MergeOrdering = mergeOrdering
+
+	if !n.all {
+		p.AddSingleGroupStage(
+			dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes)
+	}
+
+	return p, nil
 }
 
 func (dsp *DistSQLPlanner) newPlanningCtx(

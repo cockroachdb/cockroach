@@ -15,13 +15,12 @@
 package sql
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"sort"
 	"unsafe"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -835,14 +834,14 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			// Check if a parent node above this window function is an aggregate.
 			if len(v.aggregatesSeen) > 0 {
 				v.err = errors.Errorf("aggregate function calls cannot contain window function "+
-					"call %s()", t.Func)
+					"call %s()", &t.Func)
 				return false, expr
 			}
 
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = fmt.Errorf("window function calls cannot be nested under %s()", t.Func)
+					v.err = fmt.Errorf("window function calls cannot be nested under %s()", &t.Func)
 					return false, expr
 				}
 			}
@@ -918,9 +917,9 @@ type windowFuncHolder struct {
 
 func (*windowFuncHolder) Variable() {}
 
-func (w *windowFuncHolder) Format(buf *bytes.Buffer, f tree.FmtFlags) {
+func (w *windowFuncHolder) Format(ctx *tree.FmtCtx) {
 	// Avoid duplicating the type annotation by calling .Format directly.
-	w.expr.Format(buf, f)
+	w.expr.Format(ctx)
 }
 
 func (w *windowFuncHolder) String() string { return tree.AsString(w) }

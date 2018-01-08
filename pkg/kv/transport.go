@@ -16,11 +16,10 @@
 package kv
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

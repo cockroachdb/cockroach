@@ -15,10 +15,10 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"golang.org/x/net/context"
 )
 
 // This file contains the functions that perform filter propagation.
@@ -309,6 +309,7 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
@@ -318,7 +319,7 @@ func (p *planner) propagateFilters(
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
-	case *createUserNode:
+	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
 	case *createStatsNode:
@@ -327,7 +328,7 @@ func (p *planner) propagateFilters(
 	case *dropTableNode:
 	case *dropViewNode:
 	case *dropSequenceNode:
-	case *dropUserNode:
+	case *DropUserNode:
 	case *hookFnNode:
 	case *valueGenerator:
 	case *valuesNode:

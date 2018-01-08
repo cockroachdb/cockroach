@@ -15,14 +15,13 @@
 package distsqlrun
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-
-	"golang.org/x/net/context"
 )
 
 func TestDistinct(t *testing.T) {
@@ -141,6 +140,7 @@ func TestDistinct(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
+				Ctx:      context.Background(),
 				Settings: cluster.MakeTestingClusterSettings(),
 				EvalCtx:  evalCtx,
 			}
@@ -150,7 +150,7 @@ func TestDistinct(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			d.Run(context.Background(), nil)
+			d.Run(nil)
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -179,6 +179,7 @@ func BenchmarkDistinct(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
+		Ctx:      ctx,
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
@@ -195,7 +196,7 @@ func BenchmarkDistinct(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		d.Run(ctx, nil)
+		d.Run(nil)
 		input.Reset()
 	}
 	b.StopTimer()

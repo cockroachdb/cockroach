@@ -23,7 +23,7 @@ import (
 // streamGroupAccumulator groups input rows coming from src into groups dictated
 // by equality according to the ordering columns.
 type streamGroupAccumulator struct {
-	src   NoMetadataRowSource
+	src   RowSource
 	types []sqlbase.ColumnType
 
 	// srcConsumed is set once src has been exhausted.
@@ -37,43 +37,36 @@ type streamGroupAccumulator struct {
 }
 
 func makeStreamGroupAccumulator(
-	src NoMetadataRowSource, ordering sqlbase.ColumnOrdering,
+	src RowSource, ordering sqlbase.ColumnOrdering,
 ) streamGroupAccumulator {
 	return streamGroupAccumulator{
 		src:      src,
-		types:    src.Types(),
+		types:    src.OutputTypes(),
 		ordering: ordering,
 	}
 }
 
-// peekAtCurrentGroup returns the first row of the current group.
-func (s *streamGroupAccumulator) peekAtCurrentGroup() (sqlbase.EncDatumRow, error) {
-	// On all but the very first call, either there will be (one or all) rows
-	// accumulated already in the current group, or srcConsumed will be set.
-	if s.srcConsumed {
-		return nil, nil
-	}
-	if len(s.curGroup) == 0 {
-		row, err := s.src.NextRow()
-		if err != nil {
-			return nil, err
+// advanceGroup returns all rows of the current group and advances the internal
+// state to the next group.
+func (s *streamGroupAccumulator) advanceGroup(
+	evalCtx *tree.EvalContext, metadataSink RowReceiver,
+) ([]sqlbase.EncDatumRow, error) {
+	for {
+		batch, meta := s.nextGroup(evalCtx)
+		if meta != nil {
+			if meta.Err != nil {
+				return nil, meta.Err
+			}
+			_ = metadataSink.Push(nil /* row */, meta)
+			continue
 		}
-		if row != nil {
-			s.curGroup = append(s.curGroup, row)
-		} else {
-			s.srcConsumed = true
-			return nil, nil
-		}
+		return batch, nil
 	}
-	return s.curGroup[0], nil
 }
 
-// advanceGroup returns all rows of the current group and advances the internal
-// state to the next group, so that a subsequent peekAtCurrentGroup() will
-// return the first row of the next group.
-func (s *streamGroupAccumulator) advanceGroup(
+func (s *streamGroupAccumulator) nextGroup(
 	evalCtx *tree.EvalContext,
-) ([]sqlbase.EncDatumRow, error) {
+) ([]sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.srcConsumed {
 		// If src has been exhausted, then we also must have advanced away from the
 		// last group.
@@ -81,9 +74,9 @@ func (s *streamGroupAccumulator) advanceGroup(
 	}
 
 	for {
-		row, err := s.src.NextRow()
-		if err != nil {
-			return nil, err
+		row, meta := s.src.Next()
+		if meta != nil {
+			return nil, meta
 		}
 		if row == nil {
 			s.srcConsumed = true
@@ -100,15 +93,16 @@ func (s *streamGroupAccumulator) advanceGroup(
 
 		cmp, err := s.curGroup[0].Compare(s.types, &s.datumAlloc, s.ordering, evalCtx, row)
 		if err != nil {
-			return nil, err
+			return nil, &ProducerMetadata{Err: err}
 		}
 		if cmp == 0 {
 			s.curGroup = append(s.curGroup, row)
 		} else if cmp == 1 {
-			return nil, errors.Errorf(
-				"detected badly ordered input: %s > %s, but expected '<'",
-				s.curGroup[0].String(s.types), row.String(s.types),
-			)
+			return nil, &ProducerMetadata{
+				Err: errors.Errorf(
+					"detected badly ordered input: %s > %s, but expected '<'",
+					s.curGroup[0].String(s.types), row.String(s.types)),
+			}
 		} else {
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]

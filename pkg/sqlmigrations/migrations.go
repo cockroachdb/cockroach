@@ -15,11 +15,10 @@
 package sqlmigrations
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -146,6 +145,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		name:   "upgrade table descs to interleaved format version",
 		workFn: upgradeTableDescsToInterleavedFormatVersion,
+	},
+	{
+		name:   "remove cluster setting `kv.gc.batch_size`",
+		workFn: purgeClusterSettingKVGCBatchSize,
 	},
 }
 
@@ -918,4 +921,9 @@ func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) 
 		}
 	}
 	return nil
+}
+
+func purgeClusterSettingKVGCBatchSize(ctx context.Context, r runner) error {
+	// This cluster setting has been removed.
+	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.gc.batch_size'`)
 }

@@ -599,6 +599,7 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`.*\.lock`),
+			stream.GrepNot(`^storage\/engine\/rocksdb_error_dict\.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkg.Dir, s)
 			}),
@@ -766,9 +767,9 @@ func TestLint(t *testing.T) {
 
 		// forbiddenImportPkg -> permittedReplacementPkg
 		forbiddenImports := map[string]string{
-			"context": "golang.org/x/net/context",
-			"log":     "util/log",
-			"path":    "path/filepath",
+			"golang.org/x/net/context": "context",
+			"log":  "util/log",
+			"path": "path/filepath",
 			"github.com/golang/protobuf/proto": "github.com/gogo/protobuf/proto",
 			"github.com/satori/go.uuid":        "util/uuid",
 			"golang.org/x/sync/singleflight":   "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",

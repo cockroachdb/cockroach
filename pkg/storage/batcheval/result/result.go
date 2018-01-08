@@ -15,7 +15,7 @@
 package result
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -245,6 +245,15 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		return errors.New("conflicting AddSSTable")
 	}
 	q.Replicated.AddSSTable = nil
+
+	if q.Replicated.SuggestedCompactions != nil {
+		if p.Replicated.SuggestedCompactions == nil {
+			p.Replicated.SuggestedCompactions = q.Replicated.SuggestedCompactions
+		} else {
+			p.Replicated.SuggestedCompactions = append(p.Replicated.SuggestedCompactions, q.Replicated.SuggestedCompactions...)
+		}
+	}
+	q.Replicated.SuggestedCompactions = nil
 
 	if q.Local.IntentsAlways != nil {
 		if p.Local.IntentsAlways == nil {

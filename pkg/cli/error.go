@@ -15,12 +15,11 @@
 package cli
 
 import (
+	"context"
 	"net"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"

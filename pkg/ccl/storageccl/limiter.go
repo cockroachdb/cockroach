@@ -9,7 +9,7 @@
 package storageccl
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )

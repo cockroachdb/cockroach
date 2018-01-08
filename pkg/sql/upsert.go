@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -220,12 +219,13 @@ func upsertExprsAndIndex(
 		updateExprs := make(tree.UpdateExprs, 0, len(insertCols))
 		for _, c := range insertCols {
 			if _, ok := indexColSet[c.ID]; !ok {
+				n := tree.Name(c.Name)
 				names := tree.UnresolvedNames{
-					tree.UnresolvedName{tree.Name(c.Name)},
+					tree.UnresolvedName{&n},
 				}
 				expr := &tree.ColumnItem{
 					TableName:  upsertExcludedTable,
-					ColumnName: tree.Name(c.Name),
+					ColumnName: n,
 				}
 				updateExprs = append(updateExprs, &tree.UpdateExpr{Names: names, Expr: expr})
 			}

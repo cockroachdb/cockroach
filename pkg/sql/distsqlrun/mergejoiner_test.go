@@ -15,10 +15,9 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -433,7 +432,11 @@ func TestMergeJoiner(t *testing.T) {
 			out := &RowBuffer{}
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
+			flowCtx := FlowCtx{
+				Ctx:      context.Background(),
+				Settings: cluster.MakeTestingClusterSettings(),
+				EvalCtx:  evalCtx,
+			}
 
 			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
 			m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, &post, out)
@@ -441,7 +444,7 @@ func TestMergeJoiner(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m.Run(context.Background(), nil /* wg */)
+			m.Run(nil /* wg */)
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -537,6 +540,7 @@ func TestConsumerClosed(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
+				Ctx:      context.Background(),
 				Settings: cluster.MakeTestingClusterSettings(),
 				EvalCtx:  evalCtx,
 			}
@@ -546,7 +550,7 @@ func TestConsumerClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m.Run(context.TODO(), nil /* wg */)
+			m.Run(nil /* wg */)
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -560,6 +564,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
+		Ctx:      ctx,
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
@@ -592,7 +597,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				m.Run(ctx, nil)
+				m.Run(nil)
 				leftInput.Reset()
 				rightInput.Reset()
 			}

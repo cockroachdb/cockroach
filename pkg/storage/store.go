@@ -16,6 +16,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -30,7 +31,6 @@ import (
 	"github.com/google/btree"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -44,8 +44,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -352,9 +354,10 @@ type Store struct {
 	cfg                StoreConfig
 	db                 *client.DB
 	engine             engine.Engine               // The underlying key-value store
+	compactor          *compactor.Compactor        // Schedules compaction of the engine
 	tsCache            tscache.Cache               // Most recent timestamps for keys / key ranges
 	allocator          Allocator                   // Makes allocation decisions
-	rangeIDAlloc       *idAllocator                // Range ID allocator
+	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
 	gcQueue            *gcQueue                    // Garbage collection queue
 	splitQueue         *splitQueue                 // Range splitting queue
 	replicateQueue     *replicateQueue             // Replication queue
@@ -862,6 +865,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
 	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
 
+	s.compactor = compactor.NewCompactor(s.engine.(engine.WithSSTables), s.Capacity)
+	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
+
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
 	if s.cfg.Gossip != nil {
@@ -1087,8 +1093,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(
-		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper,
+	idAlloc, err := idalloc.NewAllocator(
+		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, 2 /* minID */, rangeIDAllocCount, s.stopper,
 	)
 	if err != nil {
 		return err
@@ -1203,6 +1209,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 		log.Event(ctx, "computed initial metrics")
+	}
+
+	// Start the storage engine compactor.
+	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
+		s.compactor.Start(s.AnnotateCtx(context.Background()), s.Tracer(), s.stopper)
 	}
 
 	// Set the started flag (for unittests).
@@ -1760,6 +1771,9 @@ func (s *Store) DB() *client.DB { return s.cfg.DB }
 
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.cfg.Gossip }
+
+// Compactor accessor.
+func (s *Store) Compactor() *compactor.Compactor { return s.compactor }
 
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
@@ -3425,7 +3439,7 @@ func sendSnapshot(
 		}
 		var key engine.MVCCKey
 		var value []byte
-		alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
+		alloc, key, value = snap.Iter.AllocIterKeyValue(alloc)
 		if bytes.HasPrefix(key.Key, unreplicatedPrefix) {
 			continue
 		}

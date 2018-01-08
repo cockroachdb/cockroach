@@ -83,7 +83,7 @@ function renderNodeLiveness(props: NodeLivenessProps) {
     { "alert": deadNodes > 0 },
   );
   return [
-    <h3 className="node-liveness cluster-summary__title">Node Liveness</h3>,
+    <h3 className="node-liveness cluster-summary__title">Node Status</h3>,
     <div className="node-liveness cluster-summary__metric live-nodes">{ liveNodes }</div>,
     <div className="node-liveness cluster-summary__label live-nodes">Live<br />Nodes</div>,
     <div className={suspectClasses}>{ suspectNodes }</div>,

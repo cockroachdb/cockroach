@@ -15,12 +15,11 @@
 package tree_test
 
 import (
+	"context"
 	"go/constant"
 	"go/token"
 	"reflect"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"

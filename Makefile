@@ -44,7 +44,7 @@ TESTS := .
 ## Benchmarks to run for use with `make bench`.
 BENCHES :=
 
-## Space delimited list of logic test files to run, for make testlogic.
+## Space delimited list of logic test files to run, for make testlogic and testccllogic.
 FILES :=
 
 ## Regex for matching logic test subtests. This is always matched after "FILES"
@@ -99,9 +99,10 @@ help: ## Print help for targets with comments.
 		"make test PKG=./pkg/sql" "Run all unit tests in the ./pkg/sql package" \
 		"make test PKG=./pkg/sql/parser TESTS=TestParse" "Run the TestParse test in the ./pkg/sql/parser package." \
 		"make bench PKG=./pkg/sql/parser BENCHES=BenchmarkParse" "Run the BenchmarkParse benchmark in the ./pkg/sql/parser package." \
-		"make testlogic" "Run all SQL Logic Tests." \
-		"make testlogic FILES=prepare" "Run the logic test with filename prepare." \
-		"make testlogic FILES=fk SUBTESTS='(20042|20045)'" "Run the logic test with filename fk and only subtests 20042 and 20045."
+		"make testlogic" "Run all OSS SQL logic tests." \
+		"make testccllogic" "Run all CCL SQL logic tests." \
+		"make testlogic FILES='prepare fk'" "Run the logic tests in the files named prepare and fk." \
+		"make testlogic FILES=fk SUBTESTS='20042|20045'" "Run the logic tests within subtests 20042 and 20045 in the file named fk."
 
 # Possible values:
 # <empty>: use the default toolchain
@@ -403,6 +404,12 @@ HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 CONFIGURE_FLAGS :=
 CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
 
+# The following flag informs cmake to not print percent completes on target
+# completion, to prevent spammy output from make when c-deps are all already
+# built. Percent completion messages are still printed when actual compilation
+# is being performed.
+CMAKE_FLAGS += -DCMAKE_TARGET_MESSAGES=OFF
+
 # override so that no one is tempted to make USE_STDMALLOC=1 instead of make
 # TAGS=stdmalloc; without TAGS=stdmalloc, Go will still try to link jemalloc.
 override USE_STDMALLOC := $(findstring stdmalloc,$(TAGS))
@@ -470,8 +477,9 @@ LIBROACH_DIR := $(BUILD_DIR)/libroach
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
-C_LIBS_OSS = $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb libroach
-C_LIBS_CCL = $(C_LIBS_OSS) libcryptopp libroachccl
+C_LIBS_COMMON = $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb
+C_LIBS_OSS = $(C_LIBS_COMMON) libroach
+C_LIBS_CCL = $(C_LIBS_COMMON) libcryptopp libroachccl
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
 NATIVE_SPECIFIER_TAG := $(subst -,_,$(NATIVE_SPECIFIER))$(STDMALLOC_SUFFIX)
@@ -504,7 +512,6 @@ CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 $(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
 
 $(CGO_FLAGS_FILES): Makefile
-	@echo 'GEN $@'
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
 	@echo '// +build $(if $(findstring $(NATIVE_SPECIFIER_TAG),$@),$(NATIVE_SPECIFIER_TAG),!make)' >> $@
@@ -617,7 +624,7 @@ libcryptopp: $(CRYPTOPP_DIR)/Makefile
 
 .PHONY: libjemalloc
 libjemalloc: $(JEMALLOC_DIR)/Makefile
-	@$(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
+	@set -o pipefail; $(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static | { grep -v "Nothing to be done" || true; }
 
 .PHONY: libprotobuf
 libprotobuf: $(PROTOBUF_DIR)/Makefile
@@ -636,7 +643,7 @@ libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
-libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET) libroach
+libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
@@ -676,6 +683,9 @@ CPP_PROTOS_CCL_TARGET := $(LOCAL_BIN)/.cpp_ccl_protobuf_sources
 
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
+
+.PHONY: c-deps
+c-deps: $(C_LIBS_CCL)
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 buildoss: $(C_LIBS_OSS) $(UI_ROOT)/distoss/bindata.go
@@ -743,28 +753,29 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 # guaranteed to be irrelevant to save nearly 10s on every Make invocation.
 FIND_RELEVANT := find $(PKG_ROOT) -name node_modules -prune -o
 
-bin/logictest.test: PKG := ./pkg/sql/logictest
-bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
-	$(MAKE) gotestdashi GOFLAGS='$(GOFLAGS)' TAGS='$(TAGS)' LINKFLAGS='$(LINKFLAGS)' PKG='$(PKG)'
-	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/logictest.test $(PKG)
+pkg/%.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
+	$(MAKE) testbuild PKG='./pkg/$(*D)'
 
 bench: ## Run benchmarks.
 bench: TESTS := -
 bench: BENCHES := .
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
-.PHONY: check test testshort testrace testlogic bench
+.PHONY: check test testshort testrace testlogic testccllogic bench
 test: ## Run tests.
 check test testshort testrace bench: gotestdashi
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
-# Run make testlogic to run all of the logic tests. Specify test files to run
-# with make testlogic FILES="foo bar".
 testlogic: ## Run SQL Logic Tests.
-testlogic: TESTS := $(if $(FILES),TestLogic$$//^$(subst $(space),$$|^,$(FILES))$$$(if $(SUBTESTS),/$(SUBTESTS)),TestLogic)
-testlogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
-testlogic: bin/logictest.test
-	cd pkg/sql/logictest && logictest.test -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
+testlogic: pkg/sql/logictest/logictest.test
+
+testccllogic: ## Run SQL CCL Logic Tests.
+testccllogic: pkg/ccl/sqlccl/logictestccl/logictestccl.test
+
+testlogic testccllogic: TESTS := Test(CCL)?Logic//$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
+testlogic testccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
+testlogic testccllogic:
+	cd $(<D) && ./$(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
 
 testraceslow: override GOFLAGS += -race
 testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
@@ -931,11 +942,11 @@ UI_JS := $(UI_ROOT)/src/js/protos.js
 UI_TS := $(UI_ROOT)/src/js/protos.d.ts
 UI_PROTOS := $(UI_JS) $(UI_TS)
 
-CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/mvcc3.proto %/engine/enginepb/registry.proto %/engine/enginepb/rocksdb.proto %/hlc/legacy_timestamp.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
+CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/mvcc3.proto %/engine/enginepb/file_registry.proto %/engine/enginepb/rocksdb.proto %/hlc/legacy_timestamp.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
 CPP_HEADERS := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.cc))
 
-CPP_PROTOS_CCL := $(filter %ccl/baseccl/encryption_options.proto,$(GO_PROTOS))
+CPP_PROTOS_CCL := $(filter %/ccl/baseccl/encryption_options.proto %/ccl/storageccl/engineccl/enginepbccl/key_registry.proto,$(GO_PROTOS))
 CPP_HEADERS_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.proto=%.pb.h))
 CPP_SOURCES_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.proto=%.pb.cc))
 
@@ -950,6 +961,8 @@ $(GO_PROTOS_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	$(SED_INPLACE) -E 's!import (fmt|math) "github.com/cockroachdb/cockroach/pkg/(fmt|math)"! !g' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!cockroachdb/cockroach/pkg/(etcd)!coreos/\1!g' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!github.com/cockroachdb/cockroach/pkg/(bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)!\1!g' $(GO_SOURCES)
+	@# TODO(benesch): Remove after https://github.com/grpc/grpc-go/issues/711.
+	$(SED_INPLACE) -E 's!golang.org/x/net/context!context!g' $(GO_SOURCES)
 	gofmt -s -w $(GO_SOURCES)
 	touch $@
 
@@ -957,6 +970,11 @@ $(GW_PROTOS_TARGET): $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) 
 	$(FIND_RELEVANT) -type f -name '*.pb.gw.go' -exec rm {} +
 	build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_SERVER_PROTOS)
 	build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_TS_PROTOS)
+	@# TODO(benesch): Remove after https://github.com/grpc/grpc-go/issues/711.
+	$(SED_INPLACE) -E 's!golang.org/x/net/context!context!g' $(GW_SOURCES)
+	gofmt -s -w $(GW_SOURCES)
+	@# TODO(jordan,benesch) This can be removed along with the above TODO.
+	goimports -w $(GW_SOURCES)
 	touch $@
 
 $(CPP_PROTOS_TARGET): $(PROTOC) $(CPP_PROTOS)

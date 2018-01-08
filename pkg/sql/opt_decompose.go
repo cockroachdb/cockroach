@@ -46,7 +46,7 @@ import (
 func decomposeExpr(
 	evalCtx *tree.EvalContext, e tree.TypedExpr,
 ) (exprs []tree.TypedExprs, equivalent bool) {
-	e, equivalent = simplifyExpr(evalCtx, e)
+	e, equivalent = SimplifyExpr(evalCtx, e)
 	orExprs := splitOrExpr(evalCtx, e, nil)
 	results := make([]tree.TypedExprs, len(orExprs))
 	for i := range orExprs {
@@ -118,7 +118,7 @@ func joinExprs(
 	}
 }
 
-// simplifyExpr transforms an expression such that it contains only expressions
+// SimplifyExpr transforms an expression such that it contains only expressions
 // involving IndexedVars that can be used for index selection. If an expression is
 // encountered that cannot be used for index selection (e.g. "func(val)") that
 // part of the expression tree is considered to evaluate to true, possibly
@@ -140,7 +140,7 @@ func joinExprs(
 // Returns false for equivalent if the resulting expression is not equivalent
 // to the original. This occurs for expressions which are currently not handled
 // by simplification.
-func simplifyExpr(
+func SimplifyExpr(
 	evalCtx *tree.EvalContext, e tree.TypedExpr,
 ) (simplified tree.TypedExpr, equivalent bool) {
 	if e == tree.DNull {
@@ -171,7 +171,7 @@ func simplifyNotExpr(evalCtx *tree.EvalContext, n *tree.NotExpr) (tree.TypedExpr
 	}
 	switch t := n.Expr.(type) {
 	case *tree.NotExpr:
-		return simplifyExpr(evalCtx, t.TypedInnerExpr())
+		return SimplifyExpr(evalCtx, t.TypedInnerExpr())
 	case *tree.ComparisonExpr:
 		op := t.Operator
 		switch op {
@@ -218,7 +218,7 @@ func simplifyNotExpr(evalCtx *tree.EvalContext, n *tree.NotExpr) (tree.TypedExpr
 		default:
 			return tree.DBoolTrue, false
 		}
-		return simplifyExpr(evalCtx, tree.NewTypedComparisonExpr(
+		return SimplifyExpr(evalCtx, tree.NewTypedComparisonExpr(
 			op,
 			t.TypedLeft(),
 			t.TypedRight(),
@@ -226,19 +226,19 @@ func simplifyNotExpr(evalCtx *tree.EvalContext, n *tree.NotExpr) (tree.TypedExpr
 
 	case *tree.AndExpr:
 		// De Morgan's Law: NOT (a AND b) -> (NOT a) OR (NOT b)
-		return simplifyExpr(evalCtx, tree.NewTypedOrExpr(
+		return SimplifyExpr(evalCtx, tree.NewTypedOrExpr(
 			tree.NewTypedNotExpr(t.TypedLeft()),
 			tree.NewTypedNotExpr(t.TypedRight()),
 		))
 
 	case *tree.OrExpr:
 		// De Morgan's Law: NOT (a OR b) -> (NOT a) AND (NOT b)
-		return simplifyExpr(evalCtx, tree.NewTypedAndExpr(
+		return SimplifyExpr(evalCtx, tree.NewTypedAndExpr(
 			tree.NewTypedNotExpr(t.TypedLeft()),
 			tree.NewTypedNotExpr(t.TypedRight()),
 		))
 	case *tree.IndexedVar:
-		return simplifyExpr(evalCtx, tree.NewTypedNotExpr(
+		return SimplifyExpr(evalCtx, tree.NewTypedNotExpr(
 			boolVarToComparison(t),
 		))
 	}
@@ -271,7 +271,7 @@ func simplifyAndExpr(evalCtx *tree.EvalContext, n *tree.AndExpr) (tree.TypedExpr
 	exprs := splitAndExpr(evalCtx, n, nil)
 	for i := range exprs {
 		var equiv bool
-		exprs[i], equiv = simplifyExpr(evalCtx, exprs[i])
+		exprs[i], equiv = SimplifyExpr(evalCtx, exprs[i])
 		if !equiv {
 			equivalent = false
 		}
@@ -828,7 +828,7 @@ func simplifyOrExpr(evalCtx *tree.EvalContext, n *tree.OrExpr) (tree.TypedExpr, 
 	exprs := splitOrExpr(evalCtx, n, nil)
 	for i := range exprs {
 		var equiv bool
-		exprs[i], equiv = simplifyExpr(evalCtx, exprs[i])
+		exprs[i], equiv = SimplifyExpr(evalCtx, exprs[i])
 		if !equiv {
 			equivalent = false
 		}
@@ -1388,7 +1388,7 @@ func simplifyComparisonExpr(
 ) (tree.TypedExpr, bool) {
 	// NormalizeExpr will have left comparisons in the form "<var> <op>
 	// <datum>" unless they could not be simplified further in which case
-	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
+	// SimplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
 	left, right := n.TypedLeft(), n.TypedRight()
 	if isVar(left) && isDatum(right) {
 		if right == tree.DNull {
@@ -1495,7 +1495,7 @@ func simplifyComparisonExpr(
 // (e.g. WHERE b -> WHERE b = true) This is so index selection only needs
 // to work on ComparisonExprs.
 func simplifyBoolVar(evalCtx *tree.EvalContext, n *tree.IndexedVar) (tree.TypedExpr, bool) {
-	return simplifyExpr(evalCtx, boolVarToComparison(n))
+	return SimplifyExpr(evalCtx, boolVarToComparison(n))
 }
 
 func boolVarToComparison(n *tree.IndexedVar) tree.TypedExpr {

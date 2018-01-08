@@ -180,6 +180,8 @@ func tryTruncateTupleComparison(
 	t *tree.ComparisonExpr, conv varConvertFunc, weaker bool,
 ) tree.TypedExpr {
 	switch t.Operator {
+	case tree.EQ, tree.NE:
+		return tryTruncateTupleEqOrNe(t, conv, weaker)
 	case tree.LT, tree.GT, tree.LE, tree.GE:
 	default:
 		return nil
@@ -201,20 +203,17 @@ func tryTruncateTupleComparison(
 		}
 	}
 
-	newOp := &tree.ComparisonExpr{}
-	*newOp = *t
-
-	switch prefix {
-	case 0:
+	if prefix == 0 {
 		// Not even the first tuple members are useful.
 		return nil
+	}
+	newOp := *t
 
-	case 1:
+	if prefix == 1 {
 		// Simplify to a non-tuple comparison.
 		newOp.Left = left.Exprs[0]
 		newOp.Right = right.D[0]
-
-	case 2:
+	} else {
 		// Preserve a prefix of the tuples.
 		newOp.Left = left.Truncate(prefix)
 		newOp.Right = &tree.DTuple{
@@ -243,7 +242,62 @@ func tryTruncateTupleComparison(
 			newOp.Operator = tree.GT
 		}
 	}
-	return exprConvertVars(newOp, conv)
+	return exprConvertVars(&newOp, conv)
+}
+
+// If the given expression is a tuple EQ or NE, extract a comparison that
+// contains only variables known to the conversion function. See
+// tryTruncateTupleComparison for information on "weaker".
+func tryTruncateTupleEqOrNe(
+	t *tree.ComparisonExpr, conv varConvertFunc, weaker bool,
+) tree.TypedExpr {
+	// In the "normal" case where we want a weaker expression:
+	//  - we can convert (a, b, x) = (1, 2, 3) to (a, b) = (1, 2).
+	//  - we can't convert (a, b, x) != (1, 2, 3).
+	//
+	// In the "inverted" case where we want a stronger expression:
+	//  - we can't convert (a, b, x) = (1, 2, 3).
+	//  - we can convert (a, b, x) != (1, 2, 3) to (a, b) != (1, 2).
+	if (t.Operator == tree.EQ) != weaker {
+		return nil
+	}
+	left, leftOk := t.Left.(*tree.Tuple)
+	right, rightOk := t.Right.(*tree.DTuple)
+	// TODO(radu): we should also support Tuple on both sides.
+	if !leftOk || !rightOk {
+		return nil
+	}
+	if len(left.Exprs) != len(right.D) {
+		panic(fmt.Sprintf("invalid tuple comparison %s", t))
+	}
+	var convertible util.FastIntSet
+	for i, e := range left.Exprs {
+		if exprCheckVars(e, conv) {
+			convertible.Add(i)
+		}
+	}
+	if convertible.Empty() {
+		return nil
+	}
+
+	newOp := *t
+	if convertible.Len() == 1 {
+		// Simplify to a non-tuple comparison.
+		idx, _ := convertible.Next(0)
+		newOp.Left = left.Exprs[idx]
+		newOp.Right = right.D[idx]
+	} else {
+		newOp.Left = left.Project(convertible)
+		dTuple := &tree.DTuple{
+			D:      make(tree.Datums, 0, convertible.Len()),
+			Sorted: right.Sorted,
+		}
+		for i, ok := convertible.Next(0); ok; i, ok = convertible.Next(i + 1) {
+			dTuple.D = append(dTuple.D, right.D[i])
+		}
+		newOp.Right = dTuple
+	}
+	return exprConvertVars(&newOp, conv)
 }
 
 // splitBoolExpr splits a boolean expression E into two boolean expressions RES and REM such that:
@@ -359,6 +413,19 @@ func splitFilter(expr tree.TypedExpr, conv varConvertFunc) (restricted, remainde
 	return restricted, remainder
 }
 
+// extractNotNullConstraintsFromNotNullTuple deduces which IndexedVars must be
+// not NULL given an expr that must be not NULL and, if it is a tuple, all its
+// members must be not NULL.
+func extractNotNullConstraintsFromNotNullTuple(expr tree.TypedExpr) util.FastIntSet {
+	result := extractNotNullConstraintsFromNotNullExpr(expr)
+	if t, ok := expr.(*tree.Tuple); ok {
+		for _, e := range t.Exprs {
+			result.UnionWith(extractNotNullConstraintsFromNotNullExpr(e.(tree.TypedExpr)))
+		}
+	}
+	return result
+}
+
 // extractNotNullConstraintsFromNotNullExpr deduces which IndexedVars must be
 // not NULL for expr to be not NULL. It is best-effort so there may be false
 // negatives (but no false positives).
@@ -367,13 +434,6 @@ func extractNotNullConstraintsFromNotNullExpr(expr tree.TypedExpr) util.FastIntS
 	case *tree.IndexedVar:
 		var result util.FastIntSet
 		result.Add(t.Idx)
-		return result
-
-	case *tree.Tuple:
-		var result util.FastIntSet
-		for _, e := range t.Exprs {
-			result.UnionWith(extractNotNullConstraintsFromNotNullExpr(e.(tree.TypedExpr)))
-		}
 		return result
 
 	case *tree.BinaryExpr:
@@ -388,13 +448,17 @@ func extractNotNullConstraintsFromNotNullExpr(expr tree.TypedExpr) util.FastIntS
 			return util.FastIntSet{}
 		}
 		if t.Operator == tree.In || t.Operator == tree.NotIn {
-			return extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+			return extractNotNullConstraintsFromNotNullTuple(t.TypedLeft())
 		}
 		// For all other comparison operations, both operands must be not NULL.
-		left := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
-		right := extractNotNullConstraintsFromNotNullExpr(t.TypedRight())
-		left.UnionWith(right)
-		return left
+		result := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+		result.UnionWith(extractNotNullConstraintsFromNotNullExpr(t.TypedRight()))
+		// For tuple equality, all tuple members must be not NULL.
+		if t.Operator == tree.EQ {
+			result.UnionWith(extractNotNullConstraintsFromNotNullTuple(t.TypedLeft()))
+			result.UnionWith(extractNotNullConstraintsFromNotNullTuple(t.TypedRight()))
+		}
+		return result
 
 	case *tree.ParenExpr:
 		return extractNotNullConstraintsFromNotNullExpr(t.TypedInnerExpr())
@@ -437,19 +501,11 @@ func extractNotNullConstraints(filter tree.TypedExpr) util.FastIntSet {
 		return extractNotNullConstraintsFromNotNullExpr(t.TypedInnerExpr())
 
 	case *tree.ComparisonExpr:
-		if t.Operator == tree.IsNotDistinctFrom && t.Right == tree.DNull {
-			return util.FastIntSet{}
+		result := extractNotNullConstraintsFromNotNullExpr(filter)
+		if t.Operator == tree.IsDistinctFrom && t.Right == tree.DNull {
+			result.UnionWith(extractNotNullConstraintsFromNotNullExpr(t.TypedLeft()))
 		}
-
-		if (t.Operator == tree.IsDistinctFrom && t.Right == tree.DNull) ||
-			t.Operator == tree.In || t.Operator == tree.NotIn {
-			return extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
-		}
-		// For all other comparison operations, both operands must be not NULL.
-		left := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
-		right := extractNotNullConstraintsFromNotNullExpr(t.TypedRight())
-		left.UnionWith(right)
-		return left
+		return result
 
 	default:
 		// For any expression to be TRUE, it must not be NULL.

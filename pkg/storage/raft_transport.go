@@ -17,6 +17,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"sort"
@@ -25,8 +26,8 @@ import (
 	"unsafe"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"github.com/rubyist/circuitbreaker"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -165,7 +166,10 @@ type RaftTransport struct {
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
 func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
-	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st, nil, nil, nil)
+	resolver := func(roachpb.NodeID) (net.Addr, error) {
+		return nil, errors.New("dummy resolver")
+	}
+	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st, resolver, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport.

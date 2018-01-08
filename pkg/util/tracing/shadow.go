@@ -21,10 +21,9 @@
 package tracing
 
 import (
+	"context"
 	"fmt"
 	"os"
-
-	"golang.org/x/net/context"
 
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"

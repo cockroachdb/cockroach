@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -24,8 +25,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -787,7 +786,7 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 
 			b.StartTimer()
 			if err := MVCCGarbageCollect(
-				ctx, engine, &enginepb.MVCCStats{}, gcKeys, now, math.MaxInt64,
+				ctx, engine, &enginepb.MVCCStats{}, gcKeys, now,
 			); err != nil {
 				b.Fatal(err)
 			}

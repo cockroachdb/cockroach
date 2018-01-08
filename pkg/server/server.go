@@ -16,6 +16,7 @@ package server
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -33,8 +34,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-
-	"golang.org/x/net/context"
 
 	"github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
@@ -256,7 +255,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
 	s.nodeLiveness = storage.NewNodeLiveness(
-		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, nlActive, nlRenewal,
+		s.cfg.AmbientCtx,
+		s.clock,
+		s.db,
+		s.gossip,
+		nlActive,
+		nlRenewal,
+		s.cfg.HistogramWindowInterval(),
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
@@ -330,7 +335,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// also remove the record after the temp directory is
 			// removed.
 			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
-			err = util.CleanupTempDirs(recordPath)
+			err = engine.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
@@ -1135,6 +1140,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.clock,
 		s.jobRegistry,
 		distSQLPlanner,
+		s.st,
 		s.distSender.RangeDescriptorCache(),
 		s.distSender.LeaseHolderCache(),
 	).Start(s.stopper)

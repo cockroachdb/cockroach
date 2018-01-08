@@ -15,6 +15,7 @@
 package sql_test
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -22,8 +23,6 @@ import (
 	"strconv"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"

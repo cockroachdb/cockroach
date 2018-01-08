@@ -15,13 +15,12 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"

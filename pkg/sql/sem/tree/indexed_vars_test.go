@@ -15,11 +15,9 @@
 package tree
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -35,7 +33,8 @@ func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (d testVarContainer) IndexedVarNodeFormatter(idx int) NodeFormatter {
-	return Name(fmt.Sprintf("var%d", idx))
+	n := Name(fmt.Sprintf("var%d", idx))
+	return &n
 }
 
 func TestIndexedVars(t *testing.T) {
@@ -76,18 +75,15 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	// Test formatting using the indexed var format interceptor.
-	var buf bytes.Buffer
-	FormatNode(
-		&buf,
-		FmtIndexedVarFormat(
-			FmtSimple,
-			func(buf *bytes.Buffer, idx int) {
-				fmt.Fprintf(buf, "customVar%d", idx)
-			},
-		),
-		typedExpr,
+	f := NewFmtCtxWithBuf(FmtSimple)
+	f.WithIndexedVarFormat(
+		func(ctx *FmtCtx, idx int) {
+			ctx.Printf("customVar%d", idx)
+		},
 	)
-	str = buf.String()
+	f.FormatNode(typedExpr)
+	str = f.CloseAndGetString()
+
 	expectedStr = "customVar0 + (customVar1 * customVar2)"
 	if str != expectedStr {
 		t.Errorf("invalid expression string '%s', expected '%s'", str, expectedStr)

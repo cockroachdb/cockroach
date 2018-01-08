@@ -30,7 +30,7 @@ type ColTypeFormatter interface {
 // ColTypeAsString print a T to a string.
 func ColTypeAsString(n ColTypeFormatter) string {
 	var buf bytes.Buffer
-	n.Format(&buf, lex.EncodeFlags{})
+	n.Format(&buf, lex.EncNoFlags)
 	return buf.String()
 }
 

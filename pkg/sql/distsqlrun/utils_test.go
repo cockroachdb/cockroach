@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"golang.org/x/net/context"
 )
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
@@ -57,20 +57,20 @@ func NewRepeatableRowSource(
 	return &RepeatableRowSource{rows: rows, types: types}
 }
 
-// Types is part of the RowSource interface.
-func (r *RepeatableRowSource) Types() []sqlbase.ColumnType {
+// OutputTypes is part of the RowSource interface.
+func (r *RepeatableRowSource) OutputTypes() []sqlbase.ColumnType {
 	return r.types
 }
 
 // Next is part of the RowSource interface.
-func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	// If we've emitted all rows, signal that we have reached the end.
 	if r.nextRowIdx >= len(r.rows) {
-		return nil, ProducerMetadata{}
+		return nil, nil
 	}
 	nextRow := r.rows[r.nextRowIdx]
 	r.nextRowIdx++
-	return nextRow, ProducerMetadata{}
+	return nextRow, nil
 }
 
 // Reset resets the RepeatableRowSource such that a subsequent call to Next()
@@ -91,7 +91,7 @@ type RowDisposer struct{}
 var _ RowReceiver = &RowDisposer{}
 
 // Push is part of the RowReceiver interface.
-func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	return NeedMoreRows
 }
 
@@ -102,7 +102,7 @@ func (r *RowDisposer) ProducerDone() {}
 // it encounters any metadata.
 func (rb *RowBuffer) NextNoMeta(tb testing.TB) sqlbase.EncDatumRow {
 	row, meta := rb.Next()
-	if !meta.Empty() {
+	if meta != nil {
 		tb.Fatalf("unexpected metadata: %v", meta)
 	}
 	return row

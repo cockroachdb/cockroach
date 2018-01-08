@@ -133,6 +133,12 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 	return 1
 }
 
+func helpWithFunctionByName(sqllex sqlLexer, s string) int {
+	n := tree.Name(s)
+	un := tree.UnresolvedName{&n}
+	return helpWithFunction(sqllex, tree.ResolvableFunctionReference{FunctionReference: &un})
+}
+
 const (
 	hGroup        = ""
 	hDDL          = "schema manipulation"

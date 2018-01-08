@@ -204,6 +204,7 @@ func TestParse(t *testing.T) {
 		{`CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))`},
 		{`CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))`},
 		{`ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))`},
+		{`ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))`},
 
 		{`CREATE TABLE a AS SELECT * FROM b`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b`},
@@ -243,6 +244,7 @@ func TestParse(t *testing.T) {
 		{`CREATE SEQUENCE a CYCLE`},
 		{`CREATE SEQUENCE a NO CYCLE`},
 		{`CREATE SEQUENCE a INCREMENT 5 NO MAXVALUE MINVALUE 1 START 3 NO CYCLE`},
+		{`SHOW CREATE SEQUENCE a`},
 
 		{`CREATE STATISTICS a ON col1 FROM t`},
 		{`CREATE STATISTICS a ON col1, col2 FROM t`},
@@ -364,11 +366,8 @@ func TestParse(t *testing.T) {
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE t`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p OF TABLE t`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX db.t@i`},
-		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p OF INDEX db.t@i`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX t@i`},
-		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p OF INDEX t@i`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX i`},
-		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p OF INDEX i`},
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
@@ -378,6 +377,10 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
+
+		{`SHOW TRANSACTION STATUS`},
+
+		{`SHOW SYNTAX 'select 1'`},
 
 		{`PREPARE a AS SELECT 1`},
 		{`PREPARE a (INT) AS SELECT $1`},
@@ -862,11 +865,8 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER PARTITION p OF TABLE t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER INDEX db.t@i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
-		{`ALTER PARTITION p OF INDEX db.t@i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
-		{`ALTER PARTITION p OF INDEX t@i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER INDEX i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
-		{`ALTER PARTITION p OF INDEX i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE b'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE NULL`},
 
@@ -1253,8 +1253,19 @@ func TestParse2(t *testing.T) {
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 		{`DROP USER foo, bar`,
 			`DROP USER 'foo', 'bar'`},
+		{`DROP USER IF EXISTS foo, bar`,
+			`DROP USER IF EXISTS 'foo', 'bar'`},
 		{`ALTER USER foo WITH PASSWORD bar`,
 			`ALTER USER 'foo' WITH PASSWORD 'bar'`},
+
+		{`CREATE ROLE foo`,
+			`CREATE ROLE 'foo'`},
+		{`CREATE ROLE IF NOT EXISTS foo`,
+			`CREATE ROLE IF NOT EXISTS 'foo'`},
+		{`DROP ROLE foo, bar`,
+			`DROP ROLE 'foo', 'bar'`},
+		{`DROP ROLE IF EXISTS foo, bar`,
+			`DROP ROLE IF EXISTS 'foo', 'bar'`},
 
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)`,
@@ -1335,7 +1346,7 @@ func TestParse2(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := tree.AsStringWithFlags(stmts, tree.FmtSimpleWithPasswords)
+		s := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1366,7 +1377,7 @@ func TestParseTree(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := tree.AsStringWithFlags(stmts, tree.FmtAlwaysGroupExprs)
+		s := tree.AsStringWithFlags(&stmts, tree.FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}

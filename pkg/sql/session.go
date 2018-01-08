@@ -16,6 +16,7 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"regexp"
@@ -26,7 +27,6 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1393,19 +1393,24 @@ func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) err
 	{
 		stmts, err := parser.Parse(sqlStmts)
 		if err == nil {
-			var buf bytes.Buffer
+			var f struct {
+				buf              bytes.Buffer
+				anonCtx, hideCtx tree.FmtCtx
+			}
+			f.anonCtx = tree.MakeFmtCtx(&f.buf, tree.FmtAnonymize)
+			f.hideCtx = tree.MakeFmtCtx(&f.buf, tree.FmtHideConstants)
 			for _, stmt := range NewStatementList(stmts) {
-				tree.FormatNode(&buf, tree.FmtAnonymize, stmt.AST)
-				stmt.AST, err = parser.ParseOne(buf.String())
-				buf.Reset()
+				f.anonCtx.FormatNode(stmt.AST)
+				stmt.AST, err = parser.ParseOne(f.buf.String())
+				f.buf.Reset()
 				if err != nil {
-					buf.WriteString("[unknown]")
+					f.buf.WriteString("[unknown]")
 				} else {
-					tree.FormatNode(&buf, tree.FmtHideConstants, stmt.AST)
+					f.hideCtx.FormatNode(stmt.AST)
 				}
 
-				anonymized = append(anonymized, buf.String())
-				buf.Reset()
+				anonymized = append(anonymized, f.buf.String())
+				f.buf.Reset()
 			}
 		}
 	}

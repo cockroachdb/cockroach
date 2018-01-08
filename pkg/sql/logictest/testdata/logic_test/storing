@@ -98,13 +98,13 @@ INSERT INTO t14601 VALUES
 statement ok
 DELETE FROM t14601 WHERE a > 'a' AND a < 'c'
 
-query ITTT
+query TTT
 EXPLAIN SELECT a FROM t14601 ORDER BY a
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t14601@i14601
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t14601@i14601
+·          spans  ALL
 
 query T
 SELECT a FROM t14601 ORDER BY a
@@ -145,13 +145,13 @@ INSERT INTO t14601a VALUES
 statement ok
 UPDATE t14601a SET b = NOT b WHERE a > 'a' AND a < 'c'
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM t14601a ORDER BY a
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t14601a@i14601a
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t14601a@i14601a
+·          spans  ALL
 
 query TB
 SELECT a, b FROM t14601a ORDER BY a
@@ -185,13 +185,13 @@ INSERT INTO t14601a VALUES
 statement ok
 UPDATE t14601a SET b = NOT b WHERE a > 'a' AND a < 'c'
 
-query ITTT
+query TTT
 EXPLAIN SELECT a, b FROM t14601a ORDER BY a
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t14601a@i14601a
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  t14601a@i14601a
+·          spans  ALL
 
 query TB
 SELECT a, b FROM t14601a ORDER BY a

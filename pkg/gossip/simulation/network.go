@@ -15,11 +15,10 @@
 package simulation
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"google.golang.org/grpc"
 

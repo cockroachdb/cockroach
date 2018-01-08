@@ -67,7 +67,6 @@ kv.allocator.range_rebalance_threshold             5E-02          f     minimum 
 kv.allocator.stat_based_rebalancing.enabled        false          b     set to enable rebalancing of range replicas based on write load and disk usage
 kv.allocator.stat_rebalance_threshold              2E-01          f     minimum fraction away from the mean a store's stats (like disk usage or writes per second) can be before it is considered overfull or underfull
 kv.bulk_io_write.max_rate                          8.0 EiB        z     the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops
-kv.gc.batch_size                                   100000         i     maximum number of keys in a batch for MVCC garbage collection
 kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
 kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage
 kv.range_descriptor_cache.size                     1000000        i     maximum number of entries in the range descriptor and leaseholder caches
@@ -98,7 +97,7 @@ timeseries.resolution_10s.storage_duration         720h0m0s       d     the amou
 trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
 trace.lightstep.token                              ·              s     if set, traces go to Lightstep using this token
 trace.zipkin.collector                             ·              s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
-version                                            1.1-7          m     set the active cluster version in the format '<major>.<minor>'.
+version                                            1.1-8          m     set the active cluster version in the format '<major>.<minor>'.
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
@@ -286,3 +285,23 @@ query ITTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
 id  type  description  username  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+
+query TT colnames
+SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
+----
+field  text
+sql    SELECT 1
+sql    SELECT 2
+
+# Test the SHOW SYNTAX statement. We avoid printing out the line number
+# here because that is highly likely to change as code is edited.
+query TT colnames
+SELECT field, replace(text, e'\n', ' ') AS text FROM [SHOW SYNTAX 'foo']
+ WHERE field != 'line'
+----
+field     text
+error     syntax error at or near "foo"
+code      42601
+file      sql/show_syntax.go
+function  runShowSyntax
+detail    source SQL: foo ^

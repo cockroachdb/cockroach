@@ -15,8 +15,6 @@
 package tree
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 )
 
@@ -28,21 +26,21 @@ type Prepare struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Prepare) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("PREPARE ")
-	FormatNode(buf, f, node.Name)
+func (node *Prepare) Format(ctx *FmtCtx) {
+	ctx.WriteString("PREPARE ")
+	ctx.FormatNode(&node.Name)
 	if len(node.Types) > 0 {
-		buf.WriteString(" (")
+		ctx.WriteString(" (")
 		for i, t := range node.Types {
 			if i > 0 {
-				buf.WriteString(", ")
+				ctx.WriteString(", ")
 			}
-			t.Format(buf, f.encodeFlags)
+			t.Format(ctx.Buffer, ctx.flags.EncodeFlags())
 		}
-		buf.WriteRune(')')
+		ctx.WriteRune(')')
 	}
-	buf.WriteString(" AS ")
-	FormatNode(buf, f, node.Statement)
+	ctx.WriteString(" AS ")
+	ctx.FormatNode(node.Statement)
 }
 
 // Execute represents an EXECUTE statement.
@@ -52,13 +50,13 @@ type Execute struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Execute) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("EXECUTE ")
-	FormatNode(buf, f, node.Name)
+func (node *Execute) Format(ctx *FmtCtx) {
+	ctx.WriteString("EXECUTE ")
+	ctx.FormatNode(&node.Name)
 	if len(node.Params) > 0 {
-		buf.WriteString(" (")
-		FormatNode(buf, f, node.Params)
-		buf.WriteByte(')')
+		ctx.WriteString(" (")
+		ctx.FormatNode(&node.Params)
+		ctx.WriteByte(')')
 	}
 }
 
@@ -68,11 +66,11 @@ type Deallocate struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Deallocate) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DEALLOCATE ")
+func (node *Deallocate) Format(ctx *FmtCtx) {
+	ctx.WriteString("DEALLOCATE ")
 	if node.Name == "" {
-		buf.WriteString("ALL")
+		ctx.WriteString("ALL")
 	} else {
-		FormatNode(buf, f, node.Name)
+		ctx.FormatNode(&node.Name)
 	}
 }

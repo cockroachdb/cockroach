@@ -16,6 +16,7 @@ package tree
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/big"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1747,20 +1747,42 @@ func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
 
 func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
 	cmp := 0
+	sawNull := false
 	for i, leftElem := range left.D {
 		rightElem := right.D[i]
 		// Like with cmpOpScalarFn, check for values that need to be handled
 		// differently than when ordering Datums.
 		if leftElem == DNull || rightElem == DNull {
-			// If either Datum is NULL, the result of the comparison is NULL.
-			return DNull
+			if op == EQ {
+				// If either Datum is NULL and the op is EQ, we continue the
+				// comparison and the result is only NULL if the other (non-NULL)
+				// elements are equal. This is because NULL is thought of as "unknown",
+				// so a NULL equality comparison does not prevent the equality from
+				// being proven false, but does prevent it from being proven true.
+				sawNull = true
+				continue
+			} else {
+				// If either Datum is NULL and the op is not EQ, we short-circuit
+				// the evaluation and the result of the comparison is NULL. This is
+				// because NULL is thought of as "unknown" and tuple inequality is
+				// defined lexicographically, so once a NULL comparison is seen,
+				// the result of the entire tuple comparison is unknown.
+				return DNull
+			}
 		}
 		cmp = leftElem.Compare(ctx, rightElem)
 		if cmp != 0 {
 			break
 		}
 	}
-	return boolFromCmp(cmp, op)
+	b := boolFromCmp(cmp, op)
+	if b == DBoolTrue && sawNull {
+		// The op is EQ and all non-NULL elements are equal, but we saw at least
+		// one NULL element. Since NULL comparisons are treated as unknown, the
+		// result of the comparison becomes unknown (NULL).
+		return DNull
+	}
+	return b
 }
 
 func makeEvalTupleIn(typ types.T) CmpOp {
@@ -1916,9 +1938,9 @@ type EvalPlanner interface {
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] table_name [ @ index_name ]`.
-	// If the table name is not given, it uses the search path to find it, and sets it
-	// on the returned TableName.
-	// It returns an error if the table deson't exist.
+	// If the database name is not given, it uses the search path to find it, and
+	// sets it on the returned TableName.
+	// It returns an error if the table doesn't exist.
 	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
 
 	// ParseType parses a column type.
@@ -2780,9 +2802,8 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			// Trim whitespace and unwrap outer quotes if necessary.
 			// This is required to mimic postgres.
 			s = strings.TrimSpace(s)
-			var hadQuotes bool
+			origS := s
 			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
-				hadQuotes = true
 				s = s[1 : len(s)-1]
 			}
 
@@ -2803,8 +2824,8 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				// Resolve function name.
 				substrs := strings.Split(s, ".")
 				name := UnresolvedName{}
-				for _, substr := range substrs {
-					name = append(name, Name(substr))
+				for i := range substrs {
+					name = append(name, (*Name)(&substrs[i]))
 				}
 				funcDef, err := name.ResolveFunction(ctx.SearchPath)
 				if err != nil {
@@ -2824,19 +2845,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				return queryOid(ctx, typ, NewDString(s))
 
 			case coltypes.RegClass:
-				// Resolving a table name requires looking at the search path to
-				// determine the database that owns it.
-				// If the table wasn't quoted, normalize it. This matches the behavior
-				// when creating tables - table names are normalized (downcased) unless
-				// they're double quoted.
-				if !hadQuotes {
-					s = Name(s).Normalize()
-				}
-				t := &NormalizableTableName{
-					TableNameReference: UnresolvedName{
-						Name(s),
-					}}
-				tn, err := ctx.Planner.QualifyWithDatabase(ctx.Ctx(), t)
+				tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), origS)
 				if err != nil {
 					return nil, err
 				}
@@ -2950,10 +2959,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return MakeDBool(!DBool(left == DNull && right == DNull)), nil
 		case IsNotDistinctFrom:
 			return MakeDBool(left == DNull && right == DNull), nil
-		case Is:
-			return nil, errors.Errorf("IS NULL should never be compared: use IS NOT DISTINCT FROM")
-		case IsNot:
-			return nil, errors.Errorf("IS NOT NULL should never be compared: use IS DISTINCT FROM")
 		default:
 			return DNull, nil
 		}
@@ -3176,7 +3181,7 @@ func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
+func (expr *UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 
@@ -3455,18 +3460,6 @@ func foldComparisonExpr(
 		// Note the special handling of NULLs and IS NOT DISTINCT FROM is needed
 		// before this expression fold.
 		return EQ, left, right, false, false
-	case Is:
-		// Is(left, right) is implemented as EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS is needed before this
-		// expression fold.
-		return EQ, left, right, false, false
-	case IsNot:
-		// IsNot(left, right) is implemented as !EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS NOT is needed before this
-		// expression fold.
-		return EQ, left, right, false, true
 	}
 	return op, left, right, false, false
 }

@@ -15,14 +15,13 @@
 package sql_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"

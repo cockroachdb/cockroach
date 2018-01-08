@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -109,7 +108,7 @@ func (p *planner) makeIndexJoin(
 	table := p.Scan()
 	table.desc = origScan.desc
 	// Note: initDescDefaults can only error out if its 3rd argument is not nil.
-	_ = table.initDescDefaults(p.planDeps, origScan.scanVisibility, nil)
+	_ = table.initDescDefaults(p.curPlan.deps, origScan.scanVisibility, nil)
 	table.initOrdering(0, &p.evalCtx)
 	table.disableBatchLimit()
 

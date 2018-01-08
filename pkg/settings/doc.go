@@ -23,7 +23,7 @@ gossip-driven worker updates this package's cached value when the table changes
 The package's cache is global -- while all the usual drawbacks of mutable global
 state obviously apply, it is needed to make the package's functionality
 available to a wide variety of callsites, that may or may not have a *Server or
-similar available to plumb though.
+similar available to access settings.
 
 To add a new setting, call one of the `Register` methods in `registry.go` and
 save the accessor created by the register function in the package where the
@@ -50,6 +50,11 @@ Ideally, when passing configuration into some structure or subsystem, e.g.
 a rate limit into a client or something, passing a `*FooSetting` rather than a
 `Foo` and waiting to call `.Get()` until the value is actually used ensures
 observing the latest value.
+
+Settings may become irrelevant over time, especially when introduced
+to provide a workaround to a system limitation which is later corrected. To
+remove a setting, write a SQL migration which removes the setting from the
+system setting table. See #21070 and #21078 for examples.
 
 Existing/off-the-shelf systems generally will not be defined in terms of our
 settings, but if they can either be swapped at runtime or expose some `setFoo`

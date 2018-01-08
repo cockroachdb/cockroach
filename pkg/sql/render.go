@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"errors"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -98,6 +97,7 @@ func (p *planner) Select(
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
+	with := n.With
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		wrapped = s.Select.Select
@@ -119,13 +119,15 @@ func (p *planner) Select(
 	case *tree.SelectClause:
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
-		return p.SelectClause(ctx, s, orderBy, limit, desiredTypes, publicColumns)
+		return p.SelectClause(ctx, s, orderBy, limit, with, desiredTypes, publicColumns)
 
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
 	// through. Instead of continuing this special casing, it may be worth
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
+	// TODO(jordan): this limitation also applies to CTEs, which do not yet
+	// propagate into VALUES and UNION clauses
 	default:
 		plan, err := p.newPlan(ctx, s, desiredTypes)
 		if err != nil {
@@ -170,10 +172,19 @@ func (p *planner) SelectClause(
 	parsed *tree.SelectClause,
 	orderBy tree.OrderBy,
 	limit *tree.Limit,
+	with *tree.With,
 	desiredTypes []types.T,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
 	r := &renderNode{}
+
+	resetter, err := p.initWith(ctx, with)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
+	}
 
 	if err := p.initFrom(ctx, r, parsed, scanVisibility); err != nil {
 		return nil, err
@@ -389,7 +400,7 @@ func (p *planner) initTargets(
 			return err
 		}
 
-		p.hasStar = p.hasStar || hasStar
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 		_ = r.addOrReuseRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we

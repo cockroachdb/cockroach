@@ -15,10 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -34,8 +34,6 @@ const joinReaderBatchSize = 100
 
 type joinReader struct {
 	processorBase
-
-	flowCtx *FlowCtx
 
 	desc  sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
@@ -62,10 +60,9 @@ func newJoinReader(
 	}
 
 	jr := &joinReader{
-		flowCtx:    flowCtx,
 		desc:       spec.Table,
 		input:      input,
-		inputTypes: input.Types(),
+		inputTypes: input.OutputTypes(),
 	}
 
 	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
@@ -73,7 +70,7 @@ func newJoinReader(
 		types[i] = spec.Table.Columns[i].Type
 	}
 
-	if err := jr.init(post, types, flowCtx, output); err != nil {
+	if err := jr.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 
@@ -135,7 +132,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// within a certain amount of time).
 		for spans = spans[:0]; len(spans) < joinReaderBatchSize; {
 			row, meta := jr.input.Next()
-			if !meta.Empty() {
+			if meta != nil {
 				if meta.Err != nil {
 					return meta.Err
 				}
@@ -187,7 +184,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			}
 
 			// Emit the row; stop if no more rows are needed.
-			if !emitHelper(ctx, &jr.out, row, ProducerMetadata{}, jr.input) {
+			if !emitHelper(ctx, &jr.out, row, nil /* meta */, jr.input) {
 				return nil
 			}
 		}
@@ -202,12 +199,12 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 }
 
 // Run is part of the processor interface.
-func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (jr *joinReader) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTagInt(ctx, "JoinReader", int(jr.desc.ID))
+	ctx := log.WithLogTagInt(jr.flowCtx.Ctx, "JoinReader", int(jr.desc.ID))
 	ctx, span := processorSpan(ctx, "join reader")
 	defer tracing.FinishSpan(span)
 

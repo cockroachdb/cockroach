@@ -16,10 +16,9 @@
 package cli
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"

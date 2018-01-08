@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"flag"
 	"fmt"
@@ -27,8 +28,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
