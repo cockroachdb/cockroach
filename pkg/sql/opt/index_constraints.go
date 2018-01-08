@@ -713,6 +713,22 @@ func (c *indexConstraintCtx) makeSpansForOrExprs(
 	return spans, true, tight
 }
 
+// makeInvertedIndexSpansForExpr is analogous to makeSpansForExpr, but it is
+// used for inverted indexes.
+func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
+	e *Expr,
+) (_ LogicalSpans, ok bool, tight bool) {
+	// TODO(radu,masha): we currently only support a single "contains" expression.
+	if e.op != containsOp {
+		return nil, false, false
+	}
+	lhs, rhs := e.children[0], e.children[1]
+	if !c.isIndexColumn(lhs, 0 /* index */) || rhs.op != constOp {
+		return nil, false, false
+	}
+	return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
+}
+
 var constTrueExpr = &Expr{
 	op:          constOp,
 	scalarProps: &scalarProps{typ: types.Bool},
@@ -934,13 +950,17 @@ type IndexConstraints struct {
 
 // Init processes the filter and calculates the spans.
 func (ic *IndexConstraints) Init(
-	filter *Expr, colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
+	filter *Expr, colInfos []IndexColumnInfo, isInverted bool, evalCtx *tree.EvalContext,
 ) {
 	*ic = IndexConstraints{
 		filter:             filter,
-		indexConstraintCtx: makeIndexConstraintCtx(colInfos, evalCtx),
+		indexConstraintCtx: makeIndexConstraintCtx(colInfos, isInverted, evalCtx),
 	}
-	ic.spans, ic.spansPopulated, ic.spansTight = ic.makeSpansForExpr(0 /* offset */, ic.filter)
+	if isInverted {
+		ic.spans, ic.spansPopulated, ic.spansTight = ic.makeInvertedIndexSpansForExpr(ic.filter)
+	} else {
+		ic.spans, ic.spansPopulated, ic.spansTight = ic.makeSpansForExpr(0 /* offset */, ic.filter)
+	}
 }
 
 // Spans returns the spans created by Init. If ok is false, no constraints

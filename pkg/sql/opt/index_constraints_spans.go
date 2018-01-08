@@ -165,15 +165,24 @@ type indexConstraintCtx struct {
 	// types of the columns of the index we are generating constraints for.
 	colInfos []IndexColumnInfo
 
+	// isInverted indicates if the index is an inverted index (e.g. JSONB).
+	// An inverted index behaves differently than a normal index because a PK
+	// can appear in multiple index entries.
+	isInverted bool
+
 	evalCtx *tree.EvalContext
 }
 
 func makeIndexConstraintCtx(
-	colInfos []IndexColumnInfo, evalCtx *tree.EvalContext,
+	colInfos []IndexColumnInfo, isInverted bool, evalCtx *tree.EvalContext,
 ) indexConstraintCtx {
+	if isInverted && len(colInfos) > 1 {
+		panic(fmt.Sprintf("inverted index on multiple columns"))
+	}
 	return indexConstraintCtx{
-		colInfos: colInfos,
-		evalCtx:  evalCtx,
+		colInfos:   colInfos,
+		isInverted: isInverted,
+		evalCtx:    evalCtx,
 	}
 }
 
