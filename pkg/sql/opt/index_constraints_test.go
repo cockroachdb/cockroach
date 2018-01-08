@@ -86,7 +86,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var ic IndexConstraints
 
-				ic.Init(e, colInfos, &evalCtx)
+				ic.Init(e, colInfos, false /*isInverted */, &evalCtx)
 				_, _ = ic.Spans()
 				_ = ic.RemainingFilter(&iVarHelper)
 			}
