@@ -80,8 +80,9 @@ const (
 	// Requests for acquiring a lease skip the (proposal-time) check that the
 	// proposing replica has a valid lease.
 	skipLeaseCheck
-	consultsTSCache // mutating commands which write data at a timestamp
-	updatesTSCache  // commands which read data at a timestamp
+	consultsTSCache       // mutating commands which write data at a timestamp
+	updatesTSCache        // commands which read data at a timestamp
+	updatesTSCacheOnError // commands which make read data available on errors
 )
 
 // IsReadOnly returns true iff the request is read-only.
@@ -116,6 +117,13 @@ func ConsultsTimestampCache(args Request) bool {
 // such that they don't re-write history.
 func UpdatesTimestampCache(args Request) bool {
 	return (args.flags() & updatesTSCache) != 0
+}
+
+// UpdatesTimestampCacheOnError returns whether the command must
+// update the timestamp cache even on error, as in some cases the data
+// which was read is returned (e.g. ConditionalPut ConditionFailedError).
+func UpdatesTimestampCacheOnError(args Request) bool {
+	return (args.flags() & updatesTSCacheOnError) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -871,10 +879,12 @@ func NewReverseScan(key, endKey Key) Request {
 func (*GetRequest) flags() int { return isRead | isTxn | updatesTSCache }
 func (*PutRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsTSCache }
 
-// ConditionalPut and InitPut effectively read and may not write,
-// so must update the timestamp cache.
+// ConditionalPut and InitPut effectively read and may not write, so
+// must update the timestamp cache. Note that on ConditionFailedErrors
+// ConditionalPut returns the read data and must update the timestamp
+// cache.
 func (*ConditionalPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesTSCache | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | updatesTSCache | updatesTSCacheOnError | consultsTSCache
 }
 func (*InitPutRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | updatesTSCache | consultsTSCache
