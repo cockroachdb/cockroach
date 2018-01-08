@@ -147,7 +147,7 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (v *valuesProcessor) ConsumerDone() {
-	v.consumerDone("values")
+	v.consumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.

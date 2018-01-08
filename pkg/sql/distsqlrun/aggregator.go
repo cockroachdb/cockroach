@@ -307,7 +307,7 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (ag *aggregator) ConsumerDone() {
-	ag.consumerDone("aggregator")
+	ag.consumerDone()
 	ag.input.ConsumerDone()
 }
 

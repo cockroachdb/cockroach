@@ -372,7 +372,7 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (tr *tableReader) ConsumerDone() {
-	tr.consumerDone("tableReader")
+	tr.consumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
