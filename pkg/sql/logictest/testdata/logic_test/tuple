@@ -627,3 +627,24 @@ SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
 1  3     1
 1  3     2
 1  3     3
+
+
+# Regression test for #6390.
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b))
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3);
+----
+render           0  render      ·         ·                      (a, b, c)  ·
+ │               0  ·           render 0  test.abc.a             ·          ·
+ │               0  ·           render 1  test.abc.b             ·          ·
+ │               0  ·           render 2  test.abc.c             ·          ·
+ └── index-join  1  index-join  ·         ·                      (a, b, c)  ·
+      ├── scan   2  scan        ·         ·                      (a, b, c)  ·
+      │          2  ·           table     abc@abc_a_b_idx        ·          ·
+      │          2  ·           spans     /1/2-                  ·          ·
+      │          2  ·           filter    (a, b) >= (1, 2)       ·          ·
+      └── scan   2  scan        ·         ·                      (a, b, c)  ·
+·                2  ·           table     abc@primary            ·          ·
+·                2  ·           filter    (a, b, c) > (1, 2, 3)  ·          ·
