@@ -128,7 +128,8 @@ type RowSource interface {
 
 	// ConsumerDone lets the source know that we will not need any more data
 	// rows. The source is expected to start draining and only send metadata
-	// rows.
+	// rows. May be called multiple times on a RowSource, even after
+	// ConsumerClosed has been called.
 	//
 	// May block. If the consumer of the source stops consuming rows before
 	// Next indicates that there are no more rows, ConsumerDone() and/or
@@ -137,7 +138,8 @@ type RowSource interface {
 	ConsumerDone()
 
 	// ConsumerClosed informs the source that the consumer is done and will not
-	// make any more calls to Next().
+	// make any more calls to Next(). Must only be called once on a given
+	// RowSource.
 	//
 	// Like ConsumerDone(), if the consumer of the source stops consuming rows
 	// before Next indicates that there are no more rows, ConsumerDone() and/or
@@ -256,6 +258,9 @@ func DrainAndClose(ctx context.Context, dst RowReceiver, cause error, srcs ...Ro
 		DrainAndForwardMetadata(ctx, srcs[0], dst)
 		wg.Wait()
 	}
+	// for _, input := range srcs {
+	// 	DrainAndForwardMetadata(ctx, input, dst)
+	// }
 	sendTraceData(ctx, dst)
 	dst.ProducerDone()
 }
@@ -322,6 +327,8 @@ type ProducerMetadata struct {
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to
 // transfer rows between goroutines.
 type RowChannel struct {
+	rowSourceBase
+
 	types []sqlbase.ColumnType
 
 	// The channel on which rows are delivered.
@@ -329,10 +336,6 @@ type RowChannel struct {
 
 	// dataChan is the same channel as C.
 	dataChan chan RowChannelMsg
-
-	// consumerStatus is an atomic that signals whether the RowChannel is only
-	// accepting draining metadata or is no longer accepting any rows via Push.
-	consumerStatus ConsumerStatus
 }
 
 var _ RowReceiver = &RowChannel{}
@@ -390,20 +393,12 @@ func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (rc *RowChannel) ConsumerDone() {
-	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rc.consumerStatus)))
-	if status != NeedMoreRows {
-		log.Fatalf(context.TODO(), "RowChannel already done or closed: %d", status)
-	}
-	atomic.StoreUint32((*uint32)(&rc.consumerStatus), uint32(DrainRequested))
+	rc.consumerDone("RowChannel")
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (rc *RowChannel) ConsumerClosed() {
-	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rc.consumerStatus)))
-	if status == ConsumerClosed {
-		panic("RowChannel already closed")
-	}
-	atomic.StoreUint32((*uint32)(&rc.consumerStatus), uint32(ConsumerClosed))
+	rc.consumerClosed("RowChannel")
 	// Read (at most) one message in case the producer is blocked trying to emit a
 	// row. Note that, if the producer is done, then it has also closed the
 	// channel this will not block. The producer might be neither blocked nor
@@ -462,12 +457,7 @@ func (mrc *MultiplexedRowChannel) Next() (row sqlbase.EncDatumRow, meta *Produce
 
 // ConsumerDone is part of the RowSource interface.
 func (mrc *MultiplexedRowChannel) ConsumerDone() {
-	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&mrc.rowChan.consumerStatus)))
-	if status != NeedMoreRows {
-		log.Fatalf(context.TODO(), "MultiplexedRowChannel already done or closed: %d", status)
-	}
-	atomic.StoreUint32(
-		(*uint32)(&mrc.rowChan.consumerStatus), uint32(DrainRequested))
+	mrc.rowChan.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -628,17 +618,22 @@ func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (rb *RowBuffer) ConsumerDone() {
-	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(DrainRequested))
-	if rb.args.OnConsumerDone != nil {
-		rb.args.OnConsumerDone(rb)
+	if atomic.CompareAndSwapUint32((*uint32)(&rb.ConsumerStatus),
+		uint32(NeedMoreRows), uint32(DrainRequested)) {
+		if rb.args.OnConsumerDone != nil {
+			rb.args.OnConsumerDone(rb)
+		}
 	}
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (rb *RowBuffer) ConsumerClosed() {
-	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(ConsumerClosed))
-	if rb.args.OnConsumerClosed != nil {
-		rb.args.OnConsumerClosed(rb)
+	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
+	if status != ConsumerClosed {
+		atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(ConsumerClosed))
+		if rb.args.OnConsumerClosed != nil {
+			rb.args.OnConsumerClosed(rb)
+		}
 	}
 }
 
