@@ -1008,6 +1008,81 @@ func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
 }
 
+// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing ( such as
+// RaftHardStateKey, RaftTombstoneKey, and many others). Such keys could in principle exist at any
+// RangeID, and this helper efficiently discovers all the keys of the desired type (as specified by
+// the supplied `keyFn`) and, for each key-value pair discovered, unmarshals it into `msg` and then
+// invokes `f`.
+//
+// Iteration stops on the first error (and will pass through that error).
+func IterateIDPrefixKeys(
+	ctx context.Context,
+	eng engine.Reader,
+	keyFn func(roachpb.RangeID) roachpb.Key,
+	msg protoutil.Message,
+	f func(_ roachpb.RangeID) (more bool, _ error),
+) error {
+	rangeID := roachpb.RangeID(1)
+	iter := eng.NewIterator(false /* prefix */)
+
+	for {
+		bumped := false
+		mvccKey := engine.MakeMVCCMetadataKey(keyFn(rangeID))
+		iter.Seek(mvccKey)
+
+		if ok, err := iter.Valid(); !ok {
+			return err
+		}
+
+		unsafeKey := iter.UnsafeKey()
+
+		if !bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
+			// Left the local keyspace, so we're done.
+			return nil
+		}
+
+		curRangeID, _, _, _, err := keys.DecodeRangeIDKey(unsafeKey.Key)
+		if err != nil {
+			return err
+		}
+
+		if curRangeID > rangeID {
+			// `bumped` is always `false` here, but let's be explicit.
+			if !bumped {
+				rangeID = curRangeID
+				bumped = true
+			}
+			mvccKey = engine.MakeMVCCMetadataKey(keyFn(rangeID))
+		}
+
+		if !unsafeKey.Key.Equal(mvccKey.Key) {
+			if !bumped {
+				// Don't increment the rangeID if it has already been incremented
+				// above, or we could skip past a value we ought to see.
+				rangeID++
+				bumped = true // for completeness' sake; continuing below anyway
+			}
+			continue
+		}
+
+		ok, err := engine.MVCCGetProto(
+			ctx, eng, unsafeKey.Key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, msg,
+		)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey.Key, msg)
+		}
+
+		more, err := f(rangeID)
+		if !more || err != nil {
+			return err
+		}
+		rangeID++
+	}
+}
+
 // IterateRangeDescriptors calls the provided function with each descriptor
 // from the provided Engine. The return values of this method and fn have
 // semantics similar to engine.MVCCIterate.
@@ -1103,6 +1178,22 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
+
+	// Migrate legacy tombstones away if we can. We want to do this when the node boots with a
+	// cluster version as below or higher, i.e. not when the upgrade happens for a running node.
+	// In fact, we do it on *every* such boot (i.e. not only once); this is because we want the
+	// migration to run when the v2.1 binary is started (the next release at the time of writing
+	// is v2.0) so that that version doesn't have to know about legacy tombstones (outside of
+	// this migration).
+	//
+	// Note that `Settings.Version` is the persisted cluster version and has not been updated
+	// via Gossip (see `(*Node).start`).
+	if s.cfg.Settings.Version.IsMinSupported(cluster.VersionUnreplicatedTombstoneKey) {
+		if err := migrateLegacyTombstones(ctx, s.engine); err != nil {
+			return errors.Wrapf(err, "migrating legacy tombstones for %v", s.engine)
+		}
+		log.Event(ctx, "ran legacy tombstone migration")
+	}
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
@@ -3948,15 +4039,25 @@ func (s *Store) tryGetOrCreateReplica(
 	// No replica currently exists, so we'll try to create one. Before creating
 	// the replica, see if there is a tombstone which would indicate that this is
 	// a stale message.
-	tombstoneKey := keys.RaftTombstoneKey(rangeID)
-	var tombstone roachpb.RaftTombstone
-	if ok, err := engine.MVCCGetProto(
-		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
-	); err != nil {
-		return nil, false, err
-	} else if ok {
-		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-			return nil, false, &roachpb.RaftGroupDeletedError{}
+	tombstoneKeys := []roachpb.Key{
+		keys.RaftTombstoneKey(rangeID),
+		keys.RaftTombstoneIncorrectLegacyKey(rangeID),
+	}
+
+	var minReplicaID roachpb.ReplicaID
+	for _, tombstoneKey := range tombstoneKeys {
+		var tombstone roachpb.RaftTombstone
+		if ok, err := engine.MVCCGetProto(
+			ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
+		); err != nil {
+			return nil, false, err
+		} else if ok {
+			if replicaID != 0 && replicaID < tombstone.NextReplicaID {
+				return nil, false, &roachpb.RaftGroupDeletedError{}
+			}
+			if minReplicaID < tombstone.NextReplicaID {
+				minReplicaID = tombstone.NextReplicaID
+			}
 		}
 	}
 
@@ -3973,7 +4074,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
-	repl.mu.minReplicaID = tombstone.NextReplicaID
+	repl.mu.minReplicaID = minReplicaID
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine

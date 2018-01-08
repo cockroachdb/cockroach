@@ -339,7 +339,7 @@ func (r *Replica) sha512(
 	snap engine.Reader,
 	snapshot *roachpb.RaftSnapshotData,
 ) (*replicaHash, error) {
-	tombstoneKey := engine.MakeMVCCMetadataKey(keys.RaftTombstoneKey(desc.RangeID))
+	legacyTombstoneKey := engine.MakeMVCCMetadataKey(keys.RaftTombstoneIncorrectLegacyKey(desc.RangeID))
 
 	// Iterate over all the data in the range.
 	iter := snap.NewIterator(false /* prefix */)
@@ -350,7 +350,7 @@ func (r *Replica) sha512(
 
 	var legacyTimestamp hlc.LegacyTimestamp
 	visitor := func(unsafeKey engine.MVCCKey, unsafeValue []byte) error {
-		if unsafeKey.Equal(tombstoneKey) {
+		if unsafeKey.Equal(legacyTombstoneKey) {
 			// Skip the tombstone key which is marked as replicated even though it
 			// isn't.
 			//

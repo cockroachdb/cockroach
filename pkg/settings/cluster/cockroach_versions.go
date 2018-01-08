@@ -40,6 +40,7 @@ const (
 	VersionClearRange
 	VersionPartitioning
 	VersionLeaseSequence
+	VersionUnreplicatedTombstoneKey
 
 	// Add new versions here (step one of two).
 
@@ -139,6 +140,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionLeaseSequence is https://github.com/cockroachdb/cockroach/pull/20953.
 		Key:     VersionLeaseSequence,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 8},
+	},
+	{
+		// VersionUnreplicatedTombstoneKey is https://github.com/cockroachdb/cockroach/pull/21120.
+		Key:     VersionUnreplicatedTombstoneKey,
+		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 9},
 	},
 
 	// Add new versions here (step two of two).

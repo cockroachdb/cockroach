@@ -376,8 +376,8 @@ func (n *Node) start(
 	n.initDescriptor(addr, attrs, locality)
 
 	n.storeCfg.Settings.Version.OnChange(func(cv cluster.ClusterVersion) {
-		if err := n.stores.WriteClusterVersion(ctx, cv); err != nil {
-			log.Fatalf(ctx, "error updating persisted cluster version: %s", err)
+		if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
+			log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %s", cv))
 		}
 	})
 
@@ -423,6 +423,8 @@ func (n *Node) start(
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 
 	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
+	// Be careful about moving this line above `startStores`; store migrations rely
+	// on the fact that the cluster version has not been updated via Gossip.
 	n.startGossip(ctx, n.stopper)
 
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, bootstrappedEngines, attrs.Attrs)

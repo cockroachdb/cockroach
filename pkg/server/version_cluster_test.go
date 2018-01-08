@@ -22,11 +22,14 @@ import (
 	gosql "database/sql"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -124,9 +127,50 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 	tc := setupMixedCluster(t, bootstrapVersion, versions)
 	defer tc.Stopper().Stop(ctx)
 
+	tombstone := roachpb.RaftTombstone{NextReplicaID: 0}
+	tombstoneOp := func(f func(engine.Engine, roachpb.Key) error) error {
+		visitor := func(s *storage.Store) error {
+			// Put down a few fake legacy tombstones (#12154) to jog `migrateLegacyTombstones`, including
+			// one for the existing range, but also some for non-existing ones.
+
+			legacyTombstoneKeys := []roachpb.Key{
+				// Range 1 actually exists, at least on some stores.
+				keys.RaftTombstoneIncorrectLegacyKey(1 /* rangeID */),
+				// These ranges don't exist.
+				keys.RaftTombstoneIncorrectLegacyKey(200 /* rangeID */),
+				keys.RaftTombstoneIncorrectLegacyKey(300 /* rangeID */),
+			}
+			for _, legacyTombstoneKey := range legacyTombstoneKeys {
+				if err := f(s.Engine(), legacyTombstoneKey); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		for i := 0; i < tc.NumServers(); i++ {
+			if err := tc.Server(i).GetStores().(*storage.Stores).VisitStores(visitor); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	for i := 0; i < tc.NumServers(); i++ {
 		if exp, version := bootstrapVersion.MinimumVersion.String(), tc.getVersionFromShow(i); version != exp {
 			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
+		}
+
+		// Put some legacy tombstones down. We're going to test the migration for removing those in the
+		// negative: the tombstones are to be removed only after a node at *cluster version* v1.2 boots
+		// up. We don't restart nodes in this test, so the only boot is at the initial version v1.0,
+		// and we verify that the  tombstones remain. The rewrite functionality is tested in
+		// TestStoreInitAndBootstrap.
+		if err := tombstoneOp(func(eng engine.Engine, legacyTombstoneKey roachpb.Key) error {
+			return engine.MVCCPutProto(
+				ctx, eng, nil /* ms */, legacyTombstoneKey, hlc.Timestamp{}, nil /* txn */, &tombstone,
+			)
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -175,16 +219,30 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 				vers := tc.getVersionFromSetting(i)
 				if v := vers.Version().MinimumVersion.String(); v == curVersion {
 					if isNoopUpdate {
-						// Just what we wanted!
-						return nil
+						continue
 					}
 					return errors.Errorf("%d: still waiting for %s (now at %s)", i, exp, v)
 				} else if v != exp {
 					t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
 				}
 			}
-			// Everyone is at the version we're waiting for.
-			return nil
+
+			// Everyone is at the version we're waiting for. Check that the tombstones are still there.
+			return tombstoneOp(func(eng engine.Engine, legacyTombstoneKey roachpb.Key) error {
+				ok, err := engine.MVCCGetProto(
+					ctx, eng, legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
+					nil,
+				)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return errors.Errorf(
+						"legacy tombstone at %s unexpectedly removed", legacyTombstoneKey,
+					)
+				}
+				return nil
+			})
 		})
 
 		// Since the wrapped version setting exposes the new versions, it must
