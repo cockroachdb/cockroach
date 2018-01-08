@@ -140,6 +140,7 @@ func Setup(db *gosql.DB, tables []Table, batchSize int) (int64, error) {
 	var size int64
 	for _, table := range tables {
 		createStmt := fmt.Sprintf(`CREATE TABLE %s %s`, table.Name, table.Schema)
+		fmt.Println(createStmt)
 		if _, err := db.Exec(createStmt); err != nil {
 			return 0, err
 		}

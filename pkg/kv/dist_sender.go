@@ -485,7 +485,7 @@ func (ds *DistSender) initAndVerifyBatch(
 		txnClone := ba.Txn.Clone()
 		ba.Txn = &txnClone
 
-		if len(ba.Txn.ObservedTimestamps) == 0 {
+		if len(ba.Txn.ObservedTimestamps) == 0 && true { // change to `false` to show that this code path is active too much with DistSQL=on
 			// Ensure the local NodeID is marked as free from clock offset;
 			// the transaction's timestamp was taken off the local clock.
 			// TODO(andrei): This is broken when Txn.OrigTimestamp has not been, in
