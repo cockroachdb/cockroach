@@ -337,41 +337,30 @@ func runBenchmarkUpsert(b *testing.B, db *gosql.DB, count int) {
 		b.Fatal(err)
 	}
 
-	s := rand.New(rand.NewSource(5432))
-
-	b.ResetTimer()
 	// Upsert in Cockroach doesn't let you conflict the same row twice in one
 	// statement (fwiw, neither does Postgres), so build one statement that
 	// inserts half the values requested by `count` followed by a statement that
 	// updates each of the values just inserted. This also weighs the benchmark
 	// 50/50 for inserts vs updates.
-	var insertBuf bytes.Buffer
-	var updateBuf bytes.Buffer
+	var upsertBuf bytes.Buffer
+	upsertBuf.WriteString(`UPSERT INTO bench.upsert VALUES `)
+	for j := 0; j < count; j += 2 {
+		if j > 0 {
+			upsertBuf.WriteString(`, `)
+		}
+		fmt.Fprintf(&upsertBuf, "($1+%d, unique_rowid())", j)
+	}
+
+	b.ResetTimer()
 	key := 0
 	for i := 0; i < b.N; i++ {
-		// TODO(dan): Once the long form is implemented, use it here so we can have
-		// Postgres benchmarks.
-		insertBuf.Reset()
-		insertBuf.WriteString(`UPSERT INTO bench.upsert VALUES `)
-		updateBuf.Reset()
-		updateBuf.WriteString(`UPSERT INTO bench.upsert VALUES `)
-		j := 0
-		for ; j < count; j += 2 {
-			if j > 0 {
-				insertBuf.WriteString(`, `)
-				updateBuf.WriteString(`, `)
-			}
-			fmt.Fprintf(&insertBuf, "(%d, %d)", key, s.Int())
-			fmt.Fprintf(&updateBuf, "(%d, %d)", key, s.Int())
-			key++
-		}
-		insertBuf.WriteString(`; `)
-		if _, err := updateBuf.WriteTo(&insertBuf); err != nil {
+		if _, err := db.Exec(upsertBuf.String(), key); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := db.Exec(insertBuf.String()); err != nil {
+		if _, err := db.Exec(upsertBuf.String(), key); err != nil {
 			b.Fatal(err)
 		}
+		key += count
 	}
 	b.StopTimer()
 }
