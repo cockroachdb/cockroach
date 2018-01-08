@@ -33,15 +33,15 @@ enum RangeLogEventType {
 
 message RangeLogEvent {
   message Info {
-      roachpb.RangeDescriptor updated_desc = 1 [(gogoproto.jsontag) = "UpdatedDesc"];
-      roachpb.RangeDescriptor new_desc = 2 [(gogoproto.jsontag) = "NewDesc"];
-      roachpb.ReplicaDescriptor added_replica = 3 [(gogoproto.jsontag) = "AddReplica"];
-      roachpb.ReplicaDescriptor removed_replica = 4 [(gogoproto.jsontag) = "RemovedReplica"];
+      roachpb.RangeDescriptor updated_desc = 1 [(gogoproto.jsontag) = "UpdatedDesc,omitempty"];
+      roachpb.RangeDescriptor new_desc = 2 [(gogoproto.jsontag) = "NewDesc,omitempty"];
+      roachpb.ReplicaDescriptor added_replica = 3 [(gogoproto.jsontag) = "AddReplica,omitempty"];
+      roachpb.ReplicaDescriptor removed_replica = 4 [(gogoproto.jsontag) = "RemovedReplica,omitempty"];
       string reason = 5 [
-        (gogoproto.jsontag) = "Reason",
+        (gogoproto.jsontag) = "Reason,omitempty",
         (gogoproto.casttype) = "RangeLogEventReason"
       ];
-      string details = 6 [(gogoproto.jsontag) = "Details"];
+      string details = 6 [(gogoproto.jsontag) = "Details,omitempty"];
   }
 
   google.protobuf.Timestamp timestamp = 1 [
