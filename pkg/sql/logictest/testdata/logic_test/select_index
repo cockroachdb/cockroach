@@ -883,3 +883,27 @@ SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY 
 ----
 1  NULL  1  NULL
 1  NULL  5  NULL
+
+# Regression test for #3548: verify we create constraints on implicit columns.
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY(a,b), INDEX(c))
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT c FROM abc WHERE c = 1 and a = 3
+----
+render     0  render  ·         ·              (c)  c=CONST
+ │         0  ·       render 0  test.abc.c     ·    ·
+ └── scan  1  scan    ·         ·              (c)  c=CONST
+·          1  ·       table     abc@abc_c_idx  ·    ·
+·          1  ·       spans     /1/3-/1/4      ·    ·
+
+# Regression test for #20504.
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT a, b FROM abc WHERE (a, b) BETWEEN (1, 2) AND (3, 4)
+----
+render     0  render  ·         ·            (a, b)  a!=NULL; b!=NULL; key(a,b)
+ │         0  ·       render 0  test.abc.a   ·       ·
+ │         0  ·       render 1  test.abc.b   ·       ·
+ └── scan  1  scan    ·         ·            (a, b)  a!=NULL; b!=NULL; key(a,b)
+·          1  ·       table     abc@primary  ·       ·
+·          1  ·       spans     /1/2-/3/4/#  ·       ·

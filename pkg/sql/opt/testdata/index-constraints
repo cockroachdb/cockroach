@@ -1112,3 +1112,9 @@ build-scalar,index-constraints vars=(int, int) index=(@1, @2)
 ----
 [/4/5 - ]
 Remaining filter: @2 = 5
+
+# Regression test for #3472.
+build-scalar,index-constraints vars=(int, int) index=(@1, @2)
+(@1,@2) IN ((1, 2)) AND @1 = 1
+----
+[/1/2 - /1/2]
