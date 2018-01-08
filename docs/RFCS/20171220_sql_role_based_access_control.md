@@ -363,14 +363,11 @@ GRANT rolename TO name [ WITH ADMIN OPTION ]
 ```
 
 * **Behavior**: adds `name` as a member of `rolename`. Member is a role admin if `WITH ADMIN OPTION` is specified.
-Fails if either `rolename` or `name` does not exist, if the membership exists, or if this creates a
-membership loop.
+  - Fails if either `rolename` or `name` does not exist, or if this creates a membership loop.
+  - Existing memberships can have their `WITH ADMIN` option enabled, but never disabled.
+  - The `ADMIN OPTION` is inherited. eg: if `A ∈ B ∈ C` and `B` has `ADMIN OPTION` on `C`, then `A` has `ADMIN OPTION` on `C` (but not necessarily on `B`).
 * **Permissions**: must be an administrator or role admin.
 * **Enterprise requirement**: valid license required.
-
-
-**TODO(mberhault)**: check postgres behavior w.r.t inheritance of `WITH ADMIN` option.
-**TODO(mberhault)**: check postgres behavior: can we add/remove `WITH ADMIN` without changing membership?
 
 #### REVOKE role
 
@@ -378,12 +375,10 @@ membership loop.
 REVOKE [ ADMIN OPTION FOR ] rolename FROM name
 ```
 
-* **Behavior**: removes `name` as a member of `rolename`. Member admin setting is removed if `ADMIN OPTION FOR` is specified.
-Fails if either `rolename` or `name` does not exist, or if the membership does not exist.
+* **Behavior**: removes `name` as a member of `rolename`. Member admin setting is removed if `ADMIN OPTION FOR` is specified, but the membership remains.
+Fails if either `rolename` or `name` does not exist. Succeeds if the membership does not exist.
 * **Permissions**: must be an administrator or role admin.
 * **Enterprise requirement**: valid license required.
-
-**TODO(mberhault)**: check postgres behavior: can we add/remove `WITH ADMIN` without changing membership?
 
 #### SHOW ROLES
 
