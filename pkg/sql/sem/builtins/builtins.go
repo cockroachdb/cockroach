@@ -2533,11 +2533,11 @@ var jsonBuildObjectImpl = tree.Builtin{
 				"argument list must have even number of elements")
 		}
 
-		obj := make(map[string]interface{})
+		builder := json.NewBuilder()
 		for i := 0; i < len(args); i += 2 {
 			if args[i] == tree.DNull {
-				return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
-					fmt.Sprintf("argument %d cannot be null", i+1))
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"argument %d cannot be null", i+1)
 			}
 
 			key, err := asJSONBuildObjectKey(args[i])
@@ -2549,10 +2549,11 @@ var jsonBuildObjectImpl = tree.Builtin{
 			if err != nil {
 				return nil, err
 			}
-			obj[key] = val
+
+			builder.Add(key, val)
 		}
 
-		return tree.MakeDJSON(obj)
+		return tree.NewDJSON(builder.Build()), nil
 	},
 	Info: "Builds a JSON object out of a variadic argument list.",
 }
