@@ -39,7 +39,7 @@ import (
 	"github.com/tylertreat/hdrhistogram-writer"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
-	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/kv"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/all"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -49,30 +49,19 @@ var rootCmd = &cobra.Command{
 	Use: `workload`,
 }
 
-// concurrency = number of concurrent insertion processes.
-var concurrency = rootCmd.PersistentFlags().Int(
+var rootFlags = pflag.NewFlagSet(`workload`, pflag.ContinueOnError)
+var concurrency = rootFlags.Int(
 	"concurrency", 2*runtime.NumCPU(), "Number of concurrent writers inserting blocks")
-
-// batch = number of blocks to insert in a single SQL statement.
-var batch = rootCmd.PersistentFlags().Int(
-	"batch", 1, "Number of blocks to insert in a single SQL statement")
-
-var tolerateErrors = rootCmd.PersistentFlags().Bool(
-	"tolerate-errors", false, "Keep running on error")
-
-var maxRate = rootCmd.PersistentFlags().Float64(
+var tolerateErrors = rootFlags.Bool("tolerate-errors", false, "Keep running on error")
+var maxRate = rootFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
-
-var maxOps = rootCmd.PersistentFlags().Uint64(
-	"max-ops", 0, "Maximum number of blocks to read/write")
-var duration = rootCmd.PersistentFlags().Duration(
-	"duration", 0, "The duration to run. If 0, run forever.")
-var drop = rootCmd.PersistentFlags().Bool(
-	"drop", false, "Clear the existing data before starting.")
+var maxOps = rootFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
+var duration = rootFlags.Duration("duration", 0, "The duration to run. If 0, run forever.")
+var drop = rootFlags.Bool("drop", false, "Clear the existing data before starting.")
 
 // Output in HdrHistogram Plotter format. See
 // https://hdrhistogram.github.io/HdrHistogram/plotFiles.html
-var histFile = rootCmd.PersistentFlags().String(
+var histFile = rootFlags.String(
 	"hist-file", "",
 	"Write histogram data to file for HdrHistogram Plotter, or stdout if - is specified.")
 
@@ -81,17 +70,18 @@ func main() {
 }
 
 func init() {
-	for _, genFn := range workload.Registered() {
-		gen := genFn()
+	for _, meta := range workload.Registered() {
+		gen := meta.New()
 		// Avoid use of `genFn` in the closures below, because it is a) not needed and
 		// b) prevents regression of a bug in which a missing loop-local copy in
 		// the RunE closure below caused the last registered command to be the one
 		// run, whichever generator was specified.
-		genFn = nil
+		meta.New = nil
 
 		genFlags := gen.Flags()
 
-		genCmd := &cobra.Command{Use: gen.Name()}
+		genCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
+		genCmd.Flags().AddFlagSet(rootFlags)
 		genCmd.Flags().AddFlagSet(genFlags)
 		genCmd.RunE = func(cmd *cobra.Command, args []string) error {
 			// The is a little awkward, but grab the strings back from the
@@ -179,7 +169,7 @@ func (w *worker) run(
 			log.Fatal(ctx, err)
 		}
 		w.latency.Unlock()
-		v := atomic.AddUint64(&numOps, uint64(*batch))
+		v := atomic.AddUint64(&numOps, 1)
 		if *maxOps > 0 && v >= *maxOps {
 			return
 		}
@@ -312,7 +302,7 @@ func runRoot(gen workload.Generator, args []string) error {
 		// Output results that mimic Go's built-in benchmark format.
 		benchmarkName := strings.Join([]string{
 			"BenchmarkWorkload",
-			fmt.Sprintf("generator=%s", gen.Name()),
+			fmt.Sprintf("generator=%s", gen.Meta().Name),
 			fmt.Sprintf("concurrency=%d", *concurrency),
 			fmt.Sprintf("duration=%s", *duration),
 		}, "/")
