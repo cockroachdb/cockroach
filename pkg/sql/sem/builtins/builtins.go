@@ -3451,7 +3451,7 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 	}
 }
 
-// converts a scalar Datum to its string representation
+// Converts a scalar Datum to its string representation
 func asJSONBuildObjectKey(d tree.Datum) (string, error) {
 	switch d.(type) {
 	case *tree.DJSON, *tree.DArray, *tree.DTuple:
