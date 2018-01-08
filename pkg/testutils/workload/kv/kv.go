@@ -56,6 +56,7 @@ var kvMeta = workload.Meta{
 	Name: `kv`,
 	Description: `KV reads and writes to keys spread (by default, uniformly` +
 		` at random) across the cluster`,
+	Version: `1.0.0`,
 	New: func() workload.Generator {
 		g := &kv{flags: pflag.NewFlagSet(`kv`, pflag.ContinueOnError)}
 		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to insert in a single SQL statement`)

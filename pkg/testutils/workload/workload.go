@@ -66,7 +66,11 @@ type Meta struct {
 	Name string
 	// Description is a short description of this generator.
 	Description string
-	New         func() Generator
+	// Version is a semantic version for this generator. It should be bumped
+	// whenever InitialRowFn or InitialRowCount change for any of the tables.
+	Version string
+	// New returns an unconfigured instance of this generator.
+	New func() Generator
 }
 
 // Table represents a single table in a Generator. Included is a name, schema,
