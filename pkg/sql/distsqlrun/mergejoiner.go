@@ -153,10 +153,6 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				continue
 			}
 		case DrainRequested:
-			// TODO(peter): Could we be calling ConsumerDone twice on the inputs?
-			// Looks like it can happen here and in response to
-			// mergeJoiner.ConsumerDone(). This also affects distinct and
-			// noopProcessor.
 			m.leftSource.ConsumerDone()
 			m.rightSource.ConsumerDone()
 			continue
