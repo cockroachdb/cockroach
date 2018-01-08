@@ -17,6 +17,7 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -328,39 +329,27 @@ type FmtCtxWithBuf struct {
 	buf bytes.Buffer
 }
 
-// TODO(nathan/peter): the tests break horribly when the following code is enabled:
-//
-// var fmtCtxWithBufPool = sync.Pool{
-// 	New: func() interface{} {
-// 		f := &FmtCtxWithBuf{}
-// 		f.FmtCtx.Buffer = &f.buf
-// 		return f
-// 	},
-// }
-//
-// // NewFmtCtxWithBuf returns a FmtCtxWithBuf ready for use.
-// func NewFmtCtxWithBuf(f FmtFlags) *FmtCtxWithBuf {
-// 	ctx := fmtCtxWithBufPool.Get().(*FmtCtxWithBuf)
-// 	ctx.FmtCtx.flags = f
-// 	return ctx
-// }
-//
-// // Close releases the FmtCtxWithBuf.
-// func (f *FmtCtxWithBuf) Close() {
-// 	f.Reset()
-// 	fmtCtxWithBufPool.Put(f)
-// }
+var fmtCtxWithBufPool = sync.Pool{
+	New: func() interface{} {
+		ctx := &FmtCtxWithBuf{}
+		ctx.Buffer = &ctx.buf
+		return ctx
+	},
+}
 
 // NewFmtCtxWithBuf returns a FmtCtxWithBuf ready for use.
 func NewFmtCtxWithBuf(f FmtFlags) *FmtCtxWithBuf {
-	ctx := &FmtCtxWithBuf{}
-	ctx.FmtCtx.Buffer = &ctx.buf
-	ctx.FmtCtx.flags = f
+	ctx := fmtCtxWithBufPool.Get().(*FmtCtxWithBuf)
+	ctx.flags = f
 	return ctx
 }
 
 // Close releases the FmtCtxWithBuf.
-func (f *FmtCtxWithBuf) Close() {}
+func (f *FmtCtxWithBuf) Close() {
+	f.Reset()
+	f.FmtCtx = FmtCtx{Buffer: &f.buf}
+	fmtCtxWithBufPool.Put(f)
+}
 
 // CloseAndGetString combines Close() and String().
 func (f *FmtCtxWithBuf) CloseAndGetString() string {
