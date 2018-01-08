@@ -893,6 +893,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				t, err := l.Float64()
+				if err != nil {
+					return nil, err
+				}
 				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(t)}, err
 			},
 		},
@@ -903,6 +906,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := &right.(*DDecimal).Decimal
 				t, err := r.Float64()
+				if err != nil {
+					return nil, err
+				}
 				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(t)}, err
 			},
 		},
