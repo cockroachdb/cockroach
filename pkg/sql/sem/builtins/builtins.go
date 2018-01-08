@@ -3458,6 +3458,8 @@ func asJSONBuildObjectKey(d tree.Datum) (string, error) {
 			"key value must be scalar, not array, tuple, or json")
 	default:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
+	}
+}
 
 func asJSONObjectKey(d tree.Datum) (string, error) {
 	switch t := d.(type) {
