@@ -3,7 +3,7 @@ import _ from "lodash";
 export interface TreeNode<T> {
   name: string;
   children?: TreeNode<T>[];
-  data: T;
+  data?: T;
 }
 
 export type TreePath = string[];
@@ -69,9 +69,9 @@ interface LayoutNode<T> {
  *
  * Collapsing `e` yields:
  *
- *   |       a       |
- *   |   b   |   e   |
- *   | c | d |  <P>  |
+ *   |      a      |
+ *   |   b   |  e  |
+ *   | c | d | <P> |
  *
  * Where <P> is a LayoutNode with `isPlaceholder: true`
  * and e is a LayoutNode with `isCollapsed: true`.
@@ -373,7 +373,7 @@ function cartProd<A, B>(as: A[], bs: B[]): {a: A, b: B}[] {
  * for all leaf paths R under `rowPath` in `rowTree`,
  * and all leaf paths C under `colPath` in `rowTree`.
  *
- * e.g. in the matrix
+ * E.g. in the matrix
  *
  *  |       |    C_1    |
  *  |       | C_2 | C_3 |
@@ -382,16 +382,16 @@ function cartProd<A, B>(as: A[], bs: B[]): {a: A, b: B}[] {
  *  |   R_b |  1  |  2  |
  *  |   R_c |  3  |  4  |
  *
- * Represented by
+ * represented by
  *
  *   rowTree = (R_a [R_b R_c])
  *   colTree = (C_1 [C_2 C_3])
  *
- * Calling sumValuesUnderPath(rowTree, colTree, ['R_a'], ['C_b'], getValue)
+ * calling sumValuesUnderPath(rowTree, colTree, ['R_a'], ['C_b'], getValue)
  * sums up all the cells in the matrix, yielding
- * yielding 1 + 2 + 3 + 4 = 9
+ * yielding 1 + 2 + 3 + 4 = 10.
  *
- * And calling sumValuesUnderPath(rowTree, colTree, ['R_a', 'R_b'], ['C_b'], getValue)
+ * Calling sumValuesUnderPath(rowTree, colTree, ['R_a', 'R_b'], ['C_b'], getValue)
  * sums up only the cells under R_b,
  * yielding 1 + 2 = 3.
  *
