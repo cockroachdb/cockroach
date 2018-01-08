@@ -76,6 +76,11 @@ const (
 	// version IS DISTINCT FROM.
 	isNotOp
 
+	// containsOp is the @> JSON operator.
+	containsOp
+	// containedByOp is the <@ JSON operator.
+	containedByOp
+
 	anyOp
 	someOp
 	allOp
