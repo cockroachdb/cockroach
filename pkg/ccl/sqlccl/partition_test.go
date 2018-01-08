@@ -288,13 +288,12 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				`@primary /1/5/8-/2`,
 			},
 			scans: map[string]string{
-				`(a, b) < (3, 4)`: `n1`,
-				`a = 3 AND b = 4`: `n2`,
-				// TODO(dan): Uncomment when #20504 is fixed.
-				// `(a, b) > (3, 4) AND (a, b) < (5, 6)`: `n1`,
-				`a = 5 AND b = 6`: `n3`,
-				`a = 5 AND b = 7`: `n1`,
-				`(a, b) > (5, 7)`: `n1`,
+				`(a, b) < (3, 4)`:                     `n1`,
+				`a = 3 AND b = 4`:                     `n2`,
+				`(a, b) > (3, 4) AND (a, b) < (5, 6)`: `n1`,
+				`a = 5 AND b = 6`:                     `n3`,
+				`a = 5 AND b = 7`:                     `n1`,
+				`(a, b) > (5, 7)`:                     `n1`,
 			},
 		},
 		{
@@ -452,11 +451,10 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				`@primary /1/5/7-/2`,
 			},
 			scans: map[string]string{
-				`(a, b) < (3, 4)`: `n2`,
-				// TODO(dan): Uncomment when #20504 is fixed.
-				// `(a, b) >= (3, 4) AND (a, b) < (5, 6)`: `n3`,
-				// `(a, b) >= (5, 6) AND (a, b) < (5, 7)`: `n1`,
-				`(a, b) >= (5, 7)`: `n1`,
+				`(a, b) < (3, 4)`:                      `n2`,
+				`(a, b) >= (3, 4) AND (a, b) < (5, 6)`: `n3`,
+				`(a, b) >= (5, 6) AND (a, b) < (5, 7)`: `n1`,
+				`(a, b) >= (5, 7)`:                     `n1`,
 			},
 		},
 		{
@@ -478,12 +476,11 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				`@primary /1/5/7-/2`,
 			},
 			scans: map[string]string{
-				`(a, b) < (3, 4)`:            `n2`,
-				`(a, b) >= (3, 4) AND a < 4`: `n3`,
-				`a >= 4 AND (a, b) < (5, 6)`: `n1`,
-				// TODO(dan): Uncomment when #20504 is fixed.
-				// `(a, b) >= (5, 6) AND (a, b) < (5, 7)`: `n2`,
-				`(a, b) >= (5, 7)`: `n1`,
+				`(a, b) < (3, 4)`:                      `n2`,
+				`(a, b) >= (3, 4) AND a < 4`:           `n3`,
+				`a >= 4 AND (a, b) < (5, 6)`:           `n1`,
+				`(a, b) >= (5, 6) AND (a, b) < (5, 7)`: `n2`,
+				`(a, b) >= (5, 7)`:                     `n1`,
 			},
 		},
 		{
@@ -504,12 +501,11 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				` .pm /1/5/7-/2`,
 			},
 			scans: map[string]string{
-				`(a, b) < (3, 4)`:            `n1`,
-				`(a, b) >= (3, 4) AND a < 4`: `n2`,
-				`a >= 4 AND (a, b) < (5, 6)`: `n3`,
-				// TODO(dan): Uncomment when #20504 is fixed.
-				// `(a, b) >= (5, 6) AND (a, b) < (5, 7)`: `n1`,
-				`(a, b) >= (5, 7)`: `n2`,
+				`(a, b) < (3, 4)`:                      `n1`,
+				`(a, b) >= (3, 4) AND a < 4`:           `n2`,
+				`a >= 4 AND (a, b) < (5, 6)`:           `n3`,
+				`(a, b) >= (5, 6) AND (a, b) < (5, 7)`: `n1`,
+				`(a, b) >= (5, 7)`:                     `n2`,
 			},
 		},
 
