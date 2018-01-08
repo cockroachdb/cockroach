@@ -45,8 +45,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var rootCmd = &cobra.Command{
-	Use: `workload`,
+const crdbDefaultURI = `postgres://root@localhost:26257/test?sslmode=disable`
+
+var runCmd = &cobra.Command{
+	Use:   `run`,
+	Short: `Run a workload's operations against a cluster`,
 }
 
 var rootFlags = pflag.NewFlagSet(`workload`, pflag.ContinueOnError)
@@ -65,19 +68,9 @@ var histFile = rootFlags.String(
 	"hist-file", "",
 	"Write histogram data to file for HdrHistogram Plotter, or stdout if - is specified.")
 
-func main() {
-	_ = rootCmd.Execute()
-}
-
 func init() {
 	for _, meta := range workload.Registered() {
 		gen := meta.New()
-		// Avoid use of `genFn` in the closures below, because it is a) not needed and
-		// b) prevents regression of a bug in which a missing loop-local copy in
-		// the RunE closure below caused the last registered command to be the one
-		// run, whichever generator was specified.
-		meta.New = nil
-
 		genFlags := gen.Flags()
 
 		genCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
@@ -99,11 +92,12 @@ func init() {
 			if err := gen.Configure(flags); err != nil {
 				return err
 			}
-			return runRoot(gen, args)
+			return runRun(gen, args)
 		}
 
-		rootCmd.AddCommand(genCmd)
+		runCmd.AddCommand(genCmd)
 	}
+	rootCmd.AddCommand(runCmd)
 }
 
 // numOps keeps a global count of successful operations.
@@ -220,10 +214,10 @@ func setupDatabase(dbURLs []string) (*gosql.DB, error) {
 	}
 }
 
-func runRoot(gen workload.Generator, args []string) error {
+func runRun(gen workload.Generator, args []string) error {
 	ctx := context.Background()
 
-	dbURLs := []string{"postgres://root@localhost:26257/test?sslmode=disable"}
+	dbURLs := []string{crdbDefaultURI}
 	if len(args) >= 1 {
 		dbURLs = args
 	}
