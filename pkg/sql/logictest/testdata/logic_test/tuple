@@ -648,3 +648,19 @@ render           0  render      ·         ·                      (a, b, c)  ·
       └── scan   2  scan        ·         ·                      (a, b, c)  ·
 ·                2  ·           table     abc@primary            ·          ·
 ·                2  ·           filter    (a, b, c) > (1, 2, 3)  ·          ·
+
+statement ok
+DROP TABLE abc;
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b DESC, c))
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3)
+----
+render     0  render  ·         ·                      (a, b, c)  ·
+ │         0  ·       render 0  test.abc.a             ·          ·
+ │         0  ·       render 1  test.abc.b             ·          ·
+ │         0  ·       render 2  test.abc.c             ·          ·
+ └── scan  1  scan    ·         ·                      (a, b, c)  ·
+·          1  ·       table     abc@abc_a_b_c_idx      ·          ·
+·          1  ·       spans     /1-                    ·          ·
+·          1  ·       filter    (a, b, c) > (1, 2, 3)  ·          ·

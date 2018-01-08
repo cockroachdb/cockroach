@@ -1190,7 +1190,7 @@ func spansFromLogicalSpans(
 	index *sqlbase.IndexDescriptor,
 ) (roachpb.Spans, error) {
 	spans := make(roachpb.Spans, len(logicalSpans))
-	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
+	interstices := make([][]byte, len(index.ColumnDirections)+1)
 	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
 	if len(index.Interleave.Ancestors) > 0 {
 		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
@@ -2062,7 +2062,7 @@ func (v *indexInfo) makeIndexConstraintsExperimental(
 func (v *indexInfo) spansFromLogicalSpansExperimental(
 	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
 ) (roachpb.Spans, error) {
-	interstices := make([][]byte, len(index.ColumnDirections)+1)
+	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
 	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
 	if len(index.Interleave.Ancestors) > 0 {
 		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
