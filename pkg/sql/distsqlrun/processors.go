@@ -431,18 +431,20 @@ func (pb *processorBase) internalClose() bool {
 // rowSourceBase provides common functionality for RowSource implementations
 // that need to track consumer status.
 type rowSourceBase struct {
-	// consumerStatus is used by the RowSource interface to signal that the
-	// consumer is done accepting rows or is no longer accepting data.
+	// consumerStatus is an atomic used in implementation of the
+	// RowSource.Consumer{Done,Closed} methods to signal that the consumer is
+	// done accepting rows or is no longer accepting data.
 	consumerStatus ConsumerStatus
 }
 
 // consumerDone helps processors implement RowSource.ConsumerDone.
-func (rb *rowSourceBase) consumerDone(name string) {
+func (rb *rowSourceBase) consumerDone() {
 	atomic.CompareAndSwapUint32((*uint32)(&rb.consumerStatus),
 		uint32(NeedMoreRows), uint32(DrainRequested))
 }
 
-// consumerDone helps processors implement RowSource.ConsumerClosed.
+// consumerDone helps processors implement RowSource.ConsumerClosed. The name
+// is only used for debug messages.
 func (rb *rowSourceBase) consumerClosed(name string) {
 	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.consumerStatus)))
 	if status == ConsumerClosed {
