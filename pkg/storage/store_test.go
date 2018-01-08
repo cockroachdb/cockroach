@@ -1725,6 +1725,87 @@ func TestStoreReadInconsistent(t *testing.T) {
 	}
 }
 
+// TestStoreScanResumeTSCache verifies that the timestamp cache is
+// properly updated when scans and reverse scans return partial
+// results and a resume span.
+func TestStoreScanResumeTSCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store, manualClock := createTestStore(t, stopper)
+
+	// Write three keys at time t0.
+	t0 := 1 * time.Second
+	manualClock.Set(t0.Nanoseconds())
+	h := roachpb.Header{Timestamp: makeTS(t0.Nanoseconds(), 0)}
+	for _, keyStr := range []string{"a", "b", "c"} {
+		key := roachpb.Key(keyStr)
+		putArgs := putArgs(key, []byte("value"))
+		if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &putArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Scan the span at t1 with max keys and verify the expected resume span.
+	span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}
+	sArgs := scanArgs(span.Key, span.EndKey)
+	t1 := 2 * time.Second
+	manualClock.Set(t1.Nanoseconds())
+	h.Timestamp = makeTS(t1.Nanoseconds(), 0)
+	h.MaxSpanRequestKeys = 2
+	reply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &sArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	sReply := reply.(*roachpb.ScanResponse)
+	if a, e := len(sReply.Rows), 2; a != e {
+		t.Errorf("expected %d rows; got %d", e, a)
+	}
+	expResumeSpan := &roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}
+	if a, e := sReply.ResumeSpan, expResumeSpan; !reflect.DeepEqual(a, e) {
+		t.Errorf("expected resume span %s; got %s", e, a)
+	}
+
+	// Verify the timestamp cache has been set for "b".Next(), but not for "c".
+	rTS, _ := store.tsCache.GetMaxRead(roachpb.Key("b").Next(), nil)
+	if a, e := rTS, makeTS(t1.Nanoseconds(), 0); a != e {
+		t.Errorf("expected timestamp cache for \"b\".Next() set to %s; got %s", e, a)
+	}
+	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("c"), nil)
+	if a, lt := rTS, makeTS(t1.Nanoseconds(), 0); !a.Less(lt) {
+		t.Errorf("expected timestamp cache for \"c\" set less than %s; got %s", lt, a)
+	}
+
+	// Reverse scan the span at t1 with max keys and verify the expected resume span.
+	t2 := 3 * time.Second
+	manualClock.Set(t2.Nanoseconds())
+	h.Timestamp = makeTS(t2.Nanoseconds(), 0)
+	rsArgs := reverseScanArgs(span.Key, span.EndKey)
+	reply, pErr = client.SendWrappedWith(context.Background(), store.testSender(), h, &rsArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	rsReply := reply.(*roachpb.ReverseScanResponse)
+	if a, e := len(rsReply.Rows), 2; a != e {
+		t.Errorf("expected %d rows; got %d", e, a)
+	}
+	expResumeSpan = &roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("a").Next()}
+	if a, e := rsReply.ResumeSpan, expResumeSpan; !reflect.DeepEqual(a, e) {
+		t.Errorf("expected resume span %s; got %s", e, a)
+	}
+
+	// Verify the timestamp cache has been set for "a".Next(), but not for "a".
+	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("a").Next(), nil)
+	if a, e := rTS, makeTS(t2.Nanoseconds(), 0); a != e {
+		t.Errorf("expected timestamp cache for \"a\".Next() set to %s; got %s", e, a)
+	}
+	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+	if a, lt := rTS, makeTS(t2.Nanoseconds(), 0); !a.Less(lt) {
+		t.Errorf("expected timestamp cache for \"a\" set less than %s; got %s", lt, a)
+	}
+}
+
 // TestStoreScanIntents verifies that a scan across 10 intents resolves
 // them in one fell swoop using both consistent and inconsistent reads.
 func TestStoreScanIntents(t *testing.T) {

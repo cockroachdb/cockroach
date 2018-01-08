@@ -2063,28 +2063,21 @@ func (r *Replica) updateTimestampCache(ba *roachpb.BatchRequest, br *roachpb.Bat
 				tc.Add(key, nil, ts, txnID, false /* readCache */)
 			case *roachpb.ScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
-				if ba.Header.MaxSpanRequestKeys != 0 &&
-					ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
-					// If the scan requested a limited number of results and we hit the
-					// limit, truncate the span of keys to add to the timestamp cache
-					// to those that were returned.
-					//
-					// NB: We need to include any key read by the operation, even if
-					// not returned, in the span added to the timestamp cache in order
-					// to prevent phantom read anomalies. That means we can only
-					// perform this truncate if the scan requested a limited number of
-					// results and we hit that limit.
-					end = resp.Rows[len(resp.Rows)-1].Key.Next()
+				if resp.ResumeSpan != nil {
+					// Note that for forward scan, the resume span will start at
+					// the (last key read).Next(), which is actually the correct
+					// end key for the span to update the timestamp cache.
+					end = resp.ResumeSpan.Key
 				}
 				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
 			case *roachpb.ReverseScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
-				if ba.Header.MaxSpanRequestKeys != 0 &&
-					ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
-					// See comment in the ScanRequest case. For revert scans, results
-					// are returned in reverse order and we truncate the start key of
-					// the span.
-					start = resp.Rows[len(resp.Rows)-1].Key
+				if resp.ResumeSpan != nil {
+					// Note that for reverse scans, the resume span's end key is
+					// an open interval. That means it was read as part of this op
+					// and won't be read on resume. It is the correct start key for
+					// the span to update the timestamp cache.
+					start = resp.ResumeSpan.EndKey
 				}
 				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
 			default:

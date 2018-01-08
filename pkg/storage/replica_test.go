@@ -1465,6 +1465,15 @@ func scanArgs(start, end []byte) roachpb.ScanRequest {
 	}
 }
 
+func reverseScanArgs(start, end []byte) roachpb.ReverseScanRequest {
+	return roachpb.ReverseScanRequest{
+		Span: roachpb.Span{
+			Key:    start,
+			EndKey: end,
+		},
+	}
+}
+
 func beginTxnArgs(
 	key []byte, txn *roachpb.Transaction,
 ) (roachpb.BeginTransactionRequest, roachpb.Header) {
