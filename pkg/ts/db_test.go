@@ -160,6 +160,15 @@ func (tm *testModel) assertKeyCount(expected int) {
 	}
 }
 
+// assertActualKeyCount achieves the same purpose as assertKeyCount, but by
+// checking the actual data rather than the model data.
+func (tm *testModel) assertActualKeyCount(expected int) {
+	actualData := tm.getActualData()
+	if a, e := len(actualData), expected; a != e {
+		tm.t.Errorf("actual data key count did not match expected value: %d != %d", a, e)
+	}
+}
+
 func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 	// Note the source, used to construct keys for model queries.
 	tm.seenSources[data.Source] = struct{}{}
@@ -404,6 +413,76 @@ func TestPollSource(t *testing.T) {
 	}
 	tm.assertKeyCount(3)
 	tm.assertModelCorrect()
+}
+
+// TestDisableStorage verifies that disabling timeseries storage via the cluster
+// setting works properly.
+func TestDisableStorage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tm := newTestModel(t)
+	tm.Start()
+	defer tm.Stop()
+	TimeseriesStorageEnabled.Override(&tm.Cfg.Settings.SV, false)
+
+	// Basic storage operation: one data point.
+	tm.storeTimeSeriesData(Resolution10s, []tspb.TimeSeriesData{
+		{
+			Name: "test.metric",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(-446061360000000000, 100),
+			},
+		},
+	})
+	tm.assertActualKeyCount(0)
+
+	testSource := modelDataSource{
+		model:   tm,
+		r:       Resolution10s,
+		stopper: stop.NewStopper(),
+		datasets: [][]tspb.TimeSeriesData{
+			{
+				{
+					Name:   "test.metric.float",
+					Source: "cpu01",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						datapoint(1428713843000000000, 100.0),
+						datapoint(1428713843000000001, 50.2),
+						datapoint(1428713843000000002, 90.9),
+					},
+				},
+				{
+					Name:   "test.metric.float",
+					Source: "cpu02",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						datapoint(1428713843000000000, 900.8),
+						datapoint(1428713843000000001, 30.12),
+						datapoint(1428713843000000002, 72.324),
+					},
+				},
+			},
+			{
+				{
+					Name: "test.metric",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						datapoint(-446061360000000000, 100),
+					},
+				},
+			},
+		},
+	}
+
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
+	select {
+	case <-testSource.stopper.IsStopped():
+		t.Error("testSource data exhausted when polling should have been enabled")
+	case <-time.After(50 * time.Millisecond):
+		testSource.stopper.Stop(context.Background())
+	}
+	if a, e := testSource.calledCount, 0; a != e {
+		t.Errorf("testSource was called %d times, expected %d", a, e)
+	}
+	tm.assertActualKeyCount(0)
 }
 
 // TestPruneThreshold verifies that `PruneThreshold` returns correct result in nanoseconds
