@@ -135,6 +135,9 @@ type readTimeoutConn struct {
 func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
 	// net.Pipe does not support setting deadlines. See
 	// https://github.com/golang/go/blob/go1.7.4/src/net/pipe.go#L57-L67
+	//
+	// TODO(andrei): starting with Go 1.10, pipes are supposed to support
+	// timeouts, so this should go away when we upgrade the compiler.
 	if c.LocalAddr().Network() == "pipe" {
 		return c
 	}
