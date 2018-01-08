@@ -35,7 +35,7 @@
   "devDependencies": {
     "@types/analytics-node": "^0.0.30",
     "@types/bytebuffer": "^5.0.33",
-    "@types/chai": "^3.4.35",
+    "@types/chai": "^4.1.0",
     "@types/classnames": "^0.0.32",
     "@types/combokeys": "^2.4.5",
     "@types/d3": "<4.0.0",
@@ -67,7 +67,7 @@
     "babel-preset-react": "^6.23.0",
     "bytebuffer": "^5.0.1",
     "cache-loader": "^1.0.3",
-    "chai": "^3.5.0",
+    "chai": "^4.1.0",
     "css-loader": "^0.28.0",
     "d3": "<4.0.0",
     "dagre-layout": "^0.8.0",
