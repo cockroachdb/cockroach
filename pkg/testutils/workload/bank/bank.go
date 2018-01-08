@@ -59,6 +59,7 @@ func init() {
 var bankMeta = workload.Meta{
 	Name:        `bank`,
 	Description: `Bank models a set of accounts with currency balances`,
+	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &bank{flags: pflag.NewFlagSet(`kv`, pflag.ContinueOnError)}
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
