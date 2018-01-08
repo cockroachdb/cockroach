@@ -258,9 +258,6 @@ func DrainAndClose(ctx context.Context, dst RowReceiver, cause error, srcs ...Ro
 		DrainAndForwardMetadata(ctx, srcs[0], dst)
 		wg.Wait()
 	}
-	// for _, input := range srcs {
-	// 	DrainAndForwardMetadata(ctx, input, dst)
-	// }
 	sendTraceData(ctx, dst)
 	dst.ProducerDone()
 }
@@ -393,7 +390,7 @@ func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (rc *RowChannel) ConsumerDone() {
-	rc.consumerDone("RowChannel")
+	rc.consumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -629,11 +626,12 @@ func (rb *RowBuffer) ConsumerDone() {
 // ConsumerClosed is part of the RowSource interface.
 func (rb *RowBuffer) ConsumerClosed() {
 	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
-	if status != ConsumerClosed {
-		atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(ConsumerClosed))
-		if rb.args.OnConsumerClosed != nil {
-			rb.args.OnConsumerClosed(rb)
-		}
+	if status == ConsumerClosed {
+		log.Fatalf(context.Background(), "RowBuffer already closed")
+	}
+	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(ConsumerClosed))
+	if rb.args.OnConsumerClosed != nil {
+		rb.args.OnConsumerClosed(rb)
 	}
 }
 
