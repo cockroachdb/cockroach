@@ -67,6 +67,9 @@ export const refreshRaft = raftReducerObj.refresh;
 export const versionReducerObj = new CachedDataReducer(versionCheck, "version");
 export const refreshVersion = versionReducerObj.refresh;
 
+export const locationsReducerObj = new CachedDataReducer(api.getLocations, "locations", moment.duration(10, "m"));
+export const refreshLocations = locationsReducerObj.refresh;
+
 const databasesReducerObj = new CachedDataReducer(
   api.getDatabaseList,
   "databases",
@@ -219,6 +222,7 @@ export interface APIReducersState {
   nodes: CachedDataReducerState<NodeStatus$Properties[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
+  locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<api.DatabasesResponseMessage>;
   databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
@@ -242,6 +246,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
   [raftReducerObj.actionNamespace]: raftReducerObj.reducer,
   [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
+  [locationsReducerObj.actionNamespace]: locationsReducerObj.reducer,
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
   [databaseDetailsReducerObj.actionNamespace]: databaseDetailsReducerObj.reducer,
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
