@@ -896,7 +896,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if err != nil {
 					return nil, err
 				}
-				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(t)}, err
+				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(t)}, nil
 			},
 		},
 		BinOp{
@@ -909,7 +909,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if err != nil {
 					return nil, err
 				}
-				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(t)}, err
+				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(t)}, nil
 			},
 		},
 	},
