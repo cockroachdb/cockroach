@@ -45,6 +45,10 @@ type showTraceNode struct {
 // ShowTrace shows the current stored session trace.
 // Privileges: None.
 func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
+	if n.TraceType == tree.ShowTraceLocality {
+		return p.ShowTraceLocality(ctx, n)
+	}
+
 	const fullSelection = `
        timestamp,
        timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
@@ -73,7 +77,7 @@ SELECT %s
 	}
 
 	whereClause := ""
-	if n.OnlyKVTrace {
+	if n.TraceType == tree.ShowTraceKV {
 		whereClause = `
 WHERE message LIKE 'fetched: %'
    OR message LIKE 'CPut %'
@@ -110,7 +114,8 @@ WHERE message LIKE 'fetched: %'
 		plan.Close(ctx)
 		return nil, err
 	}
-	tracePlan, err := p.makeShowTraceNode(stmtPlan, n.OnlyKVTrace /* kvTracingEnabled */)
+	tracePlan, err := p.makeShowTraceNode(
+		stmtPlan, n.TraceType == tree.ShowTraceKV /* kvTracingEnabled */)
 	if err != nil {
 		plan.Close(ctx)
 		stmtPlan.Close(ctx)

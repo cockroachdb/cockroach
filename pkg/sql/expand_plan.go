@@ -76,6 +76,12 @@ func doExpandPlan(
 			return plan, err
 		}
 
+	case *showTraceLocalityNode:
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
+		if err != nil {
+			return plan, err
+		}
+
 	case *explainPlanNode:
 		if n.expanded {
 			n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
@@ -472,6 +478,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *showTraceNode:
+		n.plan = p.simplifyOrderings(n.plan, nil)
+
+	case *showTraceLocalityNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *explainPlanNode:

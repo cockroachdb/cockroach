@@ -79,24 +79,35 @@ func (node *ShowDatabases) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW DATABASES")
 }
 
+// ShowTraceType is an enum of SHOW TRACE variants.
+type ShowTraceType string
+
+// A list of the SHOW TRACE variants.
+const (
+	ShowTraceRaw      ShowTraceType = "TRACE"
+	ShowTraceKV       ShowTraceType = "KV TRACE"
+	ShowTraceLocality ShowTraceType = "LOCALITY TRACE"
+)
+
 // ShowTrace represents a SHOW TRACE FOR <stmt>/SESSION statement.
 type ShowTrace struct {
 	// If statement is nil, this is asking for the session trace.
-	Statement   Statement
-	OnlyKVTrace bool
-	Compact     bool
+	Statement Statement
+	TraceType ShowTraceType
+	Compact   bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTrace) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW")
+	if node.TraceType == ShowTraceLocality {
+		ctx.WriteString("EXPERIMENTAL ")
+	}
+	ctx.WriteString("SHOW ")
 	if node.Compact {
-		ctx.WriteString(" COMPACT")
+		ctx.WriteString("COMPACT ")
 	}
-	if node.OnlyKVTrace {
-		ctx.WriteString(" KV")
-	}
-	ctx.WriteString(" TRACE FOR ")
+	ctx.WriteString(string(node.TraceType))
+	ctx.WriteString(" FOR ")
 	if node.Statement == nil {
 		ctx.WriteString("SESSION")
 	} else {

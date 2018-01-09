@@ -492,7 +492,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   KEY KEYS KV
 
 %token <str>   LATERAL LC_CTYPE LC_COLLATE
-%token <str>   LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
+%token <str>   LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL LOCALITY
 %token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
 %token <str>   MATCH MINVALUE MAXVALUE MINUTE MONTH
@@ -2810,21 +2810,25 @@ show_jobs_stmt:
 show_trace_stmt:
   SHOW opt_compact TRACE FOR SESSION
   {
-    $$.val = &tree.ShowTrace{Statement: nil, Compact: $2.bool() }
+    $$.val = &tree.ShowTrace{Statement: nil, TraceType: tree.ShowTraceRaw, Compact: $2.bool() }
   }
 | SHOW opt_compact TRACE error // SHOW HELP: SHOW TRACE
 | SHOW opt_compact KV TRACE FOR SESSION
   {
-    $$.val = &tree.ShowTrace{Statement: nil, OnlyKVTrace: true, Compact: $2.bool() }
+    $$.val = &tree.ShowTrace{Statement: nil, TraceType: tree.ShowTraceKV, Compact: $2.bool() }
   }
 | SHOW opt_compact KV error // SHOW HELP: SHOW TRACE
 | SHOW opt_compact TRACE FOR explainable_stmt
   {
-    $$.val = &tree.ShowTrace{Statement: $5.stmt(), Compact: $2.bool() }
+    $$.val = &tree.ShowTrace{Statement: $5.stmt(), TraceType: tree.ShowTraceRaw, Compact: $2.bool() }
   }
 | SHOW opt_compact KV TRACE FOR explainable_stmt
   {
-    $$.val = &tree.ShowTrace{Statement: $6.stmt(), OnlyKVTrace: true, Compact: $2.bool() }
+    $$.val = &tree.ShowTrace{Statement: $6.stmt(), TraceType: tree.ShowTraceKV, Compact: $2.bool() }
+  }
+| EXPERIMENTAL SHOW LOCALITY TRACE FOR explainable_stmt
+  {
+    $$.val = &tree.ShowTrace{Statement: $6.stmt(), TraceType: tree.ShowTraceLocality}
   }
 
 opt_compact:
@@ -7276,6 +7280,7 @@ unreserved_keyword:
 | LEVEL
 | LIST
 | LOCAL
+| LOCALITY
 | LOW
 | MATCH
 | MINUTE

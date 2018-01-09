@@ -37,6 +37,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *showTraceNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
 
+	case *showTraceLocalityNode:
+		setNeededColumns(n.plan, allColumns(n.plan))
+
 	case *explainPlanNode:
 		if n.optimized {
 			setNeededColumns(n.plan, allColumns(n.plan))

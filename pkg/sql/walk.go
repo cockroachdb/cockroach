@@ -427,6 +427,9 @@ func (v *planVisitor) visit(plan planNode) {
 	case *showTraceNode:
 		v.visit(n.plan)
 
+	case *showTraceLocalityNode:
+		v.visit(n.plan)
+
 	case *explainPlanNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "expanded", strconv.FormatBool(n.expanded))
@@ -569,6 +572,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain dist_sql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
 	reflect.TypeOf(&showTraceNode{}):            "show trace for",
+	reflect.TypeOf(&showTraceLocalityNode{}):    "show trace for",
 	reflect.TypeOf(&filterNode{}):               "filter",
 	reflect.TypeOf(&groupNode{}):                "group",
 	reflect.TypeOf(&unaryNode{}):                "emptyrow",
