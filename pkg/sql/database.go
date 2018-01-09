@@ -351,9 +351,9 @@ func (p *planner) renameDatabase(
 	b.Put(descKey, descDesc)
 	b.Del(oldKey)
 
-	p.session.tables.addUncommittedDatabase(
+	p.Tables().addUncommittedDatabase(
 		oldName, descID, true /* dropped */)
-	p.session.tables.addUncommittedDatabase(
+	p.Tables().addUncommittedDatabase(
 		newName, descID, false /* dropped */)
 
 	if err := p.txn.Run(ctx, b); err != nil {

@@ -159,7 +159,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return nil
 	})
 
-	p.session.tables.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
+	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err

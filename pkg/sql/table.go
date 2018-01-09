@@ -667,7 +667,7 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	// done.
 	p.session.setTestingVerifyMetadata(nil)
 
-	p.session.tables.addUncommittedTable(*tableDesc)
+	p.Tables().addUncommittedTable(*tableDesc)
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	descVal := sqlbase.WrapDescriptor(tableDesc)
@@ -720,7 +720,7 @@ func expandTableGlob(
 func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableName) error {
 	t := *tn
 
-	descFunc := p.session.tables.getTableVersion
+	descFunc := p.Tables().getTableVersion
 	if p.avoidCachedDescriptors {
 		descFunc = getTableOrViewDesc
 	}

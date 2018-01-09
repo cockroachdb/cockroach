@@ -52,6 +52,9 @@ type extendedEvalContext struct {
 	// MemMetrics represent the group of metrics to which execution should
 	// contribute.
 	MemMetrics *MemoryMetrics
+
+	// Tables points to the Session's table collection.
+	Tables *TableCollection
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -237,6 +240,7 @@ func makeInternalPlanner(
 	}
 
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+	p.extendedEvalCtx.Tables = &s.tables
 
 	return p
 }
@@ -256,13 +260,17 @@ func (p *planner) EvalContext() *tree.EvalContext {
 	return &p.extendedEvalCtx.EvalContext
 }
 
+func (p *planner) Tables() *TableCollection {
+	return p.extendedEvalCtx.Tables
+}
+
 // ExecCfg implements the PlanHookState interface.
 func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.session.execCfg
 }
 
 func (p *planner) LeaseMgr() *LeaseManager {
-	return p.session.tables.leaseMgr
+	return p.Tables().leaseMgr
 }
 
 func (p *planner) User() string {
@@ -405,7 +413,7 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 func (p *planner) lookupFKTable(
 	ctx context.Context, tableID sqlbase.ID,
 ) (sqlbase.TableLookup, error) {
-	table, err := p.session.tables.getTableVersionByID(ctx, p.txn, tableID)
+	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID)
 	if err != nil {
 		if err == errTableAdding {
 			return sqlbase.TableLookup{IsAdding: true}, nil

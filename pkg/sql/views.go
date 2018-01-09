@@ -114,7 +114,7 @@ func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor
 	// We run as NodeUser because we may update system descriptors.
 	p := makeInternalPlanner("recompute-view-dependencies", txn, security.NodeUser, lm.memMetrics)
 	defer finishInternalPlanner(p)
-	p.session.tables.leaseMgr = lm
+	p.Tables().leaseMgr = lm
 
 	log.VEventf(ctx, 2, "recomputing view dependencies")
 

@@ -113,7 +113,7 @@ func (p *planner) printForeignKeyConstraint(
 	if !fk.IsSet() {
 		return nil
 	}
-	fkTable, err := p.session.tables.getTableVersionByID(ctx, p.txn, fk.Table)
+	fkTable, err := p.Tables().getTableVersionByID(ctx, p.txn, fk.Table)
 	if err != nil {
 		return err
 	}

@@ -644,6 +644,7 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 		Tracing:        &s.Tracing,
 		StatusServer:   statusServer,
 		MemMetrics:     s.memMetrics,
+		Tables:         &s.tables,
 	}
 }
 
