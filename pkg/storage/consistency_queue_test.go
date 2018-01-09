@@ -20,13 +20,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
 )
 
 // TestConsistencyQueueRequiresLive verifies the queue will not
@@ -174,5 +182,158 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	case <-notifyPanic:
 	case <-time.After(5 * time.Second):
 		t.Fatal("CheckConsistency() failed to panic as expected")
+	}
+}
+
+// TestConsistencyQueueAdjustStats is an end-to-end test of the mechanism CockroachDB
+// employs to adjust incorrect MVCCStats ("incorrect" meaning not an inconsistency of
+// these stats between replicas, but a delta between persisted stats and those one
+// would obtain via a recomputation from the on-disk state), namely a call to
+// AdjustStats triggered from the consistency checker (which also recomputes the stats).
+//
+// The test splits off a range on a single node cluster backed by an on-disk RocksDB
+// instance, and takes that node offline to perturb its stats. Next, it restarts the
+// node as part of a cluster, upreplicates the range, and waits for the stats
+// divergence to disappear.
+//
+// The upreplication here is immaterial and serves only to add realism to the test.
+func TestConsistencyQueueAdjustStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	path, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	// Set testing knobs that let the consistency queue run in a tight loop.
+	knobs := base.TestingKnobs{
+		Store: &storage.StoreTestingKnobs{
+			DisableLastProcessedCheck: true,
+		},
+	}
+
+	clusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: knobs,
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				Knobs: knobs, // need to pass this twice
+				StoreSpecs: []base.StoreSpec{{
+					Path: path,
+				}},
+			},
+		},
+	}
+
+	key := []byte("a")
+
+	computeDelta := func(db *client.DB) enginepb.MVCCStats {
+		var b client.Batch
+		b.AddRawRequest(&roachpb.AdjustStatsRequest{
+			Span:   roachpb.Span{Key: key},
+			DryRun: true,
+		})
+		if err := db.Run(ctx, &b); err != nil {
+			t.Fatal(err)
+		}
+		resp := b.RawResponse().Responses[0].GetInner().(*roachpb.AdjustStatsResponse)
+		delta := enginepb.MVCCStats(resp.AddedDelta)
+		delta.AgeTo(0)
+		return delta
+	}
+
+	rangeID := func() roachpb.RangeID {
+		tc := testcluster.StartTestCluster(t, 1, clusterArgs)
+		defer tc.Stopper().Stop(context.TODO())
+
+		db0 := tc.Servers[0].DB()
+
+		// Split off a range so that we get away from the timeseries writes, which
+		// pollute the stats with ContainsEstimates=true. Note that the split clears
+		// the right hand side (which is what we operate on) from that flag.
+		if err := db0.AdminSplit(ctx, key, key); err != nil {
+			t.Fatal(err)
+		}
+
+		delta := computeDelta(db0)
+
+		if delta != (enginepb.MVCCStats{}) {
+			t.Fatalf("unexpected initial stats adjustment of %+v", delta)
+		}
+
+		rangeDesc, err := tc.LookupRange(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return rangeDesc.RangeID
+	}()
+
+	func() {
+		cache := engine.NewRocksDBCache(1 << 20)
+		defer cache.Release()
+		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
+			Dir:       path,
+			MustExist: true,
+		}, cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer eng.Close()
+
+		statsKey := keys.RangeStatsKey(rangeID)
+
+		var ms enginepb.MVCCStats
+		ok, err := engine.MVCCGetProto(
+			ctx, eng, statsKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &ms,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			t.Fatal("no persisted stats")
+		}
+
+		// Put some garbage in the stats that we're hoping the consistency queue will
+		// trigger a removal of via AdjustStats.
+		ms.LiveCount += 123
+
+		// Overwrite with the new stats; remember that this range hasn't upreplicated,
+		// so the consistency checker won't see any replica divergence when it runs,
+		// but it should definitely see that its recomputed stats mismatch.
+		if err := engine.MVCCPutProto(
+			ctx, eng, nil, statsKey, hlc.Timestamp{}, nil, &ms,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	// Now that we've tampered with the stats, restart the cluster and extend it
+	// to three nodes.
+	tc := testcluster.StartTestCluster(t, 3, clusterArgs)
+	defer tc.Stopper().Stop(context.TODO())
+
+	if _, err := tc.AddReplicas(
+		key, tc.Target(1), tc.Target(2),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	db0 := tc.Servers[0].DB()
+
+	// The stats should magically repair themselves. The high timeout is only
+	// relevant in stress testing; it's usually quick.
+	if err := retry.ForDuration(3*time.Minute, func() error {
+		delta := computeDelta(db0)
+		if delta == (enginepb.MVCCStats{}) {
+			return nil
+		}
+		err := errors.Errorf("stats still in need of adjustment: %+v", delta)
+		log.Info(ctx, err)
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

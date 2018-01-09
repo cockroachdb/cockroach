@@ -379,6 +379,35 @@ message CheckConsistencyResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An AdjustStatsRequest triggers a stats recomputation on the Range addressed by
+// the request.
+//
+// Since this request targets a specific Range, the start key must equal the
+// start key of the target Range.
+//
+// The stats recomputation touches essentially the whole range, but the command
+// avoids having to block other commands by taking care to not interleave
+// with splits, and by using the commutativity of stats updates. As a result,
+// it is safe to invoke at any time, including repeatedly, though it should be
+// used conservatively due to performing a full scan of the Range.
+message AdjustStatsRequest {
+  option (gogoproto.equal) = true;
+
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bytes computation_end_key = 2 [(gogoproto.casttype) = "Key"];
+  // When dry_run is true, the stats delta is computed, but no stats adjustment
+  // is performed.
+  bool dry_run = 3;
+}
+
+// An AdjustStatsResponse is the response to an AdjustStatsRequest.
+message AdjustStatsResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // added_delta is the adjustment made to the range's stats, i.e. `new_stats = old_stats + added_delta`.
+  storage.engine.enginepb.MVCCNetworkStats added_delta = 2 [(gogoproto.nullable) = false];
+}
+
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 message BeginTransactionRequest {
   option (gogoproto.equal) = true;
@@ -1150,6 +1179,7 @@ message RequestUnion {
   QueryTxnRequest query_txn = 33;
   AdminScatterRequest admin_scatter = 36;
   AddSSTableRequest add_sstable = 37;
+  AdjustStatsRequest adjust_stats = 39;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1200,6 +1230,7 @@ message ResponseUnion {
   QueryTxnResponse query_txn = 33;
   AdminScatterResponse admin_scatter = 36;
   AddSSTableResponse add_sstable = 37;
+  AdjustStatsResponse adjust_stats = 39;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

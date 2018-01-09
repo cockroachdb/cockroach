@@ -313,3 +313,17 @@ func NewBatch(b engine.Batch, spans *SpanSet) engine.Batch {
 		spans,
 	}
 }
+
+// UnwrapBatch returns the wrapped ReadWriter if it was created via `NewBatch`, and
+// the original input otherwise.
+func UnwrapBatch(rw engine.ReadWriter) engine.ReadWriter {
+	batch, ok := rw.(engine.Batch)
+	if !ok {
+		return rw
+	}
+	ssb, ok := batch.(*spanSetBatch)
+	if !ok {
+		return batch
+	}
+	return ssb.b
+}

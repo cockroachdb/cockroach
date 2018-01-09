@@ -104,9 +104,33 @@ func (r *Replica) CheckConsistency(
 		log.Error(ctx, buf.String())
 	}
 
-	// Everything is good, no further action necessary.
 	if inconsistencyCount == 0 {
-		return roachpb.CheckConsistencyResponse{}, nil
+		// The replicas were in sync. Check that the MVCCStats haven't diverged from
+		// what they should be. This code originated in the realization that there
+		// were many bugs in our stats computations. These are being fixed, but it
+		// is through this mechanism that existing ranges are updated. Hence, the
+		// logging below is relatively timid.
+		delta := enginepb.MVCCStats(results[0].Response.Delta)
+		delta.LastUpdateNanos = 0
+		if delta == (enginepb.MVCCStats{}) {
+			return roachpb.CheckConsistencyResponse{}, nil
+		}
+
+		// We've found that there's something to correct; send an AdjustStatsRequest.
+		// Note that this code runs only on the lease holder (at the time of initiating
+		// the computation), so this work isn't duplicated. Also, we're essentially
+		// paced by the consistency checker.
+		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
+
+		req := roachpb.AdjustStatsRequest{
+			Span: roachpb.Span{Key: desc.StartKey.AsRawKey()},
+		}
+
+		var b client.Batch
+		b.AddRawRequest(&req)
+
+		err := r.store.db.Run(ctx, &b)
+		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(err)
 	}
 
 	logFunc := log.Fatalf
@@ -173,7 +197,8 @@ func (r *Replica) collectChecksumFromReplica(
 
 // RunConsistencyCheck carries out a round of CheckConsistency/CollectChecksum
 // for the members of this range, returning the results (which it does not act
-// upon). The first result will belong to the local replica.
+// upon). The first result will belong to the local replica, and in particular
+// there is a first result when no error is returned.
 func (r *Replica) RunConsistencyCheck(
 	ctx context.Context, req roachpb.ComputeChecksumRequest,
 ) ([]ConsistencyCheckResult, error) {
@@ -312,6 +337,10 @@ func (r *Replica) computeChecksumDone(
 	if c, ok := r.mu.checksums[id]; ok {
 		if result != nil {
 			c.Checksum = result.SHA512[:]
+
+			delta := result.PersistedMS
+			delta.Subtract(result.RecomputedMS)
+			c.Delta = enginepb.MVCCNetworkStats(delta)
 		}
 		c.gcTimestamp = timeutil.Now().Add(batcheval.ReplicaChecksumGCInterval)
 		c.Snapshot = snapshot

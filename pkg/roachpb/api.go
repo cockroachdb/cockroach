@@ -512,6 +512,9 @@ func (*AdminScatterRequest) Method() Method { return AdminScatter }
 // Method implements the Request interface.
 func (*AddSSTableRequest) Method() Method { return AddSSTable }
 
+// Method implements the Request interface.
+func (*AdjustStatsRequest) Method() Method { return AdjustStats }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -730,6 +733,12 @@ func (r *AdminScatterRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *AddSSTableRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (r *AdjustStatsRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -954,6 +963,7 @@ func (*TransferLeaseRequest) flags() int {
 	// lease holder.
 	return isWrite | isAlone | skipLeaseCheck
 }
+func (*AdjustStatsRequest) flags() int              { return isWrite | isAlone }
 func (*ComputeChecksumRequest) flags() int          { return isWrite | isRange }
 func (*DeprecatedVerifyChecksumRequest) flags() int { return isWrite }
 func (*CheckConsistencyRequest) flags() int         { return isAdmin | isRange }
