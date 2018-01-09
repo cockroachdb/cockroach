@@ -620,7 +620,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 			setting, _ := settings.Lookup(k)
 			if err := addRow(
 				tree.NewDString(k),
-				tree.NewDString(setting.String(&p.session.execCfg.Settings.SV)),
+				tree.NewDString(setting.String(&p.ExecCfg().Settings.SV)),
 				tree.NewDString(setting.Typ()),
 				tree.NewDString(setting.Description()),
 			); err != nil {
@@ -1560,7 +1560,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			return err
 		}
 
-		g := p.session.execCfg.Gossip
+		g := p.ExecCfg().Gossip
 		var descriptors []roachpb.NodeDescriptor
 		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
@@ -1619,7 +1619,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			return err
 		}
 
-		g := p.session.execCfg.Gossip
+		g := p.ExecCfg().Gossip
 		var livenesses []storage.Liveness
 		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()

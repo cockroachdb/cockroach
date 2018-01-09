@@ -153,7 +153,9 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 			// Lookup the store in gossip.
 			var storeDesc roachpb.StoreDescriptor
 			gossipStoreKey := gossip.MakeStoreKey(storeID)
-			if err := params.p.session.execCfg.Gossip.GetInfoProto(gossipStoreKey, &storeDesc); err != nil {
+			if err := params.extendedEvalCtx.ExecCfg.Gossip.GetInfoProto(
+				gossipStoreKey, &storeDesc,
+			); err != nil {
 				return false, errors.Wrapf(err, "error looking up store %d", storeID)
 			}
 			nodeID = storeDesc.Node.NodeID
@@ -171,7 +173,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	}
 	rowKey = keys.MakeFamilyKey(rowKey, 0)
 
-	rangeDesc, err := lookupRangeDescriptor(params.ctx, params.p.session.execCfg.DB, rowKey)
+	rangeDesc, err := lookupRangeDescriptor(params.ctx, params.extendedEvalCtx.ExecCfg.DB, rowKey)
 	if err != nil {
 		return false, errors.Wrap(err, "error looking up range descriptor")
 	}

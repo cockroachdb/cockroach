@@ -152,7 +152,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		return err
 	}
 
-	newID, err := GenerateUniqueDescID(ctx, p.session.execCfg.DB)
+	newID, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 	if err != nil {
 		return err
 	}

@@ -101,7 +101,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 	if err != nil {
 		return false, err
 	}
