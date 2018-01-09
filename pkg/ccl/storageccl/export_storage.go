@@ -10,6 +10,8 @@ package storageccl
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"hash/fnv"
@@ -62,12 +64,17 @@ const (
 	authParamImplicit = "implicit"
 	authParamDefault  = "default"
 
-	cloudstoragePrefix       = "cloudstorage"
-	cloudstorageGS           = cloudstoragePrefix + ".gs"
-	cloudstorageDefault      = ".default"
-	cloudstorageKey          = ".key"
+	cloudstoragePrefix = "cloudstorage"
+	cloudstorageGS     = cloudstoragePrefix + ".gs"
+	cloudstorageHTTP   = cloudstoragePrefix + ".http"
+
+	cloudstorageDefault = ".default"
+	cloudstorageKey     = ".key"
+
 	cloudstorageGSDefault    = cloudstorageGS + cloudstorageDefault
 	cloudstorageGSDefaultKey = cloudstorageGSDefault + cloudstorageKey
+
+	cloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
 )
 
 // ExportStorageConfFromURI generates an ExportStorage config from a URI string.
@@ -154,7 +161,7 @@ func MakeExportStorage(
 	case roachpb.ExportStorageProvider_LocalFile:
 		return makeLocalStorage(dest.LocalFile.Path, settings)
 	case roachpb.ExportStorageProvider_Http:
-		return makeHTTPStorage(dest.HttpPath.BaseUri)
+		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
 	case roachpb.ExportStorageProvider_S3:
 		return makeS3Storage(ctx, dest.S3Config)
 	case roachpb.ExportStorageProvider_GoogleCloud:
@@ -200,6 +207,11 @@ var (
 	gcsDefault = settings.RegisterStringSetting(
 		cloudstorageGSDefaultKey,
 		"if set, JSON key to use during Google Cloud Storage operations",
+		"",
+	)
+	httpCustomCA = settings.RegisterStringSetting(
+		cloudstorageHTTPCASetting,
+		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 		"",
 	)
 )
@@ -298,11 +310,23 @@ type httpStorage struct {
 
 var _ ExportStorage = &httpStorage{}
 
-func makeHTTPStorage(base string) (ExportStorage, error) {
+func makeHTTPStorage(base string, settings *cluster.Settings) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but base path not provided")
 	}
-	client := &http.Client{Transport: &http.Transport{}}
+
+	var tlsConf *tls.Config
+	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not load system root CA pool")
+		}
+		if !roots.AppendCertsFromPEM([]byte(pem)) {
+			return nil, errors.Errorf("failed to parse root CA certificate from %q", pem)
+		}
+		tlsConf = &tls.Config{RootCAs: roots}
+	}
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConf}}
 	uri, err := url.Parse(base)
 	if err != nil {
 		return nil, err

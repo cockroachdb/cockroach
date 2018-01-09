@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -253,7 +254,7 @@ func TestPutHttp(t *testing.T) {
 
 	makeServer := func() (*url.URL, func() int, func()) {
 		var files int
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			localfile := filepath.Join(tmp, filepath.Base(r.URL.Path))
 			switch r.Method {
 			case "PUT":
@@ -285,6 +286,23 @@ func TestPutHttp(t *testing.T) {
 				http.Error(w, "unsupported method "+r.Method, 400)
 			}
 		}))
+
+		u := testSettings.MakeUpdater()
+		if err := u.Set(
+			cloudstorageHTTPCASetting,
+			string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
+			"s",
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		cleanup := func() {
+			srv.Close()
+			if err := u.Set(cloudstorageHTTPCASetting, "", "s"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		t.Logf("Mock HTTP Storage %q", srv.URL)
 		uri, err := url.Parse(srv.URL)
 		if err != nil {
@@ -292,7 +310,7 @@ func TestPutHttp(t *testing.T) {
 			t.Fatal(err)
 		}
 		uri.Path = path.Join(uri.Path, "testing")
-		return uri, func() int { return files }, srv.Close
+		return uri, func() int { return files }, cleanup
 	}
 
 	t.Run("singleHost", func(t *testing.T) {
