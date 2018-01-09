@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -437,7 +438,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 		// Stats should agree with a recomputation.
 		now := r.store.Clock().Now()
-		if ms, err := ComputeStatsForRange(r.Desc(), eng, now.WallTime); err != nil {
+		if ms, err := rditer.ComputeStatsForRange(r.Desc(), eng, now.WallTime); err != nil {
 			t.Errorf("failure computing range's stats: %s", err)
 		} else if ms != rs {
 			t.Errorf("expected range's stats to agree with recomputation: %s", pretty.Diff(ms, rs))

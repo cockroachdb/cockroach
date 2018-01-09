@@ -9023,3 +9023,89 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 		return q
 	})
 }
+
+func TestReplicaRecomputeStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	key := roachpb.RKey("a")
+	repl := tc.store.LookupReplica(key, nil)
+	desc := repl.Desc()
+	sKey := desc.StartKey.AsRawKey()
+
+	const errMismatch = "descriptor mismatch; range likely merged"
+
+	type testCase struct {
+		name     string
+		key      roachpb.Key
+		expDelta enginepb.MVCCStats
+		expErr   string
+	}
+
+	runTest := func(test testCase) {
+		t.Run(test.name, func(t *testing.T) {
+			args := &roachpb.RecomputeStatsRequest{
+				Span: roachpb.Span{
+					Key: test.key,
+				},
+			}
+
+			resp, pErr := tc.SendWrapped(args)
+			if !testutils.IsPError(pErr, test.expErr) {
+				t.Fatalf("got:\n%s\nexpected: %s", pErr, test.expErr)
+			}
+			if test.expErr != "" {
+				return
+			}
+
+			delta := enginepb.MVCCStats(resp.(*roachpb.RecomputeStatsResponse).AddedDelta)
+			delta.AgeTo(test.expDelta.LastUpdateNanos)
+
+			if delta != test.expDelta {
+				t.Fatal("diff(wanted, actual) = ", strings.Join(pretty.Diff(test.expDelta, delta), "\n"))
+			}
+		})
+	}
+
+	for _, test := range []testCase{
+		// Non-matching endpoints.
+		{"leftmismatch", roachpb.Key("a"), enginepb.MVCCStats{}, errMismatch},
+		// Recomputation that shouldn't find anything.
+		{"noop", sKey, enginepb.MVCCStats{}, ""},
+	} {
+		runTest(test)
+	}
+
+	ctx := context.Background()
+	seed := randutil.NewPseudoSeed()
+	t.Logf("seed is %d", seed)
+	rnd := rand.New(rand.NewSource(seed))
+
+	repl.raftMu.Lock()
+	repl.mu.Lock()
+	ms := repl.mu.state.Stats // intentionally mutated below
+	disturbMS := enginepb.NewPopulatedMVCCStats(rnd, false)
+	disturbMS.ContainsEstimates = false
+	ms.Add(*disturbMS)
+	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.engine, ms)
+	repl.assertStateLocked(ctx, tc.engine)
+	repl.mu.Unlock()
+	repl.raftMu.Unlock()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We have `stored ms = recomputable ms + disturbMS`, and so the returned delta
+	// should be `recomputable ms - stored ms = -disturbMS`.
+	var expDelta enginepb.MVCCStats
+	expDelta.Subtract(*disturbMS)
+
+	runTest(testCase{"randdelta", sKey, expDelta, ""})
+	if !t.Failed() {
+		runTest(testCase{"noopagain", sKey, enginepb.MVCCStats{}, ""})
+	}
+}

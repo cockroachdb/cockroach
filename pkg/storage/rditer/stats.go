@@ -12,13 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package rditer
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 )
 
 // ComputeStatsForRange computes the stats for a given range by
@@ -31,7 +30,7 @@ func ComputeStatsForRange(
 	defer iter.Close()
 
 	ms := enginepb.MVCCStats{}
-	for _, keyRange := range rditer.MakeReplicatedKeyRanges(d) {
+	for _, keyRange := range MakeReplicatedKeyRanges(d) {
 		msDelta, err := iter.ComputeStats(keyRange.Start, keyRange.End, nowNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
