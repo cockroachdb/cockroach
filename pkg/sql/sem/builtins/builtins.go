@@ -1602,6 +1602,10 @@ CockroachDB supports the following flags:
 
 	"jsonb_extract_path": {jsonExtractPathImpl},
 
+	"json_set": {jsonSetImpl, jsonSetWithCreateMissingImpl},
+
+	"jsonb_set": {jsonSetImpl, jsonSetWithCreateMissingImpl},
+
 	"jsonb_pretty": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"val", types.JSON}},
@@ -2493,6 +2497,53 @@ var jsonExtractPathImpl = tree.Builtin{
 		return &tree.DJSON{JSON: result}, nil
 	},
 	Info: "Returns the JSON value pointed to by the variadic arguments.",
+}
+
+func darrayToStringSlice(d tree.DArray) []string {
+	result := make([]string, len(d.Array))
+	for i, s := range d.Array {
+		result[i] = string(tree.MustBeDString(s))
+	}
+	return result
+}
+
+var jsonSetImpl = tree.Builtin{
+	Types: tree.ArgTypes{
+		{"val", types.JSON},
+		{"path", types.TArray{Typ: types.String}},
+		{"to", types.JSON},
+	},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
+		j, err := json.DeepSet(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, true)
+		if err != nil {
+			return nil, err
+		}
+		return &tree.DJSON{JSON: j}, nil
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments.",
+}
+
+var jsonSetWithCreateMissingImpl = tree.Builtin{
+	Types: tree.ArgTypes{
+		{"val", types.JSON},
+		{"path", types.TArray{Typ: types.String}},
+		{"to", types.JSON},
+		{"create_missing", types.Bool},
+	},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
+		j, err := json.DeepSet(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, bool(*(args[3].(*tree.DBool))))
+		if err != nil {
+			return nil, err
+		}
+		return &tree.DJSON{JSON: j}, nil
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments. " +
+		"If `create_missing` is false, new keys will not be inserted to objects " +
+		"and values will not be prepended or appended to arrays.",
 }
 
 var jsonTypeOfImpl = tree.Builtin{
