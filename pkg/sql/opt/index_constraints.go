@@ -413,9 +413,7 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		return spans, ok, false
 
 	case orOp:
-		spans, ok := c.makeSpansForOrExprs(offset, e.children)
-		// We don't have enough information to know if the spans are "tight".
-		return spans, ok, false
+		return c.makeSpansForOrExprs(offset, e.children)
 
 	case variableOp:
 		// Support (@1) as (@1 = TRUE) if @1 is boolean.
@@ -690,26 +688,29 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 // makeSpansForOrExprs calculates spans for a disjunction.
 func (c *indexConstraintCtx) makeSpansForOrExprs(
 	offset int, orExprs []*Expr,
-) (_ LogicalSpans, ok bool) {
+) (_ LogicalSpans, ok bool, tight bool) {
 	var spans LogicalSpans
 
+	tight = true
 	for i, orExpr := range orExprs {
-		exprSpans, ok, _ := c.makeSpansForExpr(offset, orExpr)
+		exprSpans, ok, exprTight := c.makeSpansForExpr(offset, orExpr)
 		if !ok {
 			// If we can't generate spans for a disjunct, exit early (this is
 			// equivalent to a full span).
-			return nil, false
+			return nil, false, false
 		}
+		// The OR is "tight" if all the spans are tight.
+		tight = tight && exprTight
 		if i == 0 {
 			spans = exprSpans
 		} else {
 			spans = c.mergeSpanSets(offset, spans, exprSpans)
 			if len(spans) == 1 && spans[0].IsFullSpan() {
-				return nil, false
+				return nil, false, false
 			}
 		}
 	}
-	return spans, true
+	return spans, true, tight
 }
 
 var constTrueExpr = &Expr{
@@ -927,6 +928,7 @@ type IndexConstraints struct {
 	filter *Expr
 
 	spansPopulated bool
+	spansTight     bool
 	spans          LogicalSpans
 }
 
@@ -938,7 +940,7 @@ func (ic *IndexConstraints) Init(
 		filter:             filter,
 		indexConstraintCtx: makeIndexConstraintCtx(colInfos, evalCtx),
 	}
-	ic.spans, ic.spansPopulated, _ = ic.makeSpansForExpr(0 /* offset */, ic.filter)
+	ic.spans, ic.spansPopulated, ic.spansTight = ic.makeSpansForExpr(0 /* offset */, ic.filter)
 }
 
 // Spans returns the spans created by Init. If ok is false, no constraints
@@ -960,8 +962,8 @@ func (ic *IndexConstraints) RemainingFilter(ivh *tree.IndexedVarHelper) tree.Typ
 		}
 		res = ic.filter
 	} else {
-		if len(ic.spans) == 0 {
-			// We have a contradiction, there is no remaining filter.
+		if ic.spansTight || len(ic.spans) == 0 {
+			// The spans are "tight", or we have a contradiction; there is no remaining filter.
 			return nil
 		}
 		res = ic.simplifyFilter(ic.filter, ic.spans)
