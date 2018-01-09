@@ -178,7 +178,7 @@ type Config struct {
 	// Enables linearizable behavior of operations on this node by making sure
 	// that no commit timestamp is reported back to the client until all other
 	// node clocks have necessarily passed it.
-	// Environment Variable: COCKROACH_LINEARIZABLE
+	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
 	Linearizable bool
 
 	// Maximum allowed clock offset for the cluster. If observed clock
@@ -388,7 +388,9 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
-	fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
+	if cfg.Linearizable {
+		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
+	}
 	if cfg.ListeningURLFile != "" {
 		fmt.Fprintln(w, "listening URL file\t", cfg.ListeningURLFile)
 	}
@@ -580,8 +582,7 @@ func (cfg *Config) RequireWebSession() bool {
 // variable based. Note that this only happens when initializing a node and not
 // when NewContext is called.
 func (cfg *Config) readEnvironmentVariables() {
-	// cockroach-linearizable
-	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", cfg.Linearizable)
+	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 }
