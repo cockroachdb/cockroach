@@ -448,6 +448,7 @@ var (
 	errStarNotAllowed       = pgerror.NewError(pgerror.CodeSyntaxError, "cannot use \"*\" in this context")
 	errInvalidDefaultUsage  = pgerror.NewError(pgerror.CodeSyntaxError, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
 	errInvalidMaxUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MAXVALUE can only appear within a range partition expression")
+	errInvalidMinUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MINVALUE can only appear within a range partition expression")
 )
 
 // TypeCheck implements the Expr interface.
@@ -760,6 +761,11 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 // TypeCheck implements the Expr interface.
 func (expr DefaultVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return nil, errInvalidDefaultUsage
+}
+
+// TypeCheck implements the Expr interface.
+func (expr MinVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
+	return nil, errInvalidMinUsage
 }
 
 // TypeCheck implements the Expr interface.
