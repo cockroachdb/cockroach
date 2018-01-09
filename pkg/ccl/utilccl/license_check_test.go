@@ -69,6 +69,46 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 	}
 }
 
+func TestGetLicenseTypePresent(t *testing.T) {
+	for _, tc := range []struct {
+		licenseType licenseccl.License_Type
+		expected    string
+	}{
+		{licenseccl.License_NonCommercial, "NonCommercial"},
+		{licenseccl.License_Enterprise, "Enterprise"},
+		{licenseccl.License_Evaluation, "Evaluation"},
+	} {
+		st := cluster.MakeTestingClusterSettings()
+		updater := st.MakeUpdater()
+		lic, _ := licenseccl.License{
+			ClusterID:         []uuid.UUID{},
+			Type:              tc.licenseType,
+			ValidUntilUnixSec: 0,
+		}.Encode()
+		if err := updater.Set("enterprise.license", lic, "s"); err != nil {
+			t.Fatal(err)
+		}
+		actual, err := getLicenseType(st)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actual != tc.expected {
+			t.Fatalf("expected license type %s, got %s", tc.expected, actual)
+		}
+	}
+}
+
+func TestGetLicenseTypeAbsent(t *testing.T) {
+	expected := "None"
+	actual, err := getLicenseType(cluster.MakeTestingClusterSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actual != expected {
+		t.Fatalf("expected license type %s, got %s", expected, actual)
+	}
+}
+
 func TestSettingBadLicenseStrings(t *testing.T) {
 	for _, tc := range []struct{ lic, err string }{
 		{"blah", "invalid license string"},

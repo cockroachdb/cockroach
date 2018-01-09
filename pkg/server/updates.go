@@ -155,7 +155,7 @@ func (s *Server) maybeCheckForUpdates(
 	return now.Add(updateCheckFrequency)
 }
 
-func addInfoToURL(url *url.URL, s *Server, runningTime time.Duration) {
+func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time.Duration) {
 	q := url.Query()
 	b := build.GetInfo()
 	q.Set("version", b.Tag)
@@ -164,6 +164,13 @@ func addInfoToURL(url *url.URL, s *Server, runningTime time.Duration) {
 	q.Set("nodeid", s.NodeID().String())
 	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
 	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
+
+	licenseType, err := LicenseTypeFn(s.st)
+	if err == nil {
+		q.Set("licensetype", licenseType)
+	} else {
+		log.Errorf(ctx, "error retrieving license type: %s", err)
+	}
 	url.RawQuery = q.Encode()
 }
 
@@ -175,7 +182,7 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
 	defer span.Finish()
 
-	addInfoToURL(updatesURL, s, runningTime)
+	addInfoToURL(ctx, updatesURL, s, runningTime)
 
 	res, err := http.Get(updatesURL.String())
 	if err != nil {
@@ -274,7 +281,7 @@ func (s *Server) reportDiagnostics(runningTime time.Duration) {
 		return
 	}
 
-	addInfoToURL(reportingURL, s, runningTime)
+	addInfoToURL(ctx, reportingURL, s, runningTime)
 	res, err := http.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
 	if err != nil {
 		if log.V(2) {
