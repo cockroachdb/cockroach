@@ -1,3 +1,4 @@
 grant_stmt ::=
-	'GRANT' ( 'ALL' | ( ( ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'DROP' | 'GRANT' | 'SELECT' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) ) 'ON' ( ( ( table_name ) ( ( ',' table_name ) )* ) | 'TABLE' ( ( table_name ) ( ( ',' table_name ) )* ) | 'DATABASE' ( ( name ) ( ( ',' name ) )* ) ) 'TO' ( ( name ) ( ( ',' name ) )* )
-	| 'GRANT' ( ( name ) ( ( ',' name ) )* ) 'TO' ( ( name ) ( ( ',' name ) )* ) opt_admin_option
+	'GRANT' ( 'ALL' | ( ( ( name | 'CREATE' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'SELECT' ) ) )* ) ) 'ON' ( ( ( table_name ) ( ( ',' table_name ) )* ) | 'TABLE' ( ( table_name ) ( ( ',' table_name ) )* ) | 'DATABASE' ( ( name ) ( ( ',' name ) )* ) ) 'TO' ( ( name ) ( ( ',' name ) )* )
+	| 'GRANT' ( ( ( name | 'CREATE' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'SELECT' ) ) )* ) 'TO' ( ( name ) ( ( ',' name ) )* )
+	| 'GRANT' ( ( ( name | 'CREATE' | 'SELECT' ) ) ( ( ',' ( name | 'CREATE' | 'SELECT' ) ) )* ) 'TO' ( ( name ) ( ( ',' name ) )* ) 'WITH' 'ADMIN' 'OPTION'

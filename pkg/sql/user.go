@@ -58,9 +58,9 @@ func GetUserHashedPassword(
 }
 
 // The map value is true if the map key is a role, false if it is a user.
-func GetAllUsersAndRoles(ctx context.Context, plan *planner) (map[string]bool, error) {
+func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT username,"isRole"  FROM system.users`
-	newPlanner := makeInternalPlanner("get-all-users-and-roles", plan.txn, security.RootUser, plan.p.session.memMetrics)
+	newPlanner := makeInternalPlanner("get-all-users-and-roles", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics)
 	defer finishInternalPlanner(newPlanner)
 	rows, err := newPlanner.queryRows(ctx, query)
 	if err != nil {

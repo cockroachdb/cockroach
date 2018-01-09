@@ -164,8 +164,6 @@ func ListFromStrings(strs []string) (List, error) {
 		}
 		ret[i] = k
 	}
-	// It needs to be sorted.
-	sort.Sort(ret)
 	return ret, nil
 }
 

@@ -85,8 +85,9 @@ explain_stmt ::=
 	| 'EXPLAIN' '(' explain_option_list ')' explainable_stmt
 
 grant_stmt ::=
-	'GRANT' privileges 'ON' targets 'TO' grantee_list
-	| 'GRANT' grantee_list 'TO' grantee_list opt_admin_option
+	'GRANT' privileges 'ON' targets 'TO' name_list
+	| 'GRANT' privilege_list 'TO' name_list
+	| 'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'
 
 insert_stmt ::=
 	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
@@ -110,8 +111,9 @@ resume_stmt ::=
 	'RESUME' 'JOB' a_expr
 
 revoke_stmt ::=
-	'REVOKE' privileges 'ON' targets 'FROM' grantee_list
-	| 'REVOKE' opt_admin_option_for grantee_list 'FROM' grantee_list
+	'REVOKE' privileges 'ON' targets 'FROM' name_list
+	| 'REVOKE' privilege_list 'FROM' name_list
+	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list
 
 savepoint_stmt ::=
 	'SAVEPOINT' name
@@ -302,12 +304,11 @@ privileges ::=
 	'ALL'
 	| privilege_list
 
-grantee_list ::=
+name_list ::=
 	( name ) ( ( ',' name ) )*
 
-opt_admin_option ::=
-	'WITH' 'ADMIN' 'OPTION'
-	| 
+privilege_list ::=
+	( privilege ) ( ( ',' privilege ) )*
 
 insert_target ::=
 	qualified_name
@@ -366,10 +367,6 @@ preparable_stmt ::=
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const
-
-opt_admin_option_for ::=
-	'ADMIN' 'OPTION' 'FOR'
-	| 
 
 scrub_table_stmt ::=
 	'EXPERIMENTAL' 'SCRUB' 'TABLE' qualified_name opt_as_of_clause opt_scrub_options_clause
@@ -546,9 +543,6 @@ alter_user_password_stmt ::=
 table_pattern_list ::=
 	( table_pattern ) ( ( ',' table_pattern ) )*
 
-name_list ::=
-	( name ) ( ( ',' name ) )*
-
 non_reserved_word_or_sconst ::=
 	non_reserved_word
 	| 'SCONST'
@@ -592,6 +586,7 @@ unreserved_keyword ::=
 	'ABORT'
 	| 'ACTION'
 	| 'ADD'
+	| 'ADMIN'
 	| 'ALTER'
 	| 'AT'
 	| 'BACKUP'
@@ -623,8 +618,10 @@ unreserved_keyword ::=
 	| 'DATABASES'
 	| 'DAY'
 	| 'DEALLOCATE'
+	| 'DELETE'
 	| 'DISCARD'
 	| 'DOUBLE'
+	| 'DROP'
 	| 'ENCODING'
 	| 'EXECUTE'
 	| 'EXPERIMENTAL'
@@ -644,6 +641,7 @@ unreserved_keyword ::=
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INDEXES'
+	| 'INSERT'
 	| 'INT2VECTOR'
 	| 'INTERLEAVE'
 	| 'INVERTED'
@@ -753,6 +751,7 @@ unreserved_keyword ::=
 	| 'UNBOUNDED'
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
+	| 'UPDATE'
 	| 'UPSERT'
 	| 'USE'
 	| 'USERS'
@@ -789,6 +788,7 @@ col_name_keyword ::=
 	| 'FLOAT'
 	| 'FLOAT4'
 	| 'FLOAT8'
+	| 'GRANT'
 	| 'GREATEST'
 	| 'GROUPING'
 	| 'IF'
@@ -875,8 +875,10 @@ expr_list ::=
 explain_option_name ::=
 	non_reserved_word
 
-privilege_list ::=
-	( privilege ) ( ( ',' privilege ) )*
+privilege ::=
+	name
+	| 'CREATE'
+	| 'SELECT'
 
 opt_conf_expr ::=
 	'(' name_list ')' where_clause
@@ -995,7 +997,7 @@ on_privilege_target_clause ::=
 	| 
 
 for_grantee_clause ::=
-	'FOR' grantee_list
+	'FOR' name_list
 	| 
 
 opt_compact ::=
@@ -1188,15 +1190,6 @@ table_name_with_index_list ::=
 table_name_list ::=
 	( any_name ) ( ( ',' any_name ) )*
 
-privilege ::=
-	'CREATE'
-	| 'DROP'
-	| 'GRANT'
-	| 'SELECT'
-	| 'INSERT'
-	| 'DELETE'
-	| 'UPDATE'
-
 column_def ::=
 	name typename col_qual_list
 
@@ -1266,16 +1259,13 @@ opt_array_bounds ::=
 	| 
 
 type_func_name_keyword ::=
-	'ADMIN'
-	| 'COLLATION'
+	'COLLATION'
+	| 'CREATE'
 	| 'CROSS'
-	| 'DELETE'
-	| 'DROP'
 	| 'FAMILY'
 	| 'FULL'
 	| 'INNER'
 	| 'ILIKE'
-	| 'INSERT'
 	| 'IS'
 	| 'JOIN'
 	| 'LEFT'
@@ -1287,7 +1277,6 @@ type_func_name_keyword ::=
 	| 'OVERLAPS'
 	| 'RIGHT'
 	| 'SIMILAR'
-	| 'UPDATE'
 
 reserved_keyword ::=
 	'ALL'
@@ -1306,7 +1295,6 @@ reserved_keyword ::=
 	| 'COLLATE'
 	| 'COLUMN'
 	| 'CONSTRAINT'
-	| 'CREATE'
 	| 'CURRENT_CATALOG'
 	| 'CURRENT_DATE'
 	| 'CURRENT_ROLE'
@@ -1327,7 +1315,6 @@ reserved_keyword ::=
 	| 'FOR'
 	| 'FOREIGN'
 	| 'FROM'
-	| 'GRANT'
 	| 'GROUP'
 	| 'HAVING'
 	| 'IN'
