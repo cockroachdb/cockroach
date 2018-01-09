@@ -86,6 +86,9 @@ func runTestFlow(
 	for {
 		row, meta := rowBuf.Next()
 		if meta != nil {
+			if meta.TxnMeta != nil {
+				continue
+			}
 			t.Fatalf("unexpected metadata: %v", meta)
 		}
 		if row == nil {
@@ -146,7 +149,7 @@ func checkDistAggregationInfo(
 		}
 	}
 
-	txn := client.NewTxn(srv.KVClient().(*client.DB), srv.NodeID())
+	txn := client.NewTxn(srv.DB(), srv.NodeID(), client.RootTxn)
 
 	// First run a flow that aggregates all the rows without any local stages.
 
@@ -388,7 +391,7 @@ func TestDistAggregationTable(t *testing.T) {
 		},
 	)
 
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	for fn, info := range DistAggregationTable {

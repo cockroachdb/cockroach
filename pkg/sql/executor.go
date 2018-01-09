@@ -509,7 +509,7 @@ func (e *Executor) Prepare(
 		// TODO(vivek): perhaps we should be more consistent and update
 		// session.TxnState.mu.txn, but more thought needs to be put into whether that
 		// is really needed.
-		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
+		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
 		if err := txn.SetIsolation(session.data.DefaultIsolationLevel); err != nil {
 			panic(fmt.Errorf("cannot set up txn for prepare %q: %v", stmtStr, err))
 		}
@@ -2120,23 +2120,10 @@ func shouldUseDistSQL(
 		return false, nil
 	}
 
-	var err error
-	var distribute bool
+	// Trigger limit propagation.
+	planner.setUnlimited(plan)
 
-	// Temporary workaround for #13376: if the transaction wrote something,
-	// we can't allow it to do DistSQL reads any more because we can't guarantee
-	// that the reads don't happen after the gateway's TxnCoordSender has
-	// abandoned the transaction (and so the reads could miss to see their own
-	// writes). We detect this by checking if the transaction's "anchor" key is
-	// set.
-	if planner.txn.AnchorKey() != nil {
-		err = errors.New("writing txn")
-	} else {
-		// Trigger limit propagation.
-		planner.setUnlimited(plan)
-		distribute, err = dp.CheckSupport(plan)
-	}
-
+	distribute, err := dp.CheckSupport(plan)
 	if err != nil {
 		// If the distSQLMode is ALWAYS, reject anything but SET.
 		if distSQLMode == sessiondata.DistSQLAlways && err != setNotSupportedError {

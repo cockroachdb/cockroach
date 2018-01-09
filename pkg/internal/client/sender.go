@@ -18,23 +18,55 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// Sender is the interface used to call into a Cockroach instance.
-// If the returned *roachpb.Error is not nil, no response should be returned.
+// TxnType specifies whether a transaction is the root (parent)
+// transaction, or a leaf (child) in a tree of client.Txns, as
+// is used in a DistSQL flow.
+type TxnType int
+
+const (
+	_ TxnType = iota
+	// RootTxn specifies this sender is the root transaction, and is
+	// responsible for aggregating all transactional state and
+	// finalizing the transaction.
+	RootTxn
+	// LeafTxn specifies this sender is for one of potentially many
+	// distributed transactional senders. The state frmo this sender
+	// must be propagated back to the root sender and used to augment
+	// its state before the transaction can be finalized.
+	LeafTxn
+)
+
+// Sender is the interface used to call into a CockroachDB instance.
+// If the returned *roachpb.Error is not nil, no response should be
+// returned.
 type Sender interface {
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
-// SenderWithDistSQLBackdoor is implemented by the TxnCoordSender to give
-// DistSQL some hacky powers when handling errors that happened on remote nodes.
-type SenderWithDistSQLBackdoor interface {
+// TxnSender is the interface used to call into a CockroachDB
+// instance when a transaction is active.
+type TxnSender interface {
 	Sender
 
-	// GetTxnState returns the state that the TxnCoordSender has for a
-	// transaction. The bool is false is no state is found.
-	GetTxnState(txnID uuid.UUID) (roachpb.Transaction, bool)
+	// GetMeta retrieves a copy of the TxnCoordMeta, which can be sent
+	// upstream in situations where there are multiple, distributed
+	// TxnSenders, to be combined via AugmentMeta().
+	GetMeta() roachpb.TxnCoordMeta
+	// AugmentMeta combines the TxnCoordMeta from another distributed
+	// TxnSender which is part of the same transaction.
+	AugmentMeta(meta roachpb.TxnCoordMeta)
+}
+
+// TxnSenderFactory is the interface used to create new instances
+// of TxnSender.
+type TxnSenderFactory interface {
+	// New returns a new instance of TxnSender. The rootOrLeaf parameter
+	// specifies whether the sender is the root or one of potentially
+	// many child "leaf" nodes in a tree of transaction objects, as is
+	// created during a DistSQL flow.
+	New(rootOrLeaf TxnType) TxnSender
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions
@@ -46,6 +78,32 @@ func (f SenderFunc) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	return f(ctx, ba)
+}
+
+// TxnSenderFunc is an adapter to allow the use of ordinary functions
+// as TxnSenders with GetMeta or AugmentMeta panicing with unimplemented.
+type TxnSenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+
+// Send calls f(ctx, c).
+func (f TxnSenderFunc) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	return f(ctx, ba)
+}
+
+// GetMeta implements TxnSender.
+func (f TxnSenderFunc) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+
+// AugmentMeta implements TxnSender.
+func (f TxnSenderFunc) AugmentMeta(_ roachpb.TxnCoordMeta) { panic("unimplemented") }
+
+// TxnSenderFactoryFunc is an adapter to allow the use of ordinary functions
+// as TxnSenderFactories.
+type TxnSenderFactoryFunc func(TxnType) TxnSender
+
+// New calls f().
+func (f TxnSenderFactoryFunc) New(rootOrLeaf TxnType) TxnSender {
+	return f(rootOrLeaf)
 }
 
 // SendWrappedWith is a convenience function which wraps the request in a batch

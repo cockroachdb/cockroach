@@ -110,7 +110,7 @@ func TestPlanningDuringSplits(t *testing.T) {
 	// Start a worker that continuously performs splits in the background.
 	tc.Stopper().RunWorker(context.TODO(), func(ctx context.Context) {
 		rng, _ := randutil.NewPseudoRand()
-		cdb := tc.Server(0).KVClient().(*client.DB)
+		cdb := tc.Server(0).DB()
 		for {
 			select {
 			case <-tc.Stopper().ShouldStop():

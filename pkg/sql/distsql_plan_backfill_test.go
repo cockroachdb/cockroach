@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -63,7 +62,7 @@ func TestDistBackfill(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(context.TODO())
-	cdb := tc.Server(0).KVClient().(*client.DB)
+	cdb := tc.Server(0).DB()
 
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "numtosquare", "x INT PRIMARY KEY, xsquared INT",

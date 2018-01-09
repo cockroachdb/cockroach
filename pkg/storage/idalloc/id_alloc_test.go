@@ -42,7 +42,7 @@ import (
 // by calling Stop.
 func newTestAllocator(t testing.TB) (*localtestcluster.LocalTestCluster, *idalloc.Allocator) {
 	s := &localtestcluster.LocalTestCluster{}
-	s.Start(t, testutils.NewNodeTestBaseContext(), kv.InitSenderForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), kv.InitFactoryForLocalTestCluster)
 	idAlloc, err := idalloc.NewAllocator(
 		s.Cfg.AmbientCtx,
 		keys.RangeIDGenerator,

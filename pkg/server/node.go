@@ -190,8 +190,8 @@ func bootstrapCluster(
 	cfg.AmbientCtx.Tracer = tr
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
-	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, cfg.Settings, stores, cfg.Clock, false, stopper, txnMetrics)
-	cfg.DB = client.NewDB(sender, cfg.Clock)
+	tcsFactory := kv.NewTxnCoordSenderFactory(cfg.AmbientCtx, cfg.Settings, stores, cfg.Clock, false /* linearizable */, stopper, txnMetrics)
+	cfg.DB = client.NewDB(tcsFactory, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
 	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {
 		return uuid.UUID{}, errors.Wrap(err, "while initializing cluster version")

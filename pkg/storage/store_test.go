@@ -61,12 +61,6 @@ var testIdent = roachpb.StoreIdent{
 	StoreID:   1,
 }
 
-// testSender is an implementation of the client.Sender interface
-// which passes all requests through to a single store.
-type testSender struct {
-	store *Store
-}
-
 func (s *Store) testSender() client.Sender {
 	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
 		if ba.RangeID == 0 {
@@ -75,6 +69,26 @@ func (s *Store) testSender() client.Sender {
 		return ba
 	})
 }
+
+// testSenderFactory is an implementation of the
+// client.TxnSenderFactory interface.
+type testSenderFactory struct {
+	store *Store
+}
+
+func (f *testSenderFactory) New(rootOrLeaf client.TxnType) client.TxnSender {
+	return &testSender{store: f.store}
+}
+
+// testSender is an implementation of the client.TxnSender interface
+// which passes all requests through to a single store.
+type testSender struct {
+	store *Store
+}
+
+func (db *testSender) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+
+func (db *testSender) AugmentMeta(roachpb.TxnCoordMeta) { panic("unimplemented") }
 
 // Send forwards the call to the single store. This is a poor man's
 // version of kv.TxnCoordSender, but it serves the purposes of
@@ -141,10 +155,10 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-	sender := &testSender{}
-	cfg.DB = client.NewDB(sender, cfg.Clock)
+	factory := &testSenderFactory{}
+	cfg.DB = client.NewDB(factory, cfg.Clock)
 	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
-	sender.store = store
+	factory.store = store
 	if err := store.Bootstrap(
 		context.TODO(), roachpb.StoreIdent{NodeID: 1, StoreID: 1}, cfg.Settings.Version.BootstrapVersion(),
 	); err != nil {

@@ -117,6 +117,7 @@
 		Intent
 		Lease
 		AbortSpanEntry
+		TxnCoordMeta
 		NotLeaseHolderError
 		NodeUnavailableError
 		RangeNotFoundError
