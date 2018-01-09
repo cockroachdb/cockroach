@@ -265,12 +265,12 @@ func (j *jsonEncoded) iterObject() (encodedObjectIterator, error) {
 	}, nil
 }
 
-func (j *jsonEncoded) IterObjectKey() (*ObjectKeyIterator, error) {
+func (j *jsonEncoded) ObjectIter() (*ObjectIterator, error) {
 	dec, err := j.shallowDecode()
 	if err != nil {
 		return nil, err
 	}
-	return dec.IterObjectKey()
+	return dec.ObjectIter()
 }
 
 func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
