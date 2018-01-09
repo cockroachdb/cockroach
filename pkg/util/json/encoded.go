@@ -265,6 +265,14 @@ func (j *jsonEncoded) iterObject() (encodedObjectIterator, error) {
 	}, nil
 }
 
+func (j *jsonEncoded) StripNulls() (JSON, error) {
+	dec, err := j.shallowDecode()
+	if err != nil {
+		return nil, err
+	}
+	return dec.StripNulls()
+}
+
 func (j *jsonEncoded) IterObjectKey() (*ObjectKeyIterator, error) {
 	dec, err := j.shallowDecode()
 	if err != nil {

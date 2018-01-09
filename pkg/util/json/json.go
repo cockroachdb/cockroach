@@ -89,6 +89,9 @@ type JSON interface {
 	// Exists implements the `?` operator.
 	Exists(string) (bool, error)
 
+	// StripNulls returns the JSON document with all object fields that have null values omitted
+	StripNulls() (JSON, error)
+
 	// IterObjectKey returns an ObjectKeyIterator, and it returns error if the obj
 	// is not an object.
 	IterObjectKey() (*ObjectKeyIterator, error)
@@ -1011,6 +1014,48 @@ func (j jsonObject) Exists(s string) (bool, error) {
 		return false, err
 	}
 	return v != nil, nil
+}
+
+func (j jsonNull) StripNulls() (JSON, error) {
+	return j, nil
+}
+func (j jsonTrue) StripNulls() (JSON, error) {
+	return j, nil
+}
+func (j jsonFalse) StripNulls() (JSON, error) {
+	return j, nil
+}
+func (j jsonNumber) StripNulls() (JSON, error) {
+	return j, nil
+}
+func (j jsonString) StripNulls() (JSON, error) {
+	return j, nil
+}
+func (j jsonArray) StripNulls() (JSON, error) {
+	var err error
+	jsons := make(jsonArray, len(j))
+	for i, e := range j {
+		if jsons[i], err = e.StripNulls(); err != nil {
+			return nil, err
+		}
+	}
+	return jsons, nil
+}
+func (j jsonObject) StripNulls() (JSON, error) {
+	pairs := make(jsonObject, 0)
+	for _, e := range j {
+		cmp, err := NullJSONValue.Compare(e.v)
+		if err != nil {
+			return nil, err
+		}
+		if cmp != 0 {
+			if e.v, err = e.v.StripNulls(); err != nil {
+				return nil, err
+			}
+			pairs = append(pairs, e)
+		}
+	}
+	return pairs, nil
 }
 
 var errIterateKeysNonObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError,

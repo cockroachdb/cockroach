@@ -603,6 +603,59 @@ func TestJSONExists(t *testing.T) {
 	}
 }
 
+func TestJSONStripNulls(t *testing.T) {
+	testcases := []struct {
+		input    string
+		expected string
+	}{
+		{`null`, `null`},
+		{`1`, `1`},
+		{`"a"`, `"a"`},
+		{`{}`, `{}`},
+		{`[]`, `[]`},
+		{`[1, "a", null, {"a":null}]`, `[1, "a", null, {}]`},
+		{`{"a":[null], "b":null, "c":{"a":null}}`, `{"a":[null], "c":{}}`},
+	}
+	for _, tc := range testcases {
+		expectedResult, err := ParseJSON(tc.expected)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runFuncCtr := func(encoded bool) func(*testing.T) {
+			return func(t *testing.T) {
+				input, err := ParseJSON(tc.input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if encoded {
+					var encoding []byte
+					encoding, err = EncodeJSON(nil, input)
+					if err != nil {
+						t.Fatal(err)
+					}
+					input, err = newEncodedFromRoot(encoding)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				result, err := input.StripNulls()
+				if err != nil {
+					t.Fatal(err)
+				}
+				c, err := result.Compare(expectedResult)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			}
+		}
+		t.Run(tc.input+` (non-encoded)`, runFuncCtr(false))
+		t.Run(tc.input+` (encoded)`, runFuncCtr(true))
+	}
+}
+
 func TestJSONFetchPath(t *testing.T) {
 	json := jsonTestShorthand
 	cases := map[string][]struct {
