@@ -15,23 +15,30 @@
 package opt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 func init() {
-	registerOperator(scanOp, operatorInfo{name: "scan", class: scanClass{}})
+	registerOperator(selectOp, operatorInfo{name: "select", class: selectClass{}})
 }
 
-func initScanExpr(e *Expr, tab optbase.Table) {
-	e.op = scanOp
-	e.private = tab
+func initSelectExpr(e *Expr, input *Expr) {
+	e.op = selectOp
+	e.children = []*Expr{input}
+
+	// Assumes that e.relProps has already been initialized using
+	// buildContext.newRelationalExpr().
+	e.relProps.columns = make([]columnProps, len(input.relProps.columns))
+	copy(e.relProps.columns, input.relProps.columns)
+	e.relProps.notNullCols.UnionWith(input.relProps.notNullCols)
 }
 
-type scanClass struct{}
+type selectClass struct{}
 
-var _ operatorClass = scanClass{}
+var _ operatorClass = selectClass{}
 
-func (scanClass) format(e *Expr, tp treeprinter.Node) {
-	formatRelational(e, tp)
+func (selectClass) format(e *Expr, tp treeprinter.Node) {
+	n := formatRelational(e, tp)
+	formatExprs(n, "filters", e.filters)
+	formatExprs(n, "inputs", e.children)
 }

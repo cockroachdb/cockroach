@@ -82,20 +82,29 @@ import (
 //           +--------+
 type Expr struct {
 	op operator
+
 	// subOperator is used for array operators (SOME, ALL). For
 	// example, for "a < SOME(SELECT * FROM t)" the operator is
 	// someOp and the subOperator is ltOp.
 	subOperator operator
+
 	// Child expressions. The interpretation of the children is operator
 	// dependent. For example, for a eqOp, there are two child expressions (the
 	// left-hand side and the right-hand side); for an andOp, there are at least
 	// two child expressions (each one being a conjunct).
 	children []*Expr
+
+	// Optional filters. Filters are boolean expressions usually found in the
+	// WHERE clause or HAVING clause (e.g., WHERE x < 5).
+	filters []*Expr
+
 	// Relational properties. Nil for scalar expressions.
 	relProps *relationalProps
+
 	// Scalar properties (properties that pertain only to scalar operators).
 	// Nil for relational expressions.
 	scalarProps *scalarProps
+
 	// Operator-dependent data used by this expression. For example, constOp
 	// stores a pointer to the constant value.
 	private interface{}
@@ -160,6 +169,20 @@ func (e *Expr) String() string {
 	tp := treeprinter.New()
 	e.format(tp)
 	return tp.String()
+}
+
+func (e *Expr) addFilter(f *Expr) {
+	// Recursively flatten AND expressions when adding them as a filter. The
+	// filters for an expression are implicitly AND'ed together (i.e. they are in
+	// conjunctive normal form).
+	if f.op == andOp {
+		for _, input := range f.children {
+			e.addFilter(input)
+		}
+		return
+	}
+
+	e.filters = append(e.filters, f)
 }
 
 func (e *Expr) initProps() {
