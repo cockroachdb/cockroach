@@ -14,18 +14,35 @@
 
 package json
 
-// ObjectKeyIterator is an iterator to access the keys of an object.
-type ObjectKeyIterator struct {
+// ObjectIterator is an iterator to access the key value pair of an object in
+// sorted order based on key.
+type ObjectIterator struct {
 	src jsonObject
 	idx int
 }
 
-// Next returns true and the next key in the iterator if one exists,
-// and false otherwise.
-func (it *ObjectKeyIterator) Next() (bool, string) {
-	it.idx++
-	if it.idx >= len(it.src) {
-		return false, ""
+func newObjectIterator(src jsonObject) *ObjectIterator {
+	return &ObjectIterator{
+		src: src,
+		idx: -1,
 	}
-	return true, string(it.src[it.idx].k)
+}
+
+// Next updates the cursor and returns whether the next pair exists.
+func (it *ObjectIterator) Next() bool {
+	if it.idx >= len(it.src)-1 {
+		return false
+	}
+	it.idx++
+	return true
+}
+
+// Key returns key of the current pair.
+func (it *ObjectIterator) Key() string {
+	return string(it.src[it.idx].k)
+}
+
+// Value returns value of the current pair
+func (it *ObjectIterator) Value() JSON {
+	return it.src[it.idx].v
 }
