@@ -51,9 +51,9 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	resolver := distsqlutils.FakeResolverForTestCluster(tc)
 
-	db := tc.Server(0).KVClient().(*client.DB)
+	db := tc.Server(0).DB()
 
-	txn := client.NewTxn(db, tc.Server(0).NodeID())
+	txn := client.NewTxn(db, tc.Server(0).NodeID(), client.RootTxn)
 	it := resolver.NewSpanResolverIterator(txn)
 
 	tableDesc := sqlbase.GetTableDescriptor(db, "test", "t")

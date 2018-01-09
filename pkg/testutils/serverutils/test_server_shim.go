@@ -61,9 +61,8 @@ type TestServerInterface interface {
 	// Addr returns the server's address.
 	Addr() string
 
-	// KVClient() returns a *client.DB instance for talking to this KV server,
-	// as an interface{}.
-	KVClient() interface{}
+	// DB returns a *client.DB instance for talking to this KV server.
+	DB() *client.DB
 
 	// RPCContext returns the rpc context used by the test server.
 	RPCContext() *rpc.Context
@@ -175,7 +174,6 @@ func StartServer(
 		t.Fatal(err)
 	}
 
-	kvClient := server.KVClient().(*client.DB)
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
 		t, server.ServingAddr(), "StartServer", url.User(security.RootUser))
 	pgURL.Path = params.UseDatabase
@@ -188,7 +186,7 @@ func StartServer(
 			_ = goDB.Close()
 			cleanupGoDB()
 		}))
-	return server, goDB, kvClient
+	return server, goDB, server.DB()
 }
 
 // StartServerRaw creates and starts a TestServer.

@@ -126,9 +126,8 @@ func TestTableReader(t *testing.T) {
 						Ctx:      context.Background(),
 						EvalCtx:  evalCtx,
 						Settings: s.ClusterSettings(),
-						// Pass a DB without a TxnCoordSender.
-						txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
-						nodeID: s.NodeID(),
+						txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+						nodeID:   s.NodeID(),
 					}
 
 					tr, err := newTableReader(&flowCtx, &ts, &c.post, nil /* output */)
@@ -152,7 +151,9 @@ func TestTableReader(t *testing.T) {
 					for {
 						row, meta := out.Next()
 						if meta != nil {
-							t.Fatalf("unexpected metadata: %+v", meta)
+							if meta.TxnMeta == nil {
+								t.Fatalf("unexpected metadata: %+v", meta)
+							}
 						}
 						if row == nil {
 							break
@@ -195,7 +196,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 		t.Fatal(err)
 	}
 
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	evalCtx := tree.MakeTestingEvalContext()
@@ -205,9 +206,8 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 		Ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: tc.Server(0).ClusterSettings(),
-		// Pass a DB without a TxnCoordSender.
-		txn:    client.NewTxn(client.NewDB(tc.Server(0).DistSender(), tc.Server(0).Clock()), nodeID),
-		nodeID: nodeID,
+		txn:      client.NewTxn(tc.Server(0).DB(), nodeID, client.RootTxn),
+		nodeID:   nodeID,
 	}
 	spec := TableReaderSpec{
 		Spans: []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
@@ -254,10 +254,14 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 			if len(res) != 3 {
 				t.Fatalf("expected 3 rows, got: %d", len(res))
 			}
-			if len(metas) != 1 {
-				t.Fatalf("expected one meta with misplanned ranges, got: %+v", metas)
+			var misplannedRanges []roachpb.RangeInfo
+			for _, m := range metas {
+				if len(m.Ranges) > 0 {
+					misplannedRanges = m.Ranges
+				} else if m.TxnMeta == nil {
+					t.Fatalf("expected only txn meta or misplanned ranges, got: %+v", metas)
+				}
 			}
-			misplannedRanges := metas[0].Ranges
 			if len(misplannedRanges) != 2 {
 				t.Fatalf("expected 2 misplanned ranges, got: %+v", misplannedRanges)
 			}
@@ -294,9 +298,8 @@ func BenchmarkTableReader(b *testing.B) {
 		Ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
-		// Pass a DB without a TxnCoordSender.
-		txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
-		nodeID: s.NodeID(),
+		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+		nodeID:   s.NodeID(),
 	}
 	spec := TableReaderSpec{
 		Table: *tableDesc,

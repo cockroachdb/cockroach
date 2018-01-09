@@ -893,7 +893,7 @@ func checkConcurrency(
 	s := &localtestcluster.LocalTestCluster{
 		DontRetryPushTxnFailures: true,
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 	defer s.Stop()
 	verifier.run(isolations, s.DB, t)
 }

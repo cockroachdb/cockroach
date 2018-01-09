@@ -26,7 +26,7 @@ import (
 
 // NewExecFactory is used from opt tests to create and execute plans.
 func (e *Executor) NewExecFactory() opt.ExecFactory {
-	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
+	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
 	p, cleanup := newInternalPlanner("opt", txn, "root", &MemoryMetrics{})
 	return &execFactory{
 		planner: p,

@@ -182,27 +182,29 @@ func DefaultDBContext() DBContext {
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {
-	sender Sender
-	clock  *hlc.Clock
-	ctx    DBContext
+	factory TxnSenderFactory
+	clock   *hlc.Clock
+	ctx     DBContext
 }
 
-// GetSender returns the underlying Sender. Only exported for tests.
+// GetSender returns a transaction-capable Sender instance. The same
+// sender must be used for the entirety of a transaction. Get a new
+// instance to start a new transaction.
 func (db *DB) GetSender() Sender {
-	return db.sender
+	return db.factory.New(RootTxn)
 }
 
 // NewDB returns a new DB.
-func NewDB(sender Sender, clock *hlc.Clock) *DB {
-	return NewDBWithContext(sender, clock, DefaultDBContext())
+func NewDB(factory TxnSenderFactory, clock *hlc.Clock) *DB {
+	return NewDBWithContext(factory, clock, DefaultDBContext())
 }
 
 // NewDBWithContext returns a new DB with the given parameters.
-func NewDBWithContext(sender Sender, clock *hlc.Clock, ctx DBContext) *DB {
+func NewDBWithContext(factory TxnSenderFactory, clock *hlc.Clock, ctx DBContext) *DB {
 	return &DB{
-		sender: sender,
-		clock:  clock,
-		ctx:    ctx,
+		factory: factory,
+		clock:   clock,
+		ctx:     ctx,
 	}
 }
 
@@ -491,14 +493,14 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 
-	// TODO(andrei): revisit this when TxnCoordSender is moved to the client
+	// TODO(andrei): revisit this when TxnSender is moved to the client
 	// (https://github.com/cockroachdb/cockroach/issues/10511).
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// TODO(andrei): Plumb a gatewayNodeID here. If we pass 0, then the gateway
 	// field will be filled in by the DistSender which will assume that the
 	// current node is the gateway.
-	txn := NewTxn(db, 0 /* gatewayNodeID */)
+	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
 	txn.SetDebugName("unnamed")
 	opts := TxnExecOptions{
 		AutoCommit: true,
@@ -524,6 +526,13 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 func (db *DB) send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	return db.sendUsingSender(ctx, ba, db.GetSender())
+}
+
+// sendUsingSender uses the specified sender to send the batch request.
+func (db *DB) sendUsingSender(
+	ctx context.Context, ba roachpb.BatchRequest, sender Sender,
+) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) == 0 {
 		return nil, nil
 	}
@@ -543,7 +552,7 @@ func (db *DB) send(
 	}
 
 	tracing.AnnotateTrace()
-	br, pErr := db.sender.Send(ctx, ba)
+	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
 		if log.V(1) {
 			log.Infof(ctx, "failed batch: %s", pErr)

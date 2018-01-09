@@ -1466,7 +1466,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	ctx = tc.Server(0).Stopper().WithCancel(ctx)
 
 	// This transaction will try to write "under" a served read.
-	txnOld := client.NewTxn(db, 0 /* gatewayNodeID */)
+	txnOld := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 
 	// Do something with txnOld so that its timestamp gets set.
 	if _, err := txnOld.Scan(ctx, "a", "b", 0); err != nil {
@@ -2158,7 +2158,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 			// Run a distributed transaction involving the lhsKey and rhsKey.
 			var txnKey roachpb.Key
 			ctx := context.Background()
-			txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */)
+			txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 			opts := client.TxnExecOptions{
 				AutoCommit: true,
 				AutoRetry:  false,
@@ -2517,13 +2517,13 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	// will require a scan that continues into the next meta2 range.
 	const tableID = keys.MaxReservedDescID + 2 // 51
 	splitReq := adminSplitArgs(keys.MakeTablePrefix(tableID - 3 /* 48 */))
-	if _, pErr := client.SendWrapped(ctx, s.DistSender(), splitReq); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, s.DB().GetSender(), splitReq); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	metaKey := keys.RangeMetaKey(keys.MakeTablePrefix(tableID)).AsRawKey()
 	splitReq = adminSplitArgs(metaKey)
-	if _, pErr := client.SendWrapped(ctx, s.DistSender(), splitReq); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, s.DB().GetSender(), splitReq); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -2549,7 +2549,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 		} else {
 			lookupReq = &roachpb.ScanRequest{Span: span}
 		}
-		if _, err := client.SendWrapped(ctx, s.DistSender(), lookupReq); err != nil {
+		if _, err := client.SendWrapped(ctx, s.DB().GetSender(), lookupReq); err != nil {
 			t.Fatalf("%T %v", err.GoError(), err)
 		}
 	})

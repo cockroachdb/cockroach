@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -84,48 +85,8 @@ func checkKVs(t *testing.T, kvs []client.KeyValue, expected ...interface{}) {
 	}
 }
 
-// notifyingSender is a sender which can set up a notification channel
-// (on call to reset()) for clients which need to wait on a command
-// being sent.
-type notifyingSender struct {
-	notify  chan struct{}
-	wrapped client.Sender
-}
-
-func (ss *notifyingSender) reset(notify chan struct{}) {
-	ss.notify = notify
-}
-
-func (ss *notifyingSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	br, pErr := ss.wrapped.Send(ctx, ba)
-	if br != nil && br.Error != nil {
-		panic(roachpb.ErrorUnexpectedlySet(ss.wrapped, br))
-	}
-
-	select {
-	case ss.notify <- struct{}{}:
-	default:
-	}
-
-	return br, pErr
-}
-
 func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
-	return s.KVClient().(*client.DB)
-}
-
-// createTestNotifyClient creates a new client which connects using an HTTP
-// sender to the server at addr. It contains a waitgroup to allow waiting.
-func createTestNotifyClient(
-	t *testing.T, s serverutils.TestServerInterface, priority roachpb.UserPriority,
-) (*client.DB, *notifyingSender) {
-	db := createTestClient(t, s)
-	sender := &notifyingSender{wrapped: db.GetSender()}
-	dbCtx := client.DefaultDBContext()
-	dbCtx.UserPriority = priority
-	return client.NewDBWithContext(sender, s.Clock(), dbCtx), sender
+	return s.DB()
 }
 
 // TestClientRetryNonTxn verifies that non-transactional client will
@@ -187,7 +148,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 	// succeeds iff the test dictates that it does.
 	for i, test := range testCases {
 		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		db, sender := createTestNotifyClient(t, s, 1)
+		db := createTestClient(t, s)
 
 		// doneCall signals when the non-txn read or write has completed.
 		doneCall := make(chan error)
@@ -213,13 +174,10 @@ func TestClientRetryNonTxn(t *testing.T) {
 			if count == 1 {
 				nonTxnCtx := context.TODO()
 
-				// We use a "notifying" sender here, which allows us to know exactly when the
-				// call has been processed; otherwise, we'd be dependent on timing.
-				// The channel lets us pause txn until after the non-txn method has run once.
-				// Use a channel length of size 1 to guarantee a notification through a
-				// non-blocking send.
+				// The channel lets us pause txn until after the non-txn
+				// method has run once. Use a channel length of size 1 to
+				// guarantee a notification through a non-blocking send.
 				notify := make(chan struct{}, 1)
-				sender.reset(notify)
 				// We must try the non-txn put or get in a goroutine because
 				// it might have to retry and will only succeed immediately in
 				// the event we can push.
@@ -229,6 +187,10 @@ func TestClientRetryNonTxn(t *testing.T) {
 						_, err = db.Get(nonTxnCtx, key)
 					} else {
 						err = db.Put(nonTxnCtx, key, "value")
+					}
+					notify <- struct{}{}
+					if err != nil {
+						log.Errorf(context.TODO(), "error on non-txn request: %s", err)
 					}
 					doneCall <- errors.Wrapf(
 						err, "%d: expected success on non-txn call to %s",
@@ -828,14 +790,16 @@ func TestInconsistentReads(t *testing.T) {
 
 	// Mock out DistSender's sender function to check the read consistency for
 	// outgoing BatchRequests and return an empty reply.
-	var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		if ba.ReadConsistency != roachpb.INCONSISTENT {
-			return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
-		}
-		return ba.CreateReply(), nil
-	}
+	factory := client.TxnSenderFactoryFunc(func(_ client.TxnType) client.TxnSender {
+		return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			if ba.ReadConsistency != roachpb.INCONSISTENT {
+				return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
+			}
+			return ba.CreateReply(), nil
+		})
+	})
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := client.NewDB(senderFn, clock)
+	db := client.NewDB(factory, clock)
 	ctx := context.TODO()
 
 	prepInconsistent := func() *client.Batch {
@@ -888,7 +852,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */)
+	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 	// Only snapshot transactions can observe deadline errors; serializable ones
 	// get a restart error before the deadline check.
 	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -39,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // NOTE: these tests are in package kv_test to avoid a circular
@@ -90,7 +93,17 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		},
 		s.(*server.TestServer).Gossip(),
 	)
-	db := client.NewDB(ds, s.Clock())
+	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	tsf := kv.NewTxnCoordSenderFactory(
+		ambient,
+		cluster.MakeTestingClusterSettings(),
+		ds,
+		s.Clock(),
+		false, /* linearizable */
+		s.Stopper(),
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
+	)
+	db := client.NewDB(tsf, s.Clock())
 
 	// Now, with an intent pending, attempt (asynchronously) to read
 	// from an arbitrary key. This will cause the distributed sender to
@@ -360,7 +373,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	splits := []string{"a", "b", "c", "d", "e", "f"}
 	if err := setupMultipleRanges(ctx, db, splits...); err != nil {
 		t.Fatal(err)
@@ -551,7 +564,7 @@ func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
 		t.Fatal(err)
 	}
@@ -590,7 +603,7 @@ func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
 		t.Fatal(err)
 	}
@@ -659,7 +672,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f", "g", "h"); err != nil {
 		t.Fatal(err)
 	}
@@ -727,7 +740,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b"); err != nil {
 		t.Fatal(err)
 	}
@@ -773,7 +786,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
 		t.Fatal(err)
 	}
@@ -838,7 +851,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	s, _ := startNoSplitServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "c", "d"); err != nil {
 		t.Fatal(err)
 	}
@@ -861,7 +874,7 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 	s, _ := startNoSplitServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b"); err != nil {
 		t.Fatal(err)
 	}
@@ -883,7 +896,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	s, _ := startNoSplitServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
 		t.Fatal(err)
 	}
@@ -942,7 +955,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	s, _ := startNoSplitServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
 		t.Fatal(err)
 	}
@@ -1065,7 +1078,7 @@ func TestParallelSender(t *testing.T) {
 }
 
 func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *client.DB {
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 
 	// Set up multiple ranges:
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
@@ -1163,7 +1176,7 @@ func TestStopAtRangeBoundary(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
 		t.Fatal(err)
 	}
@@ -1621,7 +1634,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	s, _ := startNoSplitServer(t)
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "b", "c"); err != nil {
 		t.Fatal(err)
 	}
@@ -1682,7 +1695,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
-	db := s.KVClient().(*client.DB)
+	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
 		t.Fatal(err)
 	}

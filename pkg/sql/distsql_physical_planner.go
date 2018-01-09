@@ -80,7 +80,7 @@ type DistSQLPlanner struct {
 	// pool of workers.
 	runnerChan chan runnerRequest
 
-	// gossip handle use to check node version compatibility
+	// gossip handle used to check node version compatibility.
 	gossip *gossip.Gossip
 }
 
@@ -90,7 +90,7 @@ const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
 // debugging).
 var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
 
-// If true, for index joins  we instantiate a join reader on every node that
+// If true, for index joins we instantiate a join reader on every node that
 // has a stream (usually from a table reader). If false, there is a single join
 // reader.
 var distributeIndexJoin = settings.RegisterBoolSetting(

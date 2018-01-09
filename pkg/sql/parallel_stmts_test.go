@@ -313,8 +313,8 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 }
 
 func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*planner, func()) {
-	kvDB := s.KVClient().(*client.DB)
-	txn := client.NewTxn(kvDB, s.NodeID())
+	kvDB := s.DB()
+	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
 	p, cleanup := newInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
 	p.extendedEvalCtx.Tables.leaseMgr = s.LeaseManager().(*LeaseManager)
 	// HACK: we're mutating the SessionData directly, without going through the
@@ -358,7 +358,7 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		CREATE TABLE bar (
 			k INT PRIMARY KEY DEFAULT 0,
 			v INT DEFAULT 1,
-			a INT, 
+			a INT,
 			UNIQUE INDEX idx(v)
 		)
 	`); err != nil {

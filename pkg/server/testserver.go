@@ -533,9 +533,6 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 	return c
 }
 
-// KVClient is part of TestServerInterface.
-func (ts *TestServer) KVClient() interface{} { return ts.db }
-
 // LeaseManager is part of TestServerInterface.
 func (ts *TestServer) LeaseManager() interface{} {
 	return ts.leaseMgr
@@ -589,7 +586,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 // LookupRange returns the descriptor of the range containing key.
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
 	rs, _, err := client.RangeLookupForVersion(context.Background(), ts.ClusterSettings(),
-		ts.DistSender(), key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+		ts.DB().GetSender(), key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, errors.Errorf(
 			"%q: lookup range unexpected error: %s", key, err)
@@ -618,7 +615,7 @@ func (ts *TestServer) SplitRange(
 		},
 		SplitKey: splitKey,
 	}
-	_, pErr := client.SendWrapped(ctx, ts.DistSender(), &splitReq)
+	_, pErr := client.SendWrapped(ctx, ts.DB().GetSender(), &splitReq)
 	if pErr != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Errorf(

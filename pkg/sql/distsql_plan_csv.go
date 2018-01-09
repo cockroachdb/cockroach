@@ -273,7 +273,7 @@ func (l *DistLoader) LoadCSV(
 			}
 		}
 
-		return l.distSQLPlanner.Run(&planCtx, txn, &p, &recv, evalCtx)
+		return l.distSQLPlanner.Run(&planCtx, txn, &p, recv, evalCtx)
 	}); err != nil {
 		return err
 	}
@@ -399,7 +399,7 @@ func (l *DistLoader) LoadCSV(
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		return l.distSQLPlanner.Run(&planCtx, txn, &p, &recv, evalCtx)
+		return l.distSQLPlanner.Run(&planCtx, txn, &p, recv, evalCtx)
 	}); err != nil {
 		return err
 	}
