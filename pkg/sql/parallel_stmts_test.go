@@ -314,10 +314,10 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 func planQuery(
 	t *testing.T, s serverutils.TestServerInterface, sql string,
 ) (*planner, planNode, func()) {
-	kvDB := s.KVClient().(*client.DB)
+	kvDB := s.DB()
 	now := s.Clock().Now()
 	physicalNow := s.Clock().PhysicalTime()
-	txn := client.NewTxn(kvDB, s.NodeID())
+	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
 	txn.Proto().OrigTimestamp = now
 	p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
 	p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
@@ -365,7 +365,7 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		CREATE TABLE bar (
 			k INT PRIMARY KEY DEFAULT 0,
 			v INT DEFAULT 1,
-			a INT, 
+			a INT,
 			UNIQUE INDEX idx(v)
 		)
 	`); err != nil {

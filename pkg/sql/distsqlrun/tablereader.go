@@ -291,6 +291,8 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 		if traceData != nil {
 			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TraceData: traceData})
 		}
+		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
+		tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TxnMeta: &txnMeta})
 		tr.close()
 	}
 	if len(tr.trailingMetadata) > 0 {

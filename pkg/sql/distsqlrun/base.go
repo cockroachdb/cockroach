@@ -312,13 +312,17 @@ type RowChannelMsg struct {
 // ProducerMetadata represents a metadata record flowing through a DistSQL flow.
 type ProducerMetadata struct {
 	// Only one of these fields will be set. If this ever changes, note that
-	// there's consumers out there that extract the error and, if there is one,
+	// there're consumers out there that extract the error and, if there is one,
 	// forward it in isolation and drop the rest of the record.
 	Ranges []roachpb.RangeInfo
 	// TODO(vivek): change to type Error
 	Err error
 	// TraceData is sent if snowball tracing is enabled.
 	TraceData []tracing.RecordedSpan
+	// TxnMeta contains the updated transaction coordinator metadata,
+	// to be sent from leaf transactions to augment the root transaction,
+	// held by the flow's ultimate receiver.
+	TxnMeta *roachpb.TxnCoordMeta
 }
 
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to

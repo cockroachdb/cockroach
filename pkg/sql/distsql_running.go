@@ -242,10 +242,10 @@ type distSQLReceiver struct {
 	// Once set, no more rows are accepted.
 	err error
 
-	// canceled is atomically set to 1 when this distSQL receiver has been marked
-	// as canceled. Upon the next Push(), err is set to a non-nil
-	// value, and ConsumerClosed is the ConsumerStatus.
-	canceled int32
+	// canceled is atomically set to an error when this distSQL receiver
+	// has been marked as canceled. Upon the next Push(), err is set to
+	// this value, and ConsumerClosed is the ConsumerStatus.
+	canceled atomic.Value
 
 	row    tree.Datums
 	status distsqlrun.ConsumerStatus
@@ -255,9 +255,8 @@ type distSQLReceiver struct {
 	rangeCache *kv.RangeDescriptorCache
 	leaseCache *kv.LeaseHolderCache
 
-	// The transaction in which the flow producing data for this receiver runs.
-	// The distSQLReceiver updates the TransactionProto in response to
-	// RetryableTxnError's. Nil if no transaction should be updated on errors
+	// The transaction in which the flow producing data for this
+	// receiver runs. Nil if no transaction should be updated on errors
 	// (i.e. if the flow overall doesn't run in a transaction).
 	txn *client.Txn
 
@@ -284,9 +283,9 @@ var _ distsqlrun.CancellableRowReceiver = &distSQLReceiver{}
 
 // makeDistSQLReceiver creates a distSQLReceiver.
 //
-// ctx is the Context that the receiver will use throughput its lifetime.
-// sink is the container where the results will be stored. If only the row count
-// is needed, this can be nil.
+// ctx is the Context that the receiver will use throughput its
+// lifetime. resultWriter is the container where the results will be
+// stored. If only the row count is needed, this can be nil.
 //
 // txn is the transaction in which the producer flow runs; it will be updated
 // on errors. Nil if the flow overall doesn't run in a transaction.
@@ -298,7 +297,7 @@ func makeDistSQLReceiver(
 	txn *client.Txn,
 	updateClock func(observedTs hlc.Timestamp),
 ) distSQLReceiver {
-	return distSQLReceiver{
+	r := distSQLReceiver{
 		ctx:          ctx,
 		resultWriter: resultWriter,
 		rangeCache:   rangeCache,
@@ -306,6 +305,14 @@ func makeDistSQLReceiver(
 		txn:          txn,
 		updateClock:  updateClock,
 	}
+	// Make sure that if the root transaction finishes (i.e. it is abandoned,
+	// aborted, or committed), we will cancel the dist SQL flow.
+	if r.txn != nil {
+		r.txn.OnFinish(func(err error) {
+			r.canceled.Store(err)
+		})
+	}
+	return r
 }
 
 // Push is part of the RowReceiver interface.
@@ -315,21 +322,8 @@ func (r *distSQLReceiver) Push(
 	if meta != nil {
 		if meta.Err != nil && r.err == nil {
 			if r.txn != nil {
-				if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
-					// Update the txn in response to remote errors. In the non-DistSQL
-					// world, the TxnCoordSender does this, and the client.Txn updates
-					// itself in non-error cases. Those updates are not necessary if we're
-					// just doing reads. Once DistSQL starts performing writes, we'll need
-					// to perform such updates too.
-					r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, retryErr.PErr)
-					// Update the clock with information from the error. On non-DistSQL
-					// code paths, the DistSender does this.
-					// TODO(andrei): We don't propagate clock signals on success cases
-					// through DistSQL; we should. We also don't propagate them through
-					// non-retryable errors; we also should.
-					r.updateClock(retryErr.PErr.Now)
-					meta.Err = roachpb.NewHandledRetryableTxnError(
-						meta.Err.Error(), r.txn.Proto().ID, *r.txn.Proto())
+				if retryErr, ok := meta.Err.(*roachpb.HandledRetryableTxnError); ok {
+					r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, retryErr)
 				}
 			}
 			r.err = meta.Err
@@ -347,11 +341,18 @@ func (r *distSQLReceiver) Push(
 				r.err = errors.Errorf("error ingesting remote spans: %s", err)
 			}
 		}
+		if meta.TxnMeta != nil {
+			if r.txn != nil {
+				r.txn.AugmentTxnCoordMeta(*meta.TxnMeta)
+			} else {
+				r.err = errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnMeta)
+			}
+		}
 		return r.status
 	}
-	if r.err == nil && atomic.LoadInt32(&r.canceled) == 1 {
+	if r.err == nil && r.canceled.Load() != nil {
 		// Set the error to reflect query cancellation.
-		r.err = sqlbase.NewQueryCanceledError()
+		r.err = r.canceled.Load().(error)
 	}
 	if r.err != nil {
 		// TODO(andrei): We should drain here.
@@ -392,6 +393,9 @@ func (r *distSQLReceiver) Push(
 
 // ProducerDone is part of the RowReceiver interface.
 func (r *distSQLReceiver) ProducerDone() {
+	if r.txn != nil {
+		r.txn.OnFinish(nil)
+	}
 	if r.closed {
 		panic("double close")
 	}
@@ -400,7 +404,7 @@ func (r *distSQLReceiver) ProducerDone() {
 
 // SetCanceled is part of the CancellableRowReceiver interface.
 func (r *distSQLReceiver) SetCanceled() {
-	atomic.StoreInt32(&r.canceled, 1)
+	r.canceled.Store(sqlbase.NewQueryCanceledError())
 }
 
 // updateCaches takes information about some ranges that were mis-planned and

@@ -36,7 +36,7 @@ func TestExportCmd(t *testing.T) {
 	defer dirCleanupFn()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 
 	exportAndSlurpOne := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter,
@@ -179,7 +179,7 @@ func TestExportGCThreshold(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 
 	req := &roachpb.ExportRequest{
 		Span:      roachpb.Span{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
