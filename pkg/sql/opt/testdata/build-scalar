@@ -221,3 +221,19 @@ eq (type: bool)
  ├── unsupported-scalar (length(@1)) (type: int)
  └── const (2) (type: int)
 length(@1) = 2
+
+build-scalar,semtree-expr vars=(jsonb)
+@1 @> '{"a":1}'
+----
+contains (type: bool)
+ ├── variable (0) (type: jsonb)
+ └── const ('{"a":1}') (type: jsonb)
+@1 @> '{"a":1}'
+
+build-scalar,semtree-expr vars=(jsonb)
+'{"a":1}' <@ @1
+----
+contained-by (type: bool)
+ ├── const ('{"a":1}') (type: jsonb)
+ └── variable (0) (type: jsonb)
+'{"a":1}' <@ @1
