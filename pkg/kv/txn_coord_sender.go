@@ -460,14 +460,14 @@ func (tc *TxnCoordSender) Send(
 	if _, ok := ba.GetArg(roachpb.EndTransaction); !ok {
 		return br, nil
 	}
-	// If the --linearizable flag is set, we want to make sure that all the
+	// If the linearizable flag is set, we want to make sure that all the
 	// clocks in the system are past the commit timestamp of the transaction.
 	// This is guaranteed if either - the commit timestamp is MaxOffset behind
 	// startNS - MaxOffset ns were spent in this function when returning to the
 	// client. Below we choose the option that involves less waiting, which is
 	// likely the first one unless a transaction commits with an odd timestamp.
 	//
-	// Can't use --linearizable mode with clockless reads since in that case we
+	// Can't use linearizable mode with clockless reads since in that case we
 	// don't know how long to sleep - could be forever!
 	if tsNS := br.Txn.Timestamp.WallTime; startNS > tsNS {
 		startNS = tsNS
