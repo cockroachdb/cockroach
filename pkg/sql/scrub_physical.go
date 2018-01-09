@@ -135,8 +135,8 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	span := o.tableDesc.IndexSpan(o.indexDesc.ID)
 	spans := []roachpb.Span{span}
 
-	planCtx := params.p.session.distSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
-	physPlan, err := params.p.session.distSQLPlanner.createScrubPhysicalCheck(
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(
 		&planCtx, scan, *o.tableDesc, *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
 	if err != nil {
 		return err

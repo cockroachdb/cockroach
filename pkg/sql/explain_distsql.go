@@ -46,7 +46,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	// Trigger limit propagation.
 	params.p.setUnlimited(n.plan)
 
-	distSQLPlanner := params.p.session.distSQLPlanner
+	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 
 	auto, err := distSQLPlanner.CheckSupport(n.plan)
 	if err != nil {

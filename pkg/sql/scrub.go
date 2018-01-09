@@ -532,14 +532,14 @@ func createConstraintCheckOperations(
 
 // scrubPlanDistSQL will prepare and run the plan in distSQL.
 func scrubPlanDistSQL(
-	ctx context.Context, planCtx *planningCtx, p *planner, plan planNode,
+	ctx context.Context, planCtx *planningCtx, plan planNode,
 ) (*physicalPlan, error) {
 	log.VEvent(ctx, 1, "creating DistSQL plan")
-	physPlan, err := p.session.distSQLPlanner.createPlanForNode(planCtx, plan)
+	physPlan, err := planCtx.extendedEvalCtx.DistSQLPlanner.createPlanForNode(planCtx, plan)
 	if err != nil {
 		return nil, err
 	}
-	p.session.distSQLPlanner.FinalizePlan(planCtx, &physPlan)
+	planCtx.extendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
 	return &physPlan, nil
 }
 
@@ -566,7 +566,7 @@ func scrubRunDistSQL(
 		},
 	)
 
-	if err := p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, &p.extendedEvalCtx); err != nil {
+	if err := p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, &recv, &p.extendedEvalCtx); err != nil {
 		return rows, err
 	} else if recv.err != nil {
 		return rows, recv.err
