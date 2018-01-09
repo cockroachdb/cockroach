@@ -114,6 +114,10 @@ var Generators = map[string][]tree.Builtin{
 	"jsonb_array_elements_text": {jsonArrayElementsTextImpl},
 	"json_object_keys":          {jsonObjectKeysImpl},
 	"jsonb_object_keys":         {jsonObjectKeysImpl},
+	"json_each":                 {jsonEachImpl},
+	"jsonb_each":                {jsonEachImpl},
+	"json_each_text":            {jsonEachTextImpl},
+	"jsonb_each_text":           {jsonEachTextImpl},
 }
 
 func makeGeneratorBuiltin(
@@ -421,6 +425,24 @@ func (s *unaryValueGenerator) Next() (bool, error) {
 // Values implements the tree.ValueGenerator interface.
 func (s *unaryValueGenerator) Values() tree.Datums { return tree.Datums{} }
 
+func jsonAsText(j json.JSON) (tree.Datum, error) {
+	text, err := j.AsText()
+	if err != nil {
+		return nil, err
+	}
+	if text == nil {
+		return tree.DNull, nil
+	}
+	return tree.NewDString(*text), nil
+}
+
+var (
+	errJSONObjectKeysOnArray         = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot call json_object_keys on an array")
+	errJSONObjectKeysOnScalar        = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "cannot call json_object_keys on a scalar")
+	errJSONDeconstructArrayAsObject  = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot deconstruct an array as an object")
+	errJSONDeconstructScalarAsObject = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "cannot deconstruct a scalar")
+)
+
 var jsonArrayElementsImpl = makeGeneratorBuiltin(
 	tree.ArgTypes{{"input", types.JSON}},
 	jsonArrayGeneratorType,
@@ -448,6 +470,7 @@ var jsonArrayTextGeneratorType = types.TTable{
 type jsonArrayGenerator struct {
 	json      tree.DJSON
 	nextIndex int
+	value     tree.Datum
 	asText    bool
 }
 
@@ -489,6 +512,7 @@ func (g *jsonArrayGenerator) ResolvedType() types.TTable {
 func (g *jsonArrayGenerator) Start() error {
 	g.nextIndex = -1
 	g.json.JSON = g.json.JSON.MaybeDecode()
+	g.value = nil
 	return nil
 }
 
@@ -499,39 +523,22 @@ func (g *jsonArrayGenerator) Close() {}
 func (g *jsonArrayGenerator) Next() (bool, error) {
 	g.nextIndex++
 	next, err := g.json.FetchValIdx(g.nextIndex)
-	if err != nil {
+	if err != nil || next == nil {
 		return false, err
 	}
-	return next != nil, nil
+	if g.asText {
+		if g.value, err = jsonAsText(next); err != nil {
+			return false, err
+		}
+	} else {
+		g.value = tree.NewDJSON(next)
+	}
+	return true, nil
 }
 
 // Values implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Values() tree.Datums {
-	val, err := g.json.FetchValIdx(g.nextIndex)
-	if err != nil {
-		// TODO(justin): propagate this error.
-		panic("unexpected JSON error")
-	}
-	if g.asText {
-		text, err := val.AsText()
-		if err != nil {
-			// TODO(justin): propagate this error.
-			panic("unexpected JSON error")
-		}
-		if text == nil {
-			return tree.Datums{
-				tree.DNull,
-			}
-		}
-		return tree.Datums{
-			tree.NewDString(*text),
-		}
-	}
-	return tree.Datums{
-		&tree.DJSON{
-			JSON: val,
-		},
-	}
+	return tree.Datums{g.value}
 }
 
 // jsonObjectKeysImpl is a key generator of a JSON object.
@@ -548,17 +555,24 @@ var jsonObjectKeysGeneratorType = types.TTable{
 }
 
 type jsonObjectKeysGenerator struct {
-	iter    *json.ObjectKeyIterator
-	nextVal string
+	iter *json.ObjectIterator
 }
 
 func makeJSONObjectKeysGenerator(
 	_ *tree.EvalContext, args tree.Datums,
 ) (tree.ValueGenerator, error) {
 	target := tree.MustBeDJSON(args[0])
-	iter, err := target.IterObjectKey()
+	iter, err := target.ObjectIter()
 	if err != nil {
 		return nil, err
+	}
+	if iter == nil {
+		switch target.Type() {
+		case json.ArrayJSONType:
+			return nil, errJSONObjectKeysOnArray
+		default:
+			return nil, errJSONObjectKeysOnScalar
+		}
 	}
 	return &jsonObjectKeysGenerator{
 		iter: iter,
@@ -578,12 +592,110 @@ func (g *jsonObjectKeysGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Next() (bool, error) {
-	ok, val := g.iter.Next()
-	g.nextVal = val
-	return ok, nil
+	return g.iter.Next(), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Values() tree.Datums {
-	return tree.Datums{tree.NewDString(g.nextVal)}
+	return tree.Datums{tree.NewDString(g.iter.Key())}
+}
+
+var jsonEachImpl = makeGeneratorBuiltin(
+	tree.ArgTypes{{"input", types.JSON}},
+	jsonEachGeneratorType,
+	makeJSONEachImplGenerator,
+	"Expands the outermost JSON or JSONB object into a set of key/value pairs.",
+)
+
+var jsonEachTextImpl = makeGeneratorBuiltin(
+	tree.ArgTypes{{"input", types.JSON}},
+	jsonEachTextGeneratorType,
+	makeJSONEachTextImplGenerator,
+	"Expands the outermost JSON or JSONB object into a set of key/value pairs. "+
+		"The returned values will be of type text.",
+)
+
+var jsonEachGeneratorType = types.TTable{
+	Cols:   types.TTuple{types.String, types.JSON},
+	Labels: []string{"key", "value"},
+}
+
+var jsonEachTextGeneratorType = types.TTable{
+	Cols:   types.TTuple{types.String, types.String},
+	Labels: []string{"key", "value"},
+}
+
+type jsonEachGenerator struct {
+	iter   *json.ObjectIterator
+	key    tree.Datum
+	value  tree.Datum
+	asText bool
+}
+
+func makeJSONEachImplGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+	return makeJSONEachGenerator(args, false)
+}
+
+func makeJSONEachTextImplGenerator(
+	_ *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	return makeJSONEachGenerator(args, true)
+}
+
+func makeJSONEachGenerator(args tree.Datums, asText bool) (tree.ValueGenerator, error) {
+	target := tree.MustBeDJSON(args[0])
+	iter, err := target.ObjectIter()
+	if err != nil {
+		return nil, err
+	}
+	if iter == nil {
+		switch target.Type() {
+		case json.ArrayJSONType:
+			return nil, errJSONDeconstructArrayAsObject
+		default:
+			return nil, errJSONDeconstructScalarAsObject
+		}
+	}
+	return &jsonEachGenerator{
+		iter:   iter,
+		key:    nil,
+		value:  nil,
+		asText: asText,
+	}, nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (g *jsonEachGenerator) ResolvedType() types.TTable {
+	if g.asText {
+		return jsonEachTextGeneratorType
+	}
+	return jsonEachGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (g *jsonEachGenerator) Start() error { return nil }
+
+// Close implements the tree.ValueGenerator interface.
+func (g *jsonEachGenerator) Close() {}
+
+// Next implements the tree.ValueGenerator interface.
+func (g *jsonEachGenerator) Next() (bool, error) {
+	if !g.iter.Next() {
+		return false, nil
+	}
+	g.key = tree.NewDString(g.iter.Key())
+	if g.asText {
+		var err error
+		if g.value, err = jsonAsText(g.iter.Value()); err != nil {
+			return false, err
+		}
+	} else {
+		g.value = tree.NewDJSON(g.iter.Value())
+	}
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (g *jsonEachGenerator) Values() tree.Datums {
+	return tree.Datums{g.key, g.value}
 }
