@@ -19,6 +19,7 @@ import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import spinner from "assets/spinner.gif";
 import noResults from "assets/noresults.svg";
+import { ExpandableString } from "src/views/shared/components/expandableString";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
@@ -126,7 +127,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Description",
-    cell: job => job.description,
+    cell: job => <ExpandableString long={job.description} />,
     sort: job => job.description,
     className: "jobs-table__cell--description",
   },
