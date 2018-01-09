@@ -198,7 +198,7 @@
   branch = "master"
   name = "github.com/coreos/etcd"
   packages = ["raft","raft/raftpb"]
-  revision = "63d0ac0fe62bc428c9c0120fdc837d83d898910c"
+  revision = "1e488f3548f3c952b9896b9279674420657d7f56"
 
 [[projects]]
   name = "github.com/cpuguy83/go-md2man"
