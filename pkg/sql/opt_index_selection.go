@@ -2026,7 +2026,7 @@ func (v *indexInfo) makeIndexConstraintsExperimental(
 	var spans opt.LogicalSpans
 	var ok bool
 	if filter != nil {
-		v.ic.Init(filter, colInfos, evalCtx)
+		v.ic.Init(filter, colInfos, false /* isInverted */, evalCtx)
 		spans, ok = v.ic.Spans()
 	}
 	if !ok {

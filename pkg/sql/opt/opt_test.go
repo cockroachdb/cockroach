@@ -62,6 +62,12 @@ package opt
 //
 //    Information for the index (used by index-constraints). Each column of the
 //    index refers to an index var.
+//
+//  - inverted-index=@<index>
+//
+//    Information about an inverted index (used by index-constraints). The one column of
+//    the inverted index refers to an index var. Only one of "index" and
+//    "inverted-index" should be used.
 
 import (
 	"bufio"
@@ -167,7 +173,7 @@ func (r *testdataReader) Close() error {
 	return r.file.Close()
 }
 
-var splitDirectivesRE = regexp.MustCompile(`^ *[a-zA-Z0-9_,-]+(|=[a-zA-Z0-9_]+|=\([^)]*\))( |$)`)
+var splitDirectivesRE = regexp.MustCompile(`^ *[a-zA-Z0-9_,-]+(|=[a-zA-Z0-9_@]+|=\([^)]*\))( |$)`)
 
 // splits a directive line into tokens, where each token is
 // either:
@@ -322,6 +328,7 @@ func TestOpt(t *testing.T) {
 				var varTypes []types.T
 				var iVarHelper tree.IndexedVarHelper
 				var colInfos []IndexColumnInfo
+				var invertedIndex bool
 				var typedExpr tree.TypedExpr
 				evalCtx := tree.MakeTestingEvalContext()
 
@@ -346,7 +353,8 @@ func TestOpt(t *testing.T) {
 						// Set up the indexed var helper.
 						iv := &indexedVars{types: varTypes}
 						iVarHelper = tree.MakeIndexedVarHelper(iv, len(iv.types))
-					case "index":
+
+					case "index", "inverted-index":
 						if varTypes == nil {
 							d.fatalf(t, "vars must precede index")
 						}
@@ -354,6 +362,12 @@ func TestOpt(t *testing.T) {
 						colInfos, err = parseIndexColumns(varTypes, vals)
 						if err != nil {
 							d.fatalf(t, "%v", err)
+						}
+						if key == "inverted-index" {
+							if len(colInfos) > 1 {
+								d.fatalf(t, "inverted index must be on a single column")
+							}
+							invertedIndex = true
 						}
 					default:
 						d.fatalf(t, "unknown argument: %s", key)
@@ -420,7 +434,7 @@ func TestOpt(t *testing.T) {
 						}
 						var ic IndexConstraints
 
-						ic.Init(e, colInfos, &evalCtx)
+						ic.Init(e, colInfos, invertedIndex, &evalCtx)
 						spans, ok := ic.Spans()
 
 						var buf bytes.Buffer

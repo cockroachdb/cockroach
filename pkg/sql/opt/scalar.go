@@ -54,6 +54,8 @@ func init() {
 		notRegIMatchOp:      {name: "not-regimatch"},
 		isOp:                {name: "is"},
 		isNotOp:             {name: "is-not"},
+		containsOp:          {name: "contains"},
+		containedByOp:       {name: "contained-by"},
 		anyOp:               {name: "any"},
 		someOp:              {name: "some"},
 		allOp:               {name: "all"},

@@ -1115,3 +1115,16 @@ build-scalar,index-constraints vars=(int, int) index=(@1, @2)
 (@1,@2) IN ((1, 2)) AND @1 = 1
 ----
 [/1/2 - /1/2]
+
+build-scalar,index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a":1}'
+----
+[/'{"a":1}' - /'{"a":1}']
+
+# We currently don't support conjunctions or disjunctions with
+# inverted indexes.
+build-scalar,index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a":1}' AND @1 @> '{"b":1}'
+----
+[ - ]
+Remaining filter: (@1 @> '{"a":1}') AND (@1 @> '{"b":1}')
