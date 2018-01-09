@@ -86,6 +86,10 @@ type planner struct {
 	// session is the Session on whose behalf this planner is working.
 	session *Session
 
+	// preparedStatements points to the Session's collection of prepared
+	// statements.
+	preparedStatements *PreparedStatements
+
 	// Reference to the corresponding sql Statement for this query.
 	stmt *Statement
 

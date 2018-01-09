@@ -580,6 +580,7 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	}
 
 	p.sessionDataMutator = s.dataMutator
+	p.preparedStatements = &s.PreparedStatements
 
 	p.setTxn(txn)
 }

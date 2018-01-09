@@ -41,7 +41,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		}
 
 		// DEALLOCATE ALL
-		p.session.PreparedStatements.DeleteAll(ctx)
+		p.preparedStatements.DeleteAll(ctx)
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
 			"unknown mode for DISCARD: %d", s.Mode)
