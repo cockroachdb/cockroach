@@ -149,6 +149,10 @@ func (l *DistLoader) LoadCSV(
 					Comment: comment,
 					Nullif:  nullif,
 				},
+				Progress: distsqlrun.JobProgress{
+					JobID: *job.ID(),
+					Slot:  int32(i),
+				},
 			})
 		}
 		n := i % len(nodes)
@@ -156,6 +160,9 @@ func (l *DistLoader) LoadCSV(
 	}
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(csvSpecs))
 	for i, rcs := range csvSpecs {
+		// TODO(mjibson): using the actual file sizes here would improve progress
+		// accuracy.
+		rcs.Progress.Contribution = float32(len(rcs.Uri)) / float32(len(from))
 		node := nodes[i]
 		proc := distsqlplan.Processor{
 			Node: node.NodeID,
@@ -167,6 +174,14 @@ func (l *DistLoader) LoadCSV(
 		}
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
+	}
+
+	if err := job.SetDetails(ctx, jobs.ImportDetails{
+		Tables: []jobs.ImportDetails_Table{{
+			SamplingProgress: make([]float32, len(csvSpecs)),
+		}},
+	}); err != nil {
+		return err
 	}
 
 	// We only need the key during sorting.
@@ -280,9 +295,6 @@ func (l *DistLoader) LoadCSV(
 	}
 
 	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(spans), job.Record.Description)
-	if err := job.Progressed(ctx, jobs.Noop(1.0/10.0)); err != nil {
-		log.Warningf(ctx, "failed to update job progress: %s", err)
-	}
 
 	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
 
@@ -332,6 +344,11 @@ func (l *DistLoader) LoadCSV(
 		if len(swSpec.Spans) == 0 {
 			continue
 		}
+		swSpec.Progress = distsqlrun.JobProgress{
+			JobID:        *job.ID(),
+			Slot:         int32(len(p.ResultRouters)),
+			Contribution: float32(len(swSpec.Spans)) / float32(len(spans)),
+		}
 		proc := distsqlplan.Processor{
 			Node: node.NodeID,
 			Spec: distsqlrun.ProcessorSpec{
@@ -354,6 +371,17 @@ func (l *DistLoader) LoadCSV(
 			})
 		}
 		p.ResultRouters = append(p.ResultRouters, pIdx)
+	}
+
+	// Clear SamplingProgress and prep second stage job details for progress
+	// tracking.
+	if err := job.SetDetails(ctx, jobs.ImportDetails{
+		Tables: []jobs.ImportDetails_Table{{
+			ReadProgress:  make([]float32, len(csvSpecs)),
+			WriteProgress: make([]float32, len(p.ResultRouters)),
+		}},
+	}); err != nil {
+		return err
 	}
 
 	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
