@@ -9,6 +9,8 @@
 #
 # https://github.com/github/gitignore/tree/master/Global
 
+/.idea
+
 artifacts
 /bin
 /bin.*
