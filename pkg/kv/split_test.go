@@ -100,7 +100,7 @@ func startTestWriter(
 // which are resolved synchronously with EndTransaction and via RPC.
 func TestRangeSplitMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	ctx := context.TODO()
@@ -131,7 +131,7 @@ func TestRangeSplitMeta(t *testing.T) {
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	// This channel shuts the whole apparatus down.
@@ -189,7 +189,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 			DisableScanner: true,
 		},
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 
 	// This is purely to silence log spam.
 	config.TestingSetupZoneConfigHook(s.Stopper)
@@ -238,7 +238,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // on the same splitKey succeeds.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	ctx := context.TODO()

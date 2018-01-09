@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -188,7 +187,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		if i == oldNodeIdx {
 			continue
 		}
-		kvClient := server.KVClient().(*client.DB)
+		kvClient := server.DB()
 		if err := kvClient.Put(ctx, fmt.Sprintf("%d", i), i); err != nil {
 			t.Errorf("failed Put to node %d: %s", i, err)
 		}

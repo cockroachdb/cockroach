@@ -399,9 +399,8 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Ctx:      context.Background(),
 				EvalCtx:  evalCtx,
 				Settings: s.ClusterSettings(),
-				// Pass a DB without a TxnCoordSender.
-				txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
-				nodeID: s.NodeID(),
+				txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+				nodeID:   s.NodeID(),
 			}
 
 			out := &RowBuffer{}
@@ -528,9 +527,8 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 			flowCtx := FlowCtx{
 				EvalCtx:  evalCtx,
 				Settings: s.ClusterSettings(),
-				// Pass a DB without a TxnCoordSender.
-				txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
-				nodeID: s.NodeID(),
+				txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+				nodeID:   s.NodeID(),
 			}
 
 			out := &RowBuffer{}

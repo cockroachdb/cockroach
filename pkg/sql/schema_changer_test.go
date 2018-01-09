@@ -606,7 +606,7 @@ func TestRaceWithBackfill(t *testing.T) {
 			ServerArgs:      params,
 		})
 	defer tc.Stopper().Stop(context.TODO())
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 	jobRegistry := tc.Server(0).JobRegistry().(*jobs.Registry)
 
@@ -773,7 +773,7 @@ func TestDropWhileBackfill(t *testing.T) {
 			ServerArgs:      params,
 		})
 	defer tc.Stopper().Stop(context.TODO())
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`
@@ -871,7 +871,7 @@ func TestBackfillErrors(t *testing.T) {
 			ServerArgs:      params,
 		})
 	defer tc.Stopper().Stop(context.TODO())
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`
@@ -2100,7 +2100,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 			ServerArgs:      params,
 		})
 	defer tc.Stopper().Stop(context.TODO())
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`
@@ -2373,7 +2373,7 @@ func TestSchemaChangeEvalContext(t *testing.T) {
 			ServerArgs:      params,
 		})
 	defer tc.Stopper().Stop(context.TODO())
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`

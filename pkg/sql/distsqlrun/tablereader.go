@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // ScrubTypes is the schema for TableReaders that are doing a SCRUB
@@ -291,6 +292,10 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 		if traceData != nil {
 			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TraceData: traceData})
 		}
+		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
+		if txnMeta.Txn.ID != (uuid.UUID{}) {
+			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TxnMeta: &txnMeta})
+		}
 		tr.close()
 	}
 	if len(tr.trailingMetadata) > 0 {
@@ -314,7 +319,7 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			tr.ctx, tr.flowCtx.txn, tr.spans,
 			true /* limit batches */, tr.limitHint, false, /* traceKV */
 		); err != nil {
-			log.Errorf(tr.ctx, "scan error: %s", err)
+			log.Eventf(tr.ctx, "scan error: %s", err)
 			return nil, tr.producerMeta(err)
 		}
 	}

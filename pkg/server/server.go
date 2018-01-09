@@ -118,7 +118,7 @@ type Server struct {
 	gossip             *gossip.Gossip
 	nodeLiveness       *storage.NodeLiveness
 	storePool          *storage.StorePool
-	txnCoordSender     *kv.TxnCoordSender
+	tcsFactory         *kv.TxnCoordSenderFactory
 	distSender         *kv.DistSender
 	db                 *client.DB
 	pgServer           *pgwire.Server
@@ -247,7 +247,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	txnMetrics := kv.MakeTxnMetrics(s.cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(txnMetrics)
-	s.txnCoordSender = kv.NewTxnCoordSender(
+	s.tcsFactory = kv.NewTxnCoordSenderFactory(
 		s.cfg.AmbientCtx,
 		st,
 		s.distSender,
@@ -256,7 +256,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		txnMetrics,
 	)
-	s.db = client.NewDB(s.txnCoordSender, s.clock)
+	s.db = client.NewDB(s.tcsFactory, s.clock)
 
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
@@ -405,11 +405,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Settings:       st,
 		DB:             s.db,
 		Executor:       sqlExecutor,
-		// DistSQL also uses a DB that bypasses the TxnCoordSender.
-		FlowDB:     client.NewDB(s.distSender, s.clock),
-		RPCContext: s.rpcContext,
-		Stopper:    s.stopper,
-		NodeID:     &s.nodeIDContainer,
+		FlowDB:         client.NewDB(s.tcsFactory, s.clock),
+		RPCContext:     s.rpcContext,
+		Stopper:        s.stopper,
+		NodeID:         &s.nodeIDContainer,
 
 		TempStorage: tempEngine,
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
