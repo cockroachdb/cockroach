@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"math"
 	"math/rand"
 	"net"
 	"strconv"
@@ -26,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
+
+var errResultOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "result out of range")
 
 // Addr is the representation of the IP address. The Uint128 takes 16-bytes for
 // both IPv4 and IPv6.
@@ -64,6 +67,14 @@ const IPv6size = net.IPv6len + 2
 
 // IPv4mappedIPv6prefix is the byte prefix for IPv4-mapped IPv6.
 const IPv4mappedIPv6prefix = uint64(0xFFFF) << 32
+
+// IPv4mask is used to select only the lower 32 bits of uint128.
+// IPv4 addresses may not have the the upper 96 bits of Addr set to 0.
+// IPv4 addresses mapped to IPv6 have prefix bits that should not change.
+const IPv4mask = uint64(0xFFFFFFFF)
+
+// IPv4max is used for overflows.
+const IPv4max = IPv4mask
 
 // ToBuffer appends the IPAddr encoding to a buffer and returns the final buffer.
 func (ipAddr *IPAddr) ToBuffer(appendTo []byte) []byte {
@@ -324,6 +335,172 @@ func (ipAddr *IPAddr) Broadcast() IPAddr {
 	return newIPAddr
 }
 
+// Complement returns a new IPAddr which is the bitwise complement of the
+// original IP. Only the lower 32 bits are changed for IPv4.
+func (ipAddr *IPAddr) Complement() IPAddr {
+	var newIPAddr IPAddr
+
+	newIPAddr.Family = ipAddr.Family
+	newIPAddr.Mask = ipAddr.Mask
+
+	var familyMask uint128.Uint128
+	if newIPAddr.Family == IPv4family {
+		familyMask = uint128.Uint128{Hi: 0, Lo: IPv4mask}
+	} else {
+		familyMask = uint128.Uint128{Hi: math.MaxUint64, Lo: math.MaxUint64}
+	}
+	newIPAddr.Addr = Addr(uint128.Uint128(ipAddr.Addr).Xor(familyMask))
+
+	return newIPAddr
+}
+
+// And returns a new IPAddr which is the bitwise AND of two IPAddrs.
+// Only the lower 32 bits are changed for IPv4.
+func (ipAddr *IPAddr) And(other *IPAddr) (IPAddr, error) {
+	var newIPAddr IPAddr
+	if ipAddr.Family != other.Family {
+		return newIPAddr, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			"cannot AND inet values of different sizes")
+	}
+	newIPAddr.Family = ipAddr.Family
+
+	if ipAddr.Mask > other.Mask {
+		newIPAddr.Mask = ipAddr.Mask
+	} else {
+		newIPAddr.Mask = other.Mask
+	}
+
+	newIPAddr.Addr = ipAddr.Addr.and(other.Addr)
+
+	return newIPAddr, nil
+}
+
+// Or returns a new IPAddr which is the bitwise OR of two IPAddrs.
+// Only the lower 32 bits are changed for IPv4.
+func (ipAddr *IPAddr) Or(other *IPAddr) (IPAddr, error) {
+	var newIPAddr IPAddr
+	if ipAddr.Family != other.Family {
+		return newIPAddr, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			"cannot OR inet values of different sizes")
+	}
+	newIPAddr.Family = ipAddr.Family
+
+	if ipAddr.Mask > other.Mask {
+		newIPAddr.Mask = ipAddr.Mask
+	} else {
+		newIPAddr.Mask = other.Mask
+	}
+
+	newIPAddr.Addr = ipAddr.Addr.or(other.Addr)
+
+	return newIPAddr, nil
+}
+
+func (ipAddr *IPAddr) sum(o int64, neg bool) (IPAddr, error) {
+	// neg carries information about whether to add or subtract other.
+	// x - -y is the same as x + y, and x + -y is the same as x - y.
+	var newIPAddr IPAddr
+	newIPAddr.Family = ipAddr.Family
+	newIPAddr.Mask = ipAddr.Mask
+
+	var err error
+	var o2 uint64
+	if o < 0 {
+		neg = !neg
+		// PostgreSQL ver 10 seems to have an error with min int64.
+		// It does not handle the overflow correctly.
+		// maxip - minInt64 incorrectly returns a valid address.
+		if o == math.MinInt64 {
+			o2 = 1 << 63
+		} else {
+			o2 = uint64(-o)
+		}
+	} else {
+		o2 = uint64(o)
+	}
+
+	if ipAddr.Family == IPv4family {
+		if !neg {
+			newIPAddr.Addr, err = ipAddr.Addr.ipv4Add(o2)
+		} else {
+			newIPAddr.Addr, err = ipAddr.Addr.ipv4Sub(o2)
+		}
+	} else {
+		if !neg {
+			newIPAddr.Addr, err = ipAddr.Addr.ipv6Add(o2)
+		} else {
+			newIPAddr.Addr, err = ipAddr.Addr.ipv6Sub(o2)
+		}
+	}
+
+	return newIPAddr, err
+}
+
+// Add returns a new IPAddr that is incremented by an int64.
+func (ipAddr *IPAddr) Add(o int64) (IPAddr, error) {
+	return ipAddr.sum(o, false)
+}
+
+// Sub returns a new IPAddr that is decremented by an int64.
+func (ipAddr *IPAddr) Sub(o int64) (IPAddr, error) {
+	return ipAddr.sum(o, true)
+}
+
+// SubIPAddr returns the difference between two IPAddrs.
+func (ipAddr *IPAddr) SubIPAddr(other *IPAddr) (int64, error) {
+	var diff int64
+	if ipAddr.Family != other.Family {
+		return diff, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			"cannot subtract inet addresses with different sizes")
+	}
+
+	if ipAddr.Family == IPv4family {
+		return ipAddr.Addr.subIPAddrIPv4(other.Addr)
+	}
+	return ipAddr.Addr.subIPAddrIPv6(other.Addr)
+}
+
+func (ipAddr IPAddr) contains(other *IPAddr) bool {
+	addrNetmask := ipAddr.Netmask()
+	o, err := other.And(&addrNetmask)
+	if err != nil {
+		return false
+	}
+	t, _ := ipAddr.And(&addrNetmask)
+
+	return t.Equal(&o)
+}
+
+// ContainsOrEquals determines if one ipAddr is in the same
+// subnet as another or the addresses and subnets are equal.
+func (ipAddr IPAddr) ContainsOrEquals(other *IPAddr) bool {
+	return ipAddr.contains(other) && ipAddr.Mask <= other.Mask
+}
+
+// Contains determines if one ipAddr is in the same
+// subnet as another.
+func (ipAddr IPAddr) Contains(other *IPAddr) bool {
+	return ipAddr.contains(other) && ipAddr.Mask < other.Mask
+}
+
+// ContainedByOrEquals determines if one ipAddr is in the same
+// subnet as another or the addresses and subnets are equal.
+func (ipAddr IPAddr) ContainedByOrEquals(other *IPAddr) bool {
+	return other.contains(&ipAddr) && ipAddr.Mask >= other.Mask
+}
+
+// ContainedBy determines if one ipAddr is in the same
+// subnet as another.
+func (ipAddr IPAddr) ContainedBy(other *IPAddr) bool {
+	return other.contains(&ipAddr) && ipAddr.Mask > other.Mask
+}
+
+// ContainsOrContainedBy determines if one ipAddr is in the same
+// subnet as another or vice versa.
+func (ipAddr IPAddr) ContainsOrContainedBy(other *IPAddr) bool {
+	return ipAddr.contains(other) || other.contains(&ipAddr)
+}
+
 // WriteIPv4Bytes writes the 4-byte IPv4 representation. If the IP is IPv6 then
 // the first 12-bytes are truncated.
 func (ip Addr) WriteIPv4Bytes(writer io.Writer) error {
@@ -362,4 +539,82 @@ func (ip Addr) Add(o uint64) Addr {
 // String wraps net.IP.String().
 func (ip Addr) String() string {
 	return net.IP(uint128.Uint128(ip).GetBytes()).String()
+}
+
+// and wraps the Uint128 AND.
+func (ip Addr) and(o Addr) Addr {
+	return Addr(uint128.Uint128(ip).And(uint128.Uint128(o)))
+}
+
+// or wraps the Uint128 OR.
+func (ip Addr) or(o Addr) Addr {
+	return Addr(uint128.Uint128(ip).Or(uint128.Uint128(o)))
+}
+
+// ipv4Add adds uint64 to Uint128 and checks for IPv4 overflows.
+func (ip Addr) ipv4Add(o uint64) (Addr, error) {
+	if o > IPv4max || IPv4max-o < ip.Lo&IPv4mask {
+		var newAddr Addr
+		return newAddr, errResultOutOfRange
+	}
+	return ip.Add(o), nil
+}
+
+// ipv6Add adds uint64 to Uint128 and checks for IPv6 overflows.
+func (ip Addr) ipv6Add(o uint64) (Addr, error) {
+	newIP := ip.Add(o)
+	if newIP.Compare(ip) < 0 {
+		return newIP, errResultOutOfRange
+	}
+	return newIP, nil
+}
+
+// ipv4Add subtracts uint64 from Uint128 and checks for IPv4 overflows.
+func (ip Addr) ipv4Sub(o uint64) (Addr, error) {
+	if o > IPv4max || (ip.Lo&IPv4mask) < o {
+		var newAddr Addr
+		return newAddr, errResultOutOfRange
+	}
+	return ip.Sub(o), nil
+}
+
+// ipv6Sub subtracts uint64 from Uint128 and checks for IPv6 overflows.
+func (ip Addr) ipv6Sub(o uint64) (Addr, error) {
+	newIP := ip.Sub(o)
+	if newIP.Compare(ip) > 0 {
+		return newIP, errResultOutOfRange
+	}
+	return newIP, nil
+}
+
+// subIPAddrIPv4 adds two Uint128s to return int64 and checks for overflows.
+func (ip Addr) subIPAddrIPv4(o Addr) (int64, error) {
+	return int64(uint128.Uint128(ip).Lo&IPv4mask) - int64(uint128.Uint128(o).Lo&IPv4mask), nil
+}
+
+// subIPAddrIPv6 adds two Uint128s to return int64 and checks for overflows.
+func (ip Addr) subIPAddrIPv6(o Addr) (int64, error) {
+	var sign int64 = 1
+	if ip.Compare(o) < 0 {
+		ip, o = o, ip
+		sign = -1
+	}
+	var lo, hi uint64
+	lo = ip.Lo - o.Lo
+	hi = ip.Hi - o.Hi
+	if lo > ip.Lo {
+		hi--
+	}
+	var diff int64
+	if hi != 0 {
+		return diff, errResultOutOfRange
+	}
+	if lo == uint64(math.MaxInt64)+1 && sign == -1 {
+		return math.MinInt64, nil
+	}
+	if lo > uint64(math.MaxInt64) {
+		return diff, errResultOutOfRange
+	}
+	diff = sign * int64(lo)
+	return diff, nil
 }
