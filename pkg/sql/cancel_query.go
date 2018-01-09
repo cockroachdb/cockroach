@@ -37,7 +37,7 @@ func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNod
 		nil,
 		tree.IndexedVarHelper{},
 		types.String,
-		true, /* requireType */
+		false, /* requireType */
 		"CANCEL QUERY",
 	)
 	if err != nil {
@@ -50,14 +50,33 @@ func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNod
 }
 
 func (n *cancelQueryNode) startExec(params runParams) error {
-	statusServer := params.p.session.execCfg.StatusServer
-
 	queryIDDatum, err := n.queryID.Eval(params.evalCtx)
 	if err != nil {
 		return err
 	}
 
-	queryIDString := tree.AsStringWithFlags(queryIDDatum, tree.FmtBareStrings)
+	switch t := queryIDDatum.(type) {
+	case *tree.DArray:
+		for _, d := range t.Array {
+			if err := n.cancelQuery(params, d); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return n.cancelQuery(params, t)
+	}
+}
+
+func (n *cancelQueryNode) cancelQuery(params runParams, d tree.Datum) error {
+	statusServer := params.p.session.execCfg.StatusServer
+
+	s, ok := tree.AsDString(d)
+	if !ok {
+		return fmt.Errorf("query ID must be of type string, not %s", d.ResolvedType())
+	}
+
+	queryIDString := tree.AsStringWithFlags(&s, tree.FmtBareStrings)
 	queryID, err := uint128.FromString(queryIDString)
 	if err != nil {
 		return errors.Wrapf(err, "invalid query ID '%s'", queryIDString)
@@ -80,7 +99,6 @@ func (n *cancelQueryNode) startExec(params runParams) error {
 	if !response.Canceled {
 		return fmt.Errorf("could not cancel query %s: %s", queryID, response.Error)
 	}
-
 	return nil
 }
 
