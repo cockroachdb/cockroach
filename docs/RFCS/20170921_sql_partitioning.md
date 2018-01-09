@@ -278,8 +278,8 @@ would be infeasible, so they use the range partitioning syntax instead:
 
 ```sql
 ALTER TABLE roachblog.articles PARTITION BY RANGE (published) (
-  PARTITION archived VALUES FROM MINVALUE TO '2017-12-04',
-  PARTITION recent VALUES FROM '2017-12-04' TO MAXVALUE
+  PARTITION archived VALUES FROM (MINVALUE) TO ('2017-12-04'),
+  PARTITION recent VALUES FROM ('2017-12-04') TO (MAXVALUE)
 );
 ```
 
@@ -486,7 +486,7 @@ List expression:
   <const-expr>
 
 Range partition:
-  PARTITION <partition-name> VALUES FROM <range-expr> TO <range-expr>
+  PARTITION <partition-name> VALUES FROM (<range-expr>) TO (<range-expr>)
 
 Range expression:
   MINVALUE
@@ -559,12 +559,12 @@ CREATE TABLE roachmart.users (
   PRIMARY KEY (country, last_seen, id)
 ) PARTITION BY LIST (country) (
   PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (last_seen) (
-    PARTITION australia_archived VALUES FROM MINVALUE TO '2017-06-04',
-    PARTITION australia_recent VALUES FROM '2017-06-04' TO MAXVALUE
+    PARTITION australia_archived VALUES FROM (MINVALUE) TO ('2017-06-04'),
+    PARTITION australia_recent VALUES FROM ('2017-06-04') TO (MAXVALUE)
   ),
   PARTITION north_america VALUES IN ('CA', 'MX', 'US') PARTITION BY RANGE (last_seen) (
-    PARTITION north_america_archived VALUES FROM MINVALUE TO '2017-06-04',
-    PARTITION north_america_recent VALUES FROM '2017-06-04' TO MAXVALUE
+    PARTITION north_america_archived VALUES FROM (MINVALUE) TO ('2017-06-04'),
+    PARTITION north_america_recent VALUES FROM ('2017-06-04') TO (MAXVALUE)
   ),
   ...
 );

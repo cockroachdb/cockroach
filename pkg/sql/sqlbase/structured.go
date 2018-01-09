@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -1377,29 +1378,38 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	}
 
 	if len(partDesc.Range) > 0 {
-		var lastEndKey []byte
-		rangeValues := make(map[string]struct{}, len(partDesc.Range))
+		tree := interval.NewTree(interval.ExclusiveOverlapper)
 		for _, p := range partDesc.Range {
 			if err := checkName(p.Name); err != nil {
 				return err
 			}
 
-			// NB: key encoding is used to check sortedness and uniqueness
-			// because it has to match the behavior of the value when
-			// indexed.
-			tuple, endKey, err := DecodePartitionTuple(
-				a, desc, idxDesc, partDesc, p.UpperBound, fakePrefixDatums)
+			// NB: key encoding is used to check uniqueness because it has to match
+			// the behavior of the value when indexed.
+			fromDatums, fromKey, err := DecodePartitionTuple(
+				a, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
-			if _, exists := rangeValues[string(endKey)]; exists {
-				return fmt.Errorf("%s cannot be present in more than one partition", tuple)
+			toDatums, toKey, err := DecodePartitionTuple(
+				a, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
+			if err != nil {
+				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
-			rangeValues[string(endKey)] = struct{}{}
-			if bytes.Compare(lastEndKey, endKey) >= 0 {
-				return fmt.Errorf("values must be strictly increasing: %s is out of order", tuple)
+			pi := partitionInterval{p.Name, fromKey, toKey}
+			if overlaps := tree.Get(pi.Range()); len(overlaps) > 0 {
+				return fmt.Errorf("partitions %s and %s overlap",
+					overlaps[0].(partitionInterval).name, p.Name)
 			}
-			lastEndKey = endKey
+			if err := tree.Insert(pi, false /* fast */); err == interval.ErrEmptyRange {
+				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is equal to upper bound %s",
+					p.Name, fromDatums, toDatums)
+			} else if err == interval.ErrInvertedRange {
+				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is greater than upper bound %s",
+					p.Name, fromDatums, toDatums)
+			} else if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("PARTITION %s", p.Name))
+			}
 		}
 	}
 

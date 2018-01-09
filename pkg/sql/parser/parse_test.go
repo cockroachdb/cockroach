@@ -182,7 +182,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
 		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))`},
-		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES < 1, PARTITION p2 VALUES < (2, MAXVALUE), PARTITION p3 VALUES < MAXVALUE)`},
+		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (MINVALUE) TO (1), PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))`},
 		// This monstrosity was added on the assumption that it's more readable
 		// than all on one line. Feel free to rip it out if you come across it
 		// and disagree.
@@ -191,7 +191,7 @@ func TestParse(t *testing.T) {
 				PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (
 					PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)
 				), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (
-					PARTITION p2_1 VALUES < 7 PARTITION BY LIST (d) (
+					PARTITION p2_1 VALUES FROM (7) TO (8) PARTITION BY LIST (d) (
 						PARTITION p2_1_1 VALUES IN (8)
 					)
 				)
