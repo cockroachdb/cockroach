@@ -763,21 +763,33 @@ func reportConfiguration(ctx context.Context) {
 	}
 }
 
-func maybeWarnCacheSize() {
-	if cacheSizeValue.IsSet() {
-		return
+func maybeWarnMemorySizes(ctx context.Context) {
+	// Is the cache configuration OK?
+	if !cacheSizeValue.IsSet() {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
+		fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
+		if size, err := server.GetTotalMemory(context.Background()); err == nil {
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=25%% (%s).",
+				humanizeutil.IBytes(size/4))
+		} else {
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+		}
+		log.Warning(ctx, buf.String())
 	}
 
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
-	fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
-	if size, err := server.GetTotalMemory(context.Background()); err == nil {
-		fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=25%% (%s).",
-			humanizeutil.IBytes(size/4))
-	} else {
-		fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+	if !sqlSizeValue.IsSet() {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "Using the default setting for --max-sql-memory (%s).\n", sqlSizeValue)
+		fmt.Fprintf(&buf, "  A significantly larger value is usually needed in production.\n")
+		if size, err := server.GetTotalMemory(context.Background()); err == nil {
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --max-sql-memory=25%% (%s).",
+				humanizeutil.IBytes(size/4))
+		} else {
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+		}
+		log.Warning(ctx, buf.String())
 	}
-	log.Warning(context.Background(), buf.String())
 }
 
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
@@ -860,7 +872,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 				"Check out how to secure your cluster: "+base.DocsURL("secure-a-cluster.html"))
 	}
 
-	maybeWarnCacheSize()
+	maybeWarnMemorySizes(ctx)
 
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
