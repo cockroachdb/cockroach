@@ -98,7 +98,6 @@ func (p *planner) MemberOfWithAdminOption(
 
 	toVisit := []string{member}
 
-	// Placeholders don't work with arrays, so let's do one by one.
 	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
 
 	internalExecutor := InternalExecutor{LeaseManager: p.LeaseMgr()}

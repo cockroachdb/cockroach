@@ -144,5 +144,5 @@ user root
 statement error pq: cannot drop user or role root: grants still exist on .*
 DROP USER root
 
-statement error pq: cannot drop user or role "admin": grants still exist on .*
+statement error pq: cannot drop user or role admin: grants still exist on .*
 DROP USER admin
