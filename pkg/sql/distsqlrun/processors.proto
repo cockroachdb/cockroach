@@ -462,6 +462,18 @@ message AlgebraicSetOpSpec {
   optional SetOpType op_type = 2 [(gogoproto.nullable) = false];
 }
 
+// JobProgress identifies the job to report progress on. This reporting
+// happens outside this package.
+message JobProgress {
+  optional int64 job_id = 1 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID"];
+  // contribution is the percent of work of the total this processor will
+  // process.
+  optional float contribution = 2 [(gogoproto.nullable) = false];
+  // slot is the index into the job details for this processor's completion.
+  optional int32 slot = 3 [(gogoproto.nullable) = false];
+}
+
 // ReadCSVSpec is the specification for a processor that reads a CSV
 // file at uri with descriptor table_desc, specified delimiter (comma),
 // optional comment rune, and optional nullif string (which is nullable to
@@ -478,6 +490,8 @@ message ReadCSVSpec {
 
   // uri is a storageccl.ExportStorage URI pointing to the CSV files to be read.
   repeated string uri = 5;
+
+  optional JobProgress progress = 6 [(gogoproto.nullable) = false];
 
   reserved 4;
 }
@@ -502,6 +516,7 @@ message SSTWriterSpec {
   optional int64 walltimeNanos = 3 [(gogoproto.nullable) = false];
   // spans is an array of span boundaries and corresponding filenames.
   repeated SpanName spans = 4 [(gogoproto.nullable) = false];
+  optional JobProgress progress = 5 [(gogoproto.nullable) = false];
 
   reserved 2;
 }
