@@ -224,16 +224,38 @@ func updateStatsOnMerge(key roachpb.Key, valSize, nowNanos int64) enginepb.MVCCS
 // If this value is an intent, updates the intent counters.
 func updateStatsOnPut(
 	key roachpb.Key,
+	prevKeySize, prevValSize int64,
 	origMetaKeySize, origMetaValSize,
 	metaKeySize, metaValSize int64,
 	orig, meta *enginepb.MVCCMetadata,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
-	sys := isSysLocal(key)
 
-	// Remove current live counts for this key.
-	if orig != nil {
-		if sys {
+	if false {
+		defer func() {
+			if orig == nil {
+				orig = &enginepb.MVCCMetadata{}
+			}
+			if meta == nil {
+				meta = &enginepb.MVCCMetadata{}
+			}
+			log.Infof(context.TODO(), "onPut\n"+
+				"prev: key=%d val=%d\n"+
+				"orig: metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
+				"meta: metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
+				"%+v",
+				prevKeySize, prevValSize,
+				origMetaKeySize, origMetaValSize, orig.KeyBytes, orig.ValBytes,
+				metaKeySize, metaValSize, meta.KeyBytes, meta.ValBytes,
+				&ms)
+		}()
+	}
+
+	if isSysLocal(key) {
+		// Handling system-local keys is straightforward because no ageable quantities
+		// are tracked. Remove the contributions from the original, if any, and add
+		// in the new contributions.
+		if orig != nil {
 			ms.SysBytes -= origMetaKeySize + origMetaValSize
 			if orig.Txn != nil {
 				// If the original value was an intent, we're replacing the
@@ -242,67 +264,135 @@ func updateStatsOnPut(
 				ms.SysBytes -= orig.KeyBytes + orig.ValBytes
 			}
 			ms.SysCount--
-		} else {
-			// Move the (so far empty) stats to the timestamp at which the
-			// previous entry was created, which is where we wish to reclassify
-			// its contributions.
-			ms.AgeTo(orig.Timestamp.WallTime)
-			// If original version value for this key wasn't deleted, subtract
-			// its contribution from live bytes in anticipation of adding in
-			// contribution from new version below.
-			if !orig.Deleted {
-				ms.LiveBytes -= orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
-				ms.LiveCount--
-				// Also, add the bytes from overwritten value to the GC'able bytes age stat.
+		}
+		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
+		ms.SysCount++
+		return ms
+	}
+
+	// Handle non-sys keys. This follows the same scheme: if there was a previous
+	// value, perhaps even an intent, subtract its contributions, and then add the
+	// new contributions. The complexity here is that we need to properly update
+	// GCBytesAge and IntentAge, which don't follow the same semantics. The difference
+	// between them is that an intent accrues IntentAge from its own timestamp on,
+	// while GCBytesAge is accrued by versions according to the following rules:
+	// 1. a (non-tombstone) value that is shadowed by a newer write accrues age at
+	// 	  the point in time at which it is shadowed (i.e. the newer write's timestamp).
+	// 2. a tombstone value accrues age at its own timestamp (note that this means
+	//    the tombstone's own contribution only -- the actual write that was deleted
+	//    is then shadowed by this tombstone, and will thus also accrue age from
+	//    the tombstone's value on, as per 1).
+	//
+	// This seems relatively straightforward, but only because it omits pesky
+	// details, which have been relegated to the comments below.
+
+	// Remove current live counts for this key.
+	if orig != nil {
+		ms.KeyCount--
+
+		// Move the (so far empty) stats to the timestamp at which the
+		// previous entry was created, which is where we wish to reclassify
+		// its contributions.
+		ms.AgeTo(orig.Timestamp.WallTime)
+
+		// If the original metadata for this key was an intent, subtract
+		// its contribution from stat counters as it's being replaced.
+		if orig.Txn != nil {
+			// Subtract counts attributable to intent we're replacing.
+			ms.ValCount--
+			ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+			ms.IntentCount--
+		}
+
+		// If the original intent is a deletion, we're removing the intent. This
+		// means removing its contribution at the *old* timestamp because it has
+		// accrued GCBytesAge that we need to offset (rule 2).
+		//
+		// Note that there is a corresponding block for the case of a non-deletion
+		// (rule 1) below, at meta.Timestamp.
+		if orig.Deleted {
+			ms.KeyBytes -= origMetaKeySize
+			ms.ValBytes -= origMetaValSize
+
+			if orig.Txn != nil {
+				ms.KeyBytes -= orig.KeyBytes
+				ms.ValBytes -= orig.ValBytes
 			}
+		}
+
+		// Rule 1 implies that sometimes it's not only the old meta and the new meta
+		// that matter, but also the version below both of them. For example, take
+		// a version at t=1 and an intent over it at t=2 that is now being replaced
+		// (t=3). Then orig.Timestamp will be 2, and meta.Timestamp will be 3, but
+		// rule 1 tells us that for the interval [2,3) we have already accrued
+		// GCBytesAge for the version at t=1 that is now moot, because the intent
+		// at t=2 is moving to t=3; we have to emit a GCBytesAge offset to that effect.
+		//
+		// The code below achieves this by making the old version live again at
+		// orig.Timestamp, and then marking it as shadowed at meta.Timestamp below.
+		// This only happens when that version wasn't a tombstone, in which case it
+		// contributes from its own timestamp on anyway, and doesn't need adjustment.
+		//
+		// Note that when meta.Timestamp equals orig.Timestamp, the computation is
+		// moot, which is something our callers may exploit (since retrieving the
+		// previous version is not for free).
+		if prevValSize > 0 {
+			// If the previous value (exists and) was not a deletion tombstone, make it
+			// live at orig.Timestamp. We don't have to do anything if there is a
+			// previous value that is a tombstone: according to rule two its age
+			// contributions are anchored to its own timestamp, so moving some values
+			// higher up doesn't affect the contributions tied to that key.
+			ms.LiveBytes += mvccVersionTimestampSize + prevValSize
+		}
+
+		// Note that there is an interesting special case here: it's possible that
+		// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
+		// outside of tests (due to our semantics of txn.OrigTimestamp, which never
+		// decreases) but it sure does happen in randomized testing. An earlier
+		// version of the code used `Forward` here, which is incorrect as it would be
+		// a no-op and fail to subtract out the intent bytes/GC age incurred due to
+		// removing the meta entry at `orig.Timestamp` (when `orig != nil`).
+		ms.AgeTo(meta.Timestamp.WallTime)
+
+		if prevValSize > 0 {
+			// Make the previous non-deletion value non-live again, as explained in the
+			// sibling block above.
+			ms.LiveBytes -= mvccVersionTimestampSize + prevValSize
+		}
+
+		// If the original version wasn't a deletion, it becomes non-live at meta.Timestamp
+		// as this is where it is shadowed.
+		if !orig.Deleted {
+			ms.LiveBytes -= orig.KeyBytes + orig.ValBytes
+			ms.LiveBytes -= origMetaKeySize + origMetaValSize
+			ms.LiveCount--
 
 			ms.KeyBytes -= origMetaKeySize
 			ms.ValBytes -= origMetaValSize
-			ms.KeyCount--
-			// If the original metadata for this key was an intent, subtract
-			// its contribution from stat counters as it's being replaced.
+
 			if orig.Txn != nil {
-				// Subtract counts attributable to intent we're replacing.
 				ms.KeyBytes -= orig.KeyBytes
 				ms.ValBytes -= orig.ValBytes
-				ms.ValCount--
-				ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
-				ms.IntentCount--
 			}
 		}
-	}
-
-	// Move the stats to the new meta's timestamp. If we had an orig meta, this
-	// ages those original stats by the time which the previous version was
-	// live.
-	//
-	// Note that there is an interesting special case here: it's possible that
-	// meta.Timestamp.WallTime < orig.Timestamp.WallTime. This wouldn't happen
-	// outside of tests (due to our semantics of txn.OrigTimestamp, which never
-	// decreases) but it sure does happen in randomized testing. An earlier
-	// version of the code used `Forward` here, which is incorrect as it would be
-	// a no-op and fail to subtract out the intent bytes/GC age incurred due to
-	// removing the meta entry at `orig.Timestamp` (when `orig != nil`).
-	ms.AgeTo(meta.Timestamp.WallTime)
-
-	if sys {
-		ms.SysBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
-		ms.SysCount++
 	} else {
-		// If new version isn't a deletion tombstone, add it to live counters.
-		if !meta.Deleted {
-			ms.LiveBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
-			ms.LiveCount++
-		}
-		ms.KeyBytes += meta.KeyBytes + metaKeySize
-		ms.ValBytes += meta.ValBytes + metaValSize
-		ms.KeyCount++
-		ms.ValCount++
-		if meta.Txn != nil {
-			ms.IntentBytes += meta.KeyBytes + meta.ValBytes
-			ms.IntentCount++
-		}
+		ms.AgeTo(meta.Timestamp.WallTime)
 	}
+
+	// If the new version isn't a deletion tombstone, add it to live counters.
+	if !meta.Deleted {
+		ms.LiveBytes += meta.KeyBytes + meta.ValBytes + metaKeySize + metaValSize
+		ms.LiveCount++
+	}
+	ms.KeyBytes += meta.KeyBytes + metaKeySize
+	ms.ValBytes += meta.ValBytes + metaValSize
+	ms.KeyCount++
+	ms.ValCount++
+	if meta.Txn != nil {
+		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
+		ms.IntentCount++
+	}
+
 	return ms
 }
 
@@ -312,6 +402,7 @@ func updateStatsOnPut(
 // counters if commit=true.
 func updateStatsOnResolve(
 	key roachpb.Key,
+	prevKeySize, prevValSize int64,
 	origMetaKeySize, origMetaValSize,
 	metaKeySize, metaValSize int64,
 	orig, meta enginepb.MVCCMetadata,
@@ -319,68 +410,105 @@ func updateStatsOnResolve(
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 
-	// NB: this is logging for ongoing work on #20554.
 	if false {
 		defer func() {
 			log.Infof(context.TODO(), "onResolve\n"+
+				"prev: key=%d val=%d\n"+
 				"orig: ts=%d metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
 				"meta: ts=%d metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
 				"%+v",
+				prevKeySize, prevValSize,
 				orig.Timestamp.WallTime, origMetaKeySize, origMetaValSize, orig.KeyBytes, orig.ValBytes,
 				meta.Timestamp.WallTime, metaKeySize, metaValSize, meta.KeyBytes, meta.ValBytes,
 				&ms)
 		}()
 	}
 
-	// In this case, we're only removing the contribution from having the
-	// meta key around from orig.Timestamp to meta.Timestamp.
-	ms.AgeTo(orig.Timestamp.WallTime)
-	sys := isSysLocal(key)
+	if isSysLocal(key) {
+		// Straightforward: old contribution goes, new contribution comes, and we're done.
+		ms.SysBytes += (metaKeySize + metaValSize) - (origMetaValSize + origMetaKeySize)
+		return ms
+	}
 
+	// An intent can't turn from deleted to non-deleted and vice versa while being
+	// resolved.
 	if orig.Deleted != meta.Deleted {
 		log.Fatalf(context.TODO(), "on resolve, original meta was deleted=%t, but new one is deleted=%t",
 			orig.Deleted, meta.Deleted)
 	}
 
-	if sys {
-		ms.SysBytes += (metaKeySize + metaValSize) - (origMetaValSize + origMetaKeySize)
-	} else {
-		// At orig.Timestamp, the original meta key disappears.
-		ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
-		ms.ValBytes -= origMetaValSize + orig.ValBytes
+	// In the main case, we had an old intent at orig.Timestamp, and a new intent
+	// or value at meta.Timestamp. We'll walk through the contributions below,
+	// taking special care for IntentAge and GCBytesAge.
+	//
+	// Jump into the method below for extensive commentary on their semantics
+	// and "rules one and two".
+	_ = updateStatsOnPut
 
-		ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
-		ms.IntentCount--
+	ms.AgeTo(orig.Timestamp.WallTime)
 
-		// If the old intent is a deletion, then the key already isn't tracked
-		// in LiveBytes any more (and the new intent/value is also a deletion).
-		// If we're looking at a non-deletion intent/value, update the live
-		// bytes to account for the difference between the previous intent and
-		// the new intent/value.
-		if !meta.Deleted {
-			ms.LiveBytes -= (origMetaKeySize + origMetaValSize) + (orig.KeyBytes + meta.ValBytes)
-		}
+	// At orig.Timestamp, the original meta key disappears. Fortunately, the
+	// GCBytesAge computations are fairly transparent because the intent is either
+	// not a deletion in which case it is always live (it's the most recent value,
+	// so it isn't shadowed -- see rule 1), or it *is* a deletion, in which case
+	// its own timestamp is where it starts accruing GCBytesAge (rule 2).
+	ms.KeyBytes -= origMetaKeySize + orig.KeyBytes
+	ms.ValBytes -= origMetaValSize + orig.ValBytes
 
-		ms.AgeTo(meta.Timestamp.WallTime)
-
-		// At meta.Timestamp, the new meta key appears.
-		ms.KeyBytes += metaKeySize + meta.KeyBytes
-		ms.ValBytes += metaValSize + meta.ValBytes
-
-		if !commit {
-			// If not committing, the intent reappears (but at meta.Timestamp).
-			//
-			// This is the case in which an intent is pushed (a similar case
-			// happens when an intent is overwritten, but that's handled in
-			// updateStatsOnPut, not this method).
-			ms.IntentBytes += meta.KeyBytes + meta.ValBytes
-			ms.IntentCount++
-		}
-
-		if !meta.Deleted {
-			ms.LiveBytes += (metaKeySize + metaValSize) + (meta.KeyBytes + meta.ValBytes)
-		}
+	// If the old intent is a deletion, then the key already isn't tracked
+	// in LiveBytes any more (and the new intent/value is also a deletion).
+	// If we're looking at a non-deletion intent/value, update the live
+	// bytes to account for the difference between the previous intent and
+	// the new intent/value.
+	if !meta.Deleted {
+		ms.LiveBytes -= origMetaKeySize + origMetaValSize
+		ms.LiveBytes -= orig.KeyBytes + meta.ValBytes
 	}
+
+	// IntentAge is always accrued from the intent's own timestamp on.
+	ms.IntentBytes -= orig.KeyBytes + orig.ValBytes
+	ms.IntentCount--
+
+	// If there was a previous value (before orig.Timestamp), and it was not a
+	// deletion tombstone, then we have to adjust its GCBytesAge contribution
+	// which was previously anchored at orig.Timestamp and now has to move to
+	// meta.Timestamp. Paralleling very similar code in the method below, this
+	// is achieved by making the previous key live between orig.Timestamp and
+	// meta.Timestamp. When the two are equal, this will be a zero adjustment,
+	// and so in that case the caller may simply pass prevValSize=0 and can
+	// skip computing that quantity in the first place.
+	_ = updateStatsOnPut
+	if prevValSize > 0 {
+		ms.LiveBytes += mvccVersionTimestampSize + prevValSize
+	}
+
+	ms.AgeTo(meta.Timestamp.WallTime)
+
+	if prevValSize > 0 {
+		// The previous non-deletion value becomes non-live at meta.Timestamp.
+		// See the sibling code above.
+		ms.LiveBytes -= mvccVersionTimestampSize + prevValSize
+	}
+
+	// At meta.Timestamp, the new meta key appears.
+	ms.KeyBytes += metaKeySize + meta.KeyBytes
+	ms.ValBytes += metaValSize + meta.ValBytes
+
+	// The new meta key appears.
+	if !meta.Deleted {
+		ms.LiveBytes += (metaKeySize + metaValSize) + (meta.KeyBytes + meta.ValBytes)
+	}
+
+	if !commit {
+		// If not committing, the intent reappears (but at meta.Timestamp).
+		//
+		// This is the case in which an intent is pushed (a similar case
+		// happens when an intent is overwritten, but that's handled in
+		// updateStatsOnPut, not this method).
+		ms.IntentBytes += meta.KeyBytes + meta.ValBytes
+		ms.IntentCount++
+	}
+
 	return ms
 }
 
@@ -393,56 +521,96 @@ func updateStatsOnAbort(
 	origMetaKeySize, origMetaValSize,
 	restoredMetaKeySize, restoredMetaValSize int64,
 	orig, restored *enginepb.MVCCMetadata,
-	restoredNanos, txnNanos int64,
+	restoredNanos int64,
 ) enginepb.MVCCStats {
-	sys := isSysLocal(key)
-
 	var ms enginepb.MVCCStats
+	if false {
+		defer func() {
+			restored := restored
+			orig := orig
+			if orig == nil {
+				orig = &enginepb.MVCCMetadata{}
+			}
+			if restored == nil {
+				restored = &enginepb.MVCCMetadata{}
+			}
+			log.Infof(context.TODO(), "onAbort\n"+
+				//"prev: key=%d val=%d\n"+
+				"last value at %d, intent at %d\n"+
+				"orig: metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
+				"rstd: metaKeySize=%d metaValSize=%d KeyBytes=%d ValBytes=%d\n"+
+				"%+v",
+				restoredNanos, orig.Timestamp.WallTime,
+				origMetaKeySize, origMetaValSize, orig.KeyBytes, orig.ValBytes,
+				restoredMetaKeySize, restoredMetaValSize, restored.KeyBytes, restored.ValBytes,
+				&ms)
+		}()
+	}
 
-	// Three epochs of time here:
-	// 1) creation of previous value (or 0) to creation of intent:
-	//		[restoredNanos, orig.Timestamp.WallTime)
-	// 2) creation of the intent (which we're now aborting) to the timestamp
-	//    at which we're aborting:
-	//		[orig.Timestamp.WallTime, txnNanos)
-	if restored != nil {
-		ms.AgeTo(restoredNanos)
-		if sys {
+	if isSysLocal(key) {
+		if restored != nil {
 			ms.SysBytes += restoredMetaKeySize + restoredMetaValSize
 			ms.SysCount++
-		} else {
-			if !restored.Deleted {
-				ms.LiveBytes += restored.KeyBytes + restored.ValBytes + restoredMetaKeySize + restoredMetaValSize
-				ms.LiveCount++
-			}
+		}
+
+		ms.SysBytes -= (orig.KeyBytes + orig.ValBytes) + (origMetaKeySize + origMetaValSize)
+		ms.SysCount--
+		return ms
+	}
+
+	// If we're restoring a previous value (which is thus not an intent), there are
+	// two main cases:
+	//
+	// 1. the previous value is a tombstone, so according to rule 2 it accrues
+	// GCBytesAge from its own timestamp on (we need to adjust only for the
+	// implicit meta key that "pops up" at that timestamp), -- or --
+	// 2. it is not, and it has been shadowed by the intent we're now aborting,
+	// in which case we need to offset its GCBytesAge contribution from
+	// restoredNanos to orig.Timestamp (rule 1).
+	if restored != nil {
+		if restored.Txn != nil {
+			panic("restored version should never be an intent")
+		}
+
+		ms.AgeTo(restoredNanos)
+
+		if restored.Deleted {
+			// The new meta key will be implicit and at restoredNanos. It needs to
+			// catch up on the GCBytesAge from that point on until orig.Timestamp
+			// (rule 2).
 			ms.KeyBytes += restoredMetaKeySize
 			ms.ValBytes += restoredMetaValSize
-			ms.KeyCount++
-			if restored.Txn != nil {
-				panic("restored version should never be an intent")
-			}
 		}
-	}
 
-	ms.AgeTo(orig.Timestamp.WallTime)
+		ms.AgeTo(orig.Timestamp.WallTime)
 
-	origTotalBytes := orig.KeyBytes + orig.ValBytes + origMetaKeySize + origMetaValSize
-	if sys {
-		ms.SysBytes -= origTotalBytes
-		ms.SysCount--
+		ms.KeyCount++
+
+		if !restored.Deleted {
+			// At orig.Timestamp, make the non-deletion version live again.
+			// Note that there's no need to explicitly age to the "present time"
+			// after.
+			ms.KeyBytes += restoredMetaKeySize
+			ms.ValBytes += restoredMetaValSize
+
+			ms.LiveBytes += restored.KeyBytes + restored.ValBytes
+			ms.LiveCount++
+			ms.LiveBytes += restoredMetaKeySize + restoredMetaValSize
+		}
 	} else {
-		if !orig.Deleted {
-			ms.LiveBytes -= origTotalBytes
-			ms.LiveCount--
-		}
-		ms.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
-		ms.ValBytes -= (orig.ValBytes + origMetaValSize)
-		ms.KeyCount--
-		ms.ValCount--
-		ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
-		ms.IntentCount--
+		ms.AgeTo(orig.Timestamp.WallTime)
 	}
-	ms.AgeTo(txnNanos)
+
+	if !orig.Deleted {
+		ms.LiveBytes -= (orig.KeyBytes + orig.ValBytes) + (origMetaKeySize + origMetaValSize)
+		ms.LiveCount--
+	}
+	ms.KeyBytes -= (orig.KeyBytes + origMetaKeySize)
+	ms.ValBytes -= (orig.ValBytes + origMetaValSize)
+	ms.KeyCount--
+	ms.ValCount--
+	ms.IntentBytes -= (orig.KeyBytes + orig.ValBytes)
+	ms.IntentCount--
 
 	return ms
 }
@@ -452,27 +620,32 @@ func updateStatsOnAbort(
 // value counts, and updating the GC'able bytes age. If meta is
 // not nil, then the value being GC'd is the mvcc metadata and we
 // decrement the key count.
+//
+// nonLiveMS is the timestamp at which the value became non-live.
+// For a deletion tombstone this will be its own timestamp (rule two
+// in updateStatsOnPut) and for a regular version it will be the closest
+// newer version's (rule one).
 func updateStatsOnGC(
-	key roachpb.Key, keySize, valSize int64, meta *enginepb.MVCCMetadata, fromNS, toNS int64,
+	key roachpb.Key, keySize, valSize int64, meta *enginepb.MVCCMetadata, nonLiveMS int64,
 ) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
-	ms.AgeTo(fromNS)
-	sys := isSysLocal(key)
-	if sys {
+
+	if isSysLocal(key) {
 		ms.SysBytes -= (keySize + valSize)
 		if meta != nil {
 			ms.SysCount--
 		}
-	} else {
-		ms.KeyBytes -= keySize
-		ms.ValBytes -= valSize
-		if meta != nil {
-			ms.KeyCount--
-		} else {
-			ms.ValCount--
-		}
+		return ms
 	}
-	ms.AgeTo(toNS)
+
+	ms.AgeTo(nonLiveMS)
+	ms.KeyBytes -= keySize
+	ms.ValBytes -= valSize
+	if meta != nil {
+		ms.KeyCount--
+	} else {
+		ms.ValCount--
+	}
 	return ms
 }
 
@@ -1110,6 +1283,7 @@ func mvccPutInternal(
 
 	var meta *enginepb.MVCCMetadata
 	var maybeTooOldErr error
+	var prevKeySize, prevValSize int64
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
 		meta = &buf.meta
@@ -1142,9 +1316,25 @@ func mvccPutInternal(
 			// writing at the same timestamp we can simply overwrite it;
 			// otherwise we must explicitly delete the obsolete intent.
 			if timestamp != metaTimestamp {
+				{
+					// If the older write intent has a version underneath it, we need to
+					// read its size because its GCBytesAge contribution may change as we
+					// move the intent above it. A similar phenomenon occurs in
+					// MVCCResolveWriteIntent.
+					latestKey := MVCCKey{Key: key, Timestamp: hlc.Timestamp(metaTimestamp)}
+					prevKey, prevVal, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
+					if err != nil {
+						return err
+					}
+					if haveNextVersion {
+						prevKeySize = int64(prevKey.EncodedSize())
+						prevValSize = int64(len(prevVal))
+					}
+				}
+
 				versionKey := metaKey
 				versionKey.Timestamp = metaTimestamp
-				if err = engine.Clear(versionKey); err != nil {
+				if err := engine.Clear(versionKey); err != nil {
 					return err
 				}
 			}
@@ -1230,7 +1420,7 @@ func mvccPutInternal(
 
 	// Update MVCC stats.
 	if ms != nil {
-		ms.Add(updateStatsOnPut(key, origMetaKeySize, origMetaValSize,
+		ms.Add(updateStatsOnPut(key, prevKeySize, prevValSize, origMetaKeySize, origMetaValSize,
 			metaKeySize, metaValSize, meta, newMeta))
 	}
 
@@ -2026,19 +2216,39 @@ func mvccResolveWriteIntent(
 		hlc.Timestamp(meta.Timestamp).Less(intent.Txn.Timestamp) &&
 		meta.Txn.Epoch >= intent.Txn.Epoch
 
-	// If we're committing, or if the commit timestamp of the intent has
-	// been moved forward, and if the proposed epoch matches the existing
-	// epoch: update the meta.Txn. For commit, it's set to nil;
-	// otherwise, we update its value. We may have to update the actual
-	// version value (remove old and create new with proper
-	// timestamp-encoded key) if timestamp changed.
+	// If we're committing, or if the commit timestamp of the intent has been moved forward, and if
+	// the proposed epoch matches the existing epoch: update the meta.Txn. For commit, it's set to
+	// nil; otherwise, we update its value. We may have to update the actual version value (remove old
+	// and create new with proper timestamp-encoded key) if timestamp changed.
 	if commit || pushed {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
 		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.Timestamp)
 
+		// If the new intent/value is at a different timestamp than the old intent,
+		// and there is a value under both, then that value may need an adjustment
+		// of its GCBytesAge. This is because it became non-live at orig.Timestamp
+		// originally, and now only becomes non-live at newMeta.Timestamp. For that
+		// reason, we have to read that version's size.
+		//
+		// However, if we're not actually moving the intent, no stats adjustment is
+		// necessary and we avoid reading the old version in that case.
+		var prevKeySize, prevValSize int64
+		if buf.newMeta.Timestamp != meta.Timestamp {
+			// Look for the first real versioned key, i.e. the key just below the (old) meta's
+			// timestamp.
+			latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
+			unsafeNextKey, unsafeNextValue, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
+			if err != nil {
+				return err
+			}
+			if haveNextVersion {
+				prevKeySize = int64(unsafeNextKey.EncodedSize())
+				prevValSize = int64(len(unsafeNextValue))
+			}
+		}
+
 		var metaKeySize, metaValSize int64
-		var err error
 		if pushed {
 			// Keep intent if we're pushing timestamp.
 			buf.newTxn = intent.Txn
@@ -2054,7 +2264,7 @@ func mvccResolveWriteIntent(
 
 		// Update stat counters related to resolving the intent.
 		if ms != nil {
-			ms.Add(updateStatsOnResolve(intent.Key, origMetaKeySize, origMetaValSize,
+			ms.Add(updateStatsOnResolve(intent.Key, prevKeySize, prevValSize, origMetaKeySize, origMetaValSize,
 				metaKeySize, metaValSize, *meta, buf.newMeta, commit))
 		}
 
@@ -2116,7 +2326,7 @@ func mvccResolveWriteIntent(
 		}
 		// Clear stat counters attributable to the intent we're aborting.
 		if ms != nil {
-			ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0, intent.Txn.Timestamp.WallTime))
+			ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0))
 		}
 		return nil
 	}
@@ -2138,8 +2348,7 @@ func mvccResolveWriteIntent(
 	// Update stat counters with older version.
 	if ms != nil {
 		ms.Add(updateStatsOnAbort(intent.Key, origMetaKeySize, origMetaValSize,
-			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime,
-			intent.Txn.Timestamp.WallTime))
+			metaKeySize, metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime))
 	}
 
 	return nil
@@ -2297,8 +2506,7 @@ func MVCCGarbageCollect(
 					updateStatsForInline(ms, gcKey.Key, metaKeySize, metaValSize, 0, 0)
 					ms.AgeTo(timestamp.WallTime)
 				} else {
-					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize,
-						meta, meta.Timestamp.WallTime, timestamp.WallTime))
+					ms.Add(updateStatsOnGC(gcKey.Key, metaKeySize, metaValSize, meta, meta.Timestamp.WallTime))
 				}
 			}
 			if !implicitMeta {
@@ -2314,7 +2522,19 @@ func MVCCGarbageCollect(
 			iter.Next()
 		}
 
+		// TODO(tschottdorf): Can't we just Seek() to a key with timestamp
+		// gcKey.Timestamp to avoid potentially cycling through a large prefix
+		// of versions we can't GC? The batching mechanism in the GC queue sends
+		// requests susceptible to that happening when there are lots of versions.
+		// A minor complication there will be that we need to know the first non-
+		// deletable value's timestamp (for prevNanos).
+
 		// Now, iterate through all values, GC'ing ones which have expired.
+		// For GCBytesAge, this requires keeping track of the previous key's
+		// timestamp (prevNanos). See ComputeStatsGo for a more easily digested
+		// and better commented version of this logic.
+
+		prevNanos := timestamp.WallTime
 		for ; ; iter.Next() {
 			if ok, err := iter.Valid(); err != nil {
 				return err
@@ -2330,15 +2550,26 @@ func MVCCGarbageCollect(
 			}
 			if !gcKey.Timestamp.Less(unsafeIterKey.Timestamp) {
 				if ms != nil {
+					// FIXME: use prevNanos instead of unsafeIterKey.Timestamp, except
+					// when it's a deletion.
+					valSize := int64(len(iter.UnsafeValue()))
+
+					// A non-deletion becomes non-live when its newer neighbor shows up.
+					// A deletion tombstone becomes non-live right when it is created.
+					fromNS := prevNanos
+					if valSize == 0 {
+						fromNS = unsafeIterKey.Timestamp.WallTime
+					}
+
 					ms.Add(updateStatsOnGC(gcKey.Key, mvccVersionTimestampSize,
-						int64(len(iter.UnsafeValue())), nil, unsafeIterKey.Timestamp.WallTime,
-						timestamp.WallTime))
+						valSize, nil, fromNS))
 				}
 				count++
 				if err := engine.Clear(unsafeIterKey); err != nil {
 					return err
 				}
 			}
+			prevNanos = unsafeIterKey.Timestamp.WallTime
 		}
 	}
 
@@ -2432,6 +2663,7 @@ func ComputeStatsGo(
 	meta := &enginepb.MVCCMetadata{}
 	var prevKey []byte
 	first := false
+	var deletionNanos int64
 
 	iter.Seek(start)
 	for ; ; iter.Next() {
@@ -2467,7 +2699,7 @@ func ComputeStatsGo(
 		}
 
 		if !isValue || implicitMeta {
-			metaKeySize := int64(len(unsafeKey.Key)) + 1
+			metaKeySize := int64(len(unsafeKey.Key)) + 1 // unsafeKey.EncodedSize()
 			var metaValSize int64
 			if !implicitMeta {
 				metaValSize = int64(len(unsafeValue))
@@ -2527,9 +2759,20 @@ func ComputeStatsGo(
 				if meta.ValBytes != int64(len(unsafeValue)) {
 					return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d", len(unsafeValue), meta.ValBytes)
 				}
+				deletionNanos = meta.Timestamp.WallTime
 			} else {
-				// Overwritten value; add value bytes to the GC'able bytes age stat.
-				ms.GCBytesAge += totalBytes * (nowNanos/1E9 - unsafeKey.Timestamp.WallTime/1E9)
+				// Overwritten value. Is it a deletion tombstone?
+				isTombstone := len(unsafeValue) == 0
+				if isTombstone {
+					// The contribution of the tombstone picks up GCByteAge from its own timestamp on.
+					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - unsafeKey.Timestamp.WallTime/1E9)
+				} else {
+					// The kv pair is an overwritten value, so it became non-live when the closest more
+					// recent value was written.
+					ms.GCBytesAge += totalBytes * (nowNanos/1E9 - deletionNanos/1E9)
+				}
+				// Update for the next version we may end up looking at.
+				deletionNanos = unsafeKey.Timestamp.WallTime
 			}
 			ms.KeyBytes += mvccVersionTimestampSize
 			ms.ValBytes += int64(len(unsafeValue))

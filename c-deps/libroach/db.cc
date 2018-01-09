@@ -2326,6 +2326,7 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
   cockroach::storage::engine::enginepb::MVCCMetadata meta;
   std::string prev_key;
   bool first = false;
+  int64_t deletion_nanos;
 
   for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0; iter_rep->Next()) {
     const rocksdb::Slice key = iter_rep->key();
@@ -2412,8 +2413,15 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
                                    int(value.size()), int(meta.val_bytes()));
           break;
         }
+        deletion_nanos = meta.timestamp().wall_time();
       } else {
-        stats.gc_bytes_age += total_bytes * age_factor(wall_time, now_nanos);
+        bool is_tombstone = value.size() == 0;
+        if (is_tombstone) {
+          stats.gc_bytes_age += total_bytes * age_factor(wall_time, now_nanos);
+        } else {
+          stats.gc_bytes_age += total_bytes * age_factor(deletion_nanos, now_nanos);
+        }
+        deletion_nanos = wall_time;
       }
       stats.key_bytes += kMVCCVersionTimestampSize;
       stats.val_bytes += value.size();
