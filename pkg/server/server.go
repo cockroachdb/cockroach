@@ -96,6 +96,13 @@ var (
 	) error {
 		return errors.New("OSS build does not include Enterprise features")
 	}
+
+	// LicenseTypeFn returns what type of license the cluster is running with, or
+	// "OSS" if it is an OSS build. This function is overridden by an init hook in
+	// CCL builds.
+	LicenseTypeFn = func(st *cluster.Settings) (string, error) {
+		return "OSS", nil
+	}
 )
 
 // Server is the cockroach server node.
