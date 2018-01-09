@@ -175,6 +175,14 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 				return NewDInt(^MustBeDInt(d)), nil
 			},
 		},
+		UnaryOp{
+			Typ:        types.INet,
+			ReturnType: types.INet,
+			fn: func(_ *EvalContext, d Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(d).IPAddr
+				return NewDIPAddr(DIPAddr{ipAddr.Complement()}), nil
+			},
+		},
 	},
 }
 
@@ -376,6 +384,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDInt(MustBeDInt(left) & MustBeDInt(right)), nil
 			},
 		},
+		BinOp{
+			LeftType:   types.INet,
+			RightType:  types.INet,
+			ReturnType: types.INet,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				newIPAddr, err := ipAddr.And(&other)
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
+			},
+		},
 	},
 
 	Bitor: {
@@ -385,6 +404,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) | MustBeDInt(right)), nil
+			},
+		},
+		BinOp{
+			LeftType:   types.INet,
+			RightType:  types.INet,
+			ReturnType: types.INet,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				newIPAddr, err := ipAddr.Or(&other)
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
 		},
 	},
@@ -574,6 +604,28 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
 				t := duration.Add(rightTZ.Time, left.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond), nil
+			},
+		},
+		BinOp{
+			LeftType:   types.INet,
+			RightType:  types.Int,
+			ReturnType: types.INet,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				i := MustBeDInt(right)
+				newIPAddr, err := ipAddr.Add(int64(i))
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
+			},
+		},
+		BinOp{
+			LeftType:   types.Int,
+			RightType:  types.INet,
+			ReturnType: types.INet,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				i := MustBeDInt(left)
+				ipAddr := MustBeDIPAddr(right).IPAddr
+				newIPAddr, err := ipAddr.Add(int64(i))
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
 		},
 	},
@@ -779,6 +831,29 @@ var BinOps = map[BinaryOperator]binOpOverload{
 					return nil, err
 				}
 				return &DJSON{j}, nil
+			},
+		},
+		BinOp{
+			LeftType:   types.INet,
+			RightType:  types.INet,
+			ReturnType: types.Int,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				diff, err := ipAddr.SubIPAddr(&other)
+				return NewDInt(DInt(diff)), err
+			},
+		},
+		BinOp{
+			// Note: postgres ver 10 does NOT have Int - INet. Throws ERROR: 42883
+			LeftType:   types.INet,
+			RightType:  types.Int,
+			ReturnType: types.INet,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				i := MustBeDInt(right)
+				newIPAddr, err := ipAddr.Sub(int64(i))
+				return NewDIPAddr(DIPAddr{newIPAddr}), err
 			},
 		},
 	},
@@ -1172,6 +1247,16 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDInt(MustBeDInt(left) << uint(MustBeDInt(right))), nil
 			},
 		},
+		BinOp{
+			LeftType:   types.INet,
+			RightType:  types.INet,
+			ReturnType: types.Bool,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				return MakeDBool(DBool(ipAddr.ContainedBy(&other))), nil
+			},
+		},
 	},
 
 	RShift: {
@@ -1181,6 +1266,16 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) >> uint(MustBeDInt(right))), nil
+			},
+		},
+		BinOp{
+			LeftType:   types.INet,
+			RightType:  types.INet,
+			ReturnType: types.Bool,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				ipAddr := MustBeDIPAddr(left).IPAddr
+				other := MustBeDIPAddr(right).IPAddr
+				return MakeDBool(DBool(ipAddr.Contains(&other))), nil
 			},
 		},
 	},
