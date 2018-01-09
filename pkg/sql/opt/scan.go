@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,10 @@ func initScanExpr(e *Expr, tab optbase.Table) {
 type scanClass struct{}
 
 var _ operatorClass = scanClass{}
+
+func (scanClass) layout() exprLayout {
+	return exprLayout{}
+}
 
 func (scanClass) format(e *Expr, tp treeprinter.Node) {
 	formatRelational(e, tp)

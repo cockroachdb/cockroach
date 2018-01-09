@@ -27,11 +27,14 @@ const (
 
 	// -- Relational operators --
 	// This list will grow significantly as we implement new operators.
-	// The only relational operator implemented so far is scanOp.
+	// The only relational operators implemented so far are scanOp and selectOp.
 
 	// scan is the lowest level relational operator, responsible for scanning
 	// tables.
 	scanOp
+
+	// selectOp is a pass-through operator which applies filters to its input.
+	selectOp
 
 	// -- Scalar operators --
 
@@ -119,6 +122,8 @@ type operatorInfo struct {
 	name string
 	// class of the operator (see operatorClass).
 	class operatorClass
+	// operator-specific layout of auxiliary expressions.
+	layout exprLayout
 
 	normalizeFn func(*Expr)
 }
@@ -140,6 +145,35 @@ func (op operator) String() string {
 // operator.
 func registerOperator(op operator, info operatorInfo) {
 	operatorTab[op] = info
+
+	if info.class != nil {
+		// Normalize the layout so that auxiliary expressions that are not present
+		// are given an invalid index which will cause a panic if they are accessed.
+		l := info.class.layout()
+		if l.numAux == 0 {
+			if l.aggregations == 0 {
+				l.aggregations = -1
+			} else {
+				l.numAux++
+			}
+			if l.groupings == 0 {
+				l.groupings = -1
+			} else {
+				l.numAux++
+			}
+			if l.projections == 0 {
+				l.projections = -1
+			} else {
+				l.numAux++
+			}
+			if l.filters == 0 {
+				l.filters = -1
+			} else {
+				l.numAux++
+			}
+		}
+		operatorTab[op].layout = l
+	}
 }
 
 // operatorClass implements functionality that is common for a subset of
@@ -147,4 +181,7 @@ func registerOperator(op operator, info operatorInfo) {
 type operatorClass interface {
 	// format outputs information about the expr tree to a treePrinter.
 	format(e *Expr, tp treeprinter.Node)
+
+	// layout returns the operator-specific expression layout.
+	layout() exprLayout
 }
