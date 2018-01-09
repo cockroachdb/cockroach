@@ -646,6 +646,7 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 		MemMetrics:     s.memMetrics,
 		Tables:         &s.tables,
 		ExecCfg:        s.execCfg,
+		DistSQLPlanner: s.distSQLPlanner,
 	}
 }
 

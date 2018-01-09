@@ -57,6 +57,8 @@ type extendedEvalContext struct {
 	Tables *TableCollection
 
 	ExecCfg *ExecutorConfig
+
+	DistSQLPlanner *DistSQLPlanner
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -283,7 +285,7 @@ func (p *planner) User() string {
 // this is the right abstraction. We could also export DistSQLPlanner, for
 // example. Revisit.
 func (p *planner) DistLoader() *DistLoader {
-	return &DistLoader{distSQLPlanner: p.session.distSQLPlanner}
+	return &DistLoader{distSQLPlanner: p.extendedEvalCtx.DistSQLPlanner}
 }
 
 // setTxn resets the current transaction in the planner and
