@@ -1256,6 +1256,7 @@ func MVCCIncrement(
 	defer iter.Close()
 
 	var int64Val int64
+	var newInt64Val int64
 	err := mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, func(value *roachpb.Value) ([]byte, error) {
 		if value.IsPresent() {
 			var err error
@@ -1266,17 +1267,23 @@ func MVCCIncrement(
 
 		// Check for overflow and underflow.
 		if willOverflow(int64Val, inc) {
-			return nil, errors.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
+			// Return the old value, since we've failed to modify it.
+			newInt64Val = int64Val
+			return nil, &roachpb.IntegerOverflowError{
+				Key:            key,
+				CurrentValue:   int64Val,
+				IncrementValue: inc,
+			}
 		}
+		newInt64Val = int64Val + inc
 
-		int64Val = int64Val + inc
 		newValue := roachpb.Value{}
-		newValue.SetInt(int64Val)
+		newValue.SetInt(newInt64Val)
 		newValue.InitChecksum(key)
 		return newValue.RawBytes, nil
 	})
 
-	return int64Val, err
+	return newInt64Val, err
 }
 
 // MVCCConditionalPut sets the value for a specified key only if the

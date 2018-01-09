@@ -80,6 +80,9 @@ CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
 statement error pgcode 22023 INCREMENT must not be zero
 CREATE SEQUENCE zero_test INCREMENT 0
 
+statement ok
+CREATE SEQUENCE high_minvalue_test MINVALUE 5
+
 # Test unimplemented syntax.
 statement error pq: unimplemented at or near "EOF"
 CREATE SEQUENCE err_test AS INT2
@@ -87,7 +90,15 @@ CREATE SEQUENCE err_test AS INT2
 statement error pq: unimplemented at or near "EOF"
 CREATE SEQUENCE err_test OWNED BY someuser
 
-# PRESENCE IN crdb_internal.create_statements
+# Verify validation of START vs MINVALUE/MAXVALUE.
+
+statement error pgcode 22023 START value \(11\) cannot be greater than MAXVALUE \(10\)
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
+
+statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
+CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
+
+# Verify presence in crdb_internal.create_statements.
 
 statement ok
 CREATE SEQUENCE show_create_test
@@ -96,7 +107,7 @@ query ITITTTT colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
 database_id database_name descriptor_id descriptor_type descriptor_name  create_statement                                                                             state
-50          test          56            sequence        show_create_test CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PUBLIC
+50          test          59            sequence        show_create_test CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PUBLIC
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
@@ -194,22 +205,22 @@ SELECT pg_sequence_parameters('baz'::regclass::oid)
 # You can create a sequence that goes down.
 
 statement ok
-CREATE SEQUENCE down_test INCREMENT BY -1 START 10
+CREATE SEQUENCE down_test INCREMENT BY -1 START -5
 
 query I
 SELECT nextval('down_test')
 ----
-10
+-5
 
 query I
 SELECT nextval('down_test')
 ----
-9
+-6
 
 query T
 SELECT pg_sequence_parameters('down_test'::regclass::oid)
 ----
-(10,-9223372036854775808,-1,-1,f,1,20)
+(-5,-9223372036854775808,-1,-1,f,1,20)
 
 
 # You can create and use a sequence with special characters.
@@ -298,7 +309,7 @@ SELECT setval('setval_test', 10)
 ----
 10
 
-# Setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
 query I
 SELECT currval('setval_test')
 ----
@@ -324,10 +335,84 @@ SELECT lastval()
 ----
 11
 
+# setval doesn't let you set values outside the bounds.
+
+statement ok
+CREATE SEQUENCE setval_bounds_test MINVALUE 5 MAXVALUE 10
+
+query I
+SELECT nextval('setval_bounds_test')
+----
+5
+
+statement error pgcode 22003 pq: setval\(\): value 11 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+SELECT setval('setval_bounds_test', 11)
+
+statement error pgcode 22003 pq: setval\(\): value 0 is out of bounds for sequence "setval_bounds_test" \(5\.\.10\)
+SELECT setval('setval_bounds_test', 0)
+
 # nextval fails with nonexistent sequences.
 
 statement error pgcode 42P01 relation "nonexistent_seq" does not exist
 SELECT nextval('nonexistent_seq')
+
+# BEHAVIOR UPON HITTING LIMITS (minvalue, maxvalue)
+
+statement ok
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 9
+
+query I
+SELECT nextval('limit_test')
+----
+9
+
+query I
+SELECT nextval('limit_test')
+----
+10
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
+SELECT nextval('limit_test')
+
+query I
+SELECT currval('limit_test')
+----
+10
+
+statement ok
+CREATE SEQUENCE downward_limit_test INCREMENT BY -1 MINVALUE -10 START WITH -10
+
+query I
+SELECT nextval('downward_limit_test')
+----
+-10
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "downward_limit_test" \(-10\)
+SELECT nextval('downward_limit_test')
+
+# Verify that it still works with integer overflows and underflows.
+
+statement ok
+CREATE SEQUENCE overflow_test START WITH 9223372036854775807
+
+query I
+SELECT nextval('overflow_test')
+----
+9223372036854775807
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "overflow_test" \(9223372036854775807\)
+SELECT nextval('overflow_test')
+
+statement ok
+CREATE SEQUENCE underflow_test MINVALUE -9223372036854775808 START WITH -9223372036854775808 INCREMENT -1
+
+query I
+SELECT nextval('underflow_test')
+----
+-9223372036854775808
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "underflow_test" \(-9223372036854775808\)
+SELECT nextval('underflow_test')
 
 # USE WITH TABLES
 
