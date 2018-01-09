@@ -18,13 +18,13 @@ CREATE ROLE IF NOT EXISTS root
 statement ok
 CREATE ROLE IF NOT EXISTS admin
 
-statement error pq: cannot drop user or role "admin": grants still exist on .*
+statement error pq: cannot drop user or role admin: grants still exist on .*
 DROP ROLE admin
 
 statement error pq: cannot drop user or role root: grants still exist on .*
 DROP ROLE root
 
-statement error pq: cannot drop users or roles "admin", root: grants still exist on .*
+statement error pq: cannot drop users or roles admin, root: grants still exist on .*
 DROP ROLE admin, root
 
 statement ok
@@ -55,7 +55,7 @@ DROP USER myrole
 statement ok
 DROP USER IF EXISTS myrole
 
-statement error pq: cannot drop users or roles "admin", myrole: grants still exist on .*
+statement error pq: cannot drop users or roles admin, myrole: grants still exist on .*
 DROP ROLE admin, myrole
 
 query T colnames
@@ -166,7 +166,7 @@ GRANT testrole TO testuser2 WITH ADMIN OPTION
 user root
 
 statement ok
-GRANT "admin" TO testuser
+GRANT admin TO testuser
 
 # Dropping users/roles deletes all their memberships.
 query TTB colnames
@@ -202,7 +202,7 @@ admin     root       true
 
 # Test cycle detection.
 statement error pq: admin cannot be a member of itself
-GRANT "admin" TO "admin"
+GRANT admin TO admin
 
 statement ok
 CREATE ROLE rolea
@@ -308,13 +308,13 @@ statement ok
 DROP ROLE rolee
 
 statement error pq: user root cannot be removed from role admin or lose the ADMIN OPTION
-REVOKE "admin" FROM root
+REVOKE admin FROM root
 
 statement error pq: user root cannot be removed from role admin or lose the ADMIN OPTION
-REVOKE ADMIN OPTION FOR "admin" FROM root
+REVOKE ADMIN OPTION FOR admin FROM root
 
 statement error pq: user or role unknownuser does not exist
-REVOKE ADMIN OPTION FOR "admin" FROM unknownuser
+REVOKE ADMIN OPTION FOR admin FROM unknownuser
 
 statement error pq: role unknownrole does not exist
 REVOKE ADMIN OPTION FOR unknownrole FROM root

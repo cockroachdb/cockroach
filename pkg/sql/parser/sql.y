@@ -741,8 +741,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.UserPriority>  transaction_user_priority
 %type <tree.ReadWriteMode> transaction_read_mode
 
-%type <str>   name opt_name opt_name_parens opt_to_savepoint
-%type <str>   savepoint_name
+%type <str> name opt_name opt_name_parens opt_to_savepoint
+%type <str> privilege savepoint_name
 
 %type <tree.Operator> subquery_op
 %type <tree.FunctionReference> func_name
@@ -775,7 +775,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.OrderBy> sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params
-%type <tree.NameList> name_list
+%type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <*tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list
@@ -815,8 +815,6 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <bool> opt_unique opt_column
 %type <bool> opt_using_gin
-%type <bool> opt_admin_option
-%type <bool> opt_admin_option_for
 
 %type <empty> opt_set_data
 
@@ -931,9 +929,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <tree.TargetList>    targets
 %type <*tree.TargetList> on_privilege_target_clause
-%type <tree.NameList>       grantee_list for_grantee_clause
-%type <privilege.List> privileges privilege_list
-%type <privilege.Kind> privilege
+%type <tree.NameList>       for_grantee_clause
+%type <privilege.List> privileges
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -2129,25 +2126,19 @@ deallocate_stmt:
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
-  GRANT privileges ON targets TO grantee_list
+  GRANT privileges ON targets TO name_list
   {
     $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
-| GRANT grantee_list TO grantee_list opt_admin_option
+| GRANT privilege_list TO name_list
   {
-    $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: $5.bool()}
+    $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: false}
+  }
+| GRANT privilege_list TO name_list WITH ADMIN OPTION
+  {
+    $$.val = &tree.GrantRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: true}
   }
 | GRANT error // SHOW HELP: GRANT
-
-opt_admin_option:
-  WITH ADMIN OPTION
-  {
-    $$.val = true
-  }
-| /* EMPTY */
-  {
-    $$.val = false
-  }
 
 // %Help: REVOKE - remove access privileges and role memberships
 // %Category: Priv
@@ -2166,25 +2157,19 @@ opt_admin_option:
 //
 // %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
-  REVOKE privileges ON targets FROM grantee_list
+  REVOKE privileges ON targets FROM name_list
   {
     $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
-| REVOKE opt_admin_option_for grantee_list FROM grantee_list
+| REVOKE privilege_list FROM name_list
   {
-    $$.val = &tree.RevokeRole{Roles: $3.nameList(), Members: $5.nameList(), AdminOption: $2.bool()}
+    $$.val = &tree.RevokeRole{Roles: $2.nameList(), Members: $4.nameList(), AdminOption: false }
+  }
+| REVOKE ADMIN OPTION FOR privilege_list FROM name_list
+  {
+    $$.val = &tree.RevokeRole{Roles: $5.nameList(), Members: $7.nameList(), AdminOption: true }
   }
 | REVOKE error // SHOW HELP: REVOKE
-
-opt_admin_option_for:
-  ADMIN OPTION FOR
-  {
-    $$.val = true
-  }
-| /* EMPTY */
-  {
-    $$.val = false
-  }
 
 targets:
   table_pattern_list
@@ -2206,60 +2191,33 @@ privileges:
   {
     $$.val = privilege.List{privilege.ALL}
   }
-  | privilege_list { }
+  | privilege_list
+  {
+     privList, err := privilege.ListFromStrings($1.nameList().ToStrings())
+     if err != nil {
+       sqllex.Error(err.Error())
+       return 1
+     }
+     $$.val = privList
+  }
 
 privilege_list:
   privilege
   {
-    $$.val = privilege.List{$1.privilegeType()}
-  }
-  | privilege_list ',' privilege
-  {
-    $$.val = append($1.privilegeList(), $3.privilegeType())
-  }
-
-// This list must match the list of privileges in sql/privilege/privilege.go.
-privilege:
-  CREATE
-  {
-    $$.val = privilege.CREATE
-  }
-| DROP
-  {
-    $$.val = privilege.DROP
-  }
-| GRANT
-  {
-    $$.val = privilege.GRANT
-  }
-| SELECT
-  {
-    $$.val = privilege.SELECT
-  }
-| INSERT
-  {
-    $$.val = privilege.INSERT
-  }
-| DELETE
-  {
-    $$.val = privilege.DELETE
-  }
-| UPDATE
-  {
-    $$.val = privilege.UPDATE
-  }
-
-// TODO(marc): this should not be 'name', but should instead be a
-// type just for usernames.
-grantee_list:
-  name
-  {
     $$.val = tree.NameList{tree.Name($1)}
   }
-| grantee_list ',' name
+| privilege_list ',' privilege
   {
     $$.val = append($1.nameList(), tree.Name($3))
   }
+
+// Privileges are parsed at execution time to avoid having to make them reserved.
+// Any privileges above `col_name_keyword` should be listed here.
+// The full list is in sql/privilege/privilege.go.
+privilege:
+	name
+| CREATE
+| SELECT
 
 reset_stmt:
   reset_session_stmt  // EXTEND WITH HELP: RESET
@@ -3065,7 +3023,7 @@ on_privilege_target_clause:
   }
 
 for_grantee_clause:
-  FOR grantee_list
+  FOR name_list
   {
     $$.val = $2.nameList()
   }
@@ -7255,6 +7213,7 @@ unreserved_keyword:
   ABORT
 | ACTION
 | ADD
+| ADMIN
 | ALTER
 | AT
 | BACKUP
@@ -7286,8 +7245,10 @@ unreserved_keyword:
 | DATABASES
 | DAY
 | DEALLOCATE
+| DELETE
 | DISCARD
 | DOUBLE
+| DROP
 | ENCODING
 | EXECUTE
 | EXPERIMENTAL
@@ -7307,6 +7268,7 @@ unreserved_keyword:
 | INCREMENT
 | INCREMENTAL
 | INDEXES
+| INSERT
 | INT2VECTOR
 | INTERLEAVE
 | INVERTED
@@ -7416,6 +7378,7 @@ unreserved_keyword:
 | UNBOUNDED
 | UNCOMMITTED
 | UNKNOWN
+| UPDATE
 | UPSERT
 | USE
 | USERS
@@ -7461,6 +7424,7 @@ col_name_keyword:
 | FLOAT
 | FLOAT4
 | FLOAT8
+| GRANT
 | GREATEST
 | GROUPING
 | IF
@@ -7514,16 +7478,13 @@ col_name_keyword:
 //
 // TODO(dan): see if we can move MAXVALUE and MINVALUE to a less restricted list
 type_func_name_keyword:
-  ADMIN
-| COLLATION
+  COLLATION
+| CREATE
 | CROSS
-| DELETE
-| DROP
 | FAMILY
 | FULL
 | INNER
 | ILIKE
-| INSERT
 | IS
 | JOIN
 | LEFT
@@ -7535,7 +7496,6 @@ type_func_name_keyword:
 | OVERLAPS
 | RIGHT
 | SIMILAR
-| UPDATE
 
 // Reserved keyword --- these keywords are usable only as a unrestricted_name.
 //
@@ -7558,7 +7518,6 @@ reserved_keyword:
 | COLLATE
 | COLUMN
 | CONSTRAINT
-| CREATE
 | CURRENT_CATALOG
 | CURRENT_DATE
 | CURRENT_ROLE
@@ -7579,7 +7538,6 @@ reserved_keyword:
 | FOR
 | FOREIGN
 | FROM
-| GRANT
 | GROUP
 | HAVING
 | IN
