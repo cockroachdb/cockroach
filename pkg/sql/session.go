@@ -640,13 +640,14 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 			Mon:             &s.TxnState.mon,
 			TestingKnobs:    evalContextTestingKnobs,
 		},
-		VirtualSchemas: &s.virtualSchemas,
-		Tracing:        &s.Tracing,
-		StatusServer:   statusServer,
-		MemMetrics:     s.memMetrics,
-		Tables:         &s.tables,
-		ExecCfg:        s.execCfg,
-		DistSQLPlanner: s.distSQLPlanner,
+		VirtualSchemas:        &s.virtualSchemas,
+		Tracing:               &s.Tracing,
+		StatusServer:          statusServer,
+		MemMetrics:            s.memMetrics,
+		Tables:                &s.tables,
+		ExecCfg:               s.execCfg,
+		DistSQLPlanner:        s.distSQLPlanner,
+		TestingVerifyMetadata: s,
 	}
 }
 
@@ -658,11 +659,7 @@ func (s *Session) resetForBatch(e *Executor) {
 	s.TxnState.schemaChangers.curGroupNum++
 }
 
-// setTestingVerifyMetadata sets a callback to be called after the Session
-// is done executing the current SQL statement. It can be used to verify
-// assumptions about how metadata will be asynchronously updated.
-// Note that this can overwrite a previous callback that was waiting to be
-// verified, which is not ideal.
+// setTestingVerifyMetadata implements the testingVerifyMetadata interface.
 func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 	s.testingVerifyMetadataFn = fn
 	s.verifyFnCheckedOnce = false

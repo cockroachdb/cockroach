@@ -665,7 +665,7 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	// have written, but if they are followed by other statements that modify
 	// the descriptor the verification of the overwritten descriptor cannot be
 	// done.
-	p.session.setTestingVerifyMetadata(nil)
+	p.testingVerifyMetadata().setTestingVerifyMetadata(nil)
 
 	p.Tables().addUncommittedTable(*tableDesc)
 

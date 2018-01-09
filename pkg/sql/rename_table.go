@@ -154,12 +154,13 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
-			return err
-		}
-		return expectDescriptor(systemConfig, descKey, descDesc)
-	})
+	p.testingVerifyMetadata().setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
+				return err
+			}
+			return expectDescriptor(systemConfig, descKey, descDesc)
+		})
 
 	return &zeroNode{}, nil
 }

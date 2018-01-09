@@ -143,7 +143,7 @@ func (p *planner) createDescriptorWithID(
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.testingVerifyMetadata().setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, idKey, descID); err != nil {
 			return err
 		}
