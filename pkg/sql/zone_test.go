@@ -92,6 +92,11 @@ func TestValidSetShowZones(t *testing.T) {
 		CLISpecifier: "d.t",
 		Config:       zoneOverride,
 	}
+	tableDroppedRow := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "NULL",
+		Config:       zoneOverride,
+	}
 
 	// Ensure the default is reported for all zones at first.
 	sqlutils.VerifyAllZoneConfigs(t, sqlDB,
@@ -217,6 +222,14 @@ func TestValidSetShowZones(t *testing.T) {
 		t.Fatal(err)
 	}
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+
+	sqlDB.Exec(t, "DROP TABLE d.t")
+	_, err = sqlDB.DB.Exec("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE d.t")
+	if !testutils.IsError(err, `relation "d.t" does not exist`) {
+		t.Errorf("expected SHOW ZONE CONFIGURATION to fail on dropped table, but got %q", err)
+	}
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB,
+		defaultOverrideRow, systemRow, jobsRow, livenessRow, tableDroppedRow)
 }
 
 func TestInvalidSetShowZones(t *testing.T) {
