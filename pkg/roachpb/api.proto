@@ -917,6 +917,7 @@ message ExportStorage {
     option (gogoproto.equal) = true;
 
     string baseUri = 1;
+    bool skipCertVerification = 2;
   }
   message S3 {
     option (gogoproto.equal) = true;

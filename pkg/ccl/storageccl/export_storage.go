@@ -10,6 +10,8 @@ package storageccl
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"hash/fnv"
@@ -62,12 +64,17 @@ const (
 	authParamImplicit = "implicit"
 	authParamDefault  = "default"
 
-	cloudstoragePrefix       = "cloudstorage"
-	cloudstorageGS           = cloudstoragePrefix + ".gs"
-	cloudstorageDefault      = ".default"
-	cloudstorageKey          = ".key"
+	cloudstoragePrefix = "cloudstorage"
+	cloudstorageGS     = cloudstoragePrefix + ".gs"
+	cloudstorageHTTP   = cloudstoragePrefix + ".http"
+
+	cloudstorageDefault = ".default"
+	cloudstorageKey     = ".key"
+
 	cloudstorageGSDefault    = cloudstorageGS + cloudstorageDefault
 	cloudstorageGSDefaultKey = cloudstorageGSDefault + cloudstorageKey
+
+	cloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
 )
 
 // ExportStorageConfFromURI generates an ExportStorage config from a URI string.
@@ -118,9 +125,10 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
 		}
 		conf.AzureConfig.Prefix = strings.TrimLeft(conf.AzureConfig.Prefix, "/")
-	case "http", "https":
+	case "http", "https", "https+insecure":
 		conf.Provider = roachpb.ExportStorageProvider_Http
 		conf.HttpPath.BaseUri = path
+		conf.HttpPath.SkipCertVerification = uri.Scheme == "https+insecure"
 	case "nodelocal":
 		if uri.Host != "" {
 			return conf, errors.Errorf("nodelocal does not support hosts: %s", path)
@@ -154,7 +162,7 @@ func MakeExportStorage(
 	case roachpb.ExportStorageProvider_LocalFile:
 		return makeLocalStorage(dest.LocalFile.Path, settings)
 	case roachpb.ExportStorageProvider_Http:
-		return makeHTTPStorage(dest.HttpPath.BaseUri)
+		return makeHTTPStorage(dest.HttpPath.BaseUri, dest.HttpPath.SkipCertVerification, settings)
 	case roachpb.ExportStorageProvider_S3:
 		return makeS3Storage(ctx, dest.S3Config)
 	case roachpb.ExportStorageProvider_GoogleCloud:
@@ -200,6 +208,11 @@ var (
 	gcsDefault = settings.RegisterStringSetting(
 		cloudstorageGSDefaultKey,
 		"if set, JSON key to use during Google Cloud Storage operations",
+		"",
+	)
+	httpCustomCA = settings.RegisterStringSetting(
+		cloudstorageHTTPCASetting,
+		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 		"",
 	)
 )
@@ -298,11 +311,27 @@ type httpStorage struct {
 
 var _ ExportStorage = &httpStorage{}
 
-func makeHTTPStorage(base string) (ExportStorage, error) {
+func makeHTTPStorage(
+	base string, skipVerification bool, settings *cluster.Settings,
+) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but base path not provided")
 	}
-	client := &http.Client{Transport: &http.Transport{}}
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: skipVerification,
+	}
+
+	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not load system root CA pool")
+		}
+		if !roots.AppendCertsFromPEM([]byte(pem)) {
+			return nil, errors.Errorf("failed to parse root CA certificate from %q", pem)
+		}
+		tlsConf.RootCAs = roots
+	}
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConf}}
 	uri, err := url.Parse(base)
 	if err != nil {
 		return nil, err
