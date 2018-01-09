@@ -500,7 +500,7 @@ var specs = []stmtSpec{
 	{name: "family_def", inline: []string{"opt_name", "name_list"}},
 	{
 		name:    "grant_stmt",
-		inline:  []string{"privileges", "privilege_list", "privilege", "targets", "grantee_list", "table_pattern_list", "name_list"},
+		inline:  []string{"privileges", "privilege_list", "privilege", "targets", "table_pattern_list", "name_list"},
 		replace: map[string]string{"table_pattern": "table_name", "'DATABASE' ( name ( ',' name )* )": "'DATABASE' ( database_name ( ',' database_name )* )", "'TO' ( name ( ',' name )* )": "'TO' ( user_name ( ',' user_name )* )"},
 		unlink:  []string{"table_name", "database_name", "user_name"},
 		nosplit: true,
@@ -566,7 +566,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "revoke_stmt",
-		inline: []string{"privileges", "privilege_list", "privilege", "targets", "grantee_list"},
+		inline: []string{"privileges", "privilege_list", "privilege", "targets"},
 		replace: map[string]string{
 			"table_pattern_list":        "table_name ( ',' table_name )*",
 			"name_list":                 "database_name ( ',' database_name )*",
@@ -656,7 +656,7 @@ var specs = []stmtSpec{
 	{
 		name:   "show_grants",
 		stmt:   "show_stmt",
-		inline: []string{"on_privilege_target_clause", "targets", "for_grantee_clause", "grantee_list", "table_pattern_list", "name_list"},
+		inline: []string{"on_privilege_target_clause", "targets", "for_grantee_clause", "table_pattern_list", "name_list"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'SHOW' 'GRANTS'")},
 		replace: map[string]string{
 			"table_pattern":                 "table_name",
