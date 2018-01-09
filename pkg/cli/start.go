@@ -375,50 +375,92 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	tBegin := timeutil.Now()
 
-	// We don't care about GRPCs fairly verbose logs in most client commands,
-	// but when actually starting a server, we enable them.
-	grpcutil.SetSeverity(log.Severity_WARNING)
-
+	// First things first: if the user wants background processing,
+	// relinquish the terminal ASAP by forking and exiting.
+	//
+	// If executing in the backround, the function returns ok == true in
+	// the parent process (regardless of err) and the parent exits at
+	// this point.
 	if ok, err := maybeRerunBackground(); ok {
 		return err
 	}
 
-	// Deal with flags that may depend on other flags.
+	// Set up the signal handlers. This also ensures that any of these
+	// signals received beyond this point do not interrupt the startup
+	// sequence until the point signals are checked below.
+	// We want to set up signal handling before starting logging, because
+	// logging uses buffering, and we want to be able to sync
+	// the buffers in the signal handler below. If we started capturing
+	// signals later, some startup logging might be lost.
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
+	// Set up a tracing span for the start process.  We want any logging
+	// happening beyond this point to be accounted to this start
+	// context, including logging related to the initialization of
+	// the logging infrastructure below.
+	// This span concludes when the startup goroutine started below
+	// has completed.
 	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartSpan("server start")
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
-	var err error
-	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
-		return err
-	}
-
-	// Use the server-specific values for some flags and settings.
-	serverCfg.Insecure = startCtx.serverInsecure
-	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
-	serverCfg.User = security.NodeUser
-
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-
 	// Set up the logging and profiling output.
-	// It is important that no logging occurs before this point or the log files
-	// will be created in $TMPDIR instead of their expected location.
+	//
+	// We want to do this as early as possible, because most of the code
+	// in CockroachDB may use logging, and until logging has been
+	// initialized log files will be created in $TMPDIR instead of their
+	// expected location.
+	//
+	// This initialization uses the various configuration parameters
+	// initialized by flag handling (before runStart was called). Any
+	// additional server configuration tweaks for the startup process
+	// must be necessarily non-logging-related, as logging parameters
+	// cannot be picked up beyond this point.
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
 	if err != nil {
 		return err
 	}
+	// We don't care about GRPCs fairly verbose logs in most client commands,
+	// but when actually starting a server, we enable them.
+	grpcutil.SetSeverity(log.Severity_WARNING)
 
+	// Now perform additional configuration tweaks specific to the start
+	// command.
+	//
+	// This includes propagating server flags dependent on the
+	// flags specified for the command.
+	serverCfg.Insecure = startCtx.serverInsecure
+	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
+	serverCfg.User = security.NodeUser
+	// As well as derived temporary/auxiliary directory specifications.
+	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
+		return err
+	}
 	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, stopper, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
 
-	serverCfg.Report(ctx)
+	// Initialize the node's configuration from startup parameters.
+	// This also reads the part of the configuration that comes from
+	// environment variables.
+	if err := serverCfg.InitNode(); err != nil {
+		return errors.Wrap(err, "failed to initialize node")
+	}
 
-	// Run the rest of the startup process in the background to avoid preventing
-	// proper handling of signals if we get stuck on something during
-	// initialization (#10138).
+	// The configuration is now ready to report to the user and the log
+	// file. We had to wait after InitNode() so that all configuration
+	// environment variables, which are reported too, have been read and
+	// registered.
+	reportConfiguration(ctx)
+
+	// Beyond this point, the configuration is set and the server is
+	// ready to start.
+	log.Info(ctx, "starting cockroach node")
+
+	// Run the rest of the startup process in a goroutine separate from
+	// the main goroutine to avoid preventing proper handling of signals
+	// if we get stuck on something during initialization (#10138).
 	var serverStatusMu struct {
 		syncutil.Mutex
 		// Used to synchronize server startup with server shutdown if something
@@ -432,28 +474,39 @@ func runStart(cmd *cobra.Command, args []string) error {
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
 		defer log.Flush()
+		// If anything goes dramatically wrong, use Go's panic/recover
+		// mechanism to intercept the panic and log the panic details to
+		// the error reporting server.
 		defer func() {
 			if s != nil {
+				// We only attempt to log the panic details if the server has
+				// actually been started successfully. If there's no server,
+				// we won't know enough to decide whether reporting is
+				// permitted.
 				log.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
 			}
 		}()
+		// When the start up goroutine completes, so can the start up span
+		// defined above.
 		defer sp.Finish()
+
+		// Any error beyond this point should be reported through the
+		// errChan defined above. However, in Go the code pattern "if err
+		// != nil { return err }" is more common. Expecting contributors
+		// to remember to write "if err != nil { errChan <- err }" beyond
+		// this point is optimistic. To avoid any error, we capture all
+		// the error returns in a closure, and do the errChan reporting,
+		// if needed, when that function returns.
 		if err := func() error {
-			if err := serverCfg.InitNode(); err != nil {
-				return errors.Wrap(err, "failed to initialize node")
-			}
-
-			log.Info(ctx, "starting cockroach node")
-			if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
-				log.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
-			}
-
+			// Instantiate the server.
 			var err error
 			s, err = server.NewServer(serverCfg, stopper)
 			if err != nil {
 				return errors.Wrap(err, "failed to start server")
 			}
 
+			// Have we already received a signal to terminate? If so, just
+			// stop here.
 			serverStatusMu.Lock()
 			draining := serverStatusMu.draining
 			serverStatusMu.Unlock()
@@ -461,6 +514,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return nil
 			}
 
+			// Attempt to start the server.
 			if err := s.Start(ctx); err != nil {
 				if le, ok := err.(server.ListenError); ok {
 					const errorPrefix = "consider changing the port via --"
@@ -473,17 +527,20 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 				return errors.Wrap(err, "cockroach server exited with error")
 			}
-
+			// Server started, notify the shutdown monitor running concurrently.
 			serverStatusMu.Lock()
 			serverStatusMu.started = true
 			serverStatusMu.Unlock()
 
+			// Start up the update check loop.
 			// We don't do this in (*server.Server).Start() because we don't want it
 			// in tests.
 			if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
 				s.PeriodicallyCheckForUpdates()
 			}
 
+			// Now inform the user that the server is running and tell the
+			// user about its run-time derived parameters.
 			pgURL, err := serverCfg.PGURL(url.User(cliCtx.sqlConnUser))
 			if err != nil {
 				return err
@@ -543,10 +600,21 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
+	// The remainder of the main function executes concurrently with the
+	// start up goroutine started above.
+	//
+	// It is concerned with determining when the server should stop
+	// because the main process is being shut down -- either via a stop
+	// message received from `cockroach quit` / `cockroach
+	// decommission`, or a signal.
+
+	// We'll want to log any shutdown activity against a separate span.
 	shutdownSpan := tracer.StartSpan("server shutdown")
 	defer shutdownSpan.Finish()
 	shutdownCtx := opentracing.ContextWithSpan(context.Background(), shutdownSpan)
 
+	// returnErr will be populated with the error to use to exit the
+	// process (reported to the shell).
 	var returnErr error
 
 	stopWithoutDrain := make(chan struct{}) // closed if interrupted very early
@@ -558,6 +626,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		// SetSync both flushes and ensures that subsequent log writes are flushed too.
 		log.SetSync(true)
 		return err
+
 	case <-stopper.ShouldStop():
 		// Server is being stopped externally and our job is finished
 		// here since we don't know if it's a graceful shutdown or not.
@@ -565,12 +634,14 @@ func runStart(cmd *cobra.Command, args []string) error {
 		// SetSync both flushes and ensures that subsequent log writes are flushed too.
 		log.SetSync(true)
 		return nil
+
 	case sig := <-signalCh:
 		// We start synchronizing log writes from here, because if a
 		// signal was received there is a non-zero chance the sender of
 		// this signal will follow up with SIGKILL if the shutdown is not
 		// timely, and we don't want logs to be lost.
 		log.SetSync(true)
+
 		log.Infof(shutdownCtx, "received signal '%s'", sig)
 		if sig == os.Interrupt {
 			// Graceful shutdown after an interrupt should cause the process
@@ -586,6 +657,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
 			fmt.Fprintln(os.Stdout, msgDouble)
 		}
+
+		// Start the draining process in a separate goroutine so that it
+		// runs concurrently with the timeout check below.
 		go func() {
 			serverStatusMu.Lock()
 			serverStatusMu.draining = true
@@ -606,12 +680,20 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 			stopper.Stop(context.Background())
 		}()
+
+		// Don't return: we're shutting down gracefully.
 	}
+
+	// At this point, a signal has been received to shut down the
+	// process, and a goroutine is busy telling the server to drain and
+	// stop. From this point on, we just have to wait until the server
+	// indicates it has stopped.
 
 	const msgDrain = "initiating graceful shutdown of server"
 	log.Info(shutdownCtx, msgDrain)
 	fmt.Fprintln(os.Stdout, msgDrain)
 
+	// Notify the user every 5 second of the shutdown progress.
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -626,6 +708,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}()
+
+	// Meanwhile, we don't want to wait too long either, in case the
+	// server is getting stuck and doesn't shut down in a timely manner.
+	//
+	// So we also pay attention to any additional signal received beyond
+	// this point (maybe some service monitor was impatient and sends
+	// another signal to hasten the shutdown process).
+	// And we also pay attention to an additional timeout.
+	//
+	// If any such trigger to hasten occurs, we simply return, which
+	// will cause the process to exit and the server goroutines to be
+	// forcefully terminated.
 
 	const hardShutdownHint = " - node may take longer to restart & clients may need to wait for leases to expire"
 	select {
@@ -643,13 +737,16 @@ func runStart(cmd *cobra.Command, args []string) error {
 				"received signal '%s' during shutdown, initiating hard shutdown%s", sig, hardShutdownHint),
 		}
 		// NB: we do not return here to go through log.Flush below.
+
 	case <-time.After(time.Minute):
 		returnErr = errors.Errorf("time limit reached, initiating hard shutdown%s", hardShutdownHint)
 		// NB: we do not return here to go through log.Flush below.
+
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
 		log.Infof(shutdownCtx, msgDone)
 		fmt.Fprintln(os.Stdout, msgDone)
+
 	case <-stopWithoutDrain:
 		const msgDone = "too early to drain; used hard shutdown instead"
 		log.Infof(shutdownCtx, msgDone)
@@ -659,21 +756,40 @@ func runStart(cmd *cobra.Command, args []string) error {
 	return returnErr
 }
 
-func maybeWarnCacheSize() {
-	if cacheSizeValue.IsSet() {
-		return
+func reportConfiguration(ctx context.Context) {
+	serverCfg.Report(ctx)
+	if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
+		log.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
+	}
+}
+
+func maybeWarnMemorySizes(ctx context.Context) {
+	// Is the cache configuration OK?
+	if !cacheSizeValue.IsSet() {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
+		fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
+		if size, err := server.GetTotalMemory(context.Background()); err == nil {
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=25%% (%s).",
+				humanizeutil.IBytes(size/4))
+		} else {
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+		}
+		log.Warning(ctx, buf.String())
 	}
 
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
-	fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
-	if size, err := server.GetTotalMemory(context.Background()); err == nil {
-		fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=25%% (%s).",
-			humanizeutil.IBytes(size/4))
-	} else {
-		fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+	if !sqlSizeValue.IsSet() {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "Using the default setting for --max-sql-memory (%s).\n", sqlSizeValue)
+		fmt.Fprintf(&buf, "  A significantly larger value is usually needed in production.\n")
+		if size, err := server.GetTotalMemory(context.Background()); err == nil {
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --max-sql-memory=25%% (%s).",
+				humanizeutil.IBytes(size/4))
+		} else {
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+		}
+		log.Warning(ctx, buf.String())
 	}
-	log.Warning(context.Background(), buf.String())
 }
 
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
@@ -756,7 +872,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 				"Check out how to secure your cluster: "+base.DocsURL("secure-a-cluster.html"))
 	}
 
-	maybeWarnCacheSize()
+	maybeWarnMemorySizes(ctx)
 
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
