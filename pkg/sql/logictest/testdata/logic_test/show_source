@@ -54,52 +54,10 @@ sql.defaults.distsql
 0
 
 query TTTT colnames
-SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name != 'diagnostics.reporting.enabled'
+SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE name LIKE '%organization'
 ----
 name                                               current_value  type  description
 cluster.organization                               ·              s     organization name
-diagnostics.reporting.interval                     1h0m0s         d     interval at which diagnostics data should be reported
-diagnostics.reporting.report_metrics               true           b     enable collection and reporting diagnostic metrics to cockroach labs
-diagnostics.reporting.send_crash_reports           true           b     send crash and panic reports
-kv.allocator.lease_rebalancing_aggressiveness      1E+00          f     set greater than 1.0 to rebalance leases toward load more aggressively, or between 0 and 1.0 to be more conservative about rebalancing leases
-kv.allocator.load_based_lease_rebalancing.enabled  true           b     set to enable rebalancing of range leases based on load and latency
-kv.allocator.range_rebalance_threshold             5E-02          f     minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull
-kv.allocator.stat_based_rebalancing.enabled        false          b     set to enable rebalancing of range replicas based on write load and disk usage
-kv.allocator.stat_rebalance_threshold              2E-01          f     minimum fraction away from the mean a store's stats (like disk usage or writes per second) can be before it is considered overfull or underfull
-kv.bulk_io_write.max_rate                          8.0 EiB        z     the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops
-kv.bulk_sst.sync_size                              2.0 MiB        z     threshold after which non-Rocks SST writes must fsync (0 disables)
-kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
-kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage
-kv.range_descriptor_cache.size                     1000000        i     maximum number of entries in the range descriptor and leaseholder caches
-kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots
-kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots
-kv.transaction.max_intents                         100000         i     maximum number of write intents allowed for a KV transaction
-rocksdb.min_wal_sync_interval                      0s             d     minimum duration between syncs of the RocksDB WAL
-server.consistency_check.interval                  24h0m0s        d     the time between range consistency checks; set to 0 to disable consistency checking
-server.declined_reservation_timeout                1s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined
-server.failed_reservation_timeout                  5s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call
-server.remote_debugging.mode                       local          s     set to enable remote debugging, localhost-only or disable (any, local, off)
-server.time_until_store_dead                       5m0s           d     the time after which if there is no new gossiped information about a store, it is considered dead
-server.web_session_timeout                         168h0m0s       d     the duration that a newly created web session will be valid
-sql.defaults.distsql                               0              e     Default distributed SQL execution mode [off = 0, auto = 1, on = 2]
-sql.distsql.distribute_index_joins                 true           b     if set, for index joins we instantiate a join reader on every node that has a stream; if not set, we use a single join reader
-sql.distsql.interleaved_joins.enabled              true           b     if set we plan interleaved table joins instead of merge joins when possible
-sql.distsql.merge_joins.enabled                    true           b     if set, we plan merge joins when possible
-sql.distsql.temp_storage.joins                     true           b     set to true to enable use of disk for distributed sql joins
-sql.distsql.temp_storage.sorts                     true           b     set to true to enable use of disk for distributed sql sorts
-sql.distsql.temp_storage.workmem                   64 MiB         z     maximum amount of memory in bytes a processor can use before falling back to temp storage
-sql.metrics.statement_details.dump_to_logs         false          b     dump collected statement statistics to node logs when periodically cleared
-sql.metrics.statement_details.enabled              true           b     collect per-statement query statistics
-sql.metrics.statement_details.threshold            0s             d     minimum execution time to cause statistics to be collected
-sql.trace.log_statement_execute                    false          b     set to true to enable logging of executed statements
-sql.trace.session_eventlog.enabled                 false          b     set to true to enable session tracing
-sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)
-timeseries.resolution_10s.storage_duration         720h0m0s       d     the amount of time to store timeseries data
-timeseries.storage.enabled                         true           b     if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere
-trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
-trace.lightstep.token                              ·              s     if set, traces go to Lightstep using this token
-trace.zipkin.collector                             ·              s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
-version                                            1.1-9          m     set the active cluster version in the format '<major>.<minor>'.
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
