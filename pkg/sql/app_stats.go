@@ -42,8 +42,15 @@ type stmtKey struct {
 type appStats struct {
 	st *cluster.Settings
 
-	syncutil.Mutex
-	stmts map[stmtKey]*stmtStats
+	stmtMu struct {
+		syncutil.Mutex
+		stmts map[stmtKey]*stmtStats
+	}
+
+	appStatsMu struct {
+		syncutil.Mutex
+		data roachpb.ApplicationStatistics
+	}
 }
 
 // stmtStats holds per-statement statistics.
@@ -56,20 +63,29 @@ type stmtStats struct {
 // stmtStatsEnable determines whether to collect per-statement
 // statistics.
 var stmtStatsEnable = settings.RegisterBoolSetting(
-	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
+	"sql.metrics.statement_details.enabled", "collect per-txn and per-statement query statistics",
+	true,
 )
 
 // sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
 var sqlStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
 	"sql.metrics.statement_details.threshold",
-	"minimum execution time to cause statistics to be collected",
+	"minimum execution time for a statement to cause statistics to be collected",
+	0,
+)
+
+// txnStatsCollectionLatencyThreshold specifies the minimum amount of time
+// consumed by a SQL txn before it is collected for statistics reporting.
+var txnStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
+	"sql.metrics.statement_details.txn.threshold",
+	"minimum execution time for a txn to cause statistics to be collected",
 	0,
 )
 
 var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	"sql.metrics.statement_details.dump_to_logs",
-	"dump collected statement statistics to node logs when periodically cleared",
+	"dump collected statement/txn statistics to node logs when periodically cleared",
 	false,
 )
 
@@ -145,17 +161,38 @@ func (a *appStats) recordStatement(
 	s.Unlock()
 }
 
+func (a *appStats) recordTxn(autoCommit bool, txnLat float64) {
+	if a == nil || !stmtStatsEnable.Get(&a.st.SV) {
+		return
+	}
+
+	if t := txnStatsCollectionLatencyThreshold.Get(&a.st.SV); t > 0 && t.Seconds() >= txnLat {
+		return
+	}
+
+	// Collect the per-txn statistics.
+	a.appStatsMu.Lock()
+	if autoCommit {
+		a.appStatsMu.data.NumAutocommitTxns++
+		a.appStatsMu.data.AutocommitTxnLat.Record(a.appStatsMu.data.NumAutocommitTxns, txnLat)
+	} else {
+		a.appStatsMu.data.NumExplicitTxns++
+		a.appStatsMu.data.ExplicitTxnLat.Record(a.appStatsMu.data.NumExplicitTxns, txnLat)
+	}
+	a.appStatsMu.Unlock()
+}
+
 // getStatsForStmt retrieves the per-stmt stat object.
 func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
-	a.Lock()
+	a.stmtMu.Lock()
 	// Retrieve the per-statement statistic object, and create it if it
 	// doesn't exist yet.
-	s, ok := a.stmts[key]
+	s, ok := a.stmtMu.stmts[key]
 	if !ok {
 		s = &stmtStats{}
-		a.stmts[key] = s
+		a.stmtMu.stmts[key] = s
 	}
-	a.Unlock()
+	a.stmtMu.Unlock()
 	return s
 }
 
@@ -192,7 +229,8 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{st: s.st, stmts: make(map[stmtKey]*stmtStats)}
+	a := &appStats{st: s.st}
+	a.stmtMu.stmts = make(map[stmtKey]*stmtStats)
 	s.apps[appName] = a
 	return a
 }
@@ -218,22 +256,36 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 	// accumulate data using that until it closes (or changes its
 	// application_name).
 	for appName, a := range s.apps {
-		a.Lock()
-
 		// Save the existing data to logs.
 		// TODO(knz/dt): instead of dumping the stats to the log, save
 		// them in a SQL table so they can be inspected by the DBA and/or
 		// the UI.
+		a.stmtMu.Lock()
 		if dumpStmtStatsToLogBeforeReset.Get(&a.st.SV) {
-			dumpStmtStats(ctx, appName, a.stmts)
+			dumpStmtStats(ctx, appName, a.stmtMu.stmts)
 		}
-
 		// Clear the map, to release the memory; make the new map somewhat
 		// already large for the likely future workload.
-		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
-		a.Unlock()
+		a.stmtMu.stmts = make(map[stmtKey]*stmtStats, len(a.stmtMu.stmts)/2)
+		a.stmtMu.Unlock()
+
+		// Ditto for transaction data.
+		a.appStatsMu.Lock()
+		dumpTxnStats(ctx, appName, &a.appStatsMu.data)
+		a.appStatsMu.data = roachpb.ApplicationStatistics{}
+		a.appStatsMu.Unlock()
 	}
 	s.Unlock()
+}
+
+// Save the existing txn data to the info log.
+func dumpTxnStats(ctx context.Context, appName string, stats *roachpb.ApplicationStatistics) {
+	json, err := json.Marshal(*stats)
+	if err != nil {
+		log.Errorf(ctx, "error while marshaling txn stats for %q: %v", appName, err)
+	} else {
+		log.Infof(ctx, "Transaction statistics for %q: %s", json)
+	}
 }
 
 // Save the existing data for an application to the info log.
@@ -285,21 +337,26 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	return f.CloseAndGetString(), true
 }
 
-// GetScrubbedStmtStats returns the statement statistics by app, with the
-// queries scrubbed of their identifiers. Any statements which cannot be
-// scrubbed will be omitted from the returned map.
-func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
+// GetScrubbedStats returns the statement and application
+// statistics by app, with the queries scrubbed of their
+// identifiers. Any statements which cannot be scrubbed will be
+// omitted from the returned map.
+func (e *Executor) GetScrubbedStats() (
+	[]roachpb.CollectedStatementStatistics, []roachpb.CollectedApplicationStatistics,
+) {
 	var ret []roachpb.CollectedStatementStatistics
+	var reta []roachpb.CollectedApplicationStatistics
 	vt := e.virtualSchemas
 	e.sqlStats.Lock()
 	for appName, a := range e.sqlStats.apps {
 		if cap(ret) == 0 {
 			// guesitmate that we'll need apps*(queries-per-app).
-			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(e.sqlStats.apps))
+			ret = make([]roachpb.CollectedStatementStatistics, 0,
+				len(a.stmtMu.stmts)*len(e.sqlStats.apps))
 		}
 		hashedApp := HashAppName(appName)
-		a.Lock()
-		for q, stats := range a.stmts {
+		a.stmtMu.Lock()
+		for q, stats := range a.stmtMu.stmts {
 			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
 			if ok {
 				k := roachpb.StatementStatisticsKey{
@@ -313,10 +370,14 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 				stats.Unlock()
 			}
 		}
-		a.Unlock()
+		a.stmtMu.Unlock()
+		a.appStatsMu.Lock()
+		reta = append(reta,
+			roachpb.CollectedApplicationStatistics{App: hashedApp, Stats: a.appStatsMu.data})
+		a.appStatsMu.Unlock()
 	}
 	e.sqlStats.Unlock()
-	return ret
+	return ret, reta
 }
 
 // HashAppName 1-way hashes an application names for use in stat reporting.

@@ -68,12 +68,13 @@ var crdbInternal = virtualSchema{
 		crdbInternalLeasesTable,
 		crdbInternalLocalQueriesTable,
 		crdbInternalLocalSessionsTable,
+		crdbInternalNodeStmtStatsTable,
+		crdbInternalNodeTxnStatsTable,
 		crdbInternalRangesTable,
 		crdbInternalRuntimeInfoTable,
 		crdbInternalSchemaChangesTable,
 		crdbInternalSessionTraceTable,
 		crdbInternalSessionVariablesTable,
-		crdbInternalStmtStatsTable,
 		crdbInternalTableColumnsTable,
 		crdbInternalTableIndexesTable,
 		crdbInternalTablesTable,
@@ -454,7 +455,7 @@ func (s stmtList) Less(i, j int) bool {
 	return s[i].stmt < s[j].stmt
 }
 
-var crdbInternalStmtStatsTable = virtualSchemaTable{
+var crdbInternalNodeStmtStatsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.node_statement_statistics (
   node_id             INT NOT NULL,
@@ -510,11 +511,11 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			// Retrieve the statement keys and sort them to ensure the
 			// output is deterministic.
 			var stmtKeys stmtList
-			appStats.Lock()
-			for k := range appStats.stmts {
+			appStats.stmtMu.Lock()
+			for k := range appStats.stmtMu.stmts {
 				stmtKeys = append(stmtKeys, k)
 			}
-			appStats.Unlock()
+			appStats.stmtMu.Unlock()
 
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
@@ -558,6 +559,66 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				if err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalNodeTxnStatsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.node_txn_statistics (
+  node_id             INT NOT NULL,
+  application_name    STRING NOT NULL,
+  autocommit_count    INT NOT NULL,
+  explicit_count      INT NOT NULL,
+  autocommit_lat_avg  FLOAT NOT NULL,
+  autocommit_lat_var  FLOAT NOT NULL,
+  explicit_lat_avg    FLOAT NOT NULL,
+  explicit_lat_var    FLOAT NOT NULL
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("access application statistics"); err != nil {
+			return err
+		}
+
+		sqlStats := p.session.sqlStats
+		if sqlStats == nil {
+			return errors.New("cannot access sql statistics from this context")
+		}
+
+		leaseMgr := p.LeaseMgr()
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeID.Get())))
+
+		// Retrieve the application names and sort them to ensure the
+		// output is deterministic.
+		var appNames []string
+		sqlStats.Lock()
+		for n := range sqlStats.apps {
+			appNames = append(appNames, n)
+		}
+		sqlStats.Unlock()
+		sort.Strings(appNames)
+
+		// Now retrieve the application stats proper.
+		for _, appName := range appNames {
+			a := sqlStats.getStatsForApplication(appName)
+
+			a.appStatsMu.Lock()
+			err := addRow(
+				nodeID,
+				tree.NewDString(appName),
+				tree.NewDInt(tree.DInt(a.appStatsMu.data.NumAutocommitTxns)),
+				tree.NewDInt(tree.DInt(a.appStatsMu.data.NumExplicitTxns)),
+				tree.NewDFloat(tree.DFloat(a.appStatsMu.data.AutocommitTxnLat.Mean)),
+				tree.NewDFloat(tree.DFloat(a.appStatsMu.data.AutocommitTxnLat.GetVariance(a.appStatsMu.data.NumAutocommitTxns))),
+				tree.NewDFloat(tree.DFloat(a.appStatsMu.data.ExplicitTxnLat.Mean)),
+				tree.NewDFloat(tree.DFloat(a.appStatsMu.data.ExplicitTxnLat.GetVariance(a.appStatsMu.data.NumExplicitTxns))),
+			)
+			a.appStatsMu.Unlock()
+			if err != nil {
+				return err
 			}
 		}
 		return nil

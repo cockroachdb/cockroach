@@ -98,10 +98,12 @@
 		Header
 		BatchRequest
 		BatchResponse
+		ApplicationStatistics
 		StatementStatistics
 		NumericStat
 		StatementStatisticsKey
 		CollectedStatementStatistics
+		CollectedApplicationStatistics
 		CSVOptions
 		Span
 		Value

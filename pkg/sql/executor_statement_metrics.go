@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // SQL execution is separated in 3+ phases:
@@ -40,6 +41,10 @@ const (
 	// When the session is created (pgwire). Used to compute
 	// the session age.
 	sessionInit sessionPhase = iota
+
+	// When the current transaction is started. Used to compute the
+	// transaction age.
+	txnInit
 
 	// When a batch of SQL code is received in pgwire.
 	// Used to compute the batch age.
@@ -63,11 +68,13 @@ type phaseTimes [sessionNumPhases]time.Time
 
 type sqlEngineMetrics struct {
 	// The subset of SELECTs that are processed through DistSQL.
-	DistSQLSelectCount    *metric.Counter
-	DistSQLExecLatency    *metric.Histogram
-	SQLExecLatency        *metric.Histogram
-	DistSQLServiceLatency *metric.Histogram
-	SQLServiceLatency     *metric.Histogram
+	DistSQLSelectCount      *metric.Counter
+	DistSQLExecLatency      *metric.Histogram
+	SQLExecLatency          *metric.Histogram
+	DistSQLServiceLatency   *metric.Histogram
+	SQLServiceLatency       *metric.Histogram
+	SQLAutocommitTxnLatency *metric.Histogram
+	SQLExplicitTxnLatency   *metric.Histogram
 }
 
 // sqlEngineMetrics implements the metric.Struct interface
@@ -141,6 +148,8 @@ func recordStatementSummary(
 			Sub(phaseTimes[sessionStartBatch]).Seconds()
 		sessionAge := phaseTimes[plannerEndExecStmt].
 			Sub(phaseTimes[sessionInit]).Seconds()
+		txnAge := phaseTimes[plannerEndExecStmt].
+			Sub(phaseTimes[txnInit]).Seconds()
 
 		log.Infof(planner.session.Ctx(),
 			"query stats: %d rows, %d retries, "+
@@ -148,13 +157,43 @@ func recordStatementSummary(
 				"plan %.2fµs (%.1f%%), "+
 				"run %.2fµs (%.1f%%), "+
 				"overhead %.2fµs (%.1f%%), "+
-				"batch age %.3fms, session age %.4fs",
+				"batch age %.3fms, txn age %.4fs session age %.4fs",
 			numRows, automaticRetryCount,
 			parseLat*1e6, 100*parseLat/svcLat,
 			planLat*1e6, 100*planLat/svcLat,
 			runLat*1e6, 100*runLat/svcLat,
 			execOverhead*1e6, 100*execOverhead/svcLat,
-			batchAge*1000, sessionAge,
+			batchAge*1000, txnAge, sessionAge,
+		)
+	}
+}
+
+// recordTxnSummery gathers various details pertaining to the
+// last executed transactin and performs the associated
+// accounting in the passed-in sqlEngineMetrics.
+func recordTxnSummary(
+	session *Session,
+	autoCommit bool,
+	m *sqlEngineMetrics,
+) {
+	phaseTimes := &session.phaseTimes
+
+	timeNow := timeutil.Now()
+	txnAge := timeNow.Sub(phaseTimes[txnInit])
+	if autoCommit {
+		m.SQLAutocommitTxnLatency.RecordValue(txnAge.Nanoseconds())
+	} else {
+		m.SQLExplicitTxnLatency.RecordValue(txnAge.Nanoseconds())
+	}
+
+	txnLat := txnAge.Seconds()
+	session.appStats.recordTxn(autoCommit, txnLat)
+
+	if log.V(2) {
+		sessionAge := timeNow.Sub(phaseTimes[sessionInit]).Seconds()
+		log.Infof(session.Ctx(),
+			"txn stats: txn age %.4fs session age %.4fs",
+			txnLat, sessionAge,
 		)
 	}
 }

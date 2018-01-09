@@ -108,6 +108,12 @@ var (
 	MetaSQLServiceLatency = metric.Metadata{
 		Name: "sql.service.latency",
 		Help: "Latency of SQL request execution"}
+	MetaSQLAutocommitTxnLatency = metric.Metadata{
+		Name: "sql.txn.autocommit.latency",
+		Help: "Latency of single-statement SQL transactions"}
+	MetaSQLExplicitTxnLatency = metric.Metadata{
+		Name: "sql.txn.explicit.latency",
+		Help: "Latency of explicit SQL transactions"}
 	MetaDistSQLSelect = metric.Metadata{
 		Name: "sql.distsql.select.count",
 		Help: "Number of DistSQL SELECT statements"}
@@ -388,6 +394,10 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 			DistSQLServiceLatency: metric.NewLatency(MetaDistSQLServiceLatency,
 				6*metricsSampleInterval),
 			SQLServiceLatency: metric.NewLatency(MetaSQLServiceLatency,
+				6*metricsSampleInterval),
+			SQLAutocommitTxnLatency: metric.NewLatency(MetaSQLAutocommitTxnLatency,
+				6*metricsSampleInterval),
+			SQLExplicitTxnLatency: metric.NewLatency(MetaSQLExplicitTxnLatency,
 				6*metricsSampleInterval),
 		},
 		UpdateCount: metric.NewCounter(MetaUpdate),
@@ -794,6 +804,9 @@ func (e *Executor) execParsed(
 		// transaction (implicit txn or explicit txn). We do the corresponding state
 		// reset.
 		if !inTxn {
+			// Remember when the transaction was started.
+			session.phaseTimes[txnInit] = timeutil.Now()
+
 			// Detect implicit transactions - they need to be autocommitted.
 			if _, isBegin := stmts[0].AST.(*tree.BeginTransaction); !isBegin {
 				autoCommit = true
@@ -923,6 +936,9 @@ func (e *Executor) execParsed(
 			if err := txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session); err != nil {
 				return err
 			}
+
+			// Complete the transaction: record the transaction statistics.
+			recordTxnSummary(session, autoCommit, &e.EngineMetrics)
 		}
 
 		// Figure out what statements to run on the next iteration.

@@ -258,7 +258,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		schema = nil
 	}
 	info.Schema = schema
-	info.SqlStats = s.sqlExecutor.GetScrubbedStmtStats()
+	info.SqlStats, info.AppStats = s.sqlExecutor.GetScrubbedStats()
 	info.UnimplementedErrors = make(map[string]int64)
 	s.sqlExecutor.FillUnimplementedErrorCounts(info.UnimplementedErrors)
 	return &info

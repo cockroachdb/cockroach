@@ -18,6 +18,18 @@ option go_package = "roachpb";
 
 import "gogoproto/gogo.proto";
 
+message ApplicationStatistics {
+  // NumAutocommitTxns is the number of single-statement transactions.
+  optional int64 num_autocommit_txns = 1 [(gogoproto.nullable) = false];
+  // NumExplicitTxns is the number of explicit (BEGIN/COMMIT) transactions.
+  optional int64 num_explicit_txns = 2 [(gogoproto.nullable) = false];
+
+  // AutocommitTxnLat is the total execution time of autocommit transactions.
+  optional NumericStat autocommit_txn_lat = 3 [(gogoproto.nullable) = false];
+  // ExplicitTxnLat is the total execution time of explicit transactions.
+  optional NumericStat explicit_txn_lat = 4 [(gogoproto.nullable) = false];
+}
+
 message StatementStatistics {
   // Count is the total number of times this statement was executed
   // since the begin of the reporting period.
@@ -85,4 +97,8 @@ message StatementStatisticsKey {
 message CollectedStatementStatistics {
   optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
   optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+}
+message CollectedApplicationStatistics {
+  optional string app = 1 [(gogoproto.nullable) = false];
+  optional ApplicationStatistics stats = 2 [(gogoproto.nullable) = false];
 }
