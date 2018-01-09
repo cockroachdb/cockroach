@@ -1052,6 +1052,18 @@ func TestEval(t *testing.T) {
 		{`'NaN'::decimal >= 'NaN'::decimal`, `true`},
 		{`'NaN'::decimal::float`, `NaN`},
 		{`'NaN'::float::decimal`, `NaN`},
+		// inet operations: ~ & | + - << <<= >> >>= &&.
+		{`~'234a:3456:aaa::/12'::inet = 'dcb5:cba9:f555:ffff:ffff:ffff:ffff:ffff/12'::inet`, `true`},
+		{`'234a:3456:aaa::/12'::inet & '12aa:444f:457a:ff45:ff31::'::inet`, `'20a:446:2a::'`},
+		{`'234a:3456:aaa::/12'::inet | '12aa:444f:457a:ff45:ff31::'::inet`, `'33ea:745f:4ffa:ff45:ff31::'`},
+		{`'234a:3456:aaa::/12'::inet + 486486846846864`, `'234a:3456:aaa:0:1:ba75:bb1:b790/12'`},
+		{`486486846846864 + '234a:3456:aaa::/12'::inet `, `'234a:3456:aaa:0:1:ba75:bb1:b790/12'`},
+		{`'234a:3456:aaa::/12'::inet - 486486846846864`, `'234a:3456:aa9:ffff:fffe:458a:f44e:4870/12'`},
+		{`'192.168.200.95/17'::inet >> '192.168.162.1'::inet`, `true`},
+		{`'192.168.2.1'::inet >>= '192.168.2.1'::inet`, `true`},
+		{`'192.168.162.1'::inet << '192.168.200.95/17'::inet`, `true`},
+		{`'192.168.2.1'::inet <<= '192.168.2.1'::inet`, `true`},
+		{`'192.168.200.95'::inet && '192.168.2.1/8'::inet`, `true`},
 	}
 	ctx := tree.NewTestingEvalContext()
 	// We have to manually close this account because we're doing the evaluations
