@@ -89,9 +89,8 @@ type JSON interface {
 	// Exists implements the `?` operator.
 	Exists(string) (bool, error)
 
-	// IterObjectKey returns an ObjectKeyIterator, and it returns error if the obj
-	// is not an object.
-	IterObjectKey() (*ObjectKeyIterator, error)
+	// ObjectIter returns an *ObjectKeyIterator, nil if json is not an object.
+	ObjectIter() (*ObjectIterator, error)
 
 	// isScalar returns whether the JSON document is null, true, false, a string,
 	// or a number.
@@ -1013,32 +1012,26 @@ func (j jsonObject) Exists(s string) (bool, error) {
 	return v != nil, nil
 }
 
-var errIterateKeysNonObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
-	"cannot iterate keys of non-object")
-
-func (jsonNull) IterObjectKey() (*ObjectKeyIterator, error) {
-	return nil, errIterateKeysNonObject
+func (jsonNull) ObjectIter() (*ObjectIterator, error) {
+	return nil, nil
 }
-func (jsonTrue) IterObjectKey() (*ObjectKeyIterator, error) {
-	return nil, errIterateKeysNonObject
+func (jsonTrue) ObjectIter() (*ObjectIterator, error) {
+	return nil, nil
 }
-func (jsonFalse) IterObjectKey() (*ObjectKeyIterator, error) {
-	return nil, errIterateKeysNonObject
+func (jsonFalse) ObjectIter() (*ObjectIterator, error) {
+	return nil, nil
 }
-func (jsonNumber) IterObjectKey() (*ObjectKeyIterator, error) {
-	return nil, errIterateKeysNonObject
+func (jsonNumber) ObjectIter() (*ObjectIterator, error) {
+	return nil, nil
 }
-func (jsonString) IterObjectKey() (*ObjectKeyIterator, error) {
-	return nil, errIterateKeysNonObject
+func (jsonString) ObjectIter() (*ObjectIterator, error) {
+	return nil, nil
 }
-func (jsonArray) IterObjectKey() (*ObjectKeyIterator, error) {
-	return nil, errIterateKeysNonObject
+func (jsonArray) ObjectIter() (*ObjectIterator, error) {
+	return nil, nil
 }
-func (j jsonObject) IterObjectKey() (*ObjectKeyIterator, error) {
-	return &ObjectKeyIterator{
-		src: j,
-		idx: -1,
-	}, nil
+func (j jsonObject) ObjectIter() (*ObjectIterator, error) {
+	return newObjectIterator(j), nil
 }
 
 func (jsonNull) isScalar() bool   { return true }
