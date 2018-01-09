@@ -1089,7 +1089,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
 	ts.mu.Lock()
-	ts.mu.txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
+	ts.mu.txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
 	ts.mu.Unlock()
 	if ts.implicitTxn {
 		ts.mu.txn.SetDebugName(sqlImplicitTxnName)

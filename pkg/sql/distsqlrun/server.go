@@ -248,11 +248,9 @@ func (ds *ServerImpl) setupFlow(
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
-	// The flow will run in a Txn that bypasses the local TxnCoordSender.
-	txn := client.NewTxnWithProto(ds.FlowDB, req.Flow.Gateway, req.Txn)
-	// DistSQL transactions get retryable errors that would otherwise be handled
-	// by the TxnCoordSender.
-	txn.AcceptUnhandledRetryableErrors()
+	// The flow will run in a Txn that specifies child=true because we
+	// do not want each distributed Txn to heartbeat the transaction.
+	txn := client.NewTxnWithProto(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, req.Txn)
 
 	location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
 	if err != nil {

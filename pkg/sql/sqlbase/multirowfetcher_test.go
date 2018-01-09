@@ -158,7 +158,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			if err := mrf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0),
+				client.NewTxn(kvDB, 0, client.RootTxn),
 				roachpb.Spans{tableDesc.TableSpan()},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
@@ -332,7 +332,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 			if err := mrf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0),
+				client.NewTxn(kvDB, 0, client.RootTxn),
 				roachpb.Spans{tableDesc.TableSpan()},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
@@ -692,7 +692,7 @@ func TestNextRowInterleaved(t *testing.T) {
 
 			if err := mrf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0),
+				client.NewTxn(kvDB, 0, client.RootTxn),
 				lookupSpans,
 				false, /*limitBatches*/
 				0,     /*limitHint*/

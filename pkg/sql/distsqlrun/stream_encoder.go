@@ -91,6 +91,10 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 				CollectedSpans: meta.TraceData,
 			},
 		}
+	} else if meta.TxnMeta != nil {
+		enc.Value = &RemoteProducerMetadata_TxnMeta{
+			TxnMeta: meta.TxnMeta,
+		}
 	} else {
 		enc.Value = &RemoteProducerMetadata_Error{
 			Error: NewError(meta.Err),

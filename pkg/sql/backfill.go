@@ -538,7 +538,7 @@ func (sc *SchemaChanger) distBackfill(
 				return err
 			}
 			if err := sc.distSQLPlanner.Run(
-				&planCtx, txn, &plan, &recv, evalCtx,
+				&planCtx, txn, &plan, recv, evalCtx,
 			); err != nil {
 				return err
 			}

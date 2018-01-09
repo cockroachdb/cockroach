@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -63,7 +62,7 @@ func TestClusterFlow(t *testing.T) {
 		numRows,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sumDigitsFn, sqlutils.RowEnglishFn))
 
-	kvDB := tc.Server(0).KVClient().(*client.DB)
+	kvDB := tc.Server(0).DB()
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	makeIndexSpan := func(start, end int) TableReaderSpan {
 		var span roachpb.Span
@@ -253,6 +252,7 @@ func TestClusterFlow(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
+	metas = ignoreTxnMeta(metas)
 	if len(metas) != 0 {
 		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -279,6 +279,18 @@ func ignoreMisplannedRanges(metas []ProducerMetadata) []ProducerMetadata {
 	res := make([]ProducerMetadata, 0)
 	for _, m := range metas {
 		if len(m.Ranges) == 0 {
+			res = append(res, m)
+		}
+	}
+	return res
+}
+
+// ignoreTxnMeta takes a slice of metadata and returns the entries excluding
+// the transaction coordinator metadata.
+func ignoreTxnMeta(metas []ProducerMetadata) []ProducerMetadata {
+	res := make([]ProducerMetadata, 0)
+	for _, m := range metas {
+		if m.TxnMeta == nil {
 			res = append(res, m)
 		}
 	}
@@ -492,6 +504,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
 	metas = ignoreMisplannedRanges(metas)
+	metas = ignoreTxnMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
@@ -734,6 +747,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 							rows, metas = testGetDecodedRows(b, &decoder, rows, metas)
 						}
 						metas = ignoreMisplannedRanges(metas)
+						metas = ignoreTxnMeta(metas)
 						if len(metas) != 0 {
 							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 						}

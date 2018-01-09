@@ -46,9 +46,9 @@ func (l *localTestClusterTransport) SendNext(ctx context.Context, done chan<- Ba
 	l.Transport.SendNext(ctx, done)
 }
 
-// InitSenderForLocalTestCluster initializes a TxnCoordSender that can be used
-// with LocalTestCluster.
-func InitSenderForLocalTestCluster(
+// InitFactoryForLocalTestCluster initializes a TxnCoordSenderFactory
+// that can be used with LocalTestCluster.
+func InitFactoryForLocalTestCluster(
 	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
 	tracer opentracing.Tracer,
@@ -57,7 +57,7 @@ func InitSenderForLocalTestCluster(
 	stores client.Sender,
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
-) client.Sender {
+) client.TxnSenderFactory {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
@@ -83,7 +83,7 @@ func InitSenderForLocalTestCluster(
 	}, gossip)
 
 	ambient := log.AmbientContext{Tracer: tracer}
-	return NewTxnCoordSender(
+	return NewTxnCoordSenderFactory(
 		ambient,
 		st,
 		distSender,

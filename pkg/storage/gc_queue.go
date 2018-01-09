@@ -59,11 +59,7 @@ const (
 
 	// abortSpanAgeThreshold is the duration after which AbortSpan entries
 	// of transactions are garbage collected.
-	// It's important that this is kept aligned with the (maximum) heartbeat
-	// interval used by transaction coordinators throughout the cluster to make
-	// sure that no coordinator can run with a transaction which has been
-	// aborted and whose AbortSpan entry is being deleted.
-	abortSpanAgeThreshold = 5 * base.DefaultHeartbeatInterval
+	abortSpanAgeThreshold = txnCleanupThreshold
 
 	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.

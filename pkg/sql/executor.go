@@ -515,7 +515,7 @@ func (e *Executor) Prepare(
 		// TODO(vivek): perhaps we should be more consistent and update
 		// session.TxnState.mu.txn, but more thought needs to be put into whether that
 		// is really needed.
-		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
+		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
 		if err := txn.SetIsolation(session.data.DefaultIsolationLevel); err != nil {
 			panic(fmt.Errorf("cannot set up txn for prepare %q: %v", stmtStr, err))
 		}
@@ -1743,7 +1743,7 @@ func (e *Executor) execStmtInOpenTxn(
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
 		// started running. The client txn's statement count indicates how many
 		// statements have been executed as part of this transaction.
-		if txnState.mu.txn.CommandCount() > 0 {
+		if meta := txnState.mu.txn.GetTxnCoordMeta(); meta.CommandCount > 0 {
 			return errors.Errorf("SAVEPOINT %s needs to be the first statement in a "+
 				"transaction", tree.RestartSavepointName)
 		}
@@ -1771,7 +1771,7 @@ func (e *Executor) execStmtInOpenTxn(
 		txnState.SetState(AutoRetry)
 		// If commands have already been sent through the transaction,
 		// restart the client txn's proto to increment the epoch.
-		if txnState.mu.txn.CommandCount() > 0 {
+		if meta := txnState.mu.txn.GetTxnCoordMeta(); meta.CommandCount > 0 {
 			// TODO(andrei): Should the timestamp below be e.cfg.Clock.Now(), so that
 			// the transaction gets a new timestamp?
 			txnState.mu.txn.Proto().Restart(
@@ -2022,7 +2022,7 @@ func (e *Executor) execDistSQL(
 		},
 	)
 	if err := e.distSQLPlanner.PlanAndRun(
-		ctx, planner.txn, tree, &recv, &planner.extendedEvalCtx,
+		ctx, planner.txn, tree, recv, &planner.extendedEvalCtx,
 	); err != nil {
 		return err
 	}
@@ -2130,23 +2130,10 @@ func shouldUseDistSQL(
 		return false, nil
 	}
 
-	var err error
-	var distribute bool
+	// Trigger limit propagation.
+	planner.setUnlimited(plan)
 
-	// Temporary workaround for #13376: if the transaction wrote something,
-	// we can't allow it to do DistSQL reads any more because we can't guarantee
-	// that the reads don't happen after the gateway's TxnCoordSender has
-	// abandoned the transaction (and so the reads could miss to see their own
-	// writes). We detect this by checking if the transaction's "anchor" key is
-	// set.
-	if planner.txn.AnchorKey() != nil {
-		err = errors.New("writing txn")
-	} else {
-		// Trigger limit propagation.
-		planner.setUnlimited(plan)
-		distribute, err = dp.CheckSupport(plan)
-	}
-
+	distribute, err := dp.CheckSupport(plan)
 	if err != nil {
 		// If the distSQLMode is ALWAYS, reject anything but SET.
 		if distSQLMode == sessiondata.DistSQLAlways && err != setNotSupportedError {
