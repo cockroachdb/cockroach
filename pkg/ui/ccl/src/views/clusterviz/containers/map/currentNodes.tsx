@@ -8,103 +8,34 @@
 
 import _ from "lodash";
 import React from "react";
-import { connect } from "react-redux";
 import * as d3 from "d3";
 
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
-
-import NodeStatusHistory from "./statusHistory";
+import { SimulatedNodeStatus } from "./nodeSimulator";
 import * as Vector from "./vector";
 import * as PathMath from "./pathmath";
-import { Locality } from "./locality";
+import { NodeView } from "./nodeView";
 import { LocalityLink, LocalityLinkProps } from "./localityLink";
 
 export interface CurrentNodesProps {
-  nodesSummary: NodesSummary;
-  statusesValid: boolean;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-}
-
-export interface CurrentNodesOwnProps {
+  nodeHistories: SimulatedNodeStatus[];
   projection: d3.geo.Projection;
 }
-
-// List of fake location data in order to place nodes on the map for visual
-// effect.
-const locations: [number, number][] = [
-  [-74.00597, 40.71427],
-  [-80.19366, 25.77427],
-  [-93.60911, 41.60054],
-  [-118.24368, 34.05223],
-  [-122.33207, 47.60621],
-  [-0.12574, 51.50853],
-  [13.41053, 52.52437],
-  [18.0649, 59.33258],
-  [151.20732, -33.86785],
-  [144.96332, -37.814],
-  [153.02809, -27.46794],
-  [116.39723, 39.9075],
-  [121.45806, 31.22222],
-  [114.0683, 22.54554],
-  [72.88261, 19.07283],
-  [77.59369, 12.97194],
-  [77.22445, 28.63576],
-];
 
 // CurrentNodes places all current nodes on the map based on their long/lat
 // coordinates (currently simulated). Also generates a link between each node
 // pair, visualized on the map as a directed path.
-class CurrentNodes extends React.Component<CurrentNodesProps & CurrentNodesOwnProps, any> {
-  // HACK: nodeHistories is used to maintain a list of previous node statuses
-  // for individual nodes. This is used to display rates of change without
-  // having to query time series data. This is a hack because this behavior
-  // should be moved into the reducer.
-  nodeHistories: { [id: string]: NodeStatusHistory } = {};
-
-  // accumulateHistory parses incoming nodeStatus properties and accumulates
-  // a history for each node.
-  accumulateHistory() {
-    if (!this.props.nodesSummary.nodeStatuses) {
-      return;
-    }
-
-    this.props.nodesSummary.nodeStatuses.map((status) => {
-      const id = status.desc.node_id;
-      if (!this.nodeHistories.hasOwnProperty(id)) {
-        this.nodeHistories[id] = new NodeStatusHistory(status);
-      } else {
-        this.nodeHistories[id].update(status);
-      }
-    });
-  }
-
-  componentWillMount() {
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
-
-  componentWillReceiveProps(props: CurrentNodesProps & CurrentNodesOwnProps) {
-    props.refreshNodes();
-    props.refreshLiveness();
-  }
-
+export class CurrentNodes extends React.Component<CurrentNodesProps, any> {
   render() {
-    // TODO(mrtracy): Move this to lifecycle methods.
-    this.accumulateHistory();
     const { projection } = this.props;
-    if (_.isEmpty(this.nodeHistories)) {
+    if (_.isEmpty(this.props.nodeHistories)) {
       return null;
     }
 
     // Attach a generated location to each node to create the data for a
     // locality.
-    const nodeHistoryList = _.values(this.nodeHistories);
-    const localities = nodeHistoryList.map((nh, i) => ({
+    const localities = this.props.nodeHistories.map((nh) => ({
       nodeHistory: nh,
-      translate: projection(locations[i % locations.length]),
+      translate: projection(nh.longLat()),
     }));
 
     // Create locality links for each pair.
@@ -125,7 +56,7 @@ class CurrentNodes extends React.Component<CurrentNodesProps & CurrentNodesOwnPr
     // scale factor is computed based on the closest locality pair, but applied
     // to all localities in order to give a uniform appearance.
     let localityScale = 1;
-    const minDistance = Locality.maxRadius * 3;
+    const minDistance = NodeView.maxRadius * 3;
     linkPairs.forEach(linkPair => {
       // Compute the distance between this locality pair. If the distance
       // is shorter than the minimum required distance, adjust the scale.
@@ -140,7 +71,7 @@ class CurrentNodes extends React.Component<CurrentNodesProps & CurrentNodesOwnPr
 
     // Adjust locality links paths by routing them around other localities.
     // TODO(mrtracy): This math should be extracted into the PathMath library.
-    const scaledRadius = Locality.outerRadius * localityScale;
+    const scaledRadius = NodeView.outerRadius * localityScale;
     const localityLinks = linkPairs.map(linkPair => {
       const link: LocalityLinkProps = {
         id: `${linkPair[0].nodeHistory.id()}-${linkPair[1].nodeHistory.id()}`,
@@ -229,7 +160,7 @@ class CurrentNodes extends React.Component<CurrentNodesProps & CurrentNodesOwnPr
               + `scale(${localityScale})`
             }
           >
-            <Locality
+            <NodeView
               nodeHistory={locality.nodeHistory}
               maxClientActivityRate={maxClientActivityRate}
             />
@@ -245,14 +176,3 @@ class CurrentNodes extends React.Component<CurrentNodesProps & CurrentNodesOwnPr
     );
   }
 }
-
-export default connect(
-  (state: AdminUIState, _ownProps: CurrentNodesOwnProps) => ({
-    nodesSummary: nodesSummarySelector(state),
-    statusesValid: state.cachedData.nodes.valid && state.cachedData.liveness.valid,
-  }),
-  {
-    refreshNodes,
-    refreshLiveness,
-  },
-)(CurrentNodes);
