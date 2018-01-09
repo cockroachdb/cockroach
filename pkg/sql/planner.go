@@ -55,6 +55,8 @@ type extendedEvalContext struct {
 
 	// Tables points to the Session's table collection.
 	Tables *TableCollection
+
+	ExecCfg *ExecutorConfig
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -266,7 +268,7 @@ func (p *planner) Tables() *TableCollection {
 
 // ExecCfg implements the PlanHookState interface.
 func (p *planner) ExecCfg() *ExecutorConfig {
-	return p.session.execCfg
+	return p.extendedEvalCtx.ExecCfg
 }
 
 func (p *planner) LeaseMgr() *LeaseManager {
