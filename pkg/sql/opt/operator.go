@@ -27,11 +27,15 @@ const (
 
 	// -- Relational operators --
 	// This list will grow significantly as we implement new operators.
-	// The only relational operator implemented so far is scanOp.
+	// The only relational operators implemented so far are scanOp and selectOp.
 
 	// scan is the lowest level relational operator, responsible for scanning
 	// tables.
 	scanOp
+
+	// selectOp is a pass-through operator, which may optionally apply filters to
+	// its input.
+	selectOp
 
 	// -- Scalar operators --
 
