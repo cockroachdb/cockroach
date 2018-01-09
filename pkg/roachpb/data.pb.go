@@ -395,10 +395,38 @@ type Transaction struct {
 	// this map is to avoid uncertainty related restarts which normally occur
 	// when reading a value in the near future as per the max_timestamp field.
 	//
+	// Morally speaking, having an entry for a node in this map means that this
+	// node has been visited before, and that no more uncertainty restarts are
+	// expected for operations served from it. However, this is not entirely
+	// accurate. For example, say a txn starts with orig_timestamp=1 (and some
+	// large max_timestamp). It then reads key "a" from node A, registering an
+	// entry `A -> 5` in the process (`5` happens to be a timestamp taken off
+	// that node's clock at the end of the read).
+	// Now assume that some other transaction writes and commits a value at key "b"
+	// and timestamp 4 (again, served by node A), and our transaction attempts to
+	// read that key. Since there is an entry in its observed_timestamps for A,
+	// our uncertainty window is `[orig_timestamp, 5) = [1, 5)` but the value at
+	// key "b" is in that window, and so we will restart. However, we will restart
+	// with a timestamp that is at least high as our entry in the map for node A,
+	// so no future operation on node A will be uncertain.
+	//
+	// Thus, expressed properly, you could say that when a node has been read from
+	// successfully before, uncertainty on that node is restricted to values with
+	// timestamps in the interval [orig_timestamp, first_visit_timestamp), and
+	// that no node will trigger restarts more than once (and in fact, usually
+	// the first restart also bumps the txn timestamp enough to clear all other
+	// nodes).
+	//
 	// When this list holds a corresponding entry for the node the current
 	// request is executing on, we can run the command with the map's timestamp
 	// as the top boundary of our uncertainty interval, limiting (and often
 	// avoiding) uncertainty restarts.
+	//
+	// When a transaction is first initialized on a node, it may use a timestamp
+	// from the local hybrid logical clock to initialize the corresponding entry
+	// in the map. In particular, if `orig_timestamp` is taken from that node's
+	// clock, we may add that to the map, which eliminates read uncertainty for
+	// reads on that node.
 	//
 	// The list of observed timestamps is kept sorted by NodeID. Use
 	// Transaction.UpdateObservedTimestamp to maintain the sorted order.
