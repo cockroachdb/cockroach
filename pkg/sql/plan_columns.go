@@ -95,6 +95,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, showFingerprintsColumns)
 	case *splitNode:
 		return n.getColumns(mut, splitNodeColumns)
+	case *showTraceReplicaNode:
+		return n.getColumns(mut, showTraceReplicaColumns)
 
 	// Nodes using the RETURNING helper.
 	case *deleteNode:
