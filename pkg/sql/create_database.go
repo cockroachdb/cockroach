@@ -96,7 +96,7 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
-		params.p.session.tables.addUncommittedDatabase(
+		params.extendedEvalCtx.Tables.addUncommittedDatabase(
 			desc.Name, desc.ID, false /* dropped */)
 	}
 	return nil

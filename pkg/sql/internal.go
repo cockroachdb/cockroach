@@ -95,7 +95,7 @@ func (ie InternalExecutor) GetTableSpan(
 
 func (ie InternalExecutor) initSession(p *planner) {
 	p.extendedEvalCtx.NodeID = ie.LeaseManager.LeaseStore.nodeID.Get()
-	p.session.tables.leaseMgr = ie.LeaseManager
+	p.extendedEvalCtx.Tables.leaseMgr = ie.LeaseManager
 }
 
 // getTableID retrieves the table ID for the specified table.
@@ -116,7 +116,7 @@ func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID
 		return retryable(ctx, p.txn)
 	}
 
-	dbID, err := p.session.tables.databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Database())
+	dbID, err := p.Tables().databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Database())
 	if err != nil {
 		return 0, err
 	}

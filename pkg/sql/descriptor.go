@@ -151,7 +151,7 @@ func (p *planner) createDescriptorWithID(
 	})
 
 	if desc, ok := descriptor.(*sqlbase.TableDescriptor); ok {
-		p.session.tables.addUncommittedTable(*desc)
+		p.Tables().addUncommittedTable(*desc)
 	}
 
 	return p.txn.Run(ctx, b)
