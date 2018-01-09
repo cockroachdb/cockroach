@@ -112,7 +112,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id := range toTruncate {
-		if err := p.truncateTable(p.session.Ctx(), id, traceKV); err != nil {
+		if err := p.truncateTable(p.EvalContext().Ctx(), id, traceKV); err != nil {
 			return nil, err
 		}
 	}
