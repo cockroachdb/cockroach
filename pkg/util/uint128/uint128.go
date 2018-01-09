@@ -78,6 +78,18 @@ func (u Uint128) Sub(n uint64) Uint128 {
 	return Uint128{hi, lo}
 }
 
+func (u Uint128) And(o Uint128) Uint128 {
+	return Uint128{u.Hi & o.Hi, u.Lo & o.Lo}
+}
+
+func (u Uint128) Or(o Uint128) Uint128 {
+	return Uint128{u.Hi | o.Hi, u.Lo | o.Lo}
+}
+
+func (u Uint128) Xor(o Uint128) Uint128 {
+	return Uint128{u.Hi ^ o.Hi, u.Lo ^ o.Lo}
+}
+
 // FromBytes parses the byte slice as a 128 bit big-endian unsigned integer.
 func FromBytes(b []byte) Uint128 {
 	hi := binary.BigEndian.Uint64(b[:8])
