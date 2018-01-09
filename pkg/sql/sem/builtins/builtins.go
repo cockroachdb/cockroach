@@ -3453,12 +3453,16 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 
 // Converts a scalar Datum to its string representation
 func asJSONBuildObjectKey(d tree.Datum) (string, error) {
-	switch d.(type) {
+	switch t := d.(type) {
 	case *tree.DJSON, *tree.DArray, *tree.DTuple:
 		return "", pgerror.NewError(pgerror.CodeInvalidParameterValueError,
 			"key value must be scalar, not array, tuple, or json")
-	default:
+	case *tree.DCollatedString:
+		return t.Contents, nil
+	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DString, *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DOid, *tree.DTime:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
+	default:
+		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for key value", d)
 	}
 }
 
