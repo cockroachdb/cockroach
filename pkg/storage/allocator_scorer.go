@@ -588,7 +588,7 @@ func shouldRebalance(
 	options scorerOptions,
 ) bool {
 	// Rebalance if this store is too full.
-	if store.Capacity.FractionUsed() >= maxFractionUsedThreshold {
+	if !maxCapacityCheck(store) {
 		log.VEventf(ctx, 2, "s%d: should-rebalance(disk-full): fraction-used=%.2f, capacity=(%v)",
 			store.StoreID, store.Capacity.FractionUsed(), store.Capacity)
 		return true
