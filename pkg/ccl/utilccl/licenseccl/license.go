@@ -16,6 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -100,4 +101,20 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 	return errors.Errorf(
 		"license for cluster(s) %s is not valid for cluster %s", matches.String(), cluster.String(),
 	)
+}
+
+// GetType returns what type of license it is, or None if the license is nil.
+func (l *License) GetType() cluster.LicenseType {
+	if l == nil {
+		return cluster.LicenseTypeNone
+	}
+	switch l.Type {
+	case License_NonCommercial:
+		return cluster.LicenseTypeNonCommercial
+	case License_Enterprise:
+		return cluster.LicenseTypeEnterprise
+	case License_Evaluation:
+		return cluster.LicenseTypeEvaluation
+	}
+	panic("unhandled license type")
 }

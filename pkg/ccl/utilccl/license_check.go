@@ -56,6 +56,7 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, featur
 
 func init() {
 	server.LicenseCheckFn = CheckEnterpriseEnabled
+	server.LicenseTypeFn = getLicenseType
 }
 
 func checkEnterpriseEnabledAt(
@@ -71,4 +72,15 @@ func checkEnterpriseEnabledAt(
 		}
 	}
 	return lic.Check(at, cluster, org, feature)
+}
+
+func getLicenseType(st *cluster.Settings) (cluster.LicenseType, error) {
+	var lic *licenseccl.License
+	if str := enterpriseLicense.Get(&st.SV); str != "" {
+		var err error
+		if lic, err = licenseccl.Decode(str); err != nil {
+			return "", err
+		}
+	}
+	return lic.GetType(), nil
 }
