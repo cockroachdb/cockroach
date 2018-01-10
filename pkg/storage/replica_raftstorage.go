@@ -719,6 +719,11 @@ func (r *Replica) applySnapshot(
 				r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
 			}
 		}
+		if snapType == snapTypeRaft { // regardless of whether it failed
+			r.store.lastRaftSnapshotTime.Lock()
+			r.store.lastRaftSnapshotTime.at = r.store.Clock().PhysicalTime()
+			r.store.lastRaftSnapshotTime.Unlock()
+		}
 	}()
 
 	if raft.IsEmptySnap(snap) {

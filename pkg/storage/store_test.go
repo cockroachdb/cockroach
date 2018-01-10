@@ -3068,6 +3068,110 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 }
 
+func TestSnapshotThrottlingAfterRaftSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc := testContext{}
+	tc.Start(t, stopper)
+	s := tc.store
+	ctx := context.Background()
+
+	verifyAccept := func(header *SnapshotRequest_Header) error {
+		cleanupFn, rejectionMsg, err := s.reserveSnapshot(ctx, header)
+		if err != nil {
+			return err
+		}
+		if rejectionMsg != "" {
+			return fmt.Errorf("expected no rejection message, got %q", rejectionMsg)
+		}
+		if n := s.ReservationCount(); n != 1 {
+			return fmt.Errorf("expected 1 reservation, but found %d", n)
+		}
+		cleanupFn()
+		return nil
+	}
+	verifyReject := func(header *SnapshotRequest_Header) error {
+		cleanupFn, rejectionMsg, err := s.reserveSnapshot(ctx, header)
+		if err != nil {
+			return err
+		}
+		if rejectionMsg != incomingRebalancesDisabledMsg {
+			return fmt.Errorf("expected rejection message %q, got %q",
+				incomingRebalancesDisabledMsg, rejectionMsg)
+		}
+		if cleanupFn != nil {
+			return fmt.Errorf("got unexpected non-nil cleanup method")
+		}
+		if n := s.ReservationCount(); n != 0 {
+			return fmt.Errorf("expected 0 reservations, but found %d", n)
+		}
+		return nil
+	}
+
+	// Snapshots on a newly started store are accepted just fine.
+	for i := 0; i < 5; i++ {
+		if err := verifyAccept(&SnapshotRequest_Header{
+			RangeSize:  1,
+			CanDecline: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// After a raft snapshot, though, they'll all be rejected.
+	const rangeID = 1
+	repl, err := s.GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repl.applySnapshot(
+		ctx,
+		IncomingSnapshot{
+			State: &storagebase.ReplicaState{
+				Desc: repl.Desc(),
+			},
+			snapType: snapTypeRaft,
+		},
+		raftpb.Snapshot{},
+		raftpb.HardState{},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 5; i++ {
+		if err := verifyReject(&SnapshotRequest_Header{
+			RangeSize:  1,
+			CanDecline: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify that a non-declinable snapshots are still allowed.
+	for i := 0; i < 5; i++ {
+		if err := verifyAccept(&SnapshotRequest_Header{
+			RangeSize:  1,
+			CanDecline: false,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify that bumping the clock far enough will allow snapshots again.
+	tc.manualClock.Increment(int64(RebalanceDelayAfterRaftSnapshot.Get(&tc.store.cfg.Settings.SV)))
+
+	for i := 0; i < 5; i++ {
+		if err := verifyAccept(&SnapshotRequest_Header{
+			RangeSize:  1,
+			CanDecline: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestSnapshotRateLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

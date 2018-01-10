@@ -71,6 +71,7 @@ kv.bulk_sst.sync_size                              2.0 MiB        z     threshol
 kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
 kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage
 kv.range_descriptor_cache.size                     1000000        i     maximum number of entries in the range descriptor and leaseholder caches
+kv.snapshot_rebalance.delay_after_recovery         10s            d     minimum duration for a store to wait after a recovery snapshot before accepting a rebalance snapshot
 kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots
 kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots
 kv.transaction.max_intents                         100000         i     maximum number of write intents allowed for a KV transaction

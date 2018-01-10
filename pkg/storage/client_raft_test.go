@@ -1134,6 +1134,9 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	// Prevent the split queue from creating additional ranges while we're
 	// waiting for replication.
 	sc.TestingKnobs.DisableSplitQueue = true
+	// Don't block preemptive snapshots on startup -- they'll never succeed
+	// otherwise since this test uses a manual clock that we don't increment.
+	storage.RebalanceDelayAfterRaftSnapshot.Override(&sc.Settings.SV, 0)
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 	}
@@ -1141,7 +1144,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	mtc.Start(t, 3)
 	mtc.stopStore(2)
 	if err := storage.ProposeAddSSTable(
-		context.Background(), "k", "v", mtc.clocks[0].Now(), mtc.stores[0],
+		context.Background(), "k", "v", mtc.clock.Now(), mtc.stores[0],
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -2371,7 +2374,13 @@ func TestRaftRemoveRace(t *testing.T) {
 // placeholders.
 func TestRemovePlaceholderRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	// Don't block preemptive snapshots on startup -- they'll never succeed
+	// otherwise since this test uses a manual clock that we don't increment.
+	sc := storage.TestStoreConfig(nil)
+	storage.RebalanceDelayAfterRaftSnapshot.Override(&sc.Settings.SV, 0)
+	mtc := &multiTestContext{
+		storeConfig: &sc,
+	}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 

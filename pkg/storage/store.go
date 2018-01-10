@@ -98,7 +98,7 @@ const (
 	systemDataGossipInterval = 1 * time.Minute
 
 	// Messages that provide detail about why a preemptive snapshot was rejected.
-	incomingRebalancesDisabledMsg = "incoming rebalances disabled because node is behind"
+	incomingRebalancesDisabledMsg = "incoming rebalances temporarily disabled because node is behind"
 	snapshotApplySemBusyMsg       = "store busy applying snapshots and/or removing replicas"
 	storeDrainingMsg              = "store is draining"
 
@@ -390,6 +390,11 @@ type Store struct {
 	initComplete sync.WaitGroup // Signaled by async init tasks
 
 	idleReplicaElectionTime struct {
+		syncutil.Mutex
+		at time.Time
+	}
+
+	lastRaftSnapshotTime struct {
 		syncutil.Mutex
 		at time.Time
 	}
@@ -1481,6 +1486,12 @@ func (s *Store) GossipStore(ctx context.Context) error {
 		// it would have been anyway if we weren't doing idle replica campaigning.
 		electionTimeout := s.cfg.RaftTickInterval * time.Duration(s.cfg.RaftElectionTimeoutTicks)
 		s.idleReplicaElectionTime.at = s.Clock().PhysicalTime().Add(electionTimeout)
+		// Treat newly restarted nodes as if they are behind enough to have needed
+		// a raft snapshot. This delays preemptive snapshots from being allowed for
+		// a little while.
+		s.lastRaftSnapshotTime.Lock()
+		s.lastRaftSnapshotTime.at = s.Clock().PhysicalTime()
+		s.lastRaftSnapshotTime.Unlock()
 	}
 	s.idleReplicaElectionTime.Unlock()
 	return nil
@@ -2812,6 +2823,9 @@ func (s *Store) reserveSnapshot(
 		// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 		// getting stuck behind large snapshots managed by the replicate queue.
 	} else if header.CanDecline {
+		if !s.canAcceptPreemptiveSnapshot() {
+			return nil, incomingRebalancesDisabledMsg, nil
+		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
@@ -2840,6 +2854,13 @@ func (s *Store) reserveSnapshot(
 			<-s.snapshotApplySem
 		}
 	}, "", nil
+}
+
+func (s *Store) canAcceptPreemptiveSnapshot() bool {
+	minTimeSinceLastSnapshot := RebalanceDelayAfterRaftSnapshot.Get(&s.cfg.Settings.SV)
+	s.lastRaftSnapshotTime.Lock()
+	defer s.lastRaftSnapshotTime.Unlock()
+	return !s.Clock().PhysicalTime().Before(s.lastRaftSnapshotTime.at.Add(minTimeSinceLastSnapshot))
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
@@ -3414,6 +3435,16 @@ type OutgoingSnapshotStream interface {
 type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
+
+// RebalanceDelayAfterRaftSnapshot controls how long a store must wait after
+// receiving a raft snapshot before it'll accept a preemptive snapshot. Exported
+// so that it can be overridden in tests.
+var RebalanceDelayAfterRaftSnapshot = settings.RegisterDurationSetting(
+	"kv.snapshot_rebalance.delay_after_recovery",
+	"minimum duration for a store to wait after a recovery snapshot before accepting a "+
+		"rebalance snapshot",
+	10*time.Second,
+)
 
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
