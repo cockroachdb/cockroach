@@ -1474,8 +1474,14 @@ CREATE TABLE crdb_internal.zones (
 		for _, r := range rows {
 			id := uint32(tree.MustBeDInt(r[0]))
 			zs, err := config.ZoneSpecifierFromID(id, resolveID)
-			if err != nil {
-				return err
+			var cliSpecifier tree.Datum
+			if err == nil {
+				cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+			} else {
+				// The table was deleted but hasn't yet been cleaned up by the schema
+				// changer. The user has no way to refer to the zone, so provide a NULL
+				// CLI specifier.
+				cliSpecifier = tree.DNull
 			}
 
 			configBytes := []byte(*r[1].(*tree.DBytes))
@@ -1499,7 +1505,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 				if err := addRow(
 					r[0], // id
-					tree.NewDString(config.CLIZoneSpecifier(&zs)),
+					cliSpecifier,
 					tree.NewDBytes(tree.DBytes(configYAML)),
 					tree.NewDBytes(tree.DBytes(configBytes)),
 				); err != nil {
@@ -1517,9 +1523,12 @@ CREATE TABLE crdb_internal.zones (
 					if err != nil {
 						return err
 					}
-					zs := zs
-					zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
-					zs.Partition = tree.Name(s.PartitionName)
+					if cliSpecifier != tree.DNull {
+						zs := zs
+						zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
+						zs.Partition = tree.Name(s.PartitionName)
+						cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+					}
 					configYAML, err := yaml.Marshal(s.Config)
 					if err != nil {
 						return err
@@ -1530,7 +1539,7 @@ CREATE TABLE crdb_internal.zones (
 					}
 					if err := addRow(
 						r[0], // id
-						tree.NewDString(config.CLIZoneSpecifier(&zs)),
+						cliSpecifier,
 						tree.NewDBytes(tree.DBytes(configYAML)),
 						tree.NewDBytes(tree.DBytes(configBytes)),
 					); err != nil {

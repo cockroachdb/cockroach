@@ -483,9 +483,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				&n.tableDesc.PrimaryIndex.Partitioning,
 				&partitioning,
 			)
+			err = deleteRemovedPartitionZoneConfigs(
+				params.ctx, params.p.txn, params.p.ExecCfg().Settings, params.p.ExecCfg().LeaseManager,
+				n.tableDesc, &n.tableDesc.PrimaryIndex, &n.tableDesc.PrimaryIndex.Partitioning, &partitioning)
+			if err != nil {
+				return err
+			}
 			n.tableDesc.PrimaryIndex.Partitioning = partitioning
-			// TODO(dan): Remove zone configs which no longer point at a
-			// partition. This also needs to be done for indexes.
 		default:
 			return fmt.Errorf("unsupported alter command: %T", cmd)
 		}
