@@ -1428,7 +1428,6 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	defer distsqlrun.DrainAndForwardMetadata(ctx, sp.input, sp.output)
 	err := func() error {
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
@@ -1533,12 +1532,7 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 		}
 		return nil
 	}()
-	if err != nil {
-		distsqlrun.DrainAndClose(ctx, sp.output, err)
-		return
-	}
-
-	sp.out.Close()
+	distsqlrun.DrainAndClose(ctx, sp.output, err, sp.input)
 }
 
 // extractSSTSpan creates an SST from the iterator, excluding keys >= end.
