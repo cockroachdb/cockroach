@@ -120,7 +120,7 @@ func createPartitioningImpl(
 	}
 	partDesc.NumColumns = uint32(len(partBy.Fields))
 
-	colMismatchErr := func() error {
+	partitioningString := func() string {
 		// We don't have the fields for our parent partitions handy, but we can use
 		// the names from the index we're partitioning. They must have matched or we
 		// would have already returned an error.
@@ -128,14 +128,15 @@ func createPartitioningImpl(
 		for _, p := range partBy.Fields {
 			partCols = append(partCols, string(p))
 		}
-		return fmt.Errorf("declared partition columns (%s) are not a prefix of index being partitioned (%s)",
-			strings.Join(partCols, ", "), strings.Join(indexDesc.ColumnNames, ", "))
+		return strings.Join(partCols, ", ")
 	}
 
 	var cols []sqlbase.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
 		if colOffset+i >= len(indexDesc.ColumnNames) {
-			return partDesc, colMismatchErr()
+			return partDesc, fmt.Errorf(
+				"declared partition columns (%s) exceed the number of columns in index being partitioned (%s)",
+				partitioningString(), strings.Join(indexDesc.ColumnNames, ", "))
 		}
 		// Search by name because some callsites of this method have not
 		// allocated ids yet (so they are still all the 0 value).
@@ -145,7 +146,10 @@ func createPartitioningImpl(
 		}
 		cols = append(cols, col)
 		if string(partBy.Fields[i]) != col.Name {
-			return partDesc, colMismatchErr()
+			n := colOffset + len(partBy.Fields)
+			return partDesc, fmt.Errorf(
+				"declared partition columns (%s) do not match first %d columns in index being partitioned (%s)",
+				partitioningString(), n, strings.Join(indexDesc.ColumnNames[:n], ", "))
 		}
 	}
 
