@@ -72,19 +72,10 @@ func initAggregateBuiltins() {
 // execution.
 // Exported for use in documentation.
 var Aggregates = map[string][]tree.Builtin{
-	"array_agg": {
-		makeAggBuiltinWithReturnType(
-			[]types.T{types.Any},
-			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
-					return tree.UnknownReturnType
-				}
-				return types.TArray{Typ: args[0].ResolvedType()}
-			},
-			newArrayAggregate,
-			"Aggregates the selected values into an array.",
-		),
-	},
+	"array_agg": arrayBuiltin(func(t types.T) tree.Builtin {
+		return makeAggBuiltin([]types.T{t}, types.TArray{Typ: t}, newArrayAggregate,
+			"Aggregates the selected values into an array.")
+	}),
 
 	"avg": {
 		makeAggBuiltin([]types.T{types.Int}, types.Decimal, newIntAvgAggregate,
