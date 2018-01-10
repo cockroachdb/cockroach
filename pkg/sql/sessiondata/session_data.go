@@ -48,6 +48,9 @@ type SessionData struct {
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
+	// SequenceState gives access to the SQL sequences that have been manipulated
+	// by the session.
+	SequenceState *SequenceState
 }
 
 // DistSQLExecMode controls if and when the Executor uses DistSQL.
