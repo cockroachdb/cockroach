@@ -24,6 +24,7 @@ import (
 	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -324,15 +325,15 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	if err := expected.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", s)
 	}
-	wbuf.writeBinaryDatum(context.Background(), expected, nil)
+	wbuf.writeBinaryDatum(context.Background(), expected, nil /* sessionLoc */)
 
-	rbuf := readBuffer{msg: wbuf.wrapped.Bytes()}
+	rbuf := pgwirebase.ReadBuffer{Msg: wbuf.wrapped.Bytes()}
 
-	plen, err := rbuf.getUint32()
+	plen, err := rbuf.GetUint32()
 	if err != nil {
 		b.Fatal(err)
 	}
-	bytes, err := rbuf.getBytes(int(plen))
+	bytes, err := rbuf.GetBytes(int(plen))
 	if err != nil {
 		b.Fatal(err)
 	}
