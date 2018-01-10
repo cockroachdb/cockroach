@@ -17,11 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -273,11 +273,6 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 
-	prettyTrimmedKey := func(key []byte) string {
-		untrimmedKey := append(keys.MakeTablePrefix(0), key...)
-		return strings.TrimPrefix(roachpb.Key(untrimmedKey).String(), "/Table/0")
-	}
-
 	partitioningTests := allPartitioningTests(rng)
 	for _, test := range partitioningTests {
 		if test.generatedSpans == nil {
@@ -296,10 +291,33 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 
 			var actual []string
 			for _, span := range spans {
+				subzone := test.parsed.subzones[span.SubzoneIndex]
+				idxDesc, err := test.parsed.tableDesc.FindIndexByID(sqlbase.IndexID(subzone.IndexID))
+				if err != nil {
+					t.Fatalf("could not find index with ID %d: %+v", subzone.IndexID, err)
+				}
+
+				directions := []encoding.Direction{encoding.Ascending /* index ID */}
+				for _, cd := range idxDesc.ColumnDirections {
+					ed, err := cd.ToEncodingDirection()
+					if err != nil {
+						t.Fatal(err)
+					}
+					directions = append(directions, ed)
+				}
+
+				var subzoneShort string
+				if len(subzone.PartitionName) > 0 {
+					subzoneShort = "." + subzone.PartitionName
+				} else {
+					subzoneShort = "@" + idxDesc.Name
+				}
+
 				// Verify that we're always doing the space savings when we can.
 				if span.Key.PrefixEnd().Equal(span.EndKey) {
 					t.Errorf("endKey should be omitted when equal to key.PrefixEnd [%s, %s)",
-						prettyTrimmedKey(span.Key), prettyTrimmedKey(span.EndKey))
+						encoding.PrettyPrintValue(directions, span.Key, "/"),
+						encoding.PrettyPrintValue(directions, span.EndKey, "/"))
 				}
 				if len(span.EndKey) == 0 {
 					span.EndKey = span.Key.PrefixEnd()
@@ -307,19 +325,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 
 				// TODO(dan): Check that spans are sorted.
 
-				var subzoneShort string
-				if subzone := test.parsed.subzones[span.SubzoneIndex]; len(subzone.PartitionName) > 0 {
-					subzoneShort = "." + subzone.PartitionName
-				} else {
-					idxDesc, err := test.parsed.tableDesc.FindIndexByID(sqlbase.IndexID(subzone.IndexID))
-					if err != nil {
-						t.Fatalf("could not find index with ID %d: %+v", subzone.IndexID, err)
-					}
-					subzoneShort = "@" + idxDesc.Name
-				}
 				actual = append(actual, fmt.Sprintf("%s %s-%s", subzoneShort,
-					prettyTrimmedKey(span.Key), prettyTrimmedKey(span.EndKey),
-				))
+					encoding.PrettyPrintValue(directions, span.Key, "/"),
+					encoding.PrettyPrintValue(directions, span.EndKey, "/")))
 			}
 
 			if len(actual) != len(test.generatedSpans) {

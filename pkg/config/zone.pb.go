@@ -133,7 +133,9 @@ func (*ZoneConfig) ProtoMessage()               {}
 func (*ZoneConfig) Descriptor() ([]byte, []int) { return fileDescriptorZone, []int{3} }
 
 type Subzone struct {
-	// IndexID is the ID of the SQL table index that the subzone represents.
+	// IndexID is the ID of the SQL table index that the subzone represents. It
+	// must always be set even though partition names are unique across all of a
+	// table's indices.
 	IndexID uint32 `protobuf:"varint,1,opt,name=index_id,json=indexId" json:"index_id"`
 	// PartitionName is the partition of the SQL table index that the subzone
 	// represents. It is empty when the subzone represents the entire index.
