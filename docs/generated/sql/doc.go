@@ -26,4 +26,4 @@ questions come up.
 package sql
 
 //go:generate go run ../../../pkg/cmd/docgen/main.go ../../../pkg/cmd/docgen/funcs.go functions .
-//go:generate go run ../../../pkg/cmd/docgen/main.go ../../../pkg/cmd/docgen/diagrams.go grammar bnf --addr ../../../pkg/sql/parser/sql.y
+//go:generate go run ../../../pkg/cmd/docgen/main.go ../../../pkg/cmd/docgen/diagrams.go grammar bnf --addr ../../../pkg/sql/parser/sql.y bnf
