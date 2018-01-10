@@ -77,6 +77,10 @@ func TestCheckVersion(t *testing.T) {
 	if expected, actual := build.GetInfo().Tag, r.last.version; expected != actual {
 		t.Errorf("expected version tag %v, got %v", expected, actual)
 	}
+
+	if expected, actual := "OSS", r.last.licenseType; expected != actual {
+		t.Errorf("expected license type %v, got %v", expected, actual)
+	}
 }
 
 func TestReportUsage(t *testing.T) {
@@ -323,8 +327,9 @@ type mockRecorder struct {
 	syncutil.Mutex
 	requests int
 	last     struct {
-		uuid    string
-		version string
+		uuid        string
+		version     string
+		licenseType string
 		diagnosticspb.DiagnosticReport
 		rawReportBody string
 	}
@@ -342,6 +347,7 @@ func makeMockRecorder(t *testing.T) *mockRecorder {
 		rec.requests++
 		rec.last.uuid = r.URL.Query().Get("uuid")
 		rec.last.version = r.URL.Query().Get("version")
+		rec.last.licenseType = r.URL.Query().Get("licensetype")
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			panic(err)
