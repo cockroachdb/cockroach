@@ -55,7 +55,7 @@ func init() {
 		isOp:                {name: "is"},
 		isNotOp:             {name: "is-not"},
 		containsOp:          {name: "contains"},
-		containedByOp:       {name: "contained-by"},
+		containedByOp:       {name: "contained-by", normalizeFn: normalizeContainedByOp},
 		anyOp:               {name: "any"},
 		someOp:              {name: "some"},
 		allOp:               {name: "all"},
@@ -329,4 +329,13 @@ func normalizeEqOp(e *Expr) {
 		// NormalizeExpr, but we may be creating new such expressions above.
 		e.children[0], e.children[1] = rhs, lhs
 	}
+}
+
+func normalizeContainedByOp(e *Expr) {
+	if e.op != containedByOp {
+		panic(fmt.Sprintf("invalid call on %s", e))
+	}
+	// Flip the condition to "contains".
+	e.op = containsOp
+	e.children[0], e.children[1] = e.children[1], e.children[0]
 }
