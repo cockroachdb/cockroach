@@ -761,6 +761,13 @@ func reportConfiguration(ctx context.Context) {
 	if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
 		log.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
 	}
+	// If a user ever reports "bad things have happened", any
+	// troubleshooting steps will want to rule out that the user was
+	// running as root in a multi-user environment, or using different
+	// uid/gid across runs in the same data directory. To determine
+	// this, it's easier if the information appears in the log file.
+	log.Infof(ctx, "process identity: uid %d euid %d gid %d egid %d",
+		syscall.Getuid(), syscall.Geteuid(), syscall.Getgid(), syscall.Getegid())
 }
 
 func maybeWarnMemorySizes(ctx context.Context) {
