@@ -653,7 +653,7 @@ func (p *planner) notifySchemaChange(
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 	}
-	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
+	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }
 
 // writeTableDesc implements the SchemaAccessor interface.

@@ -651,6 +651,8 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 		ExecCfg:               s.execCfg,
 		DistSQLPlanner:        s.distSQLPlanner,
 		TestingVerifyMetadata: s,
+		TxnModesSetter:        &s.TxnState,
+		SchemaChangers:        &s.TxnState.schemaChangers,
 	}
 }
 

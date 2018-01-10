@@ -64,6 +64,10 @@ type extendedEvalContext struct {
 	DistSQLPlanner *DistSQLPlanner
 
 	TestingVerifyMetadata testingVerifyMetadata
+
+	TxnModesSetter txnModesSetter
+
+	SchemaChangers *schemaChangerCollection
 }
 
 type testingVerifyMetadata interface {
@@ -572,4 +576,10 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 
 func (p *planner) testingVerifyMetadata() testingVerifyMetadata {
 	return p.extendedEvalCtx.TestingVerifyMetadata
+}
+
+// txnModesSetter is an interface used by SQL execution to influence the current
+// transaction.
+type txnModesSetter interface {
+	setTransactionModes(modes tree.TransactionModes) error
 }
