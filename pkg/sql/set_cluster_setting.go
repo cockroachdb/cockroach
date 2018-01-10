@@ -134,7 +134,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			SettingName string
 			Value       string
 			User        string
-		}{n.name, reportedValue, params.p.session.data.User},
+		}{n.name, reportedValue, params.SessionData().User},
 	)
 }
 
