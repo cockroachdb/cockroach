@@ -119,6 +119,15 @@ func Get(name string) (Meta, error) {
 	return m, nil
 }
 
+// MustGet is like Get but panics if no generator with that name exists.
+func MustGet(name string) Meta {
+	m, err := Get(name)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
 // Registered returns all registered Generators.
 func Registered() []Meta {
 	gens := make([]Meta, 0, len(registered))
