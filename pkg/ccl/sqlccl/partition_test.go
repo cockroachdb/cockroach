@@ -1061,18 +1061,14 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 	return nil
 }
 
-func TestInitialPartitioning(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
-
+func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.SQLRunner, func()) {
 	cfg := config.DefaultZoneConfig()
 	cfg.NumReplicas = 1
-	defer config.TestingSetDefaultZoneConfig(cfg)()
+	resetZoneConfig := config.TestingSetDefaultZoneConfig(cfg)
 
-	ctx := context.Background()
 	tsArgs := func(attr string) base.TestServerArgs {
 		return base.TestServerArgs{
-			ScanInterval: time.Second,
+			ScanInterval: time.Millisecond,
 			StoreSpecs: []base.StoreSpec{
 				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
 			},
@@ -1084,12 +1080,30 @@ func TestInitialPartitioning(t *testing.T) {
 		2: tsArgs("n3"),
 	}}
 	tc := testcluster.StartTestCluster(t, 3, tcArgs)
-	defer tc.Stopper().Stop(context.Background())
+
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE data`)
 	sqlDB.Exec(t, `USE data`)
 
+	// Disabling store throttling vastly speeds up rebalancing.
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.declined_reservation_timeout = '0s'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.failed_reservation_timeout = '0s'`)
+
+	return sqlDB, func() {
+		tc.Stopper().Stop(context.Background())
+		resetZoneConfig()
+	}
+}
+
+func TestInitialPartitioning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rng, _ := randutil.NewPseudoRand()
 	testCases := allPartitioningTests(rng)
+
+	ctx := context.Background()
+	sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
+	defer cleanup()
+
 	for _, test := range testCases {
 		if len(test.scans) == 0 {
 			continue
@@ -1189,27 +1203,9 @@ func TestRepartitioning(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 
-	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = 1
-	defer config.TestingSetDefaultZoneConfig(cfg)()
-
 	ctx := context.Background()
-	tsArgs := func(attr string) base.TestServerArgs {
-		return base.TestServerArgs{
-			ScanInterval: time.Second,
-			StoreSpecs: []base.StoreSpec{
-				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
-			},
-		}
-	}
-	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
-		0: tsArgs("n1"),
-		1: tsArgs("n2"),
-		2: tsArgs("n3"),
-	}}
-	tc := testcluster.StartTestCluster(t, 3, tcArgs)
-	defer tc.Stopper().Stop(context.Background())
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
+	defer cleanup()
 
 	for _, test := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
