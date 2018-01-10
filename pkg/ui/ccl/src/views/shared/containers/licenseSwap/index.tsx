@@ -6,7 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
+import _ from "lodash";
 import React from "react";
+import { connect } from "react-redux";
+
+import { selectEnterpriseEnabled } from "src/redux/license";
+import { AdminUIState } from "src/redux/state";
 
 // Some of the type magic is adapted from @types/react-redux.
 // Some of the code is adapted from react-redux.
@@ -29,6 +34,16 @@ function combineNames(a: string, b: string) {
   return a + "," + b;
 }
 
+interface OwnProps {
+  enterpriseEnabled: boolean;
+}
+
+function mapStateToProps(state: AdminUIState) {
+  return {
+    enterpriseEnabled: selectEnterpriseEnabled(state),
+  };
+}
+
 /**
  * LicenseSwap is a higher-order component that swaps out two components based
  * on the current license status.
@@ -42,16 +57,18 @@ export default function swapByLicense<TProps>(
   const ossName = getComponentName(OSSComponent);
   const cclName = getComponentName(CCLComponent);
 
-  class LicenseSwap extends React.Component<TProps, {}> {
+  class LicenseSwap extends React.Component<TProps & OwnProps, {}> {
     public static displayName = `LicenseSwap(${combineNames(ossName, cclName)})`;
 
     render() {
-      if (location.hash.indexOf("pretend-license-expired") !== -1) {
-        return <OSSComponent {...this.props} />;
+      const props = _.omit(this.props, ["enterpriseEnabled"]);
+
+      if (!this.props.enterpriseEnabled) {
+        return <OSSComponent {...props} />;
       }
-      return <CCLComponent {...this.props} />;
+      return <CCLComponent {...props} />;
     }
   }
 
-  return LicenseSwap;
+  return connect(mapStateToProps)(LicenseSwap);
 }
