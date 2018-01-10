@@ -92,7 +92,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 					return nil, err
 				}
 				tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(),
-					p.session.Database, tableGlob)
+					p.SessionData().Database, tableGlob)
 				if err != nil {
 					return nil, err
 				}

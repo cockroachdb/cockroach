@@ -125,7 +125,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, error) {
 	row := o.run.rows.Values()
 	timestamp := tree.MakeDTimestamp(
-		params.evalCtx.GetStmtTimestamp(), time.Nanosecond)
+		params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond)
 
 	// Start the next unit of work. This is required so during the next
 	// call to Done() it is known whether there are any rows left.

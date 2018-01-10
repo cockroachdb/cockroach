@@ -54,7 +54,7 @@ type updateNode struct {
 func (p *planner) Update(
 	ctx context.Context, n *tree.Update, desiredTypes []types.T,
 ) (planNode, error) {
-	if n.Where == nil && p.session.SafeUpdates {
+	if n.Where == nil && p.SessionData().SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
 	}
 	resetter, err := p.initWith(ctx, n.With)
@@ -98,7 +98,8 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.txCtx, &p.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(
+		updateCols, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +305,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 	if err := u.checkHelper.loadRow(u.updateColsIdx, updateValues, true); err != nil {
 		return false, err
 	}
-	if err := u.checkHelper.check(params.evalCtx); err != nil {
+	if err := u.checkHelper.check(params.EvalContext()); err != nil {
 		return false, err
 	}
 

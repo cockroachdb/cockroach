@@ -29,7 +29,7 @@ type alterSequenceNode struct {
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
-	tn, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -72,12 +72,12 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogAlterSequence,
 		int32(n.seqDesc.ID),
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.seqDesc.Name, n.n.String(), params.p.session.User},
+		}{n.seqDesc.Name, n.n.String(), params.SessionData().User},
 	); err != nil {
 		return err
 	}

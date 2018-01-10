@@ -53,13 +53,13 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		return err
 	}
 
-	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, &params.p.evalCtx, params.p.txn)
+	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
 	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
 	}
 	distSQLPlanner.FinalizePlan(&planCtx, &plan)
-	flows := plan.GenerateFlowSpecs(params.evalCtx.NodeID)
+	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
 	if err != nil {
 		return err
