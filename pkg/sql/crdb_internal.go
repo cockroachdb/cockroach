@@ -390,7 +390,7 @@ CREATE TABLE crdb_internal.jobs (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		p = makeInternalPlanner("jobs", p.txn, p.SessionData().User, p.session.memMetrics)
+		p = makeInternalPlanner("jobs", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, status, created, payload FROM system.jobs`)
 		if err != nil {
@@ -520,7 +520,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
 				anonymized := tree.DNull
-				anonStr, ok := scrubStmtStatKey(p.session.virtualSchemas, stmtKey.stmt)
+				anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stmtKey.stmt)
 				if ok {
 					anonymized = tree.NewDString(anonStr)
 				}
@@ -589,7 +589,7 @@ CREATE TABLE crdb_internal.session_trace (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		rows, err := p.session.Tracing.generateSessionTraceVTable()
+		rows, err := p.ExtendedEvalContext().Tracing.generateSessionTraceVTable()
 		if err != nil {
 			return err
 		}
@@ -621,7 +621,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 			setting, _ := settings.Lookup(k)
 			if err := addRow(
 				tree.NewDString(k),
-				tree.NewDString(setting.String(&p.session.execCfg.Settings.SV)),
+				tree.NewDString(setting.String(&p.ExecCfg().Settings.SV)),
 				tree.NewDString(setting.Typ()),
 				tree.NewDString(setting.Description()),
 			); err != nil {
@@ -675,7 +675,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "node_queries"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
+		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -689,7 +689,7 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
+		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -768,7 +768,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
+		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -782,7 +782,7 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
+		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -1466,7 +1466,7 @@ CREATE TABLE crdb_internal.zones (
 			return 0, "", fmt.Errorf("object with ID %d does not exist", id)
 		}
 
-		p = makeInternalPlanner("zones", p.txn, p.SessionData().User, p.session.memMetrics)
+		p = makeInternalPlanner("zones", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, config FROM system.zones`)
 		if err != nil {
@@ -1570,7 +1570,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			return err
 		}
 
-		g := p.session.execCfg.Gossip
+		g := p.ExecCfg().Gossip
 		var descriptors []roachpb.NodeDescriptor
 		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
@@ -1629,7 +1629,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			return err
 		}
 
-		g := p.session.execCfg.Gossip
+		g := p.ExecCfg().Gossip
 		var livenesses []storage.Liveness
 		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()

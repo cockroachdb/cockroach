@@ -101,7 +101,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 	if err != nil {
 		return false, err
 	}
@@ -136,14 +136,14 @@ func (p *planner) createDescriptorWithID(
 	b := &client.Batch{}
 	descID := descriptor.GetID()
 	descDesc := sqlbase.WrapDescriptor(descriptor)
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.testingVerifyMetadata().setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, idKey, descID); err != nil {
 			return err
 		}
@@ -151,7 +151,7 @@ func (p *planner) createDescriptorWithID(
 	})
 
 	if desc, ok := descriptor.(*sqlbase.TableDescriptor); ok {
-		p.session.tables.addUncommittedTable(*desc)
+		p.Tables().addUncommittedTable(*desc)
 	}
 
 	return p.txn.Run(ctx, b)

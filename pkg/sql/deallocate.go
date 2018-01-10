@@ -25,9 +25,9 @@ import (
 // See https://www.postgresql.org/docs/current/static/sql-deallocate.html for details.
 func (p *planner) Deallocate(ctx context.Context, s *tree.Deallocate) (planNode, error) {
 	if s.Name == "" {
-		p.session.PreparedStatements.DeleteAll(ctx)
+		p.preparedStatements.DeleteAll(ctx)
 	} else {
-		if found := p.session.PreparedStatements.Delete(ctx, string(s.Name)); !found {
+		if found := p.preparedStatements.Delete(ctx, string(s.Name)); !found {
 			return nil, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
 				"prepared statement %q does not exist", s.Name)
 		}

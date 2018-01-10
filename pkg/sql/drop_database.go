@@ -140,7 +140,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 
 	b := &client.Batch{}
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
 		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
@@ -150,16 +150,17 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	// Delete the zone config entry for this database.
 	b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
-			if err := expectDeleted(systemConfig, key); err != nil {
-				return err
+	params.extendedEvalCtx.TestingVerifyMetadata.setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
+				if err := expectDeleted(systemConfig, key); err != nil {
+					return err
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 
-	p.session.tables.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
+	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err

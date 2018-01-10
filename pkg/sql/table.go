@@ -113,7 +113,7 @@ type SchemaAccessor interface {
 var _ SchemaAccessor = &planner{}
 
 func (p *planner) getVirtualTabler() VirtualTabler {
-	return &p.session.virtualSchemas
+	return p.extendedEvalCtx.VirtualSchemas
 }
 
 // getTableOrViewDesc returns a table descriptor for either a table or view,
@@ -653,7 +653,7 @@ func (p *planner) notifySchemaChange(
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 	}
-	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
+	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }
 
 // writeTableDesc implements the SchemaAccessor interface.
@@ -665,13 +665,13 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	// have written, but if they are followed by other statements that modify
 	// the descriptor the verification of the overwritten descriptor cannot be
 	// done.
-	p.session.setTestingVerifyMetadata(nil)
+	p.testingVerifyMetadata().setTestingVerifyMetadata(nil)
 
-	p.session.tables.addUncommittedTable(*tableDesc)
+	p.Tables().addUncommittedTable(*tableDesc)
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	descVal := sqlbase.WrapDescriptor(tableDesc)
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
 	}
 	return p.txn.Put(ctx, descKey, descVal)
@@ -720,7 +720,7 @@ func expandTableGlob(
 func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableName) error {
 	t := *tn
 
-	descFunc := p.session.tables.getTableVersion
+	descFunc := p.Tables().getTableVersion
 	if p.avoidCachedDescriptors {
 		descFunc = getTableOrViewDesc
 	}

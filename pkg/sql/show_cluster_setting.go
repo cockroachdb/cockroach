@@ -43,7 +43,7 @@ func (p *planner) ShowClusterSetting(
 			"TABLE crdb_internal.cluster_settings", nil, nil)
 	}
 
-	st := p.session.execCfg.Settings
+	st := p.ExecCfg().Settings
 	val, ok := settings.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)

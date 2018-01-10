@@ -677,7 +677,7 @@ func forEachDatabaseDesc(
 	}
 
 	// Handle virtual schemas.
-	for _, schema := range p.session.virtualSchemas.entries {
+	for _, schema := range p.getVirtualTabler().getEntries() {
 		dbDescs = append(dbDescs, schema.desc)
 	}
 
@@ -835,7 +835,7 @@ func forEachTableDescWithTableLookupInternal(
 	}
 
 	// Handle virtual schemas.
-	for dbName, schema := range p.session.virtualSchemas.entries {
+	for dbName, schema := range p.getVirtualTabler().getEntries() {
 		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
 		for tableName, entry := range schema.tables {
 			dbTables[tableName] = entry.desc
@@ -941,7 +941,8 @@ func forEachRole(
 	ctx context.Context, origPlanner *planner, fn func(username string, isRole tree.DBool) error,
 ) error {
 	query := `SELECT username, "isRole" FROM system.users`
-	p := makeInternalPlanner("for-each-role", origPlanner.txn, security.RootUser, origPlanner.session.memMetrics)
+	p := makeInternalPlanner(
+		"for-each-role", origPlanner.txn, security.RootUser, origPlanner.extendedEvalCtx.MemMetrics)
 	defer finishInternalPlanner(p)
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {

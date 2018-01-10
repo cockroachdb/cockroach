@@ -302,9 +302,10 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		return verifyDropTableMetadata(systemConfig, tableDesc.ID, "table")
-	})
+	p.testingVerifyMetadata().setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			return verifyDropTableMetadata(systemConfig, tableDesc.ID, "table")
+		})
 	return droppedViews, nil
 }
 
