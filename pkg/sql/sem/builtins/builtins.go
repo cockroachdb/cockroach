@@ -1019,7 +1019,7 @@ CockroachDB supports the following flags:
 			Category:   categorySequences,
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				val, err := evalCtx.Planner.GetLastSequenceValue(evalCtx.Ctx())
+				val, err := evalCtx.SessionData.SequenceState.GetLastValue()
 				if err != nil {
 					return nil, err
 				}
