@@ -1304,15 +1304,7 @@ message BatchResponse {
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 
-// The two Batch services below are identical, except that some internal
-// Request types are not permitted in batches processed by External.Batch. This
-// distinction exists e.g. to prevent command-line tools from accessing
-// internal-only RPC methods.
-
+// Batch service implemeted by nodes for KV API requests.
 service Internal {
-  rpc Batch (BatchRequest) returns (BatchResponse) {}
-}
-
-service External {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
 }
