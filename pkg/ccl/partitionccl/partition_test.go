@@ -781,6 +781,29 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			},
 			scans: map[string]string{`b < 4`: `n1`, `b = 4`: `n2`, `b = 5`: `n3`, `b > 5`: `n1`},
 		},
+		{
+			name: `secondary index - NULL`,
+			schema: `CREATE TABLE %s (a INT PRIMARY KEY, b INT, INDEX b_idx (b) PARTITION BY LIST (b) (
+				PARTITION pl1 VALUES IN (NULL, 1),
+				PARTITION p3  VALUES IN (3)
+			))`,
+			configs: []string{`@b_idx:+n1`, `.pl1:+n2`, `.p3:+n3`},
+			generatedSpans: []string{
+				`@b_idx /2-/2/NULL`,
+				`  .pl1 /2/NULL-/2/!NULL`,
+				`@b_idx /2/!NULL-/2/1`,
+				`  .pl1 /2/1-/2/2`,
+				`@b_idx /2/2-/2/3`,
+				`   .p3 /2/3-/2/4`,
+				`@b_idx /2/4-/3`,
+			},
+			scans: map[string]string{
+				`b = -1`:             `n1`,
+				`b IS NULL`:          `n2`,
+				`b IS NULL OR b = 1`: `n2`,
+				`b = 3`:              `n3`,
+			},
+		},
 
 		{
 			name: `scans`,
