@@ -1051,7 +1051,7 @@ ui-test: $(UI_DLLS) $(UI_MANIFESTS)
 ui-test-watch: $(UI_DLLS) $(UI_MANIFESTS)
 	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --no-single-run --auto-watch
 
-$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_JS) $(UI_MANIFESTS) $(shell find $(UI_ROOT)/src $(UI_ROOT)/styl -type f)
+$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_JS) $(UI_MANIFESTS) $(shell find $(UI_ROOT)/ccl $(UI_ROOT)/src $(UI_ROOT)/styl -type f)
 	@# TODO(benesch): remove references to embedded.go once sufficient time has passed.
 	rm -f $(UI_ROOT)/embedded.go
 	find $(UI_ROOT)/dist$* -mindepth 1 -not -name dist$*.go -delete
