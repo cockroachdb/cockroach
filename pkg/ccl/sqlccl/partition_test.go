@@ -152,10 +152,12 @@ func (t *partitioningTest) parse() error {
 				)
 			}
 		} else if strings.HasPrefix(subzoneShort, ".") {
-			// TODO(dan): decide if config.Subzone needs to have IndexID
-			// set when PartitionName is non-empty. The proto comment
-			// doesn't specify.
 			subzone.PartitionName = subzoneShort[1:]
+			_, index, err := t.parsed.tableDesc.FindNonDropPartitionByName(subzone.PartitionName)
+			if err != nil {
+				return err
+			}
+			subzone.IndexID = uint32(index.ID)
 			if len(constraints) > 0 {
 				fmt.Fprintf(&zoneConfigStmts,
 					`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
@@ -412,7 +414,27 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			scans: map[string]string{
 				`a < 3`:            `n2`,
 				`a >= 3 AND a < 4`: `n3`,
+				`a >= 4`:           `n1`,
+			},
+		},
+		{
+			// If this test seems confusing, see the note on the multi-col equivalent.
+			name: `single col range partitioning - descending`,
+			schema: `CREATE TABLE %s (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+				PARTITION p4 VALUES FROM (MINVALUE) TO (4),
+				PARTITION p3 VALUES FROM (4) TO (3),
+				PARTITION px VALUES FROM (3) TO (MAXVALUE)
+			)`,
+			configs: []string{`.p4:+n1`, `.p3:+n2`, `.px:+n3`},
+			generatedSpans: []string{
+				`.p4 /1-/1/4`,
+				`.p3 /1/4-/1/3`,
+				`.px /1/3-/2`,
+			},
+			scans: map[string]string{
 				`a > 4`:            `n1`,
+				`a <= 4 AND a > 3`: `n2`,
+				`a <= 3`:           `n3`,
 			},
 		},
 		{
@@ -477,6 +499,43 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 				`(a, b) >= (3, 4) AND (a, b) < (5, 6)`: `n3`,
 				`(a, b) >= (5, 6) AND (a, b) < (5, 7)`: `n1`,
 				`(a, b) >= (5, 7)`:                     `n1`,
+			},
+		},
+		{
+			// MINVALUE and MAXVALUE are brutally confusing when used with a column
+			// stored in descending order. MINVALUE means "the value that sorts before
+			// the earliest value in the index", and so in the case of a descending
+			// INT column, represents a large *positive* integer, i.e., one greater
+			// than the maximum representable integer. Similarly, MAXVALUE represents
+			// a large *negative* integer.
+			//
+			// It's not clear that anything can be done. Switching the meaning of
+			// MINVALUE/MAXVALUE for descending columns would be quite confusing in
+			// the multi-col case. For example, in the table below, the minimum
+			// possible tuple would be (MINVALUE, MAXVALUE, MINVALUE) and the maximum
+			// possible would be (MAXVALUE, MINVALUE, MAXVALUE). Neither is exactly
+			// intuitive. Consider also that (6, MINVALUE, MINVALUE) would be invalid,
+			// as a descending MINVALUE is not equivalent to an ascending MINVALUE.
+			// How would we even describe these requirements?
+			//
+			// Better to let the meaning of MINVALUE/MAXVALUE be consistent
+			// everywhere, and document the gotcha thoroughly.
+			name: `multi col range partitioning - descending`,
+			schema: `CREATE TABLE %s (a INT, b INT, c INT, PRIMARY KEY (a, b DESC, c)) PARTITION BY RANGE (a, b, c) (
+				PARTITION p6xx VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (6, MAXVALUE, MAXVALUE),
+				PARTITION p75n VALUES FROM (7, MINVALUE, MINVALUE) TO (7, 5, MINVALUE),
+				PARTITION pxxx VALUES FROM (7, 5, MINVALUE) TO (MAXVALUE, MAXVALUE, MAXVALUE)
+			)`,
+			configs: []string{`.p6xx:+n1`, `.p75n:+n2`, `.pxxx:+n3`},
+			generatedSpans: []string{
+				`.p6xx /1-/1/7`,
+				`.p75n /1/7-/1/7/5`,
+				`.pxxx /1/7/5-/2`,
+			},
+			scans: map[string]string{
+				`a < 7`:                       `n1`,
+				`a = 7 AND b > 5`:             `n2`,
+				`a > 7 OR (a = 7 AND b <= 5)`: `n3`,
 			},
 		},
 		{
