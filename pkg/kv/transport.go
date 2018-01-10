@@ -248,6 +248,9 @@ func (gt *grpcTransport) send(
 		if err != nil {
 			return nil, err
 		}
+		if err := grpcutil.ConnectionReady(conn); err != nil {
+			return nil, err
+		}
 		reply, err := roachpb.NewInternalClient(conn).Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
