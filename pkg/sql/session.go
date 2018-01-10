@@ -259,10 +259,6 @@ type Session struct {
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
 		LastActiveQuery tree.Statement
-
-		// sequenceState stores state related to calls to sequence
-		// builtins currval(), nextval(), and lastval().
-		SequenceState sequenceState
 	}
 
 	//
@@ -390,11 +386,12 @@ func NewSession(
 
 	s := &Session{
 		data: sessiondata.SessionData{
-			Database:    args.Database,
-			DistSQLMode: distSQLMode,
-			SearchPath:  sqlbase.DefaultSearchPath,
-			Location:    time.UTC,
-			User:        args.User,
+			Database:      args.Database,
+			DistSQLMode:   distSQLMode,
+			SearchPath:    sqlbase.DefaultSearchPath,
+			Location:      time.UTC,
+			User:          args.User,
+			SequenceState: sessiondata.NewSequenceState(),
 		},
 		virtualSchemas:   e.virtualSchemas,
 		execCfg:          &e.cfg,
@@ -423,7 +420,6 @@ func NewSession(
 	s.PreparedPortals = makePreparedPortals(s)
 	s.Tracing.session = s
 	s.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
-	s.mu.SequenceState = newSequenceState()
 	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 
 	remoteStr := "<admin>"
@@ -1917,4 +1913,10 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
 	*m.curTxnReadOnly = val
+}
+
+// RecordLatestSequenceValue records that value to which the session incremented
+// a sequence.
+func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
+	m.data.SequenceState.RecordValue(seqID, val)
 }
