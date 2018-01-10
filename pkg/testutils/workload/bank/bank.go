@@ -61,7 +61,7 @@ var bankMeta = workload.Meta{
 	Description: `Bank models a set of accounts with currency balances`,
 	Version:     `1.0.0`,
 	New: func() workload.Generator {
-		g := &bank{flags: pflag.NewFlagSet(`kv`, pflag.ContinueOnError)}
+		g := &bank{flags: pflag.NewFlagSet(`bank`, pflag.ContinueOnError)}
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.rows, `rows`, defaultRows, `Initial number of accounts in bank table.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
@@ -129,7 +129,7 @@ func (b *bank) Tables() []workload.Table {
 	return []workload.Table{table}
 }
 
-// Tables implements the Generator interface.
+// Ops implements the Generator interface.
 func (b *bank) Ops() []workload.Operation {
 	// TODO(dan): Move the various queries in the backup/restore tests here.
 	op := workload.Operation{
