@@ -97,17 +97,9 @@ const (
 	// gossip update.
 	systemDataGossipInterval = 1 * time.Minute
 
-	// prohibitRebalancesBehindThreshold is the maximum number of log entries a
-	// store allows its replicas to be behind before it starts declining incoming
-	// rebalances. We prohibit rebalances in this situation to avoid adding
-	// additional work to a store that is either not keeping up or is undergoing
-	// recovery because it is on a recently restarted node.
-	prohibitRebalancesBehindThreshold = 1000
-
 	// Messages that provide detail about why a preemptive snapshot was rejected.
-	incomingRebalancesDisabledMsg = "incoming rebalances disabled because node is behind"
-	snapshotApplySemBusyMsg       = "store busy applying snapshots and/or removing replicas"
-	storeDrainingMsg              = "store is draining"
+	snapshotApplySemBusyMsg = "store busy applying snapshots and/or removing replicas"
+	storeDrainingMsg        = "store is draining"
 
 	// IntersectingSnapshotMsg is part of the error message returned from
 	// canApplySnapshotLocked and is exposed here so testing can rely on it.
@@ -404,11 +396,6 @@ type Store struct {
 	// Semaphore to limit concurrent non-empty snapshot application and replica
 	// data destruction.
 	snapshotApplySem chan struct{}
-
-	// Are rebalances to this store allowed or prohibited. Rebalances are
-	// prohibited while a store is catching up replicas (i.e. recovering) after
-	// being restarted.
-	incomingRebalancesDisabled int32
 
 	// draining holds a bool which indicates whether this store is draining. See
 	// SetDraining() for a more detailed explanation of behavior changes.
@@ -2824,9 +2811,6 @@ func (s *Store) reserveSnapshot(
 		// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 		// getting stuck behind large snapshots managed by the replicate queue.
 	} else if header.CanDecline {
-		if atomic.LoadInt32(&s.incomingRebalancesDisabled) == 1 {
-			return nil, incomingRebalancesDisabledMsg, nil
-		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
@@ -4225,7 +4209,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
 		behindCount               int64
-		selfBehindCount           int64
 	)
 
 	timestamp := s.cfg.Clock.Now()
@@ -4265,7 +4248,6 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		behindCount += metrics.BehindCount
-		selfBehindCount += metrics.SelfBehindCount
 		if qps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
 			averageWritesPerSecond += qps
 		}
@@ -4285,17 +4267,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
-	s.metrics.RaftLogSelfBehindCount.Update(selfBehindCount)
 
-	if selfBehindCount > prohibitRebalancesBehindThreshold {
-		log.Infof(ctx, "temporarily disabling rebalances because RaftLogSelfBehindCount=%d", selfBehindCount)
-		atomic.StoreInt32(&s.incomingRebalancesDisabled, 1)
-	} else {
-		prev := atomic.SwapInt32(&s.incomingRebalancesDisabled, 0)
-		if prev == 1 {
-			log.Infof(ctx, "re-enabling rebalances because RaftLogSelfBehindCount=%d", selfBehindCount)
-		}
-	}
 	return nil
 }
 
