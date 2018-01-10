@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,19 +57,19 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 func TestMaliciousInputs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, data := range [][]byte{
-		// This byte string sends a clientMsgClose message type. When
-		// readBuffer.readUntypedMsg is called, the 4 bytes is subtracted
-		// from the size, leaving a 0-length readBuffer. Following this,
+		// This byte string sends a pgwirebase.ClientMsgClose message type. When
+		// ReadBuffer.readUntypedMsg is called, the 4 bytes is subtracted
+		// from the size, leaving a 0-length ReadBuffer. Following this,
 		// handleClose is called with the empty buffer, which calls
 		// getPrepareType. Previously, getPrepareType would crash on an
 		// empty buffer. This is now fixed.
-		{byte(clientMsgClose), 0x00, 0x00, 0x00, 0x04},
-		// This byte string exploited the same bug using a clientMsgDescribe
+		{byte(pgwirebase.ClientMsgClose), 0x00, 0x00, 0x00, 0x04},
+		// This byte string exploited the same bug using a pgwirebase.ClientMsgDescribe
 		// message type.
-		{byte(clientMsgDescribe), 0x00, 0x00, 0x00, 0x04},
-		// This would cause readBuffer.getInt16 to overflow, resulting in a
+		{byte(pgwirebase.ClientMsgDescribe), 0x00, 0x00, 0x00, 0x04},
+		// This would cause ReadBuffer.getInt16 to overflow, resulting in a
 		// negative value being used for an allocation size.
-		{byte(clientMsgParse), 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0xff, 0xff},
+		{byte(pgwirebase.ClientMsgParse), 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0xff, 0xff},
 	} {
 		testMaliciousInput(t, data)
 	}
@@ -98,8 +99,8 @@ func testMaliciousInput(t *testing.T, data []byte) {
 		// Sync and terminate if a panic did not occur to stop the server.
 		// We append a 4-byte trailer to each to signify a zero length message. See
 		// lib/pq.conn.sendSimpleMessage for a similar approach to simple messages.
-		_, _ = w.Write([]byte{byte(clientMsgSync), 0x00, 0x00, 0x00, 0x04})
-		_, _ = w.Write([]byte{byte(clientMsgTerminate), 0x00, 0x00, 0x00, 0x04})
+		_, _ = w.Write([]byte{byte(pgwirebase.ClientMsgSync), 0x00, 0x00, 0x00, 0x04})
+		_, _ = w.Write([]byte{byte(pgwirebase.ClientMsgTerminate), 0x00, 0x00, 0x00, 0x04})
 	}()
 
 	v3Conn := makeTestV3Conn(r)
