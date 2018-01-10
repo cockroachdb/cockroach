@@ -473,6 +473,7 @@ show_trace_stmt ::=
 	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' 'SESSION'
 	| 'SHOW' opt_compact 'TRACE' 'FOR' explainable_stmt
 	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' explainable_stmt
+	| 'SHOW' 'EXPERIMENTAL_REPLICA' 'TRACE' 'FOR' explainable_stmt
 
 show_users_stmt ::=
 	'SHOW' 'USERS'
@@ -620,6 +621,7 @@ unreserved_keyword ::=
 	| 'EXECUTE'
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_FINGERPRINTS'
+	| 'EXPERIMENTAL_REPLICA'
 	| 'EXPLAIN'
 	| 'FILTER'
 	| 'FIRST'

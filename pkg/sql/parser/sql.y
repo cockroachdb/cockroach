@@ -472,7 +472,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   DISCARD DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL
+%token <str>   EXISTS EXECUTE EXPERIMENTAL EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str>   EXPLAIN EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
@@ -2810,21 +2810,25 @@ show_jobs_stmt:
 show_trace_stmt:
   SHOW opt_compact TRACE FOR SESSION
   {
-    $$.val = &tree.ShowTrace{Statement: nil, Compact: $2.bool() }
+    $$.val = &tree.ShowTrace{Statement: nil, TraceType: tree.ShowTraceRaw, Compact: $2.bool() }
   }
 | SHOW opt_compact TRACE error // SHOW HELP: SHOW TRACE
 | SHOW opt_compact KV TRACE FOR SESSION
   {
-    $$.val = &tree.ShowTrace{Statement: nil, OnlyKVTrace: true, Compact: $2.bool() }
+    $$.val = &tree.ShowTrace{Statement: nil, TraceType: tree.ShowTraceKV, Compact: $2.bool() }
   }
 | SHOW opt_compact KV error // SHOW HELP: SHOW TRACE
 | SHOW opt_compact TRACE FOR explainable_stmt
   {
-    $$.val = &tree.ShowTrace{Statement: $5.stmt(), Compact: $2.bool() }
+    $$.val = &tree.ShowTrace{Statement: $5.stmt(), TraceType: tree.ShowTraceRaw, Compact: $2.bool() }
   }
 | SHOW opt_compact KV TRACE FOR explainable_stmt
   {
-    $$.val = &tree.ShowTrace{Statement: $6.stmt(), OnlyKVTrace: true, Compact: $2.bool() }
+    $$.val = &tree.ShowTrace{Statement: $6.stmt(), TraceType: tree.ShowTraceKV, Compact: $2.bool() }
+  }
+| SHOW EXPERIMENTAL_REPLICA TRACE FOR explainable_stmt
+  {
+    $$.val = &tree.ShowTrace{Statement: $5.stmt(), TraceType: tree.ShowTraceReplica}
   }
 
 opt_compact:
@@ -7251,6 +7255,7 @@ unreserved_keyword:
 | EXECUTE
 | EXPERIMENTAL
 | EXPERIMENTAL_FINGERPRINTS
+| EXPERIMENTAL_REPLICA
 | EXPLAIN
 | FILTER
 | FIRST

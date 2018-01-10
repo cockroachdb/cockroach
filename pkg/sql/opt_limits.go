@@ -150,6 +150,8 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.setUnlimited(n.plan)
 	case *showTraceNode:
 		p.setUnlimited(n.plan)
+	case *showTraceReplicaNode:
+		p.setUnlimited(n.plan)
 	case *explainPlanNode:
 		if n.expanded {
 			p.setUnlimited(n.plan)
