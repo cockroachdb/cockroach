@@ -19,7 +19,6 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import spinner from "assets/spinner.gif";
-import noResults from "assets/noresults.svg";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
@@ -252,7 +251,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
         </PageConfig>
       </div>
       <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
-        <Loading loading={_.isEmpty(data)} className="loading-image" image={noResults}>
+        <Loading loading={_.isEmpty(data)} className="loading-image loading-image__text" text="No Results">
           <section className="section">
             <JobsSortedTable
               data={data}
