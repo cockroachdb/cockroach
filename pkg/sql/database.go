@@ -307,7 +307,7 @@ func (dc *databaseCache) getDatabaseID(
 func (p *planner) createDatabase(
 	ctx context.Context, desc *sqlbase.DatabaseDescriptor, ifNotExists bool,
 ) (bool, error) {
-	if p.session.virtualSchemas.isVirtualDatabase(desc.Name) {
+	if p.getVirtualTabler().isVirtualDatabase(desc.Name) {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -325,7 +325,7 @@ func (p *planner) renameDatabase(
 		return fmt.Errorf("the new database name %q already exists", newName)
 	}
 
-	if p.session.virtualSchemas.isVirtualDatabase(newName) {
+	if p.getVirtualTabler().isVirtualDatabase(newName) {
 		return onAlreadyExists()
 	}
 
@@ -342,7 +342,7 @@ func (p *planner) renameDatabase(
 	descDesc := sqlbase.WrapDescriptor(oldDesc)
 
 	b := &client.Batch{}
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newKey, descID)
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
 		log.VEventf(ctx, 2, "Del %s", oldKey)
@@ -351,9 +351,9 @@ func (p *planner) renameDatabase(
 	b.Put(descKey, descDesc)
 	b.Del(oldKey)
 
-	p.session.tables.addUncommittedDatabase(
+	p.Tables().addUncommittedDatabase(
 		oldName, descID, true /* dropped */)
-	p.session.tables.addUncommittedDatabase(
+	p.Tables().addUncommittedDatabase(
 		newName, descID, false /* dropped */)
 
 	if err := p.txn.Run(ctx, b); err != nil {
@@ -363,7 +363,7 @@ func (p *planner) renameDatabase(
 		return err
 	}
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.testingVerifyMetadata().setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, newKey, descID); err != nil {
 			return err
 		}

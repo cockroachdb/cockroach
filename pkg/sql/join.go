@@ -144,15 +144,15 @@ func (p *planner) makeJoin(
 
 	n.run.buffer = &RowBuffer{
 		RowContainer: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
+			p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
 		),
 	}
 
-	n.run.bucketsMemAcc = p.session.TxnState.mon.MakeBoundAccount()
+	n.run.bucketsMemAcc = p.EvalContext().Mon.MakeBoundAccount()
 	n.run.buckets = buckets{
 		buckets: make(map[string]*bucket),
 		rowContainer: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(),
+			p.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
 			0,
 		),

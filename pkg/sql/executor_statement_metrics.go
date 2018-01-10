@@ -142,7 +142,7 @@ func recordStatementSummary(
 		sessionAge := phaseTimes[plannerEndExecStmt].
 			Sub(phaseTimes[sessionInit]).Seconds()
 
-		log.Infof(planner.session.Ctx(),
+		log.Infof(planner.EvalContext().Ctx(),
 			"query stats: %d rows, %d retries, "+
 				"parse %.2fµs (%.1f%%), "+
 				"plan %.2fµs (%.1f%%), "+

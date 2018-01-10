@@ -2002,7 +2002,7 @@ func commitSQLTransaction(
 func (e *Executor) execDistSQL(
 	planner *planner, tree planNode, rowResultWriter StatementResult,
 ) error {
-	ctx := planner.session.Ctx()
+	ctx := planner.EvalContext().Ctx()
 	recv := makeDistSQLReceiver(
 		ctx, rowResultWriter,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
@@ -2027,7 +2027,7 @@ func (e *Executor) execDistSQL(
 func (e *Executor) execClassic(
 	planner *planner, plan planNode, rowResultWriter StatementResult,
 ) error {
-	ctx := planner.session.Ctx()
+	ctx := planner.EvalContext().Ctx()
 
 	// Create a BoundAccount to track the memory usage of each row.
 	rowAcc := planner.extendedEvalCtx.Mon.MakeBoundAccount()

@@ -121,7 +121,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(params.ctx, params.p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.extendedEvalCtx.ExecCfg.DB)
 	if err != nil {
 		return err
 	}

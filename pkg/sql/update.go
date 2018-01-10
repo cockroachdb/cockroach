@@ -265,7 +265,7 @@ func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(params.p.txn, &params.p.session.TxnState.mon)
+	return u.run.tw.init(params.p.txn, params.EvalContext().Mon)
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {
@@ -276,7 +276,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			_, err = u.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			_, err = u.tw.finalize(params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -325,7 +325,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 
 	// Update the row values.
 	newValues, err := u.tw.row(
-		params.ctx, append(oldValues, updateValues...), params.p.session.Tracing.KVTracingEnabled(),
+		params.ctx, append(oldValues, updateValues...), params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return false, err
@@ -365,7 +365,7 @@ type editNodeBase struct {
 func (p *planner) makeEditNode(
 	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
 ) (editNodeBase, error) {
-	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return editNodeBase{}, err
 	}

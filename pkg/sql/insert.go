@@ -317,7 +317,7 @@ func (n *insertNode) startExec(params runParams) error {
 		return err
 	}
 
-	return n.run.tw.init(params.p.txn, &params.p.session.TxnState.mon)
+	return n.run.tw.init(params.p.txn, params.EvalContext().Mon)
 }
 
 func (n *insertNode) Next(params runParams) (bool, error) {
@@ -379,14 +379,15 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			rows, err := n.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			rows, err := n.tw.finalize(
+				params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 			if err != nil {
 				return false, err
 			}
 
 			if n.run.isUpsertReturning {
 				n.run.rowsUpserted = sqlbase.NewRowContainer(
-					params.p.session.TxnState.makeBoundAccount(),
+					params.EvalContext().Mon.MakeBoundAccount(),
 					sqlbase.ColTypeInfoFromResCols(n.rh.columns),
 					rows.Len(),
 				)
@@ -425,7 +426,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 		return false, err
 	}
 
-	_, err = n.tw.row(params.ctx, rowVals, params.p.session.Tracing.KVTracingEnabled())
+	_, err = n.tw.row(params.ctx, rowVals, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 	if err != nil {
 		return false, err
 	}

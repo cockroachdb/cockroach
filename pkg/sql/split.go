@@ -112,7 +112,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := params.p.session.execCfg.DB.AdminSplit(params.ctx, rowKey, rowKey); err != nil {
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey); err != nil {
 		return false, err
 	}
 

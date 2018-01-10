@@ -118,8 +118,8 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	}
 	defer plan.Close(ctx)
 
-	planCtx := params.p.session.distSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, params.p, plan)
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, plan)
 	if err != nil {
 		return err
 	}

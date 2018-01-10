@@ -109,9 +109,10 @@ func (p *planner) dropSequenceImpl(
 		return err
 	}
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		return verifyDropTableMetadata(systemConfig, seqDesc.ID, "sequence")
-	})
+	p.testingVerifyMetadata().setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			return verifyDropTableMetadata(systemConfig, seqDesc.ID, "sequence")
+		})
 
 	return nil
 }

@@ -271,7 +271,7 @@ func (p *planner) getSources(
 func (p *planner) getVirtualDataSource(
 	ctx context.Context, tn *tree.TableName,
 ) (planDataSource, bool, error) {
-	virtual, err := p.session.virtualSchemas.getVirtualTableEntry(tn)
+	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return planDataSource{}, false, err
 	}
@@ -476,7 +476,7 @@ func (p *planner) QualifyWithDatabase(
 func (p *planner) getTableDescByID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
-	descFunc := p.session.tables.getTableVersionByID
+	descFunc := p.Tables().getTableVersionByID
 	if p.avoidCachedDescriptors {
 		descFunc = sqlbase.GetTableDescFromID
 	}
@@ -597,7 +597,7 @@ func (p *planner) getTableDesc(
 		return MustGetTableOrViewDesc(
 			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
 	}
-	return p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+	return p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 }
 
 func (p *planner) getPlanForDesc(

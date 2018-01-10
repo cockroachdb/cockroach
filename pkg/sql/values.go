@@ -116,7 +116,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 		isConst: true,
 		valuesRun: valuesRun{
 			rows: sqlbase.NewRowContainer(
-				p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
+				p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
 			),
 		},
 	}

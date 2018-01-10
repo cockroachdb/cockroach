@@ -163,10 +163,8 @@ type Session struct {
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
 	// virtualSchemas aliases Executor.virtualSchemas.
-	// It is duplicated in Session to provide easier access to
-	// the various methods that need this reference.
-	// TODO(knz): place this in an executionContext parameter-passing
-	// structure.
+	// It is duplicated in Session so that it can find its way to the planners'
+	// EvalContext.
 	virtualSchemas virtualSchemaHolder
 
 	// planner is the "default planner" on a session, to save planner allocations
@@ -416,6 +414,7 @@ func NewSession(
 		},
 		settings:       e.cfg.Settings,
 		curTxnReadOnly: &s.TxnState.readOnly,
+		sessionTracing: &s.Tracing,
 	}
 	s.phaseTimes[sessionInit] = timeutil.Now()
 	s.dataMutator.SetApplicationName(args.ApplicationName)
@@ -501,7 +500,7 @@ func (s *Session) Finish(e *Executor) {
 	}
 
 	if s.Tracing.Enabled() {
-		if err := s.Tracing.StopTracing(); err != nil {
+		if err := s.dataMutator.StopSessionTracing(); err != nil {
 			log.Infof(s.context, "error stopping tracing: %s", err)
 		}
 	}
@@ -582,6 +581,7 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	}
 
 	p.sessionDataMutator = s.dataMutator
+	p.preparedStatements = &s.PreparedStatements
 
 	p.setTxn(txn)
 }
@@ -623,11 +623,13 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 func (s *Session) extendedEvalCtx() extendedEvalContext {
 	var evalContextTestingKnobs tree.EvalContextTestingKnobs
 	var st *cluster.Settings
+	var statusServer serverpb.StatusServer
 	if s.execCfg != nil {
 		evalContextTestingKnobs = s.execCfg.EvalContextTestingKnobs
 		// TODO(tschottdorf): it looks like this should always be provided.
 		// Perhaps `*Settings` should live somewhere else.
 		st = s.execCfg.Settings
+		statusServer = s.execCfg.StatusServer
 	}
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
@@ -640,8 +642,17 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 			Mon:             &s.TxnState.mon,
 			TestingKnobs:    evalContextTestingKnobs,
 		},
-		VirtualSchemas: &s.virtualSchemas,
-		Tracing:        &s.Tracing,
+		SessionMutator:        s.dataMutator,
+		VirtualSchemas:        &s.virtualSchemas,
+		Tracing:               &s.Tracing,
+		StatusServer:          statusServer,
+		MemMetrics:            s.memMetrics,
+		Tables:                &s.tables,
+		ExecCfg:               s.execCfg,
+		DistSQLPlanner:        s.distSQLPlanner,
+		TestingVerifyMetadata: s,
+		TxnModesSetter:        &s.TxnState,
+		SchemaChangers:        &s.TxnState.schemaChangers,
 	}
 }
 
@@ -653,11 +664,7 @@ func (s *Session) resetForBatch(e *Executor) {
 	s.TxnState.schemaChangers.curGroupNum++
 }
 
-// setTestingVerifyMetadata sets a callback to be called after the Session
-// is done executing the current SQL statement. It can be used to verify
-// assumptions about how metadata will be asynchronously updated.
-// Note that this can overwrite a previous callback that was waiting to be
-// verified, which is not ideal.
+// setTestingVerifyMetadata implements the testingVerifyMetadata interface.
 func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 	s.testingVerifyMetadataFn = fn
 	s.verifyFnCheckedOnce = false
@@ -1862,6 +1869,7 @@ type sessionDataMutator struct {
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool
+	sessionTracing *SessionTracing
 }
 
 // SetApplicationName initializes both Session.mu.ApplicationName and
@@ -1917,4 +1925,14 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
 	*m.curTxnReadOnly = val
+}
+
+func (m *sessionDataMutator) StopSessionTracing() error {
+	return m.sessionTracing.StopTracing()
+}
+
+func (m *sessionDataMutator) StartSessionTracing(
+	recType tracing.RecordingType, kvTracingEnabled bool,
+) error {
+	return m.sessionTracing.StartTracing(recType, kvTracingEnabled)
 }

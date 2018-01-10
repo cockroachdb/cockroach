@@ -220,7 +220,7 @@ func (n *scanNode) initScan(params runParams) error {
 		n.spans,
 		!n.disableBatchLimits,
 		limitHint,
-		params.p.session.Tracing.KVTracingEnabled(),
+		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}

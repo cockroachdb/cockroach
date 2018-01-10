@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -34,16 +35,48 @@ import (
 	"github.com/pkg/errors"
 )
 
-// extendedEvalCtx extends 	ree.EvalContext with fields that are just needed in
+// extendedEvalCtx extends tree.EvalContext with fields that are just needed in
 // the sql package.
 type extendedEvalContext struct {
 	tree.EvalContext
 
+	SessionMutator sessionDataMutator
+
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
 
-	// Tracing provides access to the session's tracing interface.
+	// Tracing provides access to the session's tracing interface. Changes to the
+	// tracing state should be done through the sessionDataMutator.
 	Tracing *SessionTracing
+
+	// StatusServer gives access to the Status service. Used to cancel queries.
+	StatusServer serverpb.StatusServer
+
+	// MemMetrics represent the group of metrics to which execution should
+	// contribute.
+	MemMetrics *MemoryMetrics
+
+	// Tables points to the Session's table collection.
+	Tables *TableCollection
+
+	ExecCfg *ExecutorConfig
+
+	DistSQLPlanner *DistSQLPlanner
+
+	TestingVerifyMetadata testingVerifyMetadata
+
+	TxnModesSetter txnModesSetter
+
+	SchemaChangers *schemaChangerCollection
+}
+
+type testingVerifyMetadata interface {
+	// setTestingVerifyMetadata sets a callback to be called after the Session
+	// is done executing the current SQL statement. It can be used to verify
+	// assumptions about how metadata will be asynchronously updated.
+	// Note that this can overwrite a previous callback that was waiting to be
+	// verified, which is not ideal.
+	setTestingVerifyMetadata(fn func(config.SystemConfig) error)
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -59,6 +92,10 @@ type planner struct {
 
 	// session is the Session on whose behalf this planner is working.
 	session *Session
+
+	// preparedStatements points to the Session's collection of prepared
+	// statements.
+	preparedStatements *PreparedStatements
 
 	// Reference to the corresponding sql Statement for this query.
 	stmt *Statement
@@ -229,6 +266,7 @@ func makeInternalPlanner(
 	}
 
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+	p.extendedEvalCtx.Tables = &s.tables
 
 	return p
 }
@@ -248,13 +286,17 @@ func (p *planner) EvalContext() *tree.EvalContext {
 	return &p.extendedEvalCtx.EvalContext
 }
 
+func (p *planner) Tables() *TableCollection {
+	return p.extendedEvalCtx.Tables
+}
+
 // ExecCfg implements the PlanHookState interface.
 func (p *planner) ExecCfg() *ExecutorConfig {
-	return p.session.execCfg
+	return p.extendedEvalCtx.ExecCfg
 }
 
 func (p *planner) LeaseMgr() *LeaseManager {
-	return p.session.tables.leaseMgr
+	return p.Tables().leaseMgr
 }
 
 func (p *planner) User() string {
@@ -265,7 +307,7 @@ func (p *planner) User() string {
 // this is the right abstraction. We could also export DistSQLPlanner, for
 // example. Revisit.
 func (p *planner) DistLoader() *DistLoader {
-	return &DistLoader{distSQLPlanner: p.session.distSQLPlanner}
+	return &DistLoader{distSQLPlanner: p.extendedEvalCtx.DistSQLPlanner}
 }
 
 // setTxn resets the current transaction in the planner and
@@ -397,7 +439,7 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 func (p *planner) lookupFKTable(
 	ctx context.Context, tableID sqlbase.ID,
 ) (sqlbase.TableLookup, error) {
-	table, err := p.session.tables.getTableVersionByID(ctx, p.txn, tableID)
+	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID)
 	if err != nil {
 		if err == errTableAdding {
 			return sqlbase.TableLookup{IsAdding: true}, nil
@@ -530,4 +572,14 @@ func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]stri
 // SessionData is part of the PlanHookState interface.
 func (p *planner) SessionData() *sessiondata.SessionData {
 	return &p.EvalContext().SessionData
+}
+
+func (p *planner) testingVerifyMetadata() testingVerifyMetadata {
+	return p.extendedEvalCtx.TestingVerifyMetadata
+}
+
+// txnModesSetter is an interface used by SQL execution to influence the current
+// transaction.
+type txnModesSetter interface {
+	setTransactionModes(modes tree.TransactionModes) error
 }

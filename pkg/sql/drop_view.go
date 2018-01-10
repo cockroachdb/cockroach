@@ -225,9 +225,10 @@ func (p *planner) dropViewImpl(
 		return cascadeDroppedViews, err
 	}
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		return verifyDropTableMetadata(systemConfig, viewDesc.ID, "view")
-	})
+	p.testingVerifyMetadata().setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			return verifyDropTableMetadata(systemConfig, viewDesc.ID, "view")
+		})
 	return cascadeDroppedViews, nil
 }
 

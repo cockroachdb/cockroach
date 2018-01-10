@@ -139,7 +139,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// old name to the id, so that the name is not reused until the schema changer
 	// has made sure it's not in use any more.
 	b := &client.Batch{}
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
@@ -154,12 +154,13 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
-			return err
-		}
-		return expectDescriptor(systemConfig, descKey, descDesc)
-	})
+	p.testingVerifyMetadata().setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
+				return err
+			}
+			return expectDescriptor(systemConfig, descKey, descDesc)
+		})
 
 	return &zeroNode{}, nil
 }
