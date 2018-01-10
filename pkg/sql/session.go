@@ -414,6 +414,7 @@ func NewSession(
 		},
 		settings:       e.cfg.Settings,
 		curTxnReadOnly: &s.TxnState.readOnly,
+		sessionTracing: &s.Tracing,
 	}
 	s.phaseTimes[sessionInit] = timeutil.Now()
 	s.dataMutator.SetApplicationName(args.ApplicationName)
@@ -499,7 +500,7 @@ func (s *Session) Finish(e *Executor) {
 	}
 
 	if s.Tracing.Enabled() {
-		if err := s.Tracing.StopTracing(); err != nil {
+		if err := s.dataMutator.StopSessionTracing(); err != nil {
 			log.Infof(s.context, "error stopping tracing: %s", err)
 		}
 	}
@@ -641,6 +642,7 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 			Mon:             &s.TxnState.mon,
 			TestingKnobs:    evalContextTestingKnobs,
 		},
+		SessionMutator:        s.dataMutator,
 		VirtualSchemas:        &s.virtualSchemas,
 		Tracing:               &s.Tracing,
 		StatusServer:          statusServer,
@@ -1865,6 +1867,7 @@ type sessionDataMutator struct {
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool
+	sessionTracing *SessionTracing
 }
 
 // SetApplicationName initializes both Session.mu.ApplicationName and
@@ -1920,4 +1923,14 @@ func (m *sessionDataMutator) SetLocation(loc *time.Location) {
 
 func (m *sessionDataMutator) SetReadOnly(val bool) {
 	*m.curTxnReadOnly = val
+}
+
+func (m *sessionDataMutator) StopSessionTracing() error {
+	return m.sessionTracing.StopTracing()
+}
+
+func (m *sessionDataMutator) StartSessionTracing(
+	recType tracing.RecordingType, kvTracingEnabled bool,
+) error {
+	return m.sessionTracing.StartTracing(recType, kvTracingEnabled)
 }
