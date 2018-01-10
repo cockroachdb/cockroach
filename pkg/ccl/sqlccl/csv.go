@@ -214,10 +214,10 @@ func doLocalCSVTransform(
 		)
 		// Both read and write progress funcs register their progress as 50% of total progress.
 		readProgressFn = func(pct float32) error {
-			return job.Progressed(ctx, pct*readPct, jobs.Noop)
+			return job.Progressed(ctx, jobs.FractionUpdater(pct*readPct))
 		}
 		writeProgressFn = func(pct float32) error {
-			return job.Progressed(ctx, readPct+pct*writePct, jobs.Noop)
+			return job.Progressed(ctx, jobs.FractionUpdater(readPct+pct*writePct))
 		}
 	}
 
@@ -1228,6 +1228,8 @@ func newReadCSVProcessor(
 		uri:        spec.Uri,
 		output:     output,
 		settings:   flowCtx.Settings,
+		registry:   flowCtx.JobRegistry,
+		progress:   spec.Progress,
 	}
 	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -1240,10 +1242,12 @@ type readCSVProcessor struct {
 	csvOptions roachpb.CSVOptions
 	sampleSize int32
 	tableDesc  sqlbase.TableDescriptor
-	uri        string
+	uri        []string
 	out        distsqlrun.ProcOutputHelper
 	output     distsqlrun.RowReceiver
 	settings   *cluster.Settings
+	registry   *jobs.Registry
+	progress   distsqlrun.JobProgress
 }
 
 var _ distsqlrun.Processor = &readCSVProcessor{}
@@ -1271,8 +1275,27 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 		sCtx, span := tracing.ChildSpan(gCtx, "readcsv")
 		defer tracing.FinishSpan(span)
 		defer close(recordCh)
-		_, err := readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
-			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh, nil, cp.settings)
+
+		job, err := cp.registry.LoadJob(gCtx, cp.progress.JobID)
+		if err != nil {
+			return err
+		}
+
+		progFn := func(pct float32) error {
+			return job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+				d := details.(*jobs.Payload_Import).Import
+				slotpct := pct * cp.progress.Contribution
+				if len(d.Tables[0].SamplingProgress) > 0 {
+					d.Tables[0].SamplingProgress[cp.progress.Slot] = slotpct
+				} else {
+					d.Tables[0].ReadProgress[cp.progress.Slot] = slotpct
+				}
+				return d.Tables[0].Completed()
+			})
+		}
+
+		_, err = readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
+			len(cp.tableDesc.VisibleColumns()), cp.uri, recordCh, progFn, cp.settings)
 		return err
 	})
 	// Convert CSV records to KVs
@@ -1383,6 +1406,8 @@ func newSSTWriterProcessor(
 		output:      output,
 		tempStorage: flowCtx.TempStorage,
 		settings:    flowCtx.Settings,
+		registry:    flowCtx.JobRegistry,
+		progress:    spec.Progress,
 	}
 	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -1398,6 +1423,8 @@ type sstWriter struct {
 	output      distsqlrun.RowReceiver
 	tempStorage engine.Engine
 	settings    *cluster.Settings
+	registry    *jobs.Registry
+	progress    distsqlrun.JobProgress
 }
 
 var _ distsqlrun.Processor = &sstWriter{}
@@ -1415,6 +1442,11 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 	}
 
 	err := func() error {
+		job, err := sp.registry.LoadJob(ctx, sp.progress.JobID)
+		if err != nil {
+			return err
+		}
+
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
 		types := sp.input.OutputTypes()
@@ -1459,7 +1491,7 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 		// Fetch all the keys in each span and write them to storage.
 		iter := store.NewIterator()
 		iter.Rewind()
-		for _, span := range sp.spec.Spans {
+		for i, span := range sp.spec.Spans {
 			data, firstKey, lastKey, err := extractSSTSpan(iter, span.End, sp.spec.WalltimeNanos)
 			if err != nil {
 				return err
@@ -1483,6 +1515,14 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 			}
 			defer es.Close()
 			if err := es.WriteFile(ctx, span.Name, bytes.NewReader(data)); err != nil {
+				return err
+			}
+
+			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+				d := details.(*jobs.Payload_Import).Import
+				d.Tables[0].WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
+				return d.Tables[0].Completed()
+			}); err != nil {
 				return err
 			}
 
