@@ -140,6 +140,18 @@ func newCLITest(params cliTestParams) cliTest {
 	return c
 }
 
+// setCLIDefaultsForTests invokes initCLIDefaults but pretends the
+// output is not a terminal, even if it happens to be. This ensures
+// e.g. that tests ran with -v have the same output as those without.
+func setCLIDefaultsForTests() {
+	initCLIDefaults()
+	cliCtx.terminalOutput = false
+	cliCtx.showTimes = false
+	// Even though we pretend there is no terminal, most tests want
+	// pretty tables.
+	cliCtx.tableDisplayFormat = tableDisplayPretty
+}
+
 // stopServer stops the test server.
 func (c *cliTest) stopServer() {
 	if c.TestServer != nil {
