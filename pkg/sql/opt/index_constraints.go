@@ -730,7 +730,7 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 		for _, child := range e.children {
 			sp, ok, _ := c.makeInvertedIndexSpansForExpr(child)
 			if ok {
-				// TODO(radu, masha): for now, the beset we can do is to generate
+				// TODO(radu, masha): for now, the best we can do is to generate
 				// constraints for at most one "contains" op in the disjunction; the
 				// rest are remaining filters.
 				//
