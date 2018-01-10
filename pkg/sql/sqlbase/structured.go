@@ -2417,6 +2417,8 @@ var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 	tree.Cascade:    ForeignKeyReference_CASCADE,
 }
 
+var _ optbase.Column = &ColumnDescriptor{}
+
 // IsNullable is part of the optbase.Column interface.
 func (desc *ColumnDescriptor) IsNullable() bool {
 	return desc.Nullable
@@ -2431,6 +2433,8 @@ func (desc *ColumnDescriptor) ColName() string {
 func (desc *ColumnDescriptor) DatumType() types.T {
 	return desc.Type.ToDatumType()
 }
+
+var _ optbase.Table = &TableDescriptor{}
 
 // TabName is part of the optbase.Table interface.
 func (desc *TableDescriptor) TabName() string {
