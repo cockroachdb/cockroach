@@ -544,17 +544,6 @@ func convertRecord(
 	const kvBatchSize = 1000
 	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
 	visibleCols := tableDesc.VisibleColumns()
-	keyDatums := make(sqlbase.EncDatumRow, len(tableDesc.PrimaryIndex.ColumnIDs))
-	// keyDatumIdx maps ColumnIDs to indexes in keyDatums.
-	keyDatumIdx := make(map[sqlbase.ColumnID]int)
-	for _, id := range tableDesc.PrimaryIndex.ColumnIDs {
-		for _, col := range visibleCols {
-			if col.ID == id {
-				keyDatumIdx[id] = len(keyDatumIdx)
-				break
-			}
-		}
-	}
 
 	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
 		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
@@ -587,9 +576,6 @@ func convertRecord(
 					if err != nil {
 						return errors.Wrapf(err, "%s: row %d: parse %q as %s", batch.file, rowNum, col.Name, col.Type.SQLString())
 					}
-				}
-				if idx, ok := keyDatumIdx[visibleCols[i].ID]; ok {
-					keyDatums[idx] = sqlbase.DatumToEncDatum(col.Type, datums[i])
 				}
 			}
 
