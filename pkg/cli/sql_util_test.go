@@ -98,10 +98,9 @@ func TestRunQuery(t *testing.T) {
 	conn := makeSQLConn(url.String())
 	defer conn.Close()
 
-	// Use a buffer as the io.Writer.
-	var b bytes.Buffer
+	setCLIDefaultsForTests()
 
-	cliCtx.tableDisplayFormat = tableDisplayPretty
+	var b bytes.Buffer
 
 	// Non-query statement.
 	if err := runQueryAndFormatResults(conn, &b, makeQuery(`SET DATABASE=system`)); err != nil {
