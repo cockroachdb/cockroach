@@ -718,15 +718,29 @@ func (c *indexConstraintCtx) makeSpansForOrExprs(
 func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 	e *Expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
-	// TODO(radu,masha): we currently only support a single "contains" expression.
-	if e.op != containsOp {
-		return nil, false, false
+	switch e.op {
+	case containsOp:
+		lhs, rhs := e.children[0], e.children[1]
+		if !c.isIndexColumn(lhs, 0 /* index */) || rhs.op != constOp {
+			return nil, false, false
+		}
+		return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
+
+	case andOp:
+		for _, child := range e.children {
+			sp, ok, _ := c.makeInvertedIndexSpansForExpr(child)
+			if ok {
+				// TODO(radu, masha): for now, the beset we can do is to generate
+				// constraints for at most one "contains" op in the disjunction; the
+				// rest are remaining filters.
+				//
+				// The spans are not tight because we have other conditions in the
+				// conjunction.
+				return sp, true, false
+			}
+		}
 	}
-	lhs, rhs := e.children[0], e.children[1]
-	if !c.isIndexColumn(lhs, 0 /* index */) || rhs.op != constOp {
-		return nil, false, false
-	}
-	return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
+	return nil, false, false
 }
 
 var constTrueExpr = &Expr{
@@ -894,7 +908,16 @@ func (c *indexConstraintCtx) simplifyFilterImpl(
 				spans[i].End.Vals = spans[i].End.Vals[1:]
 			}
 		}
-		if exprSpans, ok, tight := c.makeSpansForExpr(offset, e); ok && tight {
+		var exprSpans LogicalSpans
+		var ok, tight bool
+		if c.isInverted {
+			if offset == 0 {
+				exprSpans, ok, tight = c.makeInvertedIndexSpansForExpr(e)
+			}
+		} else {
+			exprSpans, ok, tight = c.makeSpansForExpr(offset, e)
+		}
+		if ok && tight {
 			if c.isSpanSubset(offset, spans, exprSpans) {
 				// The final spans are a subset of the spans for this expression; there
 				// is no need for a remaining filter for this condition.
