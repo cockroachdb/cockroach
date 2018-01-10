@@ -297,9 +297,6 @@ var (
 	metaRaftLogFollowerBehindCount = metric.Metadata{
 		Name: "raftlog.behind",
 		Help: "Number of Raft log entries followers on other stores are behind"}
-	metaRaftLogSelfBehindCount = metric.Metadata{
-		Name: "raftlog.selfbehind",
-		Help: "Number of Raft log entries followers on this store are behind"}
 	metaRaftLogTruncated = metric.Metadata{
 		Name: "raftlog.truncated",
 		Help: "Number of Raft log entries truncated"}
@@ -579,7 +576,6 @@ type StoreMetrics struct {
 
 	// Raft log metrics.
 	RaftLogFollowerBehindCount *metric.Gauge
-	RaftLogSelfBehindCount     *metric.Gauge
 	RaftLogTruncated           *metric.Counter
 
 	// A map for conveniently finding the appropriate metric. The individual
@@ -772,7 +768,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Raft log metrics.
 		RaftLogFollowerBehindCount: metric.NewGauge(metaRaftLogFollowerBehindCount),
-		RaftLogSelfBehindCount:     metric.NewGauge(metaRaftLogSelfBehindCount),
 		RaftLogTruncated:           metric.NewCounter(metaRaftLogTruncated),
 
 		// Replica queue metrics.

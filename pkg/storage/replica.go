@@ -343,10 +343,6 @@ type Replica struct {
 		// from the Raft log entry. Use the invalidLastTerm constant for this
 		// case.
 		lastIndex, lastTerm uint64
-		// The most recent commit index seen in a message from the leader. Used by
-		// the follower to estimate the number of Raft log entries it is
-		// behind. This field is only valid when the Replica is a follower.
-		estimatedCommitIndex uint64
 		// The raft log index of a pending preemptive snapshot. Used to prohibit
 		// raft log truncation while a preemptive snapshot is in flight. A value of
 		// 0 indicates that there is no pending snapshot.
@@ -974,14 +970,6 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	return nil
 }
 
-func (r *Replica) setEstimatedCommitIndexLocked(commit uint64) {
-	// The estimated commit index only ratchets up to account for Raft messages
-	// arriving out of order.
-	if r.mu.estimatedCommitIndex < commit {
-		r.mu.estimatedCommitIndex = commit
-	}
-}
-
 func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) error {
 	r.mu.RLock()
 	quotaPool := r.mu.proposalQuota
@@ -1173,43 +1161,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 		r.mu.proposalQuota.add(int64(sum))
 	}
-}
-
-// getEstimatedBehindCountRLocked returns an estimate of how far this replica is
-// behind. A return value of 0 indicates that the replica is up to date.
-func (r *Replica) getEstimatedBehindCountRLocked(raftStatus *raft.Status) int64 {
-	if !r.isInitializedRLocked() || r.mu.replicaID == 0 || !r.mu.destroyStatus.IsAlive() {
-		// The range is either not fully initialized, has been destroyed, or is slated for removal
-		// (and thus likely ignored by its former Raft peers).
-		return 0
-	}
-	if r.mu.quiescent {
-		// The range is quiescent, so it is up to date.
-		return 0
-	}
-	if raftStatus != nil && roachpb.ReplicaID(raftStatus.SoftState.Lead) == r.mu.replicaID {
-		// We're the leader, so we can't be behind.
-		return 0
-	}
-	if !HasRaftLeader(raftStatus) && r.store.canCampaignIdleReplica() {
-		// The Raft group is idle or there is no Raft leader. This can be a
-		// temporary situation due to an in progress election or because the group
-		// can't achieve quorum. In either case, assume we're up to date.
-		return 0
-	}
-	if r.mu.estimatedCommitIndex == 0 {
-		// We haven't heard from the leader, assume we're far behind. This is the
-		// case that is commonly hit when a node restarts. In particular, we hit
-		// this case until an election timeout passes and canCampaignIdleReplica
-		// starts to return true. The result is that a restarted node will
-		// consider its replicas far behind initially which will in turn cause it
-		// to reject rebalances.
-		return prohibitRebalancesBehindThreshold + 1
-	}
-	if r.mu.estimatedCommitIndex >= r.mu.state.RaftAppliedIndex {
-		return int64(r.mu.estimatedCommitIndex - r.mu.state.RaftAppliedIndex)
-	}
-	return 0
 }
 
 // GetMaxBytes gets the range maximum byte limit.
@@ -3317,9 +3268,6 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// We're processing a message from another replica which means that the
 		// other replica is not quiesced, so we don't need to wake the leader.
 		r.unquiesceLocked()
-		if req.Message.Type == raftpb.MsgApp {
-			r.setEstimatedCommitIndexLocked(req.Message.Commit)
-		}
 		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
 		return false, /* unquiesceAndWakeLeader */
 			raftGroup.Step(req.Message)
@@ -3593,9 +3541,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
 	r.mu.leaderID = leaderID
-	if r.mu.replicaID == leaderID && !raft.IsEmptyHardState(rd.HardState) {
-		r.setEstimatedCommitIndexLocked(rd.HardState.Commit)
-	}
 	r.mu.Unlock()
 
 	r.sendRaftMessages(ctx, otherMsgs)
@@ -5785,7 +5730,6 @@ type ReplicaMetrics struct {
 	Unavailable       bool
 	Underreplicated   bool
 	BehindCount       int64
-	SelfBehindCount   int64
 	CmdQMetricsLocal  CommandQueueMetrics
 	CmdQMetricsGlobal CommandQueueMetrics
 }
@@ -5802,7 +5746,6 @@ func (r *Replica) Metrics(
 	leaseStatus := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
-	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)
 	r.cmdQMu.Lock()
 	cmdQMetricsLocal := r.cmdQMu.queues[spanset.SpanLocal].metrics()
 	cmdQMetricsGlobal := r.cmdQMu.queues[spanset.SpanGlobal].metrics()
@@ -5819,7 +5762,6 @@ func (r *Replica) Metrics(
 		leaseStatus,
 		r.store.StoreID(),
 		quiescent,
-		selfBehindCount,
 		cmdQMetricsLocal,
 		cmdQMetricsGlobal,
 	)
@@ -5844,7 +5786,6 @@ func calcReplicaMetrics(
 	leaseStatus LeaseStatus,
 	storeID roachpb.StoreID,
 	quiescent bool,
-	selfBehindCount int64,
 	cmdQMetricsLocal CommandQueueMetrics,
 	cmdQMetricsGlobal CommandQueueMetrics,
 ) ReplicaMetrics {
@@ -5860,9 +5801,6 @@ func calcReplicaMetrics(
 	m.Leaseholder = m.LeaseValid && leaseOwner
 	m.Leader = isRaftLeader(raftStatus)
 	m.Quiescent = quiescent
-	if !m.Leader {
-		m.SelfBehindCount = selfBehindCount
-	}
 
 	// We gather per-range stats on either the leader or, if there is no leader,
 	// the first live replica in the descriptor. Note that the first live replica
