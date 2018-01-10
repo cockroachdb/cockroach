@@ -60,9 +60,11 @@ func initCLIDefaults() {
 	// other client commands are non-interactive, regardless of whether
 	// the standard input is a terminal.
 	cliCtx.isInteractive = false
+	// See also setCLIDefaultForTests() in cli_test.go.
 	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	if cliCtx.terminalOutput {
+		// See also setCLIDefaultForTests() in cli_test.go.
 		cliCtx.tableDisplayFormat = tableDisplayPretty
 	}
 	cliCtx.showTimes = false
