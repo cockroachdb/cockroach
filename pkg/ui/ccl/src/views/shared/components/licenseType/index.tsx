@@ -8,7 +8,7 @@
 
 import React from "react";
 
-import swapByLicense from "src/views/shared/components/licenseSwap";
+import swapByLicense from "src/views/shared/containers/licenseSwap";
 import OSSLicenseType from "oss/src/views/shared/components/licenseType";
 
 class CCLLicenseType extends React.Component<{}, {}> {
