@@ -230,7 +230,6 @@ spec:
     spec:
       accessModes:
         - "ReadWriteOnce"
-      storageClassName: anything
       resources:
         requests:
           storage: 1Gi
