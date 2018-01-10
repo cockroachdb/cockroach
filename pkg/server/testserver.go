@@ -536,9 +536,6 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 // KVClient is part of TestServerInterface.
 func (ts *TestServer) KVClient() interface{} { return ts.db }
 
-// KVDB is part of TestServerInterface.
-func (ts *TestServer) KVDB() interface{} { return ts.kvDB }
-
 // LeaseManager is part of TestServerInterface.
 func (ts *TestServer) LeaseManager() interface{} {
 	return ts.leaseMgr

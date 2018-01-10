@@ -49,6 +49,17 @@ import (
 // TestServerInterface was introduced and all packages became able to create
 // TestServers.
 
+func startNoSplitServer(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				DisableSplitQueue: true,
+			},
+		},
+	})
+	return s, db
+}
+
 // TestRangeLookupWithOpenTransaction verifies that range lookups are
 // done in such a way (e.g. using inconsistent reads) that they
 // proceed in the event that a write intent is extant at the meta

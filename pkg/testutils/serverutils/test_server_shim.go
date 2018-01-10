@@ -65,9 +65,6 @@ type TestServerInterface interface {
 	// as an interface{}.
 	KVClient() interface{}
 
-	// KVDB() returns the *kv.DB instance as an interface{}.
-	KVDB() interface{}
-
 	// RPCContext returns the rpc context used by the test server.
 	RPCContext() *rpc.Context
 
