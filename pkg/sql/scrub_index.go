@@ -118,7 +118,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	}
 	defer plan.Close(ctx)
 
-	planCtx := params.p.session.distSQLPlanner.newPlanningCtx(ctx, params.evalCtx, params.p.txn)
+	planCtx := params.p.session.distSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, params.p, plan)
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
 	}
 	primaryKey := tree.NewDString(primaryKeyDatums.String())
 	timestamp := tree.MakeDTimestamp(
-		params.p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
+		params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond)
 
 	details := make(map[string]interface{})
 	rowDetails := make(map[string]interface{})

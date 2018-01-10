@@ -57,7 +57,7 @@ func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) 
 	for _, datum := range data {
 		if datum.src != nil {
 			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				datum.src, datum.name, p.session.SearchPath,
+				datum.src, datum.name, p.SessionData().SearchPath,
 			); err != nil {
 				return nil, err
 			}
@@ -78,7 +78,7 @@ type limitRun struct {
 }
 
 func (n *limitNode) startExec(params runParams) error {
-	return n.evalLimit(params.evalCtx)
+	return n.evalLimit(params.EvalContext())
 }
 
 func (n *limitNode) Next(params runParams) (bool, error) {

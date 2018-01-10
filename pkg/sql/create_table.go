@@ -47,7 +47,7 @@ type createTableNode struct {
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
 func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	for _, def := range n.Defs {
 		switch t := def.(type) {
 		case *tree.ForeignKeyConstraintTableDef:
-			if _, err := t.Table.NormalizeWithDatabaseName(p.session.Database); err != nil {
+			if _, err := t.Table.NormalizeWithDatabaseName(p.SessionData().Database); err != nil {
 				return nil, err
 			}
 		}
@@ -129,7 +129,9 @@ func (n *createTableNode) startExec(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	creationTime := params.p.txn.OrigTimestamp()
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx, params.evalCtx)
+		desc, err = makeTableDescIfAs(
+			n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan),
+			privs, &params.p.semaCtx, params.EvalContext())
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
@@ -178,12 +180,12 @@ func (n *createTableNode) startExec(params runParams) error {
 		params.p.txn,
 		EventLogCreateTable,
 		int32(desc.ID),
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			TableName string
 			Statement string
 			User      string
-		}{n.n.Table.String(), n.n.String(), params.p.session.User},
+		}{n.n.Table.String(), n.n.String(), params.SessionData().User},
 	); err != nil {
 		return err
 	}
@@ -599,7 +601,9 @@ func (p *planner) addInterleave(
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
-	return addInterleave(ctx, p.txn, &p.session.virtualSchemas, desc, index, interleave, p.session.Database)
+	return addInterleave(
+		ctx, p.txn, &p.session.virtualSchemas, desc, index,
+		interleave, p.SessionData().Database)
 }
 
 // addInterleave marks an index as one that is interleaved in some parent data
@@ -1038,9 +1042,9 @@ func (p *planner) makeTableDesc(
 		creationTime,
 		privileges,
 		affected,
-		p.session.Database,
+		p.SessionData().Database,
 		&p.semaCtx,
-		&p.evalCtx,
+		p.EvalContext(),
 	)
 }
 

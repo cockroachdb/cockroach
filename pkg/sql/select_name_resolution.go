@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // invalidSrcIdx is the srcIdx value returned by findColumn() when there is no match.
@@ -36,7 +37,7 @@ type nameResolutionVisitor struct {
 	err        error
 	sources    multiSourceInfo
 	iVarHelper tree.IndexedVarHelper
-	searchPath tree.SearchPath
+	searchPath sessiondata.SearchPath
 
 	// foundDependentVars is set to true during the analysis if an
 	// expression was found which can change values between rows of the
@@ -224,7 +225,7 @@ func (p *planner) resolveNames(
 		err:                nil,
 		sources:            sources,
 		iVarHelper:         ivarHelper,
-		searchPath:         p.session.SearchPath,
+		searchPath:         p.SessionData().SearchPath,
 		foundDependentVars: false,
 	}
 	colOffset := 0

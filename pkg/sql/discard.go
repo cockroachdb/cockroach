@@ -34,7 +34,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		// RESET ALL
 		for _, v := range varGen {
 			if v.Reset != nil {
-				if err := v.Reset(p.session); err != nil {
+				if err := v.Reset(p.sessionDataMutator); err != nil {
 					return nil, err
 				}
 			}

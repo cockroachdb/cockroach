@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -562,7 +563,7 @@ func convertRecord(
 	}
 
 	var txCtx transform.ExprTransformContext
-	evalCtx := tree.EvalContext{Location: &time.UTC}
+	evalCtx := tree.EvalContext{SessionData: sessiondata.SessionData{Location: time.UTC}}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
@@ -943,7 +944,7 @@ func importPlanHook(
 		var targetDB string
 		if !transformOnly {
 			if override, ok := opts[restoreOptIntoDB]; !ok {
-				if session := p.EvalContext().Database; session != "" {
+				if session := p.SessionData().Database; session != "" {
 					targetDB = session
 				} else {
 					return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
@@ -1141,7 +1142,7 @@ func doDistributedCSVTransform(
 	walltime int64,
 	sstSize int64,
 ) (int64, error) {
-	evalCtx := p.EvalContext()
+	evalCtx := p.ExtendedEvalContext()
 
 	// TODO(dan): Filter out unhealthy nodes.
 	resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
@@ -1171,7 +1172,7 @@ func doDistributedCSVTransform(
 		ctx,
 		job,
 		p.ExecCfg().DB,
-		evalCtx,
+		&evalCtx,
 		p.ExecCfg().NodeID.Get(),
 		nodes,
 		sql.NewRowResultWriter(tree.Rows, rows),

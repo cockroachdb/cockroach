@@ -25,12 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 const (
 	informationSchemaName = "information_schema"
-	pgCatalogName         = tree.PgCatalogName
+	pgCatalogName         = sessiondata.PgCatalogName
 )
 
 var informationSchema = virtualSchema{
@@ -866,7 +867,7 @@ func forEachTableDescWithTableLookupInternal(
 	}
 	sort.Strings(dbNames)
 	for _, dbName := range dbNames {
-		if !isDatabaseVisible(dbName, prefix, p.session.User) {
+		if !isDatabaseVisible(dbName, prefix, p.SessionData().User) {
 			continue
 		}
 		db := databases[dbName]

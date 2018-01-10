@@ -109,7 +109,7 @@ func (p *planner) Insert(
 	numInputColumns := len(cols)
 
 	cols, defaultExprs, err :=
-		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.txCtx, &p.evalCtx)
+		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +410,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 		n.defaultExprs,
 		n.run.insertColIDtoRowIndex,
 		n.insertCols,
-		*params.evalCtx,
+		*params.EvalContext(),
 		n.tableDesc,
 		n.run.rows.Values(),
 	)
@@ -421,7 +421,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 	if err := n.checkHelper.loadRow(n.run.insertColIDtoRowIndex, rowVals, false); err != nil {
 		return false, err
 	}
-	if err := n.checkHelper.check(params.evalCtx); err != nil {
+	if err := n.checkHelper.check(params.EvalContext()); err != nil {
 		return false, err
 	}
 

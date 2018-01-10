@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -37,7 +38,7 @@ func TestResolveFunction(t *testing.T) {
 		{`foo.*`, ``, `invalid function name: foo.*`},
 	}
 
-	searchPath := tree.MakeSearchPath([]string{"pg_catalog"})
+	searchPath := sessiondata.MakeSearchPath([]string{"pg_catalog"})
 	for _, tc := range testCases {
 		stmt, err := parser.ParseOne("SELECT " + tc.in + "(1)")
 		if err != nil {

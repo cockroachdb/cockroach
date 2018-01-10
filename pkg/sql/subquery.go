@@ -113,9 +113,9 @@ func (s *subquery) doEval(ctx context.Context, p *planner) (result tree.Datum, e
 	defer func() { s.plan.Close(ctx); s.plan = nil }()
 
 	params := runParams{
-		ctx:     ctx,
-		evalCtx: &p.evalCtx,
-		p:       p,
+		ctx:             ctx,
+		extendedEvalCtx: &p.extendedEvalCtx,
+		p:               p,
 	}
 	switch s.execMode {
 	case execModeExists:
@@ -163,7 +163,7 @@ func (s *subquery) doEval(ctx context.Context, p *planner) (result tree.Datum, e
 			rows.SetSorted()
 		}
 		if s.execMode == execModeAllRowsNormalized {
-			rows.Normalize(&p.evalCtx)
+			rows.Normalize(p.EvalContext())
 		}
 		result = &rows
 
