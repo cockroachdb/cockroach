@@ -35,15 +35,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-// extendedEvalCtx extends 	ree.EvalContext with fields that are just needed in
+// extendedEvalCtx extends tree.EvalContext with fields that are just needed in
 // the sql package.
 type extendedEvalContext struct {
 	tree.EvalContext
 
+	SessionMutator sessionDataMutator
+
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
 
-	// Tracing provides access to the session's tracing interface.
+	// Tracing provides access to the session's tracing interface. Changes to the
+	// tracing state should be done through the sessionDataMutator.
 	Tracing *SessionTracing
 
 	// StatusServer gives access to the Status service. Used to cancel queries.

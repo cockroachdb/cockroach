@@ -479,28 +479,28 @@ var varGen = map[string]sessionVar{
 			return "off"
 		},
 		Reset: func(m sessionDataMutator) error {
-			if !m.s.Tracing.Enabled() {
+			if !m.sessionTracing.Enabled() {
 				// Tracing is not active. Nothing to do.
 				return nil
 			}
-			return stopTracing(m.s)
+			return stopTracing(m)
 		},
 		Set: func(
 			_ context.Context, m sessionDataMutator,
 			evalCtx *extendedEvalContext, values []tree.TypedExpr,
 		) error {
-			return enableTracing(evalCtx, m.s, values)
+			return enableTracing(&evalCtx.EvalContext, m, values)
 		},
 	},
 }
 
-func enableTracing(evalCtx *extendedEvalContext, session *Session, values []tree.TypedExpr) error {
+func enableTracing(evalCtx *tree.EvalContext, m sessionDataMutator, values []tree.TypedExpr) error {
 	traceKV := false
 	recordingType := tracing.SnowballRecording
 	enableMode := true
 
 	for _, v := range values {
-		s, err := datumAsString(&evalCtx.EvalContext, "trace", v)
+		s, err := datumAsString(evalCtx, "trace", v)
 		if err != nil {
 			return err
 		}
@@ -521,13 +521,13 @@ func enableTracing(evalCtx *extendedEvalContext, session *Session, values []tree
 		}
 	}
 	if !enableMode {
-		return stopTracing(session)
+		return stopTracing(m)
 	}
-	return session.Tracing.StartTracing(recordingType, traceKV)
+	return m.StartSessionTracing(recordingType, traceKV)
 }
 
-func stopTracing(s *Session) error {
-	if err := s.Tracing.StopTracing(); err != nil {
+func stopTracing(m sessionDataMutator) error {
+	if err := m.StopSessionTracing(); err != nil {
 		return errors.Wrapf(err, "error stopping tracing")
 	}
 	return nil
