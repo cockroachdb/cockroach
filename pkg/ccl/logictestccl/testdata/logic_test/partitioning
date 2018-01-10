@@ -114,6 +114,12 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p2 VALUES IN (1)
 )
 
+statement error \(NULL\) cannot be present in more than one partition
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1, NULL),
+    PARTITION p2 VALUES IN (2, NULL)
+)
+
 statement error \(DEFAULT\) cannot be present in more than one partition
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES IN (DEFAULT),
@@ -176,6 +182,36 @@ CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM (1) TO (0)
 )
 
+statement error PARTITION p1: empty range: lower bound \(0\) is greater than upper bound \(NULL\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (0) TO (NULL)
+)
+
+statement error PARTITION p1: empty range: lower bound \(NULL\) is greater than upper bound \(0\)
+CREATE TABLE t (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (0)
+)
+
+statement error PARTITION p1: empty range: lower bound \(NULL\) is greater than upper bound \(MINVALUE\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (MINVALUE)
+)
+
+statement error PARTITION p1: empty range: lower bound \(MAXVALUE\) is greater than upper bound \(NULL\)
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (MAXVALUE) TO (NULL)
+)
+
+statement error PARTITION p1: empty range: lower bound \(NULL\) is greater than upper bound \(MINVALUE\)
+CREATE TABLE t (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (MINVALUE)
+)
+
+statement error PARTITION p1: empty range: lower bound \(MAXVALUE\) is greater than upper bound \(NULL\)
+CREATE TABLE t (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (MAXVALUE) TO (NULL)
+)
+
 statement error partitions p1 and p2 overlap
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM (-3) TO (2),
@@ -186,6 +222,24 @@ statement error partitions p2 and p1 overlap
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY RANGE (a, b, c) (
     PARTITION p2 VALUES FROM (MINVALUE, MINVALUE, MINVALUE) TO (1, 2, MAXVALUE),
     PARTITION p1 VALUES FROM (1, 2, 99) TO (MAXVALUE, MAXVALUE, MAXVALUE)
+)
+
+statement error partitions p1 and p2 overlap
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (0),
+    PARTITION p2 VALUES FROM (NULL) TO (1)
+)
+
+statement error partitions p1 and p2 overlap
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (NULL) TO (MAXVALUE),
+    PARTITION p2 VALUES FROM (1) TO (2)
+)
+
+statement error partitions p1 and p2 overlap
+CREATE TABLE t (a INT, PRIMARY KEY (a DESC)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (MINVALUE) TO (NULL),
+    PARTITION p2 VALUES FROM (2) TO (1)
 )
 
 statement error partitions p2 and p1 overlap
@@ -578,6 +632,7 @@ ok11  CREATE TABLE ok11 (
 
 statement ok
 CREATE TABLE IF NOT EXISTS ok12 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION pu VALUES IN (NULL),
     PARTITION p1 VALUES IN (1),
     PARTITION p2 VALUES IN (2)
 )
@@ -593,6 +648,12 @@ ok12  CREATE TABLE ok12 (
       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
       FAMILY "primary" (a, b, c)
 ) PARTITION BY LIST (a) (
+   PARTITION pu VALUES IN ((NULL)),
    PARTITION p1 VALUES IN ((1)),
    PARTITION p2 VALUES IN ((2))
 )
+
+# Verify that creating a partition that includes NULL does not change the
+# implicit NOT NULL contrainst of a primary key.
+statement error null value in column "a" violates not-null constraint
+INSERT INTO ok12 (a, b, c) VALUES (NULL, 2, 3)
