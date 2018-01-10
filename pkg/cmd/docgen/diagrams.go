@@ -39,7 +39,6 @@ func init() {
 
 	// Global vars.
 	var (
-		bnfDir      string
 		filter      string
 		invertMatch bool
 	)
@@ -59,9 +58,11 @@ func init() {
 	)
 
 	cmdBNF := &cobra.Command{
-		Use:   "bnf",
+		Use:   "bnf [dir]",
 		Short: "Generate EBNF from sql.y.",
+		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
+			bnfDir := args[0]
 			bnf, err := runBNF(addr)
 			if err != nil {
 				panic(err)
@@ -121,15 +122,17 @@ func init() {
 	// SVG vars.
 	var (
 		maxWorkers  int
-		svgDir      string
 		railroadJar string
 	)
 
 	cmdSVG := &cobra.Command{
-		Use:   "svg",
+		Use:   "svg [bnf dir] [svg dir]",
 		Short: "Generate SVG diagrams from SQL grammar",
 		Long:  `With no arguments, generates SQL diagrams for all statements.`,
+		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
+			bnfDir := args[0]
+			svgDir := args[1]
 			if railroadJar != "" {
 				_, err := os.Stat(railroadJar)
 				if err != nil {
@@ -226,7 +229,6 @@ func init() {
 	}
 
 	cmdSVG.Flags().IntVar(&maxWorkers, "max-workers", 1, "maximum number of concurrent workers")
-	cmdSVG.Flags().StringVar(&svgDir, "svgdir", filepath.Join("docs", "generated", "sql", "diagrams"), "SVG directory")
 	cmdSVG.Flags().StringVar(&railroadJar, "railroad", "", "Location of Railroad.jar; empty to use website")
 
 	diagramCmd := &cobra.Command{
@@ -234,7 +236,6 @@ func init() {
 		Short: "Generate diagrams.",
 	}
 
-	diagramCmd.PersistentFlags().StringVar(&bnfDir, "bnfdir", filepath.Join("docs", "generated", "sql", "bnf"), "BNF directory")
 	diagramCmd.PersistentFlags().StringVar(&filter, "filter", ".*", "Filter statement names (regular expression)")
 	diagramCmd.PersistentFlags().BoolVar(&invertMatch, "invert-match", false, "Generate everything that doesn't match the filter")
 
