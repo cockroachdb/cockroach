@@ -493,7 +493,7 @@ func (sc *SchemaChanger) distBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.job.Progressed(ctx, fractionCompleted, jobs.Noop); err != nil {
+				if err := sc.job.Progressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
 					log.Infof(ctx, "Ignoring error reporting progress %f for job %d: %v", fractionCompleted, *sc.job.ID(), err)
 				}
 			}

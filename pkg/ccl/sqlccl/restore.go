@@ -872,7 +872,7 @@ func restore(
 		job:           job,
 		totalChunks:   len(importSpans),
 		startFraction: job.Payload().FractionCompleted,
-		progressedFn: func(progressedCtx context.Context, details interface{}) {
+		progressedFn: func(progressedCtx context.Context, details jobs.Details) {
 			switch d := details.(type) {
 			case *jobs.Payload_Restore:
 				mu.Lock()

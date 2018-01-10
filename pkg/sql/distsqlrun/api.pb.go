@@ -44,6 +44,7 @@
 		BackfillerSpec
 		FlowSpec
 		AlgebraicSetOpSpec
+		JobProgress
 		ReadCSVSpec
 		SSTWriterSpec
 		SketchSpec
