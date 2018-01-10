@@ -31,6 +31,13 @@ var (
 // Bool represents a boolean pattern.
 type Bool interface {
 	bool()
+	// Get returns the value of a Bool.
+	Get() bool
+}
+
+// FromBool creates a Bool from a Go bool.
+func FromBool(val bool) Bool {
+	return b(val)
 }
 
 type b bool
@@ -40,8 +47,12 @@ type b bool
 // does not add any variable to the expression scope.
 type Var string
 
-func (b) bool()   {}
-func (Var) bool() {}
+func (b) bool()       {}
+func (x b) Get() bool { return bool(x) }
+func (Var) bool()     {}
+
+// Get is part of the Bool interface.
+func (Var) Get() bool { panic("can't call get on Var") }
 
 // Pattern is a mapping from (State,Event) pairs to Transitions. When
 // unexpanded, it may contain values like wildcards and variable bindings.
@@ -99,8 +110,9 @@ func expandPattern(p Pattern) Pattern {
 
 					scope := mergeScope(sVar.scope, eVar.scope)
 					xsm[xe] = Transition{
-						Next:   bindState(t.Next, scope),
-						Action: t.Action,
+						Next:        bindState(t.Next, scope),
+						Action:      t.Action,
+						Description: t.Description,
 					}
 				}
 			}

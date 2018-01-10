@@ -31,13 +31,13 @@ type debugInfo struct {
 	reachableStates  map[string]struct{}
 }
 
-// eventAppliedToState returns the State resulting from applying the specified
-// Event to the specified State and the bool true, or false if there is no
-// associated transition.
-func (di debugInfo) eventAppliedToState(sName, eName string) (State, bool) {
+// eventAppliedToState returns the Transition resulting from applying the
+// specified Event to the specified State and the bool true, or false if there
+// is no associated transition.
+func (di debugInfo) eventAppliedToState(sName, eName string) (Transition, bool) {
 	sm := di.t.expanded[di.stateNameMap[sName]]
 	tr, ok := sm[di.eventNameMap[eName]]
-	return tr.Next, ok
+	return tr, ok
 }
 
 func (di debugInfo) reachable(sName string) bool {
@@ -178,9 +178,16 @@ func (dw dotWriter) writeEdges(start string) {
 			}
 		}
 		for _, eName := range di.sortedEventNames {
-			if next, ok := di.eventAppliedToState(sName, eName); ok {
-				fmt.Fprintf(dw.w, "\t%q -> %q [label = %q]\n",
-					sName, stateName(next), eName)
+			if tr, ok := di.eventAppliedToState(sName, eName); ok {
+				var label string
+				if tr.Description == "" {
+					label = fmt.Sprintf("%q", eName)
+				} else {
+					// We'll use an HTML label with the description on the 2nd line.
+					label = fmt.Sprintf("<%s<BR/><I>%s</I>>", eName, tr.Description)
+				}
+				fmt.Fprintf(dw.w, "\t%q -> %q [label = %s]\n",
+					sName, stateName(tr.Next), label)
 			}
 		}
 	}

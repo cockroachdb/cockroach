@@ -12,6 +12,8 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// See doc.go for a description.
+
 package fsm
 
 import (
@@ -58,6 +60,8 @@ type Args struct {
 type Transition struct {
 	Next   State
 	Action func(Args) error
+	// Description, if set, is reflected in the DOT diagram.
+	Description string
 }
 
 // TransitionNotFoundError is returned from Machine.Apply when the Event cannot
@@ -137,4 +141,9 @@ func (m *Machine) ApplyWithBaggage(ctx context.Context, e Event, b EventBaggage)
 		Baggage:  b,
 	})
 	return err
+}
+
+// CurState returns the current state.
+func (m *Machine) CurState() State {
+	return m.cur
 }
