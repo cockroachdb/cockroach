@@ -1116,15 +1116,20 @@ build-scalar,index-constraints vars=(int, int) index=(@1, @2)
 ----
 [/1/2 - /1/2]
 
-build-scalar,index-constraints vars=(jsonb) inverted-index=@1
+build-scalar,normalize,index-constraints vars=(jsonb) inverted-index=@1
 @1 @> '{"a":1}'
 ----
 [/'{"a":1}' - /'{"a":1}']
 
-# We currently don't support conjunctions or disjunctions with
-# inverted indexes.
-build-scalar,index-constraints vars=(jsonb) inverted-index=@1
+# Currently we only generate spans from one of the @> expressions.
+build-scalar,normalize,index-constraints vars=(jsonb) inverted-index=@1
 @1 @> '{"a":1}' AND @1 @> '{"b":1}'
 ----
-[ - ]
-Remaining filter: (@1 @> '{"a":1}') AND (@1 @> '{"b":1}')
+[/'{"a":1}' - /'{"a":1}']
+Remaining filter: @1 @> '{"b":1}'
+
+build-scalar,normalize,index-constraints vars=(jsonb, int) inverted-index=@1
+@2 = 1 AND @1 @> '{"a":1}' AND @1 @> '{"b":1}'
+----
+[/'{"a":1}' - /'{"a":1}']
+Remaining filter: (@2 = 1) AND (@1 @> '{"b":1}')
