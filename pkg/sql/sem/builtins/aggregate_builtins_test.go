@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -235,6 +236,41 @@ func makeIntervalTestDatum(count int) []tree.Datum {
 		}}
 	}
 	return vals
+}
+
+func TestArrayAggNameOverload(t *testing.T) {
+	testArrayAggAliasedTypeOverload(t, types.Name)
+}
+
+func TestArrayAggOidOverload(t *testing.T) {
+	testArrayAggAliasedTypeOverload(t, types.Oid)
+}
+
+// testAliasedTypeOverload is a helper function for testing ARRAY_AGG's
+// overloads that can take aliased scalar types like NAME and OID.
+// These tests are necessary because some ORMs (e.g., sequelize) require
+// ARRAY_AGG to work on these aliased types and produce a result with the
+// correct type.
+func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
+	defer tree.MockNameTypes(map[string]types.T{
+		"a": expected,
+	})()
+	exprStr := "ARRAY_AGG(a)"
+	expr, err := parser.ParseExpr(exprStr)
+	if err != nil {
+		t.Fatalf("%s: %v", exprStr, err)
+	}
+	typedExpr, err := tree.TypeCheck(expr, nil, types.TArray{Typ: expected})
+	if err != nil {
+		t.Fatalf("%s: %v", expr, err)
+	}
+	if typedExpr.ResolvedType().(types.TArray).Typ != expected {
+		t.Fatalf(
+			"Expression has incorrect type: expected %v but got %v",
+			expected,
+			typedExpr.ResolvedType(),
+		)
+	}
 }
 
 func runBenchmarkAggregate(
