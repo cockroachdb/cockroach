@@ -1035,6 +1035,22 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
+		// Older nodes don't know about many new fields and flags, e.g. as-of-time,
+		// and our testing does not comprehensively cover mixed-version clusters.
+		// Refusing to initiate RESTOREs on a new node while old nodes may evaluate
+		// the RPCs it issues or even try to resume the RESTORE job and mishandle it
+		// avoid any potential unexepcted behavior. This errs on the side of being too
+		// restrictive, but an operator can still send the job to the remaining 1.x
+		// nodes if needed. VersionClearRange was introduced after many of these
+		// fields and the refactors to how jobs were saved and resumed, though we may
+		// want to bump this to 2.0 for simplicity.
+		if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionClearRange) {
+			return errors.Errorf(
+				"running RESTORE on a 2.x node requires cluster version >= %s",
+				cluster.VersionByKey(cluster.VersionClearRange).String(),
+			)
+		}
+
 		from, err := fromFn()
 		if err != nil {
 			return err
