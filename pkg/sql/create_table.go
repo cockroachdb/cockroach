@@ -148,7 +148,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err := params.p.createDescriptorWithID(params.ctx, key, id, &desc, false); err != nil {
 		return err
 	}
 
@@ -229,6 +229,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		// Return the number of rows affected as result.
 		n.run.rowsAffected = count
 	}
+
+	params.p.session.tables.addUncommittedTable(desc)
 	return nil
 }
 
