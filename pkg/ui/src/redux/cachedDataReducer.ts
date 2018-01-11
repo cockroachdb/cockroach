@@ -15,12 +15,12 @@ import { PayloadAction, WithRequest } from "src/interfaces/action";
 
 // CachedDataReducerState is used to track the state of the cached data.
 export class CachedDataReducerState<TResponseMessage> {
-  data: TResponseMessage; // the latest data received
+  data?: TResponseMessage; // the latest data received
   inFlight = false; // true if a request is in flight
   valid = false; // true if data has been received and has not been invalidated
-  requestedAt: moment.Moment; // Timestamp when data was last requested.
-  setAt: moment.Moment; // Timestamp when this data was last updated.
-  lastError: Error; // populated with the most recent error, if the last request failed
+  requestedAt?: moment.Moment; // Timestamp when data was last requested.
+  setAt?: moment.Moment; // Timestamp when this data was last updated.
+  lastError?: Error; // populated with the most recent error, if the last request failed
 }
 
 // KeyedCachedDataReducerState is used to track the state of the cached data
