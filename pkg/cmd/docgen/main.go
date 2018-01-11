@@ -22,6 +22,7 @@ import (
 )
 
 var cmds []*cobra.Command
+var quiet bool
 
 func main() {
 	rootCmd := func() *cobra.Command {
@@ -29,6 +30,7 @@ func main() {
 			Use:   "docgen",
 			Short: "docgen generates documentation for cockroachdb's SQL functions and grammar",
 		}
+		cmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "suppress output where possible")
 		cmd.AddCommand(cmds...)
 		return cmd
 	}()

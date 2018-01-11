@@ -75,7 +75,9 @@ func init() {
 
 			if filterRE.MatchString(topStmt) != invertMatch {
 				name := topStmt
-				fmt.Println("processing", name)
+				if !quiet {
+					fmt.Println("processing", name)
+				}
 				g, err := runParse(br(), nil, name, true, true, nil, nil)
 				if err != nil {
 					log.Fatalf("%s: %+v", name, err)
@@ -87,7 +89,9 @@ func init() {
 				if filterRE.MatchString(s.name) == invertMatch {
 					continue
 				}
-				fmt.Println("processing", s.name)
+				if !quiet {
+					fmt.Println("processing", s.name)
+				}
 				if s.stmt == "" {
 					s.stmt = s.name
 				}
@@ -173,7 +177,9 @@ func init() {
 					defer wg.Done()
 					defer func() { <-sem }()
 
-					fmt.Printf("generating svg of %s (%s)\n", name, m)
+					if !quiet {
+						fmt.Printf("generating svg of %s (%s)\n", name, m)
+					}
 
 					f, err := os.Open(m)
 					if err != nil {
