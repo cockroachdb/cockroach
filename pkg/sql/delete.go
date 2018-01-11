@@ -100,7 +100,7 @@ func (p *planner) Delete(
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols),
+		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols, true /* forUpdateOrDelete */),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
 	}, n.OrderBy, n.Limit, nil, nil, publicAndNonPublicColumns)
