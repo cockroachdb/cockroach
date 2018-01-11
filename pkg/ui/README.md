@@ -83,6 +83,14 @@ dependencies properly, so a top-level `make build` will rebuild exactly the
 necessary DLLs.) DLLs also make the Webpack configuration rather complicated.
 Still, the tradeoff seems well worth it.
 
+## CCL Build
+
+In CCL builds, code in `pkg/ui/ccl/src` overrides code in `pkg/ui/src` at build
+time, via an import resolution rule. E.g. if a file imports
+`src/views/shared/components/licenseType`, it'll resolve to
+`pkg/ui/src/views/shared/components/licenseType` in an OSS build, and
+`pkg/ui/ccl/src/views/shared/components/licenseType` in a CCL build.
+
 ## Running tests
 
 To run the tests outside of CI:
