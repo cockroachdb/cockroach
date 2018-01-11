@@ -484,7 +484,7 @@ func (r *RocksDBBatchReader) Next() bool {
 
 	r.offset++
 	if len(r.repr) == 0 {
-		if r.offset < int(r.count) {
+		if r.offset < r.count {
 			r.err = errors.Errorf("invalid batch: expected %d entries but found %d", r.count, r.offset)
 		}
 		return false

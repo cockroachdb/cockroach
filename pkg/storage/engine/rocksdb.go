@@ -1967,13 +1967,8 @@ func (r *rocksDBIterator) MVCCGet(
 	if err := statusToError(state.status); err != nil {
 		return nil, nil, err
 	}
-	if state.uncertainty_timestamp.wall_time != 0 || state.uncertainty_timestamp.logical != 0 {
-		return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
-			timestamp, hlc.Timestamp{
-				WallTime: int64(state.uncertainty_timestamp.wall_time),
-				Logical:  int32(state.uncertainty_timestamp.logical),
-			},
-			txn)
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
+		return nil, nil, err
 	}
 
 	intents, err := buildScanIntents(cSliceToGoBytes(state.intents))
@@ -2001,7 +1996,7 @@ func (r *rocksDBIterator) MVCCGet(
 	if count == 0 {
 		return nil, intents, nil
 	}
-	mvccKey, rawValue, repr, err := rocksDBBatchDecodeValue(repr)
+	mvccKey, rawValue, _, err := rocksDBBatchDecodeValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2039,13 +2034,8 @@ func (r *rocksDBIterator) MVCCScan(
 	if err := statusToError(state.status); err != nil {
 		return nil, nil, err
 	}
-	if state.uncertainty_timestamp.wall_time != 0 || state.uncertainty_timestamp.logical != 0 {
-		return nil, nil, roachpb.NewReadWithinUncertaintyIntervalError(
-			timestamp, hlc.Timestamp{
-				WallTime: int64(state.uncertainty_timestamp.wall_time),
-				Logical:  int32(state.uncertainty_timestamp.logical),
-			},
-			txn)
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
+		return nil, nil, err
 	}
 	return cSliceToGoBytes(state.data), cSliceToGoBytes(state.intents), nil
 }
@@ -2182,6 +2172,20 @@ func statusToError(s C.DBStatus) error {
 		return nil
 	}
 	return &RocksDBError{msg: cStringToGoString(s)}
+}
+
+func uncertaintyToError(
+	readTS hlc.Timestamp, existingTS C.DBTimestamp, txn *roachpb.Transaction,
+) error {
+	if existingTS.wall_time != 0 || existingTS.logical != 0 {
+		return roachpb.NewReadWithinUncertaintyIntervalError(
+			readTS, hlc.Timestamp{
+				WallTime: int64(existingTS.wall_time),
+				Logical:  int32(existingTS.logical),
+			},
+			txn)
+	}
+	return nil
 }
 
 // goMerge takes existing and update byte slices that are expected to
