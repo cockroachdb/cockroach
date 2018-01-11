@@ -24,12 +24,8 @@ import (
 	"testing"
 	"time"
 
-	gosql "database/sql"
-
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -210,22 +206,32 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 				case <-time.After(time.Second):
 				}
 
-				// Reconnect on every iteration; gRPC will eagerly tank the connection
-				// on transport errors. Always talk to node 0 because it's guaranteed
-				// to exist.
-				client, err := c.NewClient(ctx, 0)
+				// Always talk to node 0 because it's guaranteed to exist.
+				db, err := c.NewDB(ctx, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
-
-				var desc roachpb.RangeDescriptor
-				if err := client.GetProto(ctx, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {
-					return err
+				rows, err := db.Query(`SELECT ARRAY_LENGTH(replicas, 1) FROM crdb_internal.ranges LIMIT 1`)
+				if err != nil {
+					// Versions <= 1.1 do not contain the crdb_internal table, which is what's used
+					// to determine whether a cluster has up-replicated. This is relevant for the
+					// version upgrade acceptance test. Just skip the replication check for this case.
+					if testutils.IsError(err, "table \"crdb_internal.ranges\" does not exist") {
+						return nil
+					}
+					t.Fatal(err)
 				}
-				foundReplicas := len(desc.Replicas)
-
-				if log.V(1) {
-					log.Infof(ctx, "found %d replicas", foundReplicas)
+				defer rows.Close()
+				var foundReplicas int
+				if rows.Next() {
+					if err = rows.Scan(&foundReplicas); err != nil {
+						t.Fatalf("unable to scan for length of replicas array: %s", err)
+					}
+					if log.V(1) {
+						log.Infof(ctx, "found %d replicas", foundReplicas)
+					}
+				} else {
+					return errors.Errorf("no ranges listed")
 				}
 
 				if foundReplicas < wantedReplicas {
@@ -239,11 +245,11 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		// read-only query succeeds.
 		for i := 0; i < c.NumNodes(); i++ {
 			testutils.SucceedsSoon(t, func() error {
-				db, err := gosql.Open("postgres", c.PGUrl(ctx, i))
+				db, err := c.NewDB(ctx, i)
 				if err != nil {
 					return err
 				}
-				if _, err := db.Exec("SHOW DATABASES;"); err != nil {
+				if _, err := db.Exec("SHOW DATABASES"); err != nil {
 					return err
 				}
 				return nil

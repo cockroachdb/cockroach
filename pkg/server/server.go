@@ -121,7 +121,6 @@ type Server struct {
 	txnCoordSender     *kv.TxnCoordSender
 	distSender         *kv.DistSender
 	db                 *client.DB
-	kvDB               *kv.DBServer
 	pgServer           *pgwire.Server
 	distSQLServer      *distsqlrun.ServerImpl
 	node               *Node
@@ -284,9 +283,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.raftTransport = storage.NewRaftTransport(
 		s.cfg.AmbientCtx, st, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
 	)
-
-	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
-	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	s.internalMemMetrics = sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())

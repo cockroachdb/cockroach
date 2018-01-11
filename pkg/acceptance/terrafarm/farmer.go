@@ -17,6 +17,7 @@ package terrafarm
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -32,7 +33,6 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -334,13 +334,9 @@ func (f *Farmer) Exec(i int, cmd string) error {
 	return nil
 }
 
-// NewClient implements the Cluster interface.
-func (f *Farmer) NewClient(ctx context.Context, i int) (*client.DB, error) {
-	conn, err := f.RPCContext.GRPCDial(f.Addr(ctx, i, base.DefaultPort)).Connect(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return client.NewDB(client.NewSender(conn), f.RPCContext.LocalClock), nil
+// NewDB implements the Cluster interface.
+func (f *Farmer) NewDB(ctx context.Context, i int) (*gosql.DB, error) {
+	return gosql.Open("postgres", f.PGUrl(ctx, i))
 }
 
 // PGUrl returns a URL string for the given node postgres server.

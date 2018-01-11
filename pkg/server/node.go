@@ -112,7 +112,7 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // them by directing the commands contained within RPCs to local
 // stores, which in turn direct the commands to specific ranges. Each
 // node has access to the global, monolithic Key-Value abstraction via
-// its kv.DB reference. Nodes use this to allocate node and store
+// its client.DB reference. Nodes use this to allocate node and store
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {

@@ -397,11 +397,6 @@ a public network without combining it with --host.`,
 		Description: `Certificate and key files are overwritten if they exist.`,
 	}
 
-	MaxResults = FlagInfo{
-		Name:        "max-results",
-		Description: `Define the maximum number of results that will be retrieved.`,
-	}
-
 	Password = FlagInfo{
 		Name:        "password",
 		Description: `Prompt for the new user's password.`,

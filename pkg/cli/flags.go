@@ -107,13 +107,6 @@ func IntFlag(f *pflag.FlagSet, valPtr *int, flagInfo cliflags.FlagInfo, defaultV
 	setFlagFromEnv(f, flagInfo)
 }
 
-// Int64Flag creates an int64 flag and registers it with the FlagSet.
-func Int64Flag(f *pflag.FlagSet, valPtr *int64, flagInfo cliflags.FlagInfo, defaultVal int64) {
-	f.Int64VarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
-
-	setFlagFromEnv(f, flagInfo)
-}
-
 // BoolFlag creates a bool flag and registers it with the FlagSet.
 func BoolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo, defaultVal bool) {
 	f.BoolVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
@@ -290,7 +283,6 @@ func init() {
 		sqlShellCmd,
 		/* StartCmd is covered above */
 	}
-	clientCmds = append(clientCmds, rangeCmds...)
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
@@ -372,9 +364,6 @@ func init() {
 		f := cmd.Flags()
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
-
-	// Max results flag for range list.
-	Int64Flag(lsRangesCmd.Flags(), &debugCtx.maxResults, cliflags.MaxResults, debugCtx.maxResults)
 
 	// Debug commands.
 	{

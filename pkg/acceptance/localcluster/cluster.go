@@ -40,13 +40,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -327,41 +326,35 @@ func (c *Cluster) waitForFullReplication() {
 	log.Infof(context.Background(), "replicated %.3fs", timeutil.Since(c.started).Seconds())
 }
 
-// Client returns a *client.DB for the node with the given index.
-func (c *Cluster) Client(idx int) *client.DB {
-	return c.Nodes[idx].Client()
-}
-
 func (c *Cluster) isReplicated() (bool, string) {
-	db := c.Client(0)
-	rows, err := db.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
+	db := c.Nodes[0].DB()
+	rows, err := db.Query(`SELECT range_id, start_key, end_key, ARRAY_LENGTH(replicas, 1) FROM crdb_internal.ranges`)
 	if err != nil {
-		if IsUnavailableError(err) {
-			return false, ""
+		// Versions <= 1.1 do not contain the crdb_internal table, which is what's used
+		// to determine whether a cluster has up-replicated. This is relevant for the
+		// version upgrade acceptance test. Just skip the replication check for this case.
+		if testutils.IsError(err, "table \"crdb_internal.ranges\" does not exist") {
+			return true, ""
 		}
-		log.Fatalf(context.Background(), "scan failed: %s\n", err)
+		log.Fatal(context.Background(), err)
 	}
+	defer rows.Close()
 
 	var buf bytes.Buffer
 	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-
 	done := true
-	for _, row := range rows {
-		desc := &roachpb.RangeDescriptor{}
-		if err := row.ValueProto(desc); err != nil {
-			log.Fatalf(context.Background(), "%s: unable to unmarshal range descriptor\n", row.Key)
-			continue
+	for rows.Next() {
+		var rangeID int64
+		var startKey, endKey []byte
+		var numReplicas int
+		if err := rows.Scan(&rangeID, &startKey, &endKey, &numReplicas); err != nil {
+			log.Fatalf(context.Background(), "unable to scan range replicas: %s", err)
 		}
-		var storeIDs []roachpb.StoreID
-		for _, replica := range desc.Replicas {
-			storeIDs = append(storeIDs, replica.StoreID)
-		}
-		fmt.Fprintf(tw, "\t%s\t%s\t[%d]\t%d\n",
-			desc.StartKey, desc.EndKey, desc.RangeID, storeIDs)
+		fmt.Fprintf(tw, "\t%s\t%s\t[%d]\t%d\n", startKey, endKey, rangeID, numReplicas)
 		// This check is coarse since it doesn't know the real configuration.
 		// Assume all is well when there are 3+ replicas, or if there are as
 		// many replicas as there are nodes.
-		if len(desc.Replicas) < 3 && len(desc.Replicas) != len(c.Nodes) {
+		if numReplicas < 3 && numReplicas != len(c.Nodes) {
 			done = false
 		}
 	}
@@ -387,41 +380,13 @@ func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
 
 // Split splits the range containing the split key at the specified split key.
 func (c *Cluster) Split(nodeIdx int, splitKey roachpb.Key) error {
-	return c.Client(nodeIdx).AdminSplit(context.Background(), splitKey, splitKey)
+	return errors.Errorf("Split is unimplemented and should be re-implemented using SQL")
 }
 
 // TransferLease transfers the lease for the range containing key to a random
 // alive node in the range.
 func (c *Cluster) TransferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (bool, error) {
-	desc, err := c.lookupRange(nodeIdx, key)
-	if err != nil {
-		return false, err
-	}
-	if len(desc.Replicas) <= 1 {
-		return false, nil
-	}
-
-	var target roachpb.StoreID
-	for {
-		target = desc.Replicas[r.Intn(len(desc.Replicas))].StoreID
-		if c.Nodes[target-1].Alive() {
-			break
-		}
-	}
-	if err := c.Client(nodeIdx).AdminTransferLease(context.Background(), key, target); err != nil {
-		return false, errors.Errorf("%s: transfer lease: %s", key, err)
-	}
-	return true, nil
-}
-
-func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescriptor, error) {
-	sender := c.Client(nodeIdx).GetSender()
-	rs, _, err := client.RangeLookup(context.Background(), sender, key,
-		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* prefetchReverse */)
-	if err != nil {
-		return nil, errors.Errorf("%s: lookup range: %s", key, err)
-	}
-	return &rs[0], nil
+	return false, errors.Errorf("TransferLease is unimplemented and should be re-implemented using SQL")
 }
 
 // RandNode returns the index of a random alive node.
@@ -449,7 +414,6 @@ type Node struct {
 	cmd            *exec.Cmd
 	rpcPort, pgURL string // legacy: remove once 1.0.x is no longer tested
 	db             *gosql.DB
-	client         *client.DB
 	statusClient   serverpb.StatusClient
 }
 
@@ -505,23 +469,6 @@ func (n *Node) Alive() bool {
 	return n.cmd != nil
 }
 
-// Client returns a *client.DB set up to talk to this node.
-func (n *Node) Client() *client.DB {
-	n.Lock()
-	existingClient := n.client
-	n.Unlock()
-
-	if existingClient != nil {
-		return existingClient
-	}
-
-	conn, err := n.rpcCtx.GRPCDialRaw(n.RPCAddr())
-	if err != nil {
-		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
-	}
-	return client.NewDB(client.NewSender(conn), n.rpcCtx.LocalClock)
-}
-
 // StatusClient returns a StatusClient set up to talk to this node.
 func (n *Node) StatusClient() serverpb.StatusClient {
 	n.Lock()
@@ -566,7 +513,6 @@ func (n *Node) setNotRunningLocked(waitErr *exec.ExitError) {
 	}
 	n.notRunning = make(chan struct{})
 	n.db = nil
-	n.client = nil
 	n.statusClient = nil
 	n.cmd = nil
 	n.rpcPort = ""
