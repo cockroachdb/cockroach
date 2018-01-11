@@ -172,7 +172,7 @@ func (s *Iterator) FindSplitKey(
 // MVCCGet is part of the engine.Iterator interface.
 func (s *Iterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent bool,
-) (kv []byte, intent []byte, err error) {
+) (*roachpb.Value, []roachpb.Intent, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key}); err != nil {
 		return nil, nil, err
 	}

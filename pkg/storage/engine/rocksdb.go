@@ -1328,7 +1328,7 @@ func (r *rocksDBBatchIterator) FindSplitKey(
 
 func (r *rocksDBBatchIterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent bool,
-) (kv []byte, intent []byte, err error) {
+) (*roachpb.Value, []roachpb.Intent, error) {
 	r.batch.flushMutations()
 	return r.iter.MVCCGet(key, timestamp, txn, consistent)
 }
@@ -1951,7 +1951,7 @@ func (r *rocksDBIterator) FindSplitKey(
 
 func (r *rocksDBIterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent bool,
-) (kv []byte, intent []byte, err error) {
+) (*roachpb.Value, []roachpb.Intent, error) {
 	if !consistent && txn != nil {
 		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
@@ -1975,7 +1975,45 @@ func (r *rocksDBIterator) MVCCGet(
 			},
 			txn)
 	}
-	return cSliceToGoBytes(state.data), cSliceToGoBytes(state.intents), nil
+
+	intents, err := buildScanIntents(cSliceToGoBytes(state.intents))
+	if err != nil {
+		return nil, nil, err
+	}
+	if consistent && len(intents) > 0 {
+		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+	if state.data.len == 0 {
+		return nil, intents, nil
+	}
+
+	// Extract the value from the batch data. This code would be slightly more
+	// compact using RocksDBBatchReader, but avoiding the allocation has a
+	// measurable impact on benchmarks.
+	repr := cSliceToUnsafeGoBytes(state.data)
+	count, repr, err := rocksDBBatchDecodeHeader(repr)
+	if err != nil {
+		return nil, nil, err
+	}
+	if count > 1 {
+		return nil, nil, errors.Errorf("expected 0 or 1 result, found %d", count)
+	}
+	if count == 0 {
+		return nil, intents, nil
+	}
+	mvccKey, rawValue, repr, err := rocksDBBatchDecodeValue(repr)
+	if err != nil {
+		return nil, nil, err
+	}
+	value := &roachpb.Value{
+		RawBytes:  make([]byte, len(rawValue)),
+		Timestamp: mvccKey.Timestamp,
+	}
+	copy(value.RawBytes, rawValue)
+	if err := value.Verify(mvccKey.Key); err != nil {
+		return nil, nil, err
+	}
+	return value, intents, nil
 }
 
 func (r *rocksDBIterator) MVCCScan(
