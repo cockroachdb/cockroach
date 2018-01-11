@@ -141,7 +141,7 @@ func setupMVCCData(
 // timer). It then performs b.N MVCCScans in increments of numRows
 // keys over all of the data in the Engine instance, restarting at
 // the beginning of the keyspace, as many times as necessary.
-func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testing.B) {
+func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, reverse bool, b *testing.B) {
 	// Use the same number of keys for all of the mvcc scan
 	// benchmarks. Using a different number of keys per test gives
 	// preferential treatment to tests with fewer keys. Note that the
@@ -160,6 +160,10 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testin
 		iter.Close()
 	}
 
+	scan := MVCCScan
+	if reverse {
+		scan = MVCCReverseScan
+	}
 	b.SetBytes(int64(numRows * valueSize))
 	b.ResetTimer()
 
@@ -173,7 +177,7 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, b *testin
 		endKey = endKey.Next()
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		kvs, _, _, err := MVCCScan(context.Background(), eng, startKey, endKey, int64(numRows), ts, true, nil)
+		kvs, _, _, err := scan(context.Background(), eng, startKey, endKey, int64(numRows), ts, true, nil)
 		if err != nil {
 			b.Fatalf("failed scan: %s", err)
 		}
