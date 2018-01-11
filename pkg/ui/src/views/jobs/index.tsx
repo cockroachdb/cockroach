@@ -19,7 +19,6 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import spinner from "assets/spinner.gif";
-import noResults from "assets/noresults.svg";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
