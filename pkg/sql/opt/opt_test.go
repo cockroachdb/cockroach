@@ -309,10 +309,6 @@ func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optba
 
 func TestOpt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	catalog := testCatalog{kvDB: kvDB}
 
 	paths, err := filepath.Glob(*logicTestData)
 	if err != nil {
@@ -324,6 +320,11 @@ func TestOpt(t *testing.T) {
 
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			catalog := testCatalog{kvDB: kvDB}
+
 			runTest(t, path, func(d *testdata) string {
 				var e *Expr
 				var varTypes []types.T
