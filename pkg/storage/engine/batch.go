@@ -338,6 +338,60 @@ func DecodeKey(encodedKey []byte) (MVCCKey, error) {
 	return mvccKey, nil
 }
 
+// Decode the header of RocksDB batch repr, returning both the count of the
+// entries in the batch and the suffix of data remaining in the batch.
+func rocksDBBatchDecodeHeader(repr []byte) (count int, orepr []byte, err error) {
+	if len(repr) < headerSize {
+		return 0, nil, errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
+	}
+	seq := binary.LittleEndian.Uint64(repr[:countPos])
+	if seq != 0 {
+		return 0, nil, errors.Errorf("bad sequence: expected 0, but found %d", seq)
+	}
+	count = int(binary.LittleEndian.Uint32(repr[countPos:headerSize]))
+	return count, repr[headerSize:], nil
+}
+
+// Decode a RocksDB batch repr variable length string, returning both the
+// string and the suffix of data remaining in the batch.
+func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
+	v, n := binary.Uvarint(repr)
+	if n <= 0 {
+		return nil, nil, fmt.Errorf("unable to decode uvarint")
+	}
+	repr = repr[n:]
+	if v == 0 {
+		return nil, nil, nil
+	}
+	if v > uint64(len(repr)) {
+		return nil, nil, fmt.Errorf("malformed varstring, expected %d bytes, but only %d remaining",
+			v, len(repr))
+	}
+	return repr[:v], repr[v:], nil
+}
+
+// Decode a RocksDB batch repr key/value pair, returning both the key/value and
+// the suffix of data remaining in the batch.
+func rocksDBBatchDecodeValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
+	if len(repr) == 0 {
+		return key, nil, repr, errors.Errorf("unexpected batch EOF")
+	}
+	if BatchType(repr[0]) != BatchTypeValue {
+		return key, nil, repr, errors.Errorf("unexpected batch entry type: %d", BatchType(repr[0]))
+	}
+	repr = repr[1:]
+	rawKey, repr, err := rocksDBBatchVarString(repr)
+	if err != nil {
+		return key, nil, repr, err
+	}
+	value, repr, err = rocksDBBatchVarString(repr)
+	if err != nil {
+		return key, nil, repr, err
+	}
+	key, err = DecodeKey(rawKey)
+	return key, value, repr, err
+}
+
 // RocksDBBatchReader is used to iterate the entries in a RocksDB batch
 // representation.
 //
@@ -366,7 +420,7 @@ type RocksDBBatchReader struct {
 	err error
 
 	// The total number of entries, decoded from the batch header
-	count uint32
+	count int
 
 	// The following all represent the current entry and are updated by Next.
 	// `value` is not applicable for BatchTypeDeletion.
@@ -379,24 +433,17 @@ type RocksDBBatchReader struct {
 // NewRocksDBBatchReader creates a RocksDBBatchReader from the given repr and
 // verifies the header.
 func NewRocksDBBatchReader(repr []byte) (*RocksDBBatchReader, error) {
-	if len(repr) < headerSize {
-		return nil, errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
+	count, repr, err := rocksDBBatchDecodeHeader(repr)
+	if err != nil {
+		return nil, err
 	}
-	seq := binary.LittleEndian.Uint64(repr[:countPos])
-	if seq != 0 {
-		return nil, errors.Errorf("bad sequence: expected 0, but found %d", seq)
-	}
-
 	// Set offset to -1 so the first call to Next will increment it to 0.
-	r := &RocksDBBatchReader{repr: repr, offset: -1}
-	r.count = binary.LittleEndian.Uint32(repr[countPos:headerSize])
-	r.repr = r.repr[headerSize:]
-	return r, nil
+	return &RocksDBBatchReader{repr: repr, count: count, offset: -1}, nil
 }
 
 // Count returns the declared number of entries in the batch.
 func (r *RocksDBBatchReader) Count() int {
-	return int(r.count)
+	return r.count
 }
 
 // Error returns the error, if any, which the iterator encountered.
@@ -472,21 +519,10 @@ func (r *RocksDBBatchReader) Next() bool {
 }
 
 func (r *RocksDBBatchReader) varstring() ([]byte, error) {
-	v, n := binary.Uvarint(r.repr)
-	if n <= 0 {
-		return nil, fmt.Errorf("unable to decode uvarint")
-	}
-	r.repr = r.repr[n:]
-	if v == 0 {
-		return nil, nil
-	}
-	if v > uint64(len(r.repr)) {
-		return nil, fmt.Errorf("malformed varstring, expected %d bytes, but only %d remaining",
-			v, len(r.repr))
-	}
-	s := r.repr[:v]
-	r.repr = r.repr[v:]
-	return s, nil
+	var s []byte
+	var err error
+	s, r.repr, err = rocksDBBatchVarString(r.repr)
+	return s, err
 }
 
 // RocksDBBatchCount provides an efficient way to get the count of mutations

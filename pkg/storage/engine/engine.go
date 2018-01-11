@@ -107,7 +107,7 @@ type Iterator interface {
 	// returned in batch repr format in the separate intent return value.
 	MVCCGet(key roachpb.Key, timestamp hlc.Timestamp,
 		txn *roachpb.Transaction, consistent bool,
-	) (kv []byte, intent []byte, err error)
+	) (*roachpb.Value, []roachpb.Intent, error)
 	// MVCCScan scans the underlying engine from start to end keys and returns
 	// key/value pairs which have a timestamp less than or equal to the supplied
 	// timestamp, up to a max rows. The key/value pairs are returned in the batch
