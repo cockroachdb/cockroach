@@ -13,6 +13,13 @@ SELECT * FROM t.a
 scan [out=(0,1)]
  └── columns: a.x:int:0 a.y:float,null:1
 
+build,exec-explain
+SELECT * FROM t.a
+----
+scan  0  scan  ·      ·          (x, y)  ·
+·     0  ·     table  a@primary  ·       ·
+·     0  ·     spans  ALL        ·       ·
+
 build,exec
 SELECT * FROM t.a
 ----
