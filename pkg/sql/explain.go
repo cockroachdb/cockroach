@@ -48,7 +48,7 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 	optimized := true
 	expanded := true
 	normalizeExprs := true
-	explainer := explainer{
+	flags := explainFlags{
 		showMetadata: false,
 		showExprs:    false,
 		showTypes:    false,
@@ -68,30 +68,30 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 			switch optLower {
 			case "types":
 				newMode = explainPlan
-				explainer.showExprs = true
-				explainer.showTypes = true
+				flags.showExprs = true
+				flags.showTypes = true
 				// TYPES implies METADATA.
-				explainer.showMetadata = true
+				flags.showMetadata = true
 
 			case "symvars":
-				explainer.symbolicVars = true
+				flags.symbolicVars = true
 
 			case "metadata":
-				explainer.showMetadata = true
+				flags.showMetadata = true
 
 			case "qualify":
-				explainer.qualifyNames = true
+				flags.qualifyNames = true
 
 			case "verbose":
 				// VERBOSE implies EXPRS.
-				explainer.showExprs = true
+				flags.showExprs = true
 				// VERBOSE implies QUALIFY.
-				explainer.qualifyNames = true
+				flags.qualifyNames = true
 				// VERBOSE implies METADATA.
-				explainer.showMetadata = true
+				flags.showMetadata = true
 
 			case "exprs":
-				explainer.showExprs = true
+				flags.showExprs = true
 
 			case "noexpand":
 				expanded = false
@@ -133,7 +133,7 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 		// We may want to show placeholder types, so ensure no values
 		// are missing.
 		p.semaCtx.Placeholders.PermitUnassigned()
-		return p.makeExplainPlanNode(explainer, expanded, optimized, n.Statement, plan), nil
+		return p.makeExplainPlanNode(flags, expanded, optimized, plan), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
