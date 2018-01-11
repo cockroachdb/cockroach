@@ -49,8 +49,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	switch n := plan.(type) {
 
 	// Nodes that define their own schema.
-	case *copyNode:
-		return n.resultColumns
 	case *delayedNode:
 		return n.columns
 	case *groupNode:

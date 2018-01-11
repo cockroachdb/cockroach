@@ -50,7 +50,8 @@ func withExecutor(test func(e *Executor, s *Session, evalCtx *tree.EvalContext),
 
 	e := s.Executor().(*Executor)
 	session := NewSession(
-		ctx, SessionArgs{User: security.RootUser}, e, nil, &MemoryMetrics{})
+		ctx, SessionArgs{User: security.RootUser}, e,
+		nil /* remote */, &MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(e)
 
