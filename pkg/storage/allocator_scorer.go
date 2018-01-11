@@ -97,22 +97,62 @@ func (bd balanceDimensions) String() string {
 		bd.totalScore(), int(bd.ranges), bd.bytes, bd.writes)
 }
 
+func (bd balanceDimensions) compactString(options scorerOptions) string {
+	if !options.statsBasedRebalancingEnabled {
+		return fmt.Sprintf("%d", bd.ranges)
+	}
+	return bd.String()
+}
+
 // candidate store for allocation.
 type candidate struct {
-	store           roachpb.StoreDescriptor
-	valid           bool
-	constraintScore float64
-	convergesScore  int
-	balanceScore    balanceDimensions
-	rangeCount      int
-	details         string
+	store          roachpb.StoreDescriptor
+	valid          bool
+	diversityScore float64
+	preferredScore int
+	convergesScore int
+	balanceScore   balanceDimensions
+	rangeCount     int
+	details        string
+}
+
+func (c candidate) constraintScore() float64 {
+	return c.diversityScore + float64(c.preferredScore)
 }
 
 func (c candidate) String() string {
-	return fmt.Sprintf("s%d, valid:%t, constraint:%.2f, converges:%d, balance:%s, rangeCount:%d, "+
-		"logicalBytes:%s, writesPerSecond:%.2f, details:(%s)",
-		c.store.StoreID, c.valid, c.constraintScore, c.convergesScore, c.balanceScore, c.rangeCount,
-		humanizeutil.IBytes(c.store.Capacity.LogicalBytes), c.store.Capacity.WritesPerSecond, c.details)
+	str := fmt.Sprintf("s%d, valid:%t, constraint:%.2f, converges:%d, balance:%s, rangeCount:%d, "+
+		"logicalBytes:%s, writesPerSecond:%.2f",
+		c.store.StoreID, c.valid, c.constraintScore(), c.convergesScore, c.balanceScore, c.rangeCount,
+		humanizeutil.IBytes(c.store.Capacity.LogicalBytes), c.store.Capacity.WritesPerSecond)
+	if c.details != "" {
+		return fmt.Sprintf("%s, details:(%s)", str, details)
+	}
+	return str
+}
+
+func (c candidate) compactString(options scorerOptions) string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "s%d", c.store.StoreID)
+	if !c.valid {
+		fmt.Fprintf(&buf, ", valid:%t", c.valid)
+	}
+	if c.diversityScore != 0 {
+		fmt.Fprintf(&buf, ", diversity:%.2f", c.diversityScore)
+	}
+	if c.preferredScore != 0 {
+		fmt.Fprintf(&buf, ", preferred:%d", c.preferredScore)
+	}
+	fmt.Fprintf(&buf, ", converges:%d, balance:%s, rangeCount:%d",
+		c.convergesScore, c.balanceScore.compactString(options), c.rangeCount)
+	if options.statsBasedRebalancingEnabled {
+		fmt.Fprintf(&buf, ", logicalBytes:%s, writesPerSecond:%.2f",
+			humanizeutil.IBytes(c.store.Capacity.LogicalBytes), c.store.Capacity.WritesPerSecond)
+	}
+	if c.details != "" {
+		fmt.Fprintf(&buf, ", details:(%s)", c.details)
+	}
+	return buf.String()
 }
 
 // less returns true if o is a better fit for some range than c is.
@@ -123,8 +163,8 @@ func (c candidate) less(o candidate) bool {
 	if !c.valid {
 		return true
 	}
-	if c.constraintScore != o.constraintScore {
-		return c.constraintScore < o.constraintScore
+	if c.constraintScore() != o.constraintScore() {
+		return c.constraintScore() < o.constraintScore()
 	}
 	if c.convergesScore != o.convergesScore {
 		return c.convergesScore < o.convergesScore
@@ -144,8 +184,8 @@ func (c candidate) worthRebalancingTo(o candidate, options scorerOptions) bool {
 	if !c.valid {
 		return true
 	}
-	if c.constraintScore != o.constraintScore {
-		return c.constraintScore < o.constraintScore
+	if c.constraintScore() != o.constraintScore() {
+		return c.constraintScore() < o.constraintScore()
 	}
 	if c.convergesScore != o.convergesScore {
 		return c.convergesScore < o.convergesScore
@@ -186,6 +226,20 @@ func (cl candidateList) String() string {
 	return buffer.String()
 }
 
+func (cl candidateList) compactString(options scorerOptions) string {
+	if len(cl) == 0 {
+		return "[]"
+	}
+	var buffer bytes.Buffer
+	buffer.WriteRune('[')
+	for _, c := range cl {
+		buffer.WriteRune('\n')
+		buffer.WriteString(c.compactString(options))
+	}
+	buffer.WriteRune(']')
+	return buffer.String()
+}
+
 // byScore implements sort.Interface to sort by scores.
 type byScore candidateList
 
@@ -202,7 +256,7 @@ var _ sort.Interface = byScoreAndID(nil)
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].constraintScore == c[j].constraintScore &&
+	if c[i].constraintScore() == c[j].constraintScore() &&
 		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore.totalScore() == c[j].balanceScore.totalScore() &&
 		c[i].rangeCount == c[j].rangeCount &&
@@ -232,8 +286,8 @@ func (cl candidateList) best() candidateList {
 		return cl
 	}
 	for i := 1; i < len(cl); i++ {
-		if cl[i].constraintScore < cl[0].constraintScore ||
-			(cl[i].constraintScore == cl[len(cl)-1].constraintScore &&
+		if cl[i].constraintScore() < cl[0].constraintScore() ||
+			(cl[i].constraintScore() == cl[len(cl)-1].constraintScore() &&
 				cl[i].convergesScore < cl[len(cl)-1].convergesScore) {
 			return cl[:i]
 		}
@@ -257,8 +311,8 @@ func (cl candidateList) worst() candidateList {
 	}
 	// Find the worst constraint values.
 	for i := len(cl) - 2; i >= 0; i-- {
-		if cl[i].constraintScore > cl[len(cl)-1].constraintScore ||
-			(cl[i].constraintScore == cl[len(cl)-1].constraintScore &&
+		if cl[i].constraintScore() > cl[len(cl)-1].constraintScore() ||
+			(cl[i].constraintScore() == cl[len(cl)-1].constraintScore() &&
 				cl[i].convergesScore > cl[len(cl)-1].convergesScore) {
 			return cl[i+1:]
 		}
@@ -358,12 +412,12 @@ func allocateCandidates(
 		diversityScore := diversityAllocateScore(s, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 		candidates = append(candidates, candidate{
-			store:           s,
-			valid:           true,
-			constraintScore: diversityScore + float64(preferredMatched),
-			balanceScore:    balanceScore,
-			rangeCount:      int(s.Capacity.RangeCount),
-			details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, preferredMatched),
+			store:          s,
+			valid:          true,
+			diversityScore: diversityScore,
+			preferredScore: preferredMatched,
+			balanceScore:   balanceScore,
+			rangeCount:     int(s.Capacity.RangeCount),
 		})
 	}
 	if options.deterministic {
@@ -415,13 +469,13 @@ func removeCandidates(
 			convergesScore = 1
 		}
 		candidates = append(candidates, candidate{
-			store:           s,
-			valid:           true,
-			constraintScore: diversityScore + float64(preferredMatched),
-			convergesScore:  convergesScore,
-			balanceScore:    balanceScore,
-			rangeCount:      int(s.Capacity.RangeCount),
-			details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, preferredMatched),
+			store:          s,
+			valid:          true,
+			diversityScore: diversityScore,
+			preferredScore: preferredMatched,
+			convergesScore: convergesScore,
+			balanceScore:   balanceScore,
+			rangeCount:     int(s.Capacity.RangeCount),
 		})
 	}
 	if options.deterministic {
@@ -527,13 +581,13 @@ func rebalanceCandidates(
 				convergesScore = 1
 			}
 			existingCandidates = append(existingCandidates, candidate{
-				store:           s,
-				valid:           true,
-				constraintScore: diversityScore + float64(storeInfo.matched),
-				convergesScore:  convergesScore,
-				balanceScore:    balanceScore,
-				rangeCount:      int(s.Capacity.RangeCount),
-				details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, storeInfo.matched),
+				store:          s,
+				valid:          true,
+				diversityScore: diversityScore,
+				preferredScore: storeInfo.matched,
+				convergesScore: convergesScore,
+				balanceScore:   balanceScore,
+				rangeCount:     int(s.Capacity.RangeCount),
 			})
 		} else {
 			if !storeInfo.ok || !maxCapacityOK {
@@ -555,13 +609,13 @@ func rebalanceCandidates(
 			}
 			diversityScore := diversityRebalanceScore(s, existingNodeLocalities)
 			candidates = append(candidates, candidate{
-				store:           s,
-				valid:           true,
-				constraintScore: diversityScore + float64(storeInfo.matched),
-				convergesScore:  convergesScore,
-				balanceScore:    balanceScore,
-				rangeCount:      int(s.Capacity.RangeCount),
-				details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, storeInfo.matched),
+				store:          s,
+				valid:          true,
+				diversityScore: diversityScore,
+				preferredScore: storeInfo.matched,
+				convergesScore: convergesScore,
+				balanceScore:   balanceScore,
+				rangeCount:     int(s.Capacity.RangeCount),
 			})
 		}
 	}
