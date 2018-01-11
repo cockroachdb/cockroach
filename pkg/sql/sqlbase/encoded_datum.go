@@ -74,7 +74,7 @@ func (ed *EncDatum) String(typ *ColumnType) string {
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
 // SetEncoded wipes the underlying Datum.
-func EncDatumFromEncoded(typ *ColumnType, enc DatumEncoding, encoded []byte) EncDatum {
+func EncDatumFromEncoded(enc DatumEncoding, encoded []byte) EncDatum {
 	if len(encoded) == 0 {
 		panic(fmt.Sprintf("empty encoded value"))
 	}
@@ -99,14 +99,14 @@ func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatu
 		if err != nil {
 			return EncDatum{}, nil, err
 		}
-		ed := EncDatumFromEncoded(typ, enc, buf[:encLen])
+		ed := EncDatumFromEncoded(enc, buf[:encLen])
 		return ed, buf[encLen:], nil
 	case DatumEncoding_VALUE:
 		typeOffset, encLen, err := encoding.PeekValueLength(buf)
 		if err != nil {
 			return EncDatum{}, nil, err
 		}
-		ed := EncDatumFromEncoded(typ, enc, buf[typeOffset:encLen])
+		ed := EncDatumFromEncoded(enc, buf[typeOffset:encLen])
 		return ed, buf[encLen:], nil
 	default:
 		panic(fmt.Sprintf("unknown encoding %s", enc))
