@@ -60,13 +60,13 @@ func (p *planner) changePrivileges(
 	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
 ) (planNode, error) {
 	// Check whether grantees exists
-	users, err := GetAllUsers(ctx, p)
+	users, err := p.GetAllUsersAndRoles(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, grantee := range grantees {
 		if _, ok := users[string(grantee)]; !ok {
-			return nil, errors.Errorf("user %s does not exist", &grantee)
+			return nil, errors.Errorf("user or role %s does not exist", &grantee)
 		}
 	}
 
