@@ -573,8 +573,8 @@ func (mrf *MultiRowFetcher) processKV(
 		}
 
 		// Fill in the column values that are part of the index key.
-		for i, v := range table.keyVals {
-			table.row[table.indexColIdx[i]] = v
+		for i := range table.keyVals {
+			table.row[table.indexColIdx[i]] = table.keyVals[i]
 		}
 	}
 
@@ -744,8 +744,10 @@ func (mrf *MultiRowFetcher) processValueBytes(
 
 	var colIDDiff uint32
 	var lastColID ColumnID
+	var dataOffset int
+	var typ encoding.Type
 	for len(valueBytes) > 0 {
-		_, _, colIDDiff, _, err = encoding.DecodeValueTag(valueBytes)
+		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -753,7 +755,7 @@ func (mrf *MultiRowFetcher) processValueBytes(
 		lastColID = colID
 		if !table.neededCols.Contains(int(colID)) {
 			// This column wasn't requested, so read its length and skip it.
-			_, len, err := encoding.PeekValueLength(valueBytes)
+			len, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
 			if err != nil {
 				return "", "", err
 			}
