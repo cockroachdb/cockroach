@@ -219,6 +219,23 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
     this.props.setShow(selected.value);
   }
 
+  renderTable(jobs: Job[]) {
+    if (_.isEmpty(jobs)) {
+      return <h2 className="no-results">No Results</h2>;
+    }
+
+    return (
+      <JobsSortedTable
+        data={jobs}
+        sortSetting={this.props.sort}
+        onChangeSortSetting={this.props.setSort}
+        className="jobs-table"
+        rowClass={job => "jobs-table__row--" + job.status}
+        columns={jobsTableColumns}
+      />
+    );
+  }
+
   render() {
     const data = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     return <div className="jobs-page">
@@ -251,18 +268,9 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
         </PageConfig>
       </div>
       <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
-        <Loading loading={_.isEmpty(data)} className="loading-image loading-image__text" text="No Results">
-          <section className="section">
-            <JobsSortedTable
-              data={data}
-              sortSetting={this.props.sort}
-              onChangeSortSetting={this.props.setSort}
-              className="jobs-table"
-              rowClass={job => "jobs-table__row--" + job.status}
-              columns={jobsTableColumns}
-            />
-          </section>
-        </Loading>
+        <section className="section">
+          { renderTable(data) }
+        </section>
       </Loading>
     </div>;
   }
