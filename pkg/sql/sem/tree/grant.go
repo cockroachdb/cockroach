@@ -82,3 +82,21 @@ func (node *Grant) Format(ctx *FmtCtx) {
 	ctx.WriteString(" TO ")
 	ctx.FormatNode(&node.Grantees)
 }
+
+// GrantRole represents a GRANT <role> statement.
+type GrantRole struct {
+	Roles       NameList
+	Members     NameList
+	AdminOption bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *GrantRole) Format(ctx *FmtCtx) {
+	ctx.WriteString("GRANT ")
+	ctx.FormatNode(&node.Roles)
+	ctx.WriteString(" TO ")
+	ctx.FormatNode(&node.Members)
+	if node.AdminOption {
+		ctx.WriteString(" WITH ADMIN OPTION")
+	}
+}

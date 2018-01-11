@@ -13,3 +13,9 @@ CREATE ROLE foo
 
 statement error pq: unknown statement type: \*tree\.DropRole
 DROP ROLE foo
+
+statement error pq: unknown statement type: \*tree\.GrantRole
+GRANT foo TO testuser
+
+statement error pq: unknown statement type: \*tree\.RevokeRole
+REVOKE foo FROM testuser

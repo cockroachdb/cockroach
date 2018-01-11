@@ -174,10 +174,19 @@ func (n *DropUserNode) startExec(params runParams) error {
 		if rowsAffected == 0 && !n.ifExists {
 			return errors.Errorf("%s %s does not exist", entryType, normalizedUsername)
 		}
-
-		// TODO(mberhault): once role memberships are possible, drop all memberships involving this user/role.
-
 		numDeleted += rowsAffected
+
+		// Drop all role memberships involving the user/role.
+		_, err = internalExecutor.ExecuteStatementInTransaction(
+			params.ctx,
+			"drop-role-membership",
+			params.p.txn,
+			`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
+			normalizedUsername,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	n.run.numDeleted = numDeleted

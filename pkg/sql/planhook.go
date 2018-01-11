@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -67,11 +68,13 @@ type PlanHookState interface {
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
 	DistLoader() *DistLoader
+	LeaseMgr() *LeaseManager
 	TypeAsString(e tree.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(
 		opts tree.KVOptions, valuelessOpts map[string]bool,
 	) (func() (map[string]string, error), error)
+	Txn() *client.Txn
 	User() string
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
@@ -82,6 +85,7 @@ type PlanHookState interface {
 	DropUserNode(
 		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 	) (*DropUserNode, error)
+	GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

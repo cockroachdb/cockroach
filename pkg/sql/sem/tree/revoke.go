@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
-// Revoke represents a REVOKE statements.
+// Revoke represents a REVOKE statement.
 // PrivilegeList and TargetList are defined in grant.go
 type Revoke struct {
 	Privileges privilege.List
@@ -43,4 +43,22 @@ func (node *Revoke) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" FROM ")
 	ctx.FormatNode(&node.Grantees)
+}
+
+// RevokeRole represents a REVOKE <role> statement.
+type RevokeRole struct {
+	Roles       NameList
+	Members     NameList
+	AdminOption bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *RevokeRole) Format(ctx *FmtCtx) {
+	ctx.WriteString("REVOKE ")
+	if node.AdminOption {
+		ctx.WriteString("ADMIN OPTION FOR ")
+	}
+	ctx.FormatNode(&node.Roles)
+	ctx.WriteString(" FROM ")
+	ctx.FormatNode(&node.Members)
 }

@@ -100,3 +100,286 @@ DROP ROLE IF EXISTS rolec, roled, rolee
 
 statement ok
 DROP ROLE rolea, roleb
+
+query T colnames
+SHOW ROLES
+----
+username
+admin
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+CREATE ROLE testrole
+
+# Test that only roles are grantable.
+statement error pq: role testuser does not exist
+GRANT testuser TO testrole
+
+statement error pq: user or role unknownuser does not exist
+GRANT testrole TO unknownuser
+
+statement error pq: role unknownrole does not exist
+GRANT unknownrole TO testuser
+
+# Test role "grant" and WITH ADMIN option.
+user testuser
+
+statement error pq: testuser is not a superuser or role admin for role testrole
+GRANT testrole TO testuser2
+
+user root
+
+statement ok
+GRANT testrole TO testuser
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role      member    isAdmin
+admin     root      true
+testrole  testuser  false
+
+user testuser
+
+statement error pq: testuser is not a superuser or role admin for role testrole
+GRANT testrole TO testuser2
+
+user root
+
+statement ok
+GRANT testrole TO testuser WITH ADMIN OPTION
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role      member    isAdmin
+admin     root      true
+testrole  testuser  true
+
+user testuser
+
+statement ok
+GRANT testrole TO testuser2 WITH ADMIN OPTION
+
+user root
+
+statement ok
+GRANT admin TO testuser
+
+# Dropping users/roles deletes all their memberships.
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role      member     isAdmin
+admin     root       true
+admin     testuser   false
+testrole  testuser   true
+testrole  testuser2  true
+
+statement ok
+DROP USER testuser
+
+statement ok
+CREATE USER testuser
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role      member     isAdmin
+admin     root       true
+testrole  testuser2  true
+
+statement ok
+DROP ROLE testrole
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role      member     isAdmin
+admin     root       true
+
+# Test cycle detection.
+statement error pq: admin cannot be a member of itself
+GRANT admin TO admin
+
+statement ok
+CREATE ROLE rolea
+
+statement ok
+CREATE ROLE roleb
+
+statement ok
+CREATE ROLE rolec
+
+statement ok
+CREATE ROLE roled
+
+statement ok
+GRANT rolea TO roleb
+
+statement error pq: making rolea a member of roleb would create a cycle
+GRANT roleb TO rolea
+
+statement ok
+GRANT roleb TO rolec
+
+statement ok
+GRANT rolec TO roled
+
+statement error pq: rolea cannot be a member of itself
+GRANT rolea TO rolea
+
+statement error pq: making rolea a member of roleb would create a cycle
+GRANT roleb TO rolea
+
+statement error pq: making rolea a member of rolec would create a cycle
+GRANT rolec TO rolea
+
+statement error pq: making rolea a member of roled would create a cycle
+GRANT roled TO rolea
+
+statement ok
+CREATE ROLE rolee
+
+# Test inherited ADMIN OPTION.
+statement ok
+GRANT roled TO testuser
+
+statement ok
+GRANT rolea TO roleb WITH ADMIN OPTION
+
+user testuser
+
+statement error pq: testuser is not a superuser or role admin for role roled
+GRANT roled TO rolee
+
+statement error pq: testuser is not a superuser or role admin for role rolec
+GRANT rolec TO rolee
+
+statement error pq: testuser is not a superuser or role admin for role roleb
+GRANT roleb TO rolee
+
+statement ok
+GRANT rolea TO rolee
+
+user root
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  roleb     true
+rolea  rolee     false
+roleb  rolec     false
+rolec  roled     false
+roled  testuser  false
+
+statement ok
+DROP ROLE rolea
+
+statement ok
+DROP ROLE rolec
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+roled  testuser false
+
+query T
+SHOW ROLES
+----
+admin
+roleb
+roled
+rolee
+
+statement ok
+DROP ROLE roleb
+
+statement ok
+DROP ROLE roled
+
+statement ok
+DROP ROLE rolee
+
+statement error pq: user root cannot be removed from role admin or lose the ADMIN OPTION
+REVOKE admin FROM root
+
+statement error pq: user root cannot be removed from role admin or lose the ADMIN OPTION
+REVOKE ADMIN OPTION FOR admin FROM root
+
+statement error pq: user or role unknownuser does not exist
+REVOKE ADMIN OPTION FOR admin FROM unknownuser
+
+statement error pq: role unknownrole does not exist
+REVOKE ADMIN OPTION FOR unknownrole FROM root
+
+statement ok
+CREATE ROLE rolea
+
+statement ok
+CREATE ROLE roleb
+
+statement ok
+GRANT rolea,roleb TO testuser WITH ADMIN OPTION
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  testuser  true
+roleb  testuser  true
+
+user testuser
+
+statement ok
+GRANT rolea,roleb TO root WITH ADMIN OPTION
+
+user root
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  root      true
+rolea  testuser  true
+roleb  root      true
+roleb  testuser  true
+
+user testuser
+
+statement ok
+REVOKE ADMIN OPTION FOR rolea FROM testuser
+
+statement error pq: testuser is not a superuser or role admin for role rolea
+REVOKE ADMIN OPTION FOR rolea FROM root
+
+statement ok
+REVOKE roleb FROM root
+
+user root
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
+rolea  root      true
+rolea  testuser  false
+roleb  testuser  true
+
+statement ok
+REVOKE rolea, roleb FROM testuser, root
+
+query TTB colnames
+SELECT * FROM system.role_members
+----
+role   member    isAdmin
+admin  root      true
