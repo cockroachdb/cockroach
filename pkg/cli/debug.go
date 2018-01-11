@@ -1000,7 +1000,6 @@ var debugCmds = []*cobra.Command{
 	debugCompactCmd,
 	debugSSTablesCmd,
 	debugGossipValuesCmd,
-	rangeCmd,
 	debugEnvCmd,
 	debugZipCmd,
 }
