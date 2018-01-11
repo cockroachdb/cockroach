@@ -2217,6 +2217,7 @@ privilege_list:
 privilege:
 	name
 | CREATE
+| GRANT
 | SELECT
 
 reset_stmt:
@@ -7424,7 +7425,6 @@ col_name_keyword:
 | FLOAT
 | FLOAT4
 | FLOAT8
-| GRANT
 | GREATEST
 | GROUPING
 | IF
@@ -7479,7 +7479,6 @@ col_name_keyword:
 // TODO(dan): see if we can move MAXVALUE and MINVALUE to a less restricted list
 type_func_name_keyword:
   COLLATION
-| CREATE
 | CROSS
 | FAMILY
 | FULL
@@ -7518,6 +7517,7 @@ reserved_keyword:
 | COLLATE
 | COLUMN
 | CONSTRAINT
+| CREATE
 | CURRENT_CATALOG
 | CURRENT_DATE
 | CURRENT_ROLE
@@ -7538,6 +7538,7 @@ reserved_keyword:
 | FOR
 | FOREIGN
 | FROM
+| GRANT
 | GROUP
 | HAVING
 | IN
