@@ -223,8 +223,6 @@ func assignSequenceOptions(
 			}
 		case tree.SeqOptStart:
 			opts.Start = *option.IntVal
-		case tree.SeqOptCycle:
-			opts.Cycle = option.BoolVal
 		}
 	}
 
