@@ -1615,31 +1615,58 @@ func mvccScanInternal(
 	txn *roachpb.Transaction,
 	reverse bool,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	var res []roachpb.KeyValue
+	// TODO(peter): delete the old code.
+	if false {
+		var res []roachpb.KeyValue
+		if max == 0 {
+			return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
+		}
+
+		var resumeSpan *roachpb.Span
+		intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse,
+			func(kv roachpb.KeyValue) (bool, error) {
+				if int64(len(res)) == max {
+					// Another key was found beyond the max limit.
+					if reverse {
+						resumeSpan = &roachpb.Span{Key: key, EndKey: kv.Key.Next()}
+					} else {
+						resumeSpan = &roachpb.Span{Key: kv.Key, EndKey: endKey}
+					}
+					return true, nil
+				}
+				res = append(res, kv)
+				return false, nil
+			})
+
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return res, resumeSpan, intents, nil
+	}
+
 	if max == 0 {
 		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
 	}
 
-	var resumeSpan *roachpb.Span
-	intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse,
-		func(kv roachpb.KeyValue) (bool, error) {
-			if int64(len(res)) == max {
-				// Another key was found beyond the max limit.
-				if reverse {
-					resumeSpan = &roachpb.Span{Key: key, EndKey: kv.Key.Next()}
-				} else {
-					resumeSpan = &roachpb.Span{Key: kv.Key, EndKey: endKey}
-				}
-				return true, nil
-			}
-			res = append(res, kv)
-			return false, nil
-		})
+	iter := engine.NewIterator(false)
+	kvData, intentData, err := iter.MVCCScan(
+		key, endKey, max, timestamp, txn, consistent, reverse)
+	iter.Close()
 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return res, resumeSpan, intents, nil
+
+	kvs, resumeKey, intents, err := buildScanResults(kvData, intentData, max, consistent)
+	var resumeSpan *roachpb.Span
+	if resumeKey != nil {
+		if reverse {
+			resumeSpan = &roachpb.Span{Key: key, EndKey: resumeKey.Next()}
+		} else {
+			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: endKey}
+		}
+	}
+	return kvs, resumeSpan, intents, err
 }
 
 func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
@@ -1701,6 +1728,12 @@ func buildScanResults(
 		return nil, nil, intents, nil
 	}
 
+	// Iterator.MVCCScan will return up to max+1 results. The extra result is
+	// returned so that we can generate the resumeKey in the same manner as the
+	// old Go version of MVCCScan.
+	//
+	// TODO(peter): We should change the resumeKey to be Key.Next() of the last
+	// key returned.
 	n := count
 	if n > int(max) {
 		n = int(max)
@@ -1721,7 +1754,7 @@ func buildScanResults(
 
 	var resumeKey roachpb.Key
 	if count > int(max) {
-		key, _, kvData, err = rocksDBBatchDecodeValue(kvData)
+		key, _, _, err = rocksDBBatchDecodeValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1752,31 +1785,9 @@ func MVCCScan(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	// TODO(peter): delete the old code.
-	if false {
-		return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
-			consistent, txn, false /* reverse */)
-	}
+	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
+		consistent, txn, false /* reverse */)
 
-	if max == 0 {
-		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
-	}
-
-	iter := engine.NewIterator(false)
-	kvData, intentData, err := iter.MVCCScan(
-		key, endKey, max, timestamp, txn, consistent, false /* reverse */)
-	iter.Close()
-
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	kvs, resumeKey, intents, err := buildScanResults(kvData, intentData, max, consistent)
-	var resumeSpan *roachpb.Span
-	if resumeKey != nil {
-		resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: endKey}
-	}
-	return kvs, resumeSpan, intents, err
 }
 
 // MVCCReverseScan scans the key range [start,end) key up to some maximum
@@ -1792,7 +1803,6 @@ func MVCCReverseScan(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	// TODO(peter): Support reverse scans.
 	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
 		consistent, txn, true /* reverse */)
 }
