@@ -31,6 +31,9 @@ import (
 const (
 	// splitQueueTimerDuration is the duration between splits of queued ranges.
 	splitQueueTimerDuration = 0 // zero duration to process splits greedily.
+	// splitByLoadMaxRanges creates a limit on splitting by load based on
+	// the total number of ranges in the cluster.
+	splitByLoadMaxRanges = 1000
 )
 
 // splitQueue manages a queue of ranges slated to be split due to size
@@ -76,17 +79,64 @@ func (sq *splitQueue) shouldQueue(
 
 	// Add priority based on the size of range compared to the max
 	// size for the zone it's in.
-	if ratio := float64(repl.GetMVCCStats().Total()) / float64(repl.GetMaxBytes()); ratio > 1 {
+	totalBytes := repl.GetMVCCStats().Total()
+	if ratio := float64(totalBytes) / float64(repl.GetMaxBytes()); ratio > 1 {
 		priority += ratio
 		shouldQ = true
 	}
+
+	// If there's a split-by-load for this range, split if the range
+	// exceeds the minimum size in bytes.
+	if !shouldQ {
+		repl.splitMu.Lock()
+		defer repl.splitMu.Unlock()
+		// Only queue if the total number of ranges is less than the max.
+		if repl.store.cfg.StorePool.totalRanges() < splitByLoadMaxRanges {
+			if splitByLoad, _ := repl.splitMu.split.Key(); splitByLoad {
+				zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
+				if err != nil {
+					log.Warningf(ctx, "could not get zone: %s", err)
+				} else if totalBytes > zone.RangeMinBytes {
+					priority += 1
+					shouldQ = true
+				}
+			}
+		}
+	}
+
 	return
 }
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.SystemConfig) error {
-	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()
+
+	// First, handle the case of splitting by load.
+	r.splitMu.Lock()
+	splitByLoad, splitByLoadKey := r.splitMu.split.Key()
+	if splitByLoad {
+		r.splitMu.split = nil
+	}
+	r.splitMu.Unlock()
+	if splitByLoad {
+		log.Eventf(ctx, "splitting based on load")
+		log.Warningf(ctx, "splitting based on load")
+		if _, _, pErr := r.adminSplitWithDescriptor(
+			ctx,
+			roachpb.AdminSplitRequest{
+				Span: roachpb.Span{
+					Key: splitByLoadKey,
+				},
+				SplitKey: splitByLoadKey,
+			},
+			desc,
+		); pErr != nil {
+			return errors.Wrapf(pErr.GoError(), "unable to split %s at key %q", r, splitByLoadKey)
+		}
+		return nil
+	}
+
+	// Handle the case of splitting due to zone config maps.
 	if splitKey := sysCfg.ComputeSplitKey(desc.StartKey, desc.EndKey); splitKey != nil {
 		if _, _, pErr := r.adminSplitWithDescriptor(
 			ctx,

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -497,6 +498,15 @@ type Replica struct {
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
+	}
+
+	// split keeps information for load-based splitting.
+	splitMu struct {
+		syncutil.Mutex
+		nanos int64   // most recent time in nanos
+		count int64   // reqs since last nanos
+		rate  float64 // last reqs/ns rate
+		split *split.Split
 	}
 
 	unreachablesMu struct {
@@ -2296,6 +2306,24 @@ func (r *Replica) beginCmds(
 		} else {
 			ba.Timestamp = r.store.Clock().Now()
 		}
+	}
+
+	// Handle load-based splitting.
+	r.splitMu.Lock()
+	r.splitMu.count += int64(len(ba.Requests))
+	record, split := r.needsSplitByLoadLocked()
+	if record {
+		for _, s := range spans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal) {
+			r.splitMu.split.Record(s, rand.Intn)
+		}
+		for _, s := range spans.GetSpans(spanset.SpanReadWrite, spanset.SpanGlobal) {
+			r.splitMu.split.Record(s, rand.Intn)
+		}
+	}
+	r.splitMu.Unlock()
+	// Add to the split queue after releasing splitMu.
+	if split {
+		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 
 	ec := &endCmds{
@@ -5718,6 +5746,40 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	return config.SystemConfig{Values: kvs}, nil
+}
+
+const splitByLoadRateThreshold float64 = 200 / 1e9 // 200 reqs/s
+
+// needsSplitByLoadLocked returns two bools indicating first, whether
+// the range is over the threshold for splitting by load and second,
+// whether the range is ready to be added to the split queue.
+func (r *Replica) needsSplitByLoadLocked() (bool, bool) {
+	// First compute requests per second since the last check.
+	nowNanos := r.store.Clock().PhysicalNow()
+	duration := nowNanos - r.splitMu.nanos
+	if duration < int64(time.Second) {
+		return r.splitMu.split != nil, false
+	}
+	r.splitMu.rate = float64(r.splitMu.count) / float64(duration)
+	r.splitMu.nanos = nowNanos
+	r.splitMu.count = 0
+
+	// If requests exceed the threshold, start actively tracking potential
+	// for splitting this range based on load.
+	if r.splitMu.rate >= splitByLoadRateThreshold {
+		if r.splitMu.split != nil {
+			if r.splitMu.split.Ready(nowNanos) {
+				// We're ready to add this range to the split queue.
+				return true, true
+			}
+		} else {
+			r.splitMu.split = split.New(nowNanos)
+		}
+		return true, false
+	}
+
+	r.splitMu.split = nil
+	return false, false
 }
 
 // needsSplitBySize returns true if the size of the range requires it

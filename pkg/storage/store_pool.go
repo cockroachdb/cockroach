@@ -271,6 +271,18 @@ func (sp *StorePool) String() string {
 	return buf.String()
 }
 
+// totalRanges returns the total count of ranges in the system.
+// TODO(spencer): improve performance here.
+func (sp *StorePool) totalRanges() int64 {
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
+	var count int64
+	for _, detail := range sp.detailsMu.storeDetails {
+		count += int64(detail.desc.Capacity.RangeCount)
+	}
+	return count
+}
+
 // storeGossipUpdate is the gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
