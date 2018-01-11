@@ -734,15 +734,7 @@ func (s *Server) Start(ctx context.Context) error {
 	m := cmux.New(ln)
 
 	pgL := m.Match(func(r io.Reader) bool {
-		// We must check operational() to force all requests into anyL before the
-		// server is operational. This is because we don't start accepting from pgL
-		// until after the init server, but we don't want SQL connections to hang
-		// against a cluster that is awaiting initialization.
-		//
-		// TODO(tschottdorf): rearrange the code so that we accept on pgL early,
-		// but return "nice" PG errors to clients when `!operational()`. This
-		// incurs some code shuffling in this file.
-		return s.serveMode.operational() && pgwire.Match(r)
+		return pgwire.Match(r)
 	})
 
 	anyL := m.Match(cmux.Any())
@@ -903,6 +895,18 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.Settings.Version.ServerVersion, &s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
+	}
+
+	// Signal readiness. This unblocks the process when running with
+	// --background or under systemd. At this point we have bound our
+	// listening port but the server is not yet running, so any
+	// connection attempts will be queued up in the kernel. We turn on
+	// servers below, first HTTP and later pgwire. If we're in
+	// initializing mode, we don't start the pgwire server until after
+	// initialization completes, so connections to that port will
+	// continue to block until we're initialized.
+	if err := sdnotify.Ready(); err != nil {
+		log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 	}
 
 	// Filter the gossip bootstrap resolvers based on the listen and
@@ -1319,9 +1323,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		}
 	}
 
-	if err := sdnotify.Ready(); err != nil {
-		log.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
-	}
 	log.Event(ctx, "server ready")
 
 	return nil
