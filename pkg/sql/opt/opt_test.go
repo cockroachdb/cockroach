@@ -83,6 +83,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -308,10 +309,6 @@ func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optba
 
 func TestOpt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	catalog := testCatalog{kvDB: kvDB}
 
 	paths, err := filepath.Glob(*logicTestData)
 	if err != nil {
@@ -323,6 +320,11 @@ func TestOpt(t *testing.T) {
 
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			catalog := testCatalog{kvDB: kvDB}
+
 			runTest(t, path, func(d *testdata) string {
 				var e *Expr
 				var varTypes []types.T
@@ -400,12 +402,47 @@ func TestOpt(t *testing.T) {
 							d.fatalf(t, "%v", err)
 						}
 
-					case "exec":
+					case "exec-raw":
 						_, err := sqlDB.Exec(d.sql)
 						if err != nil {
 							d.fatalf(t, "%v", err)
 						}
 						return ""
+
+					case "exec":
+						if e == nil {
+							d.fatalf(t, "no expression for exec")
+						}
+						bld := s.Executor().(ExecBuilderFactory).NewExecBuilder()
+						n, err := makeExec(e, bld)
+						if err != nil {
+							d.fatalf(t, "MakeExec: %v", err)
+						}
+						results, err := n.Run()
+						if err != nil {
+							d.fatalf(t, "Run: %v", err)
+						}
+						// Format the results.
+						var buf bytes.Buffer
+						tw := tabwriter.NewWriter(
+							&buf,
+							2,   /* minwidth */
+							1,   /* tabwidth */
+							2,   /* padding */
+							' ', /* padchar */
+							0,   /* flags */
+						)
+						for _, r := range results {
+							for j, v := range r {
+								if j > 0 {
+									fmt.Fprintf(tw, "\t")
+								}
+								fmt.Fprintf(tw, "%s", v)
+							}
+							fmt.Fprintf(tw, "\n")
+						}
+						_ = tw.Flush()
+						return buf.String()
 
 					case "build":
 						stmt, err := parser.ParseOne(d.sql)
@@ -416,7 +453,6 @@ func TestOpt(t *testing.T) {
 						if err != nil {
 							return fmt.Sprintf("error: %v\n", err)
 						}
-						return e.String()
 
 					case "build-scalar":
 						buildScalarFn()
