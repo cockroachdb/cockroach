@@ -552,7 +552,6 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterUserSetPasswordNode{}): "alter user",
 	reflect.TypeOf(&cancelQueryNode{}):          "cancel query",
 	reflect.TypeOf(&controlJobNode{}):           "control job",
-	reflect.TypeOf(&copyNode{}):                 "copy",
 	reflect.TypeOf(&createDatabaseNode{}):       "create database",
 	reflect.TypeOf(&createIndexNode{}):          "create index",
 	reflect.TypeOf(&createTableNode{}):          "create table",

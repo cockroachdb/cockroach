@@ -425,7 +425,8 @@ func (e *Executor) Start(
 	})
 
 	ctx = log.WithLogTag(ctx, "startup", nil)
-	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
+	startupSession := NewSession(
+		ctx, SessionArgs{}, e, nil /* remote */, startupMemMetrics, nil /* conn */)
 	startupSession.StartUnlimitedMonitor()
 	if err := e.virtualSchemas.init(
 		ctx, startupSession.newPlanner(
@@ -638,7 +639,7 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execRequest(session, stmts, pinfo, copyMsgNone)
+	return e.execRequest(session, stmts, pinfo)
 }
 
 // ExecutePreparedStatement executes the given statement and returns a response.
@@ -686,23 +687,7 @@ func (e *Executor) execPrepared(
 	}
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	return e.execParsed(session, stmts, pinfo, copyMsgNone)
-}
-
-// CopyData adds data to the COPY buffer and executes if there are enough rows.
-func (e *Executor) CopyData(session *Session, data string) error {
-	return e.execRequest(session, data, nil, copyMsgData)
-}
-
-// CopyDone executes the buffered COPY data.
-func (e *Executor) CopyDone(session *Session) error {
-	return e.execRequest(session, "", nil, copyMsgDone)
-}
-
-// CopyEnd ends the COPY mode. Any buffered data is discarded.
-func (s *Session) CopyEnd(ctx context.Context) {
-	s.copyFrom.Close(ctx)
-	s.copyFrom = nil
+	return e.execParsed(session, stmts, pinfo)
 }
 
 // execRequest executes the request in the provided Session.
@@ -718,11 +703,7 @@ func (s *Session) CopyEnd(ctx context.Context) {
 // callbacks passed to be executed in the context of a transaction. Actual
 // execution of statements in the context of a KV txn is delegated to
 // runTxnAttempt().
-func (e *Executor) execRequest(
-	session *Session, sql string, pinfo *tree.PlaceholderInfo, copymsg copyMsg,
-) error {
-	var stmts StatementList
-	var err error
+func (e *Executor) execRequest(session *Session, sql string, pinfo *tree.PlaceholderInfo) error {
 	txnState := &session.TxnState
 
 	if log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV) {
@@ -730,15 +711,8 @@ func (e *Executor) execRequest(
 	}
 
 	session.phaseTimes[sessionStartParse] = timeutil.Now()
-	if session.copyFrom != nil {
-		stmts, err = session.ProcessCopyData(session.Ctx(), sql, copymsg)
-	} else if copymsg != copyMsgNone {
-		err = fmt.Errorf("unexpected copy command")
-	} else {
-		var sl tree.StatementList
-		sl, err = parser.Parse(sql)
-		stmts = NewStatementList(sl)
-	}
+	sl, err := parser.Parse(sql)
+	stmts := NewStatementList(sl)
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
 
 	if err != nil {
@@ -753,7 +727,7 @@ func (e *Executor) execRequest(
 		}
 		return err
 	}
-	return e.execParsed(session, stmts, pinfo, copymsg)
+	return e.execParsed(session, stmts, pinfo)
 }
 
 // RecordError is called by the common error handling routine in pgwire. Since
@@ -773,7 +747,7 @@ func (e *Executor) RecordError(err error) {
 // execParsed executes a batch of statements received as a unit from the client
 // and returns query execution errors and communication errors.
 func (e *Executor) execParsed(
-	session *Session, stmts StatementList, pinfo *tree.PlaceholderInfo, copymsg copyMsg,
+	session *Session, stmts StatementList, pinfo *tree.PlaceholderInfo,
 ) error {
 	var avoidCachedDescriptors bool
 	var asOfSystemTime bool
@@ -1800,6 +1774,30 @@ func (e *Executor) execStmtInOpenTxn(
 		stmt.AST = ps.Statement
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
+
+	case *tree.CopyFrom:
+		// The CopyFrom statement is special. It doesn't have a planNode. Instead,
+		// we use a CopyMachine and hand it control over the connection until the
+		// copying is done.
+
+		// If we're in an explicit txn, then the copying will be done within that
+		// txn. Otherwise, we tell the copyMachine to manage its own transactions.
+		var txnOpt copyTxnOpt
+		if !txnState.implicitTxn {
+			txnOpt = copyTxnOpt{
+				txn:           txnState.mu.txn,
+				txnTimestamp:  txnState.sqlTimestamp,
+				stmtTimestamp: e.cfg.Clock.PhysicalTime(),
+			}
+		}
+		cm, err := newCopyMachine(session.Ctx(), session.conn, session, s, txnOpt)
+		if err != nil {
+			return err
+		}
+		return cm.run(session.Ctx())
+		// Note that we returned here without closing res (in fact, the CopyFrom
+		// code doesn't touch res at all). That's OK since res.BeginResult() was
+		// also not called.
 	}
 
 	var p *planner

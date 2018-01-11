@@ -321,7 +321,6 @@ func (p *planner) propagateFilters(
 	case *cancelQueryNode:
 	case *scrubNode:
 	case *controlJobNode:
-	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:
