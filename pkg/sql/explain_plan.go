@@ -69,19 +69,21 @@ var explainPlanVerboseColumns = sqlbase.ResultColumns{
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
 func (p *planner) makeExplainPlanNode(
-	explainer explainer, expanded, optimized bool, plan planNode,
+	flags explainFlags, expanded, optimized bool, plan planNode,
 ) planNode {
 	columns := explainPlanColumns
 
-	if explainer.showMetadata {
+	if flags.showMetadata {
 		columns = explainPlanVerboseColumns
 	}
 
+	e := explainer{explainFlags: flags}
+
 	noPlaceholderFlags := tree.FmtExpr(
-		tree.FmtSimple, explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames,
+		tree.FmtSimple, flags.showTypes, flags.symbolicVars, flags.qualifyNames,
 	)
-	explainer.fmtFlags = noPlaceholderFlags
-	explainer.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
+	e.fmtFlags = noPlaceholderFlags
+	e.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 		d, err := placeholder.Eval(p.EvalContext())
 		if err != nil {
 			// Disable the placeholder formatter so that
@@ -98,7 +100,7 @@ func (p *planner) makeExplainPlanNode(
 	}
 
 	node := &explainPlanNode{
-		explainer: explainer,
+		explainer: e,
 		expanded:  expanded,
 		optimized: optimized,
 		plan:      plan,
@@ -135,8 +137,8 @@ type explainEntry struct {
 	plan                  planNode
 }
 
-// explainer represents the run-time state of the EXPLAIN logic.
-type explainer struct {
+// explainFlags contains parameters for the EXPLAIN logic.
+type explainFlags struct {
 	// showMetadata indicates whether the output has separate columns for the
 	// schema signature and ordering information of the intermediate
 	// nodes.
@@ -154,17 +156,23 @@ type explainer struct {
 	// should be printed numerically.
 	symbolicVars bool
 
+	// showTypes indicates whether to print the type of embedded
+	// expressions and result columns.
+	showTypes bool
+}
+
+// explainFlags represents the run-time state of the EXPLAIN logic.
+type explainer struct {
+	explainFlags
+
 	// fmtFlags is the formatter to use for pretty-printing expressions.
+	// This can change during the execution of EXPLAIN.
 	fmtFlags tree.FmtFlags
 
 	// showPlaceholderValues is a formatting overload function
 	// that will try to evaluate the placeholders if possible.
 	// Meant for use with FmtCtx.WithPlaceholderFormat().
 	showPlaceholderValues func(ctx *tree.FmtCtx, placeholder *tree.Placeholder)
-
-	// showTypes indicates whether to print the type of embedded
-	// expressions and result columns.
-	showTypes bool
 
 	// level is the current depth in the tree of planNodes.
 	level int
@@ -230,13 +238,15 @@ func (p *planner) populateExplain(
 	return nil
 }
 
-// planToString uses explain() to build a string representation of the planNode.
+// planToString uses walkPlan() to build a string representation of the planNode.
 func planToString(ctx context.Context, plan planNode) string {
 	e := explainer{
-		showMetadata: true,
-		showExprs:    true,
-		showTypes:    true,
-		fmtFlags:     tree.FmtExpr(tree.FmtSimple, true, true, true),
+		explainFlags: explainFlags{
+			showMetadata: true,
+			showExprs:    true,
+			showTypes:    true,
+		},
+		fmtFlags: tree.FmtExpr(tree.FmtSimple, true, true, true),
 	}
 	_ = walkPlan(ctx, plan, e.observer())
 	var buf bytes.Buffer

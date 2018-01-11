@@ -77,7 +77,7 @@ var _ opt.ExecNode = &execNode{}
 // Explain is part of the opt.ExecNode interface.
 func (en *execNode) Explain() ([]tree.Datums, error) {
 	// Add an explain node to the plan and run that.
-	explainer := explainer{
+	flags := explainFlags{
 		showMetadata: true,
 		showExprs:    true,
 		qualifyNames: true,
@@ -85,7 +85,7 @@ func (en *execNode) Explain() ([]tree.Datums, error) {
 	explainNode := execNode{
 		execBuilder: en.execBuilder,
 		plan: en.planner.makeExplainPlanNode(
-			explainer, false /* expanded */, false /* optimized */, en.plan,
+			flags, false /* expanded */, false /* optimized */, en.plan,
 		),
 	}
 	return explainNode.Run()
