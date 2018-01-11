@@ -46,10 +46,14 @@ func IsLocalRequestContext(ctx context.Context) bool {
 // on closed connections.
 func IsClosedConnection(err error) bool {
 	err = errors.Cause(err)
+	if s, ok := status.FromError(err); ok {
+		if s.Code() == codes.Canceled ||
+			s.Code() == codes.Unavailable ||
+			s.Message() == grpc.ErrClientConnClosing.Error() {
+			return true
+		}
+	}
 	if err == context.Canceled ||
-		grpc.Code(err) == codes.Canceled ||
-		grpc.Code(err) == codes.Unavailable ||
-		grpc.ErrorDesc(err) == grpc.ErrClientConnClosing.Error() ||
 		strings.Contains(err.Error(), "is closing") ||
 		strings.Contains(err.Error(), "tls: use of closed connection") ||
 		strings.Contains(err.Error(), "use of closed network connection") ||

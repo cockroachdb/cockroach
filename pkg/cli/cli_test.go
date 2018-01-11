@@ -354,7 +354,7 @@ communicate with a secure cluster\).
 		// Error returned directly from GRPC.
 		{`quit`, styled(
 			`Failed to connect to the node: initial connection heartbeat failed: rpc error: ` +
-				`code = Unavailable desc = grpc: the connection is unavailable`),
+				`code = Unavailable desc = all SubConns are in TransientFailure`),
 		},
 		// Going through the SQL client libraries gives a *net.OpError which
 		// we also handle.

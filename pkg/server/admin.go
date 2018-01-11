@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"encoding/json"
 
@@ -64,7 +65,7 @@ const (
 )
 
 // apiServerMessage is the standard body for all HTTP 500 responses.
-var errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error "+
+var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "+
 	"has occurred. Please check your CockroachDB logs for more details.")
 
 // A adminServer provides a RESTful HTTP API to administration of
@@ -209,7 +210,7 @@ func (s *adminServer) DatabaseDetails(
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 2)
 	if s.isNotFoundError(err) {
-		return nil, grpc.Errorf(codes.NotFound, "%s", err)
+		return nil, status.Errorf(codes.NotFound, "%s", err)
 	}
 	if err != nil {
 		return nil, s.serverError(err)
@@ -309,7 +310,7 @@ func (s *adminServer) TableDetails(
 		escQualTable)
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 4)
 	if s.isNotFoundError(err) {
-		return nil, grpc.Errorf(codes.NotFound, "%s", err)
+		return nil, status.Errorf(codes.NotFound, "%s", err)
 	}
 	if err != nil {
 		return nil, s.serverError(err)
@@ -902,7 +903,7 @@ func (s *adminServer) SetUIData(
 	ctx context.Context, req *serverpb.SetUIDataRequest,
 ) (*serverpb.SetUIDataResponse, error) {
 	if len(req.KeyValues) == 0 {
-		return nil, grpc.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
+		return nil, status.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
 	}
 
 	args := sql.SessionArgs{User: s.getUser(req)}
@@ -943,7 +944,7 @@ func (s *adminServer) GetUIData(
 	defer session.Finish(s.server.sqlExecutor)
 
 	if len(req.Keys) == 0 {
-		return nil, grpc.Errorf(codes.InvalidArgument, "keys cannot be empty")
+		return nil, status.Errorf(codes.InvalidArgument, "keys cannot be empty")
 	}
 
 	resp, err := s.getUIData(ctx, session, s.getUser(req), req.Keys)
@@ -985,7 +986,7 @@ func (s *adminServer) Cluster(
 ) (*serverpb.ClusterResponse, error) {
 	clusterID := s.server.ClusterID()
 	if clusterID == (uuid.UUID{}) {
-		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
+		return nil, status.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 
 	// Check if enterprise features are enabled.  We currently test for the
@@ -1012,10 +1013,10 @@ func (s *adminServer) Health(
 ) (*serverpb.HealthResponse, error) {
 	isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
 	if err != nil {
-		return nil, grpc.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	if !isLive {
-		return nil, grpc.Errorf(codes.Unavailable, "node is not live")
+		return nil, status.Errorf(codes.Unavailable, "node is not live")
 	}
 	return &serverpb.HealthResponse{}, nil
 }
@@ -1623,7 +1624,7 @@ func (s *adminServer) queryDescriptorIDPath(
 // virtual schema, and if so, returns an error.
 func (s *adminServer) assertNotVirtualSchema(dbName string) error {
 	if s.server.sqlExecutor.IsVirtualDatabase(dbName) {
-		return grpc.Errorf(codes.InvalidArgument, "%q is a virtual schema", dbName)
+		return status.Errorf(codes.InvalidArgument, "%q is a virtual schema", dbName)
 	}
 	return nil
 }

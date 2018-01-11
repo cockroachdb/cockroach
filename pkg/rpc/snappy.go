@@ -16,55 +16,66 @@ package rpc
 
 import (
 	"io"
-	"io/ioutil"
 	"sync"
 
 	"github.com/golang/snappy"
+	"google.golang.org/grpc/encoding"
 )
 
-// NB: The grpc.{Compressor,Decompressor} implementations need to be goroutine
-// safe as multiple goroutines may be using the same compressor/decompressor
-// for different streams on the same connection.
+// NB: The encoding.Compressor implementation needs to be goroutine
+// safe as multiple goroutines may be using the same compressor for
+// different streams on the same connection.
 var snappyWriterPool sync.Pool
 var snappyReaderPool sync.Pool
+
+type snappyWriter struct {
+	*snappy.Writer
+}
+
+func (w *snappyWriter) Close() error {
+	defer snappyWriterPool.Put(w)
+	return w.Writer.Close()
+}
+
+type snappyReader struct {
+	*snappy.Reader
+}
+
+func (r *snappyReader) Read(p []byte) (n int, err error) {
+	n, err = r.Reader.Read(p)
+	if err == io.EOF {
+		snappyReaderPool.Put(r)
+	}
+	return n, err
+}
 
 type snappyCompressor struct {
 }
 
-func (snappyCompressor) Do(w io.Writer, p []byte) error {
-	z, ok := snappyWriterPool.Get().(*snappy.Writer)
-	if !ok {
-		z = snappy.NewBufferedWriter(w)
-	} else {
-		z.Reset(w)
-	}
-	_, err := z.Write(p)
-	if err == nil {
-		err = z.Flush()
-	}
-	snappyWriterPool.Put(z)
-	return err
-}
-
-func (snappyCompressor) Type() string {
+func (snappyCompressor) Name() string {
 	return "snappy"
 }
 
-type snappyDecompressor struct {
-}
-
-func (snappyDecompressor) Do(r io.Reader) ([]byte, error) {
-	z, ok := snappyReaderPool.Get().(*snappy.Reader)
+func (snappyCompressor) Compress(w io.Writer) (io.WriteCloser, error) {
+	sw, ok := snappyWriterPool.Get().(*snappyWriter)
 	if !ok {
-		z = snappy.NewReader(r)
+		sw = &snappyWriter{snappy.NewBufferedWriter(w)}
 	} else {
-		z.Reset(r)
+		sw.Reset(w)
 	}
-	b, err := ioutil.ReadAll(z)
-	snappyReaderPool.Put(z)
-	return b, err
+	return sw, nil
 }
 
-func (snappyDecompressor) Type() string {
-	return "snappy"
+func (snappyCompressor) Decompress(r io.Reader) (io.Reader, error) {
+	sr, ok := snappyReaderPool.Get().(*snappyReader)
+	if !ok {
+		sr = &snappyReader{snappy.NewReader(r)}
+	} else {
+		sr.Reset(r)
+	}
+	return sr, nil
+}
+
+func init() {
+	encoding.RegisterCompressor(snappyCompressor{})
 }
