@@ -239,7 +239,8 @@ func TestAdminAPIDatabases(t *testing.T) {
 	// Test databases endpoint.
 	const testdb = "test"
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
+		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := "CREATE DATABASE " + testdb
@@ -434,7 +435,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 			defer span.Finish()
 
 			session := sql.NewSession(
-				ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+				ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
+				nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
 			session.StartUnlimitedMonitor()
 			defer session.Finish(ts.sqlExecutor)
 			setupQueries := []string{
@@ -578,7 +580,8 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
+		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	setupQueries := []string{
 		"CREATE DATABASE test",
@@ -688,7 +691,8 @@ func TestAdminAPIUsers(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
+		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := `
@@ -732,7 +736,8 @@ func TestAdminAPIEvents(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor, nil, &sql.MemoryMetrics{})
+		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
+		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	setupQueries := []string{

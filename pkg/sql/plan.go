@@ -160,7 +160,6 @@ type planNodeFastPath interface {
 var _ planNode = &alterIndexNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &alterSequenceNode{}
-var _ planNode = &copyNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &createTableNode{}
@@ -485,10 +484,6 @@ func (p *planner) newPlan(
 		return p.CancelJob(ctx, n)
 	case *tree.Scrub:
 		return p.Scrub(ctx, n)
-	case *CopyDataBlock:
-		return p.CopyData(ctx, n)
-	case *tree.CopyFrom:
-		return p.Copy(ctx, n)
 	case *tree.CreateDatabase:
 		return p.CreateDatabase(n)
 	case *tree.CreateIndex:
