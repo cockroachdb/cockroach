@@ -236,7 +236,6 @@ func doExpandPlan(
 	case *cancelQueryNode:
 	case *scrubNode:
 	case *controlJobNode:
-	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:
@@ -624,7 +623,6 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *cancelQueryNode:
 	case *scrubNode:
 	case *controlJobNode:
-	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:

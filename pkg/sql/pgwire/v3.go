@@ -178,9 +178,6 @@ type streamingState struct {
 	// firstRow is true when we haven't sent a row back in a result of type
 	// tree.Rows. We only want to send the description once per result.
 	firstRow bool
-	// copyIn is set to true if we are currently copying in so that we do not
-	// send tree.RowsAffected command complete tags.
-	copyIn bool
 }
 
 func (s *streamingState) reset(formatCodes []formatCode, sendDescription bool, limit int) {
@@ -191,7 +188,6 @@ func (s *streamingState) reset(formatCodes []formatCode, sendDescription bool, l
 	s.hasSentResults = false
 	s.txnStartIdx = 0
 	s.err = nil
-	s.copyIn = false
 	s.buf.Reset()
 }
 
@@ -330,7 +326,7 @@ func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error 
 
 func (c *v3Conn) setupSession(ctx context.Context, reserved mon.BoundAccount) error {
 	c.session = sql.NewSession(
-		ctx, c.sessionArgs, c.executor, c.conn.RemoteAddr(), &c.metrics.SQLMemMetrics,
+		ctx, c.sessionArgs, c.executor, c.conn.RemoteAddr(), &c.metrics.SQLMemMetrics, c,
 	)
 	c.session.StartMonitor(c.sqlMemoryPool, reserved)
 	return nil
@@ -485,35 +481,10 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 			c.doNotSendReadyForQuery = true
 
 		default:
-			return c.sendError(newUnrecognizedMsgTypeErr(typ))
+			return c.sendError(pgwirebase.NewUnrecognizedMsgTypeErr(typ))
 		}
 		if err != nil {
 			return err
-		}
-
-		if c.streamingState.copyIn {
-			tag := append(c.tagBuf[:0], c.streamingState.pgTag...)
-			tag = append(tag, ' ')
-
-			// Run the copy pgwire state machine. This runs until its finished or
-			// there was an error, returning the number of rows inserted.
-			rowsInserted, err := c.copyIn(ctx, c.streamingState.columns)
-			c.streamingState.copyIn = false
-			if err != nil {
-				if err := c.setError(err); err != nil {
-					return err
-				}
-			}
-
-			// Send the number of rows inserted, along with the COPY tag. Then we're
-			// ready to return to normal operation.
-			tag = strconv.AppendInt(tag, rowsInserted, 10)
-			err = c.sendCommandComplete(tag, &c.streamingState.buf)
-			if err != nil {
-				if err := c.setError(err); err != nil {
-					return err
-				}
-			}
 		}
 	}
 }
@@ -1025,12 +996,8 @@ func (c *v3Conn) sendRowDescription(
 	return c.writeBuf.finishMsg(w)
 }
 
-// beginCopyIn begins the COPY IN data flow after we receive a
-// COPY ... FROM STDIN statement by sending the number of columns we expect
-// along with their expected formats to the client. Currently, we only support
-// the "text" format for COPY IN.
-// See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
-func (c *v3Conn) beginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) error {
+// BeginCopyIn is part of the pgwirebase.Conn interface.
+func (c *v3Conn) BeginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) error {
 	c.writeBuf.initMsg(pgwirebase.ServerMsgCopyInResponse)
 	c.writeBuf.writeByte(byte(formatText))
 	c.writeBuf.putInt16(int16(len(columns)))
@@ -1044,49 +1011,6 @@ func (c *v3Conn) beginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn
 		return sql.NewWireFailureError(err)
 	}
 	return nil
-}
-
-// copyIn processes COPY IN data and returns the number of rows inserted.
-// See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
-func (c *v3Conn) copyIn(ctx context.Context, columns []sqlbase.ResultColumn) (int64, error) {
-	defer c.session.CopyEnd(ctx)
-
-	for {
-		typ, n, err := c.readBuf.ReadTypedMsg(c.rd)
-		c.metrics.BytesInCount.Inc(int64(n))
-		if err != nil {
-			return 0, err
-		}
-		var done bool
-		switch typ {
-		case pgwirebase.ClientMsgCopyData:
-			// Note: sql.Executor gets its Context from c.session.context, which
-			// has been bound by v3Conn.setupSession().
-			if err := c.executor.CopyData(c.session, string(c.readBuf.Msg)); err != nil {
-				return 0, err
-			}
-
-		case pgwirebase.ClientMsgCopyDone:
-			// Note: sql.Executor gets its Context from c.session.context, which
-			// has been bound by v3Conn.setupSession().
-			if err := c.executor.CopyDone(c.session); err != nil {
-				return 0, err
-			}
-			done = true
-
-		case pgwirebase.ClientMsgCopyFail:
-			done = true
-
-		case pgwirebase.ClientMsgFlush, pgwirebase.ClientMsgSync:
-			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
-
-		default:
-			return 0, c.sendError(newUnrecognizedMsgTypeErr(typ))
-		}
-		if done {
-			return int64(c.streamingState.rowsAffected), nil
-		}
-	}
 }
 
 // NewResultsGroup is part of the ResultsWriter interface.
@@ -1172,9 +1096,6 @@ func (c *v3Conn) CloseResult() error {
 	if state.err != nil {
 		return state.err
 	}
-	if state.copyIn {
-		return nil
-	}
 
 	ctx := c.session.Ctx()
 	formatCodes := state.formatCodes
@@ -1224,14 +1145,9 @@ func (c *v3Conn) CloseResult() error {
 		return c.sendCommandComplete(tag, &state.buf)
 
 	case tree.CopyIn:
-		state.copyIn = true
-		if err := c.beginCopyIn(ctx, state.columns); err != nil {
-			if err := c.setError(err); err != nil {
-				return err
-			}
-		}
-		return nil
-
+		// Nothing to do. The CommandComplete message has been sent elsewhere.
+		panic(fmt.Sprintf("CopyIn statements should have been handled elsewhere " +
+			"and not produce results"))
 	default:
 		panic(fmt.Sprintf("unexpected result type %v", state.statementType))
 	}
@@ -1366,9 +1282,54 @@ func (c *v3Conn) flush(forceSend bool) error {
 	return nil
 }
 
-func newUnrecognizedMsgTypeErr(typ pgwirebase.ClientMessageType) error {
-	return pgerror.NewErrorf(
-		pgerror.CodeProtocolViolationError, "unrecognized client message type %v", typ)
+// Rd is part of the pgwirebase.Conn interface.
+func (c *v3Conn) Rd() pgwirebase.BufferedReader {
+	return &pgwireReader{conn: c}
+}
+
+// SendError is part of te pgwirebase.Conn interface.
+func (c *v3Conn) SendError(err error) error {
+	return c.sendError(err)
+}
+
+// SendCommandComplete is part of the pgwirebase.Conn interface.
+func (c *v3Conn) SendCommandComplete(tag []byte) error {
+	return c.sendCommandComplete(tag, &c.streamingState.buf)
+}
+
+// v3Conn implements pgwirebase.Conn.
+var _ pgwirebase.Conn = &v3Conn{}
+
+// pgwireReader is an io.Reader that wrapps a v3Conn, maintaining its metrics as
+// it is consumed.
+type pgwireReader struct {
+	conn *v3Conn
+}
+
+// pgwireReader implements the pgwirebase.BufferedReader interface.
+var _ pgwirebase.BufferedReader = &pgwireReader{}
+
+// Read is part of the pgwirebase.BufferedReader interface.
+func (r *pgwireReader) Read(p []byte) (int, error) {
+	n, err := r.conn.rd.Read(p)
+	r.conn.metrics.BytesInCount.Inc(int64(n))
+	return n, err
+}
+
+// ReadString is part of the pgwirebase.BufferedReader interface.
+func (r *pgwireReader) ReadString(delim byte) (string, error) {
+	s, err := r.conn.rd.ReadString(delim)
+	r.conn.metrics.BytesInCount.Inc(int64(len(s)))
+	return s, err
+}
+
+// ReadByte is part of the pgwirebase.BufferedReader interface.
+func (r *pgwireReader) ReadByte() (byte, error) {
+	b, err := r.conn.rd.ReadByte()
+	if err == nil {
+		r.conn.metrics.BytesInCount.Inc(1)
+	}
+	return b, err
 }
 
 func newAdminShutdownErr(err error) error {

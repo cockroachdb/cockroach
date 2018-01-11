@@ -21,15 +21,17 @@ import (
 	"io"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 )
 
 const maxMessageSize = 1 << 24
 
-var _ bufferedReader = &bufio.Reader{}
-var _ bufferedReader = &bytes.Buffer{}
+var _ BufferedReader = &bufio.Reader{}
+var _ BufferedReader = &bytes.Buffer{}
 
-type bufferedReader interface {
+// BufferedReader extended io.Reader with some convenience methods.
+type BufferedReader interface {
 	io.Reader
 	ReadString(delim byte) (string, error)
 	ReadByte() (byte, error)
@@ -87,7 +89,7 @@ func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 
 // ReadTypedMsg reads a message from the provided reader, returning its type code and body.
 // It returns the message type, number of bytes read, and an error if there was one.
-func (b *ReadBuffer) ReadTypedMsg(rd bufferedReader) (ClientMessageType, int, error) {
+func (b *ReadBuffer) ReadTypedMsg(rd BufferedReader) (ClientMessageType, int, error) {
 	typ, err := rd.ReadByte()
 	if err != nil {
 		return 0, 0, err
@@ -147,4 +149,11 @@ func (b *ReadBuffer) GetUint32() (uint32, error) {
 	v := binary.BigEndian.Uint32(b.Msg[:4])
 	b.Msg = b.Msg[4:]
 	return v, nil
+}
+
+// NewUnrecognizedMsgTypeErr creates an error for an unrecognized pgwire
+// message.
+func NewUnrecognizedMsgTypeErr(typ ClientMessageType) error {
+	return pgerror.NewErrorf(
+		pgerror.CodeProtocolViolationError, "unrecognized client message type %v", typ)
 }
