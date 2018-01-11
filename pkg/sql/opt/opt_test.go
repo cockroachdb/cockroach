@@ -84,6 +84,7 @@ import (
 	"strings"
 	"testing"
 	"text/tabwriter"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -409,7 +410,7 @@ func TestOpt(t *testing.T) {
 						}
 						return ""
 
-					case "exec":
+					case "exec", "exec-explain":
 						if e == nil {
 							d.fatalf(t, "no expression for exec")
 						}
@@ -418,9 +419,14 @@ func TestOpt(t *testing.T) {
 						if err != nil {
 							d.fatalf(t, "MakeExec: %v", err)
 						}
-						results, err := n.Run()
+						var results []tree.Datums
+						if cmd == "exec-explain" {
+							results, err = n.Explain()
+						} else {
+							results, err = n.Run()
+						}
 						if err != nil {
-							d.fatalf(t, "Run: %v", err)
+							d.fatalf(t, "%v", err)
 						}
 						// Format the results.
 						var buf bytes.Buffer
@@ -433,11 +439,20 @@ func TestOpt(t *testing.T) {
 							0,   /* flags */
 						)
 						for _, r := range results {
-							for j, v := range r {
+							for j, val := range r {
 								if j > 0 {
 									fmt.Fprintf(tw, "\t")
 								}
-								fmt.Fprintf(tw, "%s", v)
+								if d, ok := val.(*tree.DString); ok && utf8.ValidString(string(*d)) {
+									str := string(*d)
+									if str == "" {
+										str = "·"
+									}
+									// Avoid the quotes on strings.
+									fmt.Fprintf(tw, "%s", str)
+								} else {
+									fmt.Fprintf(tw, "%s", val)
+								}
 							}
 							fmt.Fprintf(tw, "\n")
 						}

@@ -69,7 +69,7 @@ var explainPlanVerboseColumns = sqlbase.ResultColumns{
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
 func (p *planner) makeExplainPlanNode(
-	explainer explainer, expanded, optimized bool, origStmt tree.Statement, plan planNode,
+	explainer explainer, expanded, optimized bool, plan planNode,
 ) planNode {
 	columns := explainPlanColumns
 
