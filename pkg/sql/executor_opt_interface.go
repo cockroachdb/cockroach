@@ -24,24 +24,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-var _ opt.ExecBuilderFactory = &Executor{}
-
-// NewExecBuilder is part of the opt.ExecBuilderFactory interface.
-func (e *Executor) NewExecBuilder() opt.ExecBuilder {
+// NewExecFactory is used from opt tests to create and execute plans.
+func (e *Executor) NewExecFactory() opt.ExecFactory {
 	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
-	return &execBuilder{
+	return &execFactory{
 		planner: makeInternalPlanner("opt", txn, "root", &MemoryMetrics{}),
 	}
 }
 
-type execBuilder struct {
+type execFactory struct {
 	planner *planner
 }
 
-var _ opt.ExecBuilder = &execBuilder{}
+var _ opt.ExecFactory = &execFactory{}
 
-// Scan is part of the opt.ExecBuilder interface.
-func (eb *execBuilder) Scan(table optbase.Table) (opt.ExecNode, error) {
+// ConstructScan is part of the opt.ExecFactory interface.
+func (eb *execFactory) ConstructScan(table optbase.Table) (opt.ExecNode, error) {
 	desc := table.(*sqlbase.TableDescriptor)
 
 	columns := make([]tree.ColumnID, len(desc.Columns))
@@ -61,13 +59,13 @@ func (eb *execBuilder) Scan(table optbase.Table) (opt.ExecNode, error) {
 		return nil, err
 	}
 	return &execNode{
-		execBuilder: *eb,
+		execFactory: *eb,
 		plan:        scan,
 	}, nil
 }
 
 type execNode struct {
-	execBuilder
+	execFactory
 
 	plan planNode
 }
@@ -83,7 +81,7 @@ func (en *execNode) Explain() ([]tree.Datums, error) {
 		qualifyNames: true,
 	}
 	explainNode := execNode{
-		execBuilder: en.execBuilder,
+		execFactory: en.execFactory,
 		plan: en.planner.makeExplainPlanNode(
 			flags, false /* expanded */, false /* optimized */, en.plan,
 		),
