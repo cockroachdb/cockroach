@@ -77,7 +77,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	}
 	normalizableTableName := &tree.NormalizableTableName{TableNameReference: o.tableName}
 	sel := &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns),
+		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns, false /* forUpdateOrDelete */),
 		From: &tree.From{
 			Tables: tree.TableExprs{normalizableTableName},
 		},
