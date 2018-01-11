@@ -2001,7 +2001,7 @@ func (r *rocksDBIterator) MVCCGet(
 	if count == 0 {
 		return nil, intents, nil
 	}
-	mvccKey, rawValue, repr, err := rocksDBBatchDecodeValue(repr)
+	mvccKey, rawValue, _, err := rocksDBBatchDecodeValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}

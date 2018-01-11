@@ -237,6 +237,12 @@ DBTimestamp PrevTimestamp(DBTimestamp ts) {
   return ts;
 }
 
+inline bool operator==(const DBTimestamp& a, const DBTimestamp& b) {
+  return a.wall_time == b.wall_time && a.logical == b.logical;
+}
+
+inline bool operator!=(const DBTimestamp& a, const DBTimestamp& b) { return !(a == b); }
+
 inline bool operator<(const DBTimestamp& a, const DBTimestamp& b) {
   return a.wall_time < b.wall_time || (a.wall_time == b.wall_time && a.logical < b.logical);
 }
@@ -2516,7 +2522,11 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
   return kSuccess;
 }
 
-class mvccScanner {
+// mvccScanner implements the MVCCGet, MVCCScan and MVCCReverseScan
+// operations. Parameterizing the code on whether a forward or reverse
+// scan is performed allows the different code paths to be compiled
+// efficiently while still reusing the common code without difficulty.
+template <bool reverse> class mvccScanner {
   // kMaxItersBeforeSeek is the number of calls to iter->Next() to
   // perform when looking for the next key or a particular version
   // before calling iter->Seek().
@@ -2602,16 +2612,23 @@ class mvccScanner {
     // auto micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
     // printf("seek %d: %s\n", int(micros), pctx->ToString(true).c_str());
 
-    if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
-      return results_;
-    }
-
-    for (;;) {
-      if (cur_key_.compare(end_key_) >= 0) {
-        break;
+    if (reverse) {
+      if (!iterSeekReverse(EncodeKey(start_key_, 0, 0))) {
+        return results_;
       }
-      if (!getAndAdvance()) {
-        break;
+      for (; cur_key_.compare(end_key_) >= 0;) {
+        if (!getAndAdvance()) {
+          break;
+        }
+      }
+    } else {
+      if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
+        return results_;
+      }
+      for (; cur_key_.compare(end_key_) < 0;) {
+        if (!getAndAdvance()) {
+          break;
+        }
       }
     }
 
@@ -2640,15 +2657,20 @@ class mvccScanner {
     return false;
   }
 
+  bool setStatus(const DBStatus& status) {
+    results_.status = status;
+    return false;
+  }
+
   bool getAndAdvance() {
-    const bool is_value = (cur_timestamp_.wall_time != 0 || cur_timestamp_.logical != 0);
+    const bool is_value = cur_timestamp_ != kZeroTimestamp;
     const rocksdb::Slice key = iter_rep_->key();
     const rocksdb::Slice value = iter_rep_->value();
 
     if (is_value) {
       if (timestamp_ >= cur_timestamp_) {
         // 1. Fast path: there is no intent and our read timestamp is
-        // newer than the value's timestamp.
+        // newer than the most recent version's timestamp.
         return addAndAdvance(value);
       }
 
@@ -2659,6 +2681,8 @@ class mvccScanner {
         if (txn_max_timestamp_ >= cur_timestamp_) {
           return uncertaintyError(cur_timestamp_);
         }
+        // Delegate to seekVersion to return a clock uncertainty error
+        // if there are any more versions above txn_max_timestamp_.
         return seekVersion(txn_max_timestamp_, true);
       }
 
@@ -2671,8 +2695,7 @@ class mvccScanner {
     }
 
     if (!meta_.ParseFromArray(value.data(), value.size())) {
-      results_.status = FmtStatus("unable to decode MVCCMetadata");
-      return false;
+      return setStatus(FmtStatus("unable to decode MVCCMetadata"));
     }
 
     if (meta_.has_raw_bytes()) {
@@ -2681,8 +2704,7 @@ class mvccScanner {
     }
 
     if (!meta_.has_txn()) {
-      results_.status = FmtStatus("intent without transaction");
-      return false;
+      return setStatus(FmtStatus("intent without transaction"));
     }
 
     const bool own_intent = (meta_.txn().id() == txn_id_);
@@ -2709,10 +2731,12 @@ class mvccScanner {
 
     if (!own_intent) {
       // 7. The key contains an intent which was not written by our
-      // transaction and our read timestamp is newer than when the
-      // intent was written.
+      // transaction and our read timestamp is newer than that of the
+      // intent. Note that this will trigger an error on the Go
+      // side. We continue scanning so that we can return all of the
+      // intents in the scan range.
       intents_->Put(key, value);
-      return nextKey();
+      return advanceKey();
     }
 
     if (txn_epoch_ == meta_.txn().epoch()) {
@@ -2725,13 +2749,11 @@ class mvccScanner {
 
     if (txn_epoch_ < meta_.txn().epoch()) {
       // 9. We're reading our own txn's intent but the current txn has
-      // an earlier epoch than the intent. Return an error so that
+      // an earlier epoch than the intent. Return an error so that the
       // earlier incarnation of our transaction aborts (presumably
       // this is some operation that was retried).
-      results_.status =
-          FmtStatus("failed to read with epoch %u due to a write intent with epoch %u", txn_epoch_,
-                    meta_.txn().epoch());
-      return false;
+      return setStatus(FmtStatus("failed to read with epoch %u due to a write intent with epoch %u",
+                                 txn_epoch_, meta_.txn().epoch()));
     }
 
     // 10. We're reading our own txn's intent but the current txn has a
@@ -2742,17 +2764,19 @@ class mvccScanner {
     return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
   }
 
-  // nextKey advances the iterator to point the next MVCC key greater
-  // than cur_key_. Returns false if the iterator is exhausted or an
-  // error occurs.
+  // nextKey advances the iterator to point to the next MVCC key
+  // greater than cur_key_. Returns false if the iterator is exhausted
+  // or an error occurs.
   bool nextKey() {
-    // Check to see if the next key is the end key.
+    // Check to see if the next key is the end key. This avoids
+    // advancing the iterator unnecessarily. For example, SQL can take
+    // advantage of this when doing single row reads with an
+    // appropriately set end key.
     if (cur_key_.size() + 1 == end_key_.size() && end_key_.starts_with(cur_key_) &&
         end_key_[cur_key_.size()] == '\0') {
       return false;
     }
 
-    // Now seek to next key.
     key_buf_.assign(cur_key_.data(), cur_key_.size());
 
     for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
@@ -2772,6 +2796,74 @@ class mvccScanner {
     return iterSeek(key_buf_);
   }
 
+  // prevKey backs up the iterator to point to the prev MVCC key less
+  // than key. Returns false if the iterator is exhausted or an error
+  // occurs.
+  bool prevKey(const rocksdb::Slice& key) {
+    key_buf_.assign(key.data(), key.size());
+
+    for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
+      if (!iterPrev()) {
+        return false;
+      }
+      if (cur_key_ != key_buf_) {
+        // TODO(peter): This really stinks for performance. We
+        // iterated to the previous key, but in order to find the
+        // latest version of the key we need to seek. An alternative
+        // approach would be to keep calling iterPrev() until we get
+        // to another different key and then call iterNext() to get
+        // back to this key. A quick test of this approach showed the
+        // benefit was in the single-digit percentages. A final
+        // thought: perhaps we can add a wrapper or abstraction around
+        // rocksdb::Iterator that maintains a window of keys. The
+        // window could possibly be small. For example, an
+        // iter->PeekPrevKey() method might be sufficient.
+        key_buf_.assign(cur_key_.data(), cur_key_.size());
+        key_buf_.append("\0", 1);
+        return iterSeek(key_buf_);
+      }
+    }
+
+    key_buf_.append("\0", 1);
+    return iterSeekReverse(key_buf_);
+  }
+
+  // advanceKey advances the iterator to point the next MVCC
+  // key. Returns false if the iterator is exhausted or an error
+  // occurs.
+  bool advanceKey() {
+    if (reverse) {
+      return prevKey(cur_key_);
+    } else {
+      return nextKey();
+    }
+  }
+
+  bool advanceKeyAtEnd() {
+    if (reverse) {
+      // Iterating to the next key might have caused the iterator to
+      // reach the end of the key space. If that happens, back up to
+      // the very last key.
+      iter_rep_->SeekToLast();
+      return advanceKey();
+    } else {
+      // We've reached the end of the iterator and there is nothing
+      // left to do.
+      return false;
+    }
+  }
+
+  bool advanceKeyAtNewKey(const rocksdb::Slice& key) {
+    if (reverse) {
+      // We've advanced to the next key but need to move back to the
+      // previous key.
+      return prevKey(key);
+    } else {
+      // We're already at the new key so there is nothing to do.
+      return true;
+    }
+  }
+
   bool addAndAdvance(const rocksdb::Slice& value) {
     if (value.size() > 0) {
       kvs_->Put(iter_rep_->key(), value);
@@ -2779,25 +2871,29 @@ class mvccScanner {
         return false;
       }
     }
-    return nextKey();
+    return advanceKey();
   }
 
   // seekVersion advances the iterator to point to an MVCC version for
   // the specified key that is earlier than <ts_wall_time,
   // ts_logical>. Returns false if the iterator is exhausted or an
   // error occurs. On success, advances the iterator to the next key.
-  bool seekVersion(DBTimestamp timestamp, bool check_uncertainty) {
+  //
+  // If the iterator is exhausted in the process or an error occurs,
+  // return false, and true otherwise. If check_uncertainty is true,
+  // then observing any version of the desired key with a timestamp
+  // larger than our read timestamp results in an uncertainty error.
+  bool seekVersion(DBTimestamp desired_timestamp, bool check_uncertainty) {
     key_buf_.assign(cur_key_.data(), cur_key_.size());
 
     for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
       if (!iterNext()) {
-        return false;
+        return advanceKeyAtEnd();
       }
       if (cur_key_ != key_buf_) {
-        // We've iterated to the next MVCC key.
-        return true;
+        return advanceKeyAtNewKey(key_buf_);
       }
-      if (timestamp >= cur_timestamp_) {
+      if (desired_timestamp >= cur_timestamp_) {
         if (check_uncertainty && timestamp_ < cur_timestamp_) {
           return uncertaintyError(cur_timestamp_);
         }
@@ -2805,20 +2901,19 @@ class mvccScanner {
       }
     }
 
-    if (!iterSeek(EncodeKey(key_buf_, timestamp.wall_time, timestamp.logical))) {
-      return false;
+    if (!iterSeek(EncodeKey(key_buf_, desired_timestamp.wall_time, desired_timestamp.logical))) {
+      return advanceKeyAtEnd();
     }
     if (cur_key_ != key_buf_) {
-      // We've seeked to the next MVCC key.
-      return true;
+      return advanceKeyAtNewKey(key_buf_);
     }
-    if (timestamp >= cur_timestamp_) {
+    if (desired_timestamp >= cur_timestamp_) {
       if (check_uncertainty && timestamp_ < cur_timestamp_) {
         return uncertaintyError(cur_timestamp_);
       }
       return addAndAdvance(iter_rep_->value());
     }
-    return nextKey();
+    return advanceKey();
   }
 
   bool updateCurrent() {
@@ -2827,19 +2922,46 @@ class mvccScanner {
     }
     cur_timestamp_ = kZeroTimestamp;
     if (!DecodeKey(iter_rep_->key(), &cur_key_, &cur_timestamp_)) {
-      results_.status = FmtStatus("failed to split mvcc key");
-      return false;
+      return setStatus(FmtStatus("failed to split mvcc key"));
     }
     return true;
   }
 
+  // iterSeek positions the iterator at the first key that is greater
+  // than or equal to key.
   bool iterSeek(const rocksdb::Slice& key) {
     iter_rep_->Seek(key);
     return updateCurrent();
   }
 
+  // iterSeekReverse positions the iterator at the last key that is
+  // less than key.
+  bool iterSeekReverse(const rocksdb::Slice& key) {
+    // SeekForPrev positions the iterator at the key that is less than
+    // key. NB: the doc comment on SeekForPrev suggests it positions
+    // less than or equal, but this is a lie.
+    iter_rep_->SeekForPrev(key);
+    if (!updateCurrent()) {
+      return false;
+    }
+    if (cur_timestamp_ == kZeroTimestamp) {
+      // We landed on an intent or inline value.
+      return true;
+    }
+    // We landed on a versioned value, we need back up to find the
+    // latest version.
+    key_buf_.assign(cur_key_.data(), cur_key_.size());
+    key_buf_.append("\0", 1);
+    return iterSeek(key_buf_);
+  }
+
   bool iterNext() {
     iter_rep_->Next();
+    return updateCurrent();
+  }
+
+  bool iterPrev() {
+    iter_rep_->Prev();
     return updateCurrent();
   }
 
@@ -2870,16 +2992,27 @@ DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTx
   // that the semantics of max_keys is that we retrieve one more key
   // than is specified in order to maintain the existing semantics of
   // resume span. See storage/engine/mvcc.go:MVCCScan.
+  //
+  // We specify an empty key for the end key which will ensure we
+  // don't retrieve a key different than the start key. This is a bit
+  // of a hack.
   const DBSlice end = {0, 0};
-  mvccScanner scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent);
+  mvccScanner<false> scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent);
   return scanner.get();
 }
 
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool consistent, bool reverse) {
-  // TODO(peter): Support reverse iteration.
-  mvccScanner scanner(iter, start, end, timestamp, max_keys, txn, consistent);
-  return scanner.scan();
+  static const bool fwd = false;
+  static const bool rev = true;
+
+  if (reverse) {
+    mvccScanner<rev> scanner(iter, end, start, timestamp, max_keys, txn, consistent);
+    return scanner.scan();
+  } else {
+    mvccScanner<fwd> scanner(iter, start, end, timestamp, max_keys, txn, consistent);
+    return scanner.scan();
+  }
 }
 
 // DBGetStats queries the given DBEngine for various operational stats and
