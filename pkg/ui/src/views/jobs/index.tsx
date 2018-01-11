@@ -221,9 +221,8 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
 
   renderTable(jobs: Job[]) {
     if (_.isEmpty(jobs)) {
-      return <h2 className="no-results">No Results</h2>;
+      return <div className="no-results"><h2>No Results</h2></div>;
     }
-
     return (
       <JobsSortedTable
         data={jobs}
@@ -269,7 +268,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
       </div>
       <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
         <section className="section">
-          { renderTable(data) }
+          { this.renderTable(data) }
         </section>
       </Loading>
     </div>;
