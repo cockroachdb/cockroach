@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -180,6 +181,9 @@ type Session struct {
 	// execCfg is the configuration of the Executor that is executing this
 	// session.
 	execCfg *ExecutorConfig
+	// conn is the pgwire connection driving this Session. Used for the Copy-in
+	// subprotocol.
+	conn pgwirebase.Conn
 	// distSQLPlanner is in charge of distSQL physical planning and running
 	// logic.
 	distSQLPlanner *DistSQLPlanner
@@ -225,9 +229,6 @@ type Session struct {
 	Tracing SessionTracing
 
 	tables TableCollection
-
-	// If set, contains the in progress COPY FROM columns.
-	copyFrom *copyNode
 
 	// ActiveSyncQueries contains query IDs of all synchronous (i.e. non-parallel)
 	// queries in flight. All ActiveSyncQueries must also be in mu.ActiveQueries.
@@ -380,8 +381,17 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
+//
+// Args:
+// conn: The pgwire connection driving this Session. Used for the Copy-in
+//   subprotocol. If that's not going to be used on the Session, it can be nil.
 func NewSession(
-	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
+	ctx context.Context,
+	args SessionArgs,
+	e *Executor,
+	remote net.Addr,
+	memMetrics *MemoryMetrics,
+	conn pgwirebase.Conn,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
 	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&e.cfg.Settings.SV))
@@ -404,6 +414,7 @@ func NewSession(
 			leaseMgr:      e.cfg.LeaseManager,
 			databaseCache: e.getDatabaseCache(),
 		},
+		conn: conn,
 	}
 	s.dataMutator = sessionDataMutator{
 		data: &s.data,

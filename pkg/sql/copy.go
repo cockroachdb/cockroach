@@ -19,55 +19,67 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// COPY FROM is not a usual planNode. After a COPY FROM is executed as a
-// planNode and until an error or it is explicitly completed, the planner
-// carries a reference to a copyNode to send the contents of copy data
-// payloads using the executor's Copy methods. Attempting to execute non-COPY
-// statements before the COPY has finished will result in an error.
+// copyMachine supports the Copy-in pgwire subprotocol (COPY...FROM STDIN). The
+// machine is created by the Executor when that statement is executed; from that
+// moment on, the machine takes control of the pgwire connection until
+// copyMachine.run() returns. During this time, the machine is responsible for
+// sending all the protocol messages (including the messages that are usually
+// associated with statement results). Errors however are not sent on the
+// connection by the machine, if any, the caller is responsible for sending
+// them.
 //
-// The copyNode hold two buffers: raw bytes and rows. All copy data is
-// appended to the byte buffer. Afterward, rows are extracted from the
-// bytes. When the number of rows has reached some limit (whose purpose is
-// to increase performance by batching inserts), they are inserted with an
-// insertNode. A CopyDone message will flush and insert all remaining data.
+// Incoming data is buffered and batched; batches are turned into insertNodes
+// that are executed. INSERT priviledges are required on the destination table.
 //
 // See: https://www.postgresql.org/docs/9.5/static/sql-copy.html
-type copyNode struct {
+// and: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
+type copyMachine struct {
 	table         tree.TableExpr
 	columns       tree.UnresolvedNames
 	resultColumns sqlbase.ResultColumns
 	buf           bytes.Buffer
 	rows          []*tree.Tuple
-	rowsMemAcc    mon.BoundAccount
+	// insertedRows keeps track of the total number of rows inserted by the
+	// machine.
+	insertedRows int
+	rowsMemAcc   mon.BoundAccount
+
+	// conn is the pgwire connection from which data is to be read.
+	conn pgwirebase.Conn
 }
 
-// Copy begins a COPY.
-// Privileges: INSERT on table.
-func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) {
-	cn := &copyNode{
+// newCopyMachine creates a new copyMachine.
+func newCopyMachine(
+	ctx context.Context, conn pgwirebase.Conn, params runParams, n *tree.CopyFrom,
+) (*copyMachine, error) {
+	cn := &copyMachine{
+		conn:    conn,
 		table:   &n.Table,
 		columns: n.Columns,
 	}
 
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(params.p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
-	en, err := p.makeEditNode(ctx, tn, privilege.INSERT)
+	en, err := params.p.makeEditNode(ctx, tn, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}
-	cols, err := p.processColumns(en.tableDesc, n.Columns)
+	cols, err := params.p.processColumns(en.tableDesc, n.Columns)
 	if err != nil {
 		return nil, err
 	}
@@ -75,39 +87,74 @@ func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) 
 	for i, c := range cols {
 		cn.resultColumns[i] = sqlbase.ResultColumn{Typ: c.Type.ToDatumType()}
 	}
-	cn.rowsMemAcc = p.session.mon.MakeBoundAccount()
+	cn.rowsMemAcc = params.extendedEvalCtx.Mon.MakeBoundAccount()
 	return cn, nil
 }
 
-func (n *copyNode) startExec(params runParams) error {
-	// Should never happen because the executor prevents non-COPY messages during
-	// a COPY.
-	if params.p.session.copyFrom != nil {
-		return fmt.Errorf("COPY already in progress")
+// run consumes all the copy-in data from the network connection and inserts it
+// in the database.
+func (c *copyMachine) run(params runParams) error {
+	err := c.runInternal(params)
+	defer c.rowsMemAcc.Close(params.ctx)
+	return err
+}
+
+func (c *copyMachine) runInternal(params runParams) error {
+	// Send the message describing the columns to the client.
+	if err := c.conn.BeginCopyIn(params.ctx, c.resultColumns); err != nil {
+		return err
 	}
-	params.p.session.copyFrom = n
-	return nil
+
+	// Read from the connection until we see an ClientMsgCopyDone.
+	readBuf := pgwirebase.ReadBuffer{}
+	for {
+		typ, _, err := readBuf.ReadTypedMsg(c.conn.Rd())
+		if err != nil {
+			return err
+		}
+		var done bool
+		switch typ {
+		case pgwirebase.ClientMsgCopyData:
+			if err := c.processCopyData(
+				string(readBuf.Msg), params, false, /* final */
+			); err != nil {
+				return err
+			}
+		case pgwirebase.ClientMsgCopyDone:
+			// If there's a line in the buffer without \n at EOL, add it here.
+			if c.buf.Len() > 0 {
+				if err := c.addRow(params.ctx, c.buf.Bytes(), params.EvalContext()); err != nil {
+					return err
+				}
+			}
+			if err := c.processCopyData(
+				"" /* data */, params, true, /* final */
+			); err != nil {
+				return err
+			}
+			done = true
+		case pgwirebase.ClientMsgCopyFail:
+			return fmt.Errorf("client canceled COPY")
+		case pgwirebase.ClientMsgFlush, pgwirebase.ClientMsgSync:
+			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
+		default:
+			return pgwirebase.NewUnrecognizedMsgTypeErr(typ)
+		}
+		if done {
+			break
+		}
+	}
+
+	// Finalize execution by sending the statement tag and number of rows
+	// inserted.
+	dummy := tree.CopyFrom{}
+	tag := []byte(dummy.StatementTag())
+	tag = append(tag, ' ')
+	tag = strconv.AppendInt(tag, int64(c.insertedRows), 10 /* base */)
+	return c.conn.SendCommandComplete(tag)
 }
-
-func (*copyNode) Next(runParams) (bool, error) { return false, nil }
-func (*copyNode) Values() tree.Datums          { return nil }
-
-func (n *copyNode) Close(ctx context.Context) {
-	n.rowsMemAcc.Close(ctx)
-}
-
-// CopyDataBlock represents a data block of a COPY FROM statement.
-type CopyDataBlock struct {
-	Done bool
-}
-
-type copyMsg int
 
 const (
-	copyMsgNone copyMsg = iota
-	copyMsgData
-	copyMsgDone
-
 	nullString = `\N`
 	lineDelim  = '\n'
 )
@@ -116,39 +163,21 @@ var (
 	fieldDelim = []byte{'\t'}
 )
 
-// ProcessCopyData appends data to the planner's internal COPY state as
-// parsed datums. Since the COPY protocol allows any length of data to be
-// sent in a message, there's no guarantee that data contains a complete row
-// (or even a complete datum). It is thus valid to have no new rows added
-// to the internal state after this call.
-func (s *Session) ProcessCopyData(
-	ctx context.Context, data string, msg copyMsg,
-) (StatementList, error) {
-	cf := s.copyFrom
-	buf := cf.buf
+// processCopyData buffers incoming data and, once the buffer fills up, inserts
+// the accumulated rows.
+//
+// Args:
+// final: If set, buffered data is written even if the buffer is not full.
+func (c *copyMachine) processCopyData(data string, params runParams, final bool) error {
+	// When this many rows are in the copy buffer, they are inserted.
+	const copyBatchRowSize = 100
 
-	evalCtx := s.extendedEvalCtx()
-
-	switch msg {
-	case copyMsgData:
-		// ignore
-	case copyMsgDone:
-		var err error
-		// If there's a line in the buffer without \n at EOL, add it here.
-		if buf.Len() > 0 {
-			err = cf.addRow(ctx, buf.Bytes(), &evalCtx.EvalContext)
-		}
-		return StatementList{{AST: &CopyDataBlock{Done: true}}}, err
-	default:
-		return nil, fmt.Errorf("expected copy command")
-	}
-
-	buf.WriteString(data)
-	for buf.Len() > 0 {
-		line, err := buf.ReadBytes(lineDelim)
+	c.buf.WriteString(data)
+	for c.buf.Len() > 0 {
+		line, err := c.buf.ReadBytes(lineDelim)
 		if err != nil {
 			if err != io.EOF {
-				return nil, err
+				return err
 			}
 		} else {
 			// Remove lineDelim from end.
@@ -158,21 +187,62 @@ func (s *Session) ProcessCopyData(
 				line = line[:len(line)-1]
 			}
 		}
-		if buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
+		if c.buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
 			break
 		}
-		if err := cf.addRow(ctx, line, &evalCtx.EvalContext); err != nil {
-			return nil, err
+		if err := c.addRow(params.ctx, line, params.EvalContext()); err != nil {
+			return err
 		}
 	}
-	return StatementList{{AST: &CopyDataBlock{}}}, nil
+	// Only do work if we have a full batch of rows or this is the end.
+	if ln := len(c.rows); ln == 0 || (ln < copyBatchRowSize && !final) {
+		return nil
+	}
+	return c.insertRows(params)
 }
 
-func (n *copyNode) addRow(ctx context.Context, line []byte, evalCtx *tree.EvalContext) error {
+// insertRows transforms the buffered rows into an insertNode and executes it.
+func (c *copyMachine) insertRows(params runParams) error {
+	vc := &tree.ValuesClause{Tuples: c.rows}
+	numRows := len(c.rows)
+	// Reuse the same backing array once the Insert is complete.
+	c.rows = c.rows[:0]
+	c.rowsMemAcc.Clear(params.ctx)
+
+	in := tree.Insert{
+		Table:   c.table,
+		Columns: c.columns,
+		Rows: &tree.Select{
+			Select: vc,
+		},
+		Returning: tree.AbsentReturningClause,
+	}
+	insertNode, err := params.p.Insert(params.ctx, &in, nil /* desiredTypes */)
+	if err != nil {
+		return err
+	}
+	defer insertNode.Close(params.ctx)
+
+	if err := startPlan(params, insertNode); err != nil {
+		return err
+	}
+	rows, err := countRowsAffected(params, insertNode)
+	if err != nil {
+		return err
+	}
+	if rows != numRows {
+		log.Fatalf(params.ctx, "didn't insert all buffered rows and yet no error was reported. "+
+			"Inserted %d out of %d rows.", rows, numRows)
+	}
+	c.insertedRows += rows
+	return nil
+}
+
+func (c *copyMachine) addRow(ctx context.Context, line []byte, evalCtx *tree.EvalContext) error {
 	var err error
 	parts := bytes.Split(line, fieldDelim)
-	if len(parts) != len(n.resultColumns) {
-		return fmt.Errorf("expected %d values, got %d", len(n.resultColumns), len(parts))
+	if len(parts) != len(c.resultColumns) {
+		return fmt.Errorf("expected %d values, got %d", len(c.resultColumns), len(parts))
 	}
 	exprs := make(tree.Exprs, len(parts))
 	for i, part := range parts {
@@ -181,7 +251,7 @@ func (n *copyNode) addRow(ctx context.Context, line []byte, evalCtx *tree.EvalCo
 			exprs[i] = tree.DNull
 			continue
 		}
-		switch t := n.resultColumns[i].Typ; t {
+		switch t := c.resultColumns[i].Typ; t {
 		case types.Bytes,
 			types.Date,
 			types.Interval,
@@ -195,24 +265,24 @@ func (n *copyNode) addRow(ctx context.Context, line []byte, evalCtx *tree.EvalCo
 				return err
 			}
 		}
-		d, err := parser.ParseStringAs(n.resultColumns[i].Typ, s, evalCtx)
+		d, err := parser.ParseStringAs(c.resultColumns[i].Typ, s, evalCtx)
 		if err != nil {
 			return err
 		}
 
 		sz := d.Size()
-		if err := n.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
+		if err := c.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
 			return err
 		}
 
 		exprs[i] = d
 	}
 	tuple := &tree.Tuple{Exprs: exprs}
-	if err := n.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(*tuple))); err != nil {
+	if err := c.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(*tuple))); err != nil {
 		return err
 	}
 
-	n.rows = append(n.rows, tuple)
+	c.rows = append(c.rows, tuple)
 	return nil
 }
 
@@ -308,43 +378,3 @@ var decodeMap = map[byte]byte{
 	'v':  '\v',
 	'\\': '\\',
 }
-
-// CopyData is the statement type after a block of COPY data has been
-// received. There may be additional rows ready to insert. If so, return an
-// insertNode, otherwise emptyNode.
-func (p *planner) CopyData(ctx context.Context, n *CopyDataBlock) (planNode, error) {
-	// When this many rows are in the copy buffer, they are inserted.
-	const copyRowSize = 100
-
-	cf := p.session.copyFrom
-
-	// Only do work if we have lots of rows or this is the end.
-	if ln := len(cf.rows); ln == 0 || (ln < copyRowSize && !n.Done) {
-		return &zeroNode{}, nil
-	}
-
-	vc := &tree.ValuesClause{Tuples: cf.rows}
-	// Reuse the same backing array once the Insert is complete.
-	cf.rows = cf.rows[:0]
-	cf.rowsMemAcc.Clear(ctx)
-
-	in := tree.Insert{
-		Table:   cf.table,
-		Columns: cf.columns,
-		Rows: &tree.Select{
-			Select: vc,
-		},
-		Returning: tree.AbsentReturningClause,
-	}
-	return p.Insert(ctx, &in, nil)
-}
-
-// Format implements the NodeFormatter interface.
-func (*CopyDataBlock) Format(_ *tree.FmtCtx) {}
-
-// StatementType implements the Statement interface.
-func (*CopyDataBlock) StatementType() tree.StatementType { return tree.RowsAffected }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*CopyDataBlock) StatementTag() string { return "" }
-func (*CopyDataBlock) String() string       { return "CopyDataBlock" }
