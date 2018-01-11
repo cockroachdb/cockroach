@@ -92,7 +92,7 @@ func TestCandidateSelection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type scoreTuple struct {
-		constraint int
+		diversity  int
 		rangeCount int
 	}
 	genCandidates := func(scores []scoreTuple, idShift int) candidateList {
@@ -102,9 +102,9 @@ func TestCandidateSelection(t *testing.T) {
 				store: roachpb.StoreDescriptor{
 					StoreID: roachpb.StoreID(i + idShift),
 				},
-				constraintScore: float64(score.constraint),
-				rangeCount:      score.rangeCount,
-				valid:           true,
+				diversityScore: float64(score.diversity),
+				rangeCount:     score.rangeCount,
+				valid:          true,
 			})
 		}
 		sort.Sort(sort.Reverse(byScore(cl)))
@@ -117,7 +117,7 @@ func TestCandidateSelection(t *testing.T) {
 			if i != 0 {
 				buffer.WriteRune(',')
 			}
-			buffer.WriteString(fmt.Sprintf("%d:%d", int(c.constraintScore), c.rangeCount))
+			buffer.WriteString(fmt.Sprintf("%d:%d", int(c.diversityScore), c.rangeCount))
 		}
 		return buffer.String()
 	}
@@ -202,7 +202,7 @@ func TestCandidateSelection(t *testing.T) {
 			if good == nil {
 				t.Fatalf("no good candidate found")
 			}
-			actual := scoreTuple{int(good.constraintScore), good.rangeCount}
+			actual := scoreTuple{int(good.diversityScore), good.rangeCount}
 			if actual != tc.good {
 				t.Errorf("expected:%v actual:%v", tc.good, actual)
 			}
@@ -212,7 +212,7 @@ func TestCandidateSelection(t *testing.T) {
 			if bad == nil {
 				t.Fatalf("no bad candidate found")
 			}
-			actual := scoreTuple{int(bad.constraintScore), bad.rangeCount}
+			actual := scoreTuple{int(bad.diversityScore), bad.rangeCount}
 			if actual != tc.bad {
 				t.Errorf("expected:%v actual:%v", tc.bad, actual)
 			}
@@ -225,59 +225,59 @@ func TestBetterThan(t *testing.T) {
 
 	testCandidateList := candidateList{
 		{
-			valid:           true,
-			constraintScore: 1,
-			rangeCount:      0,
+			valid:          true,
+			diversityScore: 1,
+			rangeCount:     0,
 		},
 		{
-			valid:           true,
-			constraintScore: 1,
-			rangeCount:      0,
+			valid:          true,
+			diversityScore: 1,
+			rangeCount:     0,
 		},
 		{
-			valid:           true,
-			constraintScore: 1,
-			rangeCount:      1,
+			valid:          true,
+			diversityScore: 1,
+			rangeCount:     1,
 		},
 		{
-			valid:           true,
-			constraintScore: 1,
-			rangeCount:      1,
+			valid:          true,
+			diversityScore: 1,
+			rangeCount:     1,
 		},
 		{
-			valid:           true,
-			constraintScore: 0,
-			rangeCount:      0,
+			valid:          true,
+			diversityScore: 0,
+			rangeCount:     0,
 		},
 		{
-			valid:           true,
-			constraintScore: 0,
-			rangeCount:      0,
+			valid:          true,
+			diversityScore: 0,
+			rangeCount:     0,
 		},
 		{
-			valid:           true,
-			constraintScore: 0,
-			rangeCount:      1,
+			valid:          true,
+			diversityScore: 0,
+			rangeCount:     1,
 		},
 		{
-			valid:           true,
-			constraintScore: 0,
-			rangeCount:      1,
+			valid:          true,
+			diversityScore: 0,
+			rangeCount:     1,
 		},
 		{
-			valid:           false,
-			constraintScore: 1,
-			rangeCount:      0,
+			valid:          false,
+			diversityScore: 1,
+			rangeCount:     0,
 		},
 		{
-			valid:           false,
-			constraintScore: 0,
-			rangeCount:      0,
+			valid:          false,
+			diversityScore: 0,
+			rangeCount:     0,
 		},
 		{
-			valid:           false,
-			constraintScore: 0,
-			rangeCount:      1,
+			valid:          false,
+			diversityScore: 0,
+			rangeCount:     1,
 		},
 	}
 

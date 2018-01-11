@@ -41,10 +41,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
+var workers = flag.Int("workers", 1, "number of workers; the i'th worker talks to node i%numNodes")
 var numNodes = flag.Int("n", 4, "number of nodes")
 var duration = flag.Duration("duration", math.MaxInt64, "how long to run the simulation for")
-var blockSize = flag.Int("b", 1000, "block size")
+var blockSize = flag.Int("blocksize", 1000, "block size")
 var configFile = flag.String("f", "", "config file that specifies an allocsim workload (overrides -n)")
 
 // Configuration provides a way to configure allocsim via a JSON file.
