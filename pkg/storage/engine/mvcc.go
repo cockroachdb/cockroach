@@ -600,18 +600,8 @@ func MVCCGet(
 	}
 
 	iter := engine.NewIterator(true)
-	kvData, intentData, err := iter.MVCCGet(key, timestamp, txn, consistent)
+	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent)
 	iter.Close()
-
-	if err != nil {
-		return nil, nil, err
-	}
-
-	kvs, _, intents, err := buildScanResults(kvData, intentData, math.MaxInt64, consistent)
-	var value *roachpb.Value
-	if len(kvs) > 0 {
-		value = &kvs[0].Value
-	}
 	return value, intents, err
 }
 
@@ -1699,30 +1689,43 @@ func buildScanResults(
 		return nil, nil, intents, nil
 	}
 
-	reader, err := NewRocksDBBatchReader(kvData)
+	// Loop over the kvData (which is in RocksDB batch repr format), creating a
+	// slice of roachpb.KeyValue. This code would be slightly more compact using
+	// RocksDBBatchReader, but there is a measurable performance benefit to
+	// avoiding the associated allocation for small (1 row) scans.
+	count, kvData, err := rocksDBBatchDecodeHeader(kvData)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if count == 0 {
+		return nil, nil, intents, nil
+	}
 
-	kvs := make([]roachpb.KeyValue, 0, reader.Count())
-	var resumeKey roachpb.Key
-	for reader.Next() {
-		key, err := reader.MVCCKey()
+	n := count
+	if n > int(max) {
+		n = int(max)
+	}
+	kvs := make([]roachpb.KeyValue, n)
+
+	var key MVCCKey
+	var rawBytes []byte
+	for i := range kvs {
+		key, rawBytes, kvData, err = rocksDBBatchDecodeValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		if int64(len(kvs)) == max {
-			resumeKey = key.Key
-			break
-		}
-		kvs = append(kvs, roachpb.KeyValue{
-			Key:   key.Key,
-			Value: roachpb.Value{RawBytes: reader.Value(), Timestamp: key.Timestamp},
-		})
+		kvs[i].Key = key.Key
+		kvs[i].Value.RawBytes = rawBytes
+		kvs[i].Value.Timestamp = key.Timestamp
 	}
 
-	if err := reader.Error(); err != nil {
-		return nil, nil, nil, err
+	var resumeKey roachpb.Key
+	if count > int(max) {
+		key, _, kvData, err = rocksDBBatchDecodeValue(kvData)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		resumeKey = key.Key
 	}
 
 	// TODO(peter): The checksum verification causes a 10-20% slowdown for large
@@ -1731,9 +1734,7 @@ func buildScanResults(
 	if err := roachpb.VerifyValues(kvs); err != nil {
 		return nil, nil, nil, err
 	}
-
 	return kvs, resumeKey, intents, nil
-
 }
 
 // MVCCScan scans the key range [key,endKey) key up to some maximum number of
