@@ -25,6 +25,10 @@ import (
 type ExecNode interface {
 	// Run() executes the plan and returns the results as a Datum table.
 	Run() ([]tree.Datums, error)
+
+	// Explain() executes EXPLAIN (VERBOSE) on the given plan and returns the
+	// results as a Datum table.
+	Explain() ([]tree.Datums, error)
 }
 
 // ExecBuilder is an interface used by the opt package to build an execution

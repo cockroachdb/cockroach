@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -29,11 +28,9 @@ var _ opt.ExecBuilderFactory = &Executor{}
 
 // NewExecBuilder is part of the opt.ExecBuilderFactory interface.
 func (e *Executor) NewExecBuilder() opt.ExecBuilder {
-	metrics := MakeMemMetrics("opt", time.Second)
-	session := NewSession(context.TODO(), SessionArgs{User: "root"}, e, nil /* remote */, &metrics)
 	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
 	return &execBuilder{
-		planner: session.newPlanner(e, txn),
+		planner: makeInternalPlanner("opt", txn, "root", &MemoryMetrics{}),
 	}
 }
 
@@ -76,6 +73,23 @@ type execNode struct {
 }
 
 var _ opt.ExecNode = &execNode{}
+
+// Explain is part of the opt.ExecNode interface.
+func (en *execNode) Explain() ([]tree.Datums, error) {
+	// Add an explain node to the plan and run that.
+	flags := explainFlags{
+		showMetadata: true,
+		showExprs:    true,
+		qualifyNames: true,
+	}
+	explainNode := execNode{
+		execBuilder: en.execBuilder,
+		plan: en.planner.makeExplainPlanNode(
+			flags, false /* expanded */, false /* optimized */, en.plan,
+		),
+	}
+	return explainNode.Run()
+}
 
 // Run is part of the opt.ExecNode interface.
 func (en *execNode) Run() ([]tree.Datums, error) {
