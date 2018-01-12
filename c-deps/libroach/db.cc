@@ -2540,6 +2540,11 @@ template <bool reverse> class mvccScanner {
   //
   // This also highlights the expense of keeping old versions inline
   // with the most recent version.
+  //
+  // It might be possible to make the number of iterations adaptive:
+  // decrease the number by one whenever we're forced to
+  // seek. Increase the number by one whenever the optimization hits
+  // (up to this maximum).
   static const int kMaxItersBeforeSeek = 10;
 
  public:
