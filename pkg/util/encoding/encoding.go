@@ -1320,11 +1320,11 @@ func EncodeNonsortingUvarint(appendTo []byte, x uint64) []byte {
 func DecodeNonsortingUvarint(buf []byte) (remaining []byte, length int, value uint64, err error) {
 	// TODO(dan): Handle overflow.
 	for i, b := range buf {
-		value <<= 7
 		value += uint64(b & 0x7f)
 		if b < 0x80 {
 			return buf[i+1:], i + 1, value, nil
 		}
+		value <<= 7
 	}
 	return buf, 0, 0, nil
 }
