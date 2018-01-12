@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Map from tree.ComparisonOperator to operator.
@@ -139,7 +140,7 @@ type buildContext struct {
 	evalCtx *tree.EvalContext
 	catalog optbase.Catalog
 
-	state queryState
+	scope *scope
 
 	preallocScalarProps     []scalarProps
 	preallocExprs           []Expr
@@ -198,6 +199,18 @@ func (bc *buildContext) newRelationalExpr() *Expr {
 	return e
 }
 
+// resolve converts expr to a TypedExpr and normalizes the resulting expression.
+// It panics if there are any errors during conversion or normalization.
+func (bc *buildContext) resolve(expr tree.Expr, desired types.T) tree.TypedExpr {
+	texpr := bc.scope.resolve(expr, desired)
+	nexpr, err := bc.evalCtx.NormalizeExpr(texpr)
+	if err != nil {
+		panic(err)
+	}
+
+	return nexpr
+}
+
 // build converts a tree.Statement to an Expr tree.
 func (bc *buildContext) build(stmt tree.Statement) *Expr {
 	var result *Expr
@@ -224,10 +237,10 @@ func (bc *buildContext) buildSelect(stmt *tree.Select) *Expr {
 		result = bc.buildSelect(t.Select)
 
 	case *tree.SelectClause:
-		if t.Where != nil || (t.GroupBy != nil && len(t.GroupBy) > 0) || len(t.Exprs) > 1 || t.Distinct {
+		if (t.GroupBy != nil && len(t.GroupBy) > 0) || len(t.Exprs) > 1 || t.Distinct {
 			panic("complex queries not yet supported.")
 		}
-		result = bc.buildFrom(t.From)
+		result = bc.buildFrom(t.From, t.Where)
 
 	default:
 		panic(fmt.Sprintf("unexpected select statement: %T", stmt.Select))
@@ -237,12 +250,27 @@ func (bc *buildContext) buildSelect(stmt *tree.Select) *Expr {
 }
 
 // buildSelect converts a tree.From to an Expr tree. This method
-// will expand significantly once we implement joins and filters.
-func (bc *buildContext) buildFrom(from *tree.From) *Expr {
+// will expand significantly once we implement joins.
+func (bc *buildContext) buildFrom(from *tree.From, where *tree.Where) *Expr {
 	if len(from.Tables) != 1 {
 		panic("joins not yet supported.")
 	}
-	return bc.buildTable(from.Tables[0])
+	result := bc.buildTable(from.Tables[0])
+	bc.scope = bc.scope.push()
+	bc.scope.cols = append(bc.scope.cols, result.relProps.columns...)
+
+	if where != nil {
+		input := result
+		result = bc.newRelationalExpr()
+		initSelectExpr(result, input)
+		texpr := bc.resolve(where.Expr, types.Bool)
+		result.addFilter(bc.buildScalar(texpr))
+		result.initProps()
+		bc.scope = bc.scope.push()
+		bc.scope.cols = append(bc.scope.cols, result.relProps.columns...)
+	}
+
+	return result
 }
 
 // buildTable converts a tree.TableExpr to an Expr tree.  For example,
@@ -319,19 +347,20 @@ func (bc *buildContext) buildScan(tab optbase.Table) *Expr {
 	// In this query, `l.x` is not equivalent to `r.x` and `l.y` is not
 	// equivalent to `r.y`. In order to achieve this, we need to give these
 	// columns different indexes.
+	state := bc.scope.state
 	tabName := tableName(tab.TabName())
-	bc.state.tables[tabName] = append(bc.state.tables[tabName], bc.state.nextColumnIndex)
+	state.tables[tabName] = append(state.tables[tabName], state.nextColumnIndex)
 
 	for i := 0; i < tab.NumColumns(); i++ {
 		col := tab.Column(i)
 		colProps := columnProps{
-			index: bc.state.nextColumnIndex,
+			index: state.nextColumnIndex,
 			name:  columnName(col.ColName()),
 			table: tabName,
 			typ:   col.DatumType(),
 		}
 		props.columns = append(props.columns, colProps)
-		bc.state.nextColumnIndex++
+		state.nextColumnIndex++
 	}
 
 	// Initialize not-NULL columns from the table schema.
@@ -356,6 +385,9 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 	e.scalarProps.typ = pexpr.ResolvedType()
 
 	switch t := pexpr.(type) {
+	case *columnProps:
+		initVariableExpr(e, t)
+
 	case *tree.AndExpr:
 		initBinaryExpr(
 			e, andOp,
@@ -397,7 +429,11 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 	//	initFunctionCallExpr(e, t.ResolvedFunc(), children)
 
 	case *tree.IndexedVar:
-		initVariableExpr(e, t.Idx)
+		colProps := &columnProps{
+			typ:        t.ResolvedType(),
+			indexedVar: t.Idx,
+		}
+		initVariableExpr(e, colProps)
 
 	case *tree.Tuple:
 		children := make([]*Expr, len(t.Exprs))
@@ -443,7 +479,10 @@ func build(
 		}
 	}()
 	buildCtx := makeBuildContext(ctx, evalCtx, catalog)
-	buildCtx.state.tables = make(map[tableName][]columnIndex)
+	buildCtx.scope = &scope{
+		state: &queryState{tables: make(map[tableName][]columnIndex)},
+	}
+	buildCtx.scope.state.semaCtx.Placeholders = tree.MakePlaceholderInfo()
 	return buildCtx.build(stmt), nil
 }
 
@@ -528,7 +567,7 @@ func constOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 }
 
 func variableOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
-	return ivh.IndexedVar(e.private.(int))
+	return ivh.IndexedVar(e.private.(*columnProps).indexedVar)
 }
 
 func boolOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {

@@ -96,6 +96,10 @@ type scalarClass struct{}
 
 var _ operatorClass = scalarClass{}
 
+func (scalarClass) layout() exprLayout {
+	return exprLayout{}
+}
+
 func (scalarClass) format(e *Expr, tp treeprinter.Node) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%v", e.op)
@@ -164,16 +168,15 @@ func initBinaryExpr(e *Expr, op operator, input1 *Expr, input2 *Expr) {
 }
 
 // initVariableExpr initializes a variableOp expression node.
-// The index refers to a column index (currently derived from an IndexedVar).
-func initVariableExpr(e *Expr, index int) {
+func initVariableExpr(e *Expr, col *columnProps) {
 	e.op = variableOp
-	e.private = index
+	e.private = col
 }
 
 // isIndexedVar checks if e is a variableOp that represents an
 // indexed variable with the given index.
 func isIndexedVar(e *Expr, index int) bool {
-	return e.op == variableOp && e.private.(int) == index
+	return e.op == variableOp && e.private.(*columnProps).indexedVar == index
 }
 
 func initTupleExpr(e *Expr, children []*Expr) {
