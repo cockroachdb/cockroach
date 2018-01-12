@@ -31,25 +31,20 @@ type ExecNode interface {
 	Explain() ([]tree.Datums, error)
 }
 
-// ExecBuilder is an interface used by the opt package to build an execution
-// plan (currently a sql.planNode tree).
-type ExecBuilder interface {
-	// Scan returns an ExecNode that represents a scan of the given table.
+// ExecFactory is an interface used by the opt package to build
+// an execution plan (currently a sql.planNode tree).
+type ExecFactory interface {
+	// ConstructScan returns an ExecNode that represents a scan of the given
+	// table.
 	// TODO(radu): support list of columns, index, index constraints
-	Scan(table optbase.Table) (ExecNode, error)
+	ConstructScan(table optbase.Table) (ExecNode, error)
 }
 
-// ExecBuilderFactory is an interface used to generate an ExecBuilder.
-type ExecBuilderFactory interface {
-	// New returns an ExecBuilder.
-	NewExecBuilder() ExecBuilder
-}
-
-// makeExec uses an ExecBuilder to build an execution tree.
-func makeExec(e *Expr, bld ExecBuilder) (ExecNode, error) {
+// makeExec uses an ExecFactory to build an execution tree.
+func makeExec(e *Expr, bld ExecFactory) (ExecNode, error) {
 	switch e.op {
 	case scanOp:
-		return bld.Scan(e.private.(optbase.Table))
+		return bld.ConstructScan(e.private.(optbase.Table))
 	default:
 		return nil, errors.Errorf("unsupported op %s", e.op)
 	}

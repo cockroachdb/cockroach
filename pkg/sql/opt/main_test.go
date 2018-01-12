@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -31,6 +33,10 @@ func TestMain(m *testing.M) {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
+
+	opt.NewExecFactory = func(s serverutils.TestServerInterface) opt.ExecFactory {
+		return s.Executor().(*sql.Executor).NewExecFactory()
+	}
 
 	os.Exit(m.Run())
 }

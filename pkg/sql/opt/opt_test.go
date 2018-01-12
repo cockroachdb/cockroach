@@ -101,6 +101,11 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
+// NewExecFactory returns an ExecFactory that can be used to create
+// an execution plan. The implementation is in sql so this is an opaque
+// function that is initialized in TestMain.
+var NewExecFactory func(s serverutils.TestServerInterface) ExecFactory
+
 var (
 	logicTestData    = flag.String("d", "testdata/[^.]*", "test data glob")
 	rewriteTestFiles = flag.Bool(
@@ -414,8 +419,7 @@ func TestOpt(t *testing.T) {
 						if e == nil {
 							d.fatalf(t, "no expression for exec")
 						}
-						bld := s.Executor().(ExecBuilderFactory).NewExecBuilder()
-						n, err := makeExec(e, bld)
+						n, err := makeExec(e, NewExecFactory(s))
 						if err != nil {
 							d.fatalf(t, "MakeExec: %v", err)
 						}
