@@ -53,10 +53,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, boundsExceededError(descriptor)
 	}
 
-	p.session.mu.Lock()
-	defer p.session.mu.Unlock()
-	p.session.mu.SequenceState.lastSequenceIncremented = descriptor.ID
-	p.session.mu.SequenceState.latestValues[descriptor.ID] = val
+	p.session.dataMutator.RecordLatestSequenceVal(uint32(descriptor.ID), val)
 
 	return val, nil
 }
@@ -79,21 +76,6 @@ func boundsExceededError(descriptor *sqlbase.TableDescriptor) error {
 		`reached %s value of sequence "%s" (%d)`, word, descriptor.Name, value)
 }
 
-// GetLastSequenceValue implements the tree.EvalPlanner interface.
-func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
-	p.session.mu.RLock()
-	defer p.session.mu.RUnlock()
-
-	seqState := p.session.mu.SequenceState
-
-	if !seqState.nextvalEverCalled() {
-		return 0, pgerror.NewError(
-			pgerror.CodeObjectNotInPrerequisiteStateError, "lastval is not yet defined in this session")
-	}
-
-	return seqState.latestValues[seqState.lastSequenceIncremented], nil
-}
-
 // GetLatestValueInSessionForSequence implements the tree.EvalPlanner interface.
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
@@ -103,10 +85,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 		return 0, err
 	}
 
-	p.session.mu.RLock()
-	defer p.session.mu.RUnlock()
-
-	val, ok := p.session.mu.SequenceState.latestValues[descriptor.ID]
+	val, ok := p.SessionData().SequenceState.GetLastValueByID(uint32(descriptor.ID))
 	if !ok {
 		return 0, pgerror.NewErrorf(
 			pgerror.CodeObjectNotInPrerequisiteStateError,
@@ -140,26 +119,6 @@ func (p *planner) SetSequenceValue(
 	// according to comments on Inc operation. Switch to Inc if `desired-current`
 	// overflows correctly.
 	return p.txn.Put(ctx, seqValueKey, newVal)
-}
-
-// sequenceState stores session-scoped state used by sequence builtins.
-type sequenceState struct {
-	// latestValues stores the last value obtained by nextval() in this session by descriptor id.
-	latestValues map[sqlbase.ID]int64
-
-	// lastSequenceIncremented records the descriptor id of the last sequence nextval() was
-	// called on in this session.
-	lastSequenceIncremented sqlbase.ID
-}
-
-func newSequenceState() sequenceState {
-	return sequenceState{
-		latestValues: make(map[sqlbase.ID]int64),
-	}
-}
-
-func (ss *sequenceState) nextvalEverCalled() bool {
-	return len(ss.latestValues) > 0
 }
 
 func readOnlyError(s string) error {
