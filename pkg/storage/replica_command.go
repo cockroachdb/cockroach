@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -2094,6 +2095,21 @@ func (r *Replica) adminScatter(
 			allowLeaseTransfer = true
 		}
 		re.Reset()
+	}
+
+	// If we've been asked to randomize the leases beyond what the replicate
+	// queue would do on its own (#17341), do so after the replicate queue is
+	// done by transferring the lease to any of the given N replicas with
+	// probability 1/N of choosing each.
+	if args.RandomizeLeases && r.OwnsValidLease(r.store.Clock().Now()) {
+		desc := r.Desc()
+		newLeaseholderIdx := rand.Intn(len(desc.Replicas))
+		targetStoreID := desc.Replicas[newLeaseholderIdx].StoreID
+		if targetStoreID != r.store.StoreID() {
+			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
+				log.Warningf(ctx, "failed to scatter lease to s%d: %s", targetStoreID, err)
+			}
+		}
 	}
 
 	desc := r.Desc()
