@@ -2314,7 +2314,7 @@ func TestMVCCReverseScan(t *testing.T) {
 		!bytes.Equal(kvs[1].Key, testKey2) ||
 		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) ||
 		!bytes.Equal(kvs[1].Value.RawBytes, value3.RawBytes) {
-		t.Errorf("unexpected value: %v", kvs)
+		t.Fatalf("unexpected value: %v", kvs)
 	}
 	if resumeSpan != nil {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
@@ -2328,7 +2328,7 @@ func TestMVCCReverseScan(t *testing.T) {
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey3) ||
 		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
-		t.Errorf("unexpected value: %v", kvs)
+		t.Fatalf("unexpected value: %v", kvs)
 	}
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey2.Next()}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
@@ -2340,7 +2340,7 @@ func TestMVCCReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(kvs) != 0 {
-		t.Errorf("unexpected value: %v", kvs)
+		t.Fatalf("unexpected value: %v", kvs)
 	}
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey4}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
@@ -2369,7 +2369,19 @@ func TestMVCCReverseScan(t *testing.T) {
 	if len(kvs) != 1 ||
 		!bytes.Equal(kvs[0].Key, testKey4) ||
 		!bytes.Equal(kvs[0].Value.RawBytes, value2.RawBytes) {
-		t.Errorf("unexpected value: %v", kvs)
+		t.Fatalf("unexpected value: %v", kvs)
+	}
+
+	// Scan only the first key in the key space.
+	kvs, _, _, err = MVCCReverseScan(context.Background(), engine,
+		testKey1, testKey1.Next(), 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 ||
+		!bytes.Equal(kvs[0].Key, testKey1) ||
+		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) {
+		t.Fatalf("unexpected value: %v", kvs)
 	}
 }
 
