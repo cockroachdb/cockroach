@@ -256,16 +256,14 @@ func makeInternalPlanner(
 		-1, noteworthyInternalMemoryUsageBytes/5)
 	s.TxnState.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
-	p := s.newPlanner(nil /* executor */, txn)
-
+	ts := time.Time{}
 	if txn != nil {
 		if txn.Proto().OrigTimestamp == (hlc.Timestamp{}) {
 			panic("makeInternalPlanner called with a transaction without timestamps")
 		}
-		ts := txn.Proto().OrigTimestamp.GoTime()
-		p.extendedEvalCtx.SetTxnTimestamp(ts)
-		p.extendedEvalCtx.SetStmtTimestamp(ts)
+		ts = txn.Proto().OrigTimestamp.GoTime()
 	}
+	p := s.newPlanner(txn, ts /* txnTimestamp */, ts /* stmtTimestamp */, nil /* reCache */)
 
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Tables = &s.tables
@@ -314,21 +312,6 @@ func (p *planner) User() string {
 // example. Revisit.
 func (p *planner) DistLoader() *DistLoader {
 	return &DistLoader{distSQLPlanner: p.extendedEvalCtx.DistSQLPlanner}
-}
-
-// setTxn resets the current transaction in the planner and
-// initializes the timestamps used by SQL built-in functions from
-// the new txn object, if any.
-func (p *planner) setTxn(txn *client.Txn) {
-	p.txn = txn
-	p.extendedEvalCtx.Txn = txn
-	if txn != nil {
-		p.extendedEvalCtx.SetClusterTimestamp(txn.OrigTimestamp())
-	} else {
-		p.extendedEvalCtx.SetTxnTimestamp(time.Time{})
-		p.extendedEvalCtx.SetStmtTimestamp(time.Time{})
-		p.extendedEvalCtx.SetClusterTimestamp(hlc.Timestamp{})
-	}
 }
 
 // makeInternalPlan initializes a planNode from a SQL statement string.

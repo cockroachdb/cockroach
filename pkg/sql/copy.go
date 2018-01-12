@@ -127,7 +127,8 @@ func (s *Session) ProcessCopyData(
 	cf := s.copyFrom
 	buf := cf.buf
 
-	evalCtx := s.extendedEvalCtx()
+	evalCtx := s.extendedEvalCtx(
+		s.TxnState.mu.txn, s.TxnState.sqlTimestamp, s.execCfg.Clock.PhysicalTime())
 
 	switch msg {
 	case copyMsgData:

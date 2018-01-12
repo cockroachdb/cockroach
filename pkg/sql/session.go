@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -557,8 +558,15 @@ func (s *Session) Ctx() context.Context {
 	return s.context
 }
 
-func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
+func (s *Session) resetPlanner(
+	p *planner,
+	txn *client.Txn,
+	txnTimestamp time.Time,
+	stmtTimestamp time.Time,
+	reCache *tree.RegexpCache,
+) {
 	p.session = s
+	p.txn = txn
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
 	p.phaseTimes = s.phaseTimes
 	p.stmt = nil
@@ -568,19 +576,17 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.semaCtx.Location = &s.data.Location
 	p.semaCtx.SearchPath = s.data.SearchPath
 
-	p.extendedEvalCtx = s.extendedEvalCtx()
+	p.extendedEvalCtx = s.extendedEvalCtx(txn, txnTimestamp, stmtTimestamp)
 	p.extendedEvalCtx.Planner = p
-	if e != nil {
-		p.extendedEvalCtx.ClusterID = e.cfg.ClusterID()
-		p.extendedEvalCtx.NodeID = e.cfg.NodeID.Get()
-		p.extendedEvalCtx.ReCache = e.reCache
+	if s.execCfg != nil {
+		p.extendedEvalCtx.ClusterID = s.execCfg.ClusterID()
+		p.extendedEvalCtx.NodeID = s.execCfg.NodeID.Get()
 	}
+	p.extendedEvalCtx.ReCache = reCache
 
 	p.sessionDataMutator = s.dataMutator
 	p.preparedStatements = &s.PreparedStatements
 	p.autoCommit = false
-
-	p.setTxn(txn)
 }
 
 // FinishPlan releases the resources that were consumed by the currently active
@@ -609,15 +615,19 @@ func (s *Session) FinishPlan() {
 // newPlanner creates a planner inside the scope of the given Session. The
 // statement executed by the planner will be executed in txn. The planner
 // should only be used to execute one statement.
-func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
+func (s *Session) newPlanner(
+	txn *client.Txn, txnTimestamp time.Time, stmtTimestamp time.Time, reCache *tree.RegexpCache,
+) *planner {
 	p := &planner{}
-	s.resetPlanner(p, e, txn)
+	s.resetPlanner(p, txn, txnTimestamp, stmtTimestamp, reCache)
 	return p
 }
 
 // extendedEvalCtx creates an evaluation context from the Session's current
 // configuration.
-func (s *Session) extendedEvalCtx() extendedEvalContext {
+func (s *Session) extendedEvalCtx(
+	txn *client.Txn, txnTimestamp time.Time, stmtTimestamp time.Time,
+) extendedEvalContext {
 	var evalContextTestingKnobs tree.EvalContextTestingKnobs
 	var st *cluster.Settings
 	var statusServer serverpb.StatusServer
@@ -628,16 +638,24 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 		st = s.execCfg.Settings
 		statusServer = s.execCfg.StatusServer
 	}
-	return extendedEvalContext{
+	var clusterTs hlc.Timestamp
+	if txn != nil {
+		clusterTs = txn.OrigTimestamp()
+	}
+	evalCtx := extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			SessionData:     s.data,
-			ApplicationName: s.dataMutator.ApplicationName(),
-			TxnState:        getTransactionState(&s.TxnState),
-			TxnReadOnly:     s.TxnState.readOnly,
-			Settings:        st,
-			CtxProvider:     s,
-			Mon:             &s.TxnState.mon,
-			TestingKnobs:    evalContextTestingKnobs,
+			Txn:              txn,
+			SessionData:      s.data,
+			ApplicationName:  s.dataMutator.ApplicationName(),
+			TxnState:         getTransactionState(&s.TxnState),
+			TxnReadOnly:      s.TxnState.readOnly,
+			Settings:         st,
+			CtxProvider:      s,
+			Mon:              &s.TxnState.mon,
+			TestingKnobs:     evalContextTestingKnobs,
+			StmtTimestamp:    stmtTimestamp,
+			TxnTimestamp:     txnTimestamp,
+			ClusterTimestamp: clusterTs,
 		},
 		SessionMutator:        s.dataMutator,
 		VirtualSchemas:        &s.virtualSchemas,
@@ -651,6 +669,7 @@ func (s *Session) extendedEvalCtx() extendedEvalContext {
 		TxnModesSetter:        &s.TxnState,
 		SchemaChangers:        &s.TxnState.schemaChangers,
 	}
+	return evalCtx
 }
 
 // resetForBatch prepares the Session for executing a new batch of statements.
