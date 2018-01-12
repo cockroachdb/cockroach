@@ -315,8 +315,10 @@ func planQuery(
 	t *testing.T, s serverutils.TestServerInterface, sql string,
 ) (*planner, planNode, func()) {
 	kvDB := s.KVClient().(*client.DB)
+	now := s.Clock().Now()
+	physicalNow := s.Clock().PhysicalTime()
 	txn := client.NewTxn(kvDB, s.NodeID())
-	txn.Proto().OrigTimestamp = s.Clock().Now()
+	txn.Proto().OrigTimestamp = now
 	p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
 	p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
 	p.session.dataMutator.SetDatabase("test")
@@ -324,7 +326,8 @@ func planQuery(
 	// statement, but here we neede to set the session database, so we did that by
 	// accessing the session directly. That requires us to reset the planner, so
 	// that its copy of the session variable is reset.
-	p.session.resetPlanner(p, nil /* executor*/, txn)
+	p.session.resetPlanner(
+		p, txn, physicalNow /* txnTimestamp */, physicalNow /* stmtTimestamp */, nil /* reCache */)
 
 	stmts, err := p.parser.Parse(sql)
 	if err != nil {
