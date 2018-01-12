@@ -2797,8 +2797,8 @@ template <bool reverse> class mvccScanner {
   }
 
   // prevKey backs up the iterator to point to the prev MVCC key less
-  // than key. Returns false if the iterator is exhausted or an error
-  // occurs.
+  // than the specified key. Returns false if the iterator is
+  // exhausted or an error occurs.
   bool prevKey(const rocksdb::Slice& key) {
     key_buf_.assign(key.data(), key.size());
 
@@ -2885,7 +2885,7 @@ template <bool reverse> class mvccScanner {
   // larger than our read timestamp results in an uncertainty error.
   //
   // TODO(peter): Passing check_uncertainty as a boolean is a bit
-  // ungainly because it makes the subsequent comparion with
+  // ungainly because it makes the subsequent comparison with
   // timestamp_ a bit subtle. Consider passing a
   // uncertainAboveTimestamp parameter. Or better, templatize this
   // method and pass a "check" functor.
@@ -2993,8 +2993,7 @@ template <bool reverse> class mvccScanner {
 };
 
 typedef mvccScanner<false> mvccForwardScanner;
-typedef mvccScanner<true> mvccReverse
-Scanner;
+typedef mvccScanner<true> mvccReverseScanner;
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
                       bool consistent) {
