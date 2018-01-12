@@ -427,7 +427,13 @@ func (e *Executor) Start(
 	ctx = log.WithLogTag(ctx, "startup", nil)
 	startupSession := NewSession(ctx, SessionArgs{}, e, nil, startupMemMetrics)
 	startupSession.StartUnlimitedMonitor()
-	if err := e.virtualSchemas.init(ctx, startupSession.newPlanner(e, nil)); err != nil {
+	if err := e.virtualSchemas.init(
+		ctx, startupSession.newPlanner(
+			nil,                        /* txn */
+			time.Time{},                /* txnTimestamp */
+			e.cfg.Clock.PhysicalTime(), /* stmtTimestamp */
+			e.reCache),
+	); err != nil {
 		log.Fatal(ctx, err)
 	}
 	startupSession.Finish(e)
@@ -516,7 +522,12 @@ func (e *Executor) Prepare(
 		txn.Proto().OrigTimestamp = e.cfg.Clock.Now()
 	}
 
-	planner := session.newPlanner(e, txn)
+	planner := session.newPlanner(
+		txn,
+		session.TxnState.sqlTimestamp,
+		e.cfg.Clock.PhysicalTime(), /* stmtTimestamp */
+		e.reCache,
+	)
 	planner.semaCtx.Placeholders.SetTypeHints(placeholderHints)
 	planner.extendedEvalCtx.PrepareOnly = true
 	planner.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
@@ -1793,18 +1804,17 @@ func (e *Executor) execStmtInOpenTxn(
 
 	var p *planner
 	runInParallel := parallelize && !txnState.implicitTxn
+	stmtTs := e.cfg.Clock.PhysicalTime()
 	if runInParallel {
 		// Create a new planner from the Session to execute the statement, since
 		// we're executing in parallel.
-		p = session.newPlanner(e, txnState.mu.txn)
+		p = session.newPlanner(txnState.mu.txn, txnState.sqlTimestamp, stmtTs, e.reCache)
 	} else {
 		// We're not executing in parallel. We can use the cached planner on the
 		// session.
 		p = &session.planner
-		session.resetPlanner(p, e, txnState.mu.txn)
+		session.resetPlanner(p, txnState.mu.txn, txnState.sqlTimestamp, stmtTs, e.reCache)
 	}
-	p.extendedEvalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
-	p.extendedEvalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 	p.semaCtx.Placeholders.Assign(pinfo)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.asOfSystemTime = asOfSystemTime
@@ -2569,7 +2579,12 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 		return nil, nil
 	}
 
-	evalCtx := session.extendedEvalCtx()
+	// the evalCtx is not needed for the purposes of evaluating AOST. See #16424.
+	evalCtx := session.extendedEvalCtx(
+		nil,         /* txn */
+		time.Time{}, /* txnTimestamp */
+		time.Time{}, /* stmtTimestamp */
+	)
 	ts, err := EvalAsOfTimestamp(&evalCtx.EvalContext, asOf, max)
 	return &ts, err
 }
