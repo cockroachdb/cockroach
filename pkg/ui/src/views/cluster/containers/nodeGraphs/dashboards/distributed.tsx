@@ -121,5 +121,14 @@ export default function (props: GraphDashboardProps) {
         }
       </Axis>
     </LineGraph>,
+
+    <LineGraph title="Clock Offset" sources={nodeSources}
+    tooltip={`Mean and Standard deviation of the clock offset across the cluster`}>
+      <Axis label="offset" units={AxisUnits.Duration}>
+        <Metric name="cr.node.clock-offset.meannanos" title="Mean" />
+        <Metric name="cr.node.clock-offset.stddevnanos" title="Standard Deviation" />
+      </Axis>
+    </LineGraph>,
+
   ];
 }
