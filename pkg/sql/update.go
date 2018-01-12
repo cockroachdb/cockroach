@@ -44,8 +44,12 @@ type updateNode struct {
 	checkHelper   checkHelper
 	sourceSlots   []sourceSlot
 
-	run updateRun
+	run        updateRun
+	autoCommit autoCommitOpt
 }
+
+// updateNode implements the autoCommitNode interface.
+var _ autoCommitNode = &updateNode{}
 
 // Update updates columns for a selection of rows from a table.
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
@@ -122,10 +126,7 @@ func (p *planner) Update(
 	if err != nil {
 		return nil, err
 	}
-	tw := tableUpdater{
-		ru:         ru,
-		autoCommit: p.autoCommit,
-	}
+	tw := tableUpdater{ru: ru}
 
 	tracing.AnnotateTrace()
 
@@ -276,7 +277,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			_, err = u.tw.finalize(params.ctx, params.extendedEvalCtx.Tracing.KVTracingEnabled())
+			_, err = u.tw.finalize(params.ctx, u.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -349,6 +350,11 @@ func (u *updateNode) Close(ctx context.Context) {
 	u.tw.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
+}
+
+// enableAutoCommit is part of the autoCommitNode interface.
+func (u *updateNode) enableAutoCommit() {
+	u.autoCommit = autoCommitEnabled
 }
 
 // editNode (Base, Run) is shared between all row updating

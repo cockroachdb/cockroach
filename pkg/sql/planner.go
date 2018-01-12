@@ -136,11 +136,13 @@ type planner struct {
 	// initializing plans to read from a table. This should be used with care.
 	skipSelectPrivilegeChecks bool
 
-	// autoCommit indicates whether we're planning for a spontaneous transaction.
-	// If autoCommit is true, the plan is allowed (but not required) to
-	// commit the transaction along with other KV operations.
-	// Note: The autoCommit parameter enables operations to enable the
-	// 1PC optimization. This is a bit hackish/preliminary at present.
+	// autoCommit indicates whether we're planning for an implicit transaction.
+	// If autoCommit is true, the plan is allowed (but not required) to commit the
+	// transaction along with other KV operations. Committing the txn might be
+	// beneficial because it may enable the 1PC optimization.
+	//
+	// NOTE: This member is for internal use of the planner only. PlanNodes that
+	// want to do 1PC transactions have to implement the autoCommitNode interface.
 	autoCommit bool
 
 	// phaseTimes helps measure the time spent in each phase of SQL execution.
