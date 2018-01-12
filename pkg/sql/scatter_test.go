@@ -16,6 +16,8 @@ package sql_test
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,11 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestScatter(t *testing.T) {
+func TestScatterRandomizeLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#14955")
 
-	const numHosts = 4
+	const numHosts = 3
 	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.TODO())
 
@@ -47,44 +48,64 @@ func TestScatter(t *testing.T) {
 	// Introduce 99 splits to get 100 ranges.
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
-	// Ensure that scattering leaves each node with at least 20% of the leases.
-	r.Exec(t, "ALTER TABLE test.t SCATTER")
-	rows := r.Query(t, "SHOW TESTING_RANGES FROM TABLE test.t")
-	// See showRangesColumns for the schema.
-	if cols, err := rows.Columns(); err != nil {
+	getLeaseholders := func() (map[int]int, error) {
+		rows := r.Query(t, "SHOW TESTING_RANGES FROM TABLE test.t")
+		// See showRangesColumns for the schema.
+		if cols, err := rows.Columns(); err != nil {
+			return nil, err
+		} else if len(cols) != 5 {
+			return nil, fmt.Errorf("expected 4 columns, got %#v", cols)
+		}
+		vals := []interface{}{
+			new(interface{}),
+			new(interface{}),
+			new(int),
+			new(interface{}),
+			new(int),
+		}
+		leaseholders := make(map[int]int)
+		numRows := 0
+		for ; rows.Next(); numRows++ {
+			if err := rows.Scan(vals...); err != nil {
+				return nil, err
+			}
+			rangeID := *vals[2].(*int)
+			if rangeID < 1 {
+				t.Fatalf("invalid rangeID: %d", rangeID)
+			}
+			leaseholder := *vals[4].(*int)
+			if leaseholder < 1 || leaseholder > numHosts {
+				return nil, fmt.Errorf("invalid lease holder value: %d", leaseholder)
+			}
+			leaseholders[rangeID] = leaseholder
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		if numRows != 100 {
+			return nil, fmt.Errorf("expected 100 ranges, got %d", numRows)
+		}
+		return leaseholders, nil
+	}
+
+	oldLeaseholders, err := getLeaseholders()
+	if err != nil {
 		t.Fatal(err)
-	} else if len(cols) != 5 {
-		t.Fatalf("expected 4 columns, got %#v", cols)
 	}
-	vals := []interface{}{
-		new(interface{}),
-		new(interface{}),
-		new(interface{}),
-		new(interface{}),
-		new(int),
-	}
-	leaseHolders := map[int]int{1: 0, 2: 0, 3: 0, 4: 0}
-	numRows := 0
-	for ; rows.Next(); numRows++ {
-		if err := rows.Scan(vals...); err != nil {
+
+	for i := 0; i < 10; i++ {
+		// Ensure that scattering changes the leaseholders, which is really all
+		// that randomizing the lease placements can probabilistically guarantee -
+		// it doesn't guarantee a uniform distribution.
+		r.Exec(t, "ALTER TABLE test.t SCATTER")
+		newLeaseholders, err := getLeaseholders()
+		if err != nil {
 			t.Fatal(err)
 		}
-		leaseHolder := *vals[4].(*int)
-		if leaseHolder < 1 || leaseHolder > numHosts {
-			t.Fatalf("invalid lease holder value: %d", leaseHolder)
+		if reflect.DeepEqual(oldLeaseholders, newLeaseholders) {
+			t.Errorf("expected scatter to change lease distribution, but got no change: %v", newLeaseholders)
 		}
-		leaseHolders[leaseHolder]++
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if numRows != 100 {
-		t.Fatalf("expected 100 ranges, got %d", numRows)
-	}
-	for i, count := range leaseHolders {
-		if count < 20 {
-			t.Errorf("less than 20 leaseholders on host %d (only %d)", i, count)
-		}
+		oldLeaseholders = newLeaseholders
 	}
 }
 

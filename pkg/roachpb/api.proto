@@ -1072,6 +1072,7 @@ message AdminScatterRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bool randomize_leases = 2;
 }
 
 // ScatterResponse is the response to a Scatter() operation.
