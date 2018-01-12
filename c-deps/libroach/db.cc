@@ -2526,6 +2526,13 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
 // operations. Parameterizing the code on whether a forward or reverse
 // scan is performed allows the different code paths to be compiled
 // efficiently while still reusing the common code without difficulty.
+//
+// WARNING: Do not use iter_rep_->key() or iter_rep_->value()
+// directly. In order to efficiently support reverse scans, we
+// maintain a single entry buffer that allows "peeking" at the
+// previous key. But the operation of "peeking" cause
+// iter_rep_->{key,value}() to point to different data than what the
+// scanner class considers the "current" key/value.
 template <bool reverse> class mvccScanner {
   // kMaxItersBeforeSeek is the number of calls to iter->Next() to
   // perform when looking for the next key or a particular version
@@ -2562,7 +2569,8 @@ template <bool reverse> class mvccScanner {
         consistent_(consistent),
         check_uncertainty_(timestamp < txn.max_timestamp),
         kvs_(new rocksdb::WriteBatch),
-        intents_(new rocksdb::WriteBatch) {
+        intents_(new rocksdb::WriteBatch),
+        peeked_(false) {
     memset(&results_, 0, sizeof(results_));
     results_.status = kSuccess;
 
@@ -2669,14 +2677,12 @@ template <bool reverse> class mvccScanner {
 
   bool getAndAdvance() {
     const bool is_value = cur_timestamp_ != kZeroTimestamp;
-    const rocksdb::Slice key = iter_rep_->key();
-    const rocksdb::Slice value = iter_rep_->value();
 
     if (is_value) {
       if (timestamp_ >= cur_timestamp_) {
         // 1. Fast path: there is no intent and our read timestamp is
         // newer than the most recent version's timestamp.
-        return addAndAdvance(value);
+        return addAndAdvance(cur_value_);
       }
 
       if (check_uncertainty_) {
@@ -2699,7 +2705,7 @@ template <bool reverse> class mvccScanner {
       return seekVersion(timestamp_, false);
     }
 
-    if (!meta_.ParseFromArray(value.data(), value.size())) {
+    if (!meta_.ParseFromArray(cur_value_.data(), cur_value_.size())) {
       return setStatus(FmtStatus("unable to decode MVCCMetadata"));
     }
 
@@ -2730,7 +2736,7 @@ template <bool reverse> class mvccScanner {
       // historical timestamp < the intent timestamp. However, we
       // return the intent separately; the caller may want to resolve
       // it.
-      intents_->Put(key, value);
+      intents_->Put(cur_iter_key_, cur_value_);
       return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
     }
 
@@ -2740,7 +2746,7 @@ template <bool reverse> class mvccScanner {
       // intent. Note that this will trigger an error on the Go
       // side. We continue scanning so that we can return all of the
       // intents in the scan range.
-      intents_->Put(key, value);
+      intents_->Put(cur_iter_key_, cur_value_);
       return advanceKey();
     }
 
@@ -2801,31 +2807,54 @@ template <bool reverse> class mvccScanner {
     return iterSeek(key_buf_);
   }
 
+  // backwardLatestVersion backs up the iterator to the latest version
+  // for the specified key. The parameter i is used to maintain the
+  // iteration count between the loop here and the caller (usually
+  // prevKey). Returns false if an error occurred.
+  bool backwardLatestVersion(const rocksdb::Slice& key, int i) {
+    key_buf_.assign(key.data(), key.size());
+
+    for (; i < kMaxItersBeforeSeek; ++i) {
+      rocksdb::Slice peeked_key;
+      if (!iterPeekPrev(&peeked_key)) {
+        return false;
+      }
+      if (peeked_key != key_buf_) {
+        // The key changed which means the current key is the latest
+        // version.
+        return true;
+      }
+      if (!iterPrev()) {
+        return false;
+      }
+    }
+
+    key_buf_.append("\0", 1);
+    return iterSeek(key_buf_);
+  }
+
   // prevKey backs up the iterator to point to the prev MVCC key less
   // than the specified key. Returns false if the iterator is
   // exhausted or an error occurs.
   bool prevKey(const rocksdb::Slice& key) {
+    if (peeked_ && iter_rep_->key().compare(end_key_) < 0) {
+      // No need to look at the previous key if it is less than our
+      // end key.
+      return false;
+    }
+
     key_buf_.assign(key.data(), key.size());
 
     for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
-      if (!iterPrev()) {
+      rocksdb::Slice peeked_key;
+      if (!iterPeekPrev(&peeked_key)) {
         return false;
       }
-      if (cur_key_ != key_buf_) {
-        // TODO(peter): This really stinks for performance. We
-        // iterated to the previous key, but in order to find the
-        // latest version of the key we need to seek. An alternative
-        // approach would be to keep calling iterPrev() until we get
-        // to another different key and then call iterNext() to get
-        // back to this key. A quick test of this approach showed the
-        // benefit was in the single-digit percentages. A final
-        // thought: perhaps we can add a wrapper or abstraction around
-        // rocksdb::Iterator that maintains a window of keys. The
-        // window could possibly be small. For example, an
-        // iter->PeekPrevKey() method might be sufficient.
-        key_buf_.assign(cur_key_.data(), cur_key_.size());
-        key_buf_.append("\0", 1);
-        return iterSeek(key_buf_);
+      if (peeked_key != key_buf_) {
+        return backwardLatestVersion(peeked_key, i + 1);
+      }
+      if (!iterPrev()) {
+        return false;
       }
     }
 
@@ -2849,7 +2878,11 @@ template <bool reverse> class mvccScanner {
       // Iterating to the next key might have caused the iterator to
       // reach the end of the key space. If that happens, back up to
       // the very last key.
+      clearPeeked();
       iter_rep_->SeekToLast();
+      if (!updateCurrent()) {
+        return false;
+      }
       return advanceKey();
     } else {
       // We've reached the end of the iterator and there is nothing
@@ -2871,7 +2904,7 @@ template <bool reverse> class mvccScanner {
 
   bool addAndAdvance(const rocksdb::Slice& value) {
     if (value.size() > 0) {
-      kvs_->Put(iter_rep_->key(), value);
+      kvs_->Put(cur_iter_key_, value);
       if (kvs_->Count() > max_keys_) {
         return false;
       }
@@ -2908,7 +2941,7 @@ template <bool reverse> class mvccScanner {
         if (check_uncertainty && timestamp_ < cur_timestamp_) {
           return uncertaintyError(cur_timestamp_);
         }
-        return addAndAdvance(iter_rep_->value());
+        return addAndAdvance(cur_value_);
       }
     }
 
@@ -2922,7 +2955,7 @@ template <bool reverse> class mvccScanner {
       if (check_uncertainty && timestamp_ < cur_timestamp_) {
         return uncertaintyError(cur_timestamp_);
       }
-      return addAndAdvance(iter_rep_->value());
+      return addAndAdvance(cur_value_);
     }
     return advanceKey();
   }
@@ -2931,8 +2964,10 @@ template <bool reverse> class mvccScanner {
     if (!iter_rep_->Valid()) {
       return false;
     }
+    cur_iter_key_ = iter_rep_->key();
+    cur_value_ = iter_rep_->value();
     cur_timestamp_ = kZeroTimestamp;
-    if (!DecodeKey(iter_rep_->key(), &cur_key_, &cur_timestamp_)) {
+    if (!DecodeKey(cur_iter_key_, &cur_key_, &cur_timestamp_)) {
       return setStatus(FmtStatus("failed to split mvcc key"));
     }
     return true;
@@ -2941,6 +2976,7 @@ template <bool reverse> class mvccScanner {
   // iterSeek positions the iterator at the first key that is greater
   // than or equal to key.
   bool iterSeek(const rocksdb::Slice& key) {
+    clearPeeked();
     iter_rep_->Seek(key);
     return updateCurrent();
   }
@@ -2948,6 +2984,8 @@ template <bool reverse> class mvccScanner {
   // iterSeekReverse positions the iterator at the last key that is
   // less than key.
   bool iterSeekReverse(const rocksdb::Slice& key) {
+    clearPeeked();
+
     // SeekForPrev positions the iterator at the key that is less than
     // key. NB: the doc comment on SeekForPrev suggests it positions
     // less than or equal, but this is a lie.
@@ -2959,21 +2997,79 @@ template <bool reverse> class mvccScanner {
       // We landed on an intent or inline value.
       return true;
     }
-    // We landed on a versioned value, we need back up to find the
+
+    // We landed on a versioned value, we need to back up to find the
     // latest version.
-    key_buf_.assign(cur_key_.data(), cur_key_.size());
-    key_buf_.append("\0", 1);
-    return iterSeek(key_buf_);
+    return backwardLatestVersion(cur_key_, 0);
   }
 
   bool iterNext() {
+    if (reverse && peeked_) {
+      // If we had peeked at the previous entry, we need to advance
+      // the iterator twice to get to the real next entry.
+      peeked_ = false;
+      iter_rep_->Next();
+      if (!iter_rep_->Valid()) {
+        return false;
+      }
+    }
     iter_rep_->Next();
     return updateCurrent();
   }
 
   bool iterPrev() {
+    if (peeked_) {
+      peeked_ = false;
+      return updateCurrent();
+    }
     iter_rep_->Prev();
     return updateCurrent();
+  }
+
+  // iterPeekPrev "peeks" at the previous key before the current
+  // iterator position.
+  bool iterPeekPrev(rocksdb::Slice *peeked_key) {
+    if (!peeked_) {
+      // We need to save a copy of the current iterator key and value
+      // and adjust cur_iter_key_, cur_key and cur_value to point to
+      // this saved data.
+      peeked_ = true;
+      peek_buf_.resize(0);
+      peek_buf_.reserve(cur_iter_key_.size() + cur_value_.size());
+      peek_buf_.append(cur_iter_key_.data(), cur_iter_key_.size());
+      peek_buf_.append(cur_value_.data(), cur_value_.size());
+      cur_iter_key_ = rocksdb::Slice(peek_buf_.data(), cur_iter_key_.size());
+      cur_value_ = rocksdb::Slice(peek_buf_.data() + cur_iter_key_.size(), cur_value_.size());
+      rocksdb::Slice dummy_timestamp;
+      if (!SplitKey(cur_iter_key_, &cur_key_, &dummy_timestamp)) {
+        return setStatus(FmtStatus("failed to split mvcc key"));
+      }
+      iter_rep_->Prev();
+      if (!iter_rep_->Valid()) {
+        // Peeking at the previous key should never leave the iterator
+        // invalid. Instead, we seek back to the first key and set the
+        // peeked_key to the empty key. Note that this prevents using
+        // reverse scan to scan to the empty key.
+        peeked_ = false;
+        *peeked_key = rocksdb::Slice();
+        iter_rep_->SeekToFirst();
+        return updateCurrent();
+      }
+    }
+
+    rocksdb::Slice dummy_timestamp;
+    if (!SplitKey(iter_rep_->key(), peeked_key, &dummy_timestamp)) {
+      return setStatus(FmtStatus("failed to split mvcc key"));
+    }
+    return true;
+  }
+
+  // clearPeeked clears the peeked flag. This should be called before
+  // any iterator movement operations on iter_rep_.
+  void clearPeeked() {
+    if (reverse) {
+      peeked_ = false;
+    }
   }
 
  public:
@@ -2992,8 +3088,12 @@ template <bool reverse> class mvccScanner {
   std::unique_ptr<rocksdb::WriteBatch> kvs_;
   std::unique_ptr<rocksdb::WriteBatch> intents_;
   std::string key_buf_;
+  std::string peek_buf_;
+  bool peeked_;
   cockroach::storage::engine::enginepb::MVCCMetadata meta_;
+  rocksdb::Slice cur_iter_key_;
   rocksdb::Slice cur_key_;
+  rocksdb::Slice cur_value_;
   DBTimestamp cur_timestamp_;
 };
 
