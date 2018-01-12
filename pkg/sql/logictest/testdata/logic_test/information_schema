@@ -217,6 +217,8 @@ crdb_internal       gossip_liveness
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
 crdb_internal       jobs
+crdb_internal       kv_node_status
+crdb_internal       kv_store_status
 crdb_internal       leases
 crdb_internal       node_build_info
 crdb_internal       node_queries
@@ -390,6 +392,8 @@ def            crdb_internal       gossip_liveness            SYSTEM VIEW  1
 def            crdb_internal       gossip_nodes               SYSTEM VIEW  1
 def            crdb_internal       index_columns              SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
+def            crdb_internal       kv_node_status             SYSTEM VIEW  1
+def            crdb_internal       kv_store_status            SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
 def            crdb_internal       node_queries               SYSTEM VIEW  1
