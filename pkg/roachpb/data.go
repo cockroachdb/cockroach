@@ -274,25 +274,6 @@ func (v Value) Verify(key []byte) error {
 	return nil
 }
 
-// VerifyValues verifies the checksums for the key/value pairs. The first error
-// encountered is returned.
-func VerifyValues(kvs []KeyValue) error {
-	crc := crc32Pool.Get().(hash.Hash32)
-	var err error
-	for i := range kvs {
-		kv := &kvs[i]
-		if sum := kv.Value.checksum(); sum != 0 {
-			if computedSum := computeChecksum(kv.Key, kv.Value.RawBytes, crc); computedSum != sum {
-				err = fmt.Errorf("%s: invalid checksum (%x) value [% x]",
-					kv.Key, computedSum, kv.Value.RawBytes)
-				break
-			}
-		}
-	}
-	crc32Pool.Put(crc)
-	return err
-}
-
 // ShallowClone returns a shallow clone of the receiver.
 func (v *Value) ShallowClone() *Value {
 	if v == nil {

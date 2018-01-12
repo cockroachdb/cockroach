@@ -1761,12 +1761,6 @@ func buildScanResults(
 		resumeKey = key.Key
 	}
 
-	// TODO(peter): The checksum verification causes a 10-20% slowdown for large
-	// scans. See what we can do about that. Perhaps move the verification into
-	// C++. Perhaps use a faster implementation of CRC32. Or switch to CRC32c.
-	if err := roachpb.VerifyValues(kvs); err != nil {
-		return nil, nil, nil, err
-	}
 	return kvs, resumeKey, intents, nil
 }
 

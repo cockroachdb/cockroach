@@ -2010,9 +2010,6 @@ func (r *rocksDBIterator) MVCCGet(
 		Timestamp: mvccKey.Timestamp,
 	}
 	copy(value.RawBytes, rawValue)
-	if err := value.Verify(mvccKey.Key); err != nil {
-		return nil, nil, err
-	}
 	return value, intents, nil
 }
 
