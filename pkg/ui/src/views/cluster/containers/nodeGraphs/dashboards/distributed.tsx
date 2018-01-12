@@ -121,5 +121,18 @@ export default function (props: GraphDashboardProps) {
         }
       </Axis>
     </LineGraph>,
+
+    <LineGraph title="Mean Clock Offset" sources={nodeSources}>
+      <Axis label="nanos">
+        <Metric name="cr.node.clock.offset.meannanos" title="Mean Clock Offset" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="StdDev Clock Offset" sources={nodeSources}>
+      <Axis label="nanos">
+        <Metric name="cr.node.clock.offset.stddevnanos" title="Std Dev Clock Offset" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
   ];
 }
