@@ -82,23 +82,38 @@ import (
 //           +--------+
 type Expr struct {
 	op operator
+
 	// subOperator is used for array operators (SOME, ALL). For
 	// example, for "a < SOME(SELECT * FROM t)" the operator is
 	// someOp and the subOperator is ltOp.
 	subOperator operator
+
 	// Child expressions. The interpretation of the children is operator
 	// dependent. For example, for a eqOp, there are two child expressions (the
 	// left-hand side and the right-hand side); for an andOp, there are at least
 	// two child expressions (each one being a conjunct).
 	children []*Expr
+
 	// Relational properties. Nil for scalar expressions.
 	relProps *relationalProps
+
 	// Scalar properties (properties that pertain only to scalar operators).
 	// Nil for relational expressions.
 	scalarProps *scalarProps
+
 	// Operator-dependent data used by this expression. For example, constOp
 	// stores a pointer to the constant value.
 	private interface{}
+}
+
+// exprLayout describes the layout of auxiliary children expressions. The layout
+// is operator specific and accessed via the operatorTab table.
+type exprLayout struct {
+	numAux       int8 // used internally, no need to specify manually
+	aggregations int8
+	filters      int8
+	groupings    int8
+	projections  int8
 }
 
 func (e *Expr) opClass() operatorClass {
@@ -160,6 +175,65 @@ func (e *Expr) String() string {
 	tp := treeprinter.New()
 	e.format(tp)
 	return tp.String()
+}
+
+// inputs returns the children expressions, excluding auxiliary expressions.
+func (e *Expr) inputs() []*Expr {
+	return e.children[:len(e.children)-int(e.layout().numAux)]
+}
+
+// aux returns the auxiliary expression(s) at location i in the children of
+// Expr e.
+func (e *Expr) aux(i int8, op operator) []*Expr {
+	t := e.children[i : i+1]
+	if t[0] == nil {
+		return nil
+	}
+	if t[0].op == op {
+		return t[0].children
+	}
+	return t
+}
+
+// addAux1 adds a single auxiliary expression with operator op at location
+// i in the children of Expr e.
+func (e *Expr) addAux1(i int8, op operator, aux *Expr) {
+	if t := e.children[i]; t == nil {
+		e.children[i] = aux
+	} else if t.op != op {
+		e.children[i] = &Expr{
+			op:       op,
+			children: []*Expr{t, aux},
+		}
+	} else {
+		t.children = append(t.children, aux)
+	}
+}
+
+func (e *Expr) filters() []*Expr {
+	l := e.layout()
+	if l.filters < 0 {
+		return nil
+	}
+	return e.aux(l.filters, andOp)
+}
+
+func (e *Expr) addFilter(f *Expr) {
+	// Recursively flatten AND expressions when adding them as a filter. The
+	// filters for an expression are implicitly AND'ed together (i.e. they are in
+	// conjunctive normal form).
+	if f.op == andOp {
+		for _, input := range f.inputs() {
+			e.addFilter(input)
+		}
+		return
+	}
+
+	e.addAux1(e.layout().filters, andOp, f)
+}
+
+func (e *Expr) layout() exprLayout {
+	return operatorTab[e.op].layout
 }
 
 func (e *Expr) initProps() {

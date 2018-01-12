@@ -54,6 +54,9 @@ type queryState struct {
 	// nextColumnIndex is the next unique column index. This field is incremented
 	// each time a new column is added to the query Expr tree.
 	nextColumnIndex columnIndex
+
+	// Semantic context used for name resolution and type checking.
+	semaCtx tree.SemaContext
 }
 
 // columnProps holds properties about each column in a relational expression.
@@ -70,14 +73,31 @@ type columnProps struct {
 	// index is the index for this column, which is unique across all the
 	// columns in the expression.
 	index columnIndex
+
+	// indexedVar represents the column index derived from an IndexedVar.
+	indexedVar int
 }
 
 func (c columnProps) String() string {
+	if c.name == "" {
+		return fmt.Sprintf("@%d", c.indexedVar+1)
+	}
 	if c.table == "" {
 		return tree.NameString(string(c.name))
 	}
 	return fmt.Sprintf("%s.%s",
 		tree.NameString(string(c.table)), tree.NameString(string(c.name)))
+}
+
+// hasColumn returns true if c references the given column.
+func (c columnProps) hasColumn(tblName tableName, colName columnName) bool {
+	if colName != c.name {
+		return false
+	}
+	if tblName == "" {
+		return true
+	}
+	return c.table == tblName
 }
 
 // relationalProps holds properties of a relational expression.
