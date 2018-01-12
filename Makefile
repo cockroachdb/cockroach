@@ -261,16 +261,14 @@ $(call make-lazy,yellow)
 $(call make-lazy,cyan)
 $(call make-lazy,term-reset)
 
-# We used to check the Go version in a .PHONY .go-version target, but the error
-# message, if any, would get mixed in with noise from other targets if Make was
-# executed in parallel job mode. This check, by contrast, is guaranteed to print
-# its error message before any noisy output.
-#
-# Note that word boundary markers (\b, \<, [[:<:]]) are not portable, but `grep
-# -w`, though not required by POSIX, exists on all tested platforms.
-GOVERS := go1\.9.*
-ifeq ($(shell $(GO) version | grep -qwE '$(GOVERS)' && echo y),)
-$(error "$(GOVERS) required (see CONTRIBUTING.md): $(shell $(GO) version); use `make GOVERS=.*` for experiments")
+# We used to check the Go version in a .PHONY target, but the error message, if
+# any, would get mixed in with noise from other targets when Make was executed
+# in parallel job mode. This check, by contrast, is guaranteed to print its
+# error message before any noisy output.
+IGNORE_GOVERS :=
+go-version-check := $(if $(IGNORE_GOVERS),,$(shell build/go-version-check.sh $(GO)))
+ifneq "$(go-version-check)" ""
+$(error $(go-version-check). Disable this check with IGNORE_GOVERS=1)
 endif
 
 # Print an error if the user specified any variables on the command line that
