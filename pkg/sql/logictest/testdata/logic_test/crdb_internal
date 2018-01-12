@@ -228,16 +228,30 @@ node_id  component  field   value
 1        UI         URI     /
 
 query ITTTTT colnames
-SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(version, '^\d+\.\d+(-\d+)?$', '<version>') as version FROM crdb_internal.gossip_nodes WHERE node_id = 1
+SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version FROM crdb_internal.gossip_nodes WHERE node_id = 1
 ----
-node_id  network  address           attrs  locality  version
-1        tcp      127.0.0.1:<port>  []     ·         <version>
+node_id  network  address           attrs  locality  server_version
+1        tcp      127.0.0.1:<port>  []     {}        <server_version>
 
 query IITBB colnames
 SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning FROM crdb_internal.gossip_liveness WHERE node_id = 1
 ----
 node_id  epoch  expiration    draining  decommissioning
 1        1      <timestamp>   false     false
+
+query ITTTTTT colnames
+SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
+FROM crdb_internal.kv_node_status WHERE node_id = 1
+----
+node_id  network  address           attrs  locality  server_version    go_version
+1        tcp      127.0.0.1:<port>  []     {}        <server_version>  <go_version>
+
+query IITI colnames
+SELECT node_id, store_id, attrs, used
+FROM crdb_internal.kv_store_status WHERE node_id = 1
+----
+node_id  store_id  attrs  used
+1        1         []     0
 
 # Check that privileged builtins are only allowed for 'root'
 user testuser
@@ -265,6 +279,12 @@ select * from crdb_internal.gossip_nodes
 
 query error pq: only root is allowed to read crdb_internal.gossip_liveness
 select * from crdb_internal.gossip_liveness
+
+query error pq: only root is allowed to read crdb_internal.kv_node_status
+select * from crdb_internal.kv_node_status
+
+query error pq: only root is allowed to read crdb_internal.kv_store_status
+select * from crdb_internal.kv_store_status
 
 # Anyone can see the executable version.
 query T
