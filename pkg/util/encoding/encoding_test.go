@@ -1547,6 +1547,22 @@ func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
 	}
 }
 
+func BenchmarkDecodeOneByteNonsortingUvarint(b *testing.B) {
+	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < b.N; i++ {
+		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()%(1<<7)))
+	}
+	var err error
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf, _, _, err = DecodeNonsortingUvarint(buf)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkPeekLengthNonsortingUvarint(b *testing.B) {
 	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
 	rng, _ := randutil.NewPseudoRand()
