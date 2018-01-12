@@ -61,10 +61,12 @@ var crdbInternal = virtualSchema{
 		crdbInternalClusterSettingsTable,
 		crdbInternalCreateStmtsTable,
 		crdbInternalForwardDependenciesTable,
-		crdbInternalGossipNodes,
-		crdbInternalGossipLiveness,
+		crdbInternalGossipNodesTable,
+		crdbInternalGossipLivenessTable,
 		crdbInternalIndexColumnsTable,
 		crdbInternalJobsTable,
+		crdbInternalKVNodeStatusTable,
+		crdbInternalKVStoreStatusTable,
 		crdbInternalLeasesTable,
 		crdbInternalLocalQueriesTable,
 		crdbInternalLocalSessionsTable,
@@ -1553,16 +1555,16 @@ CREATE TABLE crdb_internal.zones (
 	},
 }
 
-// crdbInternalGossipNodes exposes local information about the cluster nodes.
-var crdbInternalGossipNodes = virtualSchemaTable{
+// crdbInternalGossipNodesTable exposes local information about the cluster nodes.
+var crdbInternalGossipNodesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.gossip_nodes (
-  node_id  INT NOT NULL,
-  network  STRING NOT NULL,
-  address  STRING NOT NULL,
-  attrs    JSON NOT NULL,
-  locality STRING NOT NULL,
-  version  STRING NOT NULL
+  node_id         INT NOT NULL,
+  network         STRING NOT NULL,
+  address         STRING NOT NULL,
+  attrs           JSON NOT NULL,
+  locality        JSON NOT NULL,
+  server_version  STRING NOT NULL
 )
 	`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -1598,12 +1600,18 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				attrs = append(attrs, json.FromString(a))
 			}
 
+			b := json.NewBuilder()
+			for _, t := range d.Locality.Tiers {
+				b.Add(t.Key, json.FromString(t.Value))
+			}
+			locality := b.Build()
+
 			if err := addRow(
 				tree.NewDInt(tree.DInt(d.NodeID)),
 				tree.NewDString(d.Address.NetworkField),
 				tree.NewDString(d.Address.AddressField),
 				tree.NewDJSON(json.FromArrayOfJSON(attrs)),
-				tree.NewDString(d.Locality.String()),
+				tree.NewDJSON(locality),
 				tree.NewDString(d.ServerVersion.String()),
 			); err != nil {
 				return err
@@ -1613,8 +1621,8 @@ CREATE TABLE crdb_internal.gossip_nodes (
 	},
 }
 
-// crdbInternalGossipLiveness exposes local information about the nodes liveness.
-var crdbInternalGossipLiveness = virtualSchemaTable{
+// crdbInternalGossipLivenessTable exposes local information about the nodes' liveness.
+var crdbInternalGossipLivenessTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.gossip_liveness (
   node_id         INT NOT NULL,
@@ -1731,5 +1739,225 @@ CREATE TABLE crdb_internal.partitions (
 						tree.DNull /* parentName */, 0 /* colOffset */, addRow)
 				})
 			})
+	},
+}
+
+// crdbInternalKVNodeStatusTable exposes an information from the status server about the cluster nodes.
+var crdbInternalKVNodeStatusTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.kv_node_status (
+  node_id        INT NOT NULL,
+  network        STRING NOT NULL,
+  address        STRING NOT NULL,
+  attrs          JSON NOT NULL,
+  locality       JSON NOT NULL,
+  server_version STRING NOT NULL,
+  go_version     STRING NOT NULL,
+  tag            STRING NOT NULL,
+  time           STRING NOT NULL,
+  revision       STRING NOT NULL,
+  cgo_compiler   STRING NOT NULL,
+  platform       STRING NOT NULL,
+  distribution   STRING NOT NULL,
+  type           STRING NOT NULL,
+  dependencies   STRING NOT NULL,
+  started_at     TIMESTAMP NOT NULL,
+  updated_at     TIMESTAMP NOT NULL,
+  metrics        JSON NOT NULL,
+  args           JSON NOT NULL,
+  env            JSON NOT NULL,
+  activity       JSON NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.kv_node_status"); err != nil {
+			return err
+		}
+
+		response, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, n := range response.Nodes {
+			var attrs []json.JSON
+			for _, a := range n.Desc.Attrs.Attrs {
+				attrs = append(attrs, json.FromString(a))
+			}
+
+			locality := json.NewBuilder()
+			for _, t := range n.Desc.Locality.Tiers {
+				locality.Add(t.Key, json.FromString(t.Value))
+			}
+
+			var dependencies string
+			if n.BuildInfo.Dependencies == nil {
+				dependencies = ""
+			} else {
+				dependencies = *(n.BuildInfo.Dependencies)
+			}
+
+			metrics := json.NewBuilder()
+			for k, v := range n.Metrics {
+				metric, err := json.FromFloat64(v)
+				if err != nil {
+					return err
+				}
+				metrics.Add(k, metric)
+			}
+
+			var args []json.JSON
+			for _, a := range n.Args {
+				args = append(attrs, json.FromString(a))
+			}
+
+			var env []json.JSON
+			for _, v := range n.Env {
+				env = append(attrs, json.FromString(v))
+			}
+
+			activity := json.NewBuilder()
+			for nodeID, values := range n.Activity {
+				b := json.NewBuilder()
+				b.Add("incoming", json.FromInt64(values.Incoming))
+				b.Add("outgoing", json.FromInt64(values.Outgoing))
+				b.Add("latency", json.FromInt64(values.Latency))
+				activity.Add(nodeID.String(), b.Build())
+			}
+
+			if err := addRow(
+				tree.NewDInt(tree.DInt(n.Desc.NodeID)),
+				tree.NewDString(n.Desc.Address.NetworkField),
+				tree.NewDString(n.Desc.Address.AddressField),
+				tree.NewDJSON(json.FromArrayOfJSON(attrs)),
+				tree.NewDJSON(locality.Build()),
+				tree.NewDString(n.Desc.ServerVersion.String()),
+				tree.NewDString(n.BuildInfo.GoVersion),
+				tree.NewDString(n.BuildInfo.Tag),
+				tree.NewDString(n.BuildInfo.Time),
+				tree.NewDString(n.BuildInfo.Revision),
+				tree.NewDString(n.BuildInfo.CgoCompiler),
+				tree.NewDString(n.BuildInfo.Platform),
+				tree.NewDString(n.BuildInfo.Distribution),
+				tree.NewDString(n.BuildInfo.Type),
+				tree.NewDString(dependencies),
+				tree.MakeDTimestamp(timeutil.Unix(0, n.StartedAt), time.Microsecond),
+				tree.MakeDTimestamp(timeutil.Unix(0, n.UpdatedAt), time.Microsecond),
+				tree.NewDJSON(metrics.Build()),
+				tree.NewDJSON(json.FromArrayOfJSON(args)),
+				tree.NewDJSON(json.FromArrayOfJSON(env)),
+				tree.NewDJSON(activity.Build()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalKVStoreStatusTable exposes an information about the cluster stores.
+var crdbInternalKVStoreStatusTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.kv_store_status (
+  node_id            INT NOT NULL,
+  store_id           INT NOT NULL,
+  attrs              JSON NOT NULL,
+  capacity           INT NOT NULL,
+  available          INT NOT NULL,
+  used               INT NOT NULL,
+  logical_bytes      INT NOT NULL,
+  range_count        INT NOT NULL,
+  lease_count        INT NOT NULL,
+  writes_per_second  FLOAT NOT NULL,
+  bytes_per_replica  JSON NOT NULL,
+  writes_per_replica JSON NOT NULL,
+  metrics            JSON NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.kv_store_status"); err != nil {
+			return err
+		}
+
+		response, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, n := range response.Nodes {
+			for _, s := range n.StoreStatuses {
+				var attrs []json.JSON
+				for _, a := range s.Desc.Attrs.Attrs {
+					attrs = append(attrs, json.FromString(a))
+				}
+
+				metrics := json.NewBuilder()
+				for k, v := range s.Metrics {
+					metric, err := json.FromFloat64(v)
+					if err != nil {
+						return err
+					}
+					metrics.Add(k, metric)
+				}
+
+				percentilesToJSON := func(ps roachpb.Percentiles) (json.JSON, error) {
+					b := json.NewBuilder()
+					v, err := json.FromFloat64(ps.P10)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P10", v)
+					v, err = json.FromFloat64(ps.P25)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P25", v)
+					v, err = json.FromFloat64(ps.P50)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P50", v)
+					v, err = json.FromFloat64(ps.P75)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P75", v)
+					v, err = json.FromFloat64(ps.P90)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P90", v)
+					return b.Build(), nil
+				}
+
+				bytesPerReplica, err := percentilesToJSON(s.Desc.Capacity.BytesPerReplica)
+				if err != nil {
+					return err
+				}
+				writesPerReplica, err := percentilesToJSON(s.Desc.Capacity.WritesPerReplica)
+				if err != nil {
+					return err
+				}
+
+				if err := addRow(
+					tree.NewDInt(tree.DInt(s.Desc.Node.NodeID)),
+					tree.NewDInt(tree.DInt(s.Desc.StoreID)),
+					tree.NewDJSON(json.FromArrayOfJSON(attrs)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.Capacity)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.Available)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.Used)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.LogicalBytes)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.RangeCount)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.LeaseCount)),
+					tree.NewDFloat(tree.DFloat(s.Desc.Capacity.WritesPerSecond)),
+					tree.NewDJSON(bytesPerReplica),
+					tree.NewDJSON(writesPerReplica),
+					tree.NewDJSON(metrics.Build()),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	},
 }
