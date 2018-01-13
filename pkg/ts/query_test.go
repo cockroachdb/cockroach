@@ -16,6 +16,7 @@ package ts
 
 import (
 	"context"
+	"math"
 	"reflect"
 	"sort"
 	"testing"
@@ -29,150 +30,58 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	// testSeries1 has Data at timestamps [0, 50, 70, 90 and 140]. Data is split
-	// across two InternalTimeSeriesData collections.
-	testSeries1 = []roachpb.InternalTimeSeriesData{
-		{
-			StartTimestampNanos: 0,
-			SampleDurationNanos: 10,
-			Samples: []roachpb.InternalTimeSeriesSample{
-				{
-					Offset: 0,
-					Count:  1,
-					Sum:    1,
-				},
-				{
-					Offset: 5,
-					Count:  1,
-					Sum:    5,
-				},
-				{
-					Offset: 7,
-					Count:  1,
-					Sum:    10,
-				},
-			},
-		},
-		{
-			StartTimestampNanos: 80,
-			SampleDurationNanos: 10,
-			Samples: []roachpb.InternalTimeSeriesSample{
-				{
-					Offset: 1,
-					Count:  3,
-					Sum:    60,
-					Max:    proto.Float64(30),
-					Min:    proto.Float64(10),
-				},
-				{
-					Offset: 5,
-					Count:  1,
-					Sum:    0,
-					Max:    proto.Float64(0),
-					Min:    proto.Float64(0),
-				},
-				{
-					Offset: 9,
-					Count:  2,
-					Sum:    80,
-					Max:    proto.Float64(50),
-					Min:    proto.Float64(30),
-				},
-			},
-		},
-	}
-	// testSeries2 has Data at timestamps [30, 60, 70, 90 and 180].
-	testSeries2 = []roachpb.InternalTimeSeriesData{
-		{
-			StartTimestampNanos: 30,
-			SampleDurationNanos: 10,
-			Samples: []roachpb.InternalTimeSeriesSample{
-				{
-					Offset: 0,
-					Count:  1,
-					Sum:    1,
-				},
-				{
-					Offset: 3,
-					Count:  5,
-					Sum:    50,
-					Max:    proto.Float64(10),
-					Min:    proto.Float64(1),
-				},
-				{
-					Offset: 4,
-					Count:  1,
-					Sum:    25,
-				},
-				{
-					Offset: 6,
-					Count:  3,
-					Sum:    60,
-					Max:    proto.Float64(30),
-					Min:    proto.Float64(10),
-				},
-				{
-					Offset: 15,
-					Count:  2,
-					Sum:    112,
-					Max:    proto.Float64(100),
-					Min:    proto.Float64(12),
-				},
-			},
-		},
-	}
-)
-
-// generateSimpleData generates an InternalTimeSeriesData object with multiple
-// datapoints. Each datapoint has a value equal to its timestamp in nanos.
-// Supplied timestamps are expected to be absolute, not relative to the given
-// startTimestamp.
-func generateSimpleData(startTimestamp int64, timestamps ...int64) roachpb.InternalTimeSeriesData {
-	result := roachpb.InternalTimeSeriesData{
-		StartTimestampNanos: startTimestamp,
-		SampleDurationNanos: 10,
-		Samples:             make([]roachpb.InternalTimeSeriesSample, len(timestamps)),
-	}
-	for i, ts := range timestamps {
-		result.Samples[i] = roachpb.InternalTimeSeriesSample{
-			Offset: int32((ts - startTimestamp) / 10),
-			Count:  1,
-			Sum:    float64(ts),
-		}
-	}
-	return result
-}
-
-// completeDatapoint is a structure used by tests to quickly describe time
-// series data points.
-type completeDatapoint struct {
+// dataSample is a basic data type that represents a single time series sample:
+// a timestamp value pair.
+type dataSample struct {
 	timestamp int64
-	sum       float64
-	count     uint32
-	min       float64
-	max       float64
+	value     float64
 }
 
-// generateComplexData generates more complicated InternalTimeSeriesData, where
-// each contained point may have an explicit max and min.
-func generateComplexData(
-	startTimestamp, sampleDuration int64, dps []completeDatapoint,
+// makeInternalData makes an InternalTimeSeriesData object from a collection of data
+// samples. Input is the start timestamp, the sample duration, and the set of
+// samples. Sample data must be ordered by timestamp.
+func makeInternalData(
+	startTimestamp, sampleDuration int64, samples []dataSample,
 ) roachpb.InternalTimeSeriesData {
+	// Adjust startTimestamp to an exact multiple of sampleDuration.
+	startTimestamp -= startTimestamp % sampleDuration
 	result := roachpb.InternalTimeSeriesData{
 		StartTimestampNanos: startTimestamp,
 		SampleDurationNanos: sampleDuration,
-		Samples:             make([]roachpb.InternalTimeSeriesSample, len(dps)),
+		Samples:             make([]roachpb.InternalTimeSeriesSample, 0),
 	}
-	for i, dp := range dps {
-		result.Samples[i] = roachpb.InternalTimeSeriesSample{
-			Offset: int32((dp.timestamp - startTimestamp) / sampleDuration),
-			Count:  dp.count,
-			Sum:    dp.sum,
-			Max:    proto.Float64(dp.max),
-			Min:    proto.Float64(dp.min),
+
+	// Run through all samples, merging any consecutive samples which correspond
+	// to the same sample interval.
+	for _, sample := range samples {
+		offset := int32((sample.timestamp - startTimestamp) / sampleDuration)
+		value := sample.value
+
+		// Merge into the previous sample if we have the same offset.
+		if count := len(result.Samples); count > 0 && result.Samples[count-1].Offset == offset {
+			// Initialize max and min if necessary.
+			var min, max float64
+			if result.Samples[count-1].Count > 1 {
+				min, max = *result.Samples[count-1].Min, *result.Samples[count-1].Max
+			} else {
+				min, max = result.Samples[count-1].Sum, result.Samples[count-1].Sum
+			}
+
+			result.Samples[count-1].Count++
+			result.Samples[count-1].Sum += value
+			result.Samples[count-1].Min = proto.Float64(math.Min(min, value))
+			result.Samples[count-1].Max = proto.Float64(math.Max(max, value))
+		} else if count > 0 && result.Samples[count-1].Offset > offset {
+			panic("sample data provided to generateData must be ordered by timestamp.")
+		} else {
+			result.Samples = append(result.Samples, roachpb.InternalTimeSeriesSample{
+				Offset: offset,
+				Sum:    value,
+				Count:  1,
+			})
 		}
 	}
+
 	return result
 }
 
@@ -183,8 +92,15 @@ func TestDataSpanIterator(t *testing.T) {
 		sampleNanos: 10,
 	}
 	testData := []roachpb.InternalTimeSeriesData{
-		generateSimpleData(0, 0, 50, 70),
-		generateSimpleData(80, 90, 140),
+		makeInternalData(0, 10, []dataSample{
+			{0, 0},
+			{50, 50},
+			{70, 70},
+		}),
+		makeInternalData(80, 10, []dataSample{
+			{90, 90},
+			{140, 140},
+		}),
 	}
 	for _, data := range testData {
 		if err := ds.addData(data); err != nil {
@@ -193,28 +109,27 @@ func TestDataSpanIterator(t *testing.T) {
 	}
 
 	var iter dataSpanIterator
-	checkNum := 0
 	verifyIter := func(
 		expectedValid bool, expectedOffset int32, expectedTimestamp int64, expectedValue float64,
 	) {
-		checkNum++
+		t.Helper()
 		if a, e := iter.isValid(), expectedValid; a != e {
-			t.Fatalf("check %d: expected iterator valid to be %t, was %t", checkNum, e, a)
+			t.Fatalf("iterator valid = %t, wanted %t", a, e)
 		}
 		if !expectedValid {
 			return
 		}
 		if a, e := iter.offset(), expectedOffset; a != e {
-			t.Fatalf("check %d: expected iterator to have offset %d, was %d", checkNum, e, a)
+			t.Fatalf("iterator offset = %d, wanted %d", a, e)
 		}
 		if a, e := iter.timestamp(), expectedTimestamp; a != e {
 			t.Fatalf(
-				"check %d: expected iterator to have timestamp %d, was %d", checkNum, e, a,
+				"iterator timestamp = %d, wanted %d", a, e,
 			)
 		}
 		if a, e := iter.value(), expectedValue; a != e {
 			t.Fatalf(
-				"check %d: expected iterator to have value %f, was %f", checkNum, e, a,
+				"iterator value = %f, wanted %f", a, e,
 			)
 		}
 	}
@@ -296,21 +211,12 @@ func TestDataSpanIterator(t *testing.T) {
 		sampleNanos: 1,
 	}
 	testData = []roachpb.InternalTimeSeriesData{
-		generateComplexData(0, 1, []completeDatapoint{
-			{
-				timestamp: 0,
-				count:     2,
-				sum:       10,
-				max:       8,
-				min:       2,
-			},
-			{
-				timestamp: 5,
-				count:     3,
-				sum:       30,
-				max:       15,
-				min:       2,
-			},
+		makeInternalData(0, 1, []dataSample{
+			{0, 8},
+			{0, 2},
+			{5, 15},
+			{5, 13},
+			{5, 2},
 		}),
 	}
 	for _, data := range testData {
@@ -346,8 +252,21 @@ func TestDownsamplingIterator(t *testing.T) {
 		sampleNanos: 10,
 	}
 	testData := []roachpb.InternalTimeSeriesData{
-		generateSimpleData(0, 0, 10, 20, 30, 50, 60),
-		generateSimpleData(70, 70, 90, 100, 150, 170),
+		makeInternalData(0, 10, []dataSample{
+			{0, 0},
+			{10, 10},
+			{20, 20},
+			{30, 30},
+			{50, 50},
+			{60, 60},
+		}),
+		makeInternalData(70, 10, []dataSample{
+			{70, 70},
+			{90, 90},
+			{100, 100},
+			{150, 150},
+			{170, 170},
+		}),
 	}
 	for _, data := range testData {
 		if err := ds.addData(data); err != nil {
@@ -356,28 +275,27 @@ func TestDownsamplingIterator(t *testing.T) {
 	}
 
 	var iter downsamplingIterator
-	checkNum := 0
 	verifyIter := func(
 		expectedValid bool, expectedOffset int32, expectedTimestamp int64, expectedValue float64,
 	) {
-		checkNum++
+		t.Helper()
 		if a, e := iter.isValid(), expectedValid; a != e {
-			t.Fatalf("check %d: expected iterator valid to be %t, was %t", checkNum, e, a)
+			t.Fatalf("iterator valid = %t, wanted %t", a, e)
 		}
 		if !expectedValid {
 			return
 		}
 		if a, e := iter.offset(), expectedOffset; a != e {
-			t.Fatalf("check %d: expected iterator to have offset %d, was %d", checkNum, e, a)
+			t.Fatalf("iterator offset = %d, wanted %d", a, e)
 		}
 		if a, e := iter.timestamp(), expectedTimestamp; a != e {
 			t.Fatalf(
-				"check %d: expected iterator to have timestamp %d, was %d", checkNum, e, a,
+				"iterator timestamp = %d, wanted %d", a, e,
 			)
 		}
 		if a, e := iter.value(), expectedValue; a != e {
 			t.Fatalf(
-				"check %d: expected iterator to have value %f, was %f", checkNum, e, a,
+				"iterator value = %f, wanted %f", a, e,
 			)
 		}
 	}
@@ -448,35 +366,17 @@ func TestDownsamplingIterator(t *testing.T) {
 		sampleNanos: 1,
 	}
 	testData = []roachpb.InternalTimeSeriesData{
-		generateComplexData(0, 1, []completeDatapoint{
-			{
-				timestamp: 0,
-				count:     2,
-				sum:       10,
-				max:       8,
-				min:       2,
-			},
-			{
-				timestamp: 5,
-				count:     3,
-				sum:       30,
-				max:       15,
-				min:       2,
-			},
-			{
-				timestamp: 10,
-				count:     3,
-				sum:       30,
-				max:       15,
-				min:       2,
-			},
-			{
-				timestamp: 15,
-				count:     2,
-				sum:       100,
-				max:       55,
-				min:       45,
-			},
+		makeInternalData(0, 1, []dataSample{
+			{0, 8},
+			{0, 2},
+			{5, 15},
+			{5, 13},
+			{5, 2},
+			{10, 15},
+			{10, 13},
+			{10, 2},
+			{15, 55},
+			{15, 45},
 		}),
 	}
 	for _, data := range testData {
@@ -512,7 +412,25 @@ func TestInterpolation(t *testing.T) {
 		startNanos:  30,
 		sampleNanos: 10,
 	}
-	for _, data := range testSeries1 {
+
+	// Split data across two InternalTimeSeriesData slabs. The dataSpan is
+	// responsible for making this cohesive.
+	testData := []roachpb.InternalTimeSeriesData{
+		makeInternalData(0, 10, []dataSample{
+			{0, 1},
+			{50, 5},
+			{70, 10},
+		}),
+		makeInternalData(80, 10, []dataSample{
+			{90, 30},
+			{90, 20},
+			{90, 10},
+			{130, 0},
+			{170, 50},
+			{170, 30},
+		}),
+	}
+	for _, data := range testData {
 		if err := ds.addData(data); err != nil {
 			t.Fatal(err)
 		}
@@ -569,7 +487,7 @@ func TestInterpolation(t *testing.T) {
 				actual = append(actual, iter.value())
 			}
 			if !reflect.DeepEqual(actual, tc.expected) {
-				t.Fatalf("interpolated values: %v, expected values: %v", actual, tc.expected)
+				t.Fatalf("interpolated values: %v, wanted: %v", actual, tc.expected)
 			}
 		})
 	}
@@ -579,6 +497,39 @@ func TestInterpolation(t *testing.T) {
 // advances multiple interpolatingIterators together.
 func TestAggregation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	testSeries1 := []roachpb.InternalTimeSeriesData{
+		makeInternalData(0, 10, []dataSample{
+			{0, 1},
+			{50, 5},
+			{70, 10},
+		}),
+		makeInternalData(80, 10, []dataSample{
+			{90, 30},
+			{90, 20},
+			{90, 10},
+			{130, 0},
+			{170, 50},
+			{170, 30},
+		}),
+	}
+	testSeries2 := []roachpb.InternalTimeSeriesData{
+		makeInternalData(30, 10, []dataSample{
+			{30, 1},
+			{60, 10},
+			{60, 20},
+			{60, 10},
+			{60, 9},
+			{60, 1},
+			{70, 25},
+			{90, 30},
+			{90, 20},
+			{90, 10},
+			{180, 100},
+			{180, 12},
+		}),
+	}
+
 	dataSpan1 := dataSpan{
 		startNanos:  30,
 		sampleNanos: 10,
@@ -632,23 +583,25 @@ func TestAggregation(t *testing.T) {
 		return s.Average()
 	}
 	for i, tc := range testCases {
-		actual := make([]float64, 0, len(tc.expected))
-		iters := aggregatingIterator{
-			newInterpolatingIterator(
-				dataSpan1, 0, 10, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
-			),
-			newInterpolatingIterator(
-				dataSpan2, 0, 10, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
-			),
-		}
-		iters.init()
-		for iters.isValid() {
-			actual = append(actual, tc.aggFunc(iters))
-			iters.advance()
-		}
-		if !reflect.DeepEqual(actual, tc.expected) {
-			t.Errorf("test %d aggregated values: %v, expected values: %v", i, actual, tc.expected)
-		}
+		t.Run("", func(t *testing.T) {
+			actual := make([]float64, 0, len(tc.expected))
+			iters := aggregatingIterator{
+				newInterpolatingIterator(
+					dataSpan1, 0, 10, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
+				),
+				newInterpolatingIterator(
+					dataSpan2, 0, 10, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
+				),
+			}
+			iters.init()
+			for iters.isValid() {
+				actual = append(actual, tc.aggFunc(iters))
+				iters.advance()
+			}
+			if !reflect.DeepEqual(actual, tc.expected) {
+				t.Errorf("test %d aggregated values: %v, wanted: %v", i, actual, tc.expected)
+			}
+		})
 	}
 }
 
@@ -677,10 +630,10 @@ func (tm *testModel) assertQuery(
 	}
 	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
 		tm.t.Logf("actual datapoints: %v", actualDatapoints)
-		tm.t.Fatal(errors.Errorf("query expected %d datapoints, got %d", e, a))
+		tm.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
 	}
 	if a, e := len(actualSources), expectedSourceCount; a != e {
-		tm.t.Fatal(errors.Errorf("query expected %d sources, got %d", e, a))
+		tm.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
 	}
 
 	// Construct an expected result for comparison.
@@ -735,7 +688,7 @@ func (tm *testModel) assertQuery(
 	sort.Strings(expectedSources)
 	sort.Strings(actualSources)
 	if !reflect.DeepEqual(actualSources, expectedSources) {
-		tm.t.Error(errors.Errorf("actual source list: %v, expected: %v", actualSources, expectedSources))
+		tm.t.Error(errors.Errorf("actual source list: %v, wanted: %v", actualSources, expectedSources))
 	}
 
 	// Iterate over data in all dataSpans and construct expected datapoints.
@@ -760,7 +713,7 @@ func (tm *testModel) assertQuery(
 	iters.init()
 	if !iters.isValid() {
 		if a, e := 0, len(expectedDatapoints); a != e {
-			tm.t.Error(errors.Errorf("query had zero datapoints, expected: %v", expectedDatapoints))
+			tm.t.Error(errors.Errorf("query had zero datapoints, wanted: %v", expectedDatapoints))
 		}
 		return
 	}
@@ -794,7 +747,7 @@ func (tm *testModel) assertQuery(
 	}
 
 	if !reflect.DeepEqual(actualDatapoints, expectedDatapoints) {
-		tm.t.Error(errors.Errorf("actual datapoints: %v, expected: %v", actualDatapoints, expectedDatapoints))
+		tm.t.Error(errors.Errorf("actual datapoints: %v, wanted: %v", actualDatapoints, expectedDatapoints))
 	}
 }
 
@@ -980,7 +933,7 @@ func TestQueryDownsampling(t *testing.T) {
 	}
 	errorStr := "was not less"
 	if !testutils.IsError(err, errorStr) {
-		t.Fatalf("expected error from bad query to match %q, got error %q", errorStr, err.Error())
+		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
 	}
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
@@ -992,7 +945,7 @@ func TestQueryDownsampling(t *testing.T) {
 	}
 	errorStr = "not a multiple"
 	if !testutils.IsError(err, errorStr) {
-		t.Fatalf("expected error from bad query to match %q, got error %q", errorStr, err.Error())
+		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
 	}
 
 	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
