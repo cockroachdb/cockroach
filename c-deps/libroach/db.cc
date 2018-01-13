@@ -2522,6 +2522,17 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
   return kSuccess;
 }
 
+// kMaxItersBeforeSeek is the number of calls to iter->{Next,Prev}()
+// to perform when looking for the next/prev key or a particular
+// version before calling iter->Seek(). Note that mvccScanner makes
+// this number adaptive. It starts with a value of kMaxItersPerSeek/2
+// and increases the value every time a call to iter->{Next,Prev}()
+// successfully finds the desired next key. It decrements the value
+// whenever a call to iter->Seek() occurs. The adaptive
+// iters-before-seek value is constrained to the range
+// [1,kMaxItersBeforeSeek].
+static const int kMaxItersBeforeSeek = 10;
+
 // mvccScanner implements the MVCCGet, MVCCScan and MVCCReverseScan
 // operations. Parameterizing the code on whether a forward or reverse
 // scan is performed allows the different code paths to be compiled
@@ -2534,26 +2545,6 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
 // iter_rep_->{key,value}() to point to different data than what the
 // scanner class considers the "current" key/value.
 template <bool reverse> class mvccScanner {
-  // kMaxItersBeforeSeek is the number of calls to iter->Next() to
-  // perform when looking for the next key or a particular version
-  // before calling iter->Seek().
-  //
-  // TODO(peter): There is a trade-off here between iteration via
-  // Next() which is cheap and calling Seek() which is expensive, but
-  // necessary at some number of versions. Experimentation has shown
-  // that calling Next up to 10 times is a win vs calling Seek
-  // once. And calling Next up to 100 times is a loss vs calling
-  // Seek. The specific cut-over point requires more experimentation.
-  //
-  // This also highlights the expense of keeping old versions inline
-  // with the most recent version.
-  //
-  // It might be possible to make the number of iterations adaptive:
-  // decrease the number by one whenever we're forced to
-  // seek. Increase the number by one whenever the optimization hits
-  // (up to this maximum).
-  static const int kMaxItersBeforeSeek = 10;
-
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
               DBTxn txn, bool consistent)
@@ -2570,7 +2561,8 @@ template <bool reverse> class mvccScanner {
         check_uncertainty_(timestamp < txn.max_timestamp),
         kvs_(new rocksdb::WriteBatch),
         intents_(new rocksdb::WriteBatch),
-        peeked_(false) {
+        peeked_(false),
+        iters_before_seek_(kMaxItersBeforeSeek / 2) {
     memset(&results_, 0, sizeof(results_));
     results_.status = kSuccess;
 
@@ -2790,11 +2782,12 @@ template <bool reverse> class mvccScanner {
 
     key_buf_.assign(cur_key_.data(), cur_key_.size());
 
-    for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
+    for (int i = 0; i < iters_before_seek_; ++i) {
       if (!iterNext()) {
         return false;
       }
       if (cur_key_ != key_buf_) {
+        iters_before_seek_ = std::max<int>(kMaxItersBeforeSeek, iters_before_seek_ + 1);
         return true;
       }
     }
@@ -2803,6 +2796,7 @@ template <bool reverse> class mvccScanner {
     // to seeking to the next key. We append 2 NULs to account for the
     // "next-key" and a trailing zero timestamp. See EncodeKey and
     // SplitKey for more details on the encoded key format.
+    iters_before_seek_ = std::max<int>(1, iters_before_seek_ - 1);
     key_buf_.append("\0\0", 2);
     return iterSeek(key_buf_);
   }
@@ -2814,7 +2808,7 @@ template <bool reverse> class mvccScanner {
   bool backwardLatestVersion(const rocksdb::Slice& key, int i) {
     key_buf_.assign(key.data(), key.size());
 
-    for (; i < kMaxItersBeforeSeek; ++i) {
+    for (; i < iters_before_seek_; ++i) {
       rocksdb::Slice peeked_key;
       if (!iterPeekPrev(&peeked_key)) {
         return false;
@@ -2822,6 +2816,7 @@ template <bool reverse> class mvccScanner {
       if (peeked_key != key_buf_) {
         // The key changed which means the current key is the latest
         // version.
+        iters_before_seek_ = std::max<int>(kMaxItersBeforeSeek, iters_before_seek_ + 1);
         return true;
       }
       if (!iterPrev()) {
@@ -2829,6 +2824,7 @@ template <bool reverse> class mvccScanner {
       }
     }
 
+    iters_before_seek_ = std::max<int>(1, iters_before_seek_ - 1);
     key_buf_.append("\0", 1);
     return iterSeek(key_buf_);
   }
@@ -2845,7 +2841,7 @@ template <bool reverse> class mvccScanner {
 
     key_buf_.assign(key.data(), key.size());
 
-    for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
+    for (int i = 0; i < iters_before_seek_; ++i) {
       rocksdb::Slice peeked_key;
       if (!iterPeekPrev(&peeked_key)) {
         return false;
@@ -2858,6 +2854,7 @@ template <bool reverse> class mvccScanner {
       }
     }
 
+    iters_before_seek_ = std::max<int>(1, iters_before_seek_ - 1);
     key_buf_.append("\0", 1);
     return iterSeekReverse(key_buf_);
   }
@@ -2930,14 +2927,16 @@ template <bool reverse> class mvccScanner {
   bool seekVersion(DBTimestamp desired_timestamp, bool check_uncertainty) {
     key_buf_.assign(cur_key_.data(), cur_key_.size());
 
-    for (int i = 0; i < kMaxItersBeforeSeek; ++i) {
+    for (int i = 0; i < iters_before_seek_; ++i) {
       if (!iterNext()) {
         return advanceKeyAtEnd();
       }
       if (cur_key_ != key_buf_) {
+        iters_before_seek_ = std::min<int>(kMaxItersBeforeSeek, iters_before_seek_ + 1);
         return advanceKeyAtNewKey(key_buf_);
       }
       if (desired_timestamp >= cur_timestamp_) {
+        iters_before_seek_ = std::min<int>(kMaxItersBeforeSeek, iters_before_seek_ + 1);
         if (check_uncertainty && timestamp_ < cur_timestamp_) {
           return uncertaintyError(cur_timestamp_);
         }
@@ -2945,6 +2944,7 @@ template <bool reverse> class mvccScanner {
       }
     }
 
+    iters_before_seek_ = std::max<int>(1, iters_before_seek_ - 1);
     if (!iterSeek(EncodeKey(key_buf_, desired_timestamp.wall_time, desired_timestamp.logical))) {
       return advanceKeyAtEnd();
     }
@@ -3095,6 +3095,7 @@ template <bool reverse> class mvccScanner {
   rocksdb::Slice cur_key_;
   rocksdb::Slice cur_value_;
   DBTimestamp cur_timestamp_;
+  int iters_before_seek_;
 };
 
 typedef mvccScanner<false> mvccForwardScanner;
