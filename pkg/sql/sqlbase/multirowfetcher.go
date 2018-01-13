@@ -772,8 +772,7 @@ func (mrf *MultiRowFetcher) processValueBytes(
 		}
 
 		var encValue EncDatum
-		encValue, valueBytes, err =
-			EncDatumFromBuffer(&table.cols[idx].Type, DatumEncoding_VALUE, valueBytes)
+		encValue, valueBytes, err = EncDatumFromBuffer(DatumEncoding_VALUE, valueBytes)
 		if err != nil {
 			return "", "", err
 		}
