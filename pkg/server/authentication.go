@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -95,7 +96,7 @@ func (s *authenticationServer) UserLogin(
 ) (*serverpb.UserLoginResponse, error) {
 	username := req.Username
 	if username == "" {
-		return nil, grpc.Errorf(
+		return nil, status.Errorf(
 			codes.Unauthenticated,
 			"no username was provided",
 		)
@@ -103,7 +104,7 @@ func (s *authenticationServer) UserLogin(
 
 	// Root user does not have a password, simply disallow this.
 	if username == security.RootUser {
-		return nil, grpc.Errorf(
+		return nil, status.Errorf(
 			codes.Unauthenticated,
 			"user %s must use certificate authentication instead of password authentication",
 			security.RootUser,
@@ -116,7 +117,7 @@ func (s *authenticationServer) UserLogin(
 		return nil, apiInternalError(ctx, err)
 	}
 	if !verified {
-		return nil, grpc.Errorf(
+		return nil, status.Errorf(
 			codes.Unauthenticated,
 			"the provided username and password did not match any credentials on the server",
 		)
@@ -152,7 +153,7 @@ func (s *authenticationServer) UserLogin(
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
-	return nil, grpc.Errorf(codes.Unimplemented, "Logout method has not yet been implemented.")
+	return nil, status.Errorf(codes.Unimplemented, "Logout method has not yet been implemented.")
 }
 
 // verifySession verifies the existence and validity of the session claimed by

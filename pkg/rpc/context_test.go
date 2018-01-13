@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -55,20 +56,14 @@ func (ctx *Context) AddTestingDialOpts(opts ...grpc.DialOption) {
 	ctx.testingDialOpts = append(ctx.testingDialOpts, opts...)
 }
 
-func newTestServer(
-	t testing.TB, ctx *Context, compression bool, extraOpts ...grpc.ServerOption,
-) *grpc.Server {
+func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *grpc.Server {
 	tlsConfig, err := ctx.GetServerTLSConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
 	opts := []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsConfig)),
-		grpc.RPCDecompressor(snappyDecompressor{}),
 		grpc.StatsHandler(&ctx.stats),
-	}
-	if compression {
-		opts = append(opts, grpc.RPCCompressor(snappyCompressor{}))
 	}
 	opts = append(opts, extraOpts...)
 	return grpc.NewServer(opts...)
@@ -94,7 +89,7 @@ func TestHeartbeatCB(t *testing.T) {
 		clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 		serverCtx := newTestContext(clock, stopper)
 		serverCtx.rpcCompression = compression
-		s := newTestServer(t, serverCtx, true)
+		s := newTestServer(t, serverCtx)
 		RegisterHeartbeatServer(s, &HeartbeatService{
 			clock:              clock,
 			remoteClockMonitor: serverCtx.RemoteClocks,
@@ -174,7 +169,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newTestContext(clock, stopper)
-	s := newTestServer(t, serverCtx, true)
+	s := newTestServer(t, serverCtx)
 
 	heartbeat := &ManualHeartbeatService{
 		ready:              make(chan error),
@@ -313,8 +308,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := grpc.NewServer(
-		grpc.RPCDecompressor(snappyDecompressor{}), grpc.Creds(credentials.NewTLS(tlsConfig)))
+	s := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
@@ -387,8 +381,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		//
 		// rpc error: code = Internal desc = connection error: desc = "transport: authentication
 		// handshake failed: write tcp 127.0.0.1:53936->127.0.0.1:53934: write: broken pipe".
-		code := grpc.Code(err)
-		return code == codes.Unavailable || code == codes.Internal
+		s, ok := status.FromError(err)
+		return ok && (s.Code() == codes.Unavailable || s.Code() == codes.Internal)
 	}
 
 	// Close all the connections until we see a failure on the main goroutine.
@@ -477,7 +471,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	serverTime := timeutil.Unix(0, 20)
 	serverClock := hlc.NewClock(serverTime.UnixNano, time.Nanosecond)
 	serverCtx := newTestContext(serverClock, stopper)
-	s := newTestServer(t, serverCtx, true)
+	s := newTestServer(t, serverCtx)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
@@ -541,7 +535,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newTestContext(clock, stopper)
-	s := newTestServer(t, serverCtx, true)
+	s := newTestServer(t, serverCtx)
 	heartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
@@ -644,7 +638,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 		nodeCtxs[i].ctx = newTestContext(clock, stopper)
 		nodeCtxs[i].ctx.heartbeatInterval = maxOffset
 
-		s := newTestServer(t, nodeCtxs[i].ctx, true)
+		s := newTestServer(t, nodeCtxs[i].ctx)
 		RegisterHeartbeatServer(s, &HeartbeatService{
 			clock:              clock,
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
@@ -785,7 +779,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 			// Construct server with server-side keepalive.
 			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 			serverCtx := newTestContext(clock, stopper)
-			s := newTestServer(t, serverCtx, true, grpc.KeepaliveParams(sKeepalive))
+			s := newTestServer(t, serverCtx, grpc.KeepaliveParams(sKeepalive))
 
 			// Create heartbeat service. This service will continuously
 			// read on its input stream and send on its output stream.
@@ -944,7 +938,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 	serverCtx := newTestContext(clock, stopper)
 	serverCtx.ClusterID.Set(context.TODO(), uuid.MakeV4())
-	s := newTestServer(t, serverCtx, true)
+	s := newTestServer(t, serverCtx)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
@@ -1017,7 +1011,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 			if err := setVersion(serverCtx, td.serverVersion); err != nil {
 				t.Fatal(err)
 			}
-			s := newTestServer(t, serverCtx, true)
+			s := newTestServer(t, serverCtx)
 			RegisterHeartbeatServer(s, &HeartbeatService{
 				clock:              clock,
 				remoteClockMonitor: serverCtx.RemoteClocks,
@@ -1057,7 +1051,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
 	ctx := newTestContext(clock, stopper)
 
-	s := newTestServer(b, ctx, false)
+	s := newTestServer(b, ctx)
 	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)
 	if err != nil {
 		b.Fatal(err)

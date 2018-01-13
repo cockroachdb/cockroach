@@ -119,7 +119,6 @@ func NewServerWithInterceptor(
 		// server value so that we have no fixed limit on the number of concurrent
 		// streams/requests on either the client or server.
 		grpc.MaxConcurrentStreams(math.MaxInt32),
-		grpc.RPCDecompressor(snappyDecompressor{}),
 		grpc.KeepaliveParams(serverKeepalive),
 		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
 		// A stats handler to measure server network stats.
@@ -127,9 +126,6 @@ func NewServerWithInterceptor(
 	}
 	// Compression is enabled separately from decompression to allow staged
 	// rollout.
-	if ctx.rpcCompression {
-		opts = append(opts, grpc.RPCCompressor(snappyCompressor{}))
-	}
 	if !ctx.Insecure {
 		tlsConfig, err := ctx.GetServerTLSConfig()
 		if err != nil {
@@ -409,11 +405,10 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 		grpc.MaxCallSendMsgSize(math.MaxInt32),
 	))
 
-	dialOpts = append(dialOpts, grpc.WithDecompressor(snappyDecompressor{}))
 	// Compression is enabled separately from decompression to allow staged
 	// rollout.
 	if ctx.rpcCompression {
-		dialOpts = append(dialOpts, grpc.WithCompressor(snappyCompressor{}))
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	}
 
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {

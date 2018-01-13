@@ -101,7 +101,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	serverCtx := newTestContext(clock, stopper)
-	s := newTestServer(t, serverCtx, true)
+	s := newTestServer(t, serverCtx)
 
 	heartbeat := &ManualHeartbeatService{
 		ready:              make(chan error),
