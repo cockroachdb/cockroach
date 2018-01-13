@@ -23,22 +23,37 @@ enum RegistryVersion {
   Base = 0;
 }
 
+// EnvType determines which rocksdb::Env is used and for what purpose.
+enum EnvType {
+  // The default Env when no encryption is used.
+  // File using Plaintext are not recorded in the file registry.
+  Plaintext = 0;
+  // The Env using store-level keys.
+  // Used only to read/write the data key registry.
+  Store = 1;
+  // The Env using data-level keys.
+  // Used as the default rocksdb Env when encryption is enabled.
+  Data = 2;
+}
+
 // Registry describes how a files are handled. This includes the
 // rockdb::Env responsible for each file as well as opaque env details.
-// TODO(mberhault): this is still in flux.
-message Registry {
+message FileRegistry {
   // version is currently always Base.
   RegistryVersion version = 1;
-  repeated FileEntry files = 2;
+  // Map of filename -> FileEntry.
+  // Filename is relative to the rocksdb dir if the file is inside it.
+  // Otherwise it is an absolute path.
+  // TODO(mberhault): figure out if we need anything special for Windows.
+  map<string, FileEntry> files = 2;
 }
 
 message FileEntry {
-  // File path relative to the DB directory.
-  // TODO(mberhault): figure out if we need anything special for Windows.
-  string Filename = 1;
-  // Env level identifies which rocksdb::Env is responsible for this file.
-  int32 env_level = 2;
+  // Env type identifies which rocksdb::Env is responsible for this file.
+  EnvType env_type = 1;
 
   // Env-specific fields for non-0 env. These are known by CCL code only.
-  // TODO(mberhault): determine format. Maybe google.protobuf.Any
+  // This is a serialized protobuf. We cannot use protobuf.Any since we use
+  // MessageLite in C++.
+  bytes encryption_settings = 2;
 }

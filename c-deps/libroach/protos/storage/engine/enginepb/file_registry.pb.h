@@ -28,6 +28,9 @@
 #include <google/protobuf/message_lite.h>
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
+#include <google/protobuf/map.h>  // IWYU pragma: export
+#include <google/protobuf/map_entry_lite.h>
+#include <google/protobuf/map_field_lite.h>
 #include <google/protobuf/generated_enum_util.h>
 // @@protoc_insertion_point(includes)
 namespace cockroach {
@@ -37,9 +40,12 @@ namespace enginepb {
 class FileEntry;
 class FileEntryDefaultTypeInternal;
 extern FileEntryDefaultTypeInternal _FileEntry_default_instance_;
-class Registry;
-class RegistryDefaultTypeInternal;
-extern RegistryDefaultTypeInternal _Registry_default_instance_;
+class FileRegistry;
+class FileRegistryDefaultTypeInternal;
+extern FileRegistryDefaultTypeInternal _FileRegistry_default_instance_;
+class FileRegistry_FilesEntry;
+class FileRegistry_FilesEntryDefaultTypeInternal;
+extern FileRegistry_FilesEntryDefaultTypeInternal _FileRegistry_FilesEntry_default_instance_;
 }  // namespace enginepb
 }  // namespace engine
 }  // namespace storage
@@ -75,26 +81,41 @@ const RegistryVersion RegistryVersion_MIN = Base;
 const RegistryVersion RegistryVersion_MAX = Base;
 const int RegistryVersion_ARRAYSIZE = RegistryVersion_MAX + 1;
 
+enum EnvType {
+  Plaintext = 0,
+  Store = 1,
+  Data = 2,
+  EnvType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  EnvType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+};
+bool EnvType_IsValid(int value);
+const EnvType EnvType_MIN = Plaintext;
+const EnvType EnvType_MAX = Data;
+const int EnvType_ARRAYSIZE = EnvType_MAX + 1;
+
 // ===================================================================
 
-class Registry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.Registry) */ {
+
+// -------------------------------------------------------------------
+
+class FileRegistry : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.FileRegistry) */ {
  public:
-  Registry();
-  virtual ~Registry();
+  FileRegistry();
+  virtual ~FileRegistry();
 
-  Registry(const Registry& from);
+  FileRegistry(const FileRegistry& from);
 
-  inline Registry& operator=(const Registry& from) {
+  inline FileRegistry& operator=(const FileRegistry& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  Registry(Registry&& from) noexcept
-    : Registry() {
+  FileRegistry(FileRegistry&& from) noexcept
+    : FileRegistry() {
     *this = ::std::move(from);
   }
 
-  inline Registry& operator=(Registry&& from) noexcept {
+  inline FileRegistry& operator=(FileRegistry&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -103,29 +124,29 @@ class Registry : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
     return *this;
   }
   #endif
-  static const Registry& default_instance();
+  static const FileRegistry& default_instance();
 
-  static inline const Registry* internal_default_instance() {
-    return reinterpret_cast<const Registry*>(
-               &_Registry_default_instance_);
+  static inline const FileRegistry* internal_default_instance() {
+    return reinterpret_cast<const FileRegistry*>(
+               &_FileRegistry_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    0;
+    1;
 
-  void Swap(Registry* other);
-  friend void swap(Registry& a, Registry& b) {
+  void Swap(FileRegistry* other);
+  friend void swap(FileRegistry& a, FileRegistry& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline Registry* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline FileRegistry* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  Registry* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  FileRegistry* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     PROTOBUF_FINAL;
-  void CopyFrom(const Registry& from);
-  void MergeFrom(const Registry& from);
+  void CopyFrom(const FileRegistry& from);
+  void MergeFrom(const FileRegistry& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -140,7 +161,7 @@ class Registry : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(Registry* other);
+  void InternalSwap(FileRegistry* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -154,19 +175,17 @@ class Registry : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
 
   // nested types ----------------------------------------------------
 
+
   // accessors -------------------------------------------------------
 
-  // repeated .cockroach.storage.engine.enginepb.FileEntry files = 2;
+  // map<string, .cockroach.storage.engine.enginepb.FileEntry> files = 2;
   int files_size() const;
   void clear_files();
   static const int kFilesFieldNumber = 2;
-  const ::cockroach::storage::engine::enginepb::FileEntry& files(int index) const;
-  ::cockroach::storage::engine::enginepb::FileEntry* mutable_files(int index);
-  ::cockroach::storage::engine::enginepb::FileEntry* add_files();
-  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::FileEntry >*
-      mutable_files();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::FileEntry >&
+  const ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::FileEntry >&
       files() const;
+  ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::FileEntry >*
+      mutable_files();
 
   // .cockroach.storage.engine.enginepb.RegistryVersion version = 1;
   void clear_version();
@@ -174,11 +193,25 @@ class Registry : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
   ::cockroach::storage::engine::enginepb::RegistryVersion version() const;
   void set_version(::cockroach::storage::engine::enginepb::RegistryVersion value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.Registry)
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.FileRegistry)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::FileEntry > files_;
+  public:
+  typedef ::google::protobuf::internal::MapEntryLite<
+      ::std::string, ::cockroach::storage::engine::enginepb::FileEntry,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+      ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
+      0 >
+      FileRegistry_FilesEntry;
+  private:
+  ::google::protobuf::internal::MapFieldLite<
+      FileRegistry_FilesEntry,
+      ::std::string, ::cockroach::storage::engine::enginepb::FileEntry,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+      ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
+      0 > files_;
+  private:
   int version_;
   mutable int _cached_size_;
   friend struct protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::TableStruct;
@@ -218,7 +251,7 @@ class FileEntry : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
                &_FileEntry_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    1;
+    2;
 
   void Swap(FileEntry* other);
   friend void swap(FileEntry& a, FileEntry& b) {
@@ -264,32 +297,32 @@ class FileEntry : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
 
   // accessors -------------------------------------------------------
 
-  // string Filename = 1;
-  void clear_filename();
-  static const int kFilenameFieldNumber = 1;
-  const ::std::string& filename() const;
-  void set_filename(const ::std::string& value);
+  // bytes encryption_settings = 2;
+  void clear_encryption_settings();
+  static const int kEncryptionSettingsFieldNumber = 2;
+  const ::std::string& encryption_settings() const;
+  void set_encryption_settings(const ::std::string& value);
   #if LANG_CXX11
-  void set_filename(::std::string&& value);
+  void set_encryption_settings(::std::string&& value);
   #endif
-  void set_filename(const char* value);
-  void set_filename(const char* value, size_t size);
-  ::std::string* mutable_filename();
-  ::std::string* release_filename();
-  void set_allocated_filename(::std::string* filename);
+  void set_encryption_settings(const char* value);
+  void set_encryption_settings(const void* value, size_t size);
+  ::std::string* mutable_encryption_settings();
+  ::std::string* release_encryption_settings();
+  void set_allocated_encryption_settings(::std::string* encryption_settings);
 
-  // int32 env_level = 2;
-  void clear_env_level();
-  static const int kEnvLevelFieldNumber = 2;
-  ::google::protobuf::int32 env_level() const;
-  void set_env_level(::google::protobuf::int32 value);
+  // .cockroach.storage.engine.enginepb.EnvType env_type = 1;
+  void clear_env_type();
+  static const int kEnvTypeFieldNumber = 1;
+  ::cockroach::storage::engine::enginepb::EnvType env_type() const;
+  void set_env_type(::cockroach::storage::engine::enginepb::EnvType value);
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.FileEntry)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::ArenaStringPtr filename_;
-  ::google::protobuf::int32 env_level_;
+  ::google::protobuf::internal::ArenaStringPtr encryption_settings_;
+  int env_type_;
   mutable int _cached_size_;
   friend struct protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::TableStruct;
 };
@@ -303,127 +336,119 @@ class FileEntry : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #endif  // __GNUC__
-// Registry
+// -------------------------------------------------------------------
+
+// FileRegistry
 
 // .cockroach.storage.engine.enginepb.RegistryVersion version = 1;
-inline void Registry::clear_version() {
+inline void FileRegistry::clear_version() {
   version_ = 0;
 }
-inline ::cockroach::storage::engine::enginepb::RegistryVersion Registry::version() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.Registry.version)
+inline ::cockroach::storage::engine::enginepb::RegistryVersion FileRegistry::version() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileRegistry.version)
   return static_cast< ::cockroach::storage::engine::enginepb::RegistryVersion >(version_);
 }
-inline void Registry::set_version(::cockroach::storage::engine::enginepb::RegistryVersion value) {
+inline void FileRegistry::set_version(::cockroach::storage::engine::enginepb::RegistryVersion value) {
   
   version_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.Registry.version)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileRegistry.version)
 }
 
-// repeated .cockroach.storage.engine.enginepb.FileEntry files = 2;
-inline int Registry::files_size() const {
+// map<string, .cockroach.storage.engine.enginepb.FileEntry> files = 2;
+inline int FileRegistry::files_size() const {
   return files_.size();
 }
-inline void Registry::clear_files() {
+inline void FileRegistry::clear_files() {
   files_.Clear();
 }
-inline const ::cockroach::storage::engine::enginepb::FileEntry& Registry::files(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.Registry.files)
-  return files_.Get(index);
+inline const ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::FileEntry >&
+FileRegistry::files() const {
+  // @@protoc_insertion_point(field_map:cockroach.storage.engine.enginepb.FileRegistry.files)
+  return files_.GetMap();
 }
-inline ::cockroach::storage::engine::enginepb::FileEntry* Registry::mutable_files(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.Registry.files)
-  return files_.Mutable(index);
-}
-inline ::cockroach::storage::engine::enginepb::FileEntry* Registry::add_files() {
-  // @@protoc_insertion_point(field_add:cockroach.storage.engine.enginepb.Registry.files)
-  return files_.Add();
-}
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::FileEntry >*
-Registry::mutable_files() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.storage.engine.enginepb.Registry.files)
-  return &files_;
-}
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::storage::engine::enginepb::FileEntry >&
-Registry::files() const {
-  // @@protoc_insertion_point(field_list:cockroach.storage.engine.enginepb.Registry.files)
-  return files_;
+inline ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::FileEntry >*
+FileRegistry::mutable_files() {
+  // @@protoc_insertion_point(field_mutable_map:cockroach.storage.engine.enginepb.FileRegistry.files)
+  return files_.MutableMap();
 }
 
 // -------------------------------------------------------------------
 
 // FileEntry
 
-// string Filename = 1;
-inline void FileEntry::clear_filename() {
-  filename_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// .cockroach.storage.engine.enginepb.EnvType env_type = 1;
+inline void FileEntry::clear_env_type() {
+  env_type_ = 0;
 }
-inline const ::std::string& FileEntry::filename() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.Filename)
-  return filename_.GetNoArena();
+inline ::cockroach::storage::engine::enginepb::EnvType FileEntry::env_type() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.env_type)
+  return static_cast< ::cockroach::storage::engine::enginepb::EnvType >(env_type_);
 }
-inline void FileEntry::set_filename(const ::std::string& value) {
+inline void FileEntry::set_env_type(::cockroach::storage::engine::enginepb::EnvType value) {
   
-  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.Filename)
+  env_type_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.env_type)
+}
+
+// bytes encryption_settings = 2;
+inline void FileEntry::clear_encryption_settings() {
+  encryption_settings_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& FileEntry::encryption_settings() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.encryption_settings)
+  return encryption_settings_.GetNoArena();
+}
+inline void FileEntry::set_encryption_settings(const ::std::string& value) {
+  
+  encryption_settings_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.encryption_settings)
 }
 #if LANG_CXX11
-inline void FileEntry::set_filename(::std::string&& value) {
+inline void FileEntry::set_encryption_settings(::std::string&& value) {
   
-  filename_.SetNoArena(
+  encryption_settings_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.FileEntry.Filename)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.FileEntry.encryption_settings)
 }
 #endif
-inline void FileEntry::set_filename(const char* value) {
+inline void FileEntry::set_encryption_settings(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
-  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.FileEntry.Filename)
+  encryption_settings_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.FileEntry.encryption_settings)
 }
-inline void FileEntry::set_filename(const char* value, size_t size) {
+inline void FileEntry::set_encryption_settings(const void* value, size_t size) {
   
-  filename_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  encryption_settings_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.FileEntry.Filename)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.FileEntry.encryption_settings)
 }
-inline ::std::string* FileEntry::mutable_filename() {
+inline ::std::string* FileEntry::mutable_encryption_settings() {
   
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.FileEntry.Filename)
-  return filename_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.FileEntry.encryption_settings)
+  return encryption_settings_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* FileEntry::release_filename() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.FileEntry.Filename)
+inline ::std::string* FileEntry::release_encryption_settings() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.FileEntry.encryption_settings)
   
-  return filename_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return encryption_settings_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void FileEntry::set_allocated_filename(::std::string* filename) {
-  if (filename != NULL) {
+inline void FileEntry::set_allocated_encryption_settings(::std::string* encryption_settings) {
+  if (encryption_settings != NULL) {
     
   } else {
     
   }
-  filename_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), filename);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.FileEntry.Filename)
-}
-
-// int32 env_level = 2;
-inline void FileEntry::clear_env_level() {
-  env_level_ = 0;
-}
-inline ::google::protobuf::int32 FileEntry::env_level() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.env_level)
-  return env_level_;
-}
-inline void FileEntry::set_env_level(::google::protobuf::int32 value) {
-  
-  env_level_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.env_level)
+  encryption_settings_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), encryption_settings);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.FileEntry.encryption_settings)
 }
 
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 
@@ -439,6 +464,7 @@ namespace google {
 namespace protobuf {
 
 template <> struct is_proto_enum< ::cockroach::storage::engine::enginepb::RegistryVersion> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::cockroach::storage::engine::enginepb::EnvType> : ::google::protobuf::internal::true_type {};
 
 }  // namespace protobuf
 }  // namespace google

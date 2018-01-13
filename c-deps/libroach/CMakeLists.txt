@@ -29,8 +29,8 @@ add_library(roach
   db.cc
   encoding.cc
   engine.cc
-  env_switching.cc
   eventlistener.cc
+  file_registry.cc
   getter.cc
   godefs.cc
   ldb.cc
@@ -49,6 +49,7 @@ add_library(roach
   protos/util/hlc/legacy_timestamp.pb.cc
   protos/util/hlc/timestamp.pb.cc
   protos/util/unresolved_addr.pb.cc
+  rocksdbutils/env_encryption.cc
 )
 target_include_directories(roach
   PUBLIC  ./include
@@ -59,6 +60,7 @@ target_include_directories(roach
 
 add_library(roachccl
   ccl/crypto_utils.cc
+  ccl/ctr_stream.cc
   ccl/db.cc
   ccl/key_manager.cc
   protosccl/ccl/baseccl/encryption_options.pb.cc
@@ -87,6 +89,7 @@ enable_testing()
 set(tests
   db_test.cc
   encoding_test.cc
+  file_registry_test.cc
   ccl/db_test.cc
   ccl/key_manager_test.cc
 )
@@ -132,7 +135,7 @@ foreach(tsrc ${tests})
       ${CRYPTOPP_LIB}
     )
     target_include_directories(${tname}
-      PRIVATE ../cryptopp
+      PRIVATE .. # CryptoPP headers are directly in the directory. Include .. to be able to include <cryptopp/....h>
       PRIVATE protosccl
     )
   endif()
