@@ -217,7 +217,7 @@ func TestSampleAggregator(t *testing.T) {
 
 			for _, b := range h.Buckets {
 				ed, _, err := sqlbase.EncDatumFromBuffer(
-					&intType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					t.Fatal(err)
