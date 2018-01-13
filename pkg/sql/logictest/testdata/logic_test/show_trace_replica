@@ -3,8 +3,8 @@
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY)
 
-query TIII colnames
-SELECT regexp_replace(timestamp::string, '\d', 'x', 'g') as timestamp, node_id, store_id, replica_id FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SELECT * FROM t]
+query III colnames
+SELECT node_id, store_id, replica_id FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SELECT * FROM t]
 ----
-timestamp                         node_id  store_id  replica_id
-xxxx-xx-xx xx:xx:xx.xxxxxx-xx:xx  1        1         1
+node_id  store_id  replica_id
+1        1         1
