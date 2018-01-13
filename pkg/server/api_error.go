@@ -18,11 +18,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-var errAPIInternalError = grpc.Errorf(
+var errAPIInternalError = status.Errorf(
 	codes.Internal,
 	"An internal server error has occurred. Please check your CockroachDB logs for more details.",
 )

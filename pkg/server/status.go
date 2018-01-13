@@ -36,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -184,7 +185,7 @@ func (s *statusServer) Gossip(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if local {
@@ -205,7 +206,7 @@ func (s *statusServer) Allocator(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -266,7 +267,7 @@ func (s *statusServer) Allocator(
 		return nil
 	})
 	if err != nil {
-		return nil, grpc.Errorf(codes.Internal, err.Error())
+		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 	return output, nil
 }
@@ -343,7 +344,7 @@ func (s *statusServer) AllocatorRange(
 					// Context completed, response no longer needed.
 				}
 			}); err != nil {
-			return nil, grpc.Errorf(codes.Internal, err.Error())
+			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 		}
 	}
 
@@ -362,7 +363,7 @@ func (s *statusServer) AllocatorRange(
 				}, nil
 			}
 		case <-ctx.Done():
-			return nil, grpc.Errorf(codes.DeadlineExceeded, "request timed out")
+			return nil, grpcstatus.Errorf(codes.DeadlineExceeded, "request timed out")
 		}
 	}
 
@@ -377,7 +378,7 @@ func (s *statusServer) AllocatorRange(
 			}
 			fmt.Fprintf(&buf, "n%d: %s", nodeID, err)
 		}
-		return nil, grpc.Errorf(codes.Internal, buf.String())
+		return nil, grpcstatus.Errorf(codes.Internal, buf.String())
 	}
 	return &serverpb.AllocatorRangeResponse{}, nil
 }
@@ -389,7 +390,7 @@ func (s *statusServer) Certificates(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if s.cfg.Insecure {
@@ -498,7 +499,7 @@ func (s *statusServer) Details(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if local {
 		resp := &serverpb.DetailsResponse{
@@ -524,7 +525,7 @@ func (s *statusServer) LogFilesList(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -548,7 +549,7 @@ func (s *statusServer) LogFile(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -618,7 +619,7 @@ func (s *statusServer) Logs(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
 		status, err := s.dialNode(ctx, nodeID)
@@ -634,30 +635,30 @@ func (s *statusServer) Logs(
 		req.StartTime,
 		timeutil.Now().AddDate(0, 0, -1).UnixNano())
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, "StartTime could not be parsed: %s", err)
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "StartTime could not be parsed: %s", err)
 	}
 
 	endTimestamp, err := parseInt64WithDefault(req.EndTime, timeutil.Now().UnixNano())
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, "EndTime could not be parsed: %s", err)
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "EndTime could not be parsed: %s", err)
 	}
 
 	if startTimestamp > endTimestamp {
-		return nil, grpc.Errorf(codes.InvalidArgument, "StartTime: %d should not be greater than endtime: %d", startTimestamp, endTimestamp)
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "StartTime: %d should not be greater than endtime: %d", startTimestamp, endTimestamp)
 	}
 
 	maxEntries, err := parseInt64WithDefault(req.Max, defaultMaxLogEntries)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, "Max could not be parsed: %s", err)
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "Max could not be parsed: %s", err)
 	}
 	if maxEntries < 1 {
-		return nil, grpc.Errorf(codes.InvalidArgument, "Max: %d should be set to a value greater than 0", maxEntries)
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "Max: %d should be set to a value greater than 0", maxEntries)
 	}
 
 	var regex *regexp.Regexp
 	if len(req.Pattern) > 0 {
 		if regex, err = regexp.Compile(req.Pattern); err != nil {
-			return nil, grpc.Errorf(codes.InvalidArgument, "regex pattern could not be compiled: %s", err)
+			return nil, grpcstatus.Errorf(codes.InvalidArgument, "regex pattern could not be compiled: %s", err)
 		}
 	}
 
@@ -679,7 +680,7 @@ func (s *statusServer) Stacks(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -716,7 +717,7 @@ func (s *statusServer) Nodes(
 	b.Scan(startKey, endKey)
 	if err := s.db.Run(ctx, b); err != nil {
 		log.Error(ctx, err)
-		return nil, grpc.Errorf(codes.Internal, err.Error())
+		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 	rows := b.Results[0].Rows
 
@@ -726,7 +727,7 @@ func (s *statusServer) Nodes(
 	for i, row := range rows {
 		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
 			log.Error(ctx, err)
-			return nil, grpc.Errorf(codes.Internal, err.Error())
+			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 		}
 	}
 	return &resp, nil
@@ -739,7 +740,7 @@ func (s *statusServer) Node(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, _, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	key := keys.NodeStatusKey(nodeID)
@@ -747,14 +748,14 @@ func (s *statusServer) Node(
 	b.Get(key)
 	if err := s.db.Run(ctx, b); err != nil {
 		log.Error(ctx, err)
-		return nil, grpc.Errorf(codes.Internal, err.Error())
+		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 
 	var nodeStatus status.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
 		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
 		log.Error(ctx, err)
-		return nil, grpc.Errorf(codes.Internal, err.Error())
+		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 	return &nodeStatus, nil
 }
@@ -766,7 +767,7 @@ func (s *statusServer) Metrics(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -892,7 +893,7 @@ func (s *statusServer) Ranges(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1025,7 +1026,7 @@ func (s *statusServer) Ranges(
 		return nil
 	})
 	if err != nil {
-		return nil, grpc.Errorf(codes.Internal, err.Error())
+		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 	return &output, nil
 }
@@ -1081,7 +1082,7 @@ func (s *statusServer) Range(
 					// Context completed, response no longer needed.
 				}
 			}); err != nil {
-			return nil, grpc.Errorf(codes.Internal, err.Error())
+			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 		}
 	}
 	for remainingResponses := len(isLiveMap); remainingResponses > 0; remainingResponses-- {
@@ -1098,7 +1099,7 @@ func (s *statusServer) Range(
 				Infos:    resp.resp.Ranges,
 			}
 		case <-ctx.Done():
-			return nil, grpc.Errorf(codes.DeadlineExceeded, "request timed out")
+			return nil, grpcstatus.Errorf(codes.DeadlineExceeded, "request timed out")
 		}
 	}
 
@@ -1235,7 +1236,7 @@ func (s *statusServer) CancelQuery(
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
@@ -1265,7 +1266,7 @@ func (s *statusServer) SpanStats(
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeID)
 	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	if !local {
