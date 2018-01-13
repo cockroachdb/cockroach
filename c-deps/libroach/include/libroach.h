@@ -236,6 +236,35 @@ bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
 DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
                           int64_t target_size, bool allow_meta2_splits, DBString* split_key);
 
+// DBTxn contains the fields from a roachpb.Transaction that are
+// necessary for MVCC Get and Scan operations. Note that passing a
+// serialized roachpb.Transaction appears to be a non-starter as an
+// alternative due to the performance overhead.
+//
+// TODO(peter): We could investigate using
+// https://github.com/petermattis/cppgo to generate C++ code that can
+// read the Go roachpb.Transaction structure.
+typedef struct {
+  DBSlice id;
+  uint32_t epoch;
+  DBTimestamp max_timestamp;
+} DBTxn;
+
+// DBScanResults contains the key/value pairs and intents encoded
+// using the RocksDB batch repr format.
+typedef struct {
+  DBStatus status;
+  DBSlice data;
+  DBSlice intents;
+  DBTimestamp uncertainty_timestamp;
+} DBScanResults;
+
+DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp,
+                      DBTxn txn, bool consistent);
+DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end,
+                       DBTimestamp timestamp, int64_t max_keys,
+                       DBTxn txn, bool consistent, bool reverse);
+
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
   int64_t block_cache_hits;

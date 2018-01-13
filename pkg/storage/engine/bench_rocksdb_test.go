@@ -25,12 +25,15 @@ import (
 )
 
 func setupMVCCRocksDB(b testing.TB, dir string) Engine {
+	cache := NewRocksDBCache(1 << 30 /* 1GB */)
+	defer cache.Release()
+
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
 			Settings: cluster.MakeTestingClusterSettings(),
 			Dir:      dir,
 		},
-		RocksDBCache{},
+		cache,
 	)
 	if err != nil {
 		b.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
@@ -51,7 +54,23 @@ func BenchmarkMVCCScan_RocksDB(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, valueSize := range []int{8, 64, 512} {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-							runMVCCScan(setupMVCCRocksDB, numRows, numVersions, valueSize, b)
+							runMVCCScan(setupMVCCRocksDB, numRows, numVersions, valueSize, false /* reverse */, b)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkMVCCReverseScan_RocksDB(b *testing.B) {
+	for _, numRows := range []int{1, 10, 100, 1000} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			for _, numVersions := range []int{1, 2, 10, 100} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, valueSize := range []int{8, 64, 512} {
+						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+							runMVCCScan(setupMVCCRocksDB, numRows, numVersions, valueSize, true /* reverse */, b)
 						})
 					}
 				})
