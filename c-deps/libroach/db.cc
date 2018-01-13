@@ -25,7 +25,8 @@
 #include "defines.h"
 #include "encoding.h"
 #include "engine.h"
-#include "env_switching.h"
+#include "env_manager.h"
+#include "eventlistener.h"
 #include "fmt.h"
 #include "getter.h"
 #include "godefs.h"
@@ -40,7 +41,8 @@ using namespace cockroach;
 namespace cockroach {
 
 // DBOpenHook in OSS mode only verifies that no extra options are specified.
-__attribute__((weak)) rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts) {
+__attribute__((weak)) rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts,
+                                                 EnvManager* env_ctx) {
   if (opts.extra_options.len != 0) {
     return rocksdb::Status::InvalidArgument(
         "DBOptions has extra_options, but OSS code cannot handle them");
@@ -118,30 +120,60 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
 
   const std::string db_dir = ToString(dir);
 
+  // Make the default options.env the default. It points to Env::Default which does not
+  // need to be deleted.
+  std::unique_ptr<cockroach::EnvManager> env_ctx(new cockroach::EnvManager(options.env));
+
+  if (dir.len == 0) {
+    // In-memory database: use a MemEnv as the base Env.
+    auto memenv = rocksdb::NewMemEnv(rocksdb::Env::Default());
+    // Register it for deletion.
+    env_ctx->TakeEnvOwnership(memenv);
+    // Make it the env that all other Envs must wrap.
+    env_ctx->base_env = memenv;
+    // Make it the env for rocksdb.
+    env_ctx->db_env = memenv;
+  }
+
+  // Create the file registry. It uses the base_env to access the registry file.
+  auto file_registry = std::unique_ptr<FileRegistry>(new FileRegistry(env_ctx->base_env, db_dir));
+
+  if (db_opts.use_switching_env) {
+    // We're using the switching env.
+    auto status = file_registry->Load();
+    if (!status.ok()) {
+      return ToDBStatus(status);
+    }
+
+    // EnvManager takes ownership of the file registry.
+    env_ctx->file_registry.swap(file_registry);
+  } else {
+    // Switching env format not enabled: check whether we have a registry file (we shouldn't).
+    // The file_registry is not passed to anyone, it is deleted when it goes out of scope.
+    auto status = file_registry->CheckNoRegistryFile();
+    if (!status.ok()) {
+      return ToDBStatus(status);
+    }
+  }
+
   // Call hooks to handle db_opts.extra_options.
-  auto hook_status = DBOpenHook(db_dir, db_opts);
+  auto hook_status = DBOpenHook(db_dir, db_opts, env_ctx.get());
   if (!hook_status.ok()) {
     return ToDBStatus(hook_status);
   }
+
+  // TODO(mberhault):
+  // - check available ciphers somehow?
+  //   We may have a encrypted files in the registry file but running without encryption flags.
+  // - pass read-only flag though, we should not be modifying file/key registries (including key
+  //   rotation) in read-only mode.
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
   options.listeners.emplace_back(event_listener);
 
-  // TODO(mberhault): we shouldn't need two separate env objects,
-  // options.env should be sufficient with SwitchingEnv owning any
-  // underlying Env.
-  std::unique_ptr<rocksdb::Env> memenv;
-  if (dir.len == 0) {
-    memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
-    options.env = memenv.get();
-  }
-
-  std::unique_ptr<rocksdb::Env> switching_env;
-  if (db_opts.use_switching_env) {
-    switching_env.reset(NewSwitchingEnv(options.env, options.info_log));
-    options.env = switching_env.get();
-  }
+  // Point rocksdb to the env to use.
+  options.env = env_ctx->db_env;
 
   rocksdb::DB* db_ptr;
 
@@ -155,9 +187,8 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
-  *db =
-      new DBImpl(db_ptr, memenv.release(), db_opts.cache != nullptr ? db_opts.cache->rep : nullptr,
-                 event_listener, switching_env.release());
+  *db = new DBImpl(db_ptr, std::move(env_ctx),
+                   db_opts.cache != nullptr ? db_opts.cache->rep : nullptr, event_listener);
   return kSuccess;
 }
 

@@ -47,6 +47,9 @@ extern DataKeysRegistry_DataKeysEntryDefaultTypeInternal _DataKeysRegistry_DataK
 class DataKeysRegistry_StoreKeysEntry;
 class DataKeysRegistry_StoreKeysEntryDefaultTypeInternal;
 extern DataKeysRegistry_StoreKeysEntryDefaultTypeInternal _DataKeysRegistry_StoreKeysEntry_default_instance_;
+class EncryptionSettings;
+class EncryptionSettingsDefaultTypeInternal;
+extern EncryptionSettingsDefaultTypeInternal _EncryptionSettings_default_instance_;
 class KeyInfo;
 class KeyInfoDefaultTypeInternal;
 extern KeyInfoDefaultTypeInternal _KeyInfo_default_instance_;
@@ -533,6 +536,138 @@ class SecretKey : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   mutable int _cached_size_;
   friend struct protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::TableStruct;
 };
+// -------------------------------------------------------------------
+
+class EncryptionSettings : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings) */ {
+ public:
+  EncryptionSettings();
+  virtual ~EncryptionSettings();
+
+  EncryptionSettings(const EncryptionSettings& from);
+
+  inline EncryptionSettings& operator=(const EncryptionSettings& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  EncryptionSettings(EncryptionSettings&& from) noexcept
+    : EncryptionSettings() {
+    *this = ::std::move(from);
+  }
+
+  inline EncryptionSettings& operator=(EncryptionSettings&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const EncryptionSettings& default_instance();
+
+  static inline const EncryptionSettings* internal_default_instance() {
+    return reinterpret_cast<const EncryptionSettings*>(
+               &_EncryptionSettings_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    5;
+
+  void Swap(EncryptionSettings* other);
+  friend void swap(EncryptionSettings& a, EncryptionSettings& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline EncryptionSettings* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  EncryptionSettings* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const EncryptionSettings& from);
+  void MergeFrom(const EncryptionSettings& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(EncryptionSettings* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string key_id = 2;
+  void clear_key_id();
+  static const int kKeyIdFieldNumber = 2;
+  const ::std::string& key_id() const;
+  void set_key_id(const ::std::string& value);
+  #if LANG_CXX11
+  void set_key_id(::std::string&& value);
+  #endif
+  void set_key_id(const char* value);
+  void set_key_id(const char* value, size_t size);
+  ::std::string* mutable_key_id();
+  ::std::string* release_key_id();
+  void set_allocated_key_id(::std::string* key_id);
+
+  // bytes nonce = 3;
+  void clear_nonce();
+  static const int kNonceFieldNumber = 3;
+  const ::std::string& nonce() const;
+  void set_nonce(const ::std::string& value);
+  #if LANG_CXX11
+  void set_nonce(::std::string&& value);
+  #endif
+  void set_nonce(const char* value);
+  void set_nonce(const void* value, size_t size);
+  ::std::string* mutable_nonce();
+  ::std::string* release_nonce();
+  void set_allocated_nonce(::std::string* nonce);
+
+  // .cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType encryption_type = 1;
+  void clear_encryption_type();
+  static const int kEncryptionTypeFieldNumber = 1;
+  ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType encryption_type() const;
+  void set_encryption_type(::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType value);
+
+  // uint32 counter = 4;
+  void clear_counter();
+  static const int kCounterFieldNumber = 4;
+  ::google::protobuf::uint32 counter() const;
+  void set_counter(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr key_id_;
+  ::google::protobuf::internal::ArenaStringPtr nonce_;
+  int encryption_type_;
+  ::google::protobuf::uint32 counter_;
+  mutable int _cached_size_;
+  friend struct protobuf_ccl_2fstorageccl_2fengineccl_2fenginepbccl_2fkey_5fregistry_2eproto::TableStruct;
+};
 // ===================================================================
 
 
@@ -993,10 +1128,150 @@ inline void SecretKey::set_allocated_key(::std::string* key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.ccl.storageccl.engineccl.enginepbccl.SecretKey.key)
 }
 
+// -------------------------------------------------------------------
+
+// EncryptionSettings
+
+// .cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType encryption_type = 1;
+inline void EncryptionSettings::clear_encryption_type() {
+  encryption_type_ = 0;
+}
+inline ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType EncryptionSettings::encryption_type() const {
+  // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.encryption_type)
+  return static_cast< ::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType >(encryption_type_);
+}
+inline void EncryptionSettings::set_encryption_type(::cockroach::ccl::storageccl::engineccl::enginepbccl::EncryptionType value) {
+  
+  encryption_type_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.encryption_type)
+}
+
+// string key_id = 2;
+inline void EncryptionSettings::clear_key_id() {
+  key_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& EncryptionSettings::key_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.key_id)
+  return key_id_.GetNoArena();
+}
+inline void EncryptionSettings::set_key_id(const ::std::string& value) {
+  
+  key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.key_id)
+}
+#if LANG_CXX11
+inline void EncryptionSettings::set_key_id(::std::string&& value) {
+  
+  key_id_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.key_id)
+}
+#endif
+inline void EncryptionSettings::set_key_id(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.key_id)
+}
+inline void EncryptionSettings::set_key_id(const char* value, size_t size) {
+  
+  key_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.key_id)
+}
+inline ::std::string* EncryptionSettings::mutable_key_id() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.key_id)
+  return key_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* EncryptionSettings::release_key_id() {
+  // @@protoc_insertion_point(field_release:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.key_id)
+  
+  return key_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void EncryptionSettings::set_allocated_key_id(::std::string* key_id) {
+  if (key_id != NULL) {
+    
+  } else {
+    
+  }
+  key_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.key_id)
+}
+
+// bytes nonce = 3;
+inline void EncryptionSettings::clear_nonce() {
+  nonce_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& EncryptionSettings::nonce() const {
+  // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.nonce)
+  return nonce_.GetNoArena();
+}
+inline void EncryptionSettings::set_nonce(const ::std::string& value) {
+  
+  nonce_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.nonce)
+}
+#if LANG_CXX11
+inline void EncryptionSettings::set_nonce(::std::string&& value) {
+  
+  nonce_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.nonce)
+}
+#endif
+inline void EncryptionSettings::set_nonce(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  nonce_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.nonce)
+}
+inline void EncryptionSettings::set_nonce(const void* value, size_t size) {
+  
+  nonce_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.nonce)
+}
+inline ::std::string* EncryptionSettings::mutable_nonce() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.nonce)
+  return nonce_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* EncryptionSettings::release_nonce() {
+  // @@protoc_insertion_point(field_release:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.nonce)
+  
+  return nonce_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void EncryptionSettings::set_allocated_nonce(::std::string* nonce) {
+  if (nonce != NULL) {
+    
+  } else {
+    
+  }
+  nonce_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), nonce);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.nonce)
+}
+
+// uint32 counter = 4;
+inline void EncryptionSettings::clear_counter() {
+  counter_ = 0u;
+}
+inline ::google::protobuf::uint32 EncryptionSettings::counter() const {
+  // @@protoc_insertion_point(field_get:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.counter)
+  return counter_;
+}
+inline void EncryptionSettings::set_counter(::google::protobuf::uint32 value) {
+  
+  counter_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings.counter)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
