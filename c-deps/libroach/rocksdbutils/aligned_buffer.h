@@ -9,9 +9,19 @@
 #pragma once
 
 #include <algorithm>
-#include "port/port.h"
+#include <cassert>
+#include <cstring>
+#include <memory>
 
-namespace rocksdb {
+namespace rocksdb_utils {
+
+// Needed parts from rocksdb/port/win/port_win.h
+// VS < 2015
+#if defined(OS_WIN) && defined(_MSC_VER) && (_MSC_VER < 1900)
+#define ROCKSDB_NOEXCEPT
+#else  // VS >= 2015 or MinGW
+#define ROCKSDB_NOEXCEPT noexcept
+#endif
 
 inline size_t TruncateToPageBoundary(size_t page_size, size_t s) {
   s -= (s & (page_size - 1));
@@ -151,4 +161,4 @@ class AlignedBuffer {
 
   void Size(size_t cursize) { cursize_ = cursize; }
 };
-}  // namespace rocksdb
+}  // namespace rocksdb_utils
