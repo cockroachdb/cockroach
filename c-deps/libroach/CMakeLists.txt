@@ -37,6 +37,7 @@ add_library(roach
   protos/util/hlc/legacy_timestamp.pb.cc
   protos/util/hlc/timestamp.pb.cc
   protos/util/unresolved_addr.pb.cc
+  rocksdbutils/env_encryption.cc
 )
 target_include_directories(roach
   PUBLIC  ./include

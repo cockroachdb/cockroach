@@ -5,19 +5,18 @@
 
 #pragma once
 
-#if !defined(ROCKSDB_LITE)
-
 #include <string>
 
-#include "env.h"
+#include "rocksdb/env.h"
+#include "rocksdb/status.h"
 
-namespace rocksdb {
+namespace rocksdb_utils {
 
 class EncryptionProvider;
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
-Env* NewEncryptedEnv(Env* base_env, EncryptionProvider* provider);
+rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider);
 
 // BlockAccessCipherStream is the base class for any cipher stream that
 // supports random access at block level (without requiring data from other blocks).
@@ -31,11 +30,11 @@ class BlockAccessCipherStream {
 
   // Encrypt one or more (partial) blocks of data at the file offset.
   // Length of data is given in dataSize.
-  virtual Status Encrypt(uint64_t fileOffset, char* data, size_t dataSize);
+  virtual rocksdb::Status Encrypt(uint64_t fileOffset, char* data, size_t dataSize);
 
   // Decrypt one or more (partial) blocks of data at the file offset.
   // Length of data is given in dataSize.
-  virtual Status Decrypt(uint64_t fileOffset, char* data, size_t dataSize);
+  virtual rocksdb::Status Decrypt(uint64_t fileOffset, char* data, size_t dataSize);
 
  protected:
   // Allocate scratch space which is passed to EncryptBlock/DecryptBlock.
@@ -43,11 +42,11 @@ class BlockAccessCipherStream {
 
   // Encrypt a block of data at the given block index.
   // Length of data is equal to BlockSize();
-  virtual Status EncryptBlock(uint64_t blockIndex, char* data, char* scratch) = 0;
+  virtual rocksdb::Status EncryptBlock(uint64_t blockIndex, char* data, char* scratch) = 0;
 
   // Decrypt a block of data at the given block index.
   // Length of data is equal to BlockSize();
-  virtual Status DecryptBlock(uint64_t blockIndex, char* data, char* scratch) = 0;
+  virtual rocksdb::Status DecryptBlock(uint64_t blockIndex, char* data, char* scratch) = 0;
 };
 
 // BlockCipher
@@ -60,11 +59,11 @@ class BlockCipher {
 
   // Encrypt a block of data.
   // Length of data is equal to BlockSize().
-  virtual Status Encrypt(char* data) = 0;
+  virtual rocksdb::Status Encrypt(char* data) = 0;
 
   // Decrypt a block of data.
   // Length of data is equal to BlockSize().
-  virtual Status Decrypt(char* data) = 0;
+  virtual rocksdb::Status Decrypt(char* data) = 0;
 };
 
 // Implements a BlockCipher using ROT13.
@@ -84,11 +83,11 @@ class ROT13BlockCipher : public BlockCipher {
 
   // Encrypt a block of data.
   // Length of data is equal to BlockSize().
-  virtual Status Encrypt(char* data) override;
+  virtual rocksdb::Status Encrypt(char* data) override;
 
   // Decrypt a block of data.
   // Length of data is equal to BlockSize().
-  virtual Status Decrypt(char* data) override;
+  virtual rocksdb::Status Decrypt(char* data) override;
 };
 
 // CTRCipherStream implements BlockAccessCipherStream using an
@@ -117,11 +116,11 @@ class CTRCipherStream final : public BlockAccessCipherStream {
 
   // Encrypt a block of data at the given block index.
   // Length of data is equal to BlockSize();
-  virtual Status EncryptBlock(uint64_t blockIndex, char* data, char* scratch) override;
+  virtual rocksdb::Status EncryptBlock(uint64_t blockIndex, char* data, char* scratch) override;
 
   // Decrypt a block of data at the given block index.
   // Length of data is equal to BlockSize();
-  virtual Status DecryptBlock(uint64_t blockIndex, char* data, char* scratch) override;
+  virtual rocksdb::Status DecryptBlock(uint64_t blockIndex, char* data, char* scratch) override;
 };
 
 // The encryption provider is used to create a cipher stream for a specific file.
@@ -139,12 +138,15 @@ class EncryptionProvider {
 
   // CreateNewPrefix initialized an allocated block of prefix memory
   // for a new file.
-  virtual Status CreateNewPrefix(const std::string& fname, char* prefix, size_t prefixLength) = 0;
+  virtual rocksdb::Status CreateNewPrefix(const std::string& fname, char* prefix,
+                                          size_t prefixLength) = 0;
 
   // CreateCipherStream creates a block access cipher stream for a file given
   // given name and options.
-  virtual Status CreateCipherStream(const std::string& fname, const EnvOptions& options,
-                                    Slice& prefix, unique_ptr<BlockAccessCipherStream>* result) = 0;
+  virtual rocksdb::Status CreateCipherStream(const std::string& fname,
+                                             const rocksdb::EnvOptions& options,
+                                             rocksdb::Slice& prefix,
+                                             std::unique_ptr<BlockAccessCipherStream>* result) = 0;
 };
 
 // This encryption provider uses a CTR cipher stream, with a given block cipher
@@ -171,14 +173,15 @@ class CTREncryptionProvider : public EncryptionProvider {
 
   // CreateNewPrefix initialized an allocated block of prefix memory
   // for a new file.
-  virtual Status CreateNewPrefix(const std::string& fname, char* prefix,
-                                 size_t prefixLength) override;
+  virtual rocksdb::Status CreateNewPrefix(const std::string& fname, char* prefix,
+                                          size_t prefixLength) override;
 
   // CreateCipherStream creates a block access cipher stream for a file given
   // given name and options.
-  virtual Status CreateCipherStream(const std::string& fname, const EnvOptions& options,
-                                    Slice& prefix,
-                                    unique_ptr<BlockAccessCipherStream>* result) override;
+  virtual rocksdb::Status
+  CreateCipherStream(const std::string& fname, const rocksdb::EnvOptions& options,
+                     rocksdb::Slice& prefix,
+                     std::unique_ptr<BlockAccessCipherStream>* result) override;
 
  protected:
   // PopulateSecretPrefixPart initializes the data into a new prefix block
@@ -190,12 +193,11 @@ class CTREncryptionProvider : public EncryptionProvider {
 
   // CreateCipherStreamFromPrefix creates a block access cipher stream for a file given
   // given name and options. The given prefix is already decrypted.
-  virtual Status CreateCipherStreamFromPrefix(const std::string& fname, const EnvOptions& options,
-                                              uint64_t initialCounter, const Slice& iv,
-                                              const Slice& prefix,
-                                              unique_ptr<BlockAccessCipherStream>* result);
+  virtual rocksdb::Status
+  CreateCipherStreamFromPrefix(const std::string& fname, const rocksdb::EnvOptions& options,
+                               uint64_t initialCounter, const rocksdb::Slice& iv,
+                               const rocksdb::Slice& prefix,
+                               std::unique_ptr<BlockAccessCipherStream>* result);
 };
 
-}  // namespace rocksdb
-
-#endif  // !defined(ROCKSDB_LITE)
+}  // namespace rocksdb_utils
