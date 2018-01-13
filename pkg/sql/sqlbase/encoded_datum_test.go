@@ -62,7 +62,7 @@ func TestEncDatum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	y := EncDatumFromEncoded(&typeInt, DatumEncoding_ASCENDING_KEY, encoded)
+	y := EncDatumFromEncoded(DatumEncoding_ASCENDING_KEY, encoded)
 	check(y)
 
 	if enc, ok := y.Encoding(); !ok {
@@ -88,7 +88,7 @@ func TestEncDatum(t *testing.T) {
 	} else if enc != DatumEncoding_ASCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	z := EncDatumFromEncoded(&typeInt, DatumEncoding_DESCENDING_KEY, enc2)
+	z := EncDatumFromEncoded(DatumEncoding_DESCENDING_KEY, enc2)
 	if enc, ok := z.Encoding(); !ok {
 		t.Error("no encoding")
 	} else if enc != DatumEncoding_DESCENDING_KEY {
@@ -139,7 +139,7 @@ func TestEncDatumNull(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			b := EncDatumFromEncoded(&typ, DatumEncoding(enc), encoded)
+			b := EncDatumFromEncoded(DatumEncoding(enc), encoded)
 			if a.IsNull() != b.IsNull() {
 				t.Errorf("before: %s (null=%t) after: %s (null=%t)",
 					a.String(&typeInt), a.IsNull(), b.String(&typeInt), b.IsNull())
@@ -169,9 +169,9 @@ func checkEncDatumCmp(
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec1 := EncDatumFromEncoded(&typ, enc1, buf1)
+	dec1 := EncDatumFromEncoded(enc1, buf1)
 
-	dec2 := EncDatumFromEncoded(&typ, enc2, buf2)
+	dec2 := EncDatumFromEncoded(enc2, buf2)
 
 	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
