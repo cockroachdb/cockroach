@@ -562,28 +562,33 @@ var crc32Pool = sync.Pool{
 	},
 }
 
-// computeChecksum computes a checksum based on the provided key and
-// the contents of the value.
-func (v Value) computeChecksum(key []byte) uint32 {
-	if len(v.RawBytes) < headerSize {
+func computeChecksum(key, rawBytes []byte, crc hash.Hash32) uint32 {
+	if len(rawBytes) < headerSize {
 		return 0
 	}
-	crc := crc32Pool.Get().(hash.Hash32)
 	if _, err := crc.Write(key); err != nil {
 		panic(err)
 	}
-	if _, err := crc.Write(v.RawBytes[checksumSize:]); err != nil {
+	if _, err := crc.Write(rawBytes[checksumSize:]); err != nil {
 		panic(err)
 	}
 	sum := crc.Sum32()
 	crc.Reset()
-	crc32Pool.Put(crc)
 	// We reserved the value 0 (checksumUninitialized) to indicate that a checksum
 	// has not been initialized. This reservation is accomplished by folding a
 	// computed checksum of 0 to the value 1.
 	if sum == checksumUninitialized {
 		return 1
 	}
+	return sum
+}
+
+// computeChecksum computes a checksum based on the provided key and
+// the contents of the value.
+func (v Value) computeChecksum(key []byte) uint32 {
+	crc := crc32Pool.Get().(hash.Hash32)
+	sum := computeChecksum(key, v.RawBytes, crc)
+	crc32Pool.Put(crc)
 	return sum
 }
 

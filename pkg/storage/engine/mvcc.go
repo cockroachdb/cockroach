@@ -592,10 +592,17 @@ func MVCCGet(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
-	iter := engine.NewIterator(true)
-	defer iter.Close()
+	// TODO(peter): delete the old code.
+	if false {
+		iter := engine.NewIterator(true)
+		defer iter.Close()
+		return mvccGetUsingIter(ctx, iter, key, timestamp, consistent, txn)
+	}
 
-	return mvccGetUsingIter(ctx, iter, key, timestamp, consistent, txn)
+	iter := engine.NewIterator(true)
+	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent)
+	iter.Close()
+	return value, intents, err
 }
 
 func mvccGetUsingIter(
@@ -1608,31 +1615,153 @@ func mvccScanInternal(
 	txn *roachpb.Transaction,
 	reverse bool,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	var res []roachpb.KeyValue
+	// TODO(peter): delete the old code.
+	if false {
+		var res []roachpb.KeyValue
+		if max == 0 {
+			return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
+		}
+
+		var resumeSpan *roachpb.Span
+		intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse,
+			func(kv roachpb.KeyValue) (bool, error) {
+				if int64(len(res)) == max {
+					// Another key was found beyond the max limit.
+					if reverse {
+						resumeSpan = &roachpb.Span{Key: key, EndKey: kv.Key.Next()}
+					} else {
+						resumeSpan = &roachpb.Span{Key: kv.Key, EndKey: endKey}
+					}
+					return true, nil
+				}
+				res = append(res, kv)
+				return false, nil
+			})
+
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return res, resumeSpan, intents, nil
+	}
+
 	if max == 0 {
 		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
 	}
 
-	var resumeSpan *roachpb.Span
-	intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse,
-		func(kv roachpb.KeyValue) (bool, error) {
-			if int64(len(res)) == max {
-				// Another key was found beyond the max limit.
-				if reverse {
-					resumeSpan = &roachpb.Span{Key: key, EndKey: kv.Key.Next()}
-				} else {
-					resumeSpan = &roachpb.Span{Key: kv.Key, EndKey: endKey}
-				}
-				return true, nil
-			}
-			res = append(res, kv)
-			return false, nil
-		})
+	iter := engine.NewIterator(false)
+	kvData, intentData, err := iter.MVCCScan(
+		key, endKey, max, timestamp, txn, consistent, reverse)
+	iter.Close()
 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return res, resumeSpan, intents, nil
+
+	kvs, resumeKey, intents, err := buildScanResults(kvData, intentData, max, consistent)
+	var resumeSpan *roachpb.Span
+	if resumeKey != nil {
+		if reverse {
+			resumeSpan = &roachpb.Span{Key: key, EndKey: resumeKey.Next()}
+		} else {
+			resumeSpan = &roachpb.Span{Key: resumeKey, EndKey: endKey}
+		}
+	}
+	return kvs, resumeSpan, intents, err
+}
+
+func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	reader, err := NewRocksDBBatchReader(data)
+	if err != nil {
+		return nil, err
+	}
+
+	intents := make([]roachpb.Intent, 0, reader.Count())
+	var meta enginepb.MVCCMetadata
+	for reader.Next() {
+		key, err := reader.MVCCKey()
+		if err != nil {
+			return nil, err
+		}
+		if err := protoutil.Unmarshal(reader.Value(), &meta); err != nil {
+			return nil, err
+		}
+		intents = append(intents, roachpb.Intent{
+			Span:   roachpb.Span{Key: key.Key},
+			Status: roachpb.PENDING,
+			Txn:    *meta.Txn,
+		})
+	}
+
+	if err := reader.Error(); err != nil {
+		return nil, err
+	}
+	return intents, nil
+}
+
+func buildScanResults(
+	kvData, intentData []byte, max int64, consistent bool,
+) ([]roachpb.KeyValue, roachpb.Key, []roachpb.Intent, error) {
+	intents, err := buildScanIntents(intentData)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if consistent && len(intents) > 0 {
+		return nil, nil, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+	if len(kvData) == 0 {
+		return nil, nil, intents, nil
+	}
+
+	// Loop over the kvData (which is in RocksDB batch repr format), creating a
+	// slice of roachpb.KeyValue. This code would be slightly more compact using
+	// RocksDBBatchReader, but there is a measurable performance benefit to
+	// avoiding the associated allocation for small (1 row) scans.
+	count, kvData, err := rocksDBBatchDecodeHeader(kvData)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if count == 0 {
+		return nil, nil, intents, nil
+	}
+
+	// Iterator.MVCCScan will return up to max+1 results. The extra result is
+	// returned so that we can generate the resumeKey in the same manner as the
+	// old Go version of MVCCScan.
+	//
+	// TODO(peter): We should change the resumeKey to be Key.Next() of the last
+	// key returned.
+	n := count
+	if n > int(max) {
+		n = int(max)
+	}
+	kvs := make([]roachpb.KeyValue, n)
+
+	var key MVCCKey
+	var rawBytes []byte
+	for i := range kvs {
+		key, rawBytes, kvData, err = rocksDBBatchDecodeValue(kvData)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		kvs[i].Key = key.Key
+		kvs[i].Value.RawBytes = rawBytes
+		kvs[i].Value.Timestamp = key.Timestamp
+	}
+
+	var resumeKey roachpb.Key
+	if count > int(max) {
+		key, _, _, err = rocksDBBatchDecodeValue(kvData)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		resumeKey = key.Key
+	}
+
+	return kvs, resumeKey, intents, nil
 }
 
 // MVCCScan scans the key range [key,endKey) key up to some maximum number of
@@ -1652,6 +1781,7 @@ func MVCCScan(
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
 	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
 		consistent, txn, false /* reverse */)
+
 }
 
 // MVCCReverseScan scans the key range [start,end) key up to some maximum

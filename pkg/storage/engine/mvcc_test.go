@@ -672,11 +672,13 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	// Read with transaction, should get error back.
 	if _, _, err := MVCCGet(context.Background(), engine, testKey2, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
-	} else if e, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
-		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", e)
+	} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 	}
 	if _, _, _, err := MVCCScan(context.Background(), engine, testKey2, testKey2.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
+	} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 	}
 	// Adjust MaxTimestamp and retry.
 	txn.MaxTimestamp = hlc.Timestamp{WallTime: 7}
@@ -700,9 +702,13 @@ func TestMVCCGetUncertainty(t *testing.T) {
 	}
 	if _, _, _, err := MVCCScan(context.Background(), engine, testKey3, testKey3.PrefixEnd(), 10, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatal("wanted an error")
+	} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 	}
 	if _, _, err := MVCCGet(context.Background(), engine, testKey3, hlc.Timestamp{WallTime: 7}, true, txn); err == nil {
 		t.Fatalf("wanted an error")
+	} else if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
+		t.Fatalf("wanted a ReadWithinUncertaintyIntervalError, got %+v", err)
 	}
 }
 
@@ -1006,8 +1012,6 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(kvs, scan.expValues) {
-			t.Errorf("%s(%d): expected no values; got %+v", cStr, i, kvs)
-		} else if !reflect.DeepEqual(kvs, scan.expValues) {
 			t.Errorf("%s(%d): expected values %+v; got %+v", cStr, i, scan.expValues, kvs)
 		}
 	}
@@ -1894,7 +1898,10 @@ func TestMVCCDeleteRangeInline(t *testing.T) {
 			Value: value6,
 		},
 	}
-	kvs, _, _, _ := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	kvs, _, _, err := MVCCScan(context.Background(), engine, keyMin, keyMax, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if a, e := len(kvs), len(expectedKvs); a != e {
 		t.Fatalf("engine scan found %d keys; expected %d", a, e)
 	}
@@ -2264,26 +2271,41 @@ func TestMVCCReverseScan(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1,
+		hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 2}, value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey1,
+		hlc.Timestamp{WallTime: 2}, value2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2,
+		hlc.Timestamp{WallTime: 1}, value3, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 3}, value4, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey2,
+		hlc.Timestamp{WallTime: 3}, value4, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey3,
+		hlc.Timestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := MVCCPut(context.Background(), engine, nil, testKey4, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
+	if err := MVCCPut(context.Background(), engine, nil, testKey4,
+		hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey5,
+		hlc.Timestamp{WallTime: 3}, value5, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey6,
+		hlc.Timestamp{WallTime: 3}, value6, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	kvs, resumeSpan, _, err := MVCCReverseScan(context.Background(), engine, testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err := MVCCReverseScan(context.Background(), engine,
+		testKey2, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2298,7 +2320,8 @@ func TestMVCCReverseScan(t *testing.T) {
 		t.Fatalf("resumeSpan = %+v", resumeSpan)
 	}
 
-	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine,
+		testKey2, testKey4, 1, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2310,7 +2333,9 @@ func TestMVCCReverseScan(t *testing.T) {
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey2.Next()}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
 	}
-	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine, testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, true, nil)
+
+	kvs, resumeSpan, _, err = MVCCReverseScan(context.Background(), engine,
+		testKey2, testKey4, 0, hlc.Timestamp{WallTime: 1}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2319,6 +2344,32 @@ func TestMVCCReverseScan(t *testing.T) {
 	}
 	if expected := (roachpb.Span{Key: testKey2, EndKey: testKey4}); !resumeSpan.EqualValue(expected) {
 		t.Fatalf("expected = %+v, resumeSpan = %+v", expected, resumeSpan)
+	}
+
+	// The first key we encounter has multiple versions and we need to read the
+	// latest.
+	kvs, _, _, err = MVCCReverseScan(context.Background(), engine,
+		testKey2, testKey3, 1, hlc.Timestamp{WallTime: 4}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 ||
+		!bytes.Equal(kvs[0].Key, testKey2) ||
+		!bytes.Equal(kvs[0].Value.RawBytes, value4.RawBytes) {
+		t.Errorf("unexpected value: %v", kvs)
+	}
+
+	// The first key we encounter is newer than our read timestamp and we need to
+	// back up to the previous key.
+	kvs, _, _, err = MVCCReverseScan(context.Background(), engine,
+		testKey4, testKey6, 1, hlc.Timestamp{WallTime: 1}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 ||
+		!bytes.Equal(kvs[0].Key, testKey4) ||
+		!bytes.Equal(kvs[0].Value.RawBytes, value2.RawBytes) {
+		t.Errorf("unexpected value: %v", kvs)
 	}
 }
 
