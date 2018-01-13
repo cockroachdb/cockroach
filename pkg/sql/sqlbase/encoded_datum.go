@@ -113,6 +113,22 @@ func EncDatumFromBuffer(enc DatumEncoding, buf []byte) (EncDatum, []byte, error)
 	}
 }
 
+// EncDatumValueFromBufferWithOffsetsAndType is just like calling
+// EncDatumFromBuffer with DatumEncoding_VALUE, except it expects that you pass
+// in the result of calling DecodeValueTag on the input buf. Use this if you've
+// already called DecodeValueTag on buf already, to avoid it getting called
+// more than necessary.
+func EncDatumValueFromBufferWithOffsetsAndType(
+	buf []byte, typeOffset int, dataOffset int, typ encoding.Type,
+) (EncDatum, []byte, error) {
+	encLen, err := encoding.PeekValueLengthWithOffsetsAndType(buf, dataOffset, typ)
+	if err != nil {
+		return EncDatum{}, nil, err
+	}
+	ed := EncDatumFromEncoded(DatumEncoding_VALUE, buf[typeOffset:encLen])
+	return ed, buf[encLen:], nil
+}
+
 // DatumToEncDatum initializes an EncDatum with the given Datum.
 func DatumToEncDatum(ctyp ColumnType, d tree.Datum) EncDatum {
 	if d == nil {
