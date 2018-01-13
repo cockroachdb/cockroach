@@ -140,6 +140,40 @@ func (p *planner) Insert(
 			if err != nil {
 				return nil, err
 			}
+		} else {
+			pselect, ok := src.(*tree.ParenSelect)
+			if ok {
+				sc, ok := pselect.Select.Select.(*tree.SelectClause)
+				if ok {
+					outputNames := make([]string, len(sc.Exprs))
+					for _, target := range sc.Exprs {
+						outputName, err := getRenderColName(p.SessionData().SearchPath, target, nil)
+						if err != nil {
+							//TODO(sum12) do something usefull with the error
+							break
+						}
+						outputNames = append(outputNames, outputName)
+					}
+					if len(cols) > len(outputNames) {
+						for i, expectedName := range cols {
+							if i > len(outputNames) {
+								found := false
+								for _, willBeName := range outputNames {
+									if willBeName == expectedName.Name {
+										found = true
+										break
+									}
+								}
+								if !found {
+									strval := tree.NewStrVal(expectedName.Name)
+									expr := tree.Expr(strval)
+									sc.Exprs = append(sc.Exprs, tree.SelectExpr{Expr: expr})
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 		insertRows = src
 	}
