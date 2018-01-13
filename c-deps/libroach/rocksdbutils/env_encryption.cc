@@ -3,26 +3,20 @@
 //  COPYING file in the root directory) and Apache 2.0 License
 //  (found in the LICENSE.Apache file in the root directory).
 
-#ifndef ROCKSDB_LITE
-
 #include <algorithm>
 #include <cctype>
 #include <iostream>
 
-#include "rocksdb/env_encryption.h"
-#include "util/aligned_buffer.h"
-#include "util/coding.h"
-#include "util/random.h"
+#include "aligned_buffer.h"
+#include "env_encryption.h"
+//#include "util/coding.h"
+//#include "util/random.h"
 
-#endif
+namespace rocksdb_utils {
 
-namespace rocksdb {
-
-#ifndef ROCKSDB_LITE
-
-class EncryptedSequentialFile : public SequentialFile {
+class EncryptedSequentialFile : public rocksdb::SequentialFile {
  private:
-  std::unique_ptr<SequentialFile> file_;
+  std::unique_ptr<rocksdb::SequentialFile> file_;
   std::unique_ptr<BlockAccessCipherStream> stream_;
   uint64_t offset_;
   size_t prefixLength_;
@@ -30,7 +24,8 @@ class EncryptedSequentialFile : public SequentialFile {
  public:
   // Default ctor. Given underlying sequential file is supposed to be at
   // offset == prefixLength.
-  EncryptedSequentialFile(SequentialFile* f, BlockAccessCipherStream* s, size_t prefixLength)
+  EncryptedSequentialFile(rocksdb::SequentialFile* f, BlockAccessCipherStream* s,
+                          size_t prefixLength)
       : file_(f), stream_(s), offset_(prefixLength), prefixLength_(prefixLength) {}
 
   // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
@@ -41,9 +36,9 @@ class EncryptedSequentialFile : public SequentialFile {
   // If an error was encountered, returns a non-OK status.
   //
   // REQUIRES: External synchronization
-  virtual Status Read(size_t n, Slice* result, char* scratch) override {
+  virtual rocksdb::Status Read(size_t n, rocksdb::Slice* result, char* scratch) override {
     assert(scratch);
-    Status status = file_->Read(n, result, scratch);
+    rocksdb::Status status = file_->Read(n, result, scratch);
     if (!status.ok()) {
       return status;
     }
@@ -60,7 +55,7 @@ class EncryptedSequentialFile : public SequentialFile {
   // file, and Skip will return OK.
   //
   // REQUIRES: External synchronization
-  virtual Status Skip(uint64_t n) override {
+  virtual rocksdb::Status Skip(uint64_t n) override {
     auto status = file_->Skip(n);
     if (!status.ok()) {
       return status;
@@ -82,13 +77,14 @@ class EncryptedSequentialFile : public SequentialFile {
   // Remove any kind of caching of data from the offset to offset+length
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
-  virtual Status InvalidateCache(size_t offset, size_t length) override {
+  virtual rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
     return file_->InvalidateCache(offset + prefixLength_, length);
   }
 
   // Positioned Read for direct I/O
   // If Direct I/O enabled, offset, n, and scratch should be properly aligned
-  virtual Status PositionedRead(uint64_t offset, size_t n, Slice* result, char* scratch) override {
+  virtual rocksdb::Status PositionedRead(uint64_t offset, size_t n, rocksdb::Slice* result,
+                                         char* scratch) override {
     assert(scratch);
     offset += prefixLength_;  // Skip prefix
     auto status = file_->PositionedRead(offset, n, result, scratch);
@@ -102,14 +98,15 @@ class EncryptedSequentialFile : public SequentialFile {
 };
 
 // A file abstraction for randomly reading the contents of a file.
-class EncryptedRandomAccessFile : public RandomAccessFile {
+class EncryptedRandomAccessFile : public rocksdb::RandomAccessFile {
  private:
-  std::unique_ptr<RandomAccessFile> file_;
+  std::unique_ptr<rocksdb::RandomAccessFile> file_;
   std::unique_ptr<BlockAccessCipherStream> stream_;
   size_t prefixLength_;
 
  public:
-  EncryptedRandomAccessFile(RandomAccessFile* f, BlockAccessCipherStream* s, size_t prefixLength)
+  EncryptedRandomAccessFile(rocksdb::RandomAccessFile* f, BlockAccessCipherStream* s,
+                            size_t prefixLength)
       : file_(f), stream_(s), prefixLength_(prefixLength) {}
 
   // Read up to "n" bytes from the file starting at "offset".
@@ -122,7 +119,8 @@ class EncryptedRandomAccessFile : public RandomAccessFile {
   //
   // Safe for concurrent use by multiple threads.
   // If Direct I/O enabled, offset, n, and scratch should be aligned properly.
-  virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const override {
+  virtual rocksdb::Status Read(uint64_t offset, size_t n, rocksdb::Slice* result,
+                               char* scratch) const override {
     assert(scratch);
     offset += prefixLength_;
     auto status = file_->Read(offset, n, result, scratch);
@@ -134,8 +132,8 @@ class EncryptedRandomAccessFile : public RandomAccessFile {
   }
 
   // Readahead the file starting from offset by n bytes for caching.
-  virtual Status Prefetch(uint64_t offset, size_t n) override {
-    // return Status::OK();
+  virtual rocksdb::Status Prefetch(uint64_t offset, size_t n) override {
+    // return rocksdb::Status::OK();
     return file_->Prefetch(offset + prefixLength_, n);
   }
 
@@ -173,7 +171,7 @@ class EncryptedRandomAccessFile : public RandomAccessFile {
   // Remove any kind of caching of data from the offset to offset+length
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
-  virtual Status InvalidateCache(size_t offset, size_t length) override {
+  virtual rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
     return file_->InvalidateCache(offset + prefixLength_, length);
   }
 };
@@ -181,21 +179,21 @@ class EncryptedRandomAccessFile : public RandomAccessFile {
 // A file abstraction for sequential writing.  The implementation
 // must provide buffering since callers may append small fragments
 // at a time to the file.
-class EncryptedWritableFile : public WritableFileWrapper {
+class EncryptedWritableFile : public rocksdb::WritableFileWrapper {
  private:
-  std::unique_ptr<WritableFile> file_;
+  std::unique_ptr<rocksdb::WritableFile> file_;
   std::unique_ptr<BlockAccessCipherStream> stream_;
   size_t prefixLength_;
 
  public:
   // Default ctor. Prefix is assumed to be written already.
-  EncryptedWritableFile(WritableFile* f, BlockAccessCipherStream* s, size_t prefixLength)
-      : WritableFileWrapper(f), file_(f), stream_(s), prefixLength_(prefixLength) {}
+  EncryptedWritableFile(rocksdb::WritableFile* f, BlockAccessCipherStream* s, size_t prefixLength)
+      : rocksdb::WritableFileWrapper(f), file_(f), stream_(s), prefixLength_(prefixLength) {}
 
-  Status Append(const Slice& data) override {
+  rocksdb::Status Append(const rocksdb::Slice& data) override {
     AlignedBuffer buf;
-    Status status;
-    Slice dataToAppend(data);
+    rocksdb::Status status;
+    rocksdb::Slice dataToAppend(data);
     if (data.size() > 0) {
       auto offset = file_->GetFileSize();  // size including prefix
       // Encrypt in cloned buffer
@@ -206,7 +204,7 @@ class EncryptedWritableFile : public WritableFileWrapper {
       if (!status.ok()) {
         return status;
       }
-      dataToAppend = Slice(buf.BufferStart(), data.size());
+      dataToAppend = rocksdb::Slice(buf.BufferStart(), data.size());
     }
     status = file_->Append(dataToAppend);
     if (!status.ok()) {
@@ -215,10 +213,10 @@ class EncryptedWritableFile : public WritableFileWrapper {
     return status;
   }
 
-  Status PositionedAppend(const Slice& data, uint64_t offset) override {
+  rocksdb::Status PositionedAppend(const rocksdb::Slice& data, uint64_t offset) override {
     AlignedBuffer buf;
-    Status status;
-    Slice dataToAppend(data);
+    rocksdb::Status status;
+    rocksdb::Slice dataToAppend(data);
     offset += prefixLength_;
     if (data.size() > 0) {
       // Encrypt in cloned buffer
@@ -229,7 +227,7 @@ class EncryptedWritableFile : public WritableFileWrapper {
       if (!status.ok()) {
         return status;
       }
-      dataToAppend = Slice(buf.BufferStart(), data.size());
+      dataToAppend = rocksdb::Slice(buf.BufferStart(), data.size());
     }
     status = file_->PositionedAppend(dataToAppend, offset);
     if (!status.ok()) {
@@ -257,13 +255,15 @@ class EncryptedWritableFile : public WritableFileWrapper {
   // before closing. It is not always possible to keep track of the file
   // size due to whole pages writes. The behavior is undefined if called
   // with other writes to follow.
-  virtual Status Truncate(uint64_t size) override { return file_->Truncate(size + prefixLength_); }
+  virtual rocksdb::Status Truncate(uint64_t size) override {
+    return file_->Truncate(size + prefixLength_);
+  }
 
   // Remove any kind of caching of data from the offset to offset+length
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
   // This call has no effect on dirty pages in the cache.
-  virtual Status InvalidateCache(size_t offset, size_t length) override {
+  virtual rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
     return file_->InvalidateCache(offset + prefixLength_, length);
   }
 
@@ -273,7 +273,7 @@ class EncryptedWritableFile : public WritableFileWrapper {
   // This asks the OS to initiate flushing the cached data to disk,
   // without waiting for completion.
   // Default implementation does nothing.
-  virtual Status RangeSync(uint64_t offset, uint64_t nbytes) override {
+  virtual rocksdb::Status RangeSync(uint64_t offset, uint64_t nbytes) override {
     return file_->RangeSync(offset + prefixLength_, nbytes);
   }
 
@@ -287,20 +287,20 @@ class EncryptedWritableFile : public WritableFileWrapper {
   }
 
   // Pre-allocates space for a file.
-  virtual Status Allocate(uint64_t offset, uint64_t len) override {
+  virtual rocksdb::Status Allocate(uint64_t offset, uint64_t len) override {
     return file_->Allocate(offset + prefixLength_, len);
   }
 };
 
 // A file abstraction for random reading and writing.
-class EncryptedRandomRWFile : public RandomRWFile {
+class EncryptedRandomRWFile : public rocksdb::RandomRWFile {
  private:
-  std::unique_ptr<RandomRWFile> file_;
+  std::unique_ptr<rocksdb::RandomRWFile> file_;
   std::unique_ptr<BlockAccessCipherStream> stream_;
   size_t prefixLength_;
 
  public:
-  EncryptedRandomRWFile(RandomRWFile* f, BlockAccessCipherStream* s, size_t prefixLength)
+  EncryptedRandomRWFile(rocksdb::RandomRWFile* f, BlockAccessCipherStream* s, size_t prefixLength)
       : file_(f), stream_(s), prefixLength_(prefixLength) {}
 
   // Indicates if the class makes use of direct I/O
@@ -313,12 +313,12 @@ class EncryptedRandomRWFile : public RandomRWFile {
     return file_->GetRequiredBufferAlignment();
   }
 
-  // Write bytes in `data` at  offset `offset`, Returns Status::OK() on success.
+  // Write bytes in `data` at  offset `offset`, Returns rocksdb::Status::OK() on success.
   // Pass aligned buffer when use_direct_io() returns true.
-  virtual Status Write(uint64_t offset, const Slice& data) override {
+  virtual rocksdb::Status Write(uint64_t offset, const rocksdb::Slice& data) override {
     AlignedBuffer buf;
-    Status status;
-    Slice dataToWrite(data);
+    rocksdb::Status status;
+    rocksdb::Slice dataToWrite(data);
     offset += prefixLength_;
     if (data.size() > 0) {
       // Encrypt in cloned buffer
@@ -329,7 +329,7 @@ class EncryptedRandomRWFile : public RandomRWFile {
       if (!status.ok()) {
         return status;
       }
-      dataToWrite = Slice(buf.BufferStart(), data.size());
+      dataToWrite = rocksdb::Slice(buf.BufferStart(), data.size());
     }
     status = file_->Write(offset, dataToWrite);
     return status;
@@ -337,8 +337,9 @@ class EncryptedRandomRWFile : public RandomRWFile {
 
   // Read up to `n` bytes starting from offset `offset` and store them in
   // result, provided `scratch` size should be at least `n`.
-  // Returns Status::OK() on success.
-  virtual Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) const override {
+  // Returns rocksdb::Status::OK() on success.
+  virtual rocksdb::Status Read(uint64_t offset, size_t n, rocksdb::Slice* result,
+                               char* scratch) const override {
     assert(scratch);
     offset += prefixLength_;
     auto status = file_->Read(offset, n, result, scratch);
@@ -349,39 +350,40 @@ class EncryptedRandomRWFile : public RandomRWFile {
     return status;
   }
 
-  virtual Status Flush() override { return file_->Flush(); }
+  virtual rocksdb::Status Flush() override { return file_->Flush(); }
 
-  virtual Status Sync() override { return file_->Sync(); }
+  virtual rocksdb::Status Sync() override { return file_->Sync(); }
 
-  virtual Status Fsync() override { return file_->Fsync(); }
+  virtual rocksdb::Status Fsync() override { return file_->Fsync(); }
 
-  virtual Status Close() override { return file_->Close(); }
+  virtual rocksdb::Status Close() override { return file_->Close(); }
 };
 
 // EncryptedEnv implements an Env wrapper that adds encryption to files stored on disk.
-class EncryptedEnv : public EnvWrapper {
+class EncryptedEnv : public rocksdb::EnvWrapper {
  public:
-  EncryptedEnv(Env* base_env, EncryptionProvider* provider) : EnvWrapper(base_env) {
+  EncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider)
+      : rocksdb::EnvWrapper(base_env) {
     provider_ = provider;
   }
 
   // NewSequentialFile opens a file for sequential reading.
-  virtual Status NewSequentialFile(const std::string& fname,
-                                   std::unique_ptr<SequentialFile>* result,
-                                   const EnvOptions& options) override {
+  virtual rocksdb::Status NewSequentialFile(const std::string& fname,
+                                            std::unique_ptr<rocksdb::SequentialFile>* result,
+                                            const rocksdb::EnvOptions& options) override {
     result->reset();
     if (options.use_mmap_reads) {
-      return Status::InvalidArgument();
+      return rocksdb::Status::InvalidArgument();
     }
     // Open file using underlying Env implementation
-    std::unique_ptr<SequentialFile> underlying;
-    auto status = EnvWrapper::NewSequentialFile(fname, &underlying, options);
+    std::unique_ptr<rocksdb::SequentialFile> underlying;
+    auto status = rocksdb::EnvWrapper::NewSequentialFile(fname, &underlying, options);
     if (!status.ok()) {
       return status;
     }
     // Read prefix (if needed)
     AlignedBuffer prefixBuf;
-    Slice prefixSlice;
+    rocksdb::Slice prefixSlice;
     size_t prefixLength = provider_->GetPrefixLength();
     if (prefixLength > 0) {
       // Read prefix
@@ -398,27 +400,28 @@ class EncryptedEnv : public EnvWrapper {
     if (!status.ok()) {
       return status;
     }
-    (*result) = std::unique_ptr<SequentialFile>(
+    (*result) = std::unique_ptr<rocksdb::SequentialFile>(
         new EncryptedSequentialFile(underlying.release(), stream.release(), prefixLength));
-    return Status::OK();
+    return rocksdb::Status::OK();
   }
 
   // NewRandomAccessFile opens a file for random read access.
-  virtual Status NewRandomAccessFile(const std::string& fname, unique_ptr<RandomAccessFile>* result,
-                                     const EnvOptions& options) override {
+  virtual rocksdb::Status NewRandomAccessFile(const std::string& fname,
+                                              std::unique_ptr<rocksdb::RandomAccessFile>* result,
+                                              const rocksdb::EnvOptions& options) override {
     result->reset();
     if (options.use_mmap_reads) {
-      return Status::InvalidArgument();
+      return rocksdb::Status::InvalidArgument();
     }
     // Open file using underlying Env implementation
-    std::unique_ptr<RandomAccessFile> underlying;
-    auto status = EnvWrapper::NewRandomAccessFile(fname, &underlying, options);
+    std::unique_ptr<rocksdb::RandomAccessFile> underlying;
+    auto status = rocksdb::EnvWrapper::NewRandomAccessFile(fname, &underlying, options);
     if (!status.ok()) {
       return status;
     }
     // Read prefix (if needed)
     AlignedBuffer prefixBuf;
-    Slice prefixSlice;
+    rocksdb::Slice prefixSlice;
     size_t prefixLength = provider_->GetPrefixLength();
     if (prefixLength > 0) {
       // Read prefix
@@ -435,34 +438,35 @@ class EncryptedEnv : public EnvWrapper {
     if (!status.ok()) {
       return status;
     }
-    (*result) = std::unique_ptr<RandomAccessFile>(
+    (*result) = std::unique_ptr<rocksdb::RandomAccessFile>(
         new EncryptedRandomAccessFile(underlying.release(), stream.release(), prefixLength));
-    return Status::OK();
+    return rocksdb::Status::OK();
   }
 
   // NewWritableFile opens a file for sequential writing.
-  virtual Status NewWritableFile(const std::string& fname, unique_ptr<WritableFile>* result,
-                                 const EnvOptions& options) override {
+  virtual rocksdb::Status NewWritableFile(const std::string& fname,
+                                          std::unique_ptr<rocksdb::WritableFile>* result,
+                                          const rocksdb::EnvOptions& options) override {
     result->reset();
     if (options.use_mmap_writes) {
-      return Status::InvalidArgument();
+      return rocksdb::Status::InvalidArgument();
     }
     // Open file using underlying Env implementation
-    std::unique_ptr<WritableFile> underlying;
-    Status status = EnvWrapper::NewWritableFile(fname, &underlying, options);
+    std::unique_ptr<rocksdb::WritableFile> underlying;
+    rocksdb::Status status = rocksdb::EnvWrapper::NewWritableFile(fname, &underlying, options);
     if (!status.ok()) {
       return status;
     }
     // Initialize & write prefix (if needed)
     AlignedBuffer prefixBuf;
-    Slice prefixSlice;
+    rocksdb::Slice prefixSlice;
     size_t prefixLength = provider_->GetPrefixLength();
     if (prefixLength > 0) {
       // Initialize prefix
       prefixBuf.Alignment(underlying->GetRequiredBufferAlignment());
       prefixBuf.AllocateNewBuffer(prefixLength);
       provider_->CreateNewPrefix(fname, prefixBuf.BufferStart(), prefixLength);
-      prefixSlice = Slice(prefixBuf.BufferStart(), prefixLength);
+      prefixSlice = rocksdb::Slice(prefixBuf.BufferStart(), prefixLength);
       // Write prefix
       status = underlying->Append(prefixSlice);
       if (!status.ok()) {
@@ -475,9 +479,9 @@ class EncryptedEnv : public EnvWrapper {
     if (!status.ok()) {
       return status;
     }
-    (*result) = std::unique_ptr<WritableFile>(
+    (*result) = std::unique_ptr<rocksdb::WritableFile>(
         new EncryptedWritableFile(underlying.release(), stream.release(), prefixLength));
-    return Status::OK();
+    return rocksdb::Status::OK();
   }
 
   // Create an object that writes to a new file with the specified
@@ -487,28 +491,29 @@ class EncryptedEnv : public EnvWrapper {
   // returns non-OK.
   //
   // The returned file will only be accessed by one thread at a time.
-  virtual Status ReopenWritableFile(const std::string& fname, unique_ptr<WritableFile>* result,
-                                    const EnvOptions& options) override {
+  virtual rocksdb::Status ReopenWritableFile(const std::string& fname,
+                                             std::unique_ptr<rocksdb::WritableFile>* result,
+                                             const rocksdb::EnvOptions& options) override {
     result->reset();
     if (options.use_mmap_writes) {
-      return Status::InvalidArgument();
+      return rocksdb::Status::InvalidArgument();
     }
     // Open file using underlying Env implementation
-    std::unique_ptr<WritableFile> underlying;
-    Status status = EnvWrapper::ReopenWritableFile(fname, &underlying, options);
+    std::unique_ptr<rocksdb::WritableFile> underlying;
+    rocksdb::Status status = rocksdb::EnvWrapper::ReopenWritableFile(fname, &underlying, options);
     if (!status.ok()) {
       return status;
     }
     // Initialize & write prefix (if needed)
     AlignedBuffer prefixBuf;
-    Slice prefixSlice;
+    rocksdb::Slice prefixSlice;
     size_t prefixLength = provider_->GetPrefixLength();
     if (prefixLength > 0) {
       // Initialize prefix
       prefixBuf.Alignment(underlying->GetRequiredBufferAlignment());
       prefixBuf.AllocateNewBuffer(prefixLength);
       provider_->CreateNewPrefix(fname, prefixBuf.BufferStart(), prefixLength);
-      prefixSlice = Slice(prefixBuf.BufferStart(), prefixLength);
+      prefixSlice = rocksdb::Slice(prefixBuf.BufferStart(), prefixLength);
       // Write prefix
       status = underlying->Append(prefixSlice);
       if (!status.ok()) {
@@ -521,35 +526,36 @@ class EncryptedEnv : public EnvWrapper {
     if (!status.ok()) {
       return status;
     }
-    (*result) = std::unique_ptr<WritableFile>(
+    (*result) = std::unique_ptr<rocksdb::WritableFile>(
         new EncryptedWritableFile(underlying.release(), stream.release(), prefixLength));
-    return Status::OK();
+    return rocksdb::Status::OK();
   }
 
   // Reuse an existing file by renaming it and opening it as writable.
-  virtual Status ReuseWritableFile(const std::string& fname, const std::string& old_fname,
-                                   unique_ptr<WritableFile>* result,
-                                   const EnvOptions& options) override {
+  virtual rocksdb::Status ReuseWritableFile(const std::string& fname, const std::string& old_fname,
+                                            std::unique_ptr<rocksdb::WritableFile>* result,
+                                            const rocksdb::EnvOptions& options) override {
     result->reset();
     if (options.use_mmap_writes) {
-      return Status::InvalidArgument();
+      return rocksdb::Status::InvalidArgument();
     }
     // Open file using underlying Env implementation
-    std::unique_ptr<WritableFile> underlying;
-    Status status = EnvWrapper::ReuseWritableFile(fname, old_fname, &underlying, options);
+    std::unique_ptr<rocksdb::WritableFile> underlying;
+    rocksdb::Status status =
+        rocksdb::EnvWrapper::ReuseWritableFile(fname, old_fname, &underlying, options);
     if (!status.ok()) {
       return status;
     }
     // Initialize & write prefix (if needed)
     AlignedBuffer prefixBuf;
-    Slice prefixSlice;
+    rocksdb::Slice prefixSlice;
     size_t prefixLength = provider_->GetPrefixLength();
     if (prefixLength > 0) {
       // Initialize prefix
       prefixBuf.Alignment(underlying->GetRequiredBufferAlignment());
       prefixBuf.AllocateNewBuffer(prefixLength);
       provider_->CreateNewPrefix(fname, prefixBuf.BufferStart(), prefixLength);
-      prefixSlice = Slice(prefixBuf.BufferStart(), prefixLength);
+      prefixSlice = rocksdb::Slice(prefixBuf.BufferStart(), prefixLength);
       // Write prefix
       status = underlying->Append(prefixSlice);
       if (!status.ok()) {
@@ -562,9 +568,9 @@ class EncryptedEnv : public EnvWrapper {
     if (!status.ok()) {
       return status;
     }
-    (*result) = std::unique_ptr<WritableFile>(
+    (*result) = std::unique_ptr<rocksdb::WritableFile>(
         new EncryptedWritableFile(underlying.release(), stream.release(), prefixLength));
-    return Status::OK();
+    return rocksdb::Status::OK();
   }
 
   // Open `fname` for random read and write, if file dont exist the file
@@ -572,24 +578,25 @@ class EncryptedEnv : public EnvWrapper {
   // *result and returns OK.  On failure returns non-OK.
   //
   // The returned file will only be accessed by one thread at a time.
-  virtual Status NewRandomRWFile(const std::string& fname, unique_ptr<RandomRWFile>* result,
-                                 const EnvOptions& options) override {
+  virtual rocksdb::Status NewRandomRWFile(const std::string& fname,
+                                          std::unique_ptr<rocksdb::RandomRWFile>* result,
+                                          const rocksdb::EnvOptions& options) override {
     result->reset();
     if (options.use_mmap_reads || options.use_mmap_writes) {
-      return Status::InvalidArgument();
+      return rocksdb::Status::InvalidArgument();
     }
     // Check file exists
     bool isNewFile = !FileExists(fname).ok();
 
     // Open file using underlying Env implementation
-    std::unique_ptr<RandomRWFile> underlying;
-    Status status = EnvWrapper::NewRandomRWFile(fname, &underlying, options);
+    std::unique_ptr<rocksdb::RandomRWFile> underlying;
+    rocksdb::Status status = rocksdb::EnvWrapper::NewRandomRWFile(fname, &underlying, options);
     if (!status.ok()) {
       return status;
     }
     // Read or Initialize & write prefix (if needed)
     AlignedBuffer prefixBuf;
-    Slice prefixSlice;
+    rocksdb::Slice prefixSlice;
     size_t prefixLength = provider_->GetPrefixLength();
     if (prefixLength > 0) {
       prefixBuf.Alignment(underlying->GetRequiredBufferAlignment());
@@ -603,7 +610,7 @@ class EncryptedEnv : public EnvWrapper {
       } else {
         // File is new, initialize & write prefix
         provider_->CreateNewPrefix(fname, prefixBuf.BufferStart(), prefixLength);
-        prefixSlice = Slice(prefixBuf.BufferStart(), prefixLength);
+        prefixSlice = rocksdb::Slice(prefixBuf.BufferStart(), prefixLength);
         // Write prefix
         status = underlying->Write(0, prefixSlice);
         if (!status.ok()) {
@@ -617,9 +624,9 @@ class EncryptedEnv : public EnvWrapper {
     if (!status.ok()) {
       return status;
     }
-    (*result) = std::unique_ptr<RandomRWFile>(
+    (*result) = std::unique_ptr<rocksdb::RandomRWFile>(
         new EncryptedRandomRWFile(underlying.release(), stream.release(), prefixLength));
-    return Status::OK();
+    return rocksdb::Status::OK();
   }
 
   // Store in *result the attributes of the children of the specified directory.
@@ -632,9 +639,9 @@ class EncryptedEnv : public EnvWrapper {
   //         NotFound if "dir" does not exist, the calling process does not have
   //                  permission to access "dir", or if "dir" is invalid.
   //         IOError if an IO Error was encountered
-  virtual Status GetChildrenFileAttributes(const std::string& dir,
-                                           std::vector<FileAttributes>* result) override {
-    auto status = EnvWrapper::GetChildrenFileAttributes(dir, result);
+  virtual rocksdb::Status GetChildrenFileAttributes(const std::string& dir,
+                                                    std::vector<FileAttributes>* result) override {
+    auto status = rocksdb::EnvWrapper::GetChildrenFileAttributes(dir, result);
     if (!status.ok()) {
       return status;
     }
@@ -643,19 +650,19 @@ class EncryptedEnv : public EnvWrapper {
       assert(it->size_bytes >= prefixLength);
       it->size_bytes -= prefixLength;
     }
-    return Status::OK();
+    return rocksdb::Status::OK();
   }
 
   // Store the size of fname in *file_size.
-  virtual Status GetFileSize(const std::string& fname, uint64_t* file_size) override {
-    auto status = EnvWrapper::GetFileSize(fname, file_size);
+  virtual rocksdb::Status GetFileSize(const std::string& fname, uint64_t* file_size) override {
+    auto status = rocksdb::EnvWrapper::GetFileSize(fname, file_size);
     if (!status.ok()) {
       return status;
     }
     size_t prefixLength = provider_->GetPrefixLength();
     assert(*file_size >= prefixLength);
     *file_size -= prefixLength;
-    return Status::OK();
+    return rocksdb::Status::OK();
   }
 
  private:
@@ -664,18 +671,18 @@ class EncryptedEnv : public EnvWrapper {
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
-Env* NewEncryptedEnv(Env* base_env, EncryptionProvider* provider) {
+rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider) {
   return new EncryptedEnv(base_env, provider);
 }
 
 // Encrypt one or more (partial) blocks of data at the file offset.
 // Length of data is given in dataSize.
-Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data, size_t dataSize) {
+rocksdb::Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data, size_t dataSize) {
   // Calculate block index
   auto blockSize = BlockSize();
   uint64_t blockIndex = fileOffset / blockSize;
   size_t blockOffset = fileOffset % blockSize;
-  unique_ptr<char[]> blockBuffer;
+  std::unique_ptr<char[]> blockBuffer;
 
   std::string scratch;
   AllocateScratch(scratch);
@@ -689,7 +696,7 @@ Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data, size_t 
       // Copy data to blockBuffer
       if (!blockBuffer.get()) {
         // Allocate buffer
-        blockBuffer = unique_ptr<char[]>(new char[blockSize]);
+        blockBuffer = std::unique_ptr<char[]>(new char[blockSize]);
       }
       block = blockBuffer.get();
       // Copy plain data to block buffer
@@ -705,7 +712,7 @@ Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data, size_t 
     }
     dataSize -= n;
     if (dataSize == 0) {
-      return Status::OK();
+      return rocksdb::Status::OK();
     }
     data += n;
     blockOffset = 0;
@@ -715,12 +722,12 @@ Status BlockAccessCipherStream::Encrypt(uint64_t fileOffset, char* data, size_t 
 
 // Decrypt one or more (partial) blocks of data at the file offset.
 // Length of data is given in dataSize.
-Status BlockAccessCipherStream::Decrypt(uint64_t fileOffset, char* data, size_t dataSize) {
+rocksdb::Status BlockAccessCipherStream::Decrypt(uint64_t fileOffset, char* data, size_t dataSize) {
   // Calculate block index
   auto blockSize = BlockSize();
   uint64_t blockIndex = fileOffset / blockSize;
   size_t blockOffset = fileOffset % blockSize;
-  unique_ptr<char[]> blockBuffer;
+  std::unique_ptr<char[]> blockBuffer;
 
   std::string scratch;
   AllocateScratch(scratch);
@@ -734,7 +741,7 @@ Status BlockAccessCipherStream::Decrypt(uint64_t fileOffset, char* data, size_t 
       // Copy data to blockBuffer
       if (!blockBuffer.get()) {
         // Allocate buffer
-        blockBuffer = unique_ptr<char[]>(new char[blockSize]);
+        blockBuffer = std::unique_ptr<char[]>(new char[blockSize]);
       }
       block = blockBuffer.get();
       // Copy encrypted data to block buffer
@@ -750,7 +757,7 @@ Status BlockAccessCipherStream::Decrypt(uint64_t fileOffset, char* data, size_t 
     }
     dataSize -= n;
     if (dataSize == 0) {
-      return Status::OK();
+      return rocksdb::Status::OK();
     }
     data += n;
     blockOffset = 0;
@@ -760,16 +767,16 @@ Status BlockAccessCipherStream::Decrypt(uint64_t fileOffset, char* data, size_t 
 
 // Encrypt a block of data.
 // Length of data is equal to BlockSize().
-Status ROT13BlockCipher::Encrypt(char* data) {
+rocksdb::Status ROT13BlockCipher::Encrypt(char* data) {
   for (size_t i = 0; i < blockSize_; ++i) {
     data[i] += 13;
   }
-  return Status::OK();
+  return rocksdb::Status::OK();
 }
 
 // Decrypt a block of data.
 // Length of data is equal to BlockSize().
-Status ROT13BlockCipher::Decrypt(char* data) { return Encrypt(data); }
+rocksdb::Status ROT13BlockCipher::Decrypt(char* data) { return Encrypt(data); }
 
 // Allocate scratch space which is passed to EncryptBlock/DecryptBlock.
 void CTRCipherStream::AllocateScratch(std::string& scratch) {
@@ -779,29 +786,30 @@ void CTRCipherStream::AllocateScratch(std::string& scratch) {
 
 // Encrypt a block of data at the given block index.
 // Length of data is equal to BlockSize();
-Status CTRCipherStream::EncryptBlock(uint64_t blockIndex, char* data, char* scratch) {
+rocksdb::Status CTRCipherStream::EncryptBlock(uint64_t blockIndex, char* data, char* scratch) {
+  /*
+    // Create nonce + counter
+    auto blockSize = cipher_.BlockSize();
+    memmove(scratch, iv_.data(), blockSize);
+    EncodeFixed64(scratch, blockIndex + initialCounter_);
 
-  // Create nonce + counter
-  auto blockSize = cipher_.BlockSize();
-  memmove(scratch, iv_.data(), blockSize);
-  EncodeFixed64(scratch, blockIndex + initialCounter_);
+    // Encrypt nonce+counter
+    auto status = cipher_.Encrypt(scratch);
+    if (!status.ok()) {
+      return status;
+    }
 
-  // Encrypt nonce+counter
-  auto status = cipher_.Encrypt(scratch);
-  if (!status.ok()) {
-    return status;
-  }
-
-  // XOR data with ciphertext.
-  for (size_t i = 0; i < blockSize; i++) {
-    data[i] = data[i] ^ scratch[i];
-  }
-  return Status::OK();
+    // XOR data with ciphertext.
+    for (size_t i = 0; i < blockSize; i++) {
+      data[i] = data[i] ^ scratch[i];
+    }
+    */
+  return rocksdb::Status::OK();
 }
 
 // Decrypt a block of data at the given block index.
 // Length of data is equal to BlockSize();
-Status CTRCipherStream::DecryptBlock(uint64_t blockIndex, char* data, char* scratch) {
+rocksdb::Status CTRCipherStream::DecryptBlock(uint64_t blockIndex, char* data, char* scratch) {
   // For CTR decryption & encryption are the same
   return EncryptBlock(blockIndex, data, scratch);
 }
@@ -815,19 +823,22 @@ size_t CTREncryptionProvider::GetPrefixLength() { return defaultPrefixLength; }
 // decodeCTRParameters decodes the initial counter & IV from the given
 // (plain text) prefix.
 static void decodeCTRParameters(const char* prefix, size_t blockSize, uint64_t& initialCounter,
-                                Slice& iv) {
+                                rocksdb::Slice& iv) {
+  /*
   // First block contains 64-bit initial counter
   initialCounter = DecodeFixed64(prefix);
   // Second block contains IV
-  iv = Slice(prefix + blockSize, blockSize);
+  iv = rocksdb::Slice(prefix + blockSize, blockSize);
+  */
 }
 
 // CreateNewPrefix initialized an allocated block of prefix memory
 // for a new file.
-Status CTREncryptionProvider::CreateNewPrefix(const std::string& fname, char* prefix,
-                                              size_t prefixLength) {
+rocksdb::Status CTREncryptionProvider::CreateNewPrefix(const std::string& fname, char* prefix,
+                                                       size_t prefixLength) {
+  /*
   // Create & seed rnd.
-  Random rnd((uint32_t)Env::Default()->NowMicros());
+  Random rnd((uint32_t)rocksdb::Env::Default()->NowMicros());
   // Fill entire prefix block with random values.
   for (size_t i = 0; i < prefixLength; i++) {
     prefix[i] = rnd.Uniform(256) & 0xFF;
@@ -835,7 +846,7 @@ Status CTREncryptionProvider::CreateNewPrefix(const std::string& fname, char* pr
   // Take random data to extract initial counter & IV
   auto blockSize = cipher_.BlockSize();
   uint64_t initialCounter;
-  Slice prefixIV;
+  rocksdb::Slice prefixIV;
   decodeCTRParameters(prefix, blockSize, initialCounter, prefixIV);
 
   // Now populate the rest of the prefix, starting from the third block.
@@ -848,7 +859,8 @@ Status CTREncryptionProvider::CreateNewPrefix(const std::string& fname, char* pr
   if (!status.ok()) {
     return status;
   }
-  return Status::OK();
+  */
+  return rocksdb::Status::OK();
 }
 
 // PopulateSecretPrefixPart initializes the data into a new prefix block
@@ -861,13 +873,14 @@ size_t CTREncryptionProvider::PopulateSecretPrefixPart(char* prefix, size_t pref
   return 0;
 }
 
-Status CTREncryptionProvider::CreateCipherStream(const std::string& fname,
-                                                 const EnvOptions& options, Slice& prefix,
-                                                 unique_ptr<BlockAccessCipherStream>* result) {
+rocksdb::Status CTREncryptionProvider::CreateCipherStream(
+    const std::string& fname, const rocksdb::EnvOptions& options, rocksdb::Slice& prefix,
+    std::unique_ptr<BlockAccessCipherStream>* result) {
   // Read plain text part of prefix.
   auto blockSize = cipher_.BlockSize();
   uint64_t initialCounter;
-  Slice iv;
+  initialCounter = 0;
+  rocksdb::Slice iv;
   decodeCTRParameters(prefix.data(), blockSize, initialCounter, iv);
 
   // Decrypt the encrypted part of the prefix, starting from block 2 (block 0, 1 with initial
@@ -885,14 +898,13 @@ Status CTREncryptionProvider::CreateCipherStream(const std::string& fname,
 
 // CreateCipherStreamFromPrefix creates a block access cipher stream for a file given
 // given name and options. The given prefix is already decrypted.
-Status CTREncryptionProvider::CreateCipherStreamFromPrefix(
-    const std::string& fname, const EnvOptions& options, uint64_t initialCounter, const Slice& iv,
-    const Slice& prefix, unique_ptr<BlockAccessCipherStream>* result) {
-  (*result) =
-      unique_ptr<BlockAccessCipherStream>(new CTRCipherStream(cipher_, iv.data(), initialCounter));
-  return Status::OK();
+rocksdb::Status CTREncryptionProvider::CreateCipherStreamFromPrefix(
+    const std::string& fname, const rocksdb::EnvOptions& options, uint64_t initialCounter,
+    const rocksdb::Slice& iv, const rocksdb::Slice& prefix,
+    std::unique_ptr<BlockAccessCipherStream>* result) {
+  (*result) = std::unique_ptr<BlockAccessCipherStream>(
+      new CTRCipherStream(cipher_, iv.data(), initialCounter));
+  return rocksdb::Status::OK();
 }
 
-#endif  // ROCKSDB_LITE
-
-}  // namespace rocksdb
+}  // namespace rocksdb_utils
