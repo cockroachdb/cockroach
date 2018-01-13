@@ -532,7 +532,6 @@ func (mrf *MultiRowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok 
 	// when processing the index key. The column values are at the
 	// front of the key.
 	if key, err = DecodeKeyVals(
-		mrf.currentTable.keyValTypes,
 		mrf.currentTable.keyVals,
 		mrf.currentTable.indexColumnDirs,
 		key,
@@ -627,7 +626,6 @@ func (mrf *MultiRowFetcher) processKV(
 			// column values from the value.
 			var err error
 			valueBytes, err = DecodeKeyVals(
-				table.extraTypes,
 				table.extraVals,
 				nil,
 				valueBytes,
