@@ -62,6 +62,11 @@ type alterUserSetPasswordRun struct {
 	rowsAffected int
 }
 
+func (n *alterUserSetPasswordNode) rewindExec(params runParams) error {
+	n.run.rowsAffected = 0
+	return nil
+}
+
 func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {

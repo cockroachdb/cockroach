@@ -37,6 +37,8 @@ type valuesNode struct {
 	// isConst = true can serve its values multiple times. See valuesNode.Reset.
 	isConst bool
 
+	containerOnly bool
+	capacity      int
 	valuesRun
 }
 
@@ -111,8 +113,10 @@ func (p *planner) Values(
 
 func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
-		columns: columns,
-		isConst: true,
+		columns:       columns,
+		isConst:       true,
+		containerOnly: true,
+		capacity:      capacity,
 		valuesRun: valuesRun{
 			rows: sqlbase.NewRowContainer(
 				p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
@@ -125,6 +129,17 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 type valuesRun struct {
 	rows    *sqlbase.RowContainer
 	nextRow int // The index of the next row.
+}
+
+func (n *valuesNode) rewindExec(params runParams) error {
+	if n.containerOnly {
+		n.run.rows.Close(params.ctx)
+		n.run.rows = sqlbase.NewRowContainer(
+			params.p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(n.columns), n.capacity,
+		)
+	}
+	n.nextRow = 0
+	return nil
 }
 
 func (n *valuesNode) startExec(params runParams) error {

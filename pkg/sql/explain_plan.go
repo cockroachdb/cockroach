@@ -126,23 +126,31 @@ func (p *planner) makeExplainPlanNode(
 
 // explainPlanRun is the run-time state of explainPlanNode during local execution.
 type explainPlanRun struct {
+	// subqueriesAlreadyOptimized indicates whether the sub-plans
+	// have already been processed by startExec. Needed to
+	// make the plan rewindable.
+	subqueriesAlreadyOptimized bool
+
 	// results is the container for EXPLAIN's output.
 	results *valuesNode
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	// The sub-plan's subqueries have been captured local to the EXPLAIN
-	// node so that they would not be automatically started for
-	// execution by planTop.start(). But this also means they were not
-	// yet processed by makePlan()/optimizePlan(). Do it here.
-	for i := range e.subqueryPlans {
-		if err := params.p.optimizeSubquery(params.ctx, &e.subqueryPlans[i]); err != nil {
-			return err
-		}
+	if !e.subqueriesAlreadyOptimized {
+		// The sub-plan's subqueries have been captured local to the EXPLAIN
+		// node so that they would not be automatically started for
+		// execution by planTop.start(). But this also means they were not
+		// yet processed by makePlan()/optimizePlan(). Do it here.
+		for i := range e.subqueryPlans {
+			if err := params.p.optimizeSubquery(params.ctx, &e.subqueryPlans[i]); err != nil {
+				return err
+			}
 
-		// Trigger limit propagation. This would be done otherwise when
-		// starting the plan. However we do not want to start the plan.
-		params.p.setUnlimited(e.subqueryPlans[i].plan)
+			// Trigger limit propagation. This would be done otherwise when
+			// starting the plan. However we do not want to start the plan.
+			params.p.setUnlimited(e.subqueryPlans[i].plan)
+		}
+		e.subqueriesAlreadyOptimized = true
 	}
 
 	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan, e.subqueryPlans)

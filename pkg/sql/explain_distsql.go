@@ -42,6 +42,11 @@ type explainDistSQLRun struct {
 	done bool
 }
 
+func (n *explainDistSQLNode) rewindExec(params runParams) error {
+	n.run.done = false
+	return nil
+}
+
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	// Trigger limit propagation.
 	params.p.setUnlimited(n.plan)

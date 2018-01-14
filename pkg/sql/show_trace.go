@@ -195,6 +195,18 @@ type traceRun struct {
 	stopTracing func() error
 }
 
+func (n *showTraceNode) rewindExec(params runParams) error {
+	if n.stopTracing != nil {
+		if err := n.stopTracing(); err != nil {
+			log.Errorf(params.ctx, "error stopping tracing when rewinding SHOW TRACE FOR: %v", err)
+		}
+		n.stopTracing = nil
+	}
+	n.execNode = false
+	n.traceRows = nil
+	n.curRow = 0
+}
+
 func (n *showTraceNode) startExec(params runParams) error {
 	if params.p.session.Tracing.Enabled() {
 		return errTracingAlreadyEnabled

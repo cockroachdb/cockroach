@@ -804,3 +804,24 @@ func (a *aggregateFuncHolder) add(
 
 	return impl.Add(ctx, d)
 }
+
+func (n *groupNode) rewindExec(params runParams) error {
+	n.run.populated = false
+	n.run.values = nil
+	n.run.gotOneRow = false
+	// TODO(peter): This memory isn't being accounted for.
+	// See similar code in the constructor.
+	n.run.buckets = make(map[string]struct{})
+
+	for _, f := range n.funcs {
+		if f.run.seen != nil {
+			// The function had the DISTINCT modifier. Reset that.
+			f.run.seen = make(map[string]struct{})
+		}
+		f.run.buckets = make(map[string]tree.AggregateFunc)
+		f.run.bucketsMemAcc.Close(params.ctx)
+		f.run.bucketsMemAcc = params.p.session.TxnState.makeBoundAccount()
+	}
+
+	return nil
+}

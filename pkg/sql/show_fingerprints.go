@@ -88,6 +88,11 @@ type showFingerprintsRun struct {
 	values []tree.Datum
 }
 
+func (n *showFingerprintsNode) rewindExec(params runParams) error {
+	n.run = showFingerprintsRun{}
+	return nil
+}
+
 func (n *showFingerprintsNode) startExec(params runParams) error {
 	n.run.values = []tree.Datum{tree.DNull, tree.DNull}
 	return nil

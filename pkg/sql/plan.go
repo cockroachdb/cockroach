@@ -53,6 +53,9 @@ type planMaker interface {
 	// iterating using curPlan.plan.Next() and curPlan.plan.Values() in
 	// order to retrieve matching rows. Finally, the plan must be closed
 	// with curPlan.close().
+	//
+	// A plan for each isRewindable() is true can also be reused without
+	// curPlan.close() by calling curPlan.restart().
 	makePlan(ctx context.Context, stmt Statement) error
 
 	// prepare does the same checks as makePlan but skips building some
@@ -352,6 +355,16 @@ func (p *planTop) start(params runParams) error {
 	return startPlan(params, p.plan)
 }
 
+// restart restarts the plan.
+// The caller must ensure that isRewindable is true beforehand.
+func (p *planTop) restart(params runParams) error {
+	if len(p.subqueryPlans) > 0 {
+		return pgerror.NewErrorf("programming error: subquery rewind is not supported yet")
+	}
+	return restartPlan(params, p.plan)
+}
+
+
 // columns retrieves the plan's columns.
 func (p *planTop) columns() sqlbase.ResultColumns {
 	return planColumns(p.plan)
@@ -360,7 +373,7 @@ func (p *planTop) columns() sqlbase.ResultColumns {
 // startPlan starts the given plan and all its sub-query nodes.
 func startPlan(params runParams, plan planNode) error {
 	// Now start execution.
-	if err := startExec(params, plan); err != nil {
+	if err := startExec(params, plan, false); err != nil {
 		return err
 	}
 
@@ -371,10 +384,24 @@ func startPlan(params runParams, plan planNode) error {
 	return nil
 }
 
+// restartPlan restarts the given plan and all its sub-query nodes.
+// The caller must ensure that isRewindable() is true on the plan.
+func restartPlan(params runParams, plan planNode) error {
+	return startExec(params, plan, true)
+}
+
 // execStartable is implemented by planNodes that have an initial
 // execution step.
 type execStartable interface {
 	startExec(params runParams) error
+}
+
+// planNodeRequiresExplicitRewind is to be implemented by planNode
+// that need an explicit method call to be properly rewinded.
+// The rewindExec() method is called just before startExec(), but
+// after the children, if any, have been rewound/restarted already.
+type planNodeRequiresExplicitRewind interface {
+	rewindExec(params runParams) error
 }
 
 // startExec calls startExec() on each planNode that supports
@@ -383,7 +410,7 @@ type execStartable interface {
 //
 // Reminder: walkPlan() ensures that subqueries and sub-plans are
 // started before startExec() is called.
-func startExec(params runParams, plan planNode) error {
+func startExec(params runParams, plan planNode, rewind bool) error {
 	o := planObserver{
 		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
 			switch p.(type) {
@@ -399,6 +426,13 @@ func startExec(params runParams, plan planNode) error {
 			return true, nil
 		},
 		leaveNode: func(_ string, n planNode) error {
+			if rewind {
+				if r, ok := n.(planNodeRequiresExplicitRewind); ok {
+					if err := r.rewindExec(params); err != nil {
+						return err
+					}
+				}
+			}
 			if s, ok := n.(execStartable); ok {
 				return s.startExec(params)
 			}
