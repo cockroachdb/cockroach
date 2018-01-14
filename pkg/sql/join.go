@@ -362,6 +362,28 @@ type joinRun struct {
 	finishedOutput bool
 }
 
+func (n *joinNode) rewindExec(params runParams) error {
+	n.run.buffer.RowContainer.Close(params.ctx)
+	n.run.buffer.RowContainer = sqlbase.NewRowContainer(
+		params.p.EvalContext().Mon.MakeBoundAccount(),
+		sqlbase.ColTypeInfoFromResCols(planColumns(n)),
+		0,
+	)
+	n.run.bucketsMemAcc.Close(params.ctx)
+	n.run.bucketsMemAcc = params.p.session.TxnState.mon.MakeBoundAccount()
+	n.run.buckets.rowContainer.Close(params.ctx)
+	n.run.buckets = buckets{
+		buckets: make(map[string]*bucket),
+		rowContainer: sqlbase.NewRowContainer(
+			params.p.EvalContext().Mon.MakeBoundAccount(),
+			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
+			0,
+		),
+	}
+	n.run.finishedOutput = false
+	return nil
+}
+
 func (n *joinNode) startExec(params runParams) error {
 	if err := n.hashJoinStart(params); err != nil {
 		return err

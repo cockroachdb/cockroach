@@ -98,6 +98,11 @@ type scrubRun struct {
 	row        tree.Datums
 }
 
+func (n *scrubNode) rewindExec(params runParams) error {
+	n.run = scrubRun{}
+	return nil
+}
+
 func (n *scrubNode) startExec(params runParams) error {
 	switch n.n.Typ {
 	case tree.ScrubTable:

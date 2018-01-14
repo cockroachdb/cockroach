@@ -197,6 +197,11 @@ type distinctRun struct {
 	suffixMemAcc mon.BoundAccount
 }
 
+func (n *distinctNode) rewindExec(params runParams) error {
+	n.run.prefixSeen = nil
+	return nil
+}
+
 func (n *distinctNode) startExec(params runParams) error {
 	n.run.prefixMemAcc = params.EvalContext().Mon.MakeBoundAccount()
 	n.run.suffixMemAcc = params.EvalContext().Mon.MakeBoundAccount()
