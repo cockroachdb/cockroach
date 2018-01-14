@@ -200,6 +200,19 @@ type traceRun struct {
 	stopTracing func() error
 }
 
+func (n *showTraceNode) rewindExec(params runParams) error {
+	if n.run.stopTracing != nil {
+		if err := n.run.stopTracing(); err != nil {
+			log.Errorf(params.ctx, "error stopping tracing when rewinding SHOW TRACE FOR: %v", err)
+		}
+		n.run.stopTracing = nil
+	}
+	n.run.execDone = false
+	n.run.traceRows = nil
+	n.run.curRow = 0
+	return nil
+}
+
 func (n *showTraceNode) startExec(params runParams) error {
 	if params.extendedEvalCtx.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
@@ -214,7 +227,8 @@ func (n *showTraceNode) startExec(params runParams) error {
 	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
 	params.ctx = startCtx
-	return startExec(params, n.plan)
+	// FIXME(knz/jordan): This will not work with rewinding.
+	return startExec(params, n.plan, false)
 }
 
 func (n *showTraceNode) Next(params runParams) (bool, error) {

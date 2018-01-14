@@ -56,6 +56,11 @@ type setZoneConfigRun struct {
 	numAffected int
 }
 
+func (n *setZoneConfigNode) rewindExec(params runParams) error {
+	n.run.numAffected = 0
+	return nil
+}
+
 func (n *setZoneConfigNode) startExec(params runParams) error {
 	var yamlConfig *string
 	datum, err := n.yamlConfig.Eval(params.EvalContext())

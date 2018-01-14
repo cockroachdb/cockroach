@@ -96,6 +96,11 @@ type showRangesRun struct {
 	values []tree.Datum
 }
 
+func (n *showRangesNode) rewindExec(params runParams) error {
+	n.run.rowIdx = 0
+	return nil
+}
+
 func (n *showRangesNode) startExec(params runParams) error {
 	var err error
 	n.run.descriptorKVs, err = scanMetaKVs(params.ctx, params.p.txn, n.span)

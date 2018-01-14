@@ -74,6 +74,11 @@ type dropUserRun struct {
 	numDeleted int
 }
 
+func (n *DropUserNode) rewindExec(params runParams) error {
+	n.run.numDeleted = 0
+	return nil
+}
+
 func (n *DropUserNode) startExec(params runParams) error {
 	var entryType string
 	if n.isRole {

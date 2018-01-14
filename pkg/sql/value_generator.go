@@ -81,6 +81,14 @@ type valueGeneratorRun struct {
 	gen tree.ValueGenerator
 }
 
+func (n *valueGenerator) rewindExec(params runParams) error {
+	if n.run.gen != nil {
+		n.run.gen.Close()
+	}
+	n.run.gen = nil
+	return nil
+}
+
 func (n *valueGenerator) startExec(params runParams) error {
 	expr, err := n.expr.Eval(params.EvalContext())
 	if err != nil {

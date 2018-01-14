@@ -99,16 +99,20 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 
 func (n *setVarNode) startExec(params runParams) error {
 	if n.typedValues != nil {
+		// TODO(knz): Weird, why are these Eval()uated here?
+		// Every Set() method that uses the expressions seems to
+		// also evaluate. Maybe this is not needed.
+		evaluatedExprs := make([]tree.TypedExpr, len(n.typedValues))
 		for i, v := range n.typedValues {
 			d, err := v.Eval(params.EvalContext())
 			if err != nil {
 				return err
 			}
-			n.typedValues[i] = d
+			evaluatedExprs[i] = d
 		}
 		return n.v.Set(
 			params.ctx, params.p.sessionDataMutator,
-			params.extendedEvalCtx, n.typedValues)
+			params.extendedEvalCtx, evaluatedExprs)
 	}
 	return n.v.Reset(params.p.sessionDataMutator)
 }
