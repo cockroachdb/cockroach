@@ -681,3 +681,83 @@ query T
 SELECT jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}'::STRING[], '[2,3,4]')
 ----
 [{"f1":1,"f2":null,"f3":[2,3,4]},2]
+
+query T
+SELECT jsonb_strip_nulls(NULL)
+----
+NULL
+
+query T
+SELECT json_strip_nulls('1')
+----
+1
+
+query T
+SELECT json_strip_nulls('"a string"')
+----
+"a string"
+
+query T
+SELECT json_strip_nulls('null')
+----
+null
+
+query T
+SELECT json_strip_nulls('[1,2,null,3,4]')
+----
+[1,2,null,3,4]
+
+query T
+SELECT json_strip_nulls('{"a":1,"b":null,"c":[2,null,3],"d":{"e":4,"f":null}}')
+----
+{"a":1,"c":[2,null,3],"d":{"e":4}}
+
+query T
+SELECT json_strip_nulls('[1,{"a":1,"b":null,"c":2},3]')
+----
+[1,{"a":1,"c":2},3]
+
+query T
+SELECT jsonb_strip_nulls('{"a": {"b": null, "c": null}, "d": {}}')
+----
+{"a":{},"d":{}}
+
+query T
+SELECT jsonb_strip_nulls(NULL)
+----
+NULL
+
+query T
+SELECT jsonb_strip_nulls('1')
+----
+1
+
+query T
+SELECT jsonb_strip_nulls('"a string"')
+----
+"a string"
+
+query T
+SELECT jsonb_strip_nulls('null')
+----
+null
+
+query T
+SELECT jsonb_strip_nulls('[1,2,null,3,4]')
+----
+[1,2,null,3,4]
+
+query T
+SELECT jsonb_strip_nulls('{"a":1,"b":null,"c":[2,null,3],"d":{"e":4,"f":null}}')
+----
+{"a":1,"c":[2,null,3],"d":{"e":4}}
+
+query T
+SELECT jsonb_strip_nulls('[1,{"a":1,"b":null,"c":2},3]')
+----
+[1,{"a":1,"c":2},3]
+
+query T
+SELECT jsonb_strip_nulls('{"a": {"b": null, "c": null}, "d": {}}')
+----
+{"a":{},"d":{}}

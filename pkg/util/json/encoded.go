@@ -270,6 +270,14 @@ func (j *jsonEncoded) iterObject() (encodedObjectIterator, error) {
 	}, nil
 }
 
+func (j *jsonEncoded) StripNulls() (JSON, bool, error) {
+	dec, err := j.shallowDecode()
+	if err != nil {
+		return nil, false, err
+	}
+	return dec.StripNulls()
+}
+
 func (j *jsonEncoded) ObjectIter() (*ObjectIterator, error) {
 	dec, err := j.shallowDecode()
 	if err != nil {
