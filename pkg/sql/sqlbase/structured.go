@@ -2276,6 +2276,16 @@ func (c *ColumnType) ToDatumType() types.T {
 	}
 }
 
+// ColumnTypesToDatumTypes converts a slice of ColumnTypes to a slice of
+// datum types.
+func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
+	res := make([]types.T, len(colTypes))
+	for i, t := range colTypes {
+		res[i] = t.ToDatumType()
+	}
+	return res
+}
+
 // SetID implements the DescriptorProto interface.
 func (desc *DatabaseDescriptor) SetID(id ID) {
 	desc.ID = id

@@ -1274,7 +1274,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 		if needRender {
 			// Build rendering expressions.
 			renderExprs := make([]distsqlrun.Expression, len(aggregations))
-			h := distsqlplan.MakeTypeIndexedVarHelper(finalPreRenderTypes)
+			h := tree.MakeTypesOnlyIndexedVarHelper(
+				sqlbase.ColumnTypesToDatumTypes(finalPreRenderTypes),
+			)
 			// finalIdx is an index inside finalAggs. It is used to
 			// keep track of the finalAggs results that correspond
 			// to each aggregation.

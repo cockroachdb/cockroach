@@ -23,12 +23,13 @@ import (
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
 // String for IndexedVars.
-// If an object that wishes to implement this interface has lost the
-// textual name that an IndexedVar originates from, it can use the
-// ordinal column reference syntax: fmt.Fprintf(buf, "@%d", idx)
 type IndexedVarContainer interface {
 	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
 	IndexedVarResolvedType(idx int) types.T
+	// IndexedVarNodeFormatter returns a NodeFormatter; if an object that
+	// wishes to implement this interface has lost the textual name that an
+	// IndexedVar originates from, this function can return nil (and the
+	// ordinal syntax "@1, @2, .." will be used).
 	IndexedVarNodeFormatter(idx int) NodeFormatter
 }
 
@@ -291,4 +292,30 @@ func (*unboundContainerType) IndexedVarResolvedType(idx int) types.T {
 
 func (*unboundContainerType) IndexedVarNodeFormatter(idx int) NodeFormatter {
 	panic(fmt.Sprintf("unbound ordinal reference @%d", idx+1))
+}
+
+type typeContainer struct {
+	types []types.T
+}
+
+var _ IndexedVarContainer = &typeContainer{}
+
+func (tc *typeContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, error) {
+	panic("no eval allowed in typeContainer")
+}
+
+func (tc *typeContainer) IndexedVarResolvedType(idx int) types.T {
+	return tc.types[idx]
+}
+
+func (tc *typeContainer) IndexedVarNodeFormatter(idx int) NodeFormatter {
+	return nil
+}
+
+// MakeTypesOnlyIndexedVarHelper creates an IndexedVarHelper which provides
+// the given types for indexed vars. It does not support evaluation, unless
+// Rebind is used with another container which supports evaluation.
+func MakeTypesOnlyIndexedVarHelper(types []types.T) IndexedVarHelper {
+	c := &typeContainer{types: types}
+	return MakeIndexedVarHelper(c, len(types))
 }
