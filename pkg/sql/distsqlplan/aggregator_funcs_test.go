@@ -283,7 +283,7 @@ func checkDistAggregationInfo(
 	}
 
 	if info.FinalRendering != nil {
-		h := MakeTypeIndexedVarHelper(finalOutputTypes)
+		h := tree.MakeTypesOnlyIndexedVarHelper(sqlbase.ColumnTypesToDatumTypes(finalOutputTypes))
 		expr, err := info.FinalRendering(&h, varIdxs)
 		if err != nil {
 			t.Fatal(err)

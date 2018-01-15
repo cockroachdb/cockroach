@@ -358,9 +358,7 @@ func TestOpt(t *testing.T) {
 							d.fatalf(t, "%v", err)
 						}
 
-						// Set up the indexed var helper.
-						iv := &indexedVars{types: varTypes}
-						iVarHelper = tree.MakeIndexedVarHelper(iv, len(iv.types))
+						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
 					case "index", "inverted-index":
 						if varTypes == nil {
@@ -581,27 +579,6 @@ func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumn
 		}
 	}
 	return res, nil
-}
-
-type indexedVars struct {
-	types []types.T
-}
-
-var _ tree.IndexedVarContainer = &indexedVars{}
-
-func (*indexedVars) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	panic("unimplemented")
-}
-
-func (iv *indexedVars) IndexedVarResolvedType(idx int) types.T {
-	if idx >= len(iv.types) {
-		panic("out of bounds IndexedVar; not enough types provided")
-	}
-	return iv.types[idx]
-}
-
-func (*indexedVars) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
 }
 
 func parseScalarExpr(sql string, ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
