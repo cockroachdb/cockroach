@@ -187,14 +187,15 @@ func (e *Error) GetTxn() *Transaction {
 }
 
 // UpdateTxn updates the txn.
-func (e *Error) UpdateTxn(o *Transaction) {
-	if e == nil {
+func (e *Error) UpdateTxn(delta *TransactionDelta) {
+	if e == nil || delta == nil {
 		return
 	}
 	if e.UnexposedTxn == nil {
-		e.UnexposedTxn = o
+		// e.UnexposedTxn = delta
+		panic("FIXME")
 	} else {
-		e.UnexposedTxn.Update(o)
+		e.UnexposedTxn.Update(delta)
 	}
 }
 

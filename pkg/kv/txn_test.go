@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -559,52 +560,69 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	s, _ := createTestDB(t)
 	defer s.Stop()
 
+	ctx := context.Background()
+
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 	ch := make(chan struct{})
 	errChan := make(chan error)
 	go func() {
 		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			ctx = log.WithLogTag(ctx, "writer", nil)
+			log.Infof(ctx, "starting as SNAPSHOT")
 			// Use snapshot isolation.
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
 			// Put transactional value.
+			log.Infof(ctx, "put %s", keyA)
 			if err := txn.Put(ctx, keyA, "value1"); err != nil {
 				return err
 			}
 			// Notify txnB do 1st get(b).
+			log.Infof(ctx, "waiting for reader to interrupt")
 			ch <- struct{}{}
 			// Wait for txnB notify us to put(b).
+			log.Infof(ctx, "waiting for reader to give back control")
 			<-ch
 			// Write now to keyB.
-			return txn.Put(ctx, keyB, "value2")
+			err := txn.Put(ctx, keyB, "value2")
+			log.Infof(ctx, "put %s: %v", keyA, err)
+			return err
 		})
 	}()
 
 	// Wait till txnA finish put(a).
+	ctx = log.WithLogTag(ctx, "reader", nil)
+
 	<-ch
+	log.Infof(ctx, "adding delay")
 	// Delay for longer than the cache window.
 	s.Manual.Increment((tscache.MinRetentionWindow + time.Second).Nanoseconds())
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Use snapshot isolation.
+		log.Infof(ctx, "starting as SNAPSHOT")
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 			return err
 		}
 
 		// Attempt to get first keyB.
+		log.Infof(ctx, "get %s", keyB)
 		gr1, err := txn.Get(ctx, keyB)
 		if err != nil {
 			return err
 		}
 		// Notify txnA put(b).
+		log.Infof(ctx, "notify writer")
 		ch <- struct{}{}
 		// Wait for txnA finish commit.
+		log.Infof(ctx, "wait for writer to commit")
 		if err := <-errChan; err != nil {
 			t.Fatal(err)
 		}
 		// get(b) again.
 		gr2, err := txn.Get(ctx, keyB)
+		log.Infof(ctx, "read %s: %v", keyB, err)
 		if err != nil {
 			return err
 		}

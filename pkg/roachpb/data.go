@@ -869,6 +869,40 @@ func (t *Transaction) BumpEpoch() {
 	t.Epoch++
 }
 
+// Update absorbs the given new information into the transaction.
+// TODO(tschottdorf): testing.
+func (t *Transaction) Update(d *TransactionDelta) {
+	if d == nil {
+		return
+	}
+	t.Timestamp.Forward(d.Meta.Timestamp)
+	if d.Status != PENDING {
+		if t.Status != d.Status && t.Status != PENDING {
+			// Insert assertion here.
+			panic("TODO(tschottdorf): insert better message")
+		}
+		t.Status = d.Status
+	}
+	if d.Meta.Priority > t.Priority {
+		t.Priority = d.Meta.Priority
+	}
+	if d.LastHeartbeat != nil {
+		t.LastHeartbeat.Forward(*d.LastHeartbeat)
+	}
+	for _, v := range d.ObservedTimestamps {
+		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
+	}
+	if d.Writing {
+		t.Writing = d.Writing
+	}
+	if d.WriteTooOld {
+		t.WriteTooOld = d.WriteTooOld
+	}
+	if d.RetryOnPush {
+		t.RetryOnPush = d.RetryOnPush
+	}
+}
+
 // TimeBounds returns the start and end timestamps which inclusively
 // cover all intents which were written as part of this transaction.
 func (t *Transaction) TimeBounds() (hlc.Timestamp, hlc.Timestamp) {
@@ -883,48 +917,274 @@ func (t *Transaction) TimeBounds() (hlc.Timestamp, hlc.Timestamp) {
 	return min, max.Next() // Next() makes the end of the interval closed
 }
 
+// Update absorbs the given new information into the transaction.
+// TODO(tschottdorf): testing.
+func (d1 *TransactionDelta) Update(d2 *TransactionDelta) {
+	if d2 == nil {
+		return
+	}
+	d1.Meta.Timestamp.Forward(d2.Meta.Timestamp)
+	if d1.Meta.Priority < d2.Meta.Priority {
+		d1.Meta.Priority = d2.Meta.Priority
+	}
+	if d1.Status == PENDING {
+		// TODO(tschottdorf): assertion (or return error?)
+		d1.Status = d2.Status
+	}
+	if d2.Meta.Priority > d1.Meta.Priority {
+		d1.Meta.Priority = d2.Meta.Priority
+	}
+	if d2.LastHeartbeat != nil {
+		if d1.LastHeartbeat == nil {
+			d1.LastHeartbeat = d2.LastHeartbeat
+		} else {
+			d1.LastHeartbeat.Forward(*d2.LastHeartbeat)
+		}
+	}
+	if d2.ObservedTimestamps != nil {
+		if d1.ObservedTimestamps == nil {
+			d1.ObservedTimestamps = d2.ObservedTimestamps
+		} else {
+			for _, obs := range d2.ObservedTimestamps {
+				d1.ObservedTimestamps, _ = observedTimestampSlice(d1.ObservedTimestamps).update(obs.NodeID, obs.Timestamp)
+			}
+		}
+	}
+
+	d1.Writing = d1.Writing || d2.Writing
+	d1.WriteTooOld = d1.WriteTooOld || d2.WriteTooOld
+	d1.RetryOnPush = d1.RetryOnPush || d2.RetryOnPush
+}
+
+// TxnDeltaHelper helps modify Transaction protos while tracking the changes that
+// need to be propagated back to the client and helps minimize accidental omissions
+// in the process.
+type TxnDeltaHelper struct {
+	txn   *Transaction
+	delta **TransactionDelta
+
+	dirty      bool
+	updatedTxn *Transaction
+}
+
+// MakeTxnDeltaHelper makes a TxnDeltaHelper from the given information:
+// - a double-pointer to a base Transaction. This is treated as immutable; it
+//   is usually the incoming request transaction that represents the client's
+//   view of the state. This base transaction may be nil, in which case the
+//   helper will assert that no deltas are created and returns nil transactions.
+//   While the helper is active, the pointer to the transaction will be set to
+//   nil (and later restored). All access to the base transaction must go through
+//   delta.BaseTxn().
+// - A double-pointer to a TransactionDelta which may be nil, in which case it
+//   is auto-created when needed. All changes made through the helper will
+//   accumulate in the delta. The object passed in here is usually (a pointer
+//   into) the ResponseHeader of a response object.
+func MakeTxnDeltaHelper(immutableTxn **Transaction, delta **TransactionDelta) (TxnDeltaHelper, func()) {
+	th := TxnDeltaHelper{txn: *immutableTxn, delta: delta}
+	const slowAssertions = true // FIXME
+
+	origTxnPtr := *immutableTxn
+	*immutableTxn = nil
+
+	finish := func() {
+		// If UpdatedTxn() was mutated in a way that inserts a delta (and that delta
+		// wasn't later captured), explode.
+		//
+		// Note that it's intentional that `UpdatedTxn()` is sometimes mutated, to
+		// change transaction state that is not part of TransactionDelta.
+		th.AssertNoDelta(th.updatedTxn)
+		*immutableTxn = origTxnPtr
+	}
+
+	return th, finish
+}
+
+func (th *TxnDeltaHelper) assertHaveTxn() {
+	if th.txn == nil {
+		panic("cannot update nontransactional TxnDeltaHelper")
+	}
+}
+
+// BaseTxn returns the (immutable) base transaction.
+func (th *TxnDeltaHelper) BaseTxn() *Transaction {
+	return th.txn
+}
+
+// Delta returns the accumulated delta.
+func (th *TxnDeltaHelper) Delta() *TransactionDelta {
+	if *th.delta == nil {
+		return nil
+	}
+	return *th.delta
+}
+
+func (th *TxnDeltaHelper) add(delta TransactionDelta) {
+	th.assertHaveTxn()
+	if *th.delta == nil {
+		*th.delta = &TransactionDelta{}
+	}
+	(*th.delta).Update(&delta)
+	th.dirty = true
+}
+
+// UpdateFrom incorporates all relevant changes from the passed-in Transaction.
+func (th *TxnDeltaHelper) UpdateFrom(txn *Transaction) {
+	th.assertHaveTxn()
+	delta := th.UpdatedTxn().UpdateFull(txn)
+	if delta == nil {
+		return
+	}
+	th.add(*delta)
+}
+
+// UpdatedTxn returns a transaction that reflects the base transactions with the
+// accumulated deltas applied. It is not a copy (i.e. its memory will be modified
+// as more deltas are accumulated).
+//
+// In rare cases it makes sense to modify this transaction manually to modify
+// fields that are never returned in a delta. The helper may assert that no
+// delta-incurring modifications are made.
+func (th *TxnDeltaHelper) UpdatedTxn() *Transaction {
+	if th.txn == nil {
+		return nil
+	}
+	if th.updatedTxn == nil {
+		clone := th.txn.Clone()
+		th.updatedTxn = &clone
+		th.dirty = true
+	}
+	if th.dirty {
+		th.updatedTxn.Update(*th.delta)
+		th.dirty = false
+	}
+	return th.updatedTxn
+}
+
+// AssertNoDelta checks that the helper's base transaction plus the accumulated
+// delta are up to date against the supplied transaction. There are two main use
+// cases:
+//
+// 1) pass th.UpdatedTxn() to check that no modifications have been made to it
+//    (outside of the helper) that affect the delta.
+// 2) pass any other transaction that was previously passed to `UpdateFrom` to
+//    check that it hasn't been modified in ways that affect the delta.
+func (th *TxnDeltaHelper) AssertNoDelta(txn *Transaction) {
+	if th.txn == nil {
+		return
+	}
+	// FIXME avoid the clone here by moving to pure delta computations.
+	throwawayTxn := th.BaseTxn().Clone()
+	throwawayTxn.Update(th.Delta())
+	delta := throwawayTxn.UpdateFull(txn)
+	if delta != nil {
+		panic(fmt.Sprintf("unexpected delta between %v and %v: %+v", th.txn, txn, delta))
+	}
+}
+
+// ForwardTimestamp forwards the timestamp of the transaction, emitting a delta
+// where necessary.
+func (th *TxnDeltaHelper) ForwardTimestamp(ts hlc.Timestamp) {
+	var d TransactionDelta
+	d.Meta.Timestamp = ts
+	th.add(d)
+}
+
+// ForwardLastHeartbeat forwards the last heartbeat timestamp, emitting a delta
+// where necessary.
+func (th *TxnDeltaHelper) ForwardLastHeartbeat(ts hlc.Timestamp) {
+	th.add(TransactionDelta{LastHeartbeat: &ts})
+}
+
+// SetStatus sets the transaction status, emitting a delta where necessary.
+func (th *TxnDeltaHelper) SetStatus(status TransactionStatus) {
+	th.add(TransactionDelta{Status: status})
+}
+
+// SetRetryOnPush sets the RetryOnPush flag, emitting a delta when necessary.
+func (th *TxnDeltaHelper) SetRetryOnPush() {
+	th.add(TransactionDelta{RetryOnPush: true})
+}
+
+// SetWriting sets the Writing flag, emitting a delta when necessary.
+func (th *TxnDeltaHelper) SetWriting() {
+	th.add(TransactionDelta{Writing: true})
+}
+
 // Update ratchets priority, timestamp and original timestamp values (among
 // others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
-func (t *Transaction) Update(o *Transaction) {
+// TODO(tschottdorf): ideally remove.
+func (t *Transaction) UpdateFull(o *Transaction) *TransactionDelta {
+	var delta TransactionDelta
 	if o == nil {
-		return
+		return nil
 	}
 	o.AssertInitialized(context.TODO())
 	if t.ID == (uuid.UUID{}) {
-		*t = o.Clone()
-		return
+		t.ID = o.ID
 	}
 	if len(t.Key) == 0 {
 		t.Key = o.Key
 	}
-	if o.Status != PENDING {
+	if o.Status != PENDING && t.Status != o.Status {
+		delta.Status = o.Status
 		t.Status = o.Status
 	}
 	if t.Epoch < o.Epoch {
+		// TODO(tschottdorf): ever relevant? Should always be able to consider
+		// aborted. If a request ever runs into a higher epoch, it should fail
+		// non-retriably.
 		t.Epoch = o.Epoch
 	}
-	t.Timestamp.Forward(o.Timestamp)
-	t.LastHeartbeat.Forward(o.LastHeartbeat)
+	if t.Timestamp.Forward(o.Timestamp) {
+		delta.Meta.Timestamp = o.Timestamp
+	}
+	if t.LastHeartbeat.Forward(o.LastHeartbeat) {
+		delta.LastHeartbeat = &o.LastHeartbeat
+	}
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
 
 	// Absorb the collected clock uncertainty information.
 	for _, v := range o.ObservedTimestamps {
-		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
+		if t.UpdateObservedTimestamp(v.NodeID, v.Timestamp) {
+			// NB: this results in sorted order because delta.ObservedTimestamps is
+			// initially empty and o.ObservedTimestamps is sorted.
+			delta.ObservedTimestamps = append(delta.ObservedTimestamps, ObservedTimestamp{
+				NodeID:    v.NodeID,
+				Timestamp: v.Timestamp,
+			})
+		}
 	}
-	t.UpgradePriority(o.Priority)
+
+	if t.UpgradePriority(o.Priority) {
+		delta.Meta.Priority = t.Priority
+	}
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
-	t.Writing = t.Writing || o.Writing
+	if !t.Writing && o.Writing {
+		delta.Writing = true
+		t.Writing = true
+	}
 	// This isn't or'd (similar to Writing) because we want WriteTooOld
 	// and RetryOnPush to be set each time according to "o". This allows
 	// a persisted txn to have its WriteTooOld flag reset on update.
 	// TODO(tschottdorf): reset in a central location when it's certifiably
 	//   a new request. Update is called in many situations and shouldn't
 	//   reset anything.
+	if !t.WriteTooOld && o.WriteTooOld {
+		delta.WriteTooOld = true
+	}
+	// FIXME these semantics are questionable. TxnCoordSender should modify the
+	// txn on restart but then replace its state, not go through Update again.
 	t.WriteTooOld = o.WriteTooOld
+
+	if !t.RetryOnPush && o.RetryOnPush {
+		delta.RetryOnPush = true
+	}
+	// FIXME ditto.
 	t.RetryOnPush = o.RetryOnPush
+
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
 	}
@@ -932,21 +1192,32 @@ func (t *Transaction) Update(o *Transaction) {
 		t.Intents = o.Intents
 	}
 	// On update, set epoch zero timestamp to the minimum seen by either txn.
+	// FIXME(tschottdorf): handle that field.
 	if o.EpochZeroTimestamp != (hlc.Timestamp{}) {
 		if t.EpochZeroTimestamp == (hlc.Timestamp{}) || o.EpochZeroTimestamp.Less(t.EpochZeroTimestamp) {
 			t.EpochZeroTimestamp = o.EpochZeroTimestamp
 		}
 	}
+
+	// FIXME(tschottdorf)
+	if !delta.Equal(&TransactionDelta{}) {
+		heapDelta := delta
+		return &heapDelta
+	}
+	return nil
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
 // priority and the specified minPriority. The exception is if the
 // current priority is set to the minimum, in which case the minimum
 // is preserved.
-func (t *Transaction) UpgradePriority(minPriority int32) {
+// Returns true if and only if the receiver has their priority updated.
+func (t *Transaction) UpgradePriority(minPriority int32) bool {
 	if minPriority > t.Priority && t.Priority != MinTxnPriority {
 		t.Priority = minPriority
+		return true
 	}
+	return false
 }
 
 // String formats transaction into human readable string.
@@ -976,20 +1247,10 @@ func (t *Transaction) ResetObservedTimestamps() {
 // UpdateObservedTimestamp stores a timestamp off a node's clock for future
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails.
-func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp) {
-	// Fast path optimization for either no observed timestamps or
-	// exactly one, for the same nodeID as we're updating.
-	if l := len(t.ObservedTimestamps); l == 0 {
-		t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}
-		return
-	} else if l == 1 && t.ObservedTimestamps[0].NodeID == nodeID {
-		if maxTS.Less(t.ObservedTimestamps[0].Timestamp) {
-			t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}
-		}
-		return
-	}
-	s := observedTimestampSlice(t.ObservedTimestamps)
-	t.ObservedTimestamps = s.update(nodeID, maxTS)
+func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, timestamp hlc.Timestamp) bool {
+	var updated bool
+	t.ObservedTimestamps, updated = observedTimestampSlice(t.ObservedTimestamps).update(nodeID, timestamp)
+	return updated
 }
 
 // GetObservedTimestamp returns the lowest HLC timestamp recorded from the
@@ -1548,19 +1809,33 @@ func (s observedTimestampSlice) get(nodeID NodeID) (hlc.Timestamp, bool) {
 }
 
 // update the timestamp for the specified node, or add a new entry in the
-// correct (sorted) location.
-func (s observedTimestampSlice) update(
+// correct (sorted) location. Returns true if the slice was mutated.
+func (sl observedTimestampSlice) update(
 	nodeID NodeID, timestamp hlc.Timestamp,
-) observedTimestampSlice {
-	i := s.index(nodeID)
-	if i < len(s) && s[i].NodeID == nodeID {
-		if timestamp.Less(s[i].Timestamp) {
-			s[i].Timestamp = timestamp
+) (observedTimestampSlice, bool) {
+	// Fast path optimization for either no observed timestamps or
+	// exactly one, for the same nodeID as we're updating.
+	if l := len(sl); l == 0 {
+		sl = []ObservedTimestamp{{NodeID: nodeID, Timestamp: timestamp}}
+		return sl, true
+	} else if l == 1 && sl[0].NodeID == nodeID {
+		if timestamp.Less(sl[0].Timestamp) {
+			sl[0].Timestamp = timestamp
+			return sl, true
 		}
-		return s
+		return sl, false
 	}
-	s = append(s, ObservedTimestamp{})
-	copy(s[i+1:], s[i:])
-	s[i] = ObservedTimestamp{NodeID: nodeID, Timestamp: timestamp}
-	return s
+
+	i := sl.index(nodeID)
+	if i < len(sl) && sl[i].NodeID == nodeID {
+		if timestamp.Less(sl[i].Timestamp) {
+			sl[i].Timestamp = timestamp
+			return sl, true
+		}
+		return sl, false
+	}
+	sl = append(sl, ObservedTimestamp{})
+	copy(sl[i+1:], sl[i:])
+	sl[i] = ObservedTimestamp{NodeID: nodeID, Timestamp: timestamp}
+	return sl, true
 }

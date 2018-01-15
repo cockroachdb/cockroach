@@ -506,7 +506,10 @@ func (ds *DistSender) initAndVerifyBatch(
 
 				// OrigTimestamp is the HLC timestamp at which the Txn started, so
 				// this effectively means no more uncertainty on this node.
+				log.Warning(context.TODO(), "updating")
 				ba.Txn.UpdateObservedTimestamp(nDesc.NodeID, ba.Txn.OrigTimestamp)
+				// FIXME(tschottdorf): since this is happening on `ba` only, we're
+				// losing this in the response. See TestTxnLongDelayBetweenWritesWithConcurrentRead.
 			}
 		}
 	}
@@ -587,7 +590,7 @@ var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 // record is created will cause the transaction to abort early.
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+) (br *roachpb.BatchResponse, _ *roachpb.Error) {
 	ds.metrics.BatchCount.Inc(1)
 
 	tracing.AnnotateTrace()
@@ -595,6 +598,15 @@ func (ds *DistSender) Send(
 	if pErr := ds.initAndVerifyBatch(ctx, &ba); pErr != nil {
 		return nil, pErr
 	}
+	defer func() {
+		// FIXME: fix initAndVerifyBatch.
+		if br != nil && ba.Txn != nil && len(ba.Txn.ObservedTimestamps) != 0 {
+			if br.Txn == nil {
+				br.Txn = &roachpb.TransactionDelta{}
+			}
+			br.Txn.ObservedTimestamps = ba.Txn.ObservedTimestamps
+		}
+	}()
 
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, cleanup := tracing.EnsureContext(ctx, ds.AmbientContext.Tracer, "dist sender")
@@ -679,6 +691,8 @@ type response struct {
 // which partial fragment of the larger batch is being processed by
 // this method. It's specified as non-zero when this method is invoked
 // recursively.
+//
+// TODO(tschottdorf): this assignment of Sequence numbers here is shady.
 func (ds *DistSender) divideAndSendBatchToRanges(
 	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
@@ -699,6 +713,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	}
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
+		// FIXME: move sequence numbers to client.Txn. Right now sequence numbers won't
+		// be sent back to client -> more spurious restarts.
 		ba.SetNewRequest()
 		resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, false /* needsTruncate */)
 		return resp.reply, resp.pErr
@@ -777,6 +793,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		//
 		// TODO(tschottdorf): it's possible that if we don't evict from
 		// the cache we could be in for a busy loop.
+		//
+		// FIXME: move sequence numbers to client.Txn. This is broken as we don't
+		// propagate the sequence number back up.
 		ba.SetNewRequest()
 
 		responseCh := make(chan response, 1)

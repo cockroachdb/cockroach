@@ -67,6 +67,15 @@ message TxnMeta {
   int32 batch_index = 8;
 }
 
+message TxnMetaDelta {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+  option (gogoproto.goproto_getters) = true;
+
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  int32 priority = 2;
+}
+
 // MVCCNetworkStats is convertible to MVCCStats, but uses variable width
 // encodings for most fields. This makes the encodings incompatible. Note that
 // with proto3, zero-valued primitive types will not be encoded at all.

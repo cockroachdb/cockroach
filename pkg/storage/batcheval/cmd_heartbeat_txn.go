@@ -58,8 +58,11 @@ func HeartbeatTxn(
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
-	var txn roachpb.Transaction
-	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &txn); err != nil {
+	delta, done := roachpb.MakeTxnDeltaHelper(&h.Txn, &reply.Txn)
+	defer done()
+
+	var diskTxn roachpb.Transaction
+	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &diskTxn); err != nil {
 		return result.Result{}, err
 	} else if !ok {
 		// If no existing transaction record was found, skip heartbeat.
@@ -69,13 +72,14 @@ func HeartbeatTxn(
 		return result.Result{}, errors.Errorf("heartbeat for transaction %s failed; record not present", h.Txn)
 	}
 
-	if txn.Status == roachpb.PENDING {
-		txn.LastHeartbeat.Forward(args.Now)
-		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txn); err != nil {
+	delta.UpdateFrom(&diskTxn)
+
+	if delta.UpdatedTxn().Status == roachpb.PENDING {
+		delta.ForwardLastHeartbeat(args.Now)
+		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, delta.UpdatedTxn()); err != nil {
 			return result.Result{}, err
 		}
 	}
 
-	reply.Txn = &txn
 	return result.Result{}, nil
 }

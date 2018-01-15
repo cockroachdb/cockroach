@@ -131,11 +131,12 @@ func evaluateCommand(
 	// Create a roachpb.Error by initializing txn from the request/response header.
 	var pErr *roachpb.Error
 	if err != nil {
-		txn := reply.Header().Txn
-		if txn == nil {
-			txn = h.Txn
+		if h.Txn != nil {
+			shallowClone := h.Txn.Clone()
+			h.Txn = &shallowClone
+			h.Txn.Update(reply.Header().Txn)
 		}
-		pErr = roachpb.NewErrorWithTxn(err, txn)
+		pErr = roachpb.NewErrorWithTxn(err, h.Txn)
 	}
 
 	return pd, pErr
@@ -258,26 +259,25 @@ func evalEndTransaction(
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
+	delta, finish := roachpb.MakeTxnDeltaHelper(&h.Txn, &reply.Txn)
+	defer finish()
+
 	// Fetch existing transaction.
-	var existingTxn roachpb.Transaction
+	var persistedTxn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(
-		ctx, batch, key, hlc.Timestamp{}, true, nil, &existingTxn,
+		ctx, batch, key, hlc.Timestamp{}, true, nil, &persistedTxn,
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
 		return result.Result{}, roachpb.NewTransactionStatusError("does not exist")
 	}
-	// We're using existingTxn on the reply, even though it can be stale compared
-	// to the Transaction in the request (e.g. the Sequence can be stale). This is
-	// OK since we're processing an EndTransaction and so there's not going to be
-	// more requests using the transaction from this reply (or, in case of a
-	// restart, we'll reset the Transaction anyway).
-	reply.Txn = &existingTxn
+
+	delta.UpdateFrom(&persistedTxn)
 
 	// Verify that we can either commit it or abort it (according
 	// to args.Commit), and also that the Timestamp and Epoch have
 	// not suffered regression.
-	switch reply.Txn.Status {
+	switch persistedTxn.Status {
 	case roachpb.COMMITTED:
 		return result.Result{}, roachpb.NewTransactionStatusError("already committed")
 
@@ -288,15 +288,16 @@ func evalEndTransaction(
 			// wanted to abort the transaction.
 			desc := cArgs.EvalCtx.Desc()
 			externalIntents := resolveLocalIntents(ctx, desc,
-				batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
+				batch, ms, *args, &persistedTxn, cArgs.EvalCtx.EvalKnobs())
 			if err := updateTxnWithExternalIntents(
-				ctx, batch, ms, *args, reply.Txn, externalIntents,
+				ctx, batch, ms, *args, &persistedTxn, externalIntents,
 			); err != nil {
 				return result.Result{}, err
 			}
+			delta.AssertNoDelta(&persistedTxn)
 			// Use alwaysReturn==true because the transaction is definitely
 			// aborted, no matter what happens to this command.
-			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */), nil
+			return result.FromEndTxn(&persistedTxn, true /* alwaysReturn */), nil
 		}
 		// If the transaction was previously aborted by a concurrent writer's
 		// push, any intents written are still open. It's only now that we know
@@ -306,26 +307,31 @@ func evalEndTransaction(
 		// Similarly to above, use alwaysReturn==true. The caller isn't trying
 		// to abort, but the transaction is definitely aborted and its intents
 		// can go.
-		reply.Txn.Intents = args.IntentSpans
-		return result.FromEndTxn(reply.Txn, true /* alwaysReturn */), roachpb.NewTransactionAbortedError()
+		persistedTxn.Intents = args.IntentSpans
+		return result.FromEndTxn(&persistedTxn, true /* alwaysReturn */), roachpb.NewTransactionAbortedError()
 
 	case roachpb.PENDING:
-		if h.Txn.Epoch < reply.Txn.Epoch {
+		if epoch := delta.BaseTxn().Epoch; epoch < persistedTxn.Epoch {
 			// TODO(tschottdorf): this leaves the Txn record (and more
 			// importantly, intents) dangling; we can't currently write on
 			// error. Would panic, but that makes TestEndTransactionWithErrors
 			// awkward.
 			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("epoch regression: %d", h.Txn.Epoch),
+				fmt.Sprintf("epoch regression: %d", epoch),
 			)
-		} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
+		} else if curOrigTS := delta.BaseTxn().OrigTimestamp; epoch == persistedTxn.Epoch && persistedTxn.Timestamp.Less(curOrigTS) {
 			// The transaction record can only ever be pushed forward, so it's an
 			// error if somehow the transaction record has an earlier timestamp
-			// than the original transaction timestamp.
+			// than the original transaction timestamp (even if the epoch moved
+			// forward).
+			//
+			// TODO(tschottdorf): could check more, for example
+			// persistedTxn.OrigTimestamp < delta.BaseTxn().Timestamp.
+			// As currently stands, this check is pretty useless.
 
 			// TODO(tschottdorf): see above comment on epoch regression.
 			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp),
+				fmt.Sprintf("timestamp regression: %s", curOrigTS),
 			)
 		}
 
@@ -335,31 +341,14 @@ func evalEndTransaction(
 		)
 	}
 
-	// Take max of requested epoch and existing epoch. The requester
-	// may have incremented the epoch on retries.
-	if reply.Txn.Epoch < h.Txn.Epoch {
-		reply.Txn.Epoch = h.Txn.Epoch
-	}
-	// Take max of requested priority and existing priority. This isn't
-	// terribly useful, but we do it for completeness.
-	if reply.Txn.Priority < h.Txn.Priority {
-		reply.Txn.Priority = h.Txn.Priority
-	}
-
-	// Take max of supplied txn's timestamp and persisted txn's
-	// timestamp. It may have been pushed by another transaction.
-	// Note that we do not use the batch request timestamp, which for
-	// a transaction is always set to the txn's original timestamp.
-	reply.Txn.Timestamp.Forward(h.Txn.Timestamp)
-
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
-		if retry, reason := isEndTransactionTriggeringRetryError(h.Txn, reply.Txn); retry {
+		if retry, reason := isEndTransactionTriggeringRetryError(delta.BaseTxn(), delta.UpdatedTxn()); retry {
 			return result.Result{}, roachpb.NewTransactionRetryError(reason)
 		}
 
-		if isEndTransactionExceedingDeadline(reply.Txn.Timestamp, *args) {
+		if isEndTransactionExceedingDeadline(delta.UpdatedTxn().Timestamp, *args) {
 			// If the deadline has lapsed return an error and rely on the client
 			// issuing a Rollback() that aborts the transaction and cleans up
 			// intents. Unfortunately, we're returning an error and unable to
@@ -375,23 +364,23 @@ func evalEndTransaction(
 				"transaction deadline exceeded")
 		}
 
-		reply.Txn.Status = roachpb.COMMITTED
+		delta.SetStatus(roachpb.COMMITTED)
 	} else {
-		reply.Txn.Status = roachpb.ABORTED
+		delta.SetStatus(roachpb.ABORTED)
 	}
 
 	desc := cArgs.EvalCtx.Desc()
 	externalIntents := resolveLocalIntents(ctx, desc,
-		batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
-	if err := updateTxnWithExternalIntents(ctx, batch, ms, *args, reply.Txn, externalIntents); err != nil {
+		batch, ms, *args, delta.UpdatedTxn(), cArgs.EvalCtx.EvalKnobs())
+	if err := updateTxnWithExternalIntents(ctx, batch, ms, *args, delta.UpdatedTxn(), externalIntents); err != nil {
 		return result.Result{}, err
 	}
 
 	// Run triggers if successfully committed.
 	var pd result.Result
-	if reply.Txn.Status == roachpb.COMMITTED {
+	if delta.UpdatedTxn().Status == roachpb.COMMITTED {
 		var err error
-		if pd, err = runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch), ms, *args, reply.Txn); err != nil {
+		if pd, err = runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch), ms, *args, delta.UpdatedTxn()); err != nil {
 			return result.Result{}, NewReplicaCorruptionError(err)
 		}
 	}
@@ -416,8 +405,8 @@ func evalEndTransaction(
 	// We specify alwaysReturn==false because if the commit fails below Raft, we
 	// don't want the intents to be up for resolution. That should happen only
 	// if the commit actually happens; otherwise, we risk losing writes.
-	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */)
-	intentsResult.Local.UpdatedTxns = &[]*roachpb.Transaction{reply.Txn}
+	intentsResult := result.FromEndTxn(delta.UpdatedTxn(), false /* alwaysReturn */)
+	intentsResult.Local.UpdatedTxns = &[]*roachpb.Transaction{delta.UpdatedTxn()}
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
 	}

@@ -74,6 +74,9 @@ extern StoreIdentDefaultTypeInternal _StoreIdent_default_instance_;
 class Transaction;
 class TransactionDefaultTypeInternal;
 extern TransactionDefaultTypeInternal _Transaction_default_instance_;
+class TransactionDelta;
+class TransactionDeltaDefaultTypeInternal;
+extern TransactionDeltaDefaultTypeInternal _TransactionDelta_default_instance_;
 class Value;
 class ValueDefaultTypeInternal;
 extern ValueDefaultTypeInternal _Value_default_instance_;
@@ -1467,6 +1470,153 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
 };
 // -------------------------------------------------------------------
 
+class TransactionDelta : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.TransactionDelta) */ {
+ public:
+  TransactionDelta();
+  virtual ~TransactionDelta();
+
+  TransactionDelta(const TransactionDelta& from);
+
+  inline TransactionDelta& operator=(const TransactionDelta& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  TransactionDelta(TransactionDelta&& from) noexcept
+    : TransactionDelta() {
+    *this = ::std::move(from);
+  }
+
+  inline TransactionDelta& operator=(TransactionDelta&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const TransactionDelta& default_instance();
+
+  static inline const TransactionDelta* internal_default_instance() {
+    return reinterpret_cast<const TransactionDelta*>(
+               &_TransactionDelta_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    11;
+
+  void Swap(TransactionDelta* other);
+  friend void swap(TransactionDelta& a, TransactionDelta& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline TransactionDelta* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  TransactionDelta* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const TransactionDelta& from);
+  void MergeFrom(const TransactionDelta& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(TransactionDelta* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  int observed_timestamps_size() const;
+  void clear_observed_timestamps();
+  static const int kObservedTimestampsFieldNumber = 8;
+  const ::cockroach::roachpb::ObservedTimestamp& observed_timestamps(int index) const;
+  ::cockroach::roachpb::ObservedTimestamp* mutable_observed_timestamps(int index);
+  ::cockroach::roachpb::ObservedTimestamp* add_observed_timestamps();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >*
+      mutable_observed_timestamps();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >&
+      observed_timestamps() const;
+
+  bool has_meta() const;
+  void clear_meta();
+  static const int kMetaFieldNumber = 1;
+  const ::cockroach::storage::engine::enginepb::TxnMetaDelta& meta() const;
+  ::cockroach::storage::engine::enginepb::TxnMetaDelta* mutable_meta();
+  ::cockroach::storage::engine::enginepb::TxnMetaDelta* release_meta();
+  void set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMetaDelta* meta);
+
+  // .cockroach.util.hlc.Timestamp last_heartbeat = 5;
+  bool has_last_heartbeat() const;
+  void clear_last_heartbeat();
+  static const int kLastHeartbeatFieldNumber = 5;
+  const ::cockroach::util::hlc::Timestamp& last_heartbeat() const;
+  ::cockroach::util::hlc::Timestamp* mutable_last_heartbeat();
+  ::cockroach::util::hlc::Timestamp* release_last_heartbeat();
+  void set_allocated_last_heartbeat(::cockroach::util::hlc::Timestamp* last_heartbeat);
+
+  // .cockroach.roachpb.TransactionStatus status = 4;
+  void clear_status();
+  static const int kStatusFieldNumber = 4;
+  ::cockroach::roachpb::TransactionStatus status() const;
+  void set_status(::cockroach::roachpb::TransactionStatus value);
+
+  // bool writing = 9;
+  void clear_writing();
+  static const int kWritingFieldNumber = 9;
+  bool writing() const;
+  void set_writing(bool value);
+
+  // bool write_too_old = 12;
+  void clear_write_too_old();
+  static const int kWriteTooOldFieldNumber = 12;
+  bool write_too_old() const;
+  void set_write_too_old(bool value);
+
+  // bool retry_on_push = 13;
+  void clear_retry_on_push();
+  static const int kRetryOnPushFieldNumber = 13;
+  bool retry_on_push() const;
+  void set_retry_on_push(bool value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.TransactionDelta)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp > observed_timestamps_;
+  ::cockroach::storage::engine::enginepb::TxnMetaDelta* meta_;
+  ::cockroach::util::hlc::Timestamp* last_heartbeat_;
+  int status_;
+  bool writing_;
+  bool write_too_old_;
+  bool retry_on_push_;
+  mutable int _cached_size_;
+  friend struct protobuf_roachpb_2fdata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Intent) */ {
  public:
   Intent();
@@ -1500,7 +1650,7 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Intent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    11;
+    12;
 
   void Swap(Intent* other);
   friend void swap(Intent& a, Intent& b) {
@@ -1613,7 +1763,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Lease_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    12;
+    13;
 
   void Swap(Lease* other);
   friend void swap(Lease& a, Lease& b) {
@@ -1759,7 +1909,7 @@ class AbortSpanEntry : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_AbortSpanEntry_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    13;
+    14;
 
   void Swap(AbortSpanEntry* other);
   friend void swap(AbortSpanEntry& a, AbortSpanEntry& b) {
@@ -3140,6 +3290,174 @@ inline void Transaction::set_allocated_epoch_zero_timestamp(::cockroach::util::h
 
 // -------------------------------------------------------------------
 
+// TransactionDelta
+
+inline bool TransactionDelta::has_meta() const {
+  return this != internal_default_instance() && meta_ != NULL;
+}
+inline void TransactionDelta::clear_meta() {
+  if (GetArenaNoVirtual() == NULL && meta_ != NULL) delete meta_;
+  meta_ = NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::TxnMetaDelta& TransactionDelta::meta() const {
+  const ::cockroach::storage::engine::enginepb::TxnMetaDelta* p = meta_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionDelta.meta)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::TxnMetaDelta*>(
+      &::cockroach::storage::engine::enginepb::_TxnMetaDelta_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::TxnMetaDelta* TransactionDelta::mutable_meta() {
+  
+  if (meta_ == NULL) {
+    meta_ = new ::cockroach::storage::engine::enginepb::TxnMetaDelta;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionDelta.meta)
+  return meta_;
+}
+inline ::cockroach::storage::engine::enginepb::TxnMetaDelta* TransactionDelta::release_meta() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.TransactionDelta.meta)
+  
+  ::cockroach::storage::engine::enginepb::TxnMetaDelta* temp = meta_;
+  meta_ = NULL;
+  return temp;
+}
+inline void TransactionDelta::set_allocated_meta(::cockroach::storage::engine::enginepb::TxnMetaDelta* meta) {
+  delete meta_;
+  meta_ = meta;
+  if (meta) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionDelta.meta)
+}
+
+// .cockroach.roachpb.TransactionStatus status = 4;
+inline void TransactionDelta::clear_status() {
+  status_ = 0;
+}
+inline ::cockroach::roachpb::TransactionStatus TransactionDelta::status() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionDelta.status)
+  return static_cast< ::cockroach::roachpb::TransactionStatus >(status_);
+}
+inline void TransactionDelta::set_status(::cockroach::roachpb::TransactionStatus value) {
+  
+  status_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TransactionDelta.status)
+}
+
+// .cockroach.util.hlc.Timestamp last_heartbeat = 5;
+inline bool TransactionDelta::has_last_heartbeat() const {
+  return this != internal_default_instance() && last_heartbeat_ != NULL;
+}
+inline void TransactionDelta::clear_last_heartbeat() {
+  if (GetArenaNoVirtual() == NULL && last_heartbeat_ != NULL) delete last_heartbeat_;
+  last_heartbeat_ = NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& TransactionDelta::last_heartbeat() const {
+  const ::cockroach::util::hlc::Timestamp* p = last_heartbeat_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionDelta.last_heartbeat)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* TransactionDelta::mutable_last_heartbeat() {
+  
+  if (last_heartbeat_ == NULL) {
+    last_heartbeat_ = new ::cockroach::util::hlc::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionDelta.last_heartbeat)
+  return last_heartbeat_;
+}
+inline ::cockroach::util::hlc::Timestamp* TransactionDelta::release_last_heartbeat() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.TransactionDelta.last_heartbeat)
+  
+  ::cockroach::util::hlc::Timestamp* temp = last_heartbeat_;
+  last_heartbeat_ = NULL;
+  return temp;
+}
+inline void TransactionDelta::set_allocated_last_heartbeat(::cockroach::util::hlc::Timestamp* last_heartbeat) {
+  delete last_heartbeat_;
+  last_heartbeat_ = last_heartbeat;
+  if (last_heartbeat) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionDelta.last_heartbeat)
+}
+
+inline int TransactionDelta::observed_timestamps_size() const {
+  return observed_timestamps_.size();
+}
+inline void TransactionDelta::clear_observed_timestamps() {
+  observed_timestamps_.Clear();
+}
+inline const ::cockroach::roachpb::ObservedTimestamp& TransactionDelta::observed_timestamps(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionDelta.observed_timestamps)
+  return observed_timestamps_.Get(index);
+}
+inline ::cockroach::roachpb::ObservedTimestamp* TransactionDelta::mutable_observed_timestamps(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionDelta.observed_timestamps)
+  return observed_timestamps_.Mutable(index);
+}
+inline ::cockroach::roachpb::ObservedTimestamp* TransactionDelta::add_observed_timestamps() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TransactionDelta.observed_timestamps)
+  return observed_timestamps_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >*
+TransactionDelta::mutable_observed_timestamps() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TransactionDelta.observed_timestamps)
+  return &observed_timestamps_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >&
+TransactionDelta::observed_timestamps() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TransactionDelta.observed_timestamps)
+  return observed_timestamps_;
+}
+
+// bool writing = 9;
+inline void TransactionDelta::clear_writing() {
+  writing_ = false;
+}
+inline bool TransactionDelta::writing() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionDelta.writing)
+  return writing_;
+}
+inline void TransactionDelta::set_writing(bool value) {
+  
+  writing_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TransactionDelta.writing)
+}
+
+// bool write_too_old = 12;
+inline void TransactionDelta::clear_write_too_old() {
+  write_too_old_ = false;
+}
+inline bool TransactionDelta::write_too_old() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionDelta.write_too_old)
+  return write_too_old_;
+}
+inline void TransactionDelta::set_write_too_old(bool value) {
+  
+  write_too_old_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TransactionDelta.write_too_old)
+}
+
+// bool retry_on_push = 13;
+inline void TransactionDelta::clear_retry_on_push() {
+  retry_on_push_ = false;
+}
+inline bool TransactionDelta::retry_on_push() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionDelta.retry_on_push)
+  return retry_on_push_;
+}
+inline void TransactionDelta::set_retry_on_push(bool value) {
+  
+  retry_on_push_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TransactionDelta.retry_on_push)
+}
+
+// -------------------------------------------------------------------
+
 // Intent
 
 inline bool Intent::has_span() const {
@@ -3573,6 +3891,8 @@ inline void AbortSpanEntry::set_priority(::google::protobuf::int32 value) {
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

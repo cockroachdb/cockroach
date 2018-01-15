@@ -351,6 +351,24 @@ message Transaction {
   util.hlc.Timestamp epoch_zero_timestamp = 14 [(gogoproto.nullable) = false];
 }
 
+// A TransactionDelta is ...
+// TODO(tschottdorf): avoid diverging from Transaction (wire compatibility).
+message TransactionDelta {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_getters) = true;
+  option (gogoproto.goproto_stringer) = true; // TODO(tschottdorf)
+  option (gogoproto.populate) = true;
+
+  storage.engine.enginepb.TxnMetaDelta meta = 1 [(gogoproto.nullable) = false];
+  TransactionStatus status = 4;
+  util.hlc.Timestamp last_heartbeat = 5;
+  repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
+  // NB: zero values are not sent on the wire thanks to proto3.
+  bool writing = 9;
+  bool write_too_old = 12;
+  bool retry_on_push = 13;
+}
+
 // A Intent is a Span together with a Transaction metadata and its status.
 message Intent {
   option (gogoproto.equal) = true;

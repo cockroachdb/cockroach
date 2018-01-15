@@ -2595,14 +2595,22 @@ func (s *Store) Send(
 				}
 				pErr.GetTxn().UpdateObservedTimestamp(ba.Replica.NodeID, now)
 			} else {
-				if br.Txn == nil {
-					br.Txn = ba.Txn
+				// FIXME(tschottdorf): this can be optimized.
+				delta := &roachpb.TransactionDelta{
+					ObservedTimestamps: []roachpb.ObservedTimestamp{{
+						NodeID:    ba.Replica.NodeID,
+						Timestamp: now,
+					}},
 				}
-				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+				if br.Txn == nil {
+					br.Txn = delta
+				} else {
+					br.Txn.Update(delta)
+				}
 				// Update our clock with the outgoing response txn timestamp
 				// (if timestamp has been forwarded).
-				if ba.Timestamp.Less(br.Txn.Timestamp) {
-					s.cfg.Clock.Update(br.Txn.Timestamp)
+				if br.Txn != nil && ba.Timestamp.Less(br.Txn.Meta.Timestamp) {
+					s.cfg.Clock.Update(br.Txn.Meta.Timestamp)
 				}
 			}
 		} else {
@@ -2734,6 +2742,10 @@ func (s *Store) Send(
 				// after our operation started. This allows us to not have to
 				// restart for uncertainty as we come back and read.
 				h.Timestamp.Forward(now)
+				// FIXME: TestTxnLongDelayBetweenWritesWithConcurrentRead runs into
+				// a clock uncertainty restart. That restart is correct when `now`
+				// is reused.
+				h.Timestamp.Forward(s.Clock().Now())
 				// We are going to hand the header (and thus the transaction proto)
 				// to the RPC framework, after which it must not be changed (since
 				// that could race). Since the subsequent execution of the original
@@ -2758,7 +2770,9 @@ func (s *Store) Send(
 
 			// Increase the sequence counter to avoid getting caught in replay
 			// protection on retry.
-			ba.SetNewRequest()
+			// FIXME hope that this isn't necessary; if we caught WriteIntentError, we
+			// shouldn't have laid anything down in the current batch.
+			// ba.SetNewRequest()
 		}
 
 		if pErr != nil {

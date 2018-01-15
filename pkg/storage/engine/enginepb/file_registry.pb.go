@@ -16,6 +16,7 @@
 		MVCCMetadata
 		MVCCStats
 		TxnMeta
+		TxnMetaDelta
 		MVCCNetworkStats
 		SSTUserProperties
 		SSTUserPropertiesCollection

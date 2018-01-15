@@ -465,11 +465,11 @@ func (q *Queue) MaybeWaitForPush(
 		select {
 		case <-ctx.Done():
 			// Caller has given up.
-			log.Event(ctx, "pusher giving up due to context cancellation")
+			log.Warningf(ctx, "pusher giving up due to context cancellation")
 			return nil, roachpb.NewError(ctx.Err())
 
 		case txn := <-push.pending:
-			log.Eventf(ctx, "result of pending push: %v", txn)
+			log.Warningf(ctx, "result of pending push: %v", txn)
 			// If txn is nil, the queue was cleared, presumably because the
 			// replica lost the range lease. Return not pushed so request
 			// proceeds and is redirected to the new range lease holder.
@@ -480,7 +480,7 @@ func (q *Queue) MaybeWaitForPush(
 			// pushed. If this PushTxn request is satisfied, return
 			// successful PushTxn response.
 			if isPushed(req, txn) {
-				log.Event(ctx, "push request is satisfied")
+				log.Warningf(ctx, "push request is satisfied")
 				return createPushTxnResponse(txn), nil
 			}
 			// If not successfully pushed, return not pushed so request proceeds.
@@ -488,7 +488,7 @@ func (q *Queue) MaybeWaitForPush(
 			return nil, nil
 
 		case <-pusheeTxnTimer.C:
-			log.Event(ctx, "querying pushee")
+			log.Warningf(ctx, "querying pushee")
 			pusheeTxnTimer.Read = true
 			// Periodically check whether the pushee txn has been abandoned.
 			updatedPushee, _, pErr := q.queryTxnStatus(
@@ -509,7 +509,7 @@ func (q *Queue) MaybeWaitForPush(
 			}
 
 		case updatedPusher := <-queryPusherCh:
-			log.Eventf(ctx, "pusher was updated: %v", updatedPusher)
+			log.Warningf(ctx, "pusher was updated: %v", updatedPusher)
 			switch updatedPusher.Status {
 			case roachpb.COMMITTED:
 				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError("already committed"), updatedPusher)
@@ -680,7 +680,7 @@ func (q *Queue) startQueryPusherTxn(
 				} else if updatedPusher == nil {
 					// No pusher to query; the BeginTransaction hasn't yet created the
 					// pusher's record. Continue in order to backoff and retry.
-					log.Event(ctx, "no pusher found; backing off")
+					log.Warningf(ctx, "no pusher found; backing off")
 					continue
 				}
 
@@ -697,7 +697,7 @@ func (q *Queue) startQueryPusherTxn(
 				push.mu.Unlock()
 
 				// Send an update of the pusher txn.
-				pusher.Update(updatedPusher)
+				pusher.UpdateFull(updatedPusher)
 				ch <- &pusher
 
 				// Wait for context cancellation or indication on readyCh that the

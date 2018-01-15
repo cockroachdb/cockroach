@@ -217,19 +217,19 @@ func TestIntentSpanIterate(t *testing.T) {
 func TestBatchResponseCombine(t *testing.T) {
 	br := &BatchResponse{}
 	{
-		txn := MakeTransaction(
-			"test", nil /* baseKey */, NormalUserPriority,
-			enginepb.SERIALIZABLE, hlc.Timestamp{WallTime: 123}, 0, /* maxOffsetNs */
-		)
 		brTxn := &BatchResponse{
 			BatchResponse_Header: BatchResponse_Header{
-				Txn: &txn,
+				Txn: &TransactionDelta{
+					Meta: enginepb.TxnMetaDelta{
+						Timestamp: hlc.Timestamp{WallTime: 321},
+					},
+				},
 			},
 		}
 		if err := br.Combine(brTxn, nil); err != nil {
 			t.Fatal(err)
 		}
-		if br.Txn.Name != "test" {
+		if br.Txn.Meta.Timestamp.WallTime != 321 {
 			t.Fatal("Combine() did not update the header")
 		}
 	}

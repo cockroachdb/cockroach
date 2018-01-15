@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -242,19 +243,23 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		// will happen in the second epoch.
 		errChan <- store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 			epoch++
+			log.Infof(ctx, "writer epoch %d", epoch)
 
 			if epoch == 1 {
 				// Wait until the second get operation is issued.
+				log.Infof(ctx, "writer waiting for reader")
 				close(waitTxnRestart)
 				<-waitSecondGet
 			}
 
+			log.Infof(ctx, "writer writing")
 			updatedVal := []byte("updatedVal")
 			if err := txn.Put(ctx, key, updatedVal); err != nil {
 				return err
 			}
 
 			// Make sure a get will return the value that was just written.
+			log.Infof(ctx, "writer reading")
 			actual, err := txn.Get(ctx, key)
 			if err != nil {
 				return err
@@ -266,11 +271,16 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 			if epoch == 0 {
 				// Wait until the first get operation will push the txn timestamp.
 				close(waitPut)
+				log.Infof(ctx, "writer waiting for first get")
 				<-waitFirstGet
 			}
 
 			b := txn.NewBatch()
-			return txn.CommitInBatch(ctx, b)
+			{
+				err := txn.CommitInBatch(ctx, b)
+				log.Infof(ctx, "writer trying to commit: %v", err)
+				return err
+			}
 		})
 
 		if epoch != 2 {
@@ -282,6 +292,9 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		}
 	}()
 
+	ctx := context.Background()
+
+	log.Infof(ctx, "test waiting for first put")
 	<-waitPut
 
 	// Start the Reader.
@@ -294,6 +307,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	requestHeader := roachpb.Span{
 		Key: roachpb.Key(key),
 	}
+	log.Infof(ctx, "test sending interfering read")
 	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Timestamp:    cfg.Clock.Now(),
 		UserPriority: priority,
@@ -303,6 +317,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	// Wait until the writer restarts the txn.
 	close(waitFirstGet)
+	log.Infof(ctx, "test waiting for writer to restart")
 	<-waitTxnRestart
 
 	// Advance the clock and send a get operation again. This time
@@ -311,6 +326,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// timestamp cache from being updated).
 	manual.Increment(100)
 
+	log.Infof(ctx, "test sending second interfering read")
 	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Timestamp:    cfg.Clock.Now(),
 		UserPriority: priority,
@@ -318,6 +334,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		t.Fatal("unexpected success of get")
 	}
 
+	log.Infof(ctx, "collecting writer error")
 	close(waitSecondGet)
 	for i := 0; i < 2; i++ {
 		if err := <-errChan; err != nil {
