@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-var typedExprConvMap [numOperators]func(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr
+var typedExprConvMap [numOperators]func(c *typedExprConvCtx, e *Expr) tree.TypedExpr
 
 func init() {
 	// This code is not inline to avoid an initialization loop error (some of the
 	// functions depend on scalarToTypedExpr which depends on typedExprConvMap).
-	typedExprConvMap = [numOperators]func(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr{
+	typedExprConvMap = [numOperators]func(c *typedExprConvCtx, e *Expr) tree.TypedExpr{
 		constOp:    constOpToTypedExpr,
 		variableOp: variableOpToTypedExpr,
 
@@ -85,20 +85,39 @@ func init() {
 	}
 }
 
-func constOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+type typedExprConvCtx struct {
+	ivh *tree.IndexedVarHelper
+
+	// varToIndexedVar is a map used when converting an variableOp into an
+	// IndexedVar. It is optional: if it is nil, a 1-to-1 mapping is assumed.
+	varToIndexedVar map[columnIndex]int
+}
+
+func constOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	return e.private.(tree.Datum)
 }
 
-func variableOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
-	return ivh.IndexedVar(e.private.(*columnProps).index)
+func variableOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
+	col := e.private.(*columnProps)
+	var idx int
+	if c.varToIndexedVar == nil {
+		idx = int(col.index)
+	} else {
+		var ok bool
+		idx, ok = c.varToIndexedVar[col.index]
+		if !ok {
+			panic(fmt.Sprintf("missing variable-IndexedVar mapping for %d", col.index))
+		}
+	}
+	return c.ivh.IndexedVar(idx)
 }
 
-func boolOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func boolOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	switch e.op {
 	case andOp, orOp:
-		n := scalarToTypedExpr(e.children[0], ivh)
+		n := scalarToTypedExpr(c, e.children[0])
 		for _, child := range e.children[1:] {
-			m := scalarToTypedExpr(child, ivh)
+			m := scalarToTypedExpr(c, child)
 			if e.op == andOp {
 				n = tree.NewTypedAndExpr(n, m)
 			} else {
@@ -108,60 +127,60 @@ func boolOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 		return n
 
 	case notOp:
-		return tree.NewTypedNotExpr(scalarToTypedExpr(e.children[0], ivh))
+		return tree.NewTypedNotExpr(scalarToTypedExpr(c, e.children[0]))
 	default:
 		panic(fmt.Sprintf("invalid op %s", e.op))
 	}
 }
 
-func tupleOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func tupleOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	if isTupleOfConstants(e) {
 		datums := make(tree.Datums, len(e.children))
 		for i, child := range e.children {
-			datums[i] = constOpToTypedExpr(child, ivh).(tree.Datum)
+			datums[i] = constOpToTypedExpr(c, child).(tree.Datum)
 		}
 		return tree.NewDTuple(datums...)
 	}
 	children := make([]tree.TypedExpr, len(e.children))
 	for i, child := range e.children {
-		children[i] = scalarToTypedExpr(child, ivh)
+		children[i] = scalarToTypedExpr(c, child)
 	}
 	return tree.NewTypedTuple(children)
 }
 
-func unaryOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func unaryOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	return tree.NewTypedUnaryExpr(
 		unaryOpReverseMap[e.op],
-		scalarToTypedExpr(e.children[0], ivh),
+		scalarToTypedExpr(c, e.children[0]),
 		e.scalarProps.typ,
 	)
 }
 
-func comparisonOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func comparisonOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	return tree.NewTypedComparisonExprWithSubOp(
 		comparisonOpReverseMap[e.op],
 		comparisonOpReverseMap[e.subOperator],
-		scalarToTypedExpr(e.children[0], ivh),
-		scalarToTypedExpr(e.children[1], ivh),
+		scalarToTypedExpr(c, e.children[0]),
+		scalarToTypedExpr(c, e.children[1]),
 	)
 }
 
-func binaryOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func binaryOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	return tree.NewTypedBinaryExpr(
 		binaryOpReverseMap[e.op],
-		scalarToTypedExpr(e.children[0], ivh),
-		scalarToTypedExpr(e.children[1], ivh),
+		scalarToTypedExpr(c, e.children[0]),
+		scalarToTypedExpr(c, e.children[1]),
 		e.scalarProps.typ,
 	)
 }
 
-func unsupportedScalarOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func unsupportedScalarOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	return e.private.(tree.TypedExpr)
 }
 
-func scalarToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func scalarToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	if fn := typedExprConvMap[e.op]; fn != nil {
-		return fn(e, ivh)
+		return fn(c, e)
 	}
 	panic(fmt.Sprintf("unsupported op %s", e.op))
 }
