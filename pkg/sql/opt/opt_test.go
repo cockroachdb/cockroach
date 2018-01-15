@@ -423,9 +423,9 @@ func TestOpt(t *testing.T) {
 						}
 						var results []tree.Datums
 						if cmd == "exec-explain" {
-							results, err = n.Explain()
+							results, err = n.root.Explain()
 						} else {
-							results, err = n.Run()
+							results, err = n.root.Run()
 						}
 						if err != nil {
 							d.fatalf(t, "%v", err)
