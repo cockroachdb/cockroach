@@ -182,14 +182,14 @@ func (d *diskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 		}
 		var err error
 		col := orderInfo.ColIdx
-		d.scratchEncRow[col], k, err = sqlbase.EncDatumFromBuffer(&d.types[col], d.encodings[i], k)
+		d.scratchEncRow[col], k, err = sqlbase.EncDatumFromBuffer(d.encodings[i], k)
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to decode row")
 		}
 	}
 	for _, i := range d.valueIdxs {
 		var err error
-		d.scratchEncRow[i], v, err = sqlbase.EncDatumFromBuffer(&d.types[i], sqlbase.DatumEncoding_VALUE, v)
+		d.scratchEncRow[i], v, err = sqlbase.EncDatumFromBuffer(sqlbase.DatumEncoding_VALUE, v)
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to decode row")
 		}

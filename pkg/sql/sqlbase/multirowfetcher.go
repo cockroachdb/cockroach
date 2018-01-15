@@ -744,10 +744,10 @@ func (mrf *MultiRowFetcher) processValueBytes(
 
 	var colIDDiff uint32
 	var lastColID ColumnID
-	var dataOffset int
+	var typeOffset, dataOffset int
 	var typ encoding.Type
 	for len(valueBytes) > 0 {
-		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
@@ -772,8 +772,7 @@ func (mrf *MultiRowFetcher) processValueBytes(
 		}
 
 		var encValue EncDatum
-		encValue, valueBytes, err =
-			EncDatumFromBuffer(&table.cols[idx].Type, DatumEncoding_VALUE, valueBytes)
+		encValue, valueBytes, err = EncDatumValueFromBufferWithOffsetsAndType(valueBytes, typeOffset, dataOffset, typ)
 		if err != nil {
 			return "", "", err
 		}

@@ -89,7 +89,7 @@ func EncDatumFromEncoded(enc DatumEncoding, encoded []byte) EncDatum {
 // possibly followed by other data. Similar to EncDatumFromEncoded,
 // except that this function figures out where the encoding stops and returns a
 // slice for the rest of the buffer.
-func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
+func EncDatumFromBuffer(enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
 	if len(buf) == 0 {
 		return EncDatum{}, nil, errors.New("empty encoded value")
 	}
@@ -111,6 +111,22 @@ func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatu
 	default:
 		panic(fmt.Sprintf("unknown encoding %s", enc))
 	}
+}
+
+// EncDatumValueFromBufferWithOffsetsAndType is just like calling
+// EncDatumFromBuffer with DatumEncoding_VALUE, except it expects that you pass
+// in the result of calling DecodeValueTag on the input buf. Use this if you've
+// already called DecodeValueTag on buf already, to avoid it getting called
+// more than necessary.
+func EncDatumValueFromBufferWithOffsetsAndType(
+	buf []byte, typeOffset int, dataOffset int, typ encoding.Type,
+) (EncDatum, []byte, error) {
+	encLen, err := encoding.PeekValueLengthWithOffsetsAndType(buf, dataOffset, typ)
+	if err != nil {
+		return EncDatum{}, nil, err
+	}
+	ed := EncDatumFromEncoded(DatumEncoding_VALUE, buf[typeOffset:encLen])
+	return ed, buf[encLen:], nil
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
