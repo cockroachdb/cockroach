@@ -1073,6 +1073,10 @@ func (mrf *MultiRowFetcher) finalizeRow() error {
 	table := mrf.rowReadyTable
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
+		if mrf.valueColsFound == mrf.neededValueCols {
+			// Found all cols - done!
+			return nil
+		}
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
 			if !table.cols[i].Nullable {
 				var indexColValues []string
@@ -1093,6 +1097,11 @@ func (mrf *MultiRowFetcher) finalizeRow() error {
 			table.row[i] = EncDatum{
 				Datum: tree.DNull,
 			}
+			// We've set valueColsFound to the number of present columns in the row
+			// already, in processValueBytes. Now, we're filling in columns that have
+			// no encoded values with NULL - so we increment valueColsFound to permit
+			// early exit from this loop once all needed columns are filled in.
+			mrf.valueColsFound++
 		}
 	}
 	return nil
