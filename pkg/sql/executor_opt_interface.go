@@ -64,6 +64,27 @@ func (eb *execFactory) ConstructScan(table optbase.Table) (opt.ExecNode, error) 
 	}, nil
 }
 
+// ConstructFilter is part of the opt.ExecFactory interface.
+func (eb *execFactory) ConstructFilter(
+	n opt.ExecNode, filter tree.TypedExpr,
+) (opt.ExecNode, error) {
+	en := n.(*execNode)
+	src := planDataSource{
+		info: &dataSourceInfo{sourceColumns: planColumns(en.plan)},
+		plan: en.plan,
+	}
+	f := &filterNode{
+		source: src,
+	}
+	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.sourceColumns))
+	f.filter = filter
+	f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+	return &execNode{
+		execFactory: *eb,
+		plan:        f,
+	}, nil
+}
+
 type execNode struct {
 	execFactory
 
