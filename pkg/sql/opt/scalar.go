@@ -176,7 +176,7 @@ func initVariableExpr(e *Expr, col *columnProps) {
 // isIndexedVar checks if e is a variableOp that represents an
 // indexed variable with the given index.
 func isIndexedVar(e *Expr, index int) bool {
-	return e.op == variableOp && e.private.(*columnProps).indexedVar == index
+	return e.op == variableOp && e.private.(*columnProps).index == index
 }
 
 func initTupleExpr(e *Expr, children []*Expr) {

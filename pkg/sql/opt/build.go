@@ -430,8 +430,8 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 
 	case *tree.IndexedVar:
 		colProps := &columnProps{
-			typ:        t.ResolvedType(),
-			indexedVar: t.Idx,
+			typ:   t.ResolvedType(),
+			index: columnIndex(t.Idx),
 		}
 		initVariableExpr(e, colProps)
 
@@ -567,7 +567,7 @@ func constOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
 }
 
 func variableOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
-	return ivh.IndexedVar(e.private.(*columnProps).indexedVar)
+	return ivh.IndexedVar(e.private.(*columnProps).index)
 }
 
 func boolOpToTypedExpr(e *Expr, ivh *tree.IndexedVarHelper) tree.TypedExpr {
