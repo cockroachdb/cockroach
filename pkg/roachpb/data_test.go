@@ -319,6 +319,39 @@ func TestSetGetChecked(t *testing.T) {
 	}
 }
 
+func TestTransactionBumpEpoch(t *testing.T) {
+	origNow := makeTS(10, 1)
+	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	// Advance the txn timestamp.
+	txn.Timestamp.Add(10, 2)
+	txn.BumpEpoch()
+	if a, e := txn.Epoch, uint32(1); a != e {
+		t.Errorf("expected epoch %d; got %d", e, a)
+	}
+	if txn.EpochZeroTimestamp == (hlc.Timestamp{}) {
+		t.Errorf("expected non-nil epoch zero timestamp")
+	} else if txn.EpochZeroTimestamp != origNow {
+		t.Errorf("expected zero timestamp == origNow; %s != %s", txn.EpochZeroTimestamp, origNow)
+	}
+}
+
+func TestTransactionTimeBounds(t *testing.T) {
+	verify := func(txn Transaction, expMin, expMax hlc.Timestamp) {
+		if min, max := txn.TimeBounds(); min != expMin || max != expMax {
+			t.Errorf("expected (%s-%s); got (%s-%s)", expMin, expMax, min, max)
+		}
+	}
+	origNow := makeTS(1, 1)
+	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	verify(txn, origNow, origNow.Next())
+	txn.Timestamp.Forward(makeTS(1, 2))
+	verify(txn, origNow, makeTS(1, 3))
+	txn.Restart(1, 1, makeTS(2, 1))
+	verify(txn, origNow, makeTS(2, 2))
+	txn.Timestamp.Forward(makeTS(3, 1))
+	verify(txn, origNow, makeTS(3, 2))
+}
+
 // TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as
 // advertised.
 func TestTransactionObservedTimestamp(t *testing.T) {
@@ -396,6 +429,7 @@ var nonZeroTxn = Transaction{
 	WriteTooOld:        true,
 	RetryOnPush:        true,
 	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	EpochZeroTimestamp: makeTS(1, 1),
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -419,6 +453,24 @@ func TestTransactionUpdate(t *testing.T) {
 
 	if err := zerofields.NoZeroField(txn3); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTransactionUpdateEpochZero(t *testing.T) {
+	txn := nonZeroTxn
+	var txn2 Transaction
+	txn2.Update(&txn)
+
+	if a, e := txn2.EpochZeroTimestamp, txn.EpochZeroTimestamp; a != e {
+		t.Errorf("expected epoch zero %s; got %s", e, a)
+	}
+
+	txn3 := nonZeroTxn
+	txn3.EpochZeroTimestamp = nonZeroTxn.EpochZeroTimestamp.Prev()
+	txn.Update(&txn3)
+
+	if a, e := txn.EpochZeroTimestamp, txn3.EpochZeroTimestamp; a != e {
+		t.Errorf("expected epoch zero %s; got %s", e, a)
 	}
 }
 
@@ -738,6 +790,46 @@ func TestSpanOverlaps(t *testing.T) {
 	for i, test := range testData {
 		if o := test.s1.Overlaps(test.s2); o != test.overlaps {
 			t.Errorf("%d: expected overlap %t; got %t between %s vs. %s", i, test.overlaps, o, test.s1, test.s2)
+		}
+	}
+}
+
+func TestSpanCombine(t *testing.T) {
+	sA := Span{Key: []byte("a")}
+	sD := Span{Key: []byte("d")}
+	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
+	sAtoD := Span{Key: []byte("a"), EndKey: []byte("d")}
+	sAtoDNext := Span{Key: []byte("a"), EndKey: Key([]byte("d")).Next()}
+	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+	sBtoDNext := Span{Key: []byte("b"), EndKey: Key([]byte("d")).Next()}
+	// Invalid spans.
+	sCtoA := Span{Key: []byte("c"), EndKey: []byte("a")}
+	sDtoB := Span{Key: []byte("d"), EndKey: []byte("b")}
+
+	testData := []struct {
+		s1, s2   Span
+		combined Span
+	}{
+		{sA, sA, sA},
+		{sA, sD, sAtoDNext},
+		{sA, sBtoD, sAtoD},
+		{sBtoD, sA, sAtoD},
+		{sD, sBtoD, sBtoDNext},
+		{sBtoD, sD, sBtoDNext},
+		{sA, sAtoC, sAtoC},
+		{sAtoC, sA, sAtoC},
+		{sAtoC, sAtoC, sAtoC},
+		{sAtoC, sBtoD, sAtoD},
+		{sBtoD, sAtoC, sAtoD},
+		// Invalid spans.
+		{sAtoC, sDtoB, Span{}},
+		{sDtoB, sAtoC, Span{}},
+		{sBtoD, sCtoA, Span{}},
+		{sCtoA, sBtoD, Span{}},
+	}
+	for i, test := range testData {
+		if combined := test.s1.Combine(test.s2); !combined.Equal(test.combined) {
+			t.Errorf("%d: expected combined %s; got %s between %s vs. %s", i, test.combined, combined, test.s1, test.s2)
 		}
 	}
 }
