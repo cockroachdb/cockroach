@@ -73,14 +73,11 @@ type columnProps struct {
 	// index is the index for this column, which is unique across all the
 	// columns in the expression.
 	index columnIndex
-
-	// indexedVar represents the column index derived from an IndexedVar.
-	indexedVar int
 }
 
 func (c columnProps) String() string {
 	if c.name == "" {
-		return fmt.Sprintf("@%d", c.indexedVar+1)
+		return fmt.Sprintf("@%d", c.index+1)
 	}
 	if c.table == "" {
 		return tree.NameString(string(c.name))
