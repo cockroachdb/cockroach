@@ -85,13 +85,24 @@ func makeInternalData(
 	return result
 }
 
+func makeDataSpan(
+	startNanos, sampleNanos int64, internalDatas ...roachpb.InternalTimeSeriesData,
+) dataSpan {
+	ds := dataSpan{
+		startNanos:  startNanos,
+		sampleNanos: sampleNanos,
+	}
+	for _, data := range internalDatas {
+		if err := ds.addData(data); err != nil {
+			panic(err)
+		}
+	}
+	return ds
+}
+
 func TestDataSpanIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ds := dataSpan{
-		startNanos:  30,
-		sampleNanos: 10,
-	}
-	testData := []roachpb.InternalTimeSeriesData{
+	ds := makeDataSpan(30, 10,
 		makeInternalData(0, 10, []dataSample{
 			{0, 0},
 			{50, 50},
@@ -101,12 +112,7 @@ func TestDataSpanIterator(t *testing.T) {
 			{90, 90},
 			{140, 140},
 		}),
-	}
-	for _, data := range testData {
-		if err := ds.addData(data); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
 
 	var iter dataSpanIterator
 	verifyIter := func(
@@ -206,11 +212,7 @@ func TestDataSpanIterator(t *testing.T) {
 	verifyIter(true, 6, 90, 90)
 
 	// Verify extraction functions on complex data: Avg, Sum, Min, Max
-	ds = dataSpan{
-		startNanos:  0,
-		sampleNanos: 1,
-	}
-	testData = []roachpb.InternalTimeSeriesData{
+	ds = makeDataSpan(0, 1,
 		makeInternalData(0, 1, []dataSample{
 			{0, 8},
 			{0, 2},
@@ -218,12 +220,8 @@ func TestDataSpanIterator(t *testing.T) {
 			{5, 13},
 			{5, 2},
 		}),
-	}
-	for _, data := range testData {
-		if err := ds.addData(data); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
+
 	iter = newDataSpanIterator(ds, 0, (roachpb.InternalTimeSeriesSample).Average)
 	verifyIter(true, 0, 0, 5)
 	iter.advance()
@@ -247,11 +245,7 @@ func TestDataSpanIterator(t *testing.T) {
 
 func TestDownsamplingIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ds := dataSpan{
-		startNanos:  30,
-		sampleNanos: 10,
-	}
-	testData := []roachpb.InternalTimeSeriesData{
+	ds := makeDataSpan(30, 10,
 		makeInternalData(0, 10, []dataSample{
 			{0, 0},
 			{10, 10},
@@ -267,12 +261,7 @@ func TestDownsamplingIterator(t *testing.T) {
 			{150, 150},
 			{170, 170},
 		}),
-	}
-	for _, data := range testData {
-		if err := ds.addData(data); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
 
 	var iter downsamplingIterator
 	verifyIter := func(
@@ -361,11 +350,7 @@ func TestDownsamplingIterator(t *testing.T) {
 
 	// Verify extraction and downsampling functions on complex data: Avg, Sum,
 	// Min, Max.
-	ds = dataSpan{
-		startNanos:  0,
-		sampleNanos: 1,
-	}
-	testData = []roachpb.InternalTimeSeriesData{
+	ds = makeDataSpan(0, 1,
 		makeInternalData(0, 1, []dataSample{
 			{0, 8},
 			{0, 2},
@@ -378,12 +363,8 @@ func TestDownsamplingIterator(t *testing.T) {
 			{15, 55},
 			{15, 45},
 		}),
-	}
-	for _, data := range testData {
-		if err := ds.addData(data); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
+
 	iter = newDownsamplingIterator(ds, 0, 10, (roachpb.InternalTimeSeriesSample).Average, downsampleAvg)
 	verifyIter(true, 0, 0, 8)
 	iter.advance()
@@ -408,14 +389,10 @@ func TestDownsamplingIterator(t *testing.T) {
 // TestInterpolation verifies the interpolated average values of a single interpolatingIterator.
 func TestInterpolation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ds := dataSpan{
-		startNanos:  30,
-		sampleNanos: 10,
-	}
 
 	// Split data across two InternalTimeSeriesData slabs. The dataSpan is
 	// responsible for making this cohesive.
-	testData := []roachpb.InternalTimeSeriesData{
+	ds := makeDataSpan(30, 10,
 		makeInternalData(0, 10, []dataSample{
 			{0, 1},
 			{50, 5},
@@ -429,12 +406,7 @@ func TestInterpolation(t *testing.T) {
 			{170, 50},
 			{170, 30},
 		}),
-	}
-	for _, data := range testData {
-		if err := ds.addData(data); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
 
 	testCases := []struct {
 		expected   []float64
@@ -498,7 +470,7 @@ func TestInterpolation(t *testing.T) {
 func TestAggregation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testSeries1 := []roachpb.InternalTimeSeriesData{
+	dataSpan1 := makeDataSpan(30, 10,
 		makeInternalData(0, 10, []dataSample{
 			{0, 1},
 			{50, 5},
@@ -512,8 +484,8 @@ func TestAggregation(t *testing.T) {
 			{170, 50},
 			{170, 30},
 		}),
-	}
-	testSeries2 := []roachpb.InternalTimeSeriesData{
+	)
+	dataSpan2 := makeDataSpan(30, 10,
 		makeInternalData(30, 10, []dataSample{
 			{30, 1},
 			{60, 10},
@@ -528,26 +500,7 @@ func TestAggregation(t *testing.T) {
 			{180, 100},
 			{180, 12},
 		}),
-	}
-
-	dataSpan1 := dataSpan{
-		startNanos:  30,
-		sampleNanos: 10,
-	}
-	dataSpan2 := dataSpan{
-		startNanos:  30,
-		sampleNanos: 10,
-	}
-	for _, data := range testSeries1 {
-		if err := dataSpan1.addData(data); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, data := range testSeries2 {
-		if err := dataSpan2.addData(data); err != nil {
-			t.Fatal(err)
-		}
-	}
+	)
 
 	testCases := []struct {
 		expected []float64
