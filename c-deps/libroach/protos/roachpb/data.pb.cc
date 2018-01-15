@@ -185,6 +185,8 @@ void TableStruct::InitDefaultsImpl() {
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   _Transaction_default_instance_._instance.get_mutable()->max_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  _Transaction_default_instance_._instance.get_mutable()->epoch_zero_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
   _Intent_default_instance_._instance.get_mutable()->span_ = const_cast< ::cockroach::roachpb::Span*>(
       ::cockroach::roachpb::Span::internal_default_instance());
   _Intent_default_instance_._instance.get_mutable()->txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
@@ -3719,6 +3721,7 @@ const int Transaction::kWritingFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
 const int Transaction::kRetryOnPushFieldNumber;
 const int Transaction::kIntentsFieldNumber;
+const int Transaction::kEpochZeroTimestampFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Transaction::Transaction()
@@ -3760,6 +3763,11 @@ Transaction::Transaction(const Transaction& from)
   } else {
     max_timestamp_ = NULL;
   }
+  if (from.has_epoch_zero_timestamp()) {
+    epoch_zero_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.epoch_zero_timestamp_);
+  } else {
+    epoch_zero_timestamp_ = NULL;
+  }
   ::memcpy(&status_, &from.status_,
     static_cast<size_t>(reinterpret_cast<char*>(&retry_on_push_) -
     reinterpret_cast<char*>(&status_)) + sizeof(retry_on_push_));
@@ -3785,6 +3793,7 @@ void Transaction::SharedDtor() {
   if (this != internal_default_instance()) delete last_heartbeat_;
   if (this != internal_default_instance()) delete orig_timestamp_;
   if (this != internal_default_instance()) delete max_timestamp_;
+  if (this != internal_default_instance()) delete epoch_zero_timestamp_;
 }
 
 void Transaction::SetCachedSize(int size) const {
@@ -3830,6 +3839,10 @@ void Transaction::Clear() {
     delete max_timestamp_;
   }
   max_timestamp_ = NULL;
+  if (GetArenaNoVirtual() == NULL && epoch_zero_timestamp_ != NULL) {
+    delete epoch_zero_timestamp_;
+  }
+  epoch_zero_timestamp_ = NULL;
   ::memset(&status_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&retry_on_push_) -
       reinterpret_cast<char*>(&status_)) + sizeof(retry_on_push_));
@@ -3991,6 +4004,17 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
+      case 14: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(114u /* 114 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_epoch_zero_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -4080,6 +4104,11 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(13, this->retry_on_push(), output);
   }
 
+  if (this->has_epoch_zero_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      14, *this->epoch_zero_timestamp_, output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Transaction)
@@ -4142,6 +4171,12 @@ size_t Transaction::ByteSizeLong() const {
         *this->max_timestamp_);
   }
 
+  if (this->has_epoch_zero_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        *this->epoch_zero_timestamp_);
+  }
+
   // .cockroach.roachpb.TransactionStatus status = 4;
   if (this->status() != 0) {
     total_size += 1 +
@@ -4200,6 +4235,9 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.has_max_timestamp()) {
     mutable_max_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.max_timestamp());
   }
+  if (from.has_epoch_zero_timestamp()) {
+    mutable_epoch_zero_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.epoch_zero_timestamp());
+  }
   if (from.status() != 0) {
     set_status(from.status());
   }
@@ -4238,6 +4276,7 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(last_heartbeat_, other->last_heartbeat_);
   swap(orig_timestamp_, other->orig_timestamp_);
   swap(max_timestamp_, other->max_timestamp_);
+  swap(epoch_zero_timestamp_, other->epoch_zero_timestamp_);
   swap(status_, other->status_);
   swap(writing_, other->writing_);
   swap(write_too_old_, other->write_too_old_);
@@ -4574,6 +4613,45 @@ const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
 Transaction::intents() const {
   // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.intents)
   return intents_;
+}
+
+bool Transaction::has_epoch_zero_timestamp() const {
+  return this != internal_default_instance() && epoch_zero_timestamp_ != NULL;
+}
+void Transaction::clear_epoch_zero_timestamp() {
+  if (GetArenaNoVirtual() == NULL && epoch_zero_timestamp_ != NULL) delete epoch_zero_timestamp_;
+  epoch_zero_timestamp_ = NULL;
+}
+const ::cockroach::util::hlc::Timestamp& Transaction::epoch_zero_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = epoch_zero_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.epoch_zero_timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+::cockroach::util::hlc::Timestamp* Transaction::mutable_epoch_zero_timestamp() {
+  
+  if (epoch_zero_timestamp_ == NULL) {
+    epoch_zero_timestamp_ = new ::cockroach::util::hlc::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.epoch_zero_timestamp)
+  return epoch_zero_timestamp_;
+}
+::cockroach::util::hlc::Timestamp* Transaction::release_epoch_zero_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.epoch_zero_timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = epoch_zero_timestamp_;
+  epoch_zero_timestamp_ = NULL;
+  return temp;
+}
+void Transaction::set_allocated_epoch_zero_timestamp(::cockroach::util::hlc::Timestamp* epoch_zero_timestamp) {
+  delete epoch_zero_timestamp_;
+  epoch_zero_timestamp_ = epoch_zero_timestamp;
+  if (epoch_zero_timestamp) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.epoch_zero_timestamp)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
