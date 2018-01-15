@@ -1073,6 +1073,10 @@ func (mrf *MultiRowFetcher) finalizeRow() error {
 	table := mrf.rowReadyTable
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
+		if mrf.valueColsFound == mrf.neededValueCols {
+			// Found all cols - done!
+			return nil
+		}
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
 			if !table.cols[i].Nullable {
 				var indexColValues []string
@@ -1093,6 +1097,7 @@ func (mrf *MultiRowFetcher) finalizeRow() error {
 			table.row[i] = EncDatum{
 				Datum: tree.DNull,
 			}
+			mrf.valueColsFound++
 		}
 	}
 	return nil
