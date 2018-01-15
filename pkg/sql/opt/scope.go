@@ -91,6 +91,8 @@ func (*scope) VisitPost(expr tree.Expr) tree.Expr {
 	return expr
 }
 
+var _ tree.Expr = &columnProps{}
+
 // Format is part of the tree.Expr interface.
 func (c *columnProps) Format(ctx *tree.FmtCtx) {
 	ctx.Printf("@%d", c.index+1)

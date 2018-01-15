@@ -480,7 +480,8 @@ func TestOpt(t *testing.T) {
 						normalizeExpr(e)
 
 					case "semtree-expr":
-						expr := scalarToTypedExpr(e, &iVarHelper)
+						c := typedExprConvCtx{ivh: &iVarHelper}
+						expr := scalarToTypedExpr(&c, e)
 						return fmt.Sprintf("%s%s\n", e.String(), expr)
 
 					case "index-constraints":
