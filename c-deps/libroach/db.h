@@ -19,8 +19,10 @@
 #include <rocksdb/write_batch.h>
 #include <rocksdb/write_batch_base.h>
 
+struct EnvContext;
+
 // DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
-rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts);
+rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts, EnvContext* env_ctx);
 
 // ToDBSlice returns a DBSlice from a rocksdb::Slice
 DBSlice ToDBSlice(const rocksdb::Slice& s);
