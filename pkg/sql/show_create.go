@@ -207,7 +207,7 @@ func (p *planner) showCreateTable(
 		idx := &allIdx[i]
 		if fk := &idx.ForeignKey; fk.IsSet() {
 			f.WriteString(",\n\tCONSTRAINT ")
-			f.WriteString(tree.NameStringP(&fk.Name))
+			f.FormatNameP(&fk.Name)
 			f.WriteString(" ")
 			if err := p.printForeignKeyConstraint(ctx, f.Buffer, dbPrefix, idx); err != nil {
 				return "", err
