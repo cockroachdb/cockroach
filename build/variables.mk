@@ -56,7 +56,6 @@ define VALID_VARS
   GOGO_PROTOBUF_PATH
   GOPATH
   GORACE
-  GOVERS
   GO_INSTALL
   GO_PROTOS
   GO_PROTOS_TARGET
@@ -69,6 +68,7 @@ define VALID_VARS
   GW_SOURCES
   GW_TS_PROTOS
   HOST_TRIPLE
+  IGNORE_GOVERS
   INSTALL
   ISDARWIN
   JEMALLOC_DIR
@@ -146,6 +146,7 @@ define VALID_VARS
   YARN_INSTALLED_TARGET
   bindir
   cyan
+  go-version-check
   prefix
   space
   term-reset
