@@ -642,6 +642,9 @@ func (s *Session) extendedEvalCtx(
 	if txn != nil {
 		clusterTs = txn.OrigTimestamp()
 	}
+
+	log.Warningf(context.TODO(), "*!*!*!*!*! extendedEvalCtx TXN %+v", s.TxnState.implicitTxn)
+
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:              txn,
@@ -649,6 +652,7 @@ func (s *Session) extendedEvalCtx(
 			ApplicationName:  s.dataMutator.ApplicationName(),
 			TxnState:         getTransactionState(&s.TxnState),
 			TxnReadOnly:      s.TxnState.readOnly,
+			TxnImplicit:      s.TxnState.implicitTxn,
 			Settings:         st,
 			CtxProvider:      s,
 			Mon:              &s.TxnState.mon,

@@ -2547,3 +2547,57 @@ func TestFileIOLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBackupRestoreNotInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	// Our override above might be lost on gossip update unless we write it.
+	sqlDB.Exec(t, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
+	testutils.SucceedsSoon(t, func() error {
+		if res := sqlDB.QueryStr(t, "SHOW CLUSTER SETTING experimental.importcsv.enabled")[0][0]; res != "true" {
+			return errors.Errorf("%q != true", res)
+		}
+		return nil
+	})
+
+	tx, err := sqlDB.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`BACKUP DATABASE data TO 'blah'`); !testutils.IsError(err, "cannot be used inside a transaction") {
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, localFoo)
+	sqlDB.Exec(t, `DROP DATABASE data`)
+	sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, localFoo)
+
+	tx, err = sqlDB.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`RESTORE DATABASE data FROM 'blah'`); !testutils.IsError(err, "cannot be used inside a transaction") {
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err = sqlDB.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`IMPORT TABLE t (id INT PRIMARY KEY) CSV DATA ('blah')`); !testutils.IsError(err, "cannot be used inside a transaction") {
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}

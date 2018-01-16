@@ -222,7 +222,7 @@ func makeInternalPlanner(
 
 	s := &Session{
 		data:     data,
-		TxnState: txnState{Ctx: ctx},
+		TxnState: txnState{Ctx: ctx, implicitTxn: true},
 		context:  ctx,
 		tables:   TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
 	}
