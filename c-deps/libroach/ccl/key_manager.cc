@@ -154,6 +154,8 @@ rocksdb::Status GenerateDataKey(rocksdb::Env* env, enginepbccl::DataKeysRegistry
 
 };  // namespace KeyManagerUtils
 
+FileKeyManager::~FileKeyManager() {}
+
 rocksdb::Status FileKeyManager::LoadKeys() {
   std::unique_ptr<enginepbccl::SecretKey> active(new enginepbccl::SecretKey());
   rocksdb::Status status = KeyManagerUtils::KeyFromFile(env_, active_key_path_, active.get());
@@ -171,6 +173,8 @@ rocksdb::Status FileKeyManager::LoadKeys() {
   old_key_.swap(old);
   return rocksdb::Status::OK();
 }
+
+DataKeyManager::~DataKeyManager() {}
 
 DataKeyManager::DataKeyManager(rocksdb::Env* env, const std::string& db_dir,
                                int64_t rotation_period)
