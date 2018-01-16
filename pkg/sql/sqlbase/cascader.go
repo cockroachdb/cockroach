@@ -29,29 +29,158 @@ import (
 
 // cascader is used to handle all referential integrity cascading actions.
 type cascader struct {
-	txn                *client.Txn
-	tablesByID         TableLookupsByID                   // TablesDescriptors by Table ID
-	indexRowFetchers   map[ID]map[IndexID]MultiRowFetcher // RowFetchers by Table ID and Index ID
-	rowDeleters        map[ID]RowDeleter                  // RowDeleters by Table ID
-	deleterRowFetchers map[ID]MultiRowFetcher             // RowFetchers for rowDeleters by Table ID
-	rowsChanged        map[ID]*RowContainer               // Rows that have been altered by Table ID
-	alloc              *DatumAlloc
+	txn        *client.Txn
+	tablesByID TableLookupsByID // TablesDescriptors by Table ID
+	alloc      *DatumAlloc
+	evalCtx    *tree.EvalContext
+
+	indexPKRowFetchers map[ID]map[IndexID]MultiRowFetcher // PK RowFetchers by Table ID and Index ID
+
+	// Row Deleters
+	rowDeleters        map[ID]RowDeleter      // RowDeleters by Table ID
+	deleterRowFetchers map[ID]MultiRowFetcher // RowFetchers for rowDeleters by Table ID
+	deletedRows        map[ID]*RowContainer   // Rows that have been deleted by Table ID
+
+	// Row Updaters
+	rowUpdaters        map[ID]RowUpdater      // RowUpdaters by Table ID
+	updaterRowFetchers map[ID]MultiRowFetcher // RowFetchers for rowUpdaters by Table ID
+	originalRows       map[ID]*RowContainer   // Original values for rows that have been updated by Table ID
+	updatedRows        map[ID]*RowContainer   // New values for rows that have been updated by Table ID
 }
 
-func makeCascader(txn *client.Txn, tablesByID TableLookupsByID, alloc *DatumAlloc) *cascader {
+// makeDeleteCascader only creates a cascader if there is a chance that there is
+// a possible cascade. It returns a cascader if one is required and nil if not.
+func makeDeleteCascader(
+	txn *client.Txn,
+	table *TableDescriptor,
+	tablesByID TableLookupsByID,
+	evalCtx *tree.EvalContext,
+	alloc *DatumAlloc,
+) (*cascader, error) {
+	var required bool
+Outer:
+	for _, referencedIndex := range table.AllNonDropIndexes() {
+		for _, ref := range referencedIndex.ReferencedBy {
+			referencingTable, ok := tablesByID[ref.Table]
+			if !ok {
+				return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+					"programming error: could not find table:%d in table descriptor map", ref.Table,
+				)
+			}
+			if referencingTable.IsAdding {
+				// We can assume that a table being added but not yet public is empty,
+				// and thus does not need to be checked for cascading.
+				continue
+			}
+			referencingIndex, err := referencingTable.Table.FindIndexByID(ref.Index)
+			if err != nil {
+				return nil, err
+			}
+			if referencingIndex.ForeignKey.OnDelete == ForeignKeyReference_CASCADE ||
+				referencingIndex.ForeignKey.OnDelete == ForeignKeyReference_SET_DEFAULT ||
+				referencingIndex.ForeignKey.OnDelete == ForeignKeyReference_SET_NULL {
+				required = true
+				break Outer
+			}
+		}
+	}
+	if !required {
+		return nil, nil
+	}
 	return &cascader{
 		txn:                txn,
 		tablesByID:         tablesByID,
-		indexRowFetchers:   make(map[ID]map[IndexID]MultiRowFetcher),
+		indexPKRowFetchers: make(map[ID]map[IndexID]MultiRowFetcher),
 		rowDeleters:        make(map[ID]RowDeleter),
 		deleterRowFetchers: make(map[ID]MultiRowFetcher),
-		rowsChanged:        make(map[ID]*RowContainer),
+		deletedRows:        make(map[ID]*RowContainer),
+		rowUpdaters:        make(map[ID]RowUpdater),
+		updaterRowFetchers: make(map[ID]MultiRowFetcher),
+		originalRows:       make(map[ID]*RowContainer),
+		updatedRows:        make(map[ID]*RowContainer),
+		evalCtx:            evalCtx,
 		alloc:              alloc,
+	}, nil
+}
+
+// makeUpdateCascader only creates a cascader if there is a chance that there is
+// a possible cascade. It returns a cascader if one is required and nil if not.
+func makeUpdateCascader(
+	txn *client.Txn,
+	table *TableDescriptor,
+	tablesByID TableLookupsByID,
+	updateCols []ColumnDescriptor,
+	evalCtx *tree.EvalContext,
+	alloc *DatumAlloc,
+) (*cascader, error) {
+	var required bool
+	colIDs := make(map[ColumnID]struct{})
+	for _, col := range updateCols {
+		colIDs[col.ID] = struct{}{}
 	}
+Outer:
+	for _, referencedIndex := range table.AllNonDropIndexes() {
+		var match bool
+		for _, colID := range referencedIndex.ColumnIDs {
+			if _, exists := colIDs[colID]; exists {
+				match = true
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+		for _, ref := range referencedIndex.ReferencedBy {
+			referencingTable, ok := tablesByID[ref.Table]
+			if !ok {
+				return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+					"programming error: could not find table:%d in table descriptor map", ref.Table,
+				)
+			}
+			if referencingTable.IsAdding {
+				// We can assume that a table being added but not yet public is empty,
+				// and thus does not need to be checked for cascading.
+				continue
+			}
+			referencingIndex, err := referencingTable.Table.FindIndexByID(ref.Index)
+			if err != nil {
+				return nil, err
+			}
+			if referencingIndex.ForeignKey.OnUpdate == ForeignKeyReference_CASCADE ||
+				referencingIndex.ForeignKey.OnUpdate == ForeignKeyReference_SET_DEFAULT ||
+				referencingIndex.ForeignKey.OnUpdate == ForeignKeyReference_SET_NULL {
+				required = true
+				break Outer
+			}
+		}
+	}
+	if !required {
+		return nil, nil
+	}
+	return &cascader{
+		txn:                txn,
+		tablesByID:         tablesByID,
+		indexPKRowFetchers: make(map[ID]map[IndexID]MultiRowFetcher),
+		rowDeleters:        make(map[ID]RowDeleter),
+		deleterRowFetchers: make(map[ID]MultiRowFetcher),
+		deletedRows:        make(map[ID]*RowContainer),
+		rowUpdaters:        make(map[ID]RowUpdater),
+		updaterRowFetchers: make(map[ID]MultiRowFetcher),
+		originalRows:       make(map[ID]*RowContainer),
+		updatedRows:        make(map[ID]*RowContainer),
+		evalCtx:            evalCtx,
+		alloc:              alloc,
+	}, nil
 }
 
 func (c *cascader) close(ctx context.Context) {
-	for _, container := range c.rowsChanged {
+	for _, container := range c.deletedRows {
+		container.Close(ctx)
+	}
+	for _, container := range c.originalRows {
+		container.Close(ctx)
+	}
+	for _, container := range c.updatedRows {
 		container.Close(ctx)
 	}
 }
@@ -78,14 +207,16 @@ func spanForIndexValues(
 }
 
 // batchRequestForIndexValues creates a batch request against an index to
-// extract the primary keys needed for cascading.
+// extract the primary keys needed for cascading. It also returns the
+// colIDtoRowIndex that will map the columns that have been retrieved as part of
+// the request to the referencing table.
 func batchRequestForIndexValues(
 	ctx context.Context,
 	referencedIndex *IndexDescriptor,
 	referencingTable *TableDescriptor,
 	referencingIndex *IndexDescriptor,
 	values cascadeQueueElement,
-) (roachpb.BatchRequest, error) {
+) (roachpb.BatchRequest, map[ColumnID]int, error) {
 
 	//TODO(bram): consider caching some of these values
 	keyPrefix := MakeIndexKeyPrefix(referencingTable, referencingIndex.ID)
@@ -93,12 +224,13 @@ func batchRequestForIndexValues(
 	if len(referencedIndex.ColumnIDs) < prefixLen {
 		prefixLen = len(referencedIndex.ColumnIDs)
 	}
-	indexColIDs := make(map[ColumnID]int, len(referencedIndex.ColumnIDs))
+
+	colIDtoRowIndex := make(map[ColumnID]int, len(referencedIndex.ColumnIDs))
 	for i, referencedColID := range referencedIndex.ColumnIDs[:prefixLen] {
 		if found, ok := values.colIDtoRowIndex[referencedColID]; ok {
-			indexColIDs[referencingIndex.ColumnIDs[i]] = found
+			colIDtoRowIndex[referencingIndex.ColumnIDs[i]] = found
 		} else {
-			return roachpb.BatchRequest{}, pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+			return roachpb.BatchRequest{}, nil, pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 				"missing value for column %q in multi-part foreign key", referencedIndex.ColumnNames[i],
 			)
 		}
@@ -107,14 +239,19 @@ func batchRequestForIndexValues(
 	var req roachpb.BatchRequest
 	for i := values.startIndex; i < values.endIndex; i++ {
 		span, err := spanForIndexValues(
-			referencingTable, referencingIndex, prefixLen, indexColIDs, values.values.At(i), keyPrefix,
+			referencingTable,
+			referencingIndex,
+			prefixLen,
+			colIDtoRowIndex,
+			values.originalValues.At(i),
+			keyPrefix,
 		)
 		if err != nil {
-			return roachpb.BatchRequest{}, err
+			return roachpb.BatchRequest{}, nil, err
 		}
 		req.Add(&roachpb.ScanRequest{Span: span})
 	}
-	return req, nil
+	return req, colIDtoRowIndex, nil
 }
 
 // spanForPKValues creates a span against the primary index of a table and is
@@ -148,21 +285,21 @@ func batchRequestForPKValues(
 	return req, nil
 }
 
-// addIndexRowFetch will create or load a cached row fetcher on an index to
+// addIndexPKRowFetch will create or load a cached row fetcher on an index to
 // fetch the primary keys of the rows that will be affected by a cascading
 // action.
-func (c *cascader) addIndexRowFetcher(
+func (c *cascader) addIndexPKRowFetcher(
 	table *TableDescriptor, index *IndexDescriptor,
 ) (MultiRowFetcher, error) {
 	// Is there a cached row fetcher?
-	rowFetchersForTable, exists := c.indexRowFetchers[table.ID]
+	rowFetchersForTable, exists := c.indexPKRowFetchers[table.ID]
 	if exists {
 		rowFetcher, exists := rowFetchersForTable[index.ID]
 		if exists {
 			return rowFetcher, nil
 		}
 	} else {
-		c.indexRowFetchers[table.ID] = make(map[IndexID]MultiRowFetcher)
+		c.indexPKRowFetchers[table.ID] = make(map[IndexID]MultiRowFetcher)
 	}
 
 	// Create a new row fetcher. Only the primary key columns are required.
@@ -195,7 +332,7 @@ func (c *cascader) addIndexRowFetcher(
 		return MultiRowFetcher{}, err
 	}
 	// Cache the row fetcher.
-	c.indexRowFetchers[table.ID][index.ID] = rowFetcher
+	c.indexPKRowFetchers[table.ID][index.ID] = rowFetcher
 	return rowFetcher, nil
 }
 
@@ -203,17 +340,24 @@ func (c *cascader) addIndexRowFetcher(
 func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, MultiRowFetcher, error) {
 	// Is there a cached row fetcher and deleter?
 	if rowDeleter, exists := c.rowDeleters[table.ID]; exists {
-		return rowDeleter, c.deleterRowFetchers[table.ID], nil
+		rowFetcher, existsFetcher := c.deleterRowFetchers[table.ID]
+		if !existsFetcher {
+			return RowDeleter{}, MultiRowFetcher{}, pgerror.NewErrorf(pgerror.CodeInternalError,
+				"programming error: no corresponding row fetcher for the row deleter for table: (%d)%s",
+				table.ID, table.Name,
+			)
+		}
+		return rowDeleter, rowFetcher, nil
 	}
 
 	// Create the row deleter. The row deleter is needed prior to the row fetcher
 	// as it will dictate what columns are required in the row fetcher.
-	rowDeleter, err := MakeRowDeleter(
+	rowDeleter, err := makeRowDeleterWithoutCascader(
 		c.txn,
 		table,
 		c.tablesByID,
-		nil,  /* requestedCol */
-		true, /* checkFKs */
+		nil, /* requestedCol */
+		CheckFKs,
 		c.alloc,
 	)
 	if err != nil {
@@ -249,6 +393,65 @@ func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, MultiRowFe
 	return rowDeleter, rowFetcher, nil
 }
 
+// addRowUpdater creates the row updater and primary index row fetcher.
+func (c *cascader) addRowUpdater(table *TableDescriptor) (RowUpdater, MultiRowFetcher, error) {
+	// Is there a cached updater?
+	rowUpdater, existsUpdater := c.rowUpdaters[table.ID]
+	if existsUpdater {
+		rowFetcher, existsFetcher := c.updaterRowFetchers[table.ID]
+		if !existsFetcher {
+			return RowUpdater{}, MultiRowFetcher{}, pgerror.NewErrorf(pgerror.CodeInternalError,
+				"programming error: no corresponding row fetcher for the row updater for table: (%d)%s",
+				table.ID, table.Name,
+			)
+		}
+		return rowUpdater, rowFetcher, nil
+	}
+
+	// Create the row updater. The row updater requires all the columns in the
+	// table.
+	rowUpdater, err := makeRowUpdaterWithoutCascader(
+		c.txn,
+		table,
+		c.tablesByID,
+		table.Columns,
+		nil, /* requestedCol */
+		RowUpdaterDefault,
+		c.alloc,
+	)
+	if err != nil {
+		return RowUpdater{}, MultiRowFetcher{}, err
+	}
+
+	// Create the row fetcher that will retrive the rows and columns needed for
+	// deletion.
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, len(rowUpdater.FetchCols)-1)
+	tableArgs := MultiRowFetcherTableArgs{
+		Desc:             table,
+		Index:            &table.PrimaryIndex,
+		ColIdxMap:        rowUpdater.FetchColIDtoRowIndex,
+		IsSecondaryIndex: false,
+		Cols:             rowUpdater.FetchCols,
+		ValNeededForCol:  valNeededForCol,
+	}
+	var rowFetcher MultiRowFetcher
+	if err := rowFetcher.Init(
+		false, /* reverse */
+		false, /* returnRangeInfo */
+		false, /* isCheck */
+		c.alloc,
+		tableArgs,
+	); err != nil {
+		return RowUpdater{}, MultiRowFetcher{}, err
+	}
+
+	// Cache the updater and the fetcher.
+	c.rowUpdaters[table.ID] = rowUpdater
+	c.updaterRowFetchers[table.ID] = rowFetcher
+	return rowUpdater, rowFetcher, nil
+}
+
 // deleteRows performs row deletions on a single table for all rows that match
 // the values. Returns the values of the rows that were deleted. This deletion
 // happens in a single batch.
@@ -265,12 +468,11 @@ func (c *cascader) deleteRows(
 	// TODO(bram): This initial index lookup can be skipped if the index is the
 	// primary index.
 	if traceKV {
-		log.VEventf(ctx, 2,
-			"cascading delete from refIndex:%s, into table:%s, using index:%s for values:%+v",
-			referencedIndex.Name, referencingTable.Name, referencingIndex.Name, values.values.chunks,
+		log.VEventf(ctx, 2, "cascading delete into table: %d using index: %d",
+			referencingTable.ID, referencingIndex.ID,
 		)
 	}
-	req, err := batchRequestForIndexValues(
+	req, _, err := batchRequestForIndexValues(
 		ctx, referencedIndex, referencingTable, referencingIndex, values,
 	)
 	if err != nil {
@@ -281,30 +483,32 @@ func (c *cascader) deleteRows(
 		return nil, nil, 0, roachErr.GoError()
 	}
 
-	// Create or retrieve the index row fetcher.
-	indexRowFetcher, err := c.addIndexRowFetcher(referencingTable, referencingIndex)
+	// Create or retrieve the index pk row fetcher.
+	indexPKRowFetcher, err := c.addIndexPKRowFetcher(referencingTable, referencingIndex)
 	if err != nil {
 		return nil, nil, 0, err
 	}
 
 	// Fetch all the primary keys that need to be deleted.
 	// TODO(Bram): consider chunking this into n, primary keys, perhaps 100.
-	pkColTypeInfo, err := makeColTypeInfo(referencingTable, indexRowFetcher.tables[0].colIdxMap)
+	pkColTypeInfo, err := makeColTypeInfo(referencingTable, indexPKRowFetcher.tables[0].colIdxMap)
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	primaryKeysToDelete := NewRowContainer(mon.MakeBoundAccount(), pkColTypeInfo, values.values.Len())
+	primaryKeysToDelete := NewRowContainer(
+		mon.MakeBoundAccount(), pkColTypeInfo, values.originalValues.Len(),
+	)
 	defer primaryKeysToDelete.Close(ctx)
 
 	for _, resp := range br.Responses {
 		fetcher := spanKVFetcher{
 			kvs: resp.GetInner().(*roachpb.ScanResponse).Rows,
 		}
-		if err := indexRowFetcher.StartScanFrom(ctx, &fetcher); err != nil {
+		if err := indexPKRowFetcher.StartScanFrom(ctx, &fetcher); err != nil {
 			return nil, nil, 0, err
 		}
-		for !indexRowFetcher.kvEnd {
-			primaryKey, _, _, err := indexRowFetcher.NextRowDecoded(ctx)
+		for !indexPKRowFetcher.kvEnd {
+			primaryKey, _, _, err := indexPKRowFetcher.NextRowDecoded(ctx)
 			if err != nil {
 				return nil, nil, 0, err
 			}
@@ -340,21 +544,21 @@ func (c *cascader) deleteRows(
 	}
 
 	// Add the values to be checked for constraint violations after all cascading
-	// changes have completed. Here either fetch or create the rowContainer for
-	// the table. This rowContainer for the table is also used by the queue to
-	// avoid having to double the memory used.
-	if _, exists := c.rowsChanged[referencingTable.ID]; !exists {
+	// changes have completed. Here either fetch or create the deleted rows
+	// rowContainer for the table. This rowContainer for the table is also used by
+	// the queue to avoid having to double the memory used.
+	if _, exists := c.deletedRows[referencingTable.ID]; !exists {
 		// Fetch the rows for deletion and store them in a container.
 		colTypeInfo, err := makeColTypeInfo(referencingTable, rowDeleter.FetchColIDtoRowIndex)
 		if err != nil {
 			return nil, nil, 0, err
 		}
-		c.rowsChanged[referencingTable.ID] = NewRowContainer(
+		c.deletedRows[referencingTable.ID] = NewRowContainer(
 			mon.MakeBoundAccount(), colTypeInfo, primaryKeysToDelete.Len(),
 		)
 	}
-	rowsChanged := c.rowsChanged[referencingTable.ID]
-	deletedRowsStartIndex := rowsChanged.Len()
+	deletedRows := c.deletedRows[referencingTable.ID]
+	deletedRowsStartIndex := deletedRows.Len()
 
 	// Delete all the rows in a new batch.
 	deleteBatch := c.txn.NewBatch()
@@ -373,12 +577,14 @@ func (c *cascader) deleteRows(
 			}
 
 			// Add the row to be checked for consistency changes.
-			if _, err := rowsChanged.AddRow(ctx, rowToDelete); err != nil {
+			if _, err := deletedRows.AddRow(ctx, rowToDelete); err != nil {
 				return nil, nil, 0, err
 			}
 
 			// Delete the row.
-			if err := rowDeleter.deleteRowNoCascade(ctx, deleteBatch, rowToDelete, traceKV); err != nil {
+			if err := rowDeleter.DeleteRow(
+				ctx, deleteBatch, rowToDelete, nil /*mon.BytesMonitor */, SkipFKs, traceKV,
+			); err != nil {
 				return nil, nil, 0, err
 			}
 		}
@@ -389,13 +595,209 @@ func (c *cascader) deleteRows(
 		return nil, nil, 0, err
 	}
 
-	return rowsChanged, rowDeleter.FetchColIDtoRowIndex, deletedRowsStartIndex, nil
+	return deletedRows, rowDeleter.FetchColIDtoRowIndex, deletedRowsStartIndex, nil
+}
+
+// updateRows performs row updates on a single table for all rows that match
+// the values. Returns both the values of the rows that were updated and their
+// new values. This update happens in a single batch.
+func (c *cascader) updateRows(
+	ctx context.Context,
+	referencedIndex *IndexDescriptor,
+	referencingTable *TableDescriptor,
+	referencingIndex *IndexDescriptor,
+	values cascadeQueueElement,
+	mon *mon.BytesMonitor,
+	traceKV bool,
+) (*RowContainer, *RowContainer, map[ColumnID]int, int, error) {
+	// Create the span to search for index values.
+	if traceKV {
+		log.VEventf(ctx, 2, "cascading update into table: %d using index: %d",
+			referencingTable.ID, referencingIndex.ID,
+		)
+	}
+
+	// Create or retrieve the row updater and row fetcher.
+	rowUpdater, rowFetcher, err := c.addRowUpdater(referencingTable)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	// Add the values to be checked for constraint violations after all cascading
+	// changes have completed. Here either fetch or create the rowContainers for
+	// both the original and updated values for the table and index combo. These
+	// rowContainers for are also used by the queue to avoid having to double the
+	// memory used.
+	if _, exists := c.originalRows[referencingTable.ID]; !exists {
+		colTypeInfo, err := makeColTypeInfo(referencingTable, rowUpdater.FetchColIDtoRowIndex)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		c.originalRows[referencingTable.ID] = NewRowContainer(
+			mon.MakeBoundAccount(), colTypeInfo, values.originalValues.Len(),
+		)
+		c.updatedRows[referencingTable.ID] = NewRowContainer(
+			mon.MakeBoundAccount(), colTypeInfo, values.originalValues.Len(),
+		)
+	}
+	originalRows := c.originalRows[referencingTable.ID]
+	updatedRows := c.updatedRows[referencingTable.ID]
+	startIndex := originalRows.Len()
+
+	// Update all the rows in a new batch.
+	batch := c.txn.NewBatch()
+
+	// Sadly, this operation cannot be batched the same way as deletes, as the
+	// values being updated will change based on both the original and updated
+	// values.
+	for i := values.startIndex; i < values.endIndex; i++ {
+		// Extract a single value to update at a time.
+		req, valueColIDtoRowIndex, err := batchRequestForIndexValues(
+			ctx, referencedIndex, referencingTable, referencingIndex, cascadeQueueElement{
+				startIndex:      i,
+				endIndex:        i + 1,
+				originalValues:  values.originalValues,
+				updatedValues:   values.updatedValues,
+				table:           values.table,
+				colIDtoRowIndex: values.colIDtoRowIndex,
+			},
+		)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		br, roachErr := c.txn.Send(ctx, req)
+		if roachErr != nil {
+			return nil, nil, nil, 0, roachErr.GoError()
+		}
+
+		// Create or retrieve the index pk row fetcher.
+		indexPKRowFetcher, err := c.addIndexPKRowFetcher(referencingTable, referencingIndex)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+
+		// Fetch all the primary keys for rows that will be updated.
+		// TODO(Bram): consider chunking this into n, primary keys, perhaps 100.
+		pkColTypeInfo, err := makeColTypeInfo(referencingTable, indexPKRowFetcher.tables[0].colIdxMap)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		primaryKeysToUpdate := NewRowContainer(
+			mon.MakeBoundAccount(), pkColTypeInfo, values.originalValues.Len(),
+		)
+		defer primaryKeysToUpdate.Close(ctx)
+
+		for _, resp := range br.Responses {
+			fetcher := spanKVFetcher{
+				kvs: resp.GetInner().(*roachpb.ScanResponse).Rows,
+			}
+			if err := indexPKRowFetcher.StartScanFrom(ctx, &fetcher); err != nil {
+				return nil, nil, nil, 0, err
+			}
+			for !indexPKRowFetcher.kvEnd {
+				primaryKey, _, _, err := indexPKRowFetcher.NextRowDecoded(ctx)
+				if err != nil {
+					return nil, nil, nil, 0, err
+				}
+				if _, err := primaryKeysToUpdate.AddRow(ctx, primaryKey); err != nil {
+					return nil, nil, nil, 0, err
+				}
+			}
+		}
+
+		// Early exit if no rows need to be updated.
+		if primaryKeysToUpdate.Len() == 0 {
+			continue
+		}
+
+		// Create a batch request to get all the spans of the primary keys that need
+		// to be updated.
+		pkLookupReq, err := batchRequestForPKValues(
+			referencingTable, rowUpdater.FetchColIDtoRowIndex, primaryKeysToUpdate,
+		)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		primaryKeysToUpdate.Clear(ctx)
+		pkResp, roachErr := c.txn.Send(ctx, pkLookupReq)
+		if roachErr != nil {
+			return nil, nil, nil, 0, roachErr.GoError()
+		}
+
+		for _, resp := range pkResp.Responses {
+			fetcher := spanKVFetcher{
+				kvs: resp.GetInner().(*roachpb.ScanResponse).Rows,
+			}
+			if err := rowFetcher.StartScanFrom(ctx, &fetcher); err != nil {
+				return nil, nil, nil, 0, err
+			}
+			for !rowFetcher.kvEnd {
+				rowToUpdate, _, _, err := rowFetcher.NextRowDecoded(ctx)
+				if err != nil {
+					return nil, nil, nil, 0, err
+				}
+
+				// Create the updateRow based on the passed in updated values and from
+				// the retrieved row as a fallback.
+				updateRow := make(tree.Datums, len(rowUpdater.updateColIDtoRowIndex))
+				currentUpdatedValue := values.updatedValues.At(i)
+				for colID, rowIndex := range rowUpdater.updateColIDtoRowIndex {
+					if valueRowIndex, exists := valueColIDtoRowIndex[colID]; exists {
+						updateRow[rowIndex] = currentUpdatedValue[valueRowIndex]
+						continue
+					}
+					if fetchRowIndex, exists := rowUpdater.FetchColIDtoRowIndex[colID]; exists {
+						updateRow[rowIndex] = rowToUpdate[fetchRowIndex]
+						continue
+					}
+					return nil, nil, nil, 0, pgerror.NewErrorf(pgerror.CodeInternalError,
+						"could find find colID %d in either updated columns or the fetched row",
+						colID,
+					)
+				}
+
+				// Is there something to update?  If not, skip it.
+				if !rowToUpdate.IsDistinctFrom(c.evalCtx, updateRow) {
+					continue
+				}
+
+				updatedRow, err := rowUpdater.UpdateRow(
+					ctx,
+					batch,
+					rowToUpdate,
+					updateRow,
+					mon,
+					SkipFKs,
+					traceKV,
+				)
+				if err != nil {
+					return nil, nil, nil, 0, err
+				}
+				if _, err := originalRows.AddRow(ctx, rowToUpdate); err != nil {
+					return nil, nil, nil, 0, err
+				}
+				if _, err := updatedRows.AddRow(ctx, updatedRow); err != nil {
+					return nil, nil, nil, 0, err
+				}
+			}
+		}
+	}
+	if err := c.txn.Run(ctx, batch); err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	return originalRows, updatedRows, rowUpdater.FetchColIDtoRowIndex, startIndex, nil
 }
 
 type cascadeQueueElement struct {
-	table  *TableDescriptor
-	values *RowContainer // This row container is actually defined elsewhere and
-	// its memory is not managed by the queue.
+	table *TableDescriptor
+	// These row containers are defined elsewhere and their memory is not managed
+	// by the queue. The updated values can be nil for deleted rows. If it does
+	// exist, every row in originalValues must have a corresponding row in
+	// updatedValues at the exact same index. They also must have the exact same
+	// rank.
+	originalValues  *RowContainer
+	updatedValues   *RowContainer
 	colIDtoRowIndex map[ColumnID]int
 	startIndex      int // Start of the range of rows in the row container.
 	endIndex        int // End of the range of rows (exclusive) in the row container.
@@ -411,16 +813,18 @@ type cascadeQueue []cascadeQueueElement
 func (q *cascadeQueue) enqueue(
 	ctx context.Context,
 	table *TableDescriptor,
-	rowContainer *RowContainer,
+	originalValues *RowContainer,
+	updatedValues *RowContainer,
 	colIDtoRowIndex map[ColumnID]int,
 	startIndex int,
 ) error {
 	*q = append(*q, cascadeQueueElement{
 		table:           table,
-		values:          rowContainer,
+		originalValues:  originalValues,
+		updatedValues:   updatedValues,
 		colIDtoRowIndex: colIDtoRowIndex,
 		startIndex:      startIndex,
-		endIndex:        rowContainer.Len(),
+		endIndex:        originalValues.Len(),
 	})
 	return nil
 }
@@ -440,12 +844,12 @@ func (c *cascader) cascadeAll(
 	ctx context.Context,
 	table *TableDescriptor,
 	originalValues tree.Datums,
+	updatedValues tree.Datums,
 	colIDtoRowIndex map[ColumnID]int,
 	mon *mon.BytesMonitor,
 	traceKV bool,
 ) error {
 	defer c.close(ctx)
-	// Perform all the required cascading operations.
 	var cascadeQ cascadeQueue
 
 	// Enqueue the first values.
@@ -458,7 +862,17 @@ func (c *cascader) cascadeAll(
 	if _, err := originalRowContainer.AddRow(ctx, originalValues); err != nil {
 		return err
 	}
-	if err := cascadeQ.enqueue(ctx, table, originalRowContainer, colIDtoRowIndex, 0); err != nil {
+	var updatedRowContainer *RowContainer
+	if updatedValues != nil {
+		updatedRowContainer = NewRowContainer(mon.MakeBoundAccount(), colTypeInfo, len(updatedValues))
+		defer updatedRowContainer.Close(ctx)
+		if _, err := updatedRowContainer.AddRow(ctx, updatedValues); err != nil {
+			return err
+		}
+	}
+	if err := cascadeQ.enqueue(
+		ctx, table, originalRowContainer, updatedRowContainer, colIDtoRowIndex, 0,
+	); err != nil {
 		return err
 	}
 	for {
@@ -470,9 +884,6 @@ func (c *cascader) cascadeAll(
 		elem, exists := cascadeQ.dequeue()
 		if !exists {
 			break
-		}
-		if traceKV {
-			log.VEventf(ctx, 2, "cascading into %s for values:%s", elem.table.Name, elem.values.chunks)
 		}
 		for _, referencedIndex := range elem.table.AllNonDropIndexes() {
 			for _, ref := range referencedIndex.ReferencedBy {
@@ -491,25 +902,64 @@ func (c *cascader) cascadeAll(
 				if err != nil {
 					return err
 				}
-				if referencingIndex.ForeignKey.OnDelete == ForeignKeyReference_CASCADE {
-					returnedValuesContainer, colIDtoRowIndex, startIndex, err := c.deleteRows(
-						ctx,
-						&referencedIndex,
-						referencingTable.Table,
-						referencingIndex,
-						elem,
-						mon,
-						traceKV,
-					)
-					if err != nil {
-						return err
-					}
-					if returnedValuesContainer != nil && returnedValuesContainer.Len() > startIndex {
-						// If a row was deleted, add the table to the queue.
-						if err := cascadeQ.enqueue(
-							ctx, referencingTable.Table, returnedValuesContainer, colIDtoRowIndex, startIndex,
-						); err != nil {
+				if elem.updatedValues == nil {
+					// Deleting a row.
+					switch referencingIndex.ForeignKey.OnDelete {
+					case ForeignKeyReference_CASCADE:
+						deletedRows, colIDtoRowIndex, startIndex, err := c.deleteRows(
+							ctx,
+							&referencedIndex,
+							referencingTable.Table,
+							referencingIndex,
+							elem,
+							mon,
+							traceKV,
+						)
+						if err != nil {
 							return err
+						}
+						if deletedRows != nil && deletedRows.Len() > startIndex {
+							// If a row was deleted, add the table to the queue.
+							if err := cascadeQ.enqueue(
+								ctx,
+								referencingTable.Table,
+								deletedRows,
+								nil, /* updatedValues */
+								colIDtoRowIndex,
+								startIndex,
+							); err != nil {
+								return err
+							}
+						}
+					}
+				} else {
+					// Updating a row.
+					switch referencingIndex.ForeignKey.OnUpdate {
+					case ForeignKeyReference_CASCADE:
+						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
+							ctx,
+							&referencedIndex,
+							referencingTable.Table,
+							referencingIndex,
+							elem,
+							mon,
+							traceKV,
+						)
+						if err != nil {
+							return err
+						}
+						if originalAffectedRows != nil && originalAffectedRows.Len() > startIndex {
+							// A row was updated, so let's add it to the queue.
+							if err := cascadeQ.enqueue(
+								ctx,
+								referencingTable.Table,
+								originalAffectedRows,
+								updatedAffectedRows,
+								colIDtoRowIndex,
+								startIndex,
+							); err != nil {
+								return err
+							}
 						}
 					}
 				}
@@ -517,9 +967,12 @@ func (c *cascader) cascadeAll(
 		}
 	}
 
-	// Check all values to ensure there are no orphans.
-	for tableID, removedRowContainer := range c.rowsChanged {
-		if removedRowContainer.Len() == 0 {
+	// Check all foreign key constraints that have been affected by the cascading
+	// operation.
+
+	// Check all deleted rows to ensure there are no orphans.
+	for tableID, deletedRows := range c.deletedRows {
+		if deletedRows.Len() == 0 {
 			continue
 		}
 		rowDeleter, exists := c.rowDeleters[tableID]
@@ -528,12 +981,81 @@ func (c *cascader) cascadeAll(
 				"programming error: could not find row deleter for table %d", tableID,
 			)
 		}
-		for removedRowContainer.Len() > 0 {
+		for deletedRows.Len() > 0 {
 			// TODO(bram): Can these be batched?
-			if err := rowDeleter.Fks.checkAll(ctx, removedRowContainer.At(0)); err != nil {
+			if err := rowDeleter.Fks.checkAll(ctx, deletedRows.At(0)); err != nil {
 				return err
 			}
-			removedRowContainer.PopFirst()
+			deletedRows.PopFirst()
+		}
+	}
+
+	// Check all updated rows for orphans.
+	// TODO(bram): This is running more checks than needed and may be a bit
+	// brittle. All of these checks can be done selectively by storing a list of
+	// checks to perform for each updated row which can be compiled while
+	// cascading and performing them directly without relying on the rowUpdater.
+	// There is also an opportunity to batch more of these checks together.
+	for tableID, rowUpdater := range c.rowUpdaters {
+		// Fetch the original and updated rows for the updater.
+		originalRows, originalRowsExists := c.originalRows[tableID]
+		if !originalRowsExists {
+			return pgerror.NewErrorf(pgerror.CodeInternalError,
+				"programming error: could not find original rows for table %d", tableID,
+			)
+		}
+		totalRows := originalRows.Len()
+		if totalRows == 0 {
+			continue
+		}
+
+		updatedRows, updatedRowsExists := c.updatedRows[tableID]
+		if !updatedRowsExists {
+			return pgerror.NewErrorf(pgerror.CodeInternalError,
+				"programming error: could not find updated rows for table %d", tableID,
+			)
+		}
+
+		if totalRows != updatedRows.Len() {
+			return pgerror.NewErrorf(pgerror.CodeInternalError,
+				"programming error: original rows length:%d not equal to updated rows length:%d for table %d",
+				totalRows, updatedRows.Len(), tableID,
+			)
+		}
+
+		if totalRows == 1 {
+			// If there's only a single change, which is quite often the case, there
+			// is no need to worry about intermediate states.  Just run the check and
+			// avoid a bunch of allocations.
+			if err := rowUpdater.Fks.runIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
+				return err
+			}
+			continue
+		}
+
+		skipList := make(map[int]struct{}) // A map of already checked indices.
+		for i := 0; i < totalRows; i++ {
+			if _, exists := skipList[i]; exists {
+				continue
+			}
+
+			// Is this the final update for this row? Intermediate states will always
+			// fail these checks so only check the original and final update for the
+			// row.
+			finalRow := updatedRows.At(i)
+			for j := i + 1; j < totalRows; j++ {
+				if _, exists := skipList[j]; exists {
+					continue
+				}
+				if !originalRows.At(j).IsDistinctFrom(c.evalCtx, finalRow) {
+					// The row has been updated again.
+					finalRow = updatedRows.At(j)
+					skipList[j] = struct{}{}
+				}
+			}
+			if err := rowUpdater.Fks.runIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
+				return err
+			}
 		}
 	}
 

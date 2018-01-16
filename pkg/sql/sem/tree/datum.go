@@ -162,6 +162,27 @@ func (d *Datums) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
+// IsDistinctFrom checks to see if two datums are distinct from each other. Any
+// change in value is considered distinct, however, a NULL value is NOT
+// considered disctinct from another NULL value.
+func (d Datums) IsDistinctFrom(evalCtx *EvalContext, other Datums) bool {
+	if len(d) != len(other) {
+		return true
+	}
+	for i, val := range d {
+		if val == DNull {
+			if other[i] != DNull {
+				return true
+			}
+		} else {
+			if val.Compare(evalCtx, other[i]) != 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // CompositeDatum is a Datum that may require composite encoding in
 // indexes. Any Datum implementing this interface must also add itself to
 // sqlbase/HasCompositeKeyEncoding.

@@ -1,12 +1,12 @@
-# LogicTest: default parallel-stmts distsql
+# LogicTest: default
 
 subtest DeleteCascade_Basic
 ### Basic Delete Cascade
 #     a
 #    / \
 #   b1 b2
-#  / \
-# c1  c2
+#  / \   \
+# c1  c2  c3
 
 statement ok
 CREATE TABLE a (
@@ -38,63 +38,85 @@ CREATE TABLE c2 (
 );
 
 statement ok
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY REFERENCES b2 ON DELETE CASCADE
+);
+
+statement ok
 INSERT INTO a VALUES ('a-pk1');
-
-statement ok
-INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1');
-
-statement ok
-INSERT INTO b1 VALUES ('b1-pk2', 'a-pk1');
-
-statement ok
-INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1');
-
-statement ok
-INSERT INTO b2 VALUES ('b2-pk2', 'a-pk1');
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk1-b1-pk1', 'b1-pk1');
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk2-b1-pk1', 'b1-pk1');
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk3-b1-pk2', 'b1-pk2');
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk4-b1-pk2', 'b1-pk2');
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk1-b1-pk1', 'b1-pk1');
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk2-b1-pk1', 'b1-pk1');
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk3-b1-pk2', 'b1-pk2');
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk4-b1-pk2', 'b1-pk2');
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1');
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1')
+ ,('c1-pk2-b1-pk1', 'b1-pk1')
+ ,('c1-pk3-b1-pk2', 'b1-pk2')
+ ,('c1-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1')
+ ,('c2-pk2-b1-pk1', 'b1-pk1')
+ ,('c2-pk3-b1-pk2', 'b1-pk2')
+ ,('c2-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c3 VALUES ('b2-pk1'), ('b2-pk2');
 
 # ON DELETE CASCADE
 statement ok
 DELETE FROM a WHERE id = 'a-pk1';
 
+query IIIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b1)
+ ,(SELECT COUNT(*) FROM b2)
+ ,(SELECT COUNT(*) FROM c1)
+ ,(SELECT COUNT(*) FROM c2)
+ ,(SELECT COUNT(*) FROM c3)
+;
+----
+0 0 0 0 0 0
+
+# Perform the same operation but with show trace.
+statement ok
+INSERT INTO a VALUES ('a-pk1');
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1');
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1')
+ ,('c1-pk2-b1-pk1', 'b1-pk1')
+ ,('c1-pk3-b1-pk2', 'b1-pk2')
+ ,('c1-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1')
+ ,('c2-pk2-b1-pk1', 'b1-pk1')
+ ,('c2-pk3-b1-pk2', 'b1-pk2')
+ ,('c2-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c3 VALUES ('b2-pk1'), ('b2-pk2');
+
+query I
+SELECT COUNT(*) FROM [
+  SHOW KV TRACE FOR DELETE FROM a WHERE id = 'a-pk1'
+] WHERE message LIKE 'cascading %';
+----
+5
+
+query IIIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b1)
+ ,(SELECT COUNT(*) FROM b2)
+ ,(SELECT COUNT(*) FROM c1)
+ ,(SELECT COUNT(*) FROM c2)
+ ,(SELECT COUNT(*) FROM c3)
+;
+----
+0 0 0 0 0 0
+
 # Clean up after the test.
 statement ok
-DROP TABLE c2;
-
-statement ok
-DROP TABLE c1;
-
-statement ok
-DROP TABLE b2;
-
-statement ok
-DROP TABLE b1;
-
-statement ok
-DROP TABLE a;
+DROP TABLE c3, c2, c1, b2, b1, a;
 
 subtest DeleteCascade_PrimaryKeys
 ### Basic Delete Cascade using primary keys
@@ -131,38 +153,29 @@ CREATE TABLE c2 (
 
 statement ok
 INSERT INTO a VALUES ('pk1');
-
-statement ok
 INSERT INTO b1 VALUES ('pk1');
-
-statement ok
 INSERT INTO b2 VALUES ('pk1');
-
-statement ok
 INSERT INTO c1 VALUES ('pk1');
-
-statement ok
 INSERT INTO c2 VALUES ('pk1');
 
 # ON DELETE CASCADE
 statement ok
 DELETE FROM a WHERE id = 'pk1';
 
+query IIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b1)
+ ,(SELECT COUNT(*) FROM b2)
+ ,(SELECT COUNT(*) FROM c1)
+ ,(SELECT COUNT(*) FROM c2)
+;
+----
+0 0 0 0 0
+
 # Clean up after the test.
 statement ok
-DROP TABLE c2;
-
-statement ok
-DROP TABLE c1;
-
-statement ok
-DROP TABLE b2;
-
-statement ok
-DROP TABLE b1;
-
-statement ok
-DROP TABLE a;
+DROP TABLE c2, c1, b2, b1, a;
 
 subtest DeleteCascade_CompositeFKs
 ### Basic Delete Cascade with composite FKs
@@ -219,62 +232,39 @@ CREATE TABLE c2 (
 
 statement ok
 INSERT INTO a VALUES ('a-pk1', 1);
-
-statement ok
-INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1', 1, 1);
-
-statement ok
-INSERT INTO b1 VALUES ('b1-pk2', 'a-pk1', 1, 2);
-
-statement ok
-INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1', 1, 1);
-
-statement ok
-INSERT INTO b2 VALUES ('b2-pk2', 'a-pk1', 1, 2);
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk1-b1-pk1', 'b1-pk1', 1);
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk2-b1-pk1', 'b1-pk1', 1);
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk3-b1-pk2', 'b1-pk2', 1);
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk4-b1-pk2', 'b1-pk2', 1);
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk1-b1-pk1', 'b1-pk1', 1);
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk2-b1-pk1', 'b1-pk1', 1);
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk3-b1-pk2', 'b1-pk2', 1);
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk4-b1-pk2', 'b1-pk2', 1);
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1', 1, 1), ('b1-pk2', 'a-pk1', 1, 2);
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1', 1, 1), ('b2-pk2', 'a-pk1', 1, 2);
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1', 1)
+ ,('c1-pk2-b1-pk1', 'b1-pk1', 1)
+ ,('c1-pk3-b1-pk2', 'b1-pk2', 1)
+ ,('c1-pk4-b1-pk2', 'b1-pk2', 1)
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1', 1)
+ ,('c2-pk2-b1-pk1', 'b1-pk1', 1)
+ ,('c2-pk3-b1-pk2', 'b1-pk2', 1)
+ ,('c2-pk4-b1-pk2', 'b1-pk2', 1)
+;
 
 # ON DELETE CASCADE
 statement ok
 DELETE FROM a WHERE id = 'a-pk1';
 
+query IIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b1)
+ ,(SELECT COUNT(*) FROM b2)
+ ,(SELECT COUNT(*) FROM c1)
+ ,(SELECT COUNT(*) FROM c2)
+;
+----
+0 0 0 0 0
+
 # Clean up after the test.
 statement ok
-DROP TABLE c2;
-
-statement ok
-DROP TABLE c1;
-
-statement ok
-DROP TABLE b2;
-
-statement ok
-DROP TABLE b1;
-
-statement ok
-DROP TABLE a;
+DROP TABLE c2, c1, b2, b1, a;
 
 subtest DeleteCascade_Restrict
 ### Basic Delete Cascade with Restrict
@@ -323,44 +313,20 @@ CREATE TABLE d (
 
 statement ok
 INSERT INTO a VALUES ('a-pk1');
-
-statement ok
-INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1');
-
-statement ok
-INSERT INTO b1 VALUES ('b1-pk2', 'a-pk1');
-
-statement ok
-INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1');
-
-statement ok
-INSERT INTO b2 VALUES ('b2-pk2', 'a-pk1');
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk1-b1-pk1', 'b1-pk1');
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk2-b1-pk1', 'b1-pk1');
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk3-b1-pk2', 'b1-pk2');
-
-statement ok
-INSERT INTO c1 VALUES ('c1-pk4-b1-pk2', 'b1-pk2');
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk1-b1-pk1', 'b1-pk1');
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk2-b1-pk1', 'b1-pk1');
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk3-b1-pk2', 'b1-pk2');
-
-statement ok
-INSERT INTO c2 VALUES ('c2-pk4-b1-pk2', 'b1-pk2');
-
-statement ok
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1');
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1')
+ ,('c1-pk2-b1-pk1', 'b1-pk1')
+ ,('c1-pk3-b1-pk2', 'b1-pk2')
+ ,('c1-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1')
+ ,('c2-pk2-b1-pk1', 'b1-pk1')
+ ,('c2-pk3-b1-pk2', 'b1-pk2')
+ ,('c2-pk4-b1-pk2', 'b1-pk2')
+;
 INSERT INTO d VALUES ('d-pk1-c2-pk4-b1-pk2', 'c2-pk4-b1-pk2');
 
 # ON DELETE CASCADE
@@ -369,22 +335,7 @@ DELETE FROM a WHERE id = 'a-pk1';
 
 # Clean up after the test.
 statement ok
-DROP TABLE d;
-
-statement ok
-DROP TABLE c2;
-
-statement ok
-DROP TABLE c1;
-
-statement ok
-DROP TABLE b2;
-
-statement ok
-DROP TABLE b1;
-
-statement ok
-DROP TABLE a;
+DROP TABLE d, c2, c1, b2, b1, a;
 
 subtest DeleteCascade_Interleaved
 ### Basic Delete Cascade with Interleaved Tables
@@ -426,48 +377,63 @@ CREATE TABLE c3 (
 
 statement ok
 INSERT INTO a VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO b1 VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO b2 VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO c1 VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO c2 VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO c3 VALUES ('pk1'), ('pk2');
 
 # ON DELETE CASCADE from b1 downward
 statement ok
 DELETE FROM b1 WHERE id = 'pk2';
 
+query IIIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b1)
+ ,(SELECT COUNT(*) FROM b2)
+ ,(SELECT COUNT(*) FROM c1)
+ ,(SELECT COUNT(*) FROM c2)
+ ,(SELECT COUNT(*) FROM c3)
+;
+----
+2 1 2 1 1 2
+
 # ON DELETE CASCADE
 statement ok
 DELETE FROM a WHERE id = 'pk1';
 
+query IIIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b1)
+ ,(SELECT COUNT(*) FROM b2)
+ ,(SELECT COUNT(*) FROM c1)
+ ,(SELECT COUNT(*) FROM c2)
+ ,(SELECT COUNT(*) FROM c3)
+;
+----
+1 0 1 0 0 1
+
+# ON DELETE CASCADE for the rest
+statement ok
+DELETE FROM a WHERE id = 'pk2';
+
+query IIIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b1)
+ ,(SELECT COUNT(*) FROM b2)
+ ,(SELECT COUNT(*) FROM c1)
+ ,(SELECT COUNT(*) FROM c2)
+ ,(SELECT COUNT(*) FROM c3)
+;
+----
+0 0 0 0 0 0
+
 # Clean up after the test.
 statement ok
-DROP TABLE c3;
-
-statement ok
-DROP TABLE c2;
-
-statement ok
-DROP TABLE c1;
-
-statement ok
-DROP TABLE b2;
-
-statement ok
-DROP TABLE b1;
-
-statement ok
-DROP TABLE a;
+DROP TABLE c3, c2, c1, b2, b1, a;
 
 subtest DeleteCascade_InterleavedRestrict
 ### Basic Delete Cascade with Interleaved Tables To Restrict
@@ -512,25 +478,27 @@ CREATE TABLE c3 (
 
 statement ok
 INSERT INTO a VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO b1 VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO b2 VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO c1 VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO c2 VALUES ('pk1'), ('pk2');
-
-statement ok
 INSERT INTO c3 VALUES ('pk1'), ('pk2');
 
 # ON DELETE CASCADE from b1 downward
 statement ok
 DELETE FROM b1 WHERE id = 'pk2';
+
+query IIIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b1)
+ ,(SELECT COUNT(*) FROM b2)
+ ,(SELECT COUNT(*) FROM c1)
+ ,(SELECT COUNT(*) FROM c2)
+ ,(SELECT COUNT(*) FROM c3)
+;
+----
+2 1 2 1 1 2
 
 # ON DELETE CASCADE
 statement error pq: foreign key violation: values \['pk1'\] in columns \[id\] referenced in table "c3"
@@ -538,22 +506,7 @@ DELETE FROM a WHERE id = 'pk1';
 
 # Clean up after the test.
 statement ok
-DROP TABLE c3;
-
-statement ok
-DROP TABLE c2;
-
-statement ok
-DROP TABLE c1;
-
-statement ok
-DROP TABLE b2;
-
-statement ok
-DROP TABLE b1;
-
-statement ok
-DROP TABLE a;
+DROP TABLE c3, c2, c1, b2, b1, a;
 
 subtest DeleteCascade_SelfReference
 ### Self Reference Delete Cascade
@@ -567,22 +520,21 @@ CREATE TABLE self (
 
 statement ok
 INSERT INTO self VALUES (1, NULL);
-
-statement ok
 INSERT INTO self VALUES (2, 1);
-
-statement ok
 INSERT INTO self VALUES (3, 2);
-
-statement ok
 INSERT INTO self VALUES (4, 3);
 
 statement ok
 DELETE FROM self WHERE id = 1;
 
+query I
+SELECT COUNT(*) FROM self
+----
+0
+
 # Clean up after the test.
 statement ok
-DROP TABLE self CASCADE;
+DROP TABLE self;
 
 subtest DeleteCascade_SelfReferenceCycle
 ### Self Reference Delete Cascade Cycle
@@ -596,14 +548,8 @@ CREATE TABLE self (
 
 statement ok
 INSERT INTO self VALUES (1, NULL);
-
-statement ok
 INSERT INTO self VALUES (2, 1);
-
-statement ok
 INSERT INTO self VALUES (3, 2);
-
-statement ok
 INSERT INTO self VALUES (4, 3);
 
 statement ok
@@ -612,9 +558,14 @@ UPDATE self SET other_id = 4 WHERE id = 1;
 statement ok
 DELETE FROM self WHERE id = 1;
 
+query I
+SELECT COUNT(*) FROM self
+----
+0
+
 # Clean up after the test.
 statement ok
-DROP TABLE self CASCADE;
+DROP TABLE self;
 
 subtest DeleteCascade_TwoTableLoop
 ### Delete cascade loop between two tables
@@ -641,20 +592,10 @@ ALTER TABLE loop_a ADD CONSTRAINT cascade_delete_constraint
 
 statement ok
 INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk1', NULL);
-
-statement ok
 INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk1', 'loop_a-pk1');
-
-statement ok
 INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk2', 'loop_b-pk1');
-
-statement ok
 INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk2', 'loop_a-pk2');
-
-statement ok
 INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk3', 'loop_b-pk2');
-
-statement ok
 INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk3', 'loop_a-pk3');
 
 statement ok
@@ -663,12 +604,17 @@ UPDATE loop_a SET cascade_delete = 'loop_b-pk3' WHERE id = 'loop_a-pk1';
 statement ok
 DELETE FROM loop_a WHERE id = 'loop_a-pk1';
 
+query II
+SELECT
+  (SELECT COUNT(*) FROM loop_a)
+ ,(SELECT COUNT(*) FROM loop_b)
+;
+----
+0 0
+
 # Clean up after the test.
 statement ok
-DROP TABLE loop_a CASCADE;
-
-statement ok
-DROP TABLE loop_b;
+DROP TABLE loop_a, loop_b;
 
 subtest DeleteCascade_TwoTableLoopCycle
 ### Delete cascade loop between two tables with cycle
@@ -695,31 +641,26 @@ ALTER TABLE loop_a ADD CONSTRAINT cascade_delete_constraint
 
 statement ok
 INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk1', NULL);
-
-statement ok
 INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk1', 'loop_a-pk1');
-
-statement ok
 INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk2', 'loop_b-pk1');
-
-statement ok
 INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk2', 'loop_a-pk2');
-
-statement ok
 INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk3', 'loop_b-pk2');
-
-statement ok
 INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk3', 'loop_a-pk3');
 
 statement ok
 DELETE FROM loop_a WHERE id = 'loop_a-pk1';
 
+query II
+SELECT
+  (SELECT COUNT(*) FROM loop_a)
+ ,(SELECT COUNT(*) FROM loop_b)
+;
+----
+0 0
+
 # Clean up after the test.
 statement ok
-DROP TABLE loop_a CASCADE;
-
-statement ok
-DROP TABLE loop_b;
+DROP TABLE loop_a, loop_b;
 
 subtest DeleteCascade_DoubleSelfReference
 ### Delete cascade double self reference
@@ -731,25 +672,26 @@ CREATE TABLE self_x2 (
   x STRING PRIMARY KEY
  ,y STRING UNIQUE REFERENCES self_x2(x) ON DELETE CASCADE
  ,z STRING REFERENCES self_x2(y) ON DELETE CASCADE
- ,INDEX(z)
 );
 
 statement ok
 INSERT INTO self_x2 (x, y, z) VALUES ('pk1', NULL, NULL);
-
-statement ok
 INSERT INTO self_x2 (x, y, z) VALUES ('pk2', 'pk1', NULL);
-
-statement ok
 INSERT INTO self_x2 (x, y, z) VALUES ('pk3', 'pk2', 'pk1');
 
 statement ok
 DELETE FROM self_x2 WHERE x = 'pk1';
 
+query I
+SELECT COUNT(*) FROM self_x2
+----
+0
+
 # Clean up after the test.
 statement ok
 DROP TABLE self_x2;
 
+subtest DeleteCascade_Race
 ## Delete cascade race
 #         a
 #        / \
@@ -790,34 +732,888 @@ CREATE TABLE e (
 
 statement ok
 INSERT INTO a (id) VALUES ('a1');
-
-statement ok
 INSERT INTO b (id, a_id) VALUES ('b1', 'a1');
-
-statement ok
 INSERT INTO c (id, a_id) VALUES ('c1', 'a1');
-
-statement ok
 INSERT INTO d (id, c_id) VALUES ('d1', 'c1');
-
-statement ok
 INSERT INTO e (id, b_id, d_id) VALUES ('e1', 'b1', 'd1');
 
 statement ok
 DELETE FROM a WHERE id = 'a1';
 
+query IIIII
+SELECT
+  (SELECT COUNT(*) FROM a)
+ ,(SELECT COUNT(*) FROM b)
+ ,(SELECT COUNT(*) FROM c)
+ ,(SELECT COUNT(*) FROM d)
+ ,(SELECT COUNT(*) FROM e)
+;
+----
+0 0 0 0 0
+
 # Clean up after the test.
 statement ok
-DROP TABLE e;
+DROP TABLE e, d, c, b, a;
+
+subtest UpdateCascade_Basic
+### Basic Update Cascade
+#     a
+#    / \
+#   b1 b2
+#  / \   \
+# c1  c2  c3
 
 statement ok
-DROP TABLE d;
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
 
 statement ok
-DROP TABLE c;
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING NOT NULL UNIQUE REFERENCES a ON UPDATE CASCADE
+);
 
 statement ok
-DROP TABLE b;
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING NOT NULL UNIQUE REFERENCES a ON UPDATE CASCADE
+);
 
 statement ok
-DROP TABLE a;
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING NOT NULL REFERENCES b1 (update_cascade) ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING NOT NULL REFERENCES b1 (update_cascade) ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY REFERENCES b2(update_cascade) ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES ('original');
+INSERT INTO b1 VALUES ('b1-pk1', 'original');
+INSERT INTO b2 VALUES ('b2-pk1', 'original');
+INSERT INTO c1 VALUES
+  ('c1-pk1', 'original')
+ ,('c1-pk2', 'original')
+ ,('c1-pk3', 'original')
+ ,('c1-pk4', 'original')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1', 'original')
+ ,('c2-pk2', 'original')
+ ,('c2-pk3', 'original')
+ ,('c2-pk4', 'original')
+;
+INSERT INTO c3 VALUES ('original');
+
+# ON UPDATE CASCADE
+statement ok
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+query T
+SELECT * FROM a;
+----
+updated
+
+query TT
+SELECT * FROM b1;
+----
+b1-pk1 updated
+
+query TT
+SELECT * FROM b2;
+----
+b2-pk1 updated
+
+query TT rowsort
+SELECT * FROM c1;
+----
+c1-pk1 updated
+c1-pk2 updated
+c1-pk3 updated
+c1-pk4 updated
+
+query TT rowsort
+SELECT * FROM c2;
+----
+c2-pk1 updated
+c2-pk2 updated
+c2-pk3 updated
+c2-pk4 updated
+
+# Update again but this time check show trace
+statement ok
+
+query I
+SELECT COUNT(*) FROM [
+  SHOW KV TRACE FOR UPDATE a SET id = 'updated2' WHERE id = 'updated'
+] WHERE message LIKE 'cascading %';
+----
+5
+
+query T
+SELECT * FROM a;
+----
+updated2
+
+query TT
+SELECT * FROM b1;
+----
+b1-pk1 updated2
+
+query TT
+SELECT * FROM b2;
+----
+b2-pk1 updated2
+
+query TT rowsort
+SELECT * FROM c1;
+----
+c1-pk1 updated2
+c1-pk2 updated2
+c1-pk3 updated2
+c1-pk4 updated2
+
+query TT rowsort
+SELECT * FROM c2;
+----
+c2-pk1 updated2
+c2-pk2 updated2
+c2-pk3 updated2
+c2-pk4 updated2
+
+# Clean up after the test.
+statement ok
+DROP TABLE c3, c2, c1, b2, b1, a;
+
+subtest UpdateCascade_PrimaryKeys
+### Basic Update Cascade using only primary keys
+#     a
+#    / \
+#   b1 b2
+#  / \
+# c1  c2
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY REFERENCES b1 ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY REFERENCES b1 ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES ('original');
+INSERT INTO b1 VALUES ('original');
+INSERT INTO b2 VALUES ('original');
+INSERT INTO c1 VALUES ('original');
+INSERT INTO c2 VALUES ('original');
+
+# ON UPDATE CASCADE
+statement ok
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+query TTTTT
+SELECT
+  (SELECT id FROM a)
+ ,(SELECT id FROM b1)
+ ,(SELECT id FROM b2)
+ ,(SELECT id FROM c1)
+ ,(SELECT id FROM c2)
+;
+----
+updated updated updated updated updated
+
+# Clean up after the test.
+statement ok
+DROP TABLE c2, c1, b2, b1, a;
+
+subtest UpdateCascade_CompositeFKs
+### Basic Update Cascade with composite FKs
+#     a
+#    / \
+#   b1 b2
+#  / \
+# c1  c2
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+ ,x INT
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,a_id STRING
+ ,x INT
+ ,y INT
+ ,INDEX (a_id, x, y)
+ ,FOREIGN KEY (a_id, x) REFERENCES a (id, x) ON UPDATE CASCADE
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,a_id STRING
+ ,x INT
+ ,y INT
+ ,INDEX (a_id, x, y)
+ ,FOREIGN KEY (a_id, x) REFERENCES a (id, x) ON UPDATE CASCADE
+ ,UNIQUE (id, x)
+);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,b_id STRING
+ ,x INT
+ ,FOREIGN KEY (b_id, x) REFERENCES b1 (id, x) ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,b_id STRING
+ ,x INT
+ ,FOREIGN KEY (b_id, x) REFERENCES b1 (id, x) ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES ('a-pk1', 1);
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1', 1, 1), ('b1-pk2', 'a-pk1', 1, 2);
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1', 1, 1), ('b2-pk2', 'a-pk1', 1, 2);
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1', 1)
+ ,('c1-pk2-b1-pk1', 'b1-pk1', 1)
+ ,('c1-pk3-b1-pk2', 'b1-pk2', 1)
+ ,('c1-pk4-b1-pk2', 'b1-pk2', 1)
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1', 1)
+ ,('c2-pk2-b1-pk1', 'b1-pk1', 1)
+ ,('c2-pk3-b1-pk2', 'b1-pk2', 1)
+ ,('c2-pk4-b1-pk2', 'b1-pk2', 1)
+;
+
+# ON UPDATE CASCADE
+statement ok
+UPDATE a SET x = 2 WHERE x = 1;
+
+query TI
+SELECT * FROM a;
+----
+a-pk1 2
+
+query TTII rowsort
+SELECT * FROM b1;
+----
+b1-pk1  a-pk1  2  1
+b1-pk2  a-pk1  2  2
+
+query TTII rowsort
+SELECT * FROM b2;
+----
+b2-pk1  a-pk1  2  1
+b2-pk2  a-pk1  2  2
+
+query TTI rowsort
+SELECT * FROM c1;
+----
+c1-pk1-b1-pk1  b1-pk1  2
+c1-pk2-b1-pk1  b1-pk1  2
+c1-pk3-b1-pk2  b1-pk2  2
+c1-pk4-b1-pk2  b1-pk2  2
+
+query TTI rowsort
+SELECT * FROM c2;
+----
+c2-pk1-b1-pk1  b1-pk1  2
+c2-pk2-b1-pk1  b1-pk1  2
+c2-pk3-b1-pk2  b1-pk2  2
+c2-pk4-b1-pk2  b1-pk2  2
+
+# Clean up after the test.
+statement ok
+DROP TABLE c2, c1, b2, b1, a;
+
+subtest UpdateCascade_Restrict
+### Basic Update Cascade with Restrict
+# This test has a restrict on both d tables and tests both.
+# c3 and d2 use primary keys to match while the rest use non-primary keys.
+# Both restricts are tested.
+#     a
+#    / \
+#   b1 b2
+#  / \   \
+# c1  c2  c3
+#     |    |
+#     d1  d2
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING NOT NULL UNIQUE REFERENCES a ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING NOT NULL UNIQUE REFERENCES a ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING NOT NULL REFERENCES b1 (update_cascade) ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING NOT NULL UNIQUE REFERENCES b1 (update_cascade) ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY REFERENCES b2(update_cascade) ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE d1 (
+  id STRING PRIMARY KEY
+ ,update_restrict STRING NOT NULL REFERENCES c2 (update_cascade) ON UPDATE RESTRICT
+);
+
+statement ok
+CREATE TABLE d2 (
+  id STRING PRIMARY KEY REFERENCES c3 ON UPDATE RESTRICT
+);
+
+statement ok
+INSERT INTO a VALUES ('original');
+INSERT INTO b1 VALUES ('b1-pk1', 'original');
+INSERT INTO b2 VALUES ('b2-pk1', 'original');
+INSERT INTO c1 VALUES
+  ('c1-pk1', 'original')
+ ,('c1-pk2', 'original')
+ ,('c1-pk3', 'original')
+ ,('c1-pk4', 'original')
+;
+INSERT INTO c2 VALUES ('c2-pk1', 'original');
+INSERT INTO c3 VALUES ('original');
+
+# Test non-primary key restrict.
+statement ok
+INSERT INTO d1 VALUES ('d1-pk1', 'original');
+
+# ON UPDATE CASCADE
+statement error foreign key violation: values \['original'\] in columns \[update_cascade\] referenced in table "d1"
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+statement ok
+DELETE FROM d1 WHERE id = 'd1-pk1';
+
+# Test a primary key restrict.
+statement ok
+INSERT INTO d2 VALUES ('original');
+
+# ON UPDATE CASCADE
+statement error foreign key violation: values \['original'\] in columns \[id\] referenced in table "d2"
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+# Clean up after the test.
+statement ok
+DROP TABLE d2, d1, c3, c2, c1, b2, b1, a;
+
+subtest UpdateCascade_Interleaved
+### Basic Update Cascade with Interleaved Tables
+#     a
+#    / \
+#   b1 b2
+#  / \   \
+# c1  c2  c3
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+) INTERLEAVE IN PARENT a (id);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+) INTERLEAVE IN PARENT a (id);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY REFERENCES b1 ON UPDATE CASCADE
+) INTERLEAVE IN PARENT b1 (id);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY REFERENCES b1 ON UPDATE CASCADE
+) INTERLEAVE IN PARENT b1 (id);
+
+statement ok
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY REFERENCES b2 ON UPDATE CASCADE
+) INTERLEAVE IN PARENT b2 (id);
+
+statement ok
+INSERT INTO a VALUES ('original'), ('updated');
+INSERT INTO b1 VALUES ('original');
+INSERT INTO b2 VALUES ('original');
+INSERT INTO c1 VALUES ('original');
+INSERT INTO c2 VALUES ('original');
+INSERT INTO c3 VALUES ('original');
+
+# ON UPDATE CASCADE from b1 downward
+statement ok
+UPDATE b1 SET id = 'updated' WHERE id = 'original';
+
+query T rowsort
+SELECT * FROM a;
+----
+original
+updated
+
+query TTTTT
+SELECT
+  (SELECT id FROM b1)
+ ,(SELECT id FROM b2)
+ ,(SELECT id FROM c1)
+ ,(SELECT id FROM c2)
+ ,(SELECT id FROM c3)
+;
+----
+updated original updated updated original
+
+# ON UPDATE CASCADE from a downward
+statement ok
+UPDATE a SET id = 'updated2' WHERE id = 'original';
+
+query T rowsort
+SELECT * FROM a;
+----
+updated
+updated2
+
+query TTTTT
+SELECT
+  (SELECT id FROM b1)
+ ,(SELECT id FROM b2)
+ ,(SELECT id FROM c1)
+ ,(SELECT id FROM c2)
+ ,(SELECT id FROM c3)
+;
+----
+updated updated2 updated updated updated2
+
+# Clean up after the test.
+statement ok
+DROP TABLE c3, c2, c1, b2, b1, a;
+
+subtest UpdateCascade_InterleavedRestrict
+### Basic Update Cascade with Interleaved Tables To Restrict
+#     a
+#    / \
+#   b1 b2
+#  / \   \
+# c1  c2  c3
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+) INTERLEAVE IN PARENT a (id);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+) INTERLEAVE IN PARENT a (id);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY REFERENCES b1 ON UPDATE CASCADE
+) INTERLEAVE IN PARENT b1 (id);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY REFERENCES b1 ON UPDATE CASCADE
+) INTERLEAVE IN PARENT b1 (id);
+
+statement ok
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY REFERENCES b2 ON UPDATE RESTRICT
+) INTERLEAVE IN PARENT b2 (id);
+
+statement ok
+INSERT INTO a VALUES ('original'), ('updated');
+INSERT INTO b1 VALUES ('original');
+INSERT INTO b2 VALUES ('original');
+INSERT INTO c1 VALUES ('original');
+INSERT INTO c2 VALUES ('original');
+INSERT INTO c3 VALUES ('original');
+
+# ON UPDATE CASCADE from b1 downward
+statement ok
+UPDATE b1 SET id = 'updated' WHERE id = 'original';
+
+query T rowsort
+SELECT * FROM a;
+----
+original
+updated
+
+query TTTTT
+SELECT
+  (SELECT id FROM b1)
+ ,(SELECT id FROM b2)
+ ,(SELECT id FROM c1)
+ ,(SELECT id FROM c2)
+ ,(SELECT id FROM c3)
+;
+----
+updated original updated updated original
+
+# ON UPDATE CASCADE from a downward
+statement error foreign key violation: values \['original'\] in columns \[id\] referenced in table "c3"
+UPDATE a SET id = 'updated2' WHERE id = 'original';
+
+# Clean up after the test.
+statement ok
+DROP TABLE c3, c2, c1, b2, b1, a;
+
+subtest UpdateCascade_SelfReference
+### Self Reference Update Cascade
+# self <- self
+
+statement ok
+CREATE TABLE self (
+  id INT PRIMARY KEY
+ ,other_id INT REFERENCES self ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO self VALUES (1, NULL);
+INSERT INTO self VALUES (2, 1);
+INSERT INTO self VALUES (3, 2);
+
+query II rowsort
+SELECT * FROM self;
+----
+1 NULL
+2 1
+3 2
+
+statement ok
+UPDATE self SET id = 4 WHERE id = 2;
+
+query II rowsort
+SELECT * FROM self;
+----
+1 NULL
+4 1
+3 4
+
+# Clean up after the test.
+statement ok
+DROP TABLE self;
+
+subtest UpdateCascade_TwoTableLoop
+### Delete cascade loop between two tables
+# loop_a <- loop_b
+# loop_b <- loop_a
+
+statement ok
+CREATE TABLE loop_a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE loop_b (
+  id STRING PRIMARY KEY REFERENCES loop_a ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO loop_a VALUES ('original');
+INSERT INTO loop_b VALUES ('original');
+
+statement ok
+ALTER TABLE loop_a ADD CONSTRAINT cascade_update_constraint
+  FOREIGN KEY (id) REFERENCES loop_b
+  ON UPDATE CASCADE;
+
+query TT
+SELECT
+  (SELECT id FROM loop_a)
+ ,(SELECT id FROM loop_b)
+;
+----
+original original
+
+statement ok
+UPDATE loop_a SET id = 'updated' WHERE id = 'original';
+
+query TT
+SELECT
+  (SELECT id FROM loop_a)
+ ,(SELECT id FROM loop_b)
+;
+----
+updated updated
+
+statement ok
+UPDATE loop_b SET id = 'updated2' WHERE id = 'updated';
+
+query TT
+SELECT
+  (SELECT id FROM loop_a)
+ ,(SELECT id FROM loop_b)
+;
+----
+updated2 updated2
+
+# Clean up after the test.
+statement ok
+DROP TABLE loop_a, loop_b;
+
+subtest UpdateCascade_DoubleSelfReference
+### Update cascade double self reference
+# self_x2 (x) <- (y)
+# self_x2 (y) <- (z)
+
+statement ok
+CREATE TABLE self_x2 (
+  x STRING PRIMARY KEY
+ ,y STRING UNIQUE REFERENCES self_x2(x) ON UPDATE CASCADE
+ ,z STRING REFERENCES self_x2(y) ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO self_x2 (x, y, z) VALUES ('pk1', NULL, NULL);
+INSERT INTO self_x2 (x, y, z) VALUES ('pk2', 'pk1', NULL);
+INSERT INTO self_x2 (x, y, z) VALUES ('pk3', 'pk2', 'pk1');
+
+# ON UPDATE CASCADE
+statement ok
+UPDATE self_x2 SET x = 'pk1-updated' WHERE x = 'pk1';
+
+statement ok
+UPDATE self_x2 SET x = 'pk2-updated' WHERE x = 'pk2';
+
+statement ok
+UPDATE self_x2 SET x = 'pk3-updated' WHERE x = 'pk3';
+
+query TTT rowsort
+SELECT * FROM self_x2
+----
+pk1-updated NULL NULL
+pk2-updated pk1-updated NULL
+pk3-updated pk2-updated pk1-updated
+
+# Clean up after the test.
+statement ok
+DROP TABLE self_x2;
+
+subtest UpdateCascade_TwoUpdates
+## Update cascade two updates to the same table, then both of those cascade to
+# yet another table
+#         a
+#        / \
+#       b   c
+#       |   |
+#       |   d
+#        \ /
+#         e
+#         |
+#         f
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE d (
+  id STRING PRIMARY KEY REFERENCES c ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE e (
+  b_id STRING PRIMARY KEY REFERENCES b ON UPDATE CASCADE
+ ,d_id STRING UNIQUE REFERENCES d ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE f (
+  e_b_id STRING PRIMARY KEY REFERENCES e (b_id) ON UPDATE CASCADE
+ ,e_d_id STRING REFERENCES e (d_id) ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a (id) VALUES ('original');
+INSERT INTO b (id) VALUES ('original');
+INSERT INTO c (id) VALUES ('original');
+INSERT INTO d (id) VALUES ('original');
+INSERT INTO e (b_id, d_id) VALUES ('original', 'original');
+INSERT INTO f (e_b_id, e_d_id) VALUES ('original', 'original');
+
+statement ok
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+query TTTT
+SELECT
+  (SELECT id FROM a)
+ ,(SELECT id FROM b)
+ ,(SELECT id FROM c)
+ ,(SELECT id FROM d)
+;
+----
+updated updated updated updated
+
+query TT
+SELECT * FROM e
+----
+updated updated
+
+query TT
+SELECT * FROM f
+----
+updated updated
+
+# Clean up after the test.
+statement ok
+DROP TABLE f, e, d, c, b, a;
+
+subtest UpdateCascade_TwoUpdatesReverse
+## Update cascade two updates to the same table, then both of those cascade to
+# yet another table.
+# This is a similar test to UpdateCascade_TwoUpdates, but table d is now between
+# b and e instead of c and e.
+#         a
+#        / \
+#       b   c
+#       |   |
+#       d   |
+#        \ /
+#         e
+#         |
+#         f
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE c (
+  id STRING PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE d (
+  id STRING PRIMARY KEY REFERENCES b ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE e (
+  d_id STRING PRIMARY KEY REFERENCES d ON UPDATE CASCADE
+ ,c_id STRING UNIQUE REFERENCES c ON UPDATE CASCADE
+);
+
+statement ok
+CREATE TABLE f (
+  e_d_id STRING PRIMARY KEY REFERENCES e (d_id) ON UPDATE CASCADE
+ ,e_c_id STRING REFERENCES e (c_id) ON UPDATE CASCADE
+);
+
+statement ok
+INSERT INTO a (id) VALUES ('original');
+INSERT INTO b (id) VALUES ('original');
+INSERT INTO c (id) VALUES ('original');
+INSERT INTO d (id) VALUES ('original');
+INSERT INTO e (d_id, c_id) VALUES ('original', 'original');
+INSERT INTO f (e_d_id, e_c_id) VALUES ('original', 'original');
+
+statement ok
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+query TTTT
+SELECT
+  (SELECT id FROM a)
+ ,(SELECT id FROM b)
+ ,(SELECT id FROM c)
+ ,(SELECT id FROM d)
+;
+----
+updated updated updated updated
+
+query TT
+SELECT * FROM e
+----
+updated updated
+
+query TT
+SELECT * FROM f
+----
+updated updated
+
+# Clean up after the test.
+statement ok
+DROP TABLE f, e, d, c, b, a;

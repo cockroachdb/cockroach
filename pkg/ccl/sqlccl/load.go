@@ -302,7 +302,9 @@ func insertStmtToKVs(
 		if err != nil {
 			return errors.Wrapf(err, "process insert %q", row)
 		}
-		if err := ri.InsertRow(ctx, b, row, true, false /* traceKV */); err != nil {
+		// TODO(bram): Is the checking of FKs here required? If not, turning them
+		// off may provide a speed boost.
+		if err := ri.InsertRow(ctx, b, row, true, sqlbase.CheckFKs, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert %q", row)
 		}
 	}
