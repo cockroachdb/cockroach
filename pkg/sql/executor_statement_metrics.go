@@ -59,6 +59,9 @@ const (
 )
 
 // phaseTimes is the type of the session.phaseTimes array.
+//
+// It's important that this is an array and not a slice, as we rely on the array
+// copy behavior.
 type phaseTimes [sessionNumPhases]time.Time
 
 type sqlEngineMetrics struct {
@@ -93,7 +96,7 @@ func recordStatementSummary(
 	err error,
 	m *sqlEngineMetrics,
 ) {
-	phaseTimes := &planner.phaseTimes
+	phaseTimes := planner.statsCollector.PhaseTimes()
 
 	// Compute the run latency. This is always recorded in the
 	// server metrics.
@@ -130,7 +133,7 @@ func recordStatementSummary(
 		}
 	}
 
-	planner.session.appStats.recordStatement(
+	planner.statsCollector.RecordStatement(
 		stmt, distSQLUsed, automaticRetryCount, numRows, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
