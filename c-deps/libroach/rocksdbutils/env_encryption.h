@@ -16,14 +16,14 @@ class EncryptionProvider;
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
-rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider);
+rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, int env_level);
 
 // BlockAccessCipherStream is the base class for any cipher stream that
 // supports random access at block level (without requiring data from other blocks).
 // E.g. CTR (Counter operation mode) supports this requirement.
 class BlockAccessCipherStream {
  public:
-  virtual ~BlockAccessCipherStream(){};
+  virtual ~BlockAccessCipherStream() {}
 
   // BlockSize returns the size of each block supported by this cipher stream.
   virtual size_t BlockSize() = 0;
@@ -52,7 +52,7 @@ class BlockAccessCipherStream {
 // BlockCipher
 class BlockCipher {
  public:
-  virtual ~BlockCipher(){};
+  virtual ~BlockCipher() {}
 
   // BlockSize returns the size of each block supported by this cipher stream.
   virtual size_t BlockSize() = 0;
@@ -71,10 +71,13 @@ class BlockCipher {
 // actions.
 class EncryptionProvider {
  public:
-  virtual ~EncryptionProvider(){};
+  virtual ~EncryptionProvider() {}
 
-  virtual rocksdb::Status CreateCipherStream(const std::string& fname, bool new_file,
+  virtual rocksdb::Status CreateCipherStream(int env_level, const std::string& fname, bool new_file,
                                              std::unique_ptr<BlockAccessCipherStream>* result) = 0;
+
+  virtual rocksdb::Status DeleteFile(const std::string& fname) = 0;
+  virtual rocksdb::Status RenameFile(const std::string& src, const std::string& target) = 0;
 };
 
 }  // namespace rocksdb_utils

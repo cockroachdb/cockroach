@@ -301,10 +301,8 @@ class EncryptedRandomRWFile : public rocksdb::RandomRWFile {
 // EncryptedEnv implements an Env wrapper that adds encryption to files stored on disk.
 class EncryptedEnv : public rocksdb::EnvWrapper {
  public:
-  EncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider)
-      : rocksdb::EnvWrapper(base_env) {
-    provider_ = provider;
-  }
+  EncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, int env_level)
+      : rocksdb::EnvWrapper(base_env), provider_(provider), env_level_(env_level) {}
 
   // NewSequentialFile opens a file for sequential reading.
   virtual rocksdb::Status NewSequentialFile(const std::string& fname,
@@ -323,7 +321,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(fname, false /* new_file */, &stream);
+    status = provider_->CreateCipherStream(env_level_, fname, false /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -349,7 +347,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(fname, false /* new_file */, &stream);
+    status = provider_->CreateCipherStream(env_level_, fname, false /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -375,7 +373,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(fname, true /* new_file */, &stream);
+    status = provider_->CreateCipherStream(env_level_, fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -407,7 +405,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(fname, true /* new_file */, &stream);
+    status = provider_->CreateCipherStream(env_level_, fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -434,7 +432,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(fname, true /* new_file */, &stream);
+    status = provider_->CreateCipherStream(env_level_, fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -467,7 +465,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream, indicating whether this is a new file.
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(fname, isNewFile /* new_file */, &stream);
+    status = provider_->CreateCipherStream(env_level_, fname, isNewFile /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -476,14 +474,32 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
     return rocksdb::Status::OK();
   }
 
+  virtual rocksdb::Status DeleteFile(const std::string& fname) override {
+    auto status = provider_->DeleteFile(fname);
+    if (!status.ok()) {
+      return status;
+    }
+    return EnvWrapper::DeleteFile(fname);
+  }
+  virtual rocksdb::Status RenameFile(const std::string& src, const std::string& target) override {
+    auto status = provider_->RenameFile(src, target);
+    if (!status.ok()) {
+      return status;
+    }
+    return EnvWrapper::RenameFile(src, target);
+  }
+
+  // TODO(mberhault): do we want to support LinkFile (hardlink)?
+
  private:
   EncryptionProvider* provider_;
+  int env_level_;
 };
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
-rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider) {
-  return new EncryptedEnv(base_env, provider);
+rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, int env_level) {
+  return new EncryptedEnv(base_env, provider, env_level);
 }
 
 // Encrypt one or more (partial) blocks of data at the file offset.
