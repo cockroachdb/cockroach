@@ -1637,6 +1637,10 @@ CockroachDB supports the following flags:
 
 	"jsonb_object": jsonObjectImpls,
 
+	"json_strip_nulls": {jsonStripNullsImpl},
+
+	"jsonb_strip_nulls": {jsonStripNullsImpl},
+
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
@@ -2662,6 +2666,16 @@ var jsonObjectImpls = []tree.Builtin{
 			"separate arrays. In all other respects it is identical to the " +
 			"one-argument form.",
 	},
+}
+
+var jsonStripNullsImpl = tree.Builtin{
+	Types:      tree.ArgTypes{{"from_json", types.JSON}},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		j, _, err := tree.MustBeDJSON(args[0]).StripNulls()
+		return tree.NewDJSON(j), err
+	},
+	Info: "Returns from_json with all object fields that have null values omitted. Other null values are untouched.",
 }
 
 func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {
