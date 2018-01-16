@@ -90,9 +90,6 @@ type testingVerifyMetadata interface {
 type planner struct {
 	txn *client.Txn
 
-	// session is the Session on whose behalf this planner is working.
-	session *Session
-
 	// preparedStatements points to the Session's collection of prepared
 	// statements.
 	preparedStatements *PreparedStatements
@@ -180,10 +177,17 @@ var emptyPlanner planner
 // growth in the log.
 var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
 
-// makePlanner creates a new planner instance, referencing a dummy session.
-func makeInternalPlanner(
+// newInternalPlanner creates a new planner instance for internal usage. This
+// planner is not associated with a sql session.
+//
+// Since it can't be reset, the planner can be used only for planning a single
+// statement.
+//
+// Returns a cleanup function that must be called once the caller is done with
+// the planner.
+func newInternalPlanner(
 	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
-) *planner {
+) (*planner, func()) {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
@@ -243,13 +247,11 @@ func makeInternalPlanner(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Tables = &s.tables
 
-	return p
-}
-
-func finishInternalPlanner(p *planner) {
-	p.session.TxnState.mon.Stop(p.session.context)
-	p.session.sessionMon.Stop(p.session.context)
-	p.session.mon.Stop(p.session.context)
+	return p, func() {
+		s.TxnState.mon.Stop(ctx)
+		s.sessionMon.Stop(ctx)
+		s.mon.Stop(ctx)
+	}
 }
 
 func (p *planner) ExtendedEvalContext() *extendedEvalContext {
