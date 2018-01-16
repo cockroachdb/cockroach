@@ -2547,3 +2547,25 @@ func TestFileIOLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBackupRestoreNotInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	tx, err := sqlDB.DB.BeginTx(context.TODO(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`BACKUP DATABASE data TO $1`, localFoo); !testutils.IsError(err, "cannot be used inside a transaction") {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`RESTORE DATABASE data FROM $1`, localFoo); !testutils.IsError(err, "cannot be used inside a transaction") {
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}

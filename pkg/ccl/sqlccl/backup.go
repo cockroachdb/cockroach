@@ -627,6 +627,10 @@ func backupPlanHook(
 		return nil, nil, err
 	}
 
+	if !p.ExtendedEvalContext().TxnImplicit {
+		return nil, nil, errors.Errorf("BACKUP cannot be used inside a transaction")
+	}
+
 	toFn, err := p.TypeAsString(backupStmt.To, "BACKUP")
 	if err != nil {
 		return nil, nil, err

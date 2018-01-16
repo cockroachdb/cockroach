@@ -649,6 +649,7 @@ func (s *Session) extendedEvalCtx(
 			ApplicationName:  s.dataMutator.ApplicationName(),
 			TxnState:         getTransactionState(&s.TxnState),
 			TxnReadOnly:      s.TxnState.readOnly,
+			TxnImplicit:      s.TxnState.implicitTxn,
 			Settings:         st,
 			CtxProvider:      s,
 			Mon:              &s.TxnState.mon,
