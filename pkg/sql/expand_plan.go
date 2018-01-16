@@ -29,9 +29,8 @@ import (
 // fails.
 func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, error) {
 	var err error
-	plan, err = doExpandPlan(ctx, p, noParams, plan)
-	if err != nil {
-		return plan, err
+	if plan, err = doExpandPlan(ctx, p, noParams, plan); err != nil {
+		return nil, err
 	}
 	plan = p.simplifyOrderings(plan, nil)
 
@@ -193,7 +192,7 @@ func doExpandPlan(
 
 		if s, ok := n.plan.(*sortNode); ok {
 			// (... ORDER BY x) ORDER BY y -> keep the outer sort
-			elideDoubleSort(n, s)
+			n.plan = s.plan
 		}
 
 		// Check to see if the requested ordering is compatible with the existing
@@ -266,17 +265,6 @@ func doExpandPlan(
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
 	}
 	return plan, err
-}
-
-// elideDoubleSort removes the source sortNode because it is
-// redundant.
-func elideDoubleSort(parent, source *sortNode) {
-	parent.plan = source.plan
-	// Propagate renamed columns
-	mutSourceCols := planMutableColumns(parent.plan)
-	for i, col := range parent.columns {
-		mutSourceCols[i].Name = col.Name
-	}
 }
 
 func expandDistinctNode(
@@ -572,20 +560,8 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 			}
 		}
 
-		if !n.needSort {
-			if len(n.columns) < len(planColumns(n.plan)) {
-				// No sorting required, but we have to strip off the extra render
-				// expressions we added. So keep the sort node.
-				// TODO(radu): replace with a renderNode
-			} else {
-				// Sort node fully disappears.
-				// Just be sure to propagate the column names.
-				mutSourceCols := planMutableColumns(n.plan)
-				for i, col := range n.columns {
-					mutSourceCols[i].Name = col.Name
-				}
-				plan = n.plan
-			}
+		if !n.needSort && !n.needRender {
+			plan = n.plan
 		}
 
 	case *distinctNode:

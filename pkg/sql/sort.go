@@ -33,10 +33,10 @@ import (
 // sub-node.
 type sortNode struct {
 	plan     planNode
-	columns  sqlbase.ResultColumns
 	ordering sqlbase.ColumnOrdering
 
-	needSort bool
+	needRender bool
+	needSort   bool
 
 	run sortRun
 }
@@ -56,9 +56,9 @@ type sortNode struct {
 // generalization of how to add derived columns to a SelectStatement.
 func (p *planner) orderBy(
 	ctx context.Context, orderBy tree.OrderBy, n planNode,
-) (*sortNode, error) {
+) (planNode, *sortNode, error) {
 	if orderBy == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Multiple tests below use renderNode as a special case.
@@ -77,7 +77,7 @@ func (p *planner) orderBy(
 	var err error
 	orderBy, err = p.rewriteIndexOrderings(ctx, orderBy)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, o := range orderBy {
@@ -127,7 +127,7 @@ func (p *planner) orderBy(
 		// First, deal with render aliases.
 		index, err := s.colIdxByRenderAlias(expr, columns, "ORDER BY")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// If the expression does not refer to an alias, deal with
@@ -135,7 +135,7 @@ func (p *planner) orderBy(
 		if index == -1 {
 			col, err := p.colIndex(numOriginalCols, expr, "ORDER BY")
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if col != -1 {
 				index = col
@@ -146,7 +146,7 @@ func (p *planner) orderBy(
 		// column type we can order on.
 		if index != -1 {
 			if err := ensureColumnOrderable(columns[index]); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 
@@ -160,7 +160,7 @@ func (p *planner) orderBy(
 				ctx, tree.SelectExpr{Expr: expr}, types.Any,
 				s.sourceInfo, s.ivarHelper, autoGenerateRenderOutputName)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 
@@ -184,13 +184,13 @@ func (p *planner) orderBy(
 			renderCols := planColumns(s)
 			for _, colIdx := range colIdxs {
 				if err := ensureColumnOrderable(renderCols[colIdx]); err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 			}
 		}
 
 		if index == -1 {
-			return nil, pgerror.NewErrorf(
+			return nil, nil, pgerror.NewErrorf(
 				pgerror.CodeUndefinedColumnError,
 				"column %s does not exist", expr,
 			)
@@ -201,9 +201,21 @@ func (p *planner) orderBy(
 
 	if ordering == nil {
 		// No ordering; simply drop the sort node.
-		return nil, nil
+		return nil, nil, nil
 	}
-	return &sortNode{columns: columns, ordering: ordering}, nil
+	sort := &sortNode{
+		ordering:   ordering,
+		needRender: len(columns) < len(planColumns(n)),
+	}
+	if !sort.needRender {
+		return sort, sort, nil
+	}
+
+	render, err := p.insertRender(ctx, sort, &anonymousTable, columns)
+	if err != nil {
+		return nil, nil, err
+	}
+	return render, sort, nil
 }
 
 // sortRun contains the run-time state of sortNode during local
@@ -278,7 +290,7 @@ func (n *sortNode) Next(params runParams) (bool, error) {
 func (n *sortNode) Values() tree.Datums {
 	// If an ordering expression was used the number of columns in each row might
 	// differ from the number of columns requested, so trim the result.
-	return n.run.valueIter.Values()[:len(n.columns)]
+	return n.run.valueIter.Values()
 }
 
 func (n *sortNode) Close(ctx context.Context) {

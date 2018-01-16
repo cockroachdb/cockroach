@@ -93,7 +93,6 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 					{ColIdx: 0, Direction: encoding.Ascending},
 					{ColIdx: 1, Direction: encoding.Ascending},
 				},
-				columns: v.columns,
 			}, nil
 		},
 	}, nil

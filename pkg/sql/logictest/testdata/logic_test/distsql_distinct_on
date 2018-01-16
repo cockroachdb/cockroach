@@ -196,14 +196,17 @@ SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-distinct        0  distinct  ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
- │              0  ·         distinct on  a, b         ·       ·
- │              0  ·         order key    a, b         ·       ·
- └── nosort     1  nosort    ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
-      │         1  ·         order        +a,+b,+c     ·       ·
-      └── scan  2  scan      ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
-·               2  ·         table        abc@primary  ·       ·
-·               2  ·         spans        ALL          ·       ·
+distinct             0  distinct  ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
+ │                   0  ·         distinct on  a, b         ·       ·
+ │                   0  ·         order key    a, b         ·       ·
+ └── render          1  render    ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
+      │              1  ·         render 0     a            ·       ·
+      │              1  ·         render 1     b            ·       ·
+      └── nosort     2  nosort    ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
+           │         2  ·         order        +a,+b,+c     ·       ·
+           └── scan  3  scan      ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
+·                    3  ·         table        abc@primary  ·       ·
+·                    3  ·         spans        ALL          ·       ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]

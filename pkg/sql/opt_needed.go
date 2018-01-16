@@ -150,7 +150,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 
 		setNeededColumns(n.plan, sourceNeeded)
-		markOmitted(n.columns, sourceNeeded[:len(n.columns)])
 
 	case *groupNode:
 		// TODO(knz): This can be optimized by removing the aggregation
