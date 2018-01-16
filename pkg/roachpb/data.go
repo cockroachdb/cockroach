@@ -1161,13 +1161,17 @@ func (l Lease) Type() LeaseType {
 // Ignore proposed timestamps for lease verification; for epoch-
 // based leases, the start time of the lease is sufficient to
 // avoid using an older lease with same epoch.
-func (l Lease) Equivalent(ol Lease) bool {
+//
+// NB: Lease.Equivalent is NOT symmetric. For expiration-based
+// leases, a lease is equivalent to another with an equal or
+// later expiration, but not an earlier expiration.
+func (l Lease) Equivalent(newL Lease) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
-	l.ProposedTS, ol.ProposedTS = nil, nil
-	l.DeprecatedStartStasis, ol.DeprecatedStartStasis = nil, nil
+	l.ProposedTS, newL.ProposedTS = nil, nil
+	l.DeprecatedStartStasis, newL.DeprecatedStartStasis = nil, nil
 	// Ignore sequence numbers, they are simply a reflection of
 	// the equivalency of other fields.
-	l.Sequence, ol.Sequence = 0, 0
+	l.Sequence, newL.Sequence = 0, 0
 	// If both leases are epoch-based, we must dereference the epochs
 	// and then set to nil.
 	switch l.Type() {
@@ -1175,22 +1179,24 @@ func (l Lease) Equivalent(ol Lease) bool {
 		// Ignore expirations. This seems benign but since we changed the
 		// nullability of this field in the 1.2 cycle, it's crucial and
 		// tested in TestLeaseEquivalence.
-		l.Expiration, ol.Expiration = nil, nil
+		l.Expiration, newL.Expiration = nil, nil
 
-		if l.Epoch == ol.Epoch {
-			l.Epoch, ol.Epoch = 0, 0
+		if l.Epoch == newL.Epoch {
+			l.Epoch, newL.Epoch = 0, 0
 		}
 	case LeaseExpiration:
 		// See the comment above, though this field's nullability wasn't
 		// changed. We nil it out for completeness only.
-		l.Epoch, ol.Epoch = 0, 0
+		l.Epoch, newL.Epoch = 0, 0
 
 		// For expiration-based leases, extensions are considered equivalent.
-		if !ol.GetExpiration().Less(l.GetExpiration()) {
-			l.Expiration, ol.Expiration = nil, nil
+		// This is the one case where Equivalent is not commutative and, as
+		// such, requires special handling beneath Raft (see checkForcedErrLocked).
+		if !newL.GetExpiration().Less(l.GetExpiration()) {
+			l.Expiration, newL.Expiration = nil, nil
 		}
 	}
-	return l == ol
+	return l == newL
 }
 
 // GetExpiration returns the lease expiration or the zero timestamp if the

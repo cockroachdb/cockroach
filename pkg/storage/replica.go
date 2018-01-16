@@ -4451,6 +4451,27 @@ func (r *Replica) checkForcedErrLocked(
 		leaseMismatch = !raftCmd.DeprecatedProposerLease.Equivalent(*r.mu.state.Lease)
 	} else {
 		leaseMismatch = raftCmd.ProposerLeaseSequence != r.mu.state.Lease.Sequence
+		if !leaseMismatch && isLeaseRequest {
+			// Lease sequence numbers are a reflection of lease equivalency
+			// between subsequent leases. However, Lease.Equivalent is not fully
+			// symmetric, meaning that two leases may be Equivalent to a third
+			// lease but not Equivalent to each other. If these leases are
+			// proposed under that same third lease, neither will be able to
+			// detect whether the other has applied just by looking at the
+			// current lease sequence number because neither will will increment
+			// the sequence number.
+			//
+			// This can lead to inversions in lease expiration timestamps if
+			// we're not careful. To avoid this, if a lease request's proposer
+			// lease sequence matches the current lease sequence and the current
+			// lease sequence also matches the requested lease sequence, we make
+			// sure the requested lease is Equivalent to current lease.
+			if r.mu.state.Lease.Sequence == requestedLease.Sequence {
+				// It is only possible for this to fail when expiration-based
+				// lease extensions are proposed concurrently.
+				leaseMismatch = !r.mu.state.Lease.Equivalent(requestedLease)
+			}
+		}
 	}
 	if leaseMismatch {
 		log.VEventf(
