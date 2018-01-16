@@ -183,6 +183,11 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 					if m.emitUnmatchedRight {
 						m.matchedRight.Add(ridx)
 					}
+					if m.joinType == leftSemiJoin {
+						// Semi-joins only need to know if there is at least
+						// one match, so can skip the rest of the right rows.
+						m.rightIdx = len(m.rightRows)
+					}
 					return renderedRow, nil
 				}
 			}
