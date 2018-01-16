@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -99,6 +100,12 @@ func (s *Server) Query(
 		sampleNanos = Resolution10s.SampleDuration()
 	}
 
+	// For the interpolation limit, use the time limit until stores are considered
+	// dead. This is a conservatively long span, but gives us a good indication of
+	// when a gap likely indicates an outage (and thus missing values should not
+	// be interpolated).
+	interpolationLimit := storage.TimeUntilStoreDead.Get(&s.db.st.SV).Nanoseconds()
+
 	response := tspb.TimeSeriesQueryResponse{
 		Results: make([]tspb.TimeSeriesQueryResponse_Result, len(request.Queries)),
 	}
@@ -135,6 +142,7 @@ func (s *Server) Query(
 						sampleNanos,
 						request.StartNanos,
 						request.EndNanos,
+						interpolationLimit,
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{

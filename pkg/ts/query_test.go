@@ -627,13 +627,24 @@ func TestAggregation(t *testing.T) {
 
 // assertQuery generates a query result from the local test model and compares
 // it against the query returned from the server.
+//
+// TODO(mrtracy): This verification model is showing its age, and likely needs
+// to be restructured in order to improve its trustworthyness. Currently, there
+// is just enough overlap in the functionality between the model and the real
+// system that it's difficult to be sure that you don't have a common error in
+// both systems.
+//
+// My suggestion is to break down the model query into multiple, independently
+// verificable steps. These steps will not be memory or computationally
+// efficient, but will be conceptually easy to verify; then we can compare its
+// results against the real data store with more confidence.
 func (tm *testModel) assertQuery(
 	name string,
 	sources []string,
 	downsample, agg *tspb.TimeSeriesQueryAggregator,
 	derivative *tspb.TimeSeriesQueryDerivative,
 	r Resolution,
-	sampleDuration, start, end int64,
+	sampleDuration, start, end, interpolationLimit int64,
 	expectedDatapointCount, expectedSourceCount int,
 ) {
 	tm.t.Helper()
@@ -645,7 +656,9 @@ func (tm *testModel) assertQuery(
 		Derivative:       derivative,
 		Sources:          sources,
 	}
-	actualDatapoints, actualSources, err := tm.DB.Query(context.TODO(), q, r, sampleDuration, start, end)
+	actualDatapoints, actualSources, err := tm.DB.Query(
+		context.TODO(), q, r, sampleDuration, start, end, interpolationLimit,
+	)
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -677,7 +690,9 @@ func (tm *testModel) assertQuery(
 	// Iterate over all possible sources which may have data for this query.
 	for sourceName := range sourcesToCheck {
 		// Iterate over all possible key times at which query data may be present.
-		for time := start - (start % r.SlabDuration()); time < end; time += r.SlabDuration() {
+		dataStart := start - interpolationLimit
+		dataEnd := end + interpolationLimit
+		for time := dataStart - (dataStart % r.SlabDuration()); time < dataEnd; time += r.SlabDuration() {
 			// Construct a key for this source/time and retrieve it from model.
 			key := MakeDataKey(name, sourceName, r, time)
 			value, ok := tm.modelData[string(key)]
@@ -721,12 +736,13 @@ func (tm *testModel) assertQuery(
 	if err != nil {
 		tm.t.Fatal(err)
 	}
+	maxDistance := int32(interpolationLimit / r.SampleDuration())
 	var iters aggregatingIterator
 	for _, ds := range dataSpans {
 		iters = append(
 			iters,
 			newInterpolatingIterator(
-				*ds, 0, sampleDuration, 0, extractFn, downsampleFn, q.GetDerivative(),
+				*ds, 0, sampleDuration, maxDistance, extractFn, downsampleFn, q.GetDerivative(),
 			),
 		)
 	}
@@ -798,7 +814,7 @@ func TestQuery(t *testing.T) {
 	})
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 7, 1)
+	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 0, 7, 1)
 
 	// Verify across multiple sources
 	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
@@ -828,19 +844,19 @@ func TestQuery(t *testing.T) {
 	tm.assertModelCorrect()
 
 	// Test default query: avg downsampler, sum aggregator, no derivative.
-	tm.assertQuery("test.multimetric", nil, nil, nil, nil, resolution1ns, 1, 0, 90, 8, 2)
+	tm.assertQuery("test.multimetric", nil, nil, nil, nil, resolution1ns, 1, 0, 90, 0, 8, 2)
 	// Test with aggregator specified.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MAX.Enum(), nil, nil,
-		resolution1ns, 1, 0, 90, 8, 2)
+		resolution1ns, 1, 0, 90, 0, 8, 2)
 	// Test with aggregator and downsampler.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MAX.Enum(), tspb.TimeSeriesQueryAggregator_AVG.Enum(), nil,
-		resolution1ns, 1, 0, 90, 8, 2)
+		resolution1ns, 1, 0, 90, 0, 8, 2)
 	// Test with derivative specified.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_AVG.Enum(), nil,
-		tspb.TimeSeriesQueryDerivative_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 7, 2)
+		tspb.TimeSeriesQueryDerivative_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 0, 7, 2)
 	// Test with everything specified.
 	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MIN.Enum(), tspb.TimeSeriesQueryAggregator_MAX.Enum(),
-		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 7, 2)
+		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 0, 7, 2)
 
 	// Test queries that return no data. Check with every
 	// aggregator/downsampler/derivative combination. This situation is
@@ -867,6 +883,7 @@ func TestQuery(t *testing.T) {
 					1,
 					0,
 					90,
+					0,
 					0,
 					0,
 				)
@@ -934,11 +951,11 @@ func TestQuery(t *testing.T) {
 
 	// Assert querying data from subset of sources. Includes source with no
 	// data.
-	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, nil, nil, resolution1ns, 1, 0, 90, 7, 2)
+	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, nil, nil, resolution1ns, 1, 0, 90, 0, 7, 2)
 
 	// Assert querying data over limited range for single source. Regression
 	// test for #4987.
-	tm.assertQuery("test.specificmetric", []string{"source4", "source5"}, nil, nil, nil, resolution1ns, 1, 5, 24, 4, 2)
+	tm.assertQuery("test.specificmetric", []string{"source4", "source5"}, nil, nil, nil, resolution1ns, 1, 5, 24, 0, 4, 2)
 }
 
 // TestQueryDownsampling validates that query results match the expectation of
@@ -950,7 +967,7 @@ func TestQueryDownsampling(t *testing.T) {
 	defer tm.Stop()
 
 	// Query with sampleDuration that is too small, expect error.
-	_, _, err := tm.DB.Query(context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000)
+	_, _, err := tm.DB.Query(context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, 0)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
 	}
@@ -961,7 +978,7 @@ func TestQueryDownsampling(t *testing.T) {
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
 	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000,
+		context.TODO(), tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000, 0,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")
@@ -1006,7 +1023,94 @@ func TestQueryDownsampling(t *testing.T) {
 	tm.assertKeyCount(9)
 	tm.assertModelCorrect()
 
-	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 10, 0, 60, 6, 2)
-	tm.assertQuery("test.metric", []string{"source1"}, nil, nil, nil, resolution1ns, 10, 0, 60, 5, 1)
-	tm.assertQuery("test.metric", []string{"source2"}, nil, nil, nil, resolution1ns, 10, 0, 60, 4, 1)
+	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 10, 0, 60, 0, 6, 2)
+	tm.assertQuery("test.metric", []string{"source1"}, nil, nil, nil, resolution1ns, 10, 0, 60, 0, 5, 1)
+	tm.assertQuery("test.metric", []string{"source2"}, nil, nil, nil, resolution1ns, 10, 0, 60, 0, 4, 1)
+}
+
+// TestInterpolationLimit validates that query results match the expectation of
+// the test model.
+func TestInterpolationLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tm := newTestModel(t)
+	tm.Start()
+	defer tm.Stop()
+
+	// Metric with gaps at the edge of a queryable range.
+	// The first source has missing data points at 14 and 19, which can
+	// be interpolated from data points located in nearby slabs.
+	// 5 - [15, 16, 17, 18] - 25
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
+		{
+			Name:   "metric.edgegaps",
+			Source: "source1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(5, 500),
+				datapoint(15, 1500),
+				datapoint(16, 1600),
+				datapoint(17, 1700),
+				datapoint(18, 1800),
+				datapoint(25, 2500),
+			},
+		},
+		{
+			Name:   "metric.edgegaps",
+			Source: "source2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(14, 1000),
+				datapoint(15, 1000),
+				datapoint(16, 1000),
+				datapoint(17, 1000),
+				datapoint(18, 1000),
+				datapoint(19, 1000),
+			},
+		},
+	})
+	tm.assertKeyCount(4)
+	tm.assertModelCorrect()
+
+	tm.assertQuery("metric.edgegaps", nil, nil, nil, nil, resolution1ns, 1, 14, 19, 10, 6, 2)
+	tm.assertQuery("metric.edgegaps", nil, nil, nil, nil, resolution1ns, 1, 14, 19, 0, 6, 2)
+	tm.assertQuery("metric.edgegaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 14, 19, 10, 6, 2)
+
+	// Metric with inner gaps which may be effected by the interpolation limit.
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
+		{
+			Name:   "metric.innergaps",
+			Source: "source1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(1, 100),
+				datapoint(2, 200),
+				datapoint(4, 400),
+				datapoint(7, 700),
+				datapoint(10, 1000),
+			},
+		},
+		{
+			Name:   "metric.innergaps",
+			Source: "source2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(1, 100),
+				datapoint(2, 100),
+				datapoint(3, 100),
+				datapoint(4, 100),
+				datapoint(5, 100),
+				datapoint(6, 100),
+				datapoint(7, 100),
+				datapoint(8, 100),
+				datapoint(9, 100),
+			},
+		},
+	})
+	tm.assertKeyCount(7)
+	tm.assertModelCorrect()
+
+	tm.assertQuery("metric.innergaps", nil, nil, nil, nil, resolution1ns, 1, 0, 9, 0, 9, 2)
+	tm.assertQuery("metric.innergaps", nil, nil, nil, nil, resolution1ns, 1, 0, 9, 2, 9, 2)
+	tm.assertQuery("metric.innergaps", nil, nil, nil, nil, resolution1ns, 1, 0, 9, 3, 9, 2)
+	tm.assertQuery("metric.innergaps", nil, nil, nil, nil, resolution1ns, 1, 0, 9, 10, 9, 2)
+	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 0, 9, 2)
+	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 2, 9, 2)
+	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 3, 9, 2)
+	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 10, 9, 2)
 }
