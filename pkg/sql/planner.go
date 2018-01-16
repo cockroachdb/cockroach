@@ -277,8 +277,8 @@ func finishInternalPlanner(p *planner) {
 	p.session.mon.Stop(p.session.context)
 }
 
-func (p *planner) ExtendedEvalContext() extendedEvalContext {
-	return p.extendedEvalCtx
+func (p *planner) ExtendedEvalContext() *extendedEvalContext {
+	return &p.extendedEvalCtx
 }
 
 // EvalContext() provides convenient access to the planner's EvalContext().
