@@ -134,13 +134,13 @@ func (p *planner) Select(
 		if err != nil {
 			return nil, err
 		}
-		sort, err := p.orderBy(ctx, orderBy, plan)
+		sortPlan, sort, err := p.orderBy(ctx, orderBy, plan)
 		if err != nil {
 			return nil, err
 		}
 		if sort != nil {
 			sort.plan = plan
-			plan = sort
+			plan = sortPlan
 		}
 		limit, err := p.Limit(ctx, limit)
 		if err != nil {
@@ -231,7 +231,7 @@ func (p *planner) SelectClause(
 	if err != nil {
 		return nil, err
 	}
-	sort, err := p.orderBy(ctx, orderBy, r)
+	sortPlan, sort, err := p.orderBy(ctx, orderBy, r)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +297,7 @@ func (p *planner) SelectClause(
 	}
 	if sort != nil {
 		sort.plan = result
-		result = sort
+		result = sortPlan
 	}
 	if distinctComplex != nil && distinct != nil {
 		distinct.plan = result
@@ -415,11 +415,12 @@ func (p *planner) initTargets(
 }
 
 // insertRender creates a new renderNode that renders exactly its
-// source plan.
+// source plan with given columns which must be the subset of result columns
+// of the source plan.
 func (p *planner) insertRender(
-	ctx context.Context, plan planNode, tn *tree.TableName,
+	ctx context.Context, plan planNode, tn *tree.TableName, columns sqlbase.ResultColumns,
 ) (*renderNode, error) {
-	src := planDataSource{info: newSourceInfoForSingleTable(*tn, planColumns(plan)), plan: plan}
+	src := planDataSource{info: newSourceInfoForSingleTable(*tn, columns), plan: plan}
 	render := &renderNode{
 		source:     src,
 		sourceInfo: multiSourceInfo{src.info},

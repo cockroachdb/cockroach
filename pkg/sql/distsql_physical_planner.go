@@ -858,6 +858,11 @@ func (dsp *DistSQLPlanner) selectRenders(
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
 func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
+	if !n.needSort {
+		// This node exists only to keep track of an ordering requirement,
+		// we don't need to do anything
+		return
+	}
 
 	matchLen := planPhysicalProps(n.plan).computeMatch(n.ordering)
 
@@ -888,29 +893,6 @@ func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 			p.ResultTypes,
 			ordering,
 		)
-	}
-
-	if len(n.columns) != len(p.planToStreamColMap) {
-		// In cases like:
-		//   SELECT a FROM t ORDER BY b
-		// we have columns (b) that are only used for sorting. These columns are not
-		// in the output columns of the sortNode; we set a projection such that the
-		// plan results map 1-to-1 to sortNode columns.
-		//
-		// Note that internally, AddProjection might retain more columns than
-		// necessary so we can preserve the p.Ordering between parallel streams
-		// when they merge later.
-		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		columns := make([]uint32, 0, len(n.columns))
-		for i, col := range p.planToStreamColMap {
-			if col < 0 {
-				// This column isn't needed; ignore it.
-				continue
-			}
-			p.planToStreamColMap[i] = len(columns)
-			columns = append(columns, uint32(col))
-		}
-		p.AddProjection(columns)
 	}
 }
 

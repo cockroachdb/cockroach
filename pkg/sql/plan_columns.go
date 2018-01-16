@@ -65,8 +65,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *scanNode:
 		return n.resultColumns
-	case *sortNode:
-		return n.columns
 	case *valueGenerator:
 		return n.columns
 	case *valuesNode:
@@ -108,6 +106,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.
+	case *sortNode:
+		return getPlanColumns(n.plan, mut)
 	case *distinctNode:
 		return getPlanColumns(n.plan, mut)
 	case *filterNode:

@@ -170,16 +170,10 @@ func (p *planner) distinct(
 	// We add a post renderNode if DISTINCT ON introduced additional render
 	// expressions.
 	if len(origRender) < len(r.render) {
-		src := planDataSource{info: newSourceInfoForSingleTable(anonymousTable, origColumns), plan: d}
-		postRender := &renderNode{
-			source:     src,
-			sourceInfo: multiSourceInfo{src.info},
-		}
-		postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(src.info.sourceColumns))
-		if err := p.initTargets(ctx, postRender, tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}}, nil /* desiredTypes */); err != nil {
+		var err error
+		if plan, err = p.insertRender(ctx, d, &anonymousTable, origColumns); err != nil {
 			return nil, nil, err
 		}
-		plan = postRender
 	}
 
 	return plan, d, nil

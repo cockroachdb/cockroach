@@ -210,23 +210,24 @@ render            ·     ·
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-sort                                       ·         ·
- │                                         order     +ordinal_position
- └── render                                ·         ·
-      └── group                            ·         ·
-           │                               group by  @1-@5
-           └── render                      ·         ·
-                └── join                   ·         ·
-                     │                     type      left outer
-                     │                     equality  (column_name) = (column_name)
-                     ├── render            ·         ·
-                     │    └── filter       ·         ·
-                     │         └── values  ·         ·
-                     │                     size      16 columns, 717 rows
-                     └── render            ·         ·
-                          └── filter       ·         ·
-                               └── values  ·         ·
-·                                          size      13 columns, 37 rows
+render                                          ·         ·
+ └── sort                                       ·         ·
+      │                                         order     +ordinal_position
+      └── render                                ·         ·
+           └── group                            ·         ·
+                │                               group by  @1-@5
+                └── render                      ·         ·
+                     └── join                   ·         ·
+                          │                     type      left outer
+                          │                     equality  (column_name) = (column_name)
+                          ├── render            ·         ·
+                          │    └── filter       ·         ·
+                          │         └── values  ·         ·
+                          │                     size      16 columns, 717 rows
+                          └── render            ·         ·
+                               └── filter       ·         ·
+                                    └── values  ·         ·
+·                                               size      13 columns, 37 rows
 
 query TTT
 EXPLAIN SHOW GRANTS ON foo
