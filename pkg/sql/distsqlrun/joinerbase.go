@@ -68,9 +68,13 @@ func (jb *joinerBase) init(
 	jb.eqCols[rightSide] = columns(rightEqColumns)
 	jb.numMergedEqualityColumns = int(numMergedColumns)
 
-	jb.combinedRow = make(sqlbase.EncDatumRow, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
+	size := len(leftTypes) + jb.numMergedEqualityColumns
+	if shouldIncludeRight(jb.joinType) {
+		size += len(rightTypes)
+	}
+	jb.combinedRow = make(sqlbase.EncDatumRow, size)
 
-	types := make([]sqlbase.ColumnType, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
+	types := make([]sqlbase.ColumnType, 0, size)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
 		ltype := leftTypes[jb.eqCols[leftSide][idx]]
 		rtype := rightTypes[jb.eqCols[rightSide][idx]]
@@ -83,7 +87,9 @@ func (jb *joinerBase) init(
 		types = append(types, ctype)
 	}
 	types = append(types, leftTypes...)
-	types = append(types, rightTypes...)
+	if shouldIncludeRight(jb.joinType) {
+		types = append(types, rightTypes...)
+	}
 
 	evalCtx := flowCtx.NewEvalCtx()
 	if err := jb.onCond.init(onExpr, types, evalCtx); err != nil {
@@ -126,17 +132,20 @@ func (jb *joinerBase) renderUnmatchedRow(
 	return jb.combinedRow
 }
 
+// Certain types of joins only emit the left columns.
+func shouldIncludeRight(joinType joinType) bool {
+	return joinType != leftSemiJoin
+}
+
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
 // and LEFT or RIGHT OUTER joins (depending on which stream).
 func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 	switch joinType {
-	case innerJoin:
+	case leftSemiJoin, innerJoin:
 		return false
 	case rightOuter:
-		if side == leftSide {
-			return false
-		}
+		return side == rightSide
 	case leftOuter:
 		if side == rightSide {
 			return false
@@ -146,9 +155,9 @@ func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 	return true
 }
 
-// maybeEmitUnmatchedRow is used for rows that don't match anything in the other
-// table; we emit them if it's called for given the type of join, otherwise we
-// discard them.
+// maybeEmitUnmatchedRow is used for rows that don't match anything in the
+// other table; we emit them if it's called for given the type of join,
+// otherwise we discard them.
 //
 // Returns false if no more rows are needed. Also returns any error occurring
 // when emitting the row (i.e. filtering or rendering errors). If false or an
@@ -184,7 +193,9 @@ func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRo
 		jb.combinedRow[i] = lrow[jb.eqCols[leftSide][i]]
 	}
 	copy(jb.combinedRow[n:], lrow)
-	copy(jb.combinedRow[n+len(lrow):], rrow)
+	if shouldIncludeRight(jb.joinType) {
+		copy(jb.combinedRow[n+len(lrow):], rrow)
+	}
 
 	if jb.onCond.expr != nil {
 		res, err := jb.onCond.evalFilter(jb.combinedRow)
