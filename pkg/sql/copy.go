@@ -255,7 +255,10 @@ func (c *copyMachine) preparePlanner(ctx context.Context) func(context.Context, 
 		stmtTs = txnTs
 		autoCommit = true
 	}
-	c.session.resetPlanner(&c.p, txn, txnTs, stmtTs, nil /* reCache */)
+	c.session.resetPlanner(
+		&c.p, txn, txnTs, stmtTs,
+		nil /* reCache */, c.session.statsCollector(),
+	)
 	c.p.autoCommit = autoCommit
 
 	return func(ctx context.Context, err error) error {

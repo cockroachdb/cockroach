@@ -326,7 +326,8 @@ func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*pl
 	// accessing the session directly. That requires us to reset the planner, so
 	// that its copy of the session variable is reset.
 	p.session.resetPlanner(
-		p, txn, physicalNow /* txnTimestamp */, physicalNow /* stmtTimestamp */, nil /* reCache */)
+		p, txn, physicalNow /* txnTimestamp */, physicalNow, /* stmtTimestamp */
+		nil /* reCache */, p.session.statsCollector())
 
 	stmts, err := p.parser.Parse(sql)
 	if err != nil {
