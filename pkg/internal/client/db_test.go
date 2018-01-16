@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -355,107 +354,5 @@ func TestDebugName(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Errorf("txn failed: %s", err)
-	}
-}
-
-func TestCommonMethods(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	batchType := reflect.TypeOf(&client.Batch{})
-	dbType := reflect.TypeOf(&client.DB{})
-	txnType := reflect.TypeOf(&client.Txn{})
-	types := []reflect.Type{batchType, dbType, txnType}
-
-	type key struct {
-		typ    reflect.Type
-		method string
-	}
-	omittedChecks := map[key]struct{}{
-		// TODO(tschottdorf): removed GetProto from Batch, which necessitates
-		// these two exceptions. Batch.GetProto would require wrapping each
-		// request with the information that this particular Get must be
-		// unmarshaled, which didn't seem worth doing as we're not using
-		// Batch.GetProto at the moment.
-		{dbType, "GetProto"}:                         {},
-		{txnType, "GetProto"}:                        {},
-		{batchType, "CheckConsistency"}:              {},
-		{batchType, "AddRawRequest"}:                 {},
-		{batchType, "PutInline"}:                     {},
-		{batchType, "RawResponse"}:                   {},
-		{batchType, "MustPErr"}:                      {},
-		{dbType, "AddSSTable"}:                       {},
-		{dbType, "AdminMerge"}:                       {},
-		{dbType, "AdminSplit"}:                       {},
-		{dbType, "AdminTransferLease"}:               {},
-		{dbType, "AdminChangeReplicas"}:              {},
-		{dbType, "CheckConsistency"}:                 {},
-		{dbType, "Run"}:                              {},
-		{dbType, "Txn"}:                              {},
-		{dbType, "GetSender"}:                        {},
-		{dbType, "PutInline"}:                        {},
-		{dbType, "WriteBatch"}:                       {},
-		{txnType, "AcceptUnhandledRetryableErrors"}:  {},
-		{txnType, "Commit"}:                          {},
-		{txnType, "CommitInBatch"}:                   {},
-		{txnType, "CommitOrCleanup"}:                 {},
-		{txnType, "Rollback"}:                        {},
-		{txnType, "CleanupOnError"}:                  {},
-		{txnType, "DebugName"}:                       {},
-		{txnType, "GenerateForcedRetryableError"}:    {},
-		{txnType, "InternalSetPriority"}:             {},
-		{txnType, "IsFinalized"}:                     {},
-		{txnType, "IsSerializableRestart"}:           {},
-		{txnType, "NewBatch"}:                        {},
-		{txnType, "Exec"}:                            {},
-		{txnType, "PrepareForRetry"}:                 {},
-		{txnType, "ResetDeadline"}:                   {},
-		{txnType, "Run"}:                             {},
-		{txnType, "Send"}:                            {},
-		{txnType, "SetDebugName"}:                    {},
-		{txnType, "SetFixedTimestamp"}:               {},
-		{txnType, "SetIsolation"}:                    {},
-		{txnType, "SetUserPriority"}:                 {},
-		{txnType, "SetSystemConfigTrigger"}:          {},
-		{txnType, "SetTxnAnchorKey"}:                 {},
-		{txnType, "UpdateDeadlineMaybe"}:             {},
-		{txnType, "UpdateStateOnRemoteRetryableErr"}: {},
-		{txnType, "AddCommitTrigger"}:                {},
-		{txnType, "CommandCount"}:                    {},
-		{txnType, "IsRetryableErrMeantForTxn"}:       {},
-		{txnType, "Isolation"}:                       {},
-		{txnType, "OrigTimestamp"}:                   {},
-		{txnType, "Proto"}:                           {},
-		{txnType, "UserPriority"}:                    {},
-		{txnType, "AnchorKey"}:                       {},
-		{txnType, "ID"}:                              {},
-		{txnType, "IsAborted"}:                       {},
-		{txnType, "IsCommitted"}:                     {},
-		{txnType, "DB"}:                              {},
-	}
-
-	for b := range omittedChecks {
-		if _, ok := b.typ.MethodByName(b.method); !ok {
-			t.Fatalf("blacklist method (%s).%s does not exist", b.typ, b.method)
-		}
-	}
-
-	for _, typ := range types {
-		for j := 0; j < typ.NumMethod(); j++ {
-			m := typ.Method(j)
-			if len(m.PkgPath) > 0 {
-				continue
-			}
-			if _, ok := omittedChecks[key{typ, m.Name}]; ok {
-				continue
-			}
-			for _, otherTyp := range types {
-				if typ == otherTyp {
-					continue
-				}
-				if _, ok := otherTyp.MethodByName(m.Name); !ok {
-					t.Errorf("(%s).%s does not exist, but (%s).%s does",
-						otherTyp, m.Name, typ, m.Name)
-				}
-			}
-		}
 	}
 }
