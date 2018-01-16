@@ -604,16 +604,6 @@ func (mrf *MultiRowFetcher) processKV(
 	}
 
 	if !table.isSecondaryIndex && len(mrf.keyRemainingBytes) > 0 {
-		_, familyID, err := encoding.DecodeUvarintAscending(mrf.keyRemainingBytes)
-		if err != nil {
-			return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
-		}
-
-		family, err := table.desc.FindFamilyByID(FamilyID(familyID))
-		if err != nil {
-			return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
-		}
-
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
 		// (obtained from the key encoding) might not be correct (e.g. for decimals,
@@ -626,8 +616,23 @@ func (mrf *MultiRowFetcher) processKV(
 
 		switch kv.Value.GetTag() {
 		case roachpb.ValueType_TUPLE:
+			// In this case, we don't need to decode the column family ID, because
+			// the ValueType_TUPLE encoding includes the column id with every encoded
+			// column value.
 			prettyKey, prettyValue, err = mrf.processValueTuple(ctx, table, kv, prettyKey)
 		default:
+			var familyID uint64
+			_, familyID, err = encoding.DecodeUvarintAscending(mrf.keyRemainingBytes)
+			if err != nil {
+				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
+			}
+
+			var family *ColumnFamilyDescriptor
+			family, err = table.desc.FindFamilyByID(FamilyID(familyID))
+			if err != nil {
+				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
+			}
+
 			prettyKey, prettyValue, err = mrf.processValueSingle(ctx, table, family, kv, prettyKey)
 		}
 		if err != nil {
