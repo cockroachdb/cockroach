@@ -458,7 +458,7 @@ func (p *planner) newPlan(
 		}
 	}
 
-	if p.session.TxnState.readOnly {
+	if p.EvalContext().TxnReadOnly {
 		if canModifySchema || tree.CanWriteData(stmt) {
 			return nil, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
 				"cannot execute %s in a read-only transaction", stmt.StatementTag())
