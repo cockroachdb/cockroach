@@ -768,3 +768,16 @@ func TestStartNodeWithLocality(t *testing.T) {
 		testLocalityWithNewNode(testCase)
 	}
 }
+
+func TestNodeSendUnknownBatchRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ba := roachpb.BatchRequest{
+		Requests: make([]roachpb.RequestUnion, 1),
+	}
+	n := &Node{}
+	_, err := n.batchInternal(context.Background(), &ba)
+	if !testutils.IsError(err, "unknown request") {
+		t.Fatal(err)
+	}
+}

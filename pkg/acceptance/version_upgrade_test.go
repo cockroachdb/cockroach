@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -62,6 +63,28 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 
 	c := StartCluster(ctx, t, cfg)
 	defer c.AssertAndStop(ctx, t)
+
+	// NB: This is an example of how the 1.0 series handles unknown requests.
+	// The answer is "not well". v1.1 has the same problem except in late patch
+	// releases. v2.0 does not have this issue, but it should be tested once (if)
+	// we introduce a new command to v2.1 by adapting the below code. See
+	// TestNodeSendUnknownBatchRequest or the discussion in:
+	// https://github.com/cockroachdb/cockroach/pull/21345#issuecomment-357986640
+	{
+		conn, err := c.(*localcluster.LocalCluster).Nodes[0].Conn()
+		if err != nil {
+			t.Fatal(err)
+		}
+		batchClient := roachpb.NewInternalClient(conn)
+		var ba roachpb.BatchRequest
+		var clear roachpb.ClearRangeRequest
+		// Uncomment this line to crash the node.
+		// ba.Add(&clear)
+		_ = clear
+		if _, err := batchClient.Batch(ctx, &ba); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	// Verify that the nodes are *really* at the versions configured. This
 	// tests the CI harness.
