@@ -768,3 +768,22 @@ func TestStartNodeWithLocality(t *testing.T) {
 		testLocalityWithNewNode(testCase)
 	}
 }
+
+func TestNodeSendUnknownBatchRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ba := roachpb.BatchRequest{
+		Requests: make([]roachpb.RequestUnion, 1),
+	}
+	n := &Node{}
+	br, err := n.batchInternal(context.Background(), &ba)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if br.Error == nil {
+		t.Fatal("no batch error returned")
+	}
+	if _, ok := br.Error.GetDetail().(*roachpb.UnsupportedRequestError); !ok {
+		t.Fatalf("expected unsupported request, not %v", br.Error)
+	}
+}

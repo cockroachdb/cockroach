@@ -119,6 +119,7 @@
 		AbortSpanEntry
 		NotLeaseHolderError
 		NodeUnavailableError
+		UnsupportedRequestError
 		RangeNotFoundError
 		RangeKeyMismatchError
 		ReadWithinUncertaintyIntervalError
