@@ -38,8 +38,13 @@ type execFactory struct {
 
 var _ opt.ExecFactory = &execFactory{}
 
+// Close is part of the opt.ExecFactory interface.
+func (ef *execFactory) Close() {
+	finishInternalPlanner(ef.planner)
+}
+
 // ConstructScan is part of the opt.ExecFactory interface.
-func (eb *execFactory) ConstructScan(table optbase.Table) (opt.ExecNode, error) {
+func (ef *execFactory) ConstructScan(table optbase.Table) (opt.ExecNode, error) {
 	desc := table.(*sqlbase.TableDescriptor)
 
 	columns := make([]tree.ColumnID, len(desc.Columns))
@@ -47,25 +52,25 @@ func (eb *execFactory) ConstructScan(table optbase.Table) (opt.ExecNode, error) 
 		columns[i] = tree.ColumnID(desc.Columns[i].ID)
 	}
 	// Create a scanNode.
-	scan := eb.planner.Scan()
-	if err := scan.initTable(eb.planner, desc, nil /* hints */, publicColumns, columns); err != nil {
+	scan := ef.planner.Scan()
+	if err := scan.initTable(ef.planner, desc, nil /* hints */, publicColumns, columns); err != nil {
 		return nil, err
 	}
 	var err error
 	scan.spans, err = makeSpans(
-		eb.planner.EvalContext(), nil /* constraints */, desc, &desc.PrimaryIndex,
+		ef.planner.EvalContext(), nil /* constraints */, desc, &desc.PrimaryIndex,
 	)
 	if err != nil {
 		return nil, err
 	}
 	return &execNode{
-		execFactory: *eb,
+		execFactory: *ef,
 		plan:        scan,
 	}, nil
 }
 
 // ConstructFilter is part of the opt.ExecFactory interface.
-func (eb *execFactory) ConstructFilter(
+func (ef *execFactory) ConstructFilter(
 	n opt.ExecNode, filter tree.TypedExpr,
 ) (opt.ExecNode, error) {
 	en := n.(*execNode)
@@ -80,7 +85,7 @@ func (eb *execFactory) ConstructFilter(
 	f.filter = filter
 	f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 	return &execNode{
-		execFactory: *eb,
+		execFactory: *ef,
 		plan:        f,
 	}, nil
 }

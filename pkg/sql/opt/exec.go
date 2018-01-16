@@ -45,6 +45,9 @@ type ExecFactory interface {
 	// ConstructFilter returns an ExecNode that applies a filter on the results
 	// of the given ExecNode.
 	ConstructFilter(n ExecNode, filter tree.TypedExpr) (ExecNode, error)
+
+	// Close cleans up any state associated with the factory.
+	Close()
 }
 
 // execNodeSchema describes the schema for the results of
