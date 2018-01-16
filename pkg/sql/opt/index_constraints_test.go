@@ -68,8 +68,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			iv := &indexedVars{types: varTypes}
-			iVarHelper := tree.MakeIndexedVarHelper(iv, len(iv.types))
+			iVarHelper := tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
 			typedExpr, err := parseScalarExpr(tc.expr, &iVarHelper)
 			if err != nil {
