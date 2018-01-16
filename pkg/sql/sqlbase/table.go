@@ -785,7 +785,7 @@ func DecodeIndexKey(
 			}
 
 			length := int(ancestor.SharedPrefixLen)
-			key, err = DecodeKeyVals(types[:length], vals[:length], colDirs[:length], key)
+			key, err = DecodeKeyVals(vals[:length], colDirs[:length], key)
 			if err != nil {
 				return nil, false, err
 			}
@@ -808,7 +808,7 @@ func DecodeIndexKey(
 		return nil, false, nil
 	}
 
-	key, err = DecodeKeyVals(types, vals, colDirs, key)
+	key, err = DecodeKeyVals(vals, colDirs, key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -826,9 +826,7 @@ func DecodeIndexKey(
 // DecodeKeyVals decodes the values that are part of the key. The decoded
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.
-func DecodeKeyVals(
-	types []ColumnType, vals []EncDatum, directions []encoding.Direction, key []byte,
-) ([]byte, error) {
+func DecodeKeyVals(vals []EncDatum, directions []encoding.Direction, key []byte) ([]byte, error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
 			len(directions), len(vals))
@@ -893,7 +891,7 @@ func ExtractIndexKey(
 			return nil, errors.Errorf("descriptor did not match key")
 		}
 	} else {
-		key, err = DecodeKeyVals(indexTypes, values, dirs, key)
+		key, err = DecodeKeyVals(values, dirs, key)
 		if err != nil {
 			return nil, err
 		}
@@ -917,7 +915,7 @@ func ExtractIndexKey(
 			return nil, err
 		}
 	}
-	_, err = DecodeKeyVals(extraTypes, extraValues, dirs, extraKey)
+	_, err = DecodeKeyVals(extraValues, dirs, extraKey)
 	if err != nil {
 		return nil, err
 	}
