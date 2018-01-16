@@ -2356,6 +2356,11 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
   cockroach::storage::engine::enginepb::MVCCMetadata meta;
   std::string prev_key;
   bool first = false;
+  // NB: making this uninitialized triggers compiler warnings
+  // with `-Werror=maybe-uninitialized`. This warning seems like
+  // a false positive (changing the above line to `first=false`
+  // which results in equivalent code does not remove it either).
+  int64_t accrue_gc_age_nanos = 0;
 
   for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0; iter_rep->Next()) {
     const rocksdb::Slice key = iter_rep->key();
@@ -2366,7 +2371,7 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
     int32_t logical = 0;
     if (!DecodeKey(key, &decoded_key, &wall_time, &logical)) {
       stats.status = FmtStatus("unable to decode key");
-      break;
+      return stats;
     }
 
     const bool isSys = (rocksdb::Slice(decoded_key).compare(kLocalMax) < 0);
@@ -2391,7 +2396,7 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
 
       if (!implicitMeta && !meta.ParseFromArray(value.data(), value.size())) {
         stats.status = FmtStatus("unable to decode MVCCMetadata");
-        break;
+        return stats;
       }
 
       if (isSys) {
@@ -2435,15 +2440,22 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
         if (meta.key_bytes() != kMVCCVersionTimestampSize) {
           stats.status = FmtStatus("expected mvcc metadata key bytes to equal %d; got %d",
                                    kMVCCVersionTimestampSize, int(meta.key_bytes()));
-          break;
+          return stats;
         }
         if (meta.val_bytes() != value.size()) {
           stats.status = FmtStatus("expected mvcc metadata val bytes to equal %d; got %d",
                                    int(value.size()), int(meta.val_bytes()));
-          break;
+          return stats;
         }
+        accrue_gc_age_nanos = meta.timestamp().wall_time();
       } else {
-        stats.gc_bytes_age += total_bytes * age_factor(wall_time, now_nanos);
+        bool is_tombstone = value.size() == 0;
+        if (is_tombstone) {
+          stats.gc_bytes_age += total_bytes * age_factor(wall_time, now_nanos);
+        } else {
+          stats.gc_bytes_age += total_bytes * age_factor(accrue_gc_age_nanos, now_nanos);
+        }
+        accrue_gc_age_nanos = wall_time;
       }
       stats.key_bytes += kMVCCVersionTimestampSize;
       stats.val_bytes += value.size();
