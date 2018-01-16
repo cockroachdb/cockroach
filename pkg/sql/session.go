@@ -578,7 +578,6 @@ func (s *Session) resetPlanner(
 	reCache *tree.RegexpCache,
 	statsCollector sqlStatsCollector,
 ) {
-	p.session = s
 	p.statsCollector = statsCollector
 	p.txn = txn
 	p.stmt = nil

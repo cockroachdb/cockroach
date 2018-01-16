@@ -941,9 +941,9 @@ func forEachRole(
 	ctx context.Context, origPlanner *planner, fn func(username string, isRole tree.DBool) error,
 ) error {
 	query := `SELECT username, "isRole" FROM system.users`
-	p := makeInternalPlanner(
+	p, cleanup := newInternalPlanner(
 		"for-each-role", origPlanner.txn, security.RootUser, origPlanner.extendedEvalCtx.MemMetrics)
-	defer finishInternalPlanner(p)
+	defer cleanup()
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {
 		return err
