@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -644,6 +645,71 @@ func TestJSONExists(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestJSONStripNulls(t *testing.T) {
+	testcases := []struct {
+		input       string
+		needToStrip bool
+		expected    string
+	}{
+		{`null`, false, `null`},
+		{`1`, false, `1`},
+		{`"a"`, false, `"a"`},
+		{`true`, false, `true`},
+		{`false`, false, `false`},
+		{`[]`, false, `[]`},
+		{`[1, "a", null, true, {"a":1, "b":[null]}]`, false, `[1, "a", null, true, {"a":1, "b":[null]}]`},
+		{`[{"a":null}]`, true, `[{}]`},
+		{`[[{"a":null}]]`, true, `[[{}]]`},
+		{`[null, {"a":null}, {"a":null}]`, true, `[null, {}, {}]`},
+		{`[{"a":null}, {"a":null}, null]`, true, `[{}, {}, null]`},
+		{`{}`, false, `{}`},
+		{`{"a":[null], "b":1, "c":{"a":1}}`, false, `{"a":[null], "b":1, "c":{"a":1}}`},
+		{`{"a":null}`, true, `{}`},
+		{`{"a":{"a":null}}`, true, `{"a":{}}`},
+		{`{"a":[{"a":null}]}`, true, `{"a":[{}]}`},
+		{`{"a":[null], "b":null, "c":{"a":null}}`, true, `{"a":[null], "c":{}}`},
+		{`{"a":[null], "b":{"a":null}, "c":{"a":null}}`, true, `{"a":[null], "b":{}, "c":{}}`},
+		{`{"a":{"a":null}, "b":{"a":null}, "c":[null]}`, true, `{"a":{}, "b":{}, "c":[null]}`},
+	}
+	for _, tc := range testcases {
+		j, err := ParseJSON(tc.input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectedResult, err := ParseJSON(tc.expected)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runDecodedAndEncoded(t, tc.input, j, func(t *testing.T, j JSON) {
+			result, needToStrip, err := j.StripNulls()
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := result.Compare(expectedResult)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if needToStrip != tc.needToStrip {
+				t.Fatalf("expected %t, got %t", tc.needToStrip, needToStrip)
+			}
+			if c != 0 {
+				t.Fatalf("expected %s, got %s", tc.expected, result)
+			}
+			// Check whether j is not changed.
+			originInput, err := ParseJSON(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c, err = j.Compare(originInput); err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
+				t.Fatalf("expected %s, got %s", originInput, j)
+			}
+		})
 	}
 }
 
@@ -1469,6 +1535,40 @@ func BenchmarkBuildJSONObject(b *testing.B) {
 					}
 				}
 			})
+		})
+	}
+}
+
+func BenchmarkObjectStripNulls(b *testing.B) {
+	for _, objectSize := range []int{1, 10, 100, 1000} {
+		b.Run(fmt.Sprintf("object size %d no need to strip", objectSize), func(b *testing.B) {
+			builder := NewBuilder()
+			for i := 0; i < objectSize; i++ {
+				builder.Add(strconv.Itoa(i), FromInt(i))
+			}
+			obj := builder.Build()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _, err := obj.StripNulls()
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+		b.Run(fmt.Sprintf("object size %d need to strip", objectSize), func(b *testing.B) {
+			builder := NewBuilder()
+			builder.Add(strconv.Itoa(0), NullJSONValue)
+			for i := 1; i < objectSize; i++ {
+				builder.Add(strconv.Itoa(i), FromInt(i))
+			}
+			obj := builder.Build()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _, err := obj.StripNulls()
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
 		})
 	}
 }
