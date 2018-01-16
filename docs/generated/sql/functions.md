@@ -379,6 +379,8 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>
 <tr><td><code>json_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb, create_missing: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. If <code>create_missing</code> is false, new keys will not be inserted to objects and values will not be prepended or appended to arrays.</p>
 </span></td></tr>
+<tr><td><code>json_strip_nulls(from_json: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns from_json with all object fields that have null values omitted. Other null values are untouched.</p>
+</span></td></tr>
 <tr><td><code>json_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
 </span></td></tr>
 <tr><td><code>jsonb_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
@@ -392,6 +394,8 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 <tr><td><code>jsonb_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td></tr>
 <tr><td><code>jsonb_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb, create_missing: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. If <code>create_missing</code> is false, new keys will not be inserted to objects and values will not be prepended or appended to arrays.</p>
+</span></td></tr>
+<tr><td><code>jsonb_strip_nulls(from_json: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns from_json with all object fields that have null values omitted. Other null values are untouched.</p>
 </span></td></tr>
 <tr><td><code>jsonb_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
 </span></td></tr></tbody>
