@@ -103,6 +103,57 @@ func (s *tableVersionState) leaseExpiration() tree.DTimestamp {
 	return tree.DTimestamp{Time: timeutil.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
 }
 
+// tableNotifier provides an abstract structure for goroutines to register to
+// be notified of arbitrary events on a particular table and for goroutines to
+// broadcast arbitrary events on a particular table.
+type tableNotifier struct {
+	syncutil.RWMutex
+	// chans maps tableIDs to sets of channels that should be
+	// notified when a notify event is sent for the associated table.
+	chans map[sqlbase.ID]map[chan struct{}]struct{}
+}
+
+func makeTableNotifier() tableNotifier {
+	return tableNotifier{chans: make(map[sqlbase.ID]map[chan struct{}]struct{})}
+}
+
+// Register registers a notification handle for the specified table. It returns
+// a channel to listen to for events on that table and a function to unregister
+// the channel.
+func (tn *tableNotifier) Register(tableID sqlbase.ID) (<-chan struct{}, func()) {
+	waiterC := make(chan struct{}, 1)
+
+	tn.Lock()
+	tableChans := tn.chans[tableID]
+	if tableChans == nil {
+		tableChans = make(map[chan struct{}]struct{})
+		tn.chans[tableID] = tableChans
+	}
+	tableChans[waiterC] = struct{}{}
+	tn.Unlock()
+
+	return waiterC, func() {
+		tn.Lock()
+		delete(tableChans, waiterC)
+		if len(tableChans) == 0 {
+			delete(tn.chans, tableID)
+		}
+		tn.Unlock()
+	}
+}
+
+// Notify notifies all registered channels for the specified table of an event.
+func (tn *tableNotifier) Notify(tableID sqlbase.ID) {
+	tn.RLock()
+	for c := range tn.chans[tableID] {
+		select {
+		case c <- struct{}{}:
+		default:
+		}
+	}
+	tn.RUnlock()
+}
+
 // LeaseStore implements the operations for acquiring and releasing leases and
 // publishing a new version of a descriptor. Exported only for testing.
 type LeaseStore struct {
@@ -123,6 +174,12 @@ type LeaseStore struct {
 	// leaseRenewalTimeout is the time before a lease expires when
 	// acquisition to renew the lease begins.
 	leaseRenewalTimeout time.Duration
+	// releaseNotifier is a tableNotifier that is used by goroutines that are
+	// waiting for specific leases to be released (see WaitForOneVersion). The
+	// goroutines that populate these sets will poll in-case the lease is held
+	// by a different node, but proactively notifying these goroutines of a
+	// lease release can help avoid polling inefficiency.
+	releaseNotifier tableNotifier
 
 	testingKnobs LeaseStoreTestingKnobs
 	memMetrics   *MemoryMetrics
@@ -130,7 +187,7 @@ type LeaseStore struct {
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration].
-func (s LeaseStore) jitteredLeaseDuration() time.Duration {
+func (s *LeaseStore) jitteredLeaseDuration() time.Duration {
 	return time.Duration(float64(s.leaseDuration) * (1 - s.leaseJitterFraction +
 		2*s.leaseJitterFraction*rand.Float64()))
 }
@@ -138,7 +195,7 @@ func (s LeaseStore) jitteredLeaseDuration() time.Duration {
 // acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
 // being dropped, the error will be errTableDropped.
-func (s LeaseStore) acquire(
+func (s *LeaseStore) acquire(
 	ctx context.Context, tableID sqlbase.ID, minExpirationTime hlc.Timestamp,
 ) (*tableVersionState, error) {
 	var table *tableVersionState
@@ -197,8 +254,8 @@ func (s LeaseStore) acquire(
 	return table, err
 }
 
-// Release a previously acquired table descriptor.
-func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *tableVersionState) {
+// Release a previously acquired lease on a table descriptor.
+func (s *LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *tableVersionState) {
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
 	firstAttempt := true
@@ -236,6 +293,7 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 		log.Warningf(ctx, "error releasing lease %q: %s", table, err)
 		firstAttempt = false
 	}
+	s.releaseNotifier.Notify(table.ID)
 }
 
 // WaitForOneVersion returns once there are no unexpired leases on the
@@ -244,22 +302,32 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 // returned version. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
-func (s LeaseStore) WaitForOneVersion(
+func (s *LeaseStore) WaitForOneVersion(
 	ctx context.Context, tableID sqlbase.ID, retryOpts retry.Options,
 ) (sqlbase.DescriptorVersion, error) {
+	// Get the current version of the table descriptor non-transactionally.
+	//
+	// TODO(pmattis): Do an inconsistent read here?
 	desc := &sqlbase.Descriptor{}
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
-	var tableDesc *sqlbase.TableDescriptor
-	for r := retry.Start(retryOpts); r.Next(); {
-		// Get the current version of the table descriptor non-transactionally.
-		//
-		// TODO(pmattis): Do an inconsistent read here?
-		if err := s.db.GetProto(context.TODO(), descKey, desc); err != nil {
-			return 0, err
-		}
-		tableDesc = desc.GetTable()
-		if tableDesc == nil {
-			return 0, errors.Errorf("ID %d is not a table", tableID)
+	if err := s.db.GetProto(context.TODO(), descKey, desc); err != nil {
+		return 0, err
+	}
+	tableDesc := desc.GetTable()
+	if tableDesc == nil {
+		return 0, errors.Errorf("ID %d is not a table", tableID)
+	}
+
+	// Register for local lease release notifications. If all leases are locally
+	// owned, this can speed things up by avoiding polling inefficiency.
+	releaseC, unregister := s.releaseNotifier.Register(tableID)
+	defer unregister()
+	for r := retry.Start(retryOpts); ; {
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-releaseC:
+		case <-r.NextCh():
 		}
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
@@ -289,7 +357,7 @@ var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
 // The closure may be called multiple times if retries occur; make sure it does
 // not have side effects.
 // Returns the updated version of the descriptor.
-func (s LeaseStore) Publish(
+func (s *LeaseStore) Publish(
 	ctx context.Context,
 	tableID sqlbase.ID,
 	update func(*sqlbase.TableDescriptor) error,
@@ -391,7 +459,7 @@ func (s LeaseStore) Publish(
 
 // countLeases returns the number of unexpired leases for a particular version
 // of a descriptor.
-func (s LeaseStore) countLeases(
+func (s *LeaseStore) countLeases(
 	ctx context.Context, descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
 ) (int, error) {
 	var count int
@@ -418,7 +486,7 @@ func (s LeaseStore) countLeases(
 // This returns an error when Replica.requestCanProceed() returns an
 // error when the expiration timestamp is less than the storage layer
 // GC threshold.
-func (s LeaseStore) getForExpiration(
+func (s *LeaseStore) getForExpiration(
 	ctx context.Context, expiration hlc.Timestamp, id sqlbase.ID,
 ) (*tableVersionState, error) {
 	var table *tableVersionState
@@ -1204,6 +1272,7 @@ func NewLeaseManager(
 			leaseDuration:       cfg.TableDescriptorLeaseDuration,
 			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
 			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
+			releaseNotifier:     makeTableNotifier(),
 			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
 			memMetrics:          memMetrics,
 		},
@@ -1214,10 +1283,7 @@ func NewLeaseManager(
 		ambientCtx: ambientCtx,
 		stopper:    stopper,
 	}
-
-	lm.mu.Lock()
 	lm.mu.tables = make(map[sqlbase.ID]*tableState)
-	lm.mu.Unlock()
 
 	lm.draining.Store(false)
 	return lm
