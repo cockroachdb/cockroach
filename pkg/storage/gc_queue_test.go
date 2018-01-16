@@ -159,10 +159,10 @@ func newCachedWriteSimulator(t *testing.T) *cachedWriteSimulator {
 		{enginepb.MVCCStats{LastUpdateNanos: 946684800000000000}, "1-1m0s-1.0 MiB"}: {
 			first: [cacheFirstLen]enginepb.MVCCStats{
 				{ContainsEstimates: false, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
-				{ContainsEstimates: false, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
-				{ContainsEstimates: false, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 3145779, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+				{ContainsEstimates: false, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+				{ContainsEstimates: false, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
 			},
-			last: enginepb.MVCCStats{ContainsEstimates: false, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1918925190, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+			last: enginepb.MVCCStats{ContainsEstimates: false, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
 		},
 	}
 	return &cws
@@ -286,22 +286,22 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 		//
 		// Since at the time of this check the data is already 30s old on
 		// average (i.e. ~30x the TTL), we expect to *really* want GC.
-		cws.shouldQueue(true, 29.92, time.Duration(0), 0, ms)
-		cws.shouldQueue(true, 29.92, time.Duration(0), 0, ms)
+		cws.shouldQueue(true, 28.94, time.Duration(0), 0, ms)
+		cws.shouldQueue(true, 28.94, time.Duration(0), 0, ms)
 
 		// Right after we finished writing, we don't want to GC yet with a one-minute TTL.
-		cws.shouldQueue(false, 0.50, time.Duration(0), minuteTTL, ms)
+		cws.shouldQueue(false, 0.48, time.Duration(0), minuteTTL, ms)
 
 		// Neither after a minute. The first values are about to become GC'able, though.
-		cws.shouldQueue(false, 1.48, time.Minute, minuteTTL, ms)
+		cws.shouldQueue(false, 1.46, time.Minute, minuteTTL, ms)
 		// 90 seconds in it's really close, but still just shy of GC. Half of the
 		// values could be deleted now (remember that we wrote them over a one
 		// minute period).
-		cws.shouldQueue(false, 1.97, 3*time.Minute/2, minuteTTL, ms)
+		cws.shouldQueue(false, 1.95, 3*time.Minute/2, minuteTTL, ms)
 		// Advancing another 1/4 minute does the trick.
-		cws.shouldQueue(true, 2.22, 7*time.Minute/4, minuteTTL, ms)
+		cws.shouldQueue(true, 2.20, 7*time.Minute/4, minuteTTL, ms)
 		// After an hour, that's (of course) still true with a very high priority.
-		cws.shouldQueue(true, 59.35, time.Hour, minuteTTL, ms)
+		cws.shouldQueue(true, 59.34, time.Hour, minuteTTL, ms)
 
 		// Let's see what the same would look like with a 1h TTL.
 		// Can't delete anything until 59min have passed, and indeed the score is low.
