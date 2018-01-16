@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1460,15 +1461,16 @@ func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableSta
 
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip.
-func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
+func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.Gossip) {
 	ctx := context.TODO()
 	s.RunWorker(ctx, func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
-		gossipUpdateC := gossip.RegisterSystemConfigChannel()
+		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
+		gossipUpdateC := g.RegisterSystemConfigChannel()
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := gossip.GetSystemConfig()
+				cfg, _ := g.GetSystemConfig()
 				if m.testingKnobs.GossipUpdateEvent != nil {
 					m.testingKnobs.GossipUpdateEvent(cfg)
 				}
@@ -1477,16 +1479,12 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 					log.Info(ctx, "received a new config; will refresh leases")
 				}
 
-				// Loop through the configuration to find all the tables.
-				for _, kv := range cfg.Values {
-					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
-						continue
-					}
+				cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 					// Attempt to unmarshal config into a table/database descriptor.
 					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
 						log.Warningf(ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
-						continue
+						return
 					}
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
@@ -1494,7 +1492,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						table.MaybeUpgradeFormatVersion()
 						if err := table.ValidateTable(); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
-							continue
+							return
 						}
 						if log.V(2) {
 							log.Infof(ctx, "%s: refreshing lease table: %d (%s), version: %d, dropped: %t",
@@ -1511,7 +1509,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 					case *sqlbase.Descriptor_Database:
 						// Ignore.
 					}
-				}
+				})
 				if m.testingKnobs.TestingLeasesRefreshedEvent != nil {
 					m.testingKnobs.TestingLeasesRefreshedEvent(cfg)
 				}
