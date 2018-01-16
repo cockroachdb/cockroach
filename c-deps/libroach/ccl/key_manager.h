@@ -85,6 +85,8 @@ class FileKeyManager : public KeyManager {
                           const std::string& old_key_path)
       : env_(env), active_key_path_(active_key_path), old_key_path_(old_key_path) {}
 
+  virtual ~FileKeyManager() {}
+
   // LoadKeys tells the key manager to read and validate the key files.
   // On error, existing keys held by the object are not overwritten.
   rocksdb::Status LoadKeys();
