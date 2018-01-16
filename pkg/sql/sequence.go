@@ -53,7 +53,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, boundsExceededError(descriptor)
 	}
 
-	p.session.dataMutator.RecordLatestSequenceVal(uint32(descriptor.ID), val)
+	p.ExtendedEvalContext().SessionMutator.RecordLatestSequenceVal(uint32(descriptor.ID), val)
 
 	return val, nil
 }
