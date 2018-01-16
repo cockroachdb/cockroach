@@ -37,6 +37,7 @@ const (
 	leftOuter
 	rightOuter
 	fullOuter
+	leftSemiJoin
 )
 
 const rowChannelBufSize = 16
