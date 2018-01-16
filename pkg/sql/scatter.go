@@ -130,7 +130,8 @@ type scatterRun struct {
 func (n *scatterNode) startExec(params runParams) error {
 	db := params.p.ExecCfg().DB
 	req := &roachpb.AdminScatterRequest{
-		Span: roachpb.Span{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
+		Span:            roachpb.Span{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
+		RandomizeLeases: true,
 	}
 	res, pErr := client.SendWrapped(params.ctx, db.GetSender(), req)
 	if pErr != nil {
