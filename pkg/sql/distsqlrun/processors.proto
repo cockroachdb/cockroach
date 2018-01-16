@@ -238,6 +238,7 @@ enum JoinType {
   LEFT_OUTER = 1;
   RIGHT_OUTER = 2;
   FULL_OUTER = 3;
+  LEFT_SEMI = 4;
 }
 
 // MergeJoinerSpec is the specification for a merge join processor. The processor

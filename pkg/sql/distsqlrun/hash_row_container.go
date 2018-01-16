@@ -32,6 +32,7 @@ import (
 type rowMarkerIterator interface {
 	rowIterator
 	Mark(ctx context.Context, mark bool) error
+	IsMarked(ctx context.Context) bool
 }
 
 // hashRowContainer is a container used to store rows according to an encoding
@@ -286,6 +287,18 @@ func (i *hashMemRowBucketIterator) Row() (sqlbase.EncDatumRow, error) {
 	return i.EncRow(i.rowIdxs[i.curIdx]), nil
 }
 
+// IsMarked implements the rowMarkerIterator interface.
+func (i *hashMemRowBucketIterator) IsMarked(ctx context.Context) bool {
+	if !i.shouldMark {
+		log.Fatal(ctx, "hash mem row container not set up for marking")
+	}
+	if i.marked == nil {
+		return false
+	}
+
+	return i.marked[i.rowIdxs[i.curIdx]]
+}
+
 // Mark implements the rowMarkerIterator interface.
 func (i *hashMemRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 	if !i.shouldMark {
@@ -494,6 +507,20 @@ func (i hashDiskRowBucketIterator) Row() (sqlbase.EncDatumRow, error) {
 		row = row[:len(row)-1]
 	}
 	return row, nil
+}
+
+// IsMarked implements the rowMarkerIterator interface.
+func (i hashDiskRowBucketIterator) IsMarked(ctx context.Context) bool {
+	if !i.hashDiskRowContainer.shouldMark {
+		log.Fatal(ctx, "hash disk row container not set up for marking")
+	}
+	ok, err := i.diskRowIterator.Valid()
+	if !ok || err != nil {
+		return false
+	}
+
+	rowVal := i.Value()
+	return bytes.Equal(rowVal[len(rowVal)-len(encodedTrue):], encodedTrue)
 }
 
 // Mark implements the rowMarkerIterator interface.
