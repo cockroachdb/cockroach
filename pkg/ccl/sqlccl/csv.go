@@ -1171,7 +1171,7 @@ func doDistributedCSVTransform(
 		ctx,
 		job,
 		p.ExecCfg().DB,
-		&evalCtx,
+		evalCtx,
 		p.ExecCfg().NodeID.Get(),
 		nodes,
 		sql.NewRowResultWriter(tree.Rows, rows),
