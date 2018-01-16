@@ -11,7 +11,7 @@
 		storage/engine/enginepb/rocksdb.proto
 
 	It has these top-level messages:
-		Registry
+		FileRegistry
 		FileEntry
 		MVCCMetadata
 		MVCCStats
@@ -25,6 +25,8 @@ package enginepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+
+import sortkeys "github.com/gogo/protobuf/sortkeys"
 
 import io "io"
 
@@ -58,26 +60,61 @@ func (x RegistryVersion) String() string {
 }
 func (RegistryVersion) EnumDescriptor() ([]byte, []int) { return fileDescriptorFileRegistry, []int{0} }
 
-// Registry describes how a files are handled. This includes the
-// rockdb::Env responsible for each file as well as opaque env details.
-// TODO(mberhault): this is still in flux.
-type Registry struct {
-	// version is currently always Base.
-	Version RegistryVersion `protobuf:"varint,1,opt,name=version,proto3,enum=cockroach.storage.engine.enginepb.RegistryVersion" json:"version,omitempty"`
-	Files   []*FileEntry    `protobuf:"bytes,2,rep,name=files" json:"files,omitempty"`
+// EnvLevel determines which rocksdb::Env is used.
+type EnvLevel int32
+
+const (
+	// The default Env when no encryption is used.
+	// File using Plaintext are not recorded in the file registry.
+	EnvLevel_Plaintext EnvLevel = 0
+	// The Env using store-level keys.
+	// Used only to read/write the data key registry.
+	EnvLevel_Store EnvLevel = 1
+	// The Env using data-level keys.
+	// Used as the default rocksdb Env when encryption is enabled.
+	EnvLevel_Data EnvLevel = 2
+)
+
+var EnvLevel_name = map[int32]string{
+	0: "Plaintext",
+	1: "Store",
+	2: "Data",
+}
+var EnvLevel_value = map[string]int32{
+	"Plaintext": 0,
+	"Store":     1,
+	"Data":      2,
 }
 
-func (m *Registry) Reset()                    { *m = Registry{} }
-func (m *Registry) String() string            { return proto.CompactTextString(m) }
-func (*Registry) ProtoMessage()               {}
-func (*Registry) Descriptor() ([]byte, []int) { return fileDescriptorFileRegistry, []int{0} }
+func (x EnvLevel) String() string {
+	return proto.EnumName(EnvLevel_name, int32(x))
+}
+func (EnvLevel) EnumDescriptor() ([]byte, []int) { return fileDescriptorFileRegistry, []int{1} }
+
+// Registry describes how a files are handled. This includes the
+// rockdb::Env responsible for each file as well as opaque env details.
+type FileRegistry struct {
+	// version is currently always Base.
+	Version RegistryVersion `protobuf:"varint,1,opt,name=version,proto3,enum=cockroach.storage.engine.enginepb.RegistryVersion" json:"version,omitempty"`
+	// Map of filename -> FileEntry.
+	// Filename is relative to the rocksdb dir if the file is inside it.
+	// Otherwise it is an absolute path.
+	// TODO(mberhault): figure out if we need anything special for Windows.
+	Files map[string]*FileEntry `protobuf:"bytes,2,rep,name=files" json:"files,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+}
+
+func (m *FileRegistry) Reset()                    { *m = FileRegistry{} }
+func (m *FileRegistry) String() string            { return proto.CompactTextString(m) }
+func (*FileRegistry) ProtoMessage()               {}
+func (*FileRegistry) Descriptor() ([]byte, []int) { return fileDescriptorFileRegistry, []int{0} }
 
 type FileEntry struct {
-	// File path relative to the DB directory.
-	// TODO(mberhault): figure out if we need anything special for Windows.
-	Filename string `protobuf:"bytes,1,opt,name=Filename,proto3" json:"Filename,omitempty"`
 	// Env level identifies which rocksdb::Env is responsible for this file.
-	EnvLevel int32 `protobuf:"varint,2,opt,name=env_level,json=envLevel,proto3" json:"env_level,omitempty"`
+	EnvLevel int32 `protobuf:"varint,1,opt,name=env_level,json=envLevel,proto3" json:"env_level,omitempty"`
+	// Env-specific fields for non-0 env. These are known by CCL code only.
+	// This is a serialized protobuf. We cannot use protobuf.Any since we use
+	// MessageLite in C++.
+	EncryptionSettings []byte `protobuf:"bytes,2,opt,name=encryption_settings,json=encryptionSettings,proto3" json:"encryption_settings,omitempty"`
 }
 
 func (m *FileEntry) Reset()                    { *m = FileEntry{} }
@@ -86,11 +123,12 @@ func (*FileEntry) ProtoMessage()               {}
 func (*FileEntry) Descriptor() ([]byte, []int) { return fileDescriptorFileRegistry, []int{1} }
 
 func init() {
-	proto.RegisterType((*Registry)(nil), "cockroach.storage.engine.enginepb.Registry")
+	proto.RegisterType((*FileRegistry)(nil), "cockroach.storage.engine.enginepb.FileRegistry")
 	proto.RegisterType((*FileEntry)(nil), "cockroach.storage.engine.enginepb.FileEntry")
 	proto.RegisterEnum("cockroach.storage.engine.enginepb.RegistryVersion", RegistryVersion_name, RegistryVersion_value)
+	proto.RegisterEnum("cockroach.storage.engine.enginepb.EnvLevel", EnvLevel_name, EnvLevel_value)
 }
-func (m *Registry) Marshal() (dAtA []byte, err error) {
+func (m *FileRegistry) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -100,7 +138,7 @@ func (m *Registry) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *Registry) MarshalTo(dAtA []byte) (int, error) {
+func (m *FileRegistry) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -111,15 +149,36 @@ func (m *Registry) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintFileRegistry(dAtA, i, uint64(m.Version))
 	}
 	if len(m.Files) > 0 {
-		for _, msg := range m.Files {
+		keysForFiles := make([]string, 0, len(m.Files))
+		for k := range m.Files {
+			keysForFiles = append(keysForFiles, string(k))
+		}
+		sortkeys.Strings(keysForFiles)
+		for _, k := range keysForFiles {
 			dAtA[i] = 0x12
 			i++
-			i = encodeVarintFileRegistry(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+			v := m.Files[string(k)]
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovFileRegistry(uint64(msgSize))
 			}
-			i += n
+			mapSize := 1 + len(k) + sovFileRegistry(uint64(len(k))) + msgSize
+			i = encodeVarintFileRegistry(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintFileRegistry(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintFileRegistry(dAtA, i, uint64(v.Size()))
+				n1, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n1
+			}
 		}
 	}
 	return i, nil
@@ -140,16 +199,16 @@ func (m *FileEntry) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Filename) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintFileRegistry(dAtA, i, uint64(len(m.Filename)))
-		i += copy(dAtA[i:], m.Filename)
-	}
 	if m.EnvLevel != 0 {
-		dAtA[i] = 0x10
+		dAtA[i] = 0x8
 		i++
 		i = encodeVarintFileRegistry(dAtA, i, uint64(m.EnvLevel))
+	}
+	if len(m.EncryptionSettings) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintFileRegistry(dAtA, i, uint64(len(m.EncryptionSettings)))
+		i += copy(dAtA[i:], m.EncryptionSettings)
 	}
 	return i, nil
 }
@@ -163,16 +222,23 @@ func encodeVarintFileRegistry(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
-func (m *Registry) Size() (n int) {
+func (m *FileRegistry) Size() (n int) {
 	var l int
 	_ = l
 	if m.Version != 0 {
 		n += 1 + sovFileRegistry(uint64(m.Version))
 	}
 	if len(m.Files) > 0 {
-		for _, e := range m.Files {
-			l = e.Size()
-			n += 1 + l + sovFileRegistry(uint64(l))
+		for k, v := range m.Files {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovFileRegistry(uint64(l))
+			}
+			mapEntrySize := 1 + len(k) + sovFileRegistry(uint64(len(k))) + l
+			n += mapEntrySize + 1 + sovFileRegistry(uint64(mapEntrySize))
 		}
 	}
 	return n
@@ -181,12 +247,12 @@ func (m *Registry) Size() (n int) {
 func (m *FileEntry) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.Filename)
-	if l > 0 {
-		n += 1 + l + sovFileRegistry(uint64(l))
-	}
 	if m.EnvLevel != 0 {
 		n += 1 + sovFileRegistry(uint64(m.EnvLevel))
+	}
+	l = len(m.EncryptionSettings)
+	if l > 0 {
+		n += 1 + l + sovFileRegistry(uint64(l))
 	}
 	return n
 }
@@ -204,7 +270,7 @@ func sovFileRegistry(x uint64) (n int) {
 func sozFileRegistry(x uint64) (n int) {
 	return sovFileRegistry(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (m *Registry) Unmarshal(dAtA []byte) error {
+func (m *FileRegistry) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -227,10 +293,10 @@ func (m *Registry) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Registry: wiretype end group for non-group")
+			return fmt.Errorf("proto: FileRegistry: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Registry: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: FileRegistry: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -278,10 +344,102 @@ func (m *Registry) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Files = append(m.Files, &FileEntry{})
-			if err := m.Files[len(m.Files)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
+			if m.Files == nil {
+				m.Files = make(map[string]*FileEntry)
 			}
+			var mapkey string
+			var mapvalue *FileEntry
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowFileRegistry
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowFileRegistry
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= (uint64(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowFileRegistry
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= (int(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if mapmsglen < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &FileEntry{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipFileRegistry(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthFileRegistry
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Files[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -334,35 +492,6 @@ func (m *FileEntry) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Filename", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowFileRegistry
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthFileRegistry
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Filename = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field EnvLevel", wireType)
 			}
@@ -381,6 +510,37 @@ func (m *FileEntry) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EncryptionSettings", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowFileRegistry
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthFileRegistry
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EncryptionSettings = append(m.EncryptionSettings[:0], dAtA[iNdEx:postIndex]...)
+			if m.EncryptionSettings == nil {
+				m.EncryptionSettings = []byte{}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipFileRegistry(dAtA[iNdEx:])
@@ -512,22 +672,28 @@ func init() {
 }
 
 var fileDescriptorFileRegistry = []byte{
-	// 267 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xd2, 0x2e, 0x2e, 0xc9, 0x2f,
-	0x4a, 0x4c, 0x4f, 0xd5, 0x4f, 0xcd, 0x4b, 0xcf, 0xcc, 0x83, 0x51, 0x05, 0x49, 0xfa, 0x69, 0x99,
-	0x39, 0xa9, 0xf1, 0x45, 0xa9, 0xe9, 0x99, 0xc5, 0x25, 0x45, 0x95, 0x7a, 0x05, 0x45, 0xf9, 0x25,
-	0xf9, 0x42, 0x8a, 0xc9, 0xf9, 0xc9, 0xd9, 0x45, 0xf9, 0x89, 0xc9, 0x19, 0x7a, 0x50, 0x6d, 0x7a,
-	0x10, 0xf5, 0x7a, 0x30, 0x6d, 0x52, 0x22, 0xe9, 0xf9, 0xe9, 0xf9, 0x60, 0xd5, 0xfa, 0x20, 0x16,
-	0x44, 0xa3, 0xd2, 0x1c, 0x46, 0x2e, 0x8e, 0x20, 0xa8, 0x59, 0x42, 0x3e, 0x5c, 0xec, 0x65, 0xa9,
-	0x45, 0xc5, 0x99, 0xf9, 0x79, 0x12, 0x8c, 0x0a, 0x8c, 0x1a, 0x7c, 0x46, 0x46, 0x7a, 0x04, 0xcd,
-	0xd5, 0x83, 0xe9, 0x0e, 0x83, 0xe8, 0x0c, 0x82, 0x19, 0x21, 0xe4, 0xc4, 0xc5, 0x0a, 0x72, 0x6a,
-	0xb1, 0x04, 0x93, 0x02, 0xb3, 0x06, 0xb7, 0x91, 0x0e, 0x11, 0x66, 0xb9, 0x65, 0xe6, 0xa4, 0xba,
-	0xe6, 0x95, 0x14, 0x55, 0x06, 0x41, 0xb4, 0x2a, 0xb9, 0x70, 0x71, 0xc2, 0xc5, 0x84, 0xa4, 0xb8,
-	0x38, 0x40, 0x9c, 0xbc, 0xc4, 0xdc, 0x54, 0xb0, 0xfb, 0x38, 0x83, 0xe0, 0x7c, 0x21, 0x69, 0x2e,
-	0xce, 0xd4, 0xbc, 0xb2, 0xf8, 0x9c, 0xd4, 0xb2, 0xd4, 0x1c, 0x09, 0x26, 0x05, 0x46, 0x0d, 0xd6,
-	0x20, 0x8e, 0xd4, 0xbc, 0x32, 0x1f, 0x10, 0x5f, 0x4b, 0x9a, 0x8b, 0x1f, 0xcd, 0x95, 0x42, 0x1c,
-	0x5c, 0x2c, 0x4e, 0x89, 0xc5, 0xa9, 0x02, 0x0c, 0x4e, 0x4a, 0x27, 0x1e, 0xca, 0x31, 0x9c, 0x78,
-	0x24, 0xc7, 0x78, 0xe1, 0x91, 0x1c, 0xe3, 0x8d, 0x47, 0x72, 0x8c, 0x0f, 0x1e, 0xc9, 0x31, 0x4e,
-	0x78, 0x2c, 0xc7, 0x10, 0xc5, 0x01, 0x73, 0x57, 0x12, 0x1b, 0x38, 0xb0, 0x8c, 0x01, 0x01, 0x00,
-	0x00, 0xff, 0xff, 0x97, 0xf2, 0x8e, 0xf1, 0x94, 0x01, 0x00, 0x00,
+	// 362 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x91, 0x3d, 0x8f, 0xd3, 0x30,
+	0x18, 0xc7, 0xe3, 0x94, 0x40, 0xf2, 0xb4, 0x40, 0x64, 0x18, 0xaa, 0x56, 0x8a, 0x4a, 0xa7, 0xaa,
+	0xa0, 0x44, 0x0a, 0x0b, 0xea, 0x58, 0x51, 0xa6, 0x0e, 0x55, 0x2a, 0x21, 0xc1, 0x52, 0xa5, 0xd1,
+	0xd3, 0x60, 0x35, 0xb2, 0x2b, 0xdb, 0x44, 0xe4, 0x5b, 0x30, 0xf1, 0x99, 0x3a, 0x32, 0x32, 0x72,
+	0xb9, 0x2f, 0x72, 0xca, 0xdb, 0xf5, 0x74, 0xcb, 0x75, 0xf2, 0xf3, 0xf6, 0xff, 0xfd, 0x1f, 0xdb,
+	0xf0, 0x5e, 0x69, 0x21, 0xe3, 0x14, 0x03, 0xe4, 0x29, 0xe3, 0xdd, 0x71, 0xda, 0x07, 0x07, 0x96,
+	0xe1, 0x4e, 0x62, 0xca, 0x94, 0x96, 0x85, 0x7f, 0x92, 0x42, 0x0b, 0xfa, 0x2e, 0x11, 0xc9, 0x51,
+	0x8a, 0x38, 0xf9, 0xe1, 0xb7, 0x32, 0xbf, 0x99, 0xf7, 0x3b, 0xd9, 0xe8, 0x6d, 0x2a, 0x52, 0x51,
+	0x4f, 0x07, 0x55, 0xd4, 0x08, 0xa7, 0x7f, 0x4c, 0x18, 0x7c, 0x61, 0x19, 0x46, 0x2d, 0x8f, 0xae,
+	0xe1, 0x45, 0x8e, 0x52, 0x31, 0xc1, 0x87, 0x64, 0x42, 0x66, 0xaf, 0xc2, 0xd0, 0x7f, 0x92, 0xed,
+	0x77, 0xea, 0xaf, 0x8d, 0x32, 0xea, 0x10, 0x74, 0x03, 0x56, 0xb5, 0xae, 0x1a, 0x9a, 0x93, 0xde,
+	0xac, 0x1f, 0x2e, 0xae, 0x60, 0x3d, 0xdc, 0xa6, 0x4e, 0xd4, 0x8a, 0x6b, 0x59, 0x44, 0x0d, 0x68,
+	0x74, 0x00, 0xb8, 0x14, 0xa9, 0x0b, 0xbd, 0x23, 0x16, 0xf5, 0xa6, 0x4e, 0x54, 0x85, 0x74, 0x09,
+	0x56, 0x1e, 0x67, 0x3f, 0x71, 0x68, 0x4e, 0xc8, 0xac, 0x1f, 0x7e, 0xb8, 0xd2, 0xb1, 0xf5, 0xa8,
+	0xa5, 0x0b, 0xf3, 0x13, 0x99, 0x7e, 0x03, 0xe7, 0xbe, 0x4e, 0xc7, 0xe0, 0x20, 0xcf, 0x77, 0x19,
+	0xe6, 0x98, 0xd5, 0x66, 0x56, 0x64, 0x23, 0xcf, 0xd7, 0x55, 0x4e, 0x03, 0x78, 0x83, 0x3c, 0x91,
+	0xc5, 0x49, 0x33, 0xc1, 0x77, 0x0a, 0xb5, 0x66, 0x3c, 0x55, 0xb5, 0xff, 0x20, 0xa2, 0x97, 0xd6,
+	0xb6, 0xed, 0xcc, 0xc7, 0xf0, 0xfa, 0xd1, 0x83, 0x51, 0x1b, 0x9e, 0x2d, 0x63, 0x85, 0xae, 0x31,
+	0xf7, 0xc1, 0x5e, 0x75, 0xe4, 0x97, 0xe0, 0x6c, 0xb2, 0x98, 0x71, 0x8d, 0xbf, 0xb4, 0x6b, 0x50,
+	0x07, 0xac, 0xad, 0x16, 0x12, 0x5d, 0x52, 0xcd, 0x7f, 0x8e, 0x75, 0xec, 0x9a, 0xcb, 0xe9, 0xf9,
+	0xc6, 0x33, 0xce, 0xa5, 0x47, 0xfe, 0x96, 0x1e, 0xf9, 0x57, 0x7a, 0xe4, 0x7f, 0xe9, 0x91, 0xdf,
+	0xb7, 0x9e, 0xf1, 0xdd, 0xee, 0x2e, 0xb8, 0x7f, 0x5e, 0xff, 0xf5, 0xc7, 0xbb, 0x00, 0x00, 0x00,
+	0xff, 0xff, 0x9f, 0xad, 0x40, 0xa4, 0x53, 0x02, 0x00, 0x00,
 }
