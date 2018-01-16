@@ -2071,7 +2071,7 @@ type EvalContext struct {
 	TxnTimestamp time.Time
 	// The cluster timestamp. Needs to be stable for the lifetime of the
 	// transaction. Used for cluster_logical_timestamp().
-	clusterTimestamp hlc.Timestamp
+	ClusterTimestamp hlc.Timestamp
 
 	// Placeholders relates placeholder names to their type and, later, value.
 	// This pointer should always be set to the location of the PlaceholderInfo
@@ -2171,20 +2171,20 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.clusterTimestamp == (hlc.Timestamp{}) {
+	if !ctx.PrepareOnly && ctx.ClusterTimestamp == (hlc.Timestamp{}) {
 		panic("zero cluster timestamp in EvalContext")
 	}
 
-	return TimestampToDecimal(ctx.clusterTimestamp)
+	return TimestampToDecimal(ctx.ClusterTimestamp)
 }
 
-// GetClusterTimestampRaw exposes the clusterTimestamp field. Also see
+// GetClusterTimestampRaw exposes the ClusterTimestamp field. Also see
 // GetClusterTimestamp().
 func (ctx *EvalContext) GetClusterTimestampRaw() hlc.Timestamp {
-	if !ctx.PrepareOnly && ctx.clusterTimestamp == (hlc.Timestamp{}) {
+	if !ctx.PrepareOnly && ctx.ClusterTimestamp == (hlc.Timestamp{}) {
 		panic("zero cluster timestamp in EvalContext")
 	}
-	return ctx.clusterTimestamp
+	return ctx.ClusterTimestamp
 }
 
 // HasPlaceholders returns true if this EvalContext's placeholders have been
@@ -2255,7 +2255,7 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 
 // SetClusterTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetClusterTimestamp(ts hlc.Timestamp) {
-	ctx.clusterTimestamp = ts
+	ctx.ClusterTimestamp = ts
 }
 
 // GetLocation returns the session timezone.
