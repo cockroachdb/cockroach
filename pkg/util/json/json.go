@@ -89,6 +89,11 @@ type JSON interface {
 	// Exists implements the `?` operator.
 	Exists(string) (bool, error)
 
+	// StripNulls returns the JSON document with all object fields that have null values omitted
+	// and whether it needs to strip nulls. Stripping nulls is needed only if it contains some
+	// object fields having null values.
+	StripNulls() (JSON, bool, error)
+
 	// ObjectIter returns an *ObjectKeyIterator, nil if json is not an object.
 	ObjectIter() (*ObjectIterator, error)
 
@@ -1122,6 +1127,91 @@ func (j jsonObject) Exists(s string) (bool, error) {
 		return false, err
 	}
 	return v != nil, nil
+}
+
+func (j jsonNull) StripNulls() (JSON, bool, error) {
+	return j, false, nil
+}
+func (j jsonTrue) StripNulls() (JSON, bool, error) {
+	return j, false, nil
+}
+func (j jsonFalse) StripNulls() (JSON, bool, error) {
+	return j, false, nil
+}
+func (j jsonNumber) StripNulls() (JSON, bool, error) {
+	return j, false, nil
+}
+func (j jsonString) StripNulls() (JSON, bool, error) {
+	return j, false, nil
+}
+func (j jsonArray) StripNulls() (JSON, bool, error) {
+	for i, e := range j {
+		json, needToStrip, err := e.StripNulls()
+		if err != nil {
+			return nil, false, err
+		}
+		if needToStrip {
+			// Cannot return the original content, need to return the result
+			// with new JSON array.
+			newArr := make(jsonArray, 0, len(j))
+			newArr = append(append(newArr, j[:i]...), json)
+			for _, elem := range j[i+1:] {
+				if json, _, err = elem.StripNulls(); err != nil {
+					return nil, false, err
+				}
+				newArr = append(newArr, json)
+			}
+			return newArr, true, nil
+		}
+	}
+	return j, false, nil
+}
+func (j jsonObject) StripNulls() (JSON, bool, error) {
+	for i, e := range j {
+		var json JSON
+		var err error
+		needToStrip := false
+		hasNullValue := e.v.Type() == NullJSONType
+		if !hasNullValue {
+			json, needToStrip, err = e.v.StripNulls()
+			if err != nil {
+				return nil, false, err
+			}
+		}
+		if hasNullValue || needToStrip {
+			// Cannot return the original content, need to return the result
+			// with new JSON object.
+			numNotNulls := i
+			for _, elem := range j[i:] {
+				if elem.v.Type() != NullJSONType {
+					numNotNulls++
+				}
+			}
+			// Use number of fields not having null value to construct newObj
+			// so that no need to grow the capacity of newObj.
+			newObj := make(jsonObject, 0, numNotNulls)
+			newObj = append(newObj, j[:i]...)
+			if !hasNullValue {
+				newObj = append(newObj, jsonKeyValuePair{
+					k: e.k,
+					v: json,
+				})
+			}
+			for _, elem := range j[i+1:] {
+				if elem.v.Type() != NullJSONType {
+					if json, _, err = elem.v.StripNulls(); err != nil {
+						return nil, false, err
+					}
+					newObj = append(newObj, jsonKeyValuePair{
+						k: elem.k,
+						v: json,
+					})
+				}
+			}
+			return newObj, true, nil
+		}
+	}
+	return j, false, nil
 }
 
 func (jsonNull) ObjectIter() (*ObjectIterator, error) {
