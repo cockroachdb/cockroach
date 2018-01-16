@@ -882,6 +882,10 @@ func importPlanHook(
 		return nil, nil, err
 	}
 
+	if !p.ExtendedEvalContext().TxnImplicit {
+		return nil, nil, errors.Errorf("IMPORT cannot be used inside a transaction")
+	}
+
 	filesFn, err := p.TypeAsStringArray(importStmt.Files, "IMPORT")
 	if err != nil {
 		return nil, nil, err

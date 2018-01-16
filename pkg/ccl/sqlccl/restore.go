@@ -1041,6 +1041,10 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
+	if !p.ExtendedEvalContext().TxnImplicit {
+		return nil, nil, errors.Errorf("RESTORE cannot be used inside a transaction")
+	}
+
 	fromFn, err := p.TypeAsStringArray(restoreStmt.From, "RESTORE")
 	if err != nil {
 		return nil, nil, err
