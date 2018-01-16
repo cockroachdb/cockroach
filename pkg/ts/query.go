@@ -72,12 +72,6 @@ func (ds *dataSpan) addData(data roachpb.InternalTimeSeriesData) error {
 		offsetAdjustment:       int32(adjustment),
 	}
 
-	// If all samples in the supplied data set are before calibrated offset 0,
-	// do not include it.
-	if rd.offsetAt(len(data.Samples)-1) < 0 {
-		return nil
-	}
-
 	// If the supplied data does not occur after all previously added data,
 	// return an error.
 	if len(ds.datas) > 0 {
@@ -751,7 +745,7 @@ func (db *DB) Query(
 	ctx context.Context,
 	query tspb.Query,
 	queryResolution Resolution,
-	sampleDuration, startNanos, endNanos int64,
+	sampleDuration, startNanos, endNanos, interpolationLimitNanos int64,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Verify that sampleDuration is a multiple of
 	// queryResolution.SampleDuration().
@@ -777,9 +771,14 @@ func (db *DB) Query(
 	if len(query.Sources) == 0 {
 		// Based on the supplied timestamps and resolution, construct start and
 		// end keys for a scan that will return every key with data relevant to
-		// the query.
-		startKey := MakeDataKey(query.Name, "" /* source */, queryResolution, startNanos)
-		endKey := MakeDataKey(query.Name, "" /* source */, queryResolution, endNanos).PrefixEnd()
+		// the query. Query slightly before and after the actual queried range
+		// to allow interpolation of points at the start and end of the range.
+		startKey := MakeDataKey(
+			query.Name, "" /* source */, queryResolution, startNanos-interpolationLimitNanos,
+		)
+		endKey := MakeDataKey(
+			query.Name, "" /* source */, queryResolution, endNanos+interpolationLimitNanos,
+		).PrefixEnd()
 		b := &client.Batch{}
 		b.Scan(startKey, endKey)
 
@@ -792,8 +791,9 @@ func (db *DB) Query(
 		// Iterate over all key timestamps which may contain data for the given
 		// sources, based on the given start/end time and the resolution.
 		kd := queryResolution.SlabDuration()
-		startKeyNanos := startNanos - (startNanos % kd)
-		endKeyNanos := endNanos - (endNanos % kd)
+		startKeyNanos := startNanos - interpolationLimitNanos
+		startKeyNanos = startKeyNanos - (startKeyNanos % kd)
+		endKeyNanos := endNanos + interpolationLimitNanos
 		for currentTimestamp := startKeyNanos; currentTimestamp <= endKeyNanos; currentTimestamp += kd {
 			for _, source := range query.Sources {
 				key := MakeDataKey(query.Name, source, queryResolution, currentTimestamp)
@@ -838,10 +838,11 @@ func (db *DB) Query(
 	// list of all sources with data present in the query.
 	sources := make([]string, 0, len(sourceSpans))
 	iters := make(aggregatingIterator, 0, len(sourceSpans))
+	maxDistance := int32(interpolationLimitNanos / sampleDuration)
 	for name, span := range sourceSpans {
 		sources = append(sources, name)
 		iters = append(iters, newInterpolatingIterator(
-			*span, 0, sampleDuration, 0, extractor, downsampler, query.GetDerivative(),
+			*span, 0, sampleDuration, maxDistance, extractor, downsampler, query.GetDerivative(),
 		))
 	}
 
