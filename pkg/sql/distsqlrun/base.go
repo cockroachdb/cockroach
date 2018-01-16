@@ -47,6 +47,14 @@ type columns []uint32
 // producer of a consumer's state.
 type ConsumerStatus uint32
 
+// RowBatch is a batch of rows. The underlying representation is currently
+// inefficient.
+type RowBatch sqlbase.EncDatumRows
+
+// RowBatchSize is the maximum size of a RowBatch. This number is based on the
+// batch size of the kv fetcher.
+const RowBatchSize = 10000
+
 const (
 	// NeedMoreRows indicates that the consumer is still expecting more rows.
 	NeedMoreRows ConsumerStatus = iota
@@ -146,6 +154,14 @@ type RowSource interface {
 	// ConsumerClosed() must be called; it is a no-op to call these methods after
 	// all the rows were consumed (i.e. after Next() returned an empty row).
 	ConsumerClosed()
+}
+
+// RowBatchSource is a RowSource that can produce batches of records.
+type RowBatchSource interface {
+	RowSource
+	// NextBatch returns the next batch from the source. The semantics of
+	// NextBatch are the same as Next.
+	NextBatch() (RowBatch, *ProducerMetadata)
 }
 
 // Run reads records from the source and outputs them to the receiver, properly
