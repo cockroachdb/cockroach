@@ -544,20 +544,11 @@ func (sl StoreList) filter(constraints config.Constraints) StoreList {
 		return sl
 	}
 	var filteredDescs []roachpb.StoreDescriptor
-storeLoop:
 	for _, store := range sl.stores {
-		m := map[string]struct{}{}
-		for _, s := range store.CombinedAttrs().Attrs {
-			m[s] = struct{}{}
+		if ok, _ := constraintCheck(store, constraints); ok {
+			filteredDescs = append(filteredDescs, store)
 		}
-		for _, c := range constraints.Constraints {
-			if _, ok := m[c.Value]; !ok {
-				continue storeLoop
-			}
-		}
-		filteredDescs = append(filteredDescs, store)
 	}
-
 	return makeStoreList(filteredDescs)
 }
 
