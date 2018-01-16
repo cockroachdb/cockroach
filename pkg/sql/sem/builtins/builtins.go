@@ -1633,6 +1633,10 @@ CockroachDB supports the following flags:
 
 	"jsonb_build_array": {jsonBuildArrayImpl},
 
+	"json_build_object": {jsonBuildObjectImpl},
+
+	"jsonb_build_object": {jsonBuildObjectImpl},
+
 	"json_object": jsonObjectImpls,
 
 	"jsonb_object": jsonObjectImpls,
@@ -2574,6 +2578,41 @@ var jsonTypeOfImpl = tree.Builtin{
 	Info: "Returns the type of the outermost JSON value as a text string.",
 }
 
+var jsonBuildObjectImpl = tree.Builtin{
+	Types:        tree.VariadicType{VarType: types.Any},
+	ReturnType:   tree.FixedReturnType(types.JSON),
+	NullableArgs: true,
+	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		if len(args)%2 != 0 {
+			return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+				"argument list must have even number of elements")
+		}
+
+		builder := json.NewBuilder()
+		for i := 0; i < len(args); i += 2 {
+			if args[i] == tree.DNull {
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"argument %d cannot be null", i+1)
+			}
+
+			key, err := asJSONBuildObjectKey(args[i])
+			if err != nil {
+				return nil, err
+			}
+
+			val, err := asJSON(args[i+1])
+			if err != nil {
+				return nil, err
+			}
+
+			builder.Add(key, val)
+		}
+
+		return tree.NewDJSON(builder.Build()), nil
+	},
+	Info: "Builds a JSON object out of a variadic argument list.",
+}
+
 var toJSONImpl = tree.Builtin{
 	Types:      tree.ArgTypes{{"val", types.Any}},
 	ReturnType: tree.FixedReturnType(types.JSON),
@@ -3474,6 +3513,23 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 			return json.MakeJSON(nil)
 		}
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSON", d)
+	}
+}
+
+// Converts a scalar Datum to its string representation
+func asJSONBuildObjectKey(d tree.Datum) (string, error) {
+	switch t := d.(type) {
+	case *tree.DJSON, *tree.DArray, *tree.DTuple:
+		return "", pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+			"key value must be scalar, not array, tuple, or json")
+	case *tree.DString:
+		return string(*t), nil
+	case *tree.DCollatedString:
+		return t.Contents, nil
+	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DOid, *tree.DTime:
+		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
+	default:
+		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for key value", d)
 	}
 }
 
