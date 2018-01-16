@@ -15,13 +15,10 @@
 package distsqlplan
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // FinalStageInfo is a wrapper around an aggregation function performed
@@ -275,32 +272,4 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			},
 		},
 	},
-}
-
-// typeContainer is a helper type that implements tree.IndexedVarContainer; it
-// is intended to be used during planning (to back FinalRendering expressions).
-// It does not support evaluation.
-type typeContainer struct {
-	types []sqlbase.ColumnType
-}
-
-var _ tree.IndexedVarContainer = &typeContainer{}
-
-func (tc *typeContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	panic("no eval allowed in typeContainer")
-}
-
-func (tc *typeContainer) IndexedVarResolvedType(idx int) types.T {
-	return tc.types[idx].ToDatumType()
-}
-
-func (tc *typeContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	n := tree.Name(fmt.Sprintf("$%d", idx+1))
-	return &n
-}
-
-// MakeTypeIndexedVarHelper returns an IndexedVarHelper which creates IndexedVars
-// with the given types.
-func MakeTypeIndexedVarHelper(types []sqlbase.ColumnType) tree.IndexedVarHelper {
-	return tree.MakeIndexedVarHelper(&typeContainer{types: types}, len(types))
 }

@@ -1014,5 +1014,6 @@ func (ic *IndexConstraints) RemainingFilter(ivh *tree.IndexedVarHelper) tree.Typ
 	if res == nil {
 		return nil
 	}
-	return scalarToTypedExpr(res, ivh)
+	c := typedExprConvCtx{ivh: ivh}
+	return scalarToTypedExpr(&c, res)
 }
