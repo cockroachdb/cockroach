@@ -1769,7 +1769,9 @@ func (e *Executor) execStmtInOpenTxn(
 		// Substitute the placeholder information and actual statement with that of
 		// the saved prepared statement and pass control back to the ordinary
 		// execute path.
-		ps, newPInfo, err := getPreparedStatementForExecute(session, s)
+		ps, newPInfo, err := getPreparedStatementForExecute(
+			&session.PreparedStatements, session.data.SearchPath, s,
+		)
 		if err != nil {
 			return err
 		}
