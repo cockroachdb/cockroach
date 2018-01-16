@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -37,7 +38,9 @@ func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error
 			"can't have more than 1 EXECUTE per statement")
 	}
 	p.curPlan.plannedExecute = true
-	ps, newPInfo, err := getPreparedStatementForExecute(p.session, n)
+	ps, newPInfo, err := getPreparedStatementForExecute(
+		p.preparedStatements, p.EvalContext().SessionData.SearchPath, n,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -52,10 +55,10 @@ func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error
 // placeholder info.
 // See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
 func getPreparedStatementForExecute(
-	session *Session, s *tree.Execute,
+	preparedStmts *PreparedStatements, searchPath sessiondata.SearchPath, s *tree.Execute,
 ) (ps *PreparedStatement, pInfo *tree.PlaceholderInfo, err error) {
 	name := s.Name.String()
-	prepared, ok := session.PreparedStatements.Get(name)
+	prepared, ok := preparedStmts.Get(name)
 	if !ok {
 		return ps, pInfo, pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError,
 			"prepared statement %q does not exist", name)
@@ -75,10 +78,16 @@ func getPreparedStatementForExecute(
 		if err != nil {
 			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
-		if err := t.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.data.SearchPath); err != nil {
+		if err := t.AssertNoAggregationOrWindowing(
+			typedExpr, "EXECUTE parameters", searchPath,
+		); err != nil {
 			return ps, pInfo, err
 		}
 		qArgs[idx] = typedExpr
 	}
-	return prepared, &tree.PlaceholderInfo{Values: qArgs, TypeHints: prepared.TypeHints, Types: prepared.Types}, nil
+	return prepared, &tree.PlaceholderInfo{
+			Values:    qArgs,
+			TypeHints: prepared.TypeHints,
+			Types:     prepared.Types},
+		nil
 }
