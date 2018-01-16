@@ -108,6 +108,9 @@ type planner struct {
 	// access to them is provided through evalCtx.
 	sessionDataMutator sessionDataMutator
 
+	// statsCollector is used to collect statistics about SQL statement execution.
+	statsCollector sqlStatsCollector
+
 	// asOfSystemTime indicates whether the transaction timestamp was
 	// forced to a specific value (in which case that value is stored in
 	// txn.mu.Proto.OrigTimestamp). If set, avoidCachedDescriptors below
@@ -144,10 +147,6 @@ type planner struct {
 	// NOTE: This member is for internal use of the planner only. PlanNodes that
 	// want to do 1PC transactions have to implement the autoCommitNode interface.
 	autoCommit bool
-
-	// phaseTimes helps measure the time spent in each phase of SQL execution.
-	// See executor_statement_metrics.go for details.
-	phaseTimes phaseTimes
 
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
@@ -263,7 +262,9 @@ func makeInternalPlanner(
 		}
 		ts = txn.Proto().OrigTimestamp.GoTime()
 	}
-	p := s.newPlanner(txn, ts /* txnTimestamp */, ts /* stmtTimestamp */, nil /* reCache */)
+	p := s.newPlanner(
+		txn, ts /* txnTimestamp */, ts, /* stmtTimestamp */
+		nil /* reCache */, s.statsCollector())
 
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Tables = &s.tables
@@ -571,4 +572,26 @@ func (p *planner) testingVerifyMetadata() testingVerifyMetadata {
 // transaction.
 type txnModesSetter interface {
 	setTransactionModes(modes tree.TransactionModes) error
+}
+
+// sqlStatsCollector is the interface used by SQL execution, through the
+// planner, for recording statistics about SQL statements.
+type sqlStatsCollector interface {
+	// PhaseTimes returns that phaseTimes struct that measures the time spent in
+	// each phase of SQL execution.
+	// See executor_statement_metrics.go for details.
+	PhaseTimes() *phaseTimes
+
+	// RecordStatement record stats for one statement.
+	RecordStatement(
+		stmt Statement,
+		distSQLUsed bool,
+		automaticRetryCount int,
+		numRows int,
+		err error,
+		parseLat, planLat, runLat, svcLat, ovhLat float64,
+	)
+
+	// SQLStats provides access to the global sqlStats object.
+	SQLStats() *sqlStats
 }

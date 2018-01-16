@@ -281,7 +281,8 @@ type Session struct {
 	// sqlStats tracks per-application statistics for all
 	// applications on each node.
 	sqlStats *sqlStats
-	// appStats track per-application SQL usage statistics.
+	// appStats track per-application SQL usage statistics. This is a pointer into
+	// sqlStats set as the session's current app.
 	appStats *appStats
 	// phaseTimes tracks session-level phase times. It is copied-by-value
 	// to each planner in session.newPlanner.
@@ -575,11 +576,11 @@ func (s *Session) resetPlanner(
 	txnTimestamp time.Time,
 	stmtTimestamp time.Time,
 	reCache *tree.RegexpCache,
+	statsCollector sqlStatsCollector,
 ) {
 	p.session = s
+	p.statsCollector = statsCollector
 	p.txn = txn
-	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
-	p.phaseTimes = s.phaseTimes
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(s.Ctx())
 
@@ -627,10 +628,14 @@ func (s *Session) FinishPlan() {
 // statement executed by the planner will be executed in txn. The planner
 // should only be used to execute one statement.
 func (s *Session) newPlanner(
-	txn *client.Txn, txnTimestamp time.Time, stmtTimestamp time.Time, reCache *tree.RegexpCache,
+	txn *client.Txn,
+	txnTimestamp time.Time,
+	stmtTimestamp time.Time,
+	reCache *tree.RegexpCache,
+	statsCollector sqlStatsCollector,
 ) *planner {
 	p := &planner{}
-	s.resetPlanner(p, txn, txnTimestamp, stmtTimestamp, reCache)
+	s.resetPlanner(p, txn, txnTimestamp, stmtTimestamp, reCache, statsCollector)
 	return p
 }
 
@@ -1489,11 +1494,6 @@ func (s *Session) maybeRecover(action, stmts string) {
 	}
 }
 
-// Location exports the location session variable.
-func (s *Session) Location() *time.Location {
-	return s.data.Location
-}
-
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
 // the context of one SQL session.
 // It holds the current trace being collected (or the last trace collected, if
@@ -1967,4 +1967,67 @@ func (m *sessionDataMutator) StartSessionTracing(
 // a sequence.
 func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 	m.data.SequenceState.RecordValue(seqID, val)
+}
+
+// Location exports the location session variable.
+func (s *Session) Location() *time.Location {
+	return s.data.Location
+}
+
+// statsCollector returns an sqlStatsCollector that will record stats in the
+// session's stats containers.
+func (s *Session) statsCollector() sqlStatsCollector {
+	return newSQLStatsCollectorImpl(s.sqlStats, s.appStats, s.phaseTimes)
+}
+
+type sqlStatsCollectorImpl struct {
+	// sqlStats tracks per-application statistics for all
+	// applications on each node.
+	sqlStats *sqlStats
+	// appStats track per-application SQL usage statistics. This is a pointer into
+	// sqlStats set as the session's current app.
+	appStats *appStats
+	// phaseTimes tracks session-level phase times. It is copied-by-value
+	// to each planner in session.newPlanner.
+	phaseTimes phaseTimes
+}
+
+// sqlStatsCollectorImpl implements the sqlStatsCollector interface.
+var _ sqlStatsCollector = &sqlStatsCollectorImpl{}
+
+// newSQLStatsCollectorImpl creates an instance of sqlStatsCollectorImpl.
+//
+// note that phaseTimes is an array, not a slice, so this performs a copy-by-value.
+func newSQLStatsCollectorImpl(
+	sqlStats *sqlStats, appStats *appStats, phaseTimes phaseTimes,
+) *sqlStatsCollectorImpl {
+	return &sqlStatsCollectorImpl{
+		sqlStats:   sqlStats,
+		appStats:   appStats,
+		phaseTimes: phaseTimes,
+	}
+}
+
+// PhaseTimes is part of the sqlStatsCollector interface.
+func (s *sqlStatsCollectorImpl) PhaseTimes() *phaseTimes {
+	return &s.phaseTimes
+}
+
+// SQLStats is part of the sqlStatsCollector interface.
+func (s *sqlStatsCollectorImpl) RecordStatement(
+	stmt Statement,
+	distSQLUsed bool,
+	automaticRetryCount int,
+	numRows int,
+	err error,
+	parseLat, planLat, runLat, svcLat, ovhLat float64,
+) {
+	s.appStats.recordStatement(
+		stmt, distSQLUsed, automaticRetryCount, numRows, err,
+		parseLat, planLat, runLat, svcLat, ovhLat)
+}
+
+// RecordStatement is part of the sqlStatsCollector interface.
+func (s *sqlStatsCollectorImpl) SQLStats() *sqlStats {
+	return s.sqlStats
 }

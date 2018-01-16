@@ -486,7 +486,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			return err
 		}
 
-		sqlStats := p.session.sqlStats
+		sqlStats := p.statsCollector.SQLStats()
 		if sqlStats == nil {
 			return errors.New("cannot access sql statistics from this context")
 		}

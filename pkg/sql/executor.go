@@ -433,7 +433,9 @@ func (e *Executor) Start(
 			nil,                        /* txn */
 			time.Time{},                /* txnTimestamp */
 			e.cfg.Clock.PhysicalTime(), /* stmtTimestamp */
-			e.reCache),
+			e.reCache,
+			startupSession.statsCollector(),
+		),
 	); err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -528,6 +530,7 @@ func (e *Executor) Prepare(
 		session.TxnState.sqlTimestamp,
 		e.cfg.Clock.PhysicalTime(), /* stmtTimestamp */
 		e.reCache,
+		session.statsCollector(),
 	)
 	planner.semaCtx.Placeholders.SetTypeHints(placeholderHints)
 	planner.extendedEvalCtx.PrepareOnly = true
@@ -1806,18 +1809,21 @@ func (e *Executor) execStmtInOpenTxn(
 	if runInParallel {
 		// Create a new planner from the Session to execute the statement, since
 		// we're executing in parallel.
-		p = session.newPlanner(txnState.mu.txn, txnState.sqlTimestamp, stmtTs, e.reCache)
+		p = session.newPlanner(
+			txnState.mu.txn, txnState.sqlTimestamp, stmtTs, e.reCache, session.statsCollector())
 	} else {
 		// We're not executing in parallel. We can use the cached planner on the
 		// session.
 		p = &session.planner
-		session.resetPlanner(p, txnState.mu.txn, txnState.sqlTimestamp, stmtTs, e.reCache)
+		session.resetPlanner(
+			p, txnState.mu.txn, txnState.sqlTimestamp, stmtTs,
+			e.reCache, session.statsCollector())
 	}
 	p.semaCtx.Placeholders.Assign(pinfo)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.asOfSystemTime = asOfSystemTime
 	p.avoidCachedDescriptors = avoidCachedDescriptors
-	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	p.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
 	// TODO(andrei): Ideally we'd like to fork off a context for each individual
 	// statement. But the heartbeat loop in TxnCoordSender currently assumes that
@@ -2188,9 +2194,9 @@ func (e *Executor) execStmt(
 	session := planner.session
 	ctx := session.Ctx()
 
-	planner.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
+	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 	plan, err := planner.makePlan(ctx, stmt)
-	planner.phaseTimes[plannerEndLogicalPlan] = timeutil.Now()
+	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 	if err != nil {
 		return err
 	}
@@ -2217,14 +2223,14 @@ func (e *Executor) execStmt(
 		e.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), false /* isParallel */)
 	}
 
-	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+	planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 	session.setQueryExecutionMode(stmt.queryID, useDistSQL, false /* isParallel */)
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, res)
 	} else {
 		err = e.execClassic(planner, plan, res)
 	}
-	planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 	recordStatementSummary(
 		planner, stmt, useDistSQL, automaticRetryCount, res, err, &e.EngineMetrics,
 	)
@@ -2285,9 +2291,9 @@ func (e *Executor) execStmtInParallel(
 			e.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), true /* isParallel */)
 		}
 
-		planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
+		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 		err = e.execClassic(planner, plan, bufferedWriter)
-		planner.phaseTimes[plannerEndExecStmt] = timeutil.Now()
+		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 		recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err, &e.EngineMetrics)
 		if e.cfg.TestingKnobs.AfterExecute != nil {
 			e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), bufferedWriter, err)
