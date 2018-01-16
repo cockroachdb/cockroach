@@ -156,6 +156,11 @@ type MultiRowFetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
+	// The number of needed columns from the value part of the row. Once we've
+	// seen this number of value columns for a particular row, we can stop
+	// decoding values in that row.
+	neededValueCols int
+
 	// returnRangeInfo, if set, causes the underlying kvFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
 	// requests. This has some cost, so it's only enabled by DistSQL when this
@@ -173,6 +178,8 @@ type MultiRowFetcher struct {
 	kvFetcher      kvFetcher
 	indexKey       []byte // the index key of the current row
 	prettyValueBuf *bytes.Buffer
+
+	valueColsFound int // how many needed cols we've found so far in the value
 
 	rowReadyTable *tableInfo // the table for which a row was fully decoded and ready for output
 	currentTable  *tableInfo // the most recent table for which a key was decoded
@@ -287,10 +294,19 @@ func (mrf *MultiRowFetcher) Init(
 		var indexColumnIDs []ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
 
+		neededIndexCols := 0
 		table.indexColIdx = make([]int, len(indexColumnIDs))
 		for i, id := range indexColumnIDs {
+			if table.neededCols.Contains(int(id)) {
+				neededIndexCols++
+			}
 			table.indexColIdx[i] = table.colIdxMap[id]
 		}
+
+		// The number of columns we need to read from the value part of the key.
+		// It's the total number of needed columns minus the ones we read from the
+		// index key, except for composite columns.
+		mrf.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
 
 		if table.isSecondaryIndex {
 			for i := range table.cols {
@@ -532,7 +548,6 @@ func (mrf *MultiRowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok 
 	// when processing the index key. The column values are at the
 	// front of the key.
 	if key, err = DecodeKeyVals(
-		mrf.currentTable.keyValTypes,
 		mrf.currentTable.keyVals,
 		mrf.currentTable.indexColumnDirs,
 		key,
@@ -576,6 +591,8 @@ func (mrf *MultiRowFetcher) processKV(
 		for i := range table.keyVals {
 			table.row[table.indexColIdx[i]] = table.keyVals[i]
 		}
+
+		mrf.valueColsFound = 0
 	}
 
 	if table.neededCols.Empty() {
@@ -627,7 +644,6 @@ func (mrf *MultiRowFetcher) processKV(
 			// column values from the value.
 			var err error
 			valueBytes, err = DecodeKeyVals(
-				table.extraTypes,
 				table.extraVals,
 				nil,
 				valueBytes,
@@ -746,7 +762,7 @@ func (mrf *MultiRowFetcher) processValueBytes(
 	var lastColID ColumnID
 	var typeOffset, dataOffset int
 	var typ encoding.Type
-	for len(valueBytes) > 0 {
+	for len(valueBytes) > 0 && mrf.valueColsFound < mrf.neededValueCols {
 		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
@@ -784,6 +800,7 @@ func (mrf *MultiRowFetcher) processValueBytes(
 			fmt.Fprintf(mrf.prettyValueBuf, "/%v", encValue.Datum)
 		}
 		table.row[idx] = encValue
+		mrf.valueColsFound++
 		if debugRowFetch {
 			log.Infof(ctx, "Scan %d -> %v", idx, encValue)
 		}
@@ -1056,6 +1073,10 @@ func (mrf *MultiRowFetcher) finalizeRow() error {
 	table := mrf.rowReadyTable
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
+		if mrf.valueColsFound == mrf.neededValueCols {
+			// Found all cols - done!
+			return nil
+		}
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
 			if !table.cols[i].Nullable {
 				var indexColValues []string
@@ -1076,6 +1097,11 @@ func (mrf *MultiRowFetcher) finalizeRow() error {
 			table.row[i] = EncDatum{
 				Datum: tree.DNull,
 			}
+			// We've set valueColsFound to the number of present columns in the row
+			// already, in processValueBytes. Now, we're filling in columns that have
+			// no encoded values with NULL - so we increment valueColsFound to permit
+			// early exit from this loop once all needed columns are filled in.
+			mrf.valueColsFound++
 		}
 	}
 	return nil

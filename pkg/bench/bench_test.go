@@ -848,6 +848,52 @@ CREATE TABLE bench.insert_distinct (
 	b.StopTimer()
 }
 
+const wideTableSchema = `CREATE TABLE bench.widetable (
+    f1 INT, f2 INT, f3 INT, f4 INT, f5 INT, f6 INT, f7 INT, f8 INT, f9 INT, f10 INT,
+    f11 TEXT, f12 TEXT, f13 TEXT, f14 TEXT, f15 TEXT, f16 TEXT, f17 TEXT, f18 TEXT, f19 TEXT,
+	f20 TEXT,
+    PRIMARY KEY (f1, f2, f3)
+  )`
+
+func insertIntoWideTable(
+	b *testing.B, buf bytes.Buffer, i, count, bigColumnBytes int, s *rand.Rand, db *gosql.DB,
+) {
+	buf.WriteString(`INSERT INTO bench.widetable VALUES `)
+	for j := 0; j < count; j++ {
+		if j != 0 {
+			if j%3 == 0 {
+				buf.WriteString(`;`)
+				if _, err := db.Exec(buf.String()); err != nil {
+					b.Fatal(err)
+				}
+				buf.Reset()
+				buf.WriteString(`INSERT INTO bench.widetable VALUES `)
+			} else {
+				buf.WriteString(`,`)
+			}
+		}
+		buf.WriteString(`(`)
+		for k := 0; k < 20; k++ {
+			if k != 0 {
+				buf.WriteString(`,`)
+			}
+			if k < 10 {
+				fmt.Fprintf(&buf, "%d", i*count+j)
+			} else if k < 19 {
+				fmt.Fprintf(&buf, "'%d'", i*count+j)
+			} else {
+				fmt.Fprintf(&buf, "'%x'", randutil.RandBytes(s, bigColumnBytes))
+			}
+		}
+		buf.WriteString(`)`)
+	}
+	buf.WriteString(`;`)
+	if _, err := db.Exec(buf.String()); err != nil {
+		b.Fatal(err)
+	}
+	buf.Reset()
+}
+
 // runBenchmarkWideTable measures performance on a table with a large number of
 // columns (20), half of which are fixed size, half of which are variable sized
 // and presumed small. 1 of the presumed small columns is actually large.
@@ -865,13 +911,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 		}
 	}()
 
-	const schema = `CREATE TABLE bench.widetable (
-    f1 INT, f2 INT, f3 INT, f4 INT, f5 INT, f6 INT, f7 INT, f8 INT, f9 INT, f10 INT,
-    f11 TEXT, f12 TEXT, f13 TEXT, f14 TEXT, f15 TEXT, f16 TEXT, f17 TEXT, f18 TEXT, f19 TEXT,
-	f20 TEXT,
-    PRIMARY KEY (f1, f2, f3)
-  )`
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(wideTableSchema); err != nil {
 		b.Fatal(err)
 	}
 
@@ -883,36 +923,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 
-		buf.WriteString(`INSERT INTO bench.widetable VALUES `)
-		for j := 0; j < count; j++ {
-			if j != 0 {
-				if j%3 == 0 {
-					buf.WriteString(`;`)
-					if _, err := db.Exec(buf.String()); err != nil {
-						b.Fatal(err)
-					}
-					buf.Reset()
-					buf.WriteString(`INSERT INTO bench.widetable VALUES `)
-				} else {
-					buf.WriteString(`,`)
-				}
-			}
-			buf.WriteString(`(`)
-			for k := 0; k < 20; k++ {
-				if k != 0 {
-					buf.WriteString(`,`)
-				}
-				if k < 10 {
-					fmt.Fprintf(&buf, "%d", i*count+j)
-				} else if k < 19 {
-					fmt.Fprintf(&buf, "'%d'", i*count+j)
-				} else {
-					fmt.Fprintf(&buf, "'%x'", randutil.RandBytes(s, bigColumnBytes))
-				}
-			}
-			buf.WriteString(`)`)
-		}
-		buf.WriteString(`;`)
+		insertIntoWideTable(b, buf, i, count, bigColumnBytes, s, db)
 
 		// These are all updates, but ON CONFLICT DO UPDATE is (much!) faster
 		// because it can do blind writes.
@@ -958,6 +969,25 @@ func BenchmarkWideTable(b *testing.B) {
 				})
 			}
 		})
+	})
+}
+
+func BenchmarkWideTableIgnoreColumns(b *testing.B) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		if _, err := db.Exec(wideTableSchema); err != nil {
+			b.Fatal(err)
+		}
+		var buf bytes.Buffer
+		s := rand.New(rand.NewSource(5432))
+		insertIntoWideTable(b, buf, 0, 10000, 10, s, db)
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := db.Exec("SELECT COUNT(*) FROM bench.widetable WHERE f4 < 10"); err != nil {
+				b.Fatal(err)
+			}
+		}
 	})
 }
 
