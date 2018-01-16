@@ -643,7 +643,8 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestCrlfmt", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "crlfmt", "-ignore", `\.pb(\.gw)?\.go`, "-tab", "2", ".")
+		ignore := `\.(pb(\.gw)?)|(.og)\.go`
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "crlfmt", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)
 		}
