@@ -321,16 +321,15 @@ func (h *hashJoiner) buildPhase(
 ) (_ hashRowContainer, earlyExit bool, _ error) {
 	if attemptMemoryBuild {
 		storedMemRows := makeHashMemRowContainer(&h.rows[h.storedSide])
-		shouldMark := shouldEmitUnmatchedRow(h.storedSide, h.joinType)
 		if err := storedMemRows.Init(
 			ctx,
-			shouldMark,
+			shouldMark(h.storedSide, h.joinType),
 			h.rows[h.storedSide].types,
 			h.eqCols[h.storedSide],
 		); err != nil {
 			return nil, false, err
 		}
-		if !shouldMark {
+		if !shouldMark(h.storedSide, h.joinType) {
 			return &storedMemRows, false, nil
 		}
 		// If we should mark, we pre-reserve the memory needed to mark
@@ -364,7 +363,7 @@ func (h *hashJoiner) buildPhase(
 	storedDiskRows := makeHashDiskRowContainer(h.flowCtx.diskMonitor, h.flowCtx.TempStorage)
 	if err := storedDiskRows.Init(
 		ctx,
-		shouldEmitUnmatchedRow(h.storedSide, h.joinType),
+		shouldMark(h.storedSide, h.joinType),
 		h.rows[h.storedSide].types,
 		h.eqCols[h.storedSide],
 	); err != nil {
@@ -544,17 +543,27 @@ func (h *hashJoiner) probeRow(
 		// If the ON condition failed, renderedRow is nil.
 		if renderedRow != nil {
 			probeMatched = true
-			if shouldEmitUnmatchedRow(h.storedSide, h.joinType) {
-				// Mark the row on the stored side. The unmarked rows can then
-				// be iterated over for {right, left} outer joins (depending on
-				// storedSide) and full outer joins.
+			shouldEmit := true
+			if shouldMark(h.storedSide, h.joinType) {
+				if h.joinType == semiJoin && i.IsMarked(ctx) {
+					shouldEmit = false
+				}
+				// Mark the row on the stored side. The marked rows
+				// can then be iterated over for {right, left} outer joins
+				// (depending on storedSide), full outer joins and the
+				// unmarked rows for semi joins.
 				if err := i.Mark(ctx, true); err != nil {
 					return false, nil
 				}
 			}
-			consumerStatus, err := h.out.EmitRow(ctx, renderedRow)
-			if err != nil || consumerStatus != NeedMoreRows {
-				return true, nil
+			if shouldEmit {
+				consumerStatus, err := h.out.EmitRow(ctx, renderedRow)
+				if err != nil || consumerStatus != NeedMoreRows {
+					return true, nil
+				}
+			}
+			if shouldShortCircuit(h.storedSide, h.joinType) {
+				return false, nil
 			}
 		}
 	}
@@ -645,6 +654,24 @@ func (h *hashJoiner) probePhase(
 	sendTraceData(ctx, h.out.output)
 	h.out.Close()
 	return false, nil
+}
+
+// Some types of joins need to mark rows that matched.
+func shouldMark(side joinSide, joinType joinType) bool {
+	switch {
+	case joinType == semiJoin && side == leftSide:
+		fallthrough
+	case shouldEmitUnmatchedRow(side, joinType):
+		return true
+	default:
+		return false
+	}
+}
+
+// Some joins don't need to visit all possible tuples in the cross product
+// of the relations and can terminate early.
+func shouldShortCircuit(side joinSide, joinType joinType) bool {
+	return joinType == semiJoin && side == rightSide
 }
 
 // encodeColumnsOfRow returns the encoding for the grouping columns. This is
