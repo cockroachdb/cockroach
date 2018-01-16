@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -63,12 +63,8 @@ func TestDatabaseAccessors(t *testing.T) {
 			return err
 		}
 
-		p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
-		defer finishInternalPlanner(p)
-		p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
-		p.session.data.Database = "test"
-
-		_, err := p.session.tables.databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
+		databaseCache := newDatabaseCache(config.SystemConfig{})
+		_, err := databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

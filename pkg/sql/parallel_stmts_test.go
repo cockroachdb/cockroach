@@ -314,20 +314,14 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*planner, func()) {
 	kvDB := s.KVClient().(*client.DB)
-	now := s.Clock().Now()
-	physicalNow := s.Clock().PhysicalTime()
 	txn := client.NewTxn(kvDB, s.NodeID())
-	txn.Proto().OrigTimestamp = now
-	p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
-	p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
-	p.session.dataMutator.SetDatabase("test")
-	// HACK: the internal planner is not really meant to execute more than one
-	// statement, but here we neede to set the session database, so we did that by
-	// accessing the session directly. That requires us to reset the planner, so
-	// that its copy of the session variable is reset.
-	p.session.resetPlanner(
-		p, txn, physicalNow /* txnTimestamp */, physicalNow, /* stmtTimestamp */
-		nil /* reCache */, p.session.statsCollector())
+	p, cleanup := newInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
+	p.extendedEvalCtx.Tables.leaseMgr = s.LeaseManager().(*LeaseManager)
+	// HACK: we're mutating the SessionData directly, without going through the
+	// SessionDataMutator. We're not really supposed to do that, but were we to go
+	// through the mutator, we'd need a session and then we'd have to reset the
+	// planner with the session so that its copy of the session data gets updated.
+	p.extendedEvalCtx.SessionData.Database = "test"
 
 	stmts, err := p.parser.Parse(sql)
 	if err != nil {
@@ -342,7 +336,7 @@ func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*pl
 	}
 	return p, func() {
 		p.curPlan.close(context.TODO())
-		finishInternalPlanner(p)
+		cleanup()
 	}
 }
 

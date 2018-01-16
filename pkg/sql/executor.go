@@ -1848,7 +1848,7 @@ func (e *Executor) execStmtInOpenTxn(
 		// results, which has the same effect as running asynchronously but
 		// immediately blocking.
 		err = func() error {
-			cols, err := e.execStmtInParallel(stmt, p)
+			cols, err := e.execStmtInParallel(stmt, session, p)
 			if err != nil {
 				return err
 			}
@@ -1863,7 +1863,7 @@ func (e *Executor) execStmtInOpenTxn(
 		}()
 	} else {
 		p.autoCommit = txnState.implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
-		err = e.execStmt(stmt, p, automaticRetryCount, res)
+		err = e.execStmt(stmt, session, p, automaticRetryCount, res)
 		// Zeroing the cached planner allows the GC to clean up any memory hanging
 		// off the planner, which we're finished using at this point.
 	}
@@ -2191,9 +2191,8 @@ func initStatementResult(res StatementResult, stmt Statement, cols sqlbase.Resul
 // execStmt executes the statement synchronously and writes the result to
 // res.
 func (e *Executor) execStmt(
-	stmt Statement, planner *planner, automaticRetryCount int, res StatementResult,
+	stmt Statement, session *Session, planner *planner, automaticRetryCount int, res StatementResult,
 ) error {
-	session := planner.session
 	ctx := session.Ctx()
 
 	// Perform logical planning and measure the duration of that phase.
@@ -2261,9 +2260,8 @@ func (e *Executor) execStmt(
 // TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
 // queries, so this method can only be used with local SQL execution.
 func (e *Executor) execStmtInParallel(
-	stmt Statement, planner *planner,
+	stmt Statement, session *Session, planner *planner,
 ) (sqlbase.ResultColumns, error) {
-	session := planner.session
 	ctx := session.Ctx()
 	params := runParams{
 		ctx:             ctx,
