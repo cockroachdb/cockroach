@@ -36,20 +36,22 @@ func DeleteRange(
 	h := cArgs.Header
 	reply := resp.(*roachpb.DeleteRangeResponse)
 
+	delta, finish := roachpb.MakeTxnDeltaHelper(&h.Txn, &reply.Txn)
+	defer finish()
+
 	var timestamp hlc.Timestamp
 	if !args.Inline {
 		timestamp = h.Timestamp
 	}
 	deleted, resumeSpan, num, err := engine.MVCCDeleteRange(
-		ctx, batch, cArgs.Stats, args.Key, args.EndKey, cArgs.MaxKeys, timestamp, h.Txn, args.ReturnKeys,
+		ctx, batch, cArgs.Stats, args.Key, args.EndKey, cArgs.MaxKeys, timestamp, delta.BaseTxn(), args.ReturnKeys,
 	)
 	if err == nil {
 		reply.Keys = deleted
 		// DeleteRange requires that we retry on push to avoid the lost delete range anomaly.
-		if h.Txn != nil {
-			clonedTxn := h.Txn.Clone()
-			clonedTxn.RetryOnPush = true
-			reply.Txn = &clonedTxn
+		// See "Predicate Write Skew" in https://www.cs.umb.edu/~srevilak/srevilak-defense.pdf.
+		if delta.BaseTxn() != nil {
+			delta.SetRetryOnPush()
 		}
 	}
 	reply.NumKeys = num

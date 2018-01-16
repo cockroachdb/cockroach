@@ -1006,9 +1006,11 @@ func (txn *Txn) Send(
 		if br.Error != nil {
 			panic(roachpb.ErrorUnexpectedlySet(txn.db.sender, br))
 		}
-		if br.Txn != nil && br.Txn.ID != txn.mu.Proto.ID {
-			return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
-		}
+		// TODO(tschottdorf): this shouldn't happen, right? Definitely not used anywhere.
+		//
+		// if br.Txn != nil && br.Txn.ID != txn.mu.Proto.ID {
+		// 	return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
+		// }
 
 		// Only successful requests can carry an updated Txn in their response
 		// header. Some errors (e.g. a restart) have a Txn attached to them as
@@ -1153,7 +1155,7 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 		// multiple retryable errors might come back here out-of-order. Instead,
 		// we rely on the associativity of Transaction.Update to sort out this
 		// lack of ordering guarantee.
-		txn.mu.Proto.Update(newTxn)
+		txn.mu.Proto.UpdateFull(newTxn)
 	}
 }
 

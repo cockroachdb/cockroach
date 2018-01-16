@@ -500,18 +500,17 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 func getTxn(
 	coord *TxnCoordSender, txn *roachpb.Transaction,
 ) (*roachpb.Transaction, *roachpb.Error) {
-	hb := &roachpb.HeartbeatTxnRequest{
+	args := &roachpb.QueryTxnRequest{
 		Span: roachpb.Span{
 			Key: txn.Key,
 		},
+		Txn: txn.TxnMeta,
 	}
-	reply, pErr := client.SendWrappedWith(context.Background(), coord, roachpb.Header{
-		Txn: txn,
-	}, hb)
+	reply, pErr := client.SendWrapped(context.Background(), coord, args)
 	if pErr != nil {
 		return nil, pErr
 	}
-	return reply.(*roachpb.HeartbeatTxnResponse).Txn, nil
+	return &reply.(*roachpb.QueryTxnResponse).QueriedTxn, nil
 }
 
 func verifyCleanup(key roachpb.Key, coord *TxnCoordSender, eng engine.Engine, t *testing.T) {
@@ -639,7 +638,9 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	if err := txn.Put(context.TODO(), "x", "y"); err != nil {
 		t.Fatal(err)
 	}
-	err, ok := txn.CPut(context.TODO(), key, []byte("x"), []byte("born to fail")).(*roachpb.ConditionFailedError)
+
+	err := txn.CPut(context.TODO(), key, []byte("x"), []byte("born to fail"))
+	_, ok := err.(*roachpb.ConditionFailedError)
 	if !ok {
 		t.Fatal(err)
 	}
@@ -1152,7 +1153,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 
-		txn = *reply.Header().Txn
+		txn.Update(reply.Header().Txn)
 		if tc.writing != txn.Writing {
 			t.Errorf("%d: unexpected writing state: %s", i, txn)
 		}
@@ -1181,8 +1182,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 
 	var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
-		txnClone := ba.Txn.Clone()
-		br.Txn = &txnClone
+		br.Txn = &roachpb.TransactionDelta{}
 		br.Txn.Writing = true
 		return br, nil
 	}
@@ -1316,8 +1316,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 			}
 		}
 		br := ba.CreateReply()
-		txnClone := ba.Txn.Clone()
-		br.Txn = &txnClone
+		br.Txn = &roachpb.TransactionDelta{}
 		br.Txn.Writing = true
 		return br, nil
 	}
@@ -1777,8 +1776,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 					union = &br.Responses[1] // avoid operating on copy
 					union.MustSetInner(&roachpb.PutResponse{})
 					if ba.Txn != nil && br.Txn == nil {
-						txnClone := ba.Txn.Clone()
-						br.Txn = &txnClone
+						br.Txn = &roachpb.TransactionDelta{}
 						br.Txn.Writing = true
 						br.Txn.Status = roachpb.PENDING
 					}

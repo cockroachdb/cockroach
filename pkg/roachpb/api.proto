@@ -65,10 +65,7 @@ message ResponseHeader {
     RESUME_RANGE_BOUNDARY = 2;
   }
 
-  // txn is non-nil if the request specified a non-nil transaction.
-  // The transaction timestamp and/or priority may have been updated,
-  // depending on the outcome of the request.
-  Transaction txn = 3;
+  TransactionDelta txn = 3;
   // The next span to resume from when the response doesn't cover the full span
   // requested. This can happen when a bound on the keys is set through
   // max_span_request_keys in the batch header or when a scan has been stopped
@@ -1298,10 +1295,8 @@ message BatchResponse {
     // highest timestamp at which a command from the batch executed. At the
     // time of writing, it is used solely for informational purposes and tests.
     util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
-    // txn is non-nil if the request specified a non-nil
-    // transaction. The transaction timestamp and/or priority may have
-    // been updated, depending on the outcome of the request.
-    Transaction txn = 3;
+    // TODO(tschottdorf): add comment clarifying semantics.
+    TransactionDelta txn = 3;
     // now is the highest current time from any node contacted during the request.
     // It can be used by the receiver to update its local HLC.
     util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];

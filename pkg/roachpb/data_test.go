@@ -432,6 +432,13 @@ var nonZeroTxn = Transaction{
 	EpochZeroTimestamp: makeTS(1, 1),
 }
 
+func TestTransactionSize(t *testing.T) {
+	txn := MakeTransaction(
+		"", Key(""), MinTxnPriority, enginepb.SERIALIZABLE, makeTS(time.Now().UnixNano(), 0), 500*time.Millisecond.Nanoseconds(),
+	)
+	t.Skip(txn.Size())
+}
+
 func TestTransactionUpdate(t *testing.T) {
 	txn := nonZeroTxn
 	if err := zerofields.NoZeroField(txn); err != nil {
@@ -439,7 +446,7 @@ func TestTransactionUpdate(t *testing.T) {
 	}
 
 	var txn2 Transaction
-	txn2.Update(&txn)
+	txn2.UpdateFull(&txn)
 
 	if err := zerofields.NoZeroField(txn2); err != nil {
 		t.Fatal(err)
@@ -449,7 +456,7 @@ func TestTransactionUpdate(t *testing.T) {
 	txn3.ID = uuid.MakeV4()
 	txn3.Name = "carl"
 	txn3.Isolation = enginepb.SNAPSHOT
-	txn3.Update(&txn)
+	txn3.UpdateFull(&txn)
 
 	if err := zerofields.NoZeroField(txn3); err != nil {
 		t.Fatal(err)
@@ -1341,7 +1348,7 @@ func TestUpdateObservedTimestamps(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			var s observedTimestampSlice
 			for _, v := range c.input {
-				s = s.update(v.NodeID, v.Timestamp)
+				s, _ = s.update(v.NodeID, v.Timestamp)
 			}
 			if !reflect.DeepEqual(c.expected, s) {
 				t.Fatalf("%s", pretty.Diff(c.expected, s))

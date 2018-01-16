@@ -2724,7 +2724,7 @@ func (r *Replica) tryExecuteWriteBatch(
 	// timestamp and possible write-too-old bool.
 	if bumped, pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
 		return nil, pErr, proposalNoRetry
-	} else if bumped {
+	} else if bumped && ba.Txn != nil {
 		// If we bump the transaction's timestamp, we must absolutely
 		// tell the client in a response transaction (for otherwise it
 		// doesn't know about the incremented timestamp). Response
@@ -2733,7 +2733,14 @@ func (r *Replica) tryExecuteWriteBatch(
 		// likely target of future micro-optimization, this assertion is
 		// meant to protect against future correctness anomalies.
 		defer func() {
-			if br != nil && ba.Txn != nil && br.Txn == nil {
+			// FIXME(tschottdorf): applyTimestampCache really wants to be less crappy.
+			if br != nil {
+				if br.Txn == nil {
+					br.Txn = &roachpb.TransactionDelta{}
+				}
+				br.Txn.Meta.Timestamp.Forward(ba.Txn.Timestamp)
+			}
+			if br != nil && (br.Txn == nil || br.Txn.Meta.Timestamp.Less(ba.Timestamp)) {
 				log.Fatalf(ctx, "assertion failed: transaction updated by "+
 					"timestamp cache, but transaction returned in response; "+
 					"updated timestamp would have been lost (recovered): "+
@@ -5011,6 +5018,17 @@ func (r *Replica) evaluateProposalInner(
 		var pErr *roachpb.Error
 		var ms enginepb.MVCCStats
 		var br *roachpb.BatchResponse
+		defer func() {
+			if pErr != nil && ba.Txn != nil {
+				// FIXME remove
+				if false {
+					log.Infof(ctx, "pErr %s", pErr)
+					txn := ba.Txn.Clone()
+					delta := txn.UpdateFull(pErr.GetTxn())
+					log.Infof(ctx, "should delta %+v", delta)
+				}
+			}
+		}()
 		batch, ms, br, result, pErr = r.evaluateTxnWriteBatch(ctx, idKey, ba, spans)
 		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
 			result.Replicated.Delta = ms.ToNetworkStats()
@@ -5125,19 +5143,21 @@ func (r *Replica) evaluateTxnWriteBatch(
 		rec := NewReplicaEvalContext(r, spans)
 		br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
 		if pErr == nil && ba.Timestamp == br.Timestamp {
-			clonedTxn := ba.Txn.Clone()
-			clonedTxn.Writing = true
-			clonedTxn.Status = roachpb.COMMITTED
-
-			// If the end transaction is not committed, clear the batch and mark the status aborted.
+			delta, finish := roachpb.MakeTxnDeltaHelper(&ba.Txn, &br.Txn)
+			// NB: this is kosher since we definitely return from within this block.
+			// TODO(tschottdorf): refactor for clarity.
+			defer finish()
+			delta.SetWriting()
 			if !etArg.Commit {
-				clonedTxn.Status = roachpb.ABORTED
+				delta.SetStatus(roachpb.ABORTED)
 				batch.Close()
 				batch = r.store.Engine().NewBatch()
 				ms = enginepb.MVCCStats{}
 			} else {
+				delta.SetStatus(roachpb.COMMITTED)
+
 				// Run commit trigger manually.
-				innerResult, err := runCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
+				innerResult, err := runCommitTrigger(ctx, rec, batch, &ms, *etArg, delta.UpdatedTxn())
 				if err != nil {
 					return batch, ms, br, res, roachpb.NewErrorf("failed to run commit trigger: %s", err)
 				}
@@ -5146,7 +5166,6 @@ func (r *Replica) evaluateTxnWriteBatch(
 				}
 			}
 
-			br.Txn = &clonedTxn
 			// Add placeholder responses for begin & end transaction requests.
 			br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
 			br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
@@ -5337,7 +5356,9 @@ func evaluateBatch(
 	// Create a shallow clone of the transaction. We only modify a few
 	// non-pointer fields (BatchIndex, WriteTooOld, Timestamp), so this saves
 	// a few allocs.
+	var goldenBaTxn *roachpb.Transaction
 	if ba.Txn != nil {
+		goldenBaTxn = ba.Txn
 		txnShallow := *ba.Txn
 		ba.Txn = &txnShallow
 
@@ -5427,15 +5448,15 @@ func evaluateBatch(
 		// TODO(spencer,tschottdorf): need copy-on-write behavior for the
 		//   updated batch transaction / timestamp.
 		if ba.Txn != nil {
-			if txn := reply.Header().Txn; txn != nil {
-				ba.Txn.Update(txn)
-			}
+			ba.Txn.Update(reply.Header().Txn)
 		}
 	}
 
 	if ba.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
-		br.Txn = ba.Txn
+		// FIXME(tschottdorf): can also just accumulate the deltas as we go along.
+		throwawayClone := goldenBaTxn.Clone()
+		br.Txn = throwawayClone.UpdateFull(ba.Txn)
 	} else {
 		// When non-transactional, use the timestamp field.
 		br.Timestamp.Forward(ba.Timestamp)

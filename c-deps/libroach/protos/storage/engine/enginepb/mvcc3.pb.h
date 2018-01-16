@@ -41,6 +41,9 @@ extern MVCCNetworkStatsDefaultTypeInternal _MVCCNetworkStats_default_instance_;
 class TxnMeta;
 class TxnMetaDefaultTypeInternal;
 extern TxnMetaDefaultTypeInternal _TxnMeta_default_instance_;
+class TxnMetaDelta;
+class TxnMetaDeltaDefaultTypeInternal;
+extern TxnMetaDeltaDefaultTypeInternal _TxnMetaDelta_default_instance_;
 }  // namespace enginepb
 }  // namespace engine
 }  // namespace storage
@@ -240,6 +243,110 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
 };
 // -------------------------------------------------------------------
 
+class TxnMetaDelta : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.TxnMetaDelta) */ {
+ public:
+  TxnMetaDelta();
+  virtual ~TxnMetaDelta();
+
+  TxnMetaDelta(const TxnMetaDelta& from);
+
+  inline TxnMetaDelta& operator=(const TxnMetaDelta& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  TxnMetaDelta(TxnMetaDelta&& from) noexcept
+    : TxnMetaDelta() {
+    *this = ::std::move(from);
+  }
+
+  inline TxnMetaDelta& operator=(TxnMetaDelta&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const TxnMetaDelta& default_instance();
+
+  static inline const TxnMetaDelta* internal_default_instance() {
+    return reinterpret_cast<const TxnMetaDelta*>(
+               &_TxnMetaDelta_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    1;
+
+  void Swap(TxnMetaDelta* other);
+  friend void swap(TxnMetaDelta& a, TxnMetaDelta& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline TxnMetaDelta* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  TxnMetaDelta* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const TxnMetaDelta& from);
+  void MergeFrom(const TxnMetaDelta& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(TxnMetaDelta* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_timestamp() const;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 1;
+  const ::cockroach::util::hlc::Timestamp& timestamp() const;
+  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
+  ::cockroach::util::hlc::Timestamp* release_timestamp();
+  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
+
+  // int32 priority = 2;
+  void clear_priority();
+  static const int kPriorityFieldNumber = 2;
+  ::google::protobuf::int32 priority() const;
+  void set_priority(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.TxnMetaDelta)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::util::hlc::Timestamp* timestamp_;
+  ::google::protobuf::int32 priority_;
+  mutable int _cached_size_;
+  friend struct protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class MVCCNetworkStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCNetworkStats) */ {
  public:
   MVCCNetworkStats();
@@ -273,7 +380,7 @@ class MVCCNetworkStats : public ::google::protobuf::MessageLite /* @@protoc_inse
                &_MVCCNetworkStats_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    1;
+    2;
 
   void Swap(MVCCNetworkStats* other);
   friend void swap(MVCCNetworkStats& a, MVCCNetworkStats& b) {
@@ -651,6 +758,63 @@ inline void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
 
 // -------------------------------------------------------------------
 
+// TxnMetaDelta
+
+inline bool TxnMetaDelta::has_timestamp() const {
+  return this != internal_default_instance() && timestamp_ != NULL;
+}
+inline void TxnMetaDelta::clear_timestamp() {
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) delete timestamp_;
+  timestamp_ = NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& TxnMetaDelta::timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMetaDelta.timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* TxnMetaDelta::mutable_timestamp() {
+  
+  if (timestamp_ == NULL) {
+    timestamp_ = new ::cockroach::util::hlc::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMetaDelta.timestamp)
+  return timestamp_;
+}
+inline ::cockroach::util::hlc::Timestamp* TxnMetaDelta::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMetaDelta.timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+inline void TxnMetaDelta::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+  delete timestamp_;
+  timestamp_ = timestamp;
+  if (timestamp) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMetaDelta.timestamp)
+}
+
+// int32 priority = 2;
+inline void TxnMetaDelta::clear_priority() {
+  priority_ = 0;
+}
+inline ::google::protobuf::int32 TxnMetaDelta::priority() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMetaDelta.priority)
+  return priority_;
+}
+inline void TxnMetaDelta::set_priority(::google::protobuf::int32 value) {
+  
+  priority_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMetaDelta.priority)
+}
+
+// -------------------------------------------------------------------
+
 // MVCCNetworkStats
 
 // bool contains_estimates = 14;
@@ -852,6 +1016,8 @@ inline void MVCCNetworkStats::set_sys_count(::google::protobuf::int64 value) {
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 

@@ -472,6 +472,7 @@ func (tc *TxnCoordSender) Send(
 	if _, ok := ba.GetArg(roachpb.EndTransaction); !ok {
 		return br, nil
 	}
+	ba.UpdateTxn(br.Txn)
 	// If the linearizable flag is set, we want to make sure that all the
 	// clocks in the system are past the commit timestamp of the transaction.
 	// This is guaranteed if either - the commit timestamp is MaxOffset behind
@@ -481,7 +482,7 @@ func (tc *TxnCoordSender) Send(
 	//
 	// Can't use linearizable mode with clockless reads since in that case we
 	// don't know how long to sleep - could be forever!
-	if tsNS := br.Txn.Timestamp.WallTime; startNS > tsNS {
+	if tsNS := ba.Txn.Timestamp.WallTime; startNS > tsNS {
 		startNS = tsNS
 	}
 	maxOffset := tc.clock.MaxOffset()
@@ -491,14 +492,14 @@ func (tc *TxnCoordSender) Send(
 	if maxOffset != timeutil.ClocklessMaxOffset && tc.linearizable && sleepNS > 0 {
 		defer func() {
 			if log.V(1) {
-				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", br.Txn.Short(), duration.Truncate(sleepNS, time.Millisecond))
+				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", ba.Txn.Short(), duration.Truncate(sleepNS, time.Millisecond))
 			}
 			time.Sleep(sleepNS)
 		}()
 	}
-	if br.Txn.Status != roachpb.PENDING {
+	if ba.Txn.Status != roachpb.PENDING {
 		tc.txnMu.Lock()
-		tc.cleanupTxnLocked(ctx, *br.Txn)
+		tc.cleanupTxnLocked(ctx, *ba.Txn)
 		tc.txnMu.Unlock()
 	}
 	return br, nil
@@ -888,7 +889,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 	// but in particular makes sure that they notice when they've been aborted
 	// (in which case we'll give them an error on their next request).
 	tc.txnMu.Lock()
-	tc.txnMu.txns[txnID].txn.Update(&txn)
+	tc.txnMu.txns[txnID].txn.UpdateFull(&txn)
 	tc.txnMu.Unlock()
 
 	return true
@@ -922,7 +923,7 @@ func (tc *TxnCoordSender) updateState(
 	txnID := ba.Txn.ID
 	var newTxn roachpb.Transaction
 	if pErr == nil {
-		newTxn.Update(ba.Txn)
+		newTxn.UpdateFull(ba.Txn)
 		newTxn.Update(br.Txn)
 	} else {
 		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
@@ -966,9 +967,9 @@ func (tc *TxnCoordSender) updateState(
 		} else {
 			// We got a non-retryable error.
 
-			newTxn.Update(ba.Txn)
+			newTxn.UpdateFull(ba.Txn)
 			if errTxn := pErr.GetTxn(); errTxn != nil {
-				newTxn.Update(errTxn)
+				newTxn.UpdateFull(errTxn)
 			}
 
 			// Update the txn in the error to reflect the TxnCoordSender's state.
@@ -1072,7 +1073,7 @@ func (tc *TxnCoordSender) updateState(
 
 	// Update our record of this transaction, even on error.
 	if txnMeta != nil {
-		txnMeta.txn.Update(&newTxn)
+		txnMeta.txn.UpdateFull(&newTxn)
 		txnMeta.setLastUpdate(tc.clock.PhysicalNow())
 	}
 

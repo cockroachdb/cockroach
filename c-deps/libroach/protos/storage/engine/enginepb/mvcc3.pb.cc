@@ -23,6 +23,11 @@ public:
  ::google::protobuf::internal::ExplicitlyConstructed<TxnMeta>
      _instance;
 } _TxnMeta_default_instance_;
+class TxnMetaDeltaDefaultTypeInternal {
+public:
+ ::google::protobuf::internal::ExplicitlyConstructed<TxnMetaDelta>
+     _instance;
+} _TxnMetaDelta_default_instance_;
 class MVCCNetworkStatsDefaultTypeInternal {
 public:
  ::google::protobuf::internal::ExplicitlyConstructed<MVCCNetworkStats>
@@ -44,6 +49,7 @@ PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
     TableStruct::schema[] GOOGLE_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
   { NULL, NULL, 0, -1, -1, -1, -1, NULL, false },
   { NULL, NULL, 0, -1, -1, -1, -1, NULL, false },
+  { NULL, NULL, 0, -1, -1, -1, -1, NULL, false },
 };
 
 void TableStruct::InitDefaultsImpl() {
@@ -53,9 +59,13 @@ void TableStruct::InitDefaultsImpl() {
   ::cockroach::util::hlc::protobuf_util_2fhlc_2ftimestamp_2eproto::InitDefaults();
   _TxnMeta_default_instance_._instance.DefaultConstruct();
   ::google::protobuf::internal::OnShutdownDestroyMessage(
-      &_TxnMeta_default_instance_);_MVCCNetworkStats_default_instance_._instance.DefaultConstruct();
+      &_TxnMeta_default_instance_);_TxnMetaDelta_default_instance_._instance.DefaultConstruct();
+  ::google::protobuf::internal::OnShutdownDestroyMessage(
+      &_TxnMetaDelta_default_instance_);_MVCCNetworkStats_default_instance_._instance.DefaultConstruct();
   ::google::protobuf::internal::OnShutdownDestroyMessage(
       &_MVCCNetworkStats_default_instance_);_TxnMeta_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  _TxnMetaDelta_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 
@@ -737,6 +747,296 @@ void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
   
   batch_index_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int TxnMetaDelta::kTimestampFieldNumber;
+const int TxnMetaDelta::kPriorityFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+TxnMetaDelta::TxnMetaDelta()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
+    protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::InitDefaults();
+  }
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.TxnMetaDelta)
+}
+TxnMetaDelta::TxnMetaDelta(const TxnMetaDelta& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      _cached_size_(0) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_timestamp()) {
+    timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.timestamp_);
+  } else {
+    timestamp_ = NULL;
+  }
+  priority_ = from.priority_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.TxnMetaDelta)
+}
+
+void TxnMetaDelta::SharedCtor() {
+  ::memset(&timestamp_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&priority_) -
+      reinterpret_cast<char*>(&timestamp_)) + sizeof(priority_));
+  _cached_size_ = 0;
+}
+
+TxnMetaDelta::~TxnMetaDelta() {
+  // @@protoc_insertion_point(destructor:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  SharedDtor();
+}
+
+void TxnMetaDelta::SharedDtor() {
+  if (this != internal_default_instance()) delete timestamp_;
+}
+
+void TxnMetaDelta::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const TxnMetaDelta& TxnMetaDelta::default_instance() {
+  protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::InitDefaults();
+  return *internal_default_instance();
+}
+
+TxnMetaDelta* TxnMetaDelta::New(::google::protobuf::Arena* arena) const {
+  TxnMetaDelta* n = new TxnMetaDelta;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void TxnMetaDelta::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
+    delete timestamp_;
+  }
+  timestamp_ = NULL;
+  priority_ = 0;
+  _internal_metadata_.Clear();
+}
+
+bool TxnMetaDelta::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_string, false);
+  // @@protoc_insertion_point(parse_start:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // int32 priority = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &priority_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  return false;
+#undef DO_
+}
+
+void TxnMetaDelta::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, *this->timestamp_, output);
+  }
+
+  // int32 priority = 2;
+  if (this->priority() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->priority(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.TxnMetaDelta)
+}
+
+size_t TxnMetaDelta::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+        *this->timestamp_);
+  }
+
+  // int32 priority = 2;
+  if (this->priority() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->priority());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = cached_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void TxnMetaDelta::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const TxnMetaDelta*>(&from));
+}
+
+void TxnMetaDelta::MergeFrom(const TxnMetaDelta& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_timestamp()) {
+    mutable_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.timestamp());
+  }
+  if (from.priority() != 0) {
+    set_priority(from.priority());
+  }
+}
+
+void TxnMetaDelta::CopyFrom(const TxnMetaDelta& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.storage.engine.enginepb.TxnMetaDelta)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool TxnMetaDelta::IsInitialized() const {
+  return true;
+}
+
+void TxnMetaDelta::Swap(TxnMetaDelta* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void TxnMetaDelta::InternalSwap(TxnMetaDelta* other) {
+  using std::swap;
+  swap(timestamp_, other->timestamp_);
+  swap(priority_, other->priority_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  swap(_cached_size_, other->_cached_size_);
+}
+
+::std::string TxnMetaDelta::GetTypeName() const {
+  return "cockroach.storage.engine.enginepb.TxnMetaDelta";
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// TxnMetaDelta
+
+bool TxnMetaDelta::has_timestamp() const {
+  return this != internal_default_instance() && timestamp_ != NULL;
+}
+void TxnMetaDelta::clear_timestamp() {
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) delete timestamp_;
+  timestamp_ = NULL;
+}
+const ::cockroach::util::hlc::Timestamp& TxnMetaDelta::timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMetaDelta.timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+::cockroach::util::hlc::Timestamp* TxnMetaDelta::mutable_timestamp() {
+  
+  if (timestamp_ == NULL) {
+    timestamp_ = new ::cockroach::util::hlc::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMetaDelta.timestamp)
+  return timestamp_;
+}
+::cockroach::util::hlc::Timestamp* TxnMetaDelta::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMetaDelta.timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  timestamp_ = NULL;
+  return temp;
+}
+void TxnMetaDelta::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+  delete timestamp_;
+  timestamp_ = timestamp;
+  if (timestamp) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMetaDelta.timestamp)
+}
+
+// int32 priority = 2;
+void TxnMetaDelta::clear_priority() {
+  priority_ = 0;
+}
+::google::protobuf::int32 TxnMetaDelta::priority() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMetaDelta.priority)
+  return priority_;
+}
+void TxnMetaDelta::set_priority(::google::protobuf::int32 value) {
+  
+  priority_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMetaDelta.priority)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

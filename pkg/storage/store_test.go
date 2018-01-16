@@ -936,10 +936,12 @@ func TestStoreObservedTimestamp(t *testing.T) {
 				if pErr != nil {
 					t.Fatal(pErr)
 				}
-				txn := pReply.Header().Txn
-				if txn == nil || txn.ID == (uuid.UUID{}) {
+				delta := pReply.Header().Txn
+				if delta == nil {
 					t.Fatal("expected transactional response")
 				}
+				var txn roachpb.Transaction
+				txn.Update(delta)
 				obs, _ := txn.GetObservedTimestamp(desc.NodeID)
 				if act, exp := obs.WallTime, wallNanos; exp != act {
 					t.Fatalf("unexpected observed wall time: %d, wanted %d", act, exp)
@@ -1637,9 +1639,10 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 					t.Fatalf("unexpected error on commit: %s", cErr)
 				}
 				etReply := reply.(*roachpb.EndTransactionResponse)
-				if etReply.Txn.Status != roachpb.COMMITTED || etReply.Txn.Timestamp.Less(minExpTS) {
+				ts := etReply.Txn.GetMeta().Timestamp
+				if etReply.Txn.Status != roachpb.COMMITTED || ts.Less(minExpTS) {
 					t.Errorf("txn commit didn't yield expected status (COMMITTED) or timestamp %s: %s",
-						minExpTS, etReply.Txn)
+						minExpTS, ts)
 				}
 			} else {
 				if _, ok := cErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
@@ -1719,7 +1722,7 @@ func TestStoreResolveWriteIntentSnapshotIsolation(t *testing.T) {
 	etReply := reply.(*roachpb.EndTransactionResponse)
 	minExpTS := pusher.Timestamp
 	minExpTS.Logical++
-	if etReply.Txn.Status != roachpb.COMMITTED || etReply.Txn.Timestamp.Less(minExpTS) {
+	if etReply.Txn.Status != roachpb.COMMITTED || etReply.Txn.Meta.Timestamp.Less(minExpTS) {
 		t.Errorf("txn commit didn't yield expected status (COMMITTED) or timestamp %s: %s",
 			minExpTS, etReply.Txn)
 	}

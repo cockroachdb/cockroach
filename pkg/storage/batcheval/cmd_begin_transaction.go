@@ -67,46 +67,46 @@ func BeginTransaction(
 		return result.Result{}, err
 	}
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
-	clonedTxn := h.Txn.Clone()
-	reply.Txn = &clonedTxn
 
-	// Verify transaction does not already exist.
-	tmpTxn := roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &tmpTxn)
+	delta, finish := roachpb.MakeTxnDeltaHelper(&h.Txn, &reply.Txn)
+	defer finish()
+
+	// Load existing transaction (which usually does not exist).
+	var diskTxn roachpb.Transaction
+	exists, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &diskTxn)
 	if err != nil {
 		return result.Result{}, err
 	}
-	if ok {
-		switch tmpTxn.Status {
+
+	if exists {
+		switch diskTxn.Status {
 		case roachpb.ABORTED:
 			// Check whether someone has come in ahead and already aborted the
 			// txn.
 			return result.Result{}, roachpb.NewTransactionAbortedError()
 
 		case roachpb.PENDING:
-			if h.Txn.Epoch > tmpTxn.Epoch {
-				// On a transaction retry there will be an extant txn record
-				// but this run should have an upgraded epoch. The extant txn
-				// record may have been pushed or otherwise updated, so update
-				// this command's txn and rewrite the record.
-				reply.Txn.Update(&tmpTxn)
-			} else {
-				// Our txn record already exists. This is either a client error, sending
-				// a duplicate BeginTransaction, or it's an artifact of DistSender
-				// re-sending a batch. Assume the latter and ask the client to restart.
+			if diskTxn.Epoch >= delta.BaseTxn().Epoch {
+				// The txn record already exists at current or newer epoch. This is either a
+				// client error, sending a duplicate BeginTransaction, or it's an artifact of
+				// DistSender re-sending a batch. Assume the latter and ask the client to restart.
 				return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 			}
-
 		case roachpb.COMMITTED:
 			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("BeginTransaction can't overwrite %s", tmpTxn),
+				fmt.Sprintf("BeginTransaction can't overwrite committed record %s", diskTxn),
 			)
 
 		default:
 			return result.Result{}, roachpb.NewTransactionStatusError(
-				fmt.Sprintf("bad txn state: %s", tmpTxn),
+				fmt.Sprintf("bad txn state: %s", diskTxn),
 			)
 		}
+		// On a transaction retry there will be an extant txn record
+		// but this run should have an upgraded epoch. The extant txn
+		// record may have been pushed or otherwise updated, so update
+		// this command's txn and rewrite the record.
+		delta.UpdateFrom(&diskTxn)
 	}
 
 	threshold := cArgs.EvalCtx.GetTxnSpanGCThreshold()
@@ -117,11 +117,11 @@ func BeginTransaction(
 	// (which may have been written before this entry).
 	//
 	// See #9265.
-	if reply.Txn.LastActive().Less(threshold) {
+	if delta.BaseTxn().LastActive().Less(threshold) {
 		return result.Result{}, roachpb.NewTransactionAbortedError()
 	}
 
 	// Write the txn record.
-	reply.Txn.Writing = true
-	return result.Result{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
+	delta.SetWriting()
+	return result.Result{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, delta.UpdatedTxn())
 }

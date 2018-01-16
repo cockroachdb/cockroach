@@ -16,7 +16,6 @@ package roachpb
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"strings"
 
@@ -53,17 +52,19 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 // UpdateTxn updates the batch transaction from the supplied one in
 // a copy-on-write fashion, i.e. without mutating an existing
 // Transaction struct.
-func (ba *BatchRequest) UpdateTxn(otherTxn *Transaction) {
-	if otherTxn == nil {
+func (ba *BatchRequest) UpdateTxn(delta *TransactionDelta) {
+	if delta == nil {
 		return
 	}
-	otherTxn.AssertInitialized(context.TODO())
+	// FIXME otherTxn.AssertInitialized(context.TODO())
 	if ba.Txn == nil {
-		ba.Txn = otherTxn
-		return
+		// ba.Txn = otherTxn
+		// return
+		panic("FIXME")
 	}
+	// FIXME(tschottdorf): can do better here.
 	clonedTxn := ba.Txn.Clone()
-	clonedTxn.Update(otherTxn)
+	clonedTxn.Update(delta)
 	ba.Txn = &clonedTxn
 }
 
@@ -260,7 +261,11 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) err
 			return errors.Errorf("can not combine %T and %T", valLeft, valRight)
 		}
 	}
-	br.Txn.Update(otherBatch.Txn)
+	if br.Txn == nil {
+		br.Txn = otherBatch.Txn
+	} else {
+		br.Txn.Update(otherBatch.Txn)
+	}
 	return nil
 }
 
@@ -383,10 +388,12 @@ func (*BatchRequest) GetUser() string {
 // The sequence counter is used for replay and reordering protection. At the
 // Store, a sequence counter less than or equal to the last observed one incurs
 // a transaction restart (if the request is transactional).
-func (ba *BatchRequest) SetNewRequest() {
+func (ba *BatchRequest) SetNewRequest() int32 {
 	if ba.Txn != nil {
 		txn := *ba.Txn
 		txn.Sequence++
 		ba.Txn = &txn
+		return txn.Sequence
 	}
+	return 0
 }
