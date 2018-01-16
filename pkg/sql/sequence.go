@@ -28,7 +28,7 @@ import (
 
 // IncrementSequence implements the tree.EvalPlanner interface.
 func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
-	if p.session.TxnState.readOnly {
+	if p.EvalContext().TxnReadOnly {
 		return 0, readOnlyError("nextval()")
 	}
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
@@ -99,7 +99,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 func (p *planner) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64,
 ) error {
-	if p.session.TxnState.readOnly {
+	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("setval()")
 	}
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
