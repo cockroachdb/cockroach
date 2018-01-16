@@ -335,13 +335,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.index)
 
 	case *groupNode:
-		for _, fholder := range n.funcs {
-			if f, ok := fholder.expr.(*tree.FuncExpr); ok {
-				if strings.ToUpper(f.Func.FunctionReference.String()) == "ARRAY_AGG" {
-					return 0, newQueryNotSupportedError("ARRAY_AGG aggregation not supported yet")
-				}
-			}
-		}
 		rec, err := dsp.checkSupportForNode(n.plan)
 		if err != nil {
 			return 0, err
