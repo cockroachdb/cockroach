@@ -635,3 +635,15 @@ func (e *IntegerOverflowError) message(_ *Error) string {
 		"key %s with value %d incremented by %d results in overflow",
 		e.Key, e.CurrentValue, e.IncrementValue)
 }
+
+var _ ErrorDetailInterface = &IntegerOverflowError{}
+
+func (e *UnsupportedRequestError) Error() string {
+	return e.message(nil)
+}
+
+func (e *UnsupportedRequestError) message(_ *Error) string {
+	return "unsupported request"
+}
+
+var _ ErrorDetailInterface = &UnsupportedRequestError{}

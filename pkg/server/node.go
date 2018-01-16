@@ -825,9 +825,28 @@ func (n *Node) recordJoinEvent() {
 	})
 }
 
+// If we receive a (proto-marshaled) roachpb.BatchRequest whose Requests contain
+// a message type unknown to this node, we will end up with a zero entry in the
+// slice. If we don't error out early, this breaks all sorts of assumptions and
+// usually ends in a panic.
+func checkNoUnknownRequest(reqs []roachpb.RequestUnion) *roachpb.UnsupportedRequestError {
+	for _, req := range reqs {
+		if req.GetValue() == nil {
+			return &roachpb.UnsupportedRequestError{}
+		}
+	}
+	return nil
+}
+
 func (n *Node) batchInternal(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
+	if detail := checkNoUnknownRequest(args.Requests); detail != nil {
+		var br roachpb.BatchResponse
+		br.Error = roachpb.NewError(detail)
+		return &br, nil
+	}
+
 	isLocalRequest := grpcutil.IsLocalRequestContext(ctx)
 	// TODO(marc): grpc's authentication model (which gives credential access in
 	// the request handler) doesn't really fit with the current design of the
