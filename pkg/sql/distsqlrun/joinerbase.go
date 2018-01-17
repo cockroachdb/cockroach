@@ -87,8 +87,7 @@ func (jb *joinerBase) init(
 	condTypes = append(condTypes, rightTypes...)
 
 	outputSize := len(leftTypes) + jb.numMergedEqualityColumns
-	// Semi-joins do not include the right columns in their output.
-	if jb.joinType != leftSemiJoin {
+	if shouldIncludeRightColsInOutput(jb.joinType) {
 		outputSize += len(rightTypes)
 	}
 	outputTypes := condTypes[:outputSize]
@@ -134,9 +133,17 @@ func (jb *joinerBase) renderUnmatchedRow(
 	return jb.combinedRow
 }
 
+func shouldIncludeRightColsInOutput(joinType joinType) bool {
+	if joinType == leftSemiJoin || joinType == leftAntiJoin {
+		return false
+	}
+	return true
+}
+
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
-// and LEFT or RIGHT OUTER joins (depending on which stream).
+// and LEFT or RIGHT OUTER joins and ANTI joins (depending on which stream is
+// stored).
 func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 	switch joinType {
 	case leftSemiJoin, innerJoin:
@@ -145,9 +152,13 @@ func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 		return side == rightSide
 	case leftOuter:
 		return side == leftSide
+	case leftAntiJoin:
+		return side == leftSide
 	case fullOuter:
+		return true
+	default:
+		return true
 	}
-	return true
 }
 
 // maybeEmitUnmatchedRow is used for rows that don't match anything in the
