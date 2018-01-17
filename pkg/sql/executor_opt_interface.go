@@ -101,13 +101,18 @@ func (en *execNode) Explain() ([]tree.Datums, error) {
 		showExprs:    true,
 		qualifyNames: true,
 	}
-	explainNode := execNode{
-		execFactory: en.execFactory,
-		plan: en.planner.makeExplainPlanNode(
-			flags, false /* expanded */, false /* optimized */, en.plan,
-		),
+	explainNode, err := en.planner.makeExplainPlanNodeWithPlan(
+		context.TODO(), flags, false /* expanded */, false /* optimized */, en.plan,
+	)
+	if err != nil {
+		return nil, err
 	}
-	return explainNode.Run()
+	// Run the node.
+	explainExecNode := execNode{
+		execFactory: en.execFactory,
+		plan:        explainNode,
+	}
+	return explainExecNode.Run()
 }
 
 // Run is part of the opt.ExecNode interface.

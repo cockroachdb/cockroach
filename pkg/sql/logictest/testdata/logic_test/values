@@ -31,9 +31,13 @@ VALUES ((SELECT 1)), ((SELECT 2))
 query TTT
 EXPLAIN VALUES (1), ((SELECT 2))
 ----
-values                   ·           ·
- │                       size        1 column, 2 rows
- │                       subqueries  1
- └── limit               ·           ·
-      └── render         ·           ·
-           └── emptyrow  ·           ·
+root                          ·          ·
+ ├── values                   ·          ·
+ │                            size       1 column, 2 rows
+ └── subquery                 ·          ·
+      │                       id         @S1
+      │                       sql        (SELECT 2)
+      │                       exec mode  one row
+      └── limit               ·          ·
+           └── render         ·          ·
+                └── emptyrow  ·          ·

@@ -117,23 +117,23 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 		mode = explainPlan
 	}
 
+	defer func(save bool) { p.extendedEvalCtx.SkipNormalize = save }(p.extendedEvalCtx.SkipNormalize)
 	p.extendedEvalCtx.SkipNormalize = !normalizeExprs
 
-	plan, err := p.newPlan(ctx, n.Statement, nil)
-	if err != nil {
-		return nil, err
-	}
 	switch mode {
 	case explainDistSQL:
+		plan, err := p.newPlan(ctx, n.Statement, nil)
+		if err != nil {
+			return nil, err
+		}
 		return &explainDistSQLNode{
 			plan: plan,
 		}, nil
 
 	case explainPlan:
-		// We may want to show placeholder types, so ensure no values
-		// are missing.
+		// We may want to show placeholder types, so allow missing values.
 		p.semaCtx.Placeholders.PermitUnassigned()
-		return p.makeExplainPlanNode(flags, expanded, optimized, plan), nil
+		return p.makeExplainPlanNode(ctx, flags, expanded, optimized, n.Statement)
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
