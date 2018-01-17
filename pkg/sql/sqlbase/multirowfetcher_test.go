@@ -159,7 +159,7 @@ func TestNextRowSingle(t *testing.T) {
 			if err := mrf.StartScan(
 				context.TODO(),
 				client.NewTxn(kvDB, 0),
-				roachpb.Spans{tableDesc.TableSpan()},
+				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/
@@ -333,7 +333,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			if err := mrf.StartScan(
 				context.TODO(),
 				client.NewTxn(kvDB, 0),
-				roachpb.Spans{tableDesc.TableSpan()},
+				roachpb.Spans{tableDesc.IndexSpan(tableDesc.Indexes[0].ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
 				false, /*traceKV*/

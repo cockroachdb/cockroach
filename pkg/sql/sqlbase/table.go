@@ -770,18 +770,40 @@ func DecodeIndexKey(
 	colDirs []encoding.Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, _ error) {
+	key, _, _, err := DecodeTableIDIndexID(key)
+	if err != nil {
+		return nil, false, err
+	}
+	return DecodeIndexKeyWithoutTableIDIndexIDPrefix(desc, index, types, vals, colDirs, key)
+}
+
+// DecodeIndexKeyWithoutTableIDIndexIDPrefix is the same as DecodeIndexKey,
+// except it expects its index key is missing its first table id / index id
+// key prefix.
+func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
+	desc *TableDescriptor,
+	index *IndexDescriptor,
+	types []ColumnType,
+	vals []EncDatum,
+	colDirs []encoding.Direction,
+	key []byte,
+) (remainingKey []byte, matches bool, _ error) {
 	var decodedTableID ID
 	var decodedIndexID IndexID
 	var err error
 
 	if len(index.Interleave.Ancestors) > 0 {
-		for _, ancestor := range index.Interleave.Ancestors {
-			key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
-			if err != nil {
-				return nil, false, err
-			}
-			if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
-				return nil, false, nil
+		for i, ancestor := range index.Interleave.Ancestors {
+			// Our input key had its first table id / index id chopped off, so
+			// don't try to decode those for the first ancestor.
+			if i != 0 {
+				key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
+				if err != nil {
+					return nil, false, err
+				}
+				if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
+					return nil, false, nil
+				}
 			}
 
 			length := int(ancestor.SharedPrefixLen)
@@ -798,14 +820,14 @@ func DecodeIndexKey(
 				return nil, false, nil
 			}
 		}
-	}
 
-	key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
-	if err != nil {
-		return nil, false, err
-	}
-	if decodedTableID != desc.ID || decodedIndexID != index.ID {
-		return nil, false, nil
+		key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
+		if err != nil {
+			return nil, false, err
+		}
+		if decodedTableID != desc.ID || decodedIndexID != index.ID {
+			return nil, false, nil
+		}
 	}
 
 	key, err = DecodeKeyVals(vals, colDirs, key)
