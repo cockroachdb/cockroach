@@ -56,8 +56,9 @@ export default function (props: GraphDashboardProps) {
       title="Replicas per Node"
       tooltip={(
         <div>
-          The number of range replicas stored on this node.&nbsp;
-            <em>Ranges are subsets of your data, which are replicated to ensure survivability.</em>
+          The number of range replicas stored on this node.
+          {" "}
+          <em>Ranges are subsets of your data, which are replicated to ensure survivability.</em>
         </div>
       )}
     >
@@ -84,6 +85,7 @@ export default function (props: GraphDashboardProps) {
             <dt>Capacity</dt>
             <dd>
               Total disk space available {tooltipSelection} to CockroachDB.
+              {" "}
               <em>
                 Control this value per node with the
                 {" "}
