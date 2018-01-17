@@ -310,13 +310,13 @@ NULL  3     3
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                  (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u         ·          ·
- │         0  ·       render 1  test.uvw.v         ·          ·
- │         0  ·       render 2  test.uvw.w         ·          ·
- └── scan  1  scan    ·         ·                  (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx  ·          ·
-·          1  ·       spans     /1/2/3-            ·          ·
+render     0  render  ·         ·                  (u, v, w)                         +u,+v,+w
+ │         0  ·       render 0  test.uvw.u         ·                                 ·
+ │         0  ·       render 1  test.uvw.v         ·                                 ·
+ │         0  ·       render 2  test.uvw.w         ·                                 ·
+ └── scan  1  scan    ·         ·                  (u, v, w, rowid[hidden,omitted])  rowid!=NULL; weak-key(u,v,w,rowid); +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx  ·                                 ·
+·          1  ·       spans     /1/2/3-            ·                                 ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
@@ -362,13 +362,13 @@ SELECT * FROM uvw WHERE (u, v, w) >= (1, 2, 3) ORDER BY u, v, w
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                  (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u         ·          ·
- │         0  ·       render 1  test.uvw.v         ·          ·
- │         0  ·       render 2  test.uvw.w         ·          ·
- └── scan  1  scan    ·         ·                  (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx  ·          ·
-·          1  ·       spans     /2/1/2-            ·          ·
+render     0  render  ·         ·                  (u, v, w)                         +u,+v,+w
+ │         0  ·       render 0  test.uvw.u         ·                                 ·
+ │         0  ·       render 1  test.uvw.v         ·                                 ·
+ │         0  ·       render 2  test.uvw.w         ·                                 ·
+ └── scan  1  scan    ·         ·                  (u, v, w, rowid[hidden,omitted])  rowid!=NULL; weak-key(u,v,w,rowid); +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx  ·                                 ·
+·          1  ·       spans     /2/1/2-            ·                                 ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
@@ -403,14 +403,14 @@ SELECT * FROM uvw WHERE (u, v, w) > (2, 1, 1) ORDER BY u, v, w
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                       (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u              ·          ·
- │         0  ·       render 1  test.uvw.v              ·          ·
- │         0  ·       render 2  test.uvw.w              ·          ·
- └── scan  1  scan    ·         ·                       (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx       ·          ·
-·          1  ·       spans     /!NULL-/2/3/2           ·          ·
-·          1  ·       filter    (u, v, w) <= (2, 3, 1)  ·          ·
+render     0  render  ·         ·                       (u, v, w)                         +u,+v,+w
+ │         0  ·       render 0  test.uvw.u              ·                                 ·
+ │         0  ·       render 1  test.uvw.v              ·                                 ·
+ │         0  ·       render 2  test.uvw.w              ·                                 ·
+ └── scan  1  scan    ·         ·                       (u, v, w, rowid[hidden,omitted])  rowid!=NULL; weak-key(u,v,w,rowid); +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx       ·                                 ·
+·          1  ·       spans     /!NULL-/2/3/2           ·                                 ·
+·          1  ·       filter    (u, v, w) <= (2, 3, 1)  ·                                 ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
@@ -444,14 +444,14 @@ SELECT * FROM uvw WHERE (u, v, w) <= (2, 3, 1) ORDER BY u, v, w
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                      (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u             ·          ·
- │         0  ·       render 1  test.uvw.v             ·          ·
- │         0  ·       render 2  test.uvw.w             ·          ·
- └── scan  1  scan    ·         ·                      (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx      ·          ·
-·          1  ·       spans     /!NULL-/2/2/2          ·          ·
-·          1  ·       filter    (u, v, w) < (2, 2, 2)  ·          ·
+render     0  render  ·         ·                      (u, v, w)                         +u,+v,+w
+ │         0  ·       render 0  test.uvw.u             ·                                 ·
+ │         0  ·       render 1  test.uvw.v             ·                                 ·
+ │         0  ·       render 2  test.uvw.w             ·                                 ·
+ └── scan  1  scan    ·         ·                      (u, v, w, rowid[hidden,omitted])  rowid!=NULL; weak-key(u,v,w,rowid); +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx      ·                                 ·
+·          1  ·       spans     /!NULL-/2/2/2          ·                                 ·
+·          1  ·       filter    (u, v, w) < (2, 2, 2)  ·                                 ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
@@ -481,14 +481,14 @@ SELECT * FROM uvw WHERE (u, v, w) < (2, 2, 2) ORDER BY u, v, w
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                       (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u              ·          ·
- │         0  ·       render 1  test.uvw.v              ·          ·
- │         0  ·       render 2  test.uvw.w              ·          ·
- └── scan  1  scan    ·         ·                       (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx       ·          ·
-·          1  ·       spans     -/1/2/3 /1/2/4-         ·          ·
-·          1  ·       filter    (u, v, w) != (1, 2, 3)  ·          ·
+render     0  render  ·         ·                       (u, v, w)                         +u,+v,+w
+ │         0  ·       render 0  test.uvw.u              ·                                 ·
+ │         0  ·       render 1  test.uvw.v              ·                                 ·
+ │         0  ·       render 2  test.uvw.w              ·                                 ·
+ └── scan  1  scan    ·         ·                       (u, v, w, rowid[hidden,omitted])  rowid!=NULL; weak-key(u,v,w,rowid); +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx       ·                                 ·
+·          1  ·       spans     -/1/2/3 /1/2/4-         ·                                 ·
+·          1  ·       filter    (u, v, w) != (1, 2, 3)  ·                                 ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) != (1, 2, 3) ORDER BY u, v, w
@@ -553,13 +553,13 @@ NULL  3     3
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                  (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u         ·          ·
- │         0  ·       render 1  test.uvw.v         ·          ·
- │         0  ·       render 2  test.uvw.w         ·          ·
- └── scan  1  scan    ·         ·                  (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx  ·          ·
-·          1  ·       spans     /2-                ·          ·
+render     0  render  ·         ·                  (u, v, w)                         +u,+v,+w
+ │         0  ·       render 0  test.uvw.u         ·                                 ·
+ │         0  ·       render 1  test.uvw.v         ·                                 ·
+ │         0  ·       render 2  test.uvw.w         ·                                 ·
+ └── scan  1  scan    ·         ·                  (u, v, w, rowid[hidden,omitted])  rowid!=NULL; weak-key(u,v,w,rowid); +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx  ·                                 ·
+·          1  ·       spans     /2-                ·                                 ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
@@ -600,13 +600,13 @@ SELECT * FROM uvw WHERE (u, v, w) >= (1, NULL, 3) ORDER BY u, v, w
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
 ----
-render     0  render  ·         ·                  (u, v, w)  +u,+v,+w
- │         0  ·       render 0  test.uvw.u         ·          ·
- │         0  ·       render 1  test.uvw.v         ·          ·
- │         0  ·       render 2  test.uvw.w         ·          ·
- └── scan  1  scan    ·         ·                  (u, v, w)  +u,+v,+w
-·          1  ·       table     uvw@uvw_u_v_w_idx  ·          ·
-·          1  ·       spans     /!NULL-/2          ·          ·
+render     0  render  ·         ·                  (u, v, w)                         +u,+v,+w
+ │         0  ·       render 0  test.uvw.u         ·                                 ·
+ │         0  ·       render 1  test.uvw.v         ·                                 ·
+ │         0  ·       render 2  test.uvw.w         ·                                 ·
+ └── scan  1  scan    ·         ·                  (u, v, w, rowid[hidden,omitted])  rowid!=NULL; weak-key(u,v,w,rowid); +u,+v,+w
+·          1  ·       table     uvw@uvw_u_v_w_idx  ·                                 ·
+·          1  ·       spans     /!NULL-/2          ·                                 ·
 
 query III
 SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
@@ -636,18 +636,18 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b))
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3);
 ----
-render           0  render      ·         ·                      (a, b, c)  ·
- │               0  ·           render 0  test.abc.a             ·          ·
- │               0  ·           render 1  test.abc.b             ·          ·
- │               0  ·           render 2  test.abc.c             ·          ·
- └── index-join  1  index-join  ·         ·                      (a, b, c)  ·
-      ├── scan   2  scan        ·         ·                      (a, b, c)  ·
-      │          2  ·           table     abc@abc_a_b_idx        ·          ·
-      │          2  ·           spans     /1/2-                  ·          ·
-      │          2  ·           filter    (a, b) >= (1, 2)       ·          ·
-      └── scan   2  scan        ·         ·                      (a, b, c)  ·
-·                2  ·           table     abc@primary            ·          ·
-·                2  ·           filter    (a, b, c) > (1, 2, 3)  ·          ·
+render           0  render      ·         ·                      (a, b, c)                          ·
+ │               0  ·           render 0  test.abc.a             ·                                  ·
+ │               0  ·           render 1  test.abc.b             ·                                  ·
+ │               0  ·           render 2  test.abc.c             ·                                  ·
+ └── index-join  1  index-join  ·         ·                      (a, b, c, rowid[hidden,omitted])   rowid!=NULL; weak-key(a,b,rowid)
+      ├── scan   2  scan        ·         ·                      (a, b, c[omitted], rowid[hidden])  rowid!=NULL; weak-key(a,b,rowid)
+      │          2  ·           table     abc@abc_a_b_idx        ·                                  ·
+      │          2  ·           spans     /1/2-                  ·                                  ·
+      │          2  ·           filter    (a, b) >= (1, 2)       ·                                  ·
+      └── scan   2  scan        ·         ·                      (a, b, c, rowid[hidden,omitted])   ·
+·                2  ·           table     abc@primary            ·                                  ·
+·                2  ·           filter    (a, b, c) > (1, 2, 3)  ·                                  ·
 
 statement ok
 DROP TABLE abc;
@@ -656,11 +656,11 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b DESC, c))
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3)
 ----
-render     0  render  ·         ·                      (a, b, c)  ·
- │         0  ·       render 0  test.abc.a             ·          ·
- │         0  ·       render 1  test.abc.b             ·          ·
- │         0  ·       render 2  test.abc.c             ·          ·
- └── scan  1  scan    ·         ·                      (a, b, c)  ·
-·          1  ·       table     abc@abc_a_b_c_idx      ·          ·
-·          1  ·       spans     /1-                    ·          ·
-·          1  ·       filter    (a, b, c) > (1, 2, 3)  ·          ·
+render     0  render  ·         ·                      (a, b, c)                         ·
+ │         0  ·       render 0  test.abc.a             ·                                 ·
+ │         0  ·       render 1  test.abc.b             ·                                 ·
+ │         0  ·       render 2  test.abc.c             ·                                 ·
+ └── scan  1  scan    ·         ·                      (a, b, c, rowid[hidden,omitted])  rowid!=NULL; weak-key(a,b,c,rowid)
+·          1  ·       table     abc@abc_a_b_c_idx      ·                                 ·
+·          1  ·       spans     /1-                    ·                                 ·
+·          1  ·       filter    (a, b, c) > (1, 2, 3)  ·                                 ·
