@@ -1031,15 +1031,6 @@ func restorePlanHook(
 	if !ok {
 		return nil, nil, nil
 	}
-	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "RESTORE",
-	); err != nil {
-		return nil, nil, err
-	}
-
-	if err := p.RequireSuperUser("RESTORE"); err != nil {
-		return nil, nil, err
-	}
 
 	fromFn, err := p.TypeAsStringArray(restoreStmt.From, "RESTORE")
 	if err != nil {
@@ -1055,6 +1046,20 @@ func restorePlanHook(
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "RESTORE",
+		); err != nil {
+			return err
+		}
+
+		if err := p.RequireSuperUser("RESTORE"); err != nil {
+			return err
+		}
+
+		if !p.ExtendedEvalContext().TxnImplicit {
+			return errors.Errorf("RESTORE cannot be used inside a transaction")
+		}
 
 		// Older nodes don't know about many new fields and flags, e.g. as-of-time,
 		// and our testing does not comprehensively cover mixed-version clusters.

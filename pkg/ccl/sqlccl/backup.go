@@ -617,16 +617,6 @@ func backupPlanHook(
 		return nil, nil, nil
 	}
 
-	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "BACKUP",
-	); err != nil {
-		return nil, nil, err
-	}
-
-	if err := p.RequireSuperUser("BACKUP"); err != nil {
-		return nil, nil, err
-	}
-
 	toFn, err := p.TypeAsString(backupStmt.To, "BACKUP")
 	if err != nil {
 		return nil, nil, err
@@ -654,6 +644,20 @@ func backupPlanHook(
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "BACKUP",
+		); err != nil {
+			return err
+		}
+
+		if err := p.RequireSuperUser("BACKUP"); err != nil {
+			return err
+		}
+
+		if !p.ExtendedEvalContext().TxnImplicit {
+			return errors.Errorf("BACKUP cannot be used inside a transaction")
+		}
 
 		// older nodes don't know about many new fields, e.g. MVCCAll and may
 		// incorrectly evaluate either an export RPC, or a resumed backup job.
