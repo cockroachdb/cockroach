@@ -1087,22 +1087,63 @@ func (d *dummyColumnItem) ResolvedType() types.T {
 	return d.typ
 }
 
-func makeCheckConstraint(
-	desc sqlbase.TableDescriptor,
-	d *tree.CheckConstraintTableDef,
-	inuseNames map[string]struct{},
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-) (*sqlbase.TableDescriptor_CheckConstraint, error) {
+func generateNameForCheckConstraint(
+	expr tree.Expr, inuseNames map[string]struct{},
+) (string, error) {
 	var nameBuf bytes.Buffer
-	name := string(d.Name)
+	nameBuf.WriteString("check")
 
-	generateName := name == ""
-	if generateName {
-		nameBuf.WriteString("check")
+	_, err := tree.SimpleVisit(expr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		nameBuf.WriteByte('_')
+		nameBuf.WriteString(string(c.ColumnName))
+		return nil, false, expr
+	})
+
+	if err != nil {
+		return "", err
+	}
+	name := nameBuf.String()
+
+	// If generated name isn't unique, attempt to add a number to the end to
+	// get a unique name.
+	if _, ok := inuseNames[name]; ok {
+		i := 1
+		for {
+			appended := fmt.Sprintf("%s%d", name, i)
+			if _, ok := inuseNames[appended]; !ok {
+				name = appended
+				break
+			}
+			i++
+		}
+	}
+	if inuseNames != nil {
+		inuseNames[name] = struct{}{}
 	}
 
-	preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+	return name, nil
+}
+
+// replaceVars replaces the occurrences of column names in an expression with
+// dummies containing their type, so that they may be typechecked.
+func replaceVars(desc sqlbase.TableDescriptor, expr tree.Expr) (tree.Expr, error) {
+	return tree.SimpleVisit(expr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
 		vBase, ok := expr.(tree.VarName)
 		if !ok {
 			// Not a VarName, don't do anything to this node.
@@ -1122,17 +1163,31 @@ func makeCheckConstraint(
 		col, err := desc.FindActiveColumnByName(string(c.ColumnName))
 		if err != nil {
 			return fmt.Errorf("column %q not found for constraint %q",
-				c.ColumnName, d.Expr.String()), false, nil
-		}
-		if generateName {
-			nameBuf.WriteByte('_')
-			nameBuf.WriteString(col.Name)
+				c.ColumnName, expr.String()), false, nil
 		}
 		// Convert to a dummy node of the correct type.
 		return nil, false, &dummyColumnItem{col.Type.ToDatumType()}
+	})
+}
+
+func makeCheckConstraint(
+	desc sqlbase.TableDescriptor,
+	d *tree.CheckConstraintTableDef,
+	inuseNames map[string]struct{},
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+) (*sqlbase.TableDescriptor_CheckConstraint, error) {
+	name := string(d.Name)
+
+	if name == "" {
+		var err error
+		name, err = generateNameForCheckConstraint(d.Expr, inuseNames)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	expr, err := tree.SimpleVisit(d.Expr, preFn)
+	expr, err := replaceVars(desc, d.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -1146,26 +1201,6 @@ func makeCheckConstraint(
 		expr, types.Bool, "CHECK", semaCtx, evalCtx,
 	); err != nil {
 		return nil, err
-	}
-	if generateName {
-		name = nameBuf.String()
-
-		// If generated name isn't unique, attempt to add a number to the end to
-		// get a unique name.
-		if _, ok := inuseNames[name]; ok {
-			i := 1
-			for {
-				appended := fmt.Sprintf("%s%d", name, i)
-				if _, ok := inuseNames[appended]; !ok {
-					name = appended
-					break
-				}
-				i++
-			}
-		}
-		if inuseNames != nil {
-			inuseNames[name] = struct{}{}
-		}
 	}
 	return &sqlbase.TableDescriptor_CheckConstraint{Expr: tree.Serialize(d.Expr), Name: name}, nil
 }
