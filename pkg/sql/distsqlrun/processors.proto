@@ -361,6 +361,10 @@ message AggregatorSpec {
     FINAL_VARIANCE = 16;
     FINAL_STDDEV = 17;
     ARRAY_AGG = 18;
+
+    JSON_AGG = 19;
+    // JSONB_AGG is an alias for JSON_AGG, they do the same thing.
+    JSONB_AGG = 20;
   }
 
   message Aggregation {
