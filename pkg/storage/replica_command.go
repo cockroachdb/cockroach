@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -1098,7 +1099,7 @@ func splitTrigger(
 
 	// Compute (absolute) stats for LHS range. This means that no more writes
 	// to the LHS must happen below this point.
-	leftMS, err := ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
+	leftMS, err := rditer.ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for LHS range after split")
 	}
@@ -1130,7 +1131,7 @@ func splitTrigger(
 		// estimate values, we cannot perform arithmetic to determine the
 		// new range's stats. Instead, we must recompute by iterating
 		// over the keys and counting.
-		rightMS, err = ComputeStatsForRange(&split.RightDesc, batch, ts.WallTime)
+		rightMS, err = rditer.ComputeStatsForRange(&split.RightDesc, batch, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for RHS range after split")
 		}

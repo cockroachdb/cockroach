@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -62,7 +63,7 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = ComputeStatsForRange(r.Desc(), s.Engine(), now)
+		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.Engine(), now)
 		if err != nil {
 			return false
 		}
