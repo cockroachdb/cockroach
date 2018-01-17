@@ -85,15 +85,15 @@ export default function (props: GraphDashboardProps) {
             <dd>
               Total disk space available {tooltipSelection} to CockroachDB.
                 <em>
-                Control this value per node with the
-                  <code>
+                Control this value per node with the{" "}
+                <code>
                   <a
                     href={docsURL("start-a-node.html#flags")}
                     target="_blank"
                   >
                     --store
-                    </a>
-                </code>
+                  </a>
+                </code>{" "}
                 flag.
                 </em>
             </dd>
