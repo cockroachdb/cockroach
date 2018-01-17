@@ -224,7 +224,8 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
    */
   constructor(
     protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>,
-    public actionNamespace: string, private requestToID: (req: TRequest) => string,
+    public actionNamespace: string,
+    private requestToID: (req: TRequest) => string,
     protected invalidationPeriod?: moment.Duration,
     protected requestTimeout?: moment.Duration,
   ) {
