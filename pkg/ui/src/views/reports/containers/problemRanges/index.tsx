@@ -5,7 +5,7 @@ import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
 
 import * as protos from "src/js/protos";
-import { refreshProblemRanges } from "src/redux/apiReducers";
+import { problemRangesRequestKey, refreshProblemRanges } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
@@ -55,6 +55,12 @@ function ProblemRangeList(props: {
   );
 }
 
+function problemRangeRequest(props: ProblemRangesProps) {
+  return new protos.cockroach.server.serverpb.ProblemRangesRequest({
+    node_id: props.params[nodeIDAttr],
+  });
+}
+
 /**
  * Renders the Problem Ranges page.
  *
@@ -64,9 +70,7 @@ function ProblemRangeList(props: {
  */
 class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   refresh(props = this.props) {
-    props.refreshProblemRanges(new protos.cockroach.server.serverpb.ProblemRangesRequest({
-      node_id: props.params[nodeIDAttr],
-    }));
+    props.refreshProblemRanges(problemRangeRequest(props));
   }
 
   componentWillMount() {
@@ -160,9 +164,9 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 
 export default connect(
   (state: AdminUIState, props: ProblemRangesProps) => {
-    const nodeID = props.params[nodeIDAttr];
+    const nodeIDKey = problemRangesRequestKey(problemRangeRequest(props));
     return {
-      problemRanges: state.cachedData.problemRanges[nodeID] && state.cachedData.problemRanges[nodeID].data,
+      problemRanges: state.cachedData.problemRanges[nodeIDKey] && state.cachedData.problemRanges[nodeIDKey].data,
     };
   },
   {
