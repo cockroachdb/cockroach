@@ -138,4 +138,6 @@ const (
 	AdminScatter
 	// AddSSTable links a file into the RocksDB log-structured merge-tree.
 	AddSSTable
+	// RecomputeStats applies a delta to a Range's MVCCStats to fix computational errors.
+	RecomputeStats
 )

@@ -42,6 +42,58 @@ import (
 
 const testCacheSize = 1 << 30 // 1 GB
 
+// TestBatchReadLaterWrite demonstrates that reading from a batch is not like
+// reading from a snapshot: writes that occur after opening the batch will be
+// visible to reads from the batch (whereas using a snapshot, they would not).
+func TestBatchReadLaterWrite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	key := roachpb.Key("a")
+
+	eng := setupMVCCInMemRocksDB(t, "unused")
+	defer eng.Close()
+
+	batch := eng.NewBatch()
+	defer batch.Close()
+	snap := eng.NewSnapshot()
+	defer snap.Close()
+
+	v := roachpb.MakeValueFromString("foo")
+
+	if err := MVCCPut(ctx, eng, nil, key, hlc.Timestamp{}, v, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read from a batch that was opened before the value was written to the
+	// underlying engine. The batch will see the write.
+	{
+		rv, _, err := MVCCGet(ctx, batch, key, hlc.Timestamp{}, true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rv == nil {
+			t.Fatal("value not found")
+		}
+
+		if !rv.Equal(&v) {
+			t.Fatalf("values not equal: put %v, read %v", v, *rv)
+		}
+	}
+
+	// Read from a snapshot opened prior to the write. The snapshot won't see the
+	// write.
+	{
+		rv, _, err := MVCCGet(ctx, snap, key, hlc.Timestamp{}, true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rv != nil {
+			t.Fatalf("value unexpectedly found: %v", *rv)
+		}
+	}
+}
+
 func TestBatchIterReadOwnWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
