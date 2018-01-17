@@ -31,6 +31,8 @@ import (
 //      BOOL_AND
 //      BOOL_OR
 //      CONCAT_AGG
+//      JSON_AGG
+//      JSONB_AGG
 //      STDDEV
 //      VARIANCE
 func TestAggregator(t *testing.T) {
