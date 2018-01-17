@@ -3,8 +3,19 @@
 red=$(tput setaf 1 2>/dev/null)
 reset=$(tput sgr0 2>/dev/null)
 
+if grep -qE '.{80,}' "$1"; then
+    echo >&2
+    echo "${red}Long line(s) detected:${reset}" >&2
+    grep -E ".{80,}" "$1" | sed -e 's/^/   /g' >&2
+    echo >&2
+    echo "Please amend and wrap long lines." >&2
+    echo "(Long lines are OK if inside a preformatted block or a table.)" >&2
+    echo >&2
+fi
+
 if ! grep -qE '^Release note( \([^)]+\))?: ' "$1" ; then
     echo >&2
     echo "${red}Warning: no release note specified!${reset}" >&2
+    echo "Please amend and add a 'Release note:' line." >&2
     echo >&2
 fi
