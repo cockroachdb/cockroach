@@ -28,13 +28,18 @@ minimal latency disruption and no manual intervention; supports
 **strongly-consistent** ACID transactions; and provides a familiar
 **SQL** API for structuring, manipulating, and querying data.
 
-For more details, see our [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) and original [design document](
-https://github.com/cockroachdb/cockroach#design).
+For more details, see our [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) or [architecture document](
+https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
+
+Here’s a quick explainer video:
+
+<a href='https://www.youtube.com/watch?v=VgXiMcbGwzQ'> <img src='docs/media/explainer-video-preview.png' width='50%'> </a>
+
 
 ## Status
 
 CockroachDB is production-ready. See our
-[1.1 milestone](https://github.com/cockroachdb/cockroach/milestone/10) for a list of features planned or in development.
+[Roadmap](https://github.com/cockroachdb/cockroach/wiki/Roadmap) for a list of features planned or in development.
 
 ## Docs
 
@@ -65,11 +70,11 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 
 ## Deployment
 
-- [Manual Deployment](https://www.cockroachlabs.com/docs/stable/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
-
-- [Cloud Deployment](https://www.cockroachlabs.com/docs/stable/cloud-deployment.html) - Guides for deploying CockroachDB on various cloud platforms.
-
-- [Orchestration](https://www.cockroachlabs.com/docs/stable/orchestration.html) - Guides for running CockroachDB with popular open-source orchestration systems.
+- [Test Deployment](https://www.cockroachlabs.com/docs/stable/deploy-a-test-cluster.html) - Easiest way to test an insecure, multi-node CockroachDB cluster.
+- Production Deployments
+    - [Manual](https://www.cockroachlabs.com/docs/stable/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
+    - [Cloud](https://www.cockroachlabs.com/docs/stable/cloud-deployment.html) - Guides for deploying CockroachDB on various cloud platforms.
+    - [Orchestration](https://www.cockroachlabs.com/docs/stable/orchestration.html) - Guides for running CockroachDB with popular open-source orchestration systems.
 
 ## Need Help?
 
@@ -89,82 +94,15 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 
 ## Contributing
 
-We're an open source project and welcome contributions.
+We're an open source project and welcome contributions. See our [Contributing Guide](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html) for more details.
 
-1.  See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md) to get your local environment set up.
-
-2.  Take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [help wanted label](https://github.com/cockroachdb/cockroach/labels/help%20wanted).
-
-3.  Review our [style guide](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#style-guide) and follow our [code reviews](https://github.com/cockroachdb/cockroach/pulls) to learn about our style and conventions.
-
-4.  Make your changes according to our [code review workflow](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#code-review-workflow).
 
 ## Design
 
-This is an overview. For an in-depth discussion of the design and architecture, see the full [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
+For an in-depth discussion of the CockroachDB architecture, see our [Architecture Guide](https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
 
-For another quick design overview, see the [CockroachDB tech talk slides](https://docs.google.com/presentation/d/1tPPhnpJ3UwyYMe4MT8jhqCrE9ZNrUMqsvXAbd97DZ2E/edit#slide=id.p).
+For the original design motivation, see our [design doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
-### Design Goals
-
-CockroachDB is a distributed SQL database built on top of a
-transactional and consistent key:value store.
-
-The primary design goals are support for ACID transactions, horizontal scalability and survivability, hence the name.
-
-It aims to tolerate disk, machine, rack, and even datacenter failures with minimal latency disruption and no manual intervention.
-
-CockroachDB nodes are symmetric; a design goal is homogeneous deployment (one binary) with minimal configuration.
-
-### How it Works in a Nutshell
-
-CockroachDB implements a single, monolithic sorted map from key to value
-where both keys and values are byte strings (not unicode).
-
-The map is composed of one or more ranges and each range is backed by
-data stored in [RocksDB][0] (a variant of [LevelDB][1]), and is
-replicated to a total of three or more CockroachDB servers. This
-enables CockroachDB to scale linearly — theoretically up to 4 exabytes
-(4E) of logical data.
-
-Ranges are defined by start and end keys. Ranges are merged and split
-to maintain total byte size within a globally configurable min/max
-size interval. Range sizes default to target 64M in order to
-facilitate quick splits and merges and to distribute load at hotspots
-within a key range. Range replicas are intended to be located in
-disparate datacenters for survivability (e.g. `{ US-East, US-West,
-Japan }`, `{ Ireland, US-East, US-West}` , `{ Ireland, US-East,
-US-West, Japan, Australia }`).
-
-Single mutations to ranges are mediated via an instance of a
-distributed consensus algorithm to ensure consistency. We’ve chosen to
-use the [Raft consensus algorithm][2]. All consensus state is also
-stored in [RocksDB][0].
-
-A single logical mutation may affect multiple key/value pairs. Logical
-mutations have ACID transactional semantics. If all keys affected by a
-logical mutation fall within the same range, atomicity and consistency
-are guaranteed by [Raft][2]; this is the fast commit path. Otherwise, a
-non-locking distributed commit protocol is employed between affected
-ranges.
-
-CockroachDB provides snapshot isolation (SI) and serializable snapshot
-isolation (SSI) semantics, allowing externally consistent, lock-free
-reads and writes--both from an historical snapshot timestamp and from
-the current wall clock time. SI provides lock-free reads and writes
-but still allows write skew. SSI eliminates write skew, but introduces
-a performance hit in the case of a contentious system. SSI is the
-default isolation; clients must consciously decide to trade
-correctness for performance. CockroachDB implements a limited form of
-linearalizability, providing ordering for any observer or chain of
-observers.
-
-Similar to [Spanner][3] directories, CockroachDB allows configuration of
-arbitrary zones of data. This allows replication factor, storage
-device type, and/or datacenter location to be chosen to optimize
-performance and/or availability. Unlike Spanner, zones are monolithic
-and don’t allow movement of fine grained data on the level of entity
-groups.
 
 ## Comparison with Other Databases
 
@@ -182,8 +120,3 @@ visit the [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/stable/
   - [Trust, But Verify: How CockroachDB Checks Replication](https://www.cockroachlabs.com/blog/trust-but-verify-cockroachdb-checks-replication/)
   - [Living Without Atomic Clocks](https://www.cockroachlabs.com/blog/living-without-atomic-clocks/)
   - [The CockroachDB Architecture Document](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md)
-
-[0]: http://rocksdb.org/
-[1]: https://github.com/google/leveldb
-[2]: https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf
-[3]: http://research.google.com/archive/spanner.html
