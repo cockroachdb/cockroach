@@ -70,16 +70,11 @@ package opt
 //    "inverted-index" should be used.
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -97,6 +92,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
@@ -107,201 +103,8 @@ import (
 var NewExecFactory func(s serverutils.TestServerInterface) ExecFactory
 
 var (
-	logicTestData    = flag.String("d", "testdata/[^.]*", "test data glob")
-	rewriteTestFiles = flag.Bool(
-		"rewrite", false,
-		"ignore the expected results and rewrite the test files with the actual results from this "+
-			"run. Used to update tests when a change affects many cases; please verify the testfile "+
-			"diffs carefully!",
-	)
+	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
-
-type lineScanner struct {
-	*bufio.Scanner
-	line int
-}
-
-func newLineScanner(r io.Reader) *lineScanner {
-	return &lineScanner{
-		Scanner: bufio.NewScanner(r),
-		line:    0,
-	}
-}
-
-func (l *lineScanner) Scan() bool {
-	ok := l.Scanner.Scan()
-	if ok {
-		l.line++
-	}
-	return ok
-}
-
-type testdata struct {
-	pos      string // file and line number
-	cmd      string
-	cmdArgs  []string
-	sql      string
-	expected string
-}
-
-func (td testdata) fatalf(t *testing.T, format string, args ...interface{}) {
-	t.Helper()
-	t.Fatalf("%s: %s", td.pos, fmt.Sprintf(format, args...))
-}
-
-type testdataReader struct {
-	path    string
-	file    *os.File
-	scanner *lineScanner
-	data    testdata
-	rewrite *bytes.Buffer
-}
-
-func newTestdataReader(t *testing.T, path string) *testdataReader {
-	t.Helper()
-
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var rewrite *bytes.Buffer
-	if *rewriteTestFiles {
-		rewrite = &bytes.Buffer{}
-	}
-	return &testdataReader{
-		path:    path,
-		file:    file,
-		scanner: newLineScanner(file),
-		rewrite: rewrite,
-	}
-}
-
-func (r *testdataReader) Close() error {
-	return r.file.Close()
-}
-
-var splitDirectivesRE = regexp.MustCompile(`^ *[a-zA-Z0-9_,-]+(|=[a-zA-Z0-9_@]+|=\([^)]*\))( |$)`)
-
-// splits a directive line into tokens, where each token is
-// either:
-//  - a,list,of,things
-//  - argument
-//  - argument=value
-//  - argument=(values, ...)
-func splitDirectives(t *testing.T, line string) []string {
-	var res []string
-
-	for line != "" {
-		str := splitDirectivesRE.FindString(line)
-		if len(str) == 0 {
-			t.Fatalf("cannot parse directive %s\n", line)
-		}
-		res = append(res, strings.TrimSpace(line[0:len(str)]))
-		line = line[len(str):]
-	}
-	return res
-}
-
-func (r *testdataReader) Next(t *testing.T) bool {
-	t.Helper()
-
-	r.data = testdata{}
-	for r.scanner.Scan() {
-		line := r.scanner.Text()
-		r.emit(line)
-
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "#") {
-			// Skip comment lines.
-			continue
-		}
-		// Support wrapping directive lines using \, for example:
-		//   build-scalar \
-		//   vars(int)
-		for strings.HasSuffix(line, `\`) && r.scanner.Scan() {
-			nextLine := r.scanner.Text()
-			r.emit(nextLine)
-			line = strings.TrimSuffix(line, `\`) + " " + strings.TrimSpace(nextLine)
-		}
-
-		fields := splitDirectives(t, line)
-		if len(fields) == 0 {
-			continue
-		}
-		cmd := fields[0]
-		r.data.pos = fmt.Sprintf("%s:%d", r.path, r.scanner.line)
-		r.data.cmd = cmd
-		r.data.cmdArgs = fields[1:]
-
-		var buf bytes.Buffer
-		var separator bool
-		for r.scanner.Scan() {
-			line := r.scanner.Text()
-			if strings.TrimSpace(line) == "" {
-				break
-			}
-
-			r.emit(line)
-			if line == "----" {
-				separator = true
-				break
-			}
-			fmt.Fprintln(&buf, line)
-		}
-
-		r.data.sql = strings.TrimSpace(buf.String())
-
-		if separator {
-			buf.Reset()
-			for r.scanner.Scan() {
-				line := r.scanner.Text()
-				if strings.TrimSpace(line) == "" {
-					break
-				}
-				fmt.Fprintln(&buf, line)
-			}
-			r.data.expected = buf.String()
-		}
-		return true
-	}
-	return false
-}
-
-func (r *testdataReader) emit(s string) {
-	if r.rewrite != nil {
-		r.rewrite.WriteString(s)
-		r.rewrite.WriteString("\n")
-	}
-}
-
-// runTest reads through a file; for every testcase, it breaks it up into
-// testdata.cmd, testdata.sql, testdata.expected, calls f, then compares the
-// results.
-func runTest(t *testing.T, path string, f func(d *testdata) string) {
-	r := newTestdataReader(t, path)
-	for r.Next(t) {
-		d := &r.data
-		str := f(d)
-		if r.rewrite != nil {
-			r.emit(str)
-		} else if d.expected != str {
-			t.Fatalf("%s: %s\nexpected:\n%s\nfound:\n%s", d.pos, d.sql, d.expected, str)
-		} else if testing.Verbose() {
-			fmt.Printf("%s:\n%s\n----\n%s", d.pos, d.sql, str)
-		}
-	}
-
-	if r.rewrite != nil {
-		data := r.rewrite.Bytes()
-		if l := len(data); l > 2 && data[l-1] == '\n' && data[l-2] == '\n' {
-			data = data[:l-1]
-		}
-		err := ioutil.WriteFile(path, data, 0644)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
 
 // testCatalog implements the sqlbase.Catalog interface.
 type testCatalog struct {
@@ -316,12 +119,12 @@ func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optba
 func TestOpt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	paths, err := filepath.Glob(*logicTestData)
+	paths, err := filepath.Glob(*testDataGlob)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(paths) == 0 {
-		t.Fatalf("no testfiles found matching: %s", *logicTestData)
+		t.Fatalf("no testfiles found matching: %s", *testDataGlob)
 	}
 
 	for _, path := range paths {
@@ -331,7 +134,7 @@ func TestOpt(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			catalog := testCatalog{kvDB: kvDB}
 
-			runTest(t, path, func(d *testdata) string {
+			testutils.RunDataDrivenTest(t, path, func(d *testutils.TestData) string {
 				var e *Expr
 				var varTypes []types.T
 				var iVarHelper tree.IndexedVarHelper
@@ -340,7 +143,7 @@ func TestOpt(t *testing.T) {
 				var typedExpr tree.TypedExpr
 				evalCtx := tree.MakeTestingEvalContext()
 
-				for _, arg := range d.cmdArgs {
+				for _, arg := range d.CmdArgs {
 					key := arg
 					val := ""
 					if pos := strings.Index(key, "="); pos >= 0 {
@@ -355,36 +158,36 @@ func TestOpt(t *testing.T) {
 					case "vars":
 						varTypes, err = parseTypes(vals)
 						if err != nil {
-							d.fatalf(t, "%v", err)
+							d.Fatalf(t, "%v", err)
 						}
 
 						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
 					case "index", "inverted-index":
 						if varTypes == nil {
-							d.fatalf(t, "vars must precede index")
+							d.Fatalf(t, "vars must precede index")
 						}
 						var err error
 						colInfos, err = parseIndexColumns(varTypes, vals)
 						if err != nil {
-							d.fatalf(t, "%v", err)
+							d.Fatalf(t, "%v", err)
 						}
 						if key == "inverted-index" {
 							if len(colInfos) > 1 {
-								d.fatalf(t, "inverted index must be on a single column")
+								d.Fatalf(t, "inverted index must be on a single column")
 							}
 							invertedIndex = true
 						}
 					default:
-						d.fatalf(t, "unknown argument: %s", key)
+						d.Fatalf(t, "unknown argument: %s", key)
 					}
 				}
 				getTypedExpr := func() tree.TypedExpr {
 					if typedExpr == nil {
 						var err error
-						typedExpr, err = parseScalarExpr(d.sql, &iVarHelper)
+						typedExpr, err = parseScalarExpr(d.Input, &iVarHelper)
 						if err != nil {
-							d.fatalf(t, "%v", err)
+							d.Fatalf(t, "%v", err)
 						}
 					}
 					return typedExpr
@@ -397,29 +200,29 @@ func TestOpt(t *testing.T) {
 					}
 				}
 
-				for _, cmd := range strings.Split(d.cmd, ",") {
+				for _, cmd := range strings.Split(d.Cmd, ",") {
 					switch cmd {
 					case "semtree-normalize":
 						// Apply the TypedExpr normalization and rebuild the expression.
 						typedExpr, err = evalCtx.NormalizeExpr(getTypedExpr())
 						if err != nil {
-							d.fatalf(t, "%v", err)
+							d.Fatalf(t, "%v", err)
 						}
 
 					case "exec-raw":
-						_, err := sqlDB.Exec(d.sql)
+						_, err := sqlDB.Exec(d.Input)
 						if err != nil {
-							d.fatalf(t, "%v", err)
+							d.Fatalf(t, "%v", err)
 						}
 						return ""
 
 					case "exec", "exec-explain":
 						if e == nil {
-							d.fatalf(t, "no expression for exec")
+							d.Fatalf(t, "no expression for exec")
 						}
 						n, err := makeExec(e, NewExecFactory(s))
 						if err != nil {
-							d.fatalf(t, "MakeExec: %v", err)
+							d.Fatalf(t, "MakeExec: %v", err)
 						}
 						var results []tree.Datums
 						if cmd == "exec-explain" {
@@ -428,7 +231,7 @@ func TestOpt(t *testing.T) {
 							results, err = n.root.Run()
 						}
 						if err != nil {
-							d.fatalf(t, "%v", err)
+							d.Fatalf(t, "%v", err)
 						}
 						// Format the results.
 						var buf bytes.Buffer
@@ -462,9 +265,9 @@ func TestOpt(t *testing.T) {
 						return buf.String()
 
 					case "build":
-						stmt, err := parser.ParseOne(d.sql)
+						stmt, err := parser.ParseOne(d.Input)
 						if err != nil {
-							d.fatalf(t, "%v", err)
+							d.Fatalf(t, "%v", err)
 						}
 						e, err = build(ctx, stmt, catalog, &evalCtx)
 						if err != nil {
@@ -484,7 +287,7 @@ func TestOpt(t *testing.T) {
 
 					case "index-constraints":
 						if e == nil {
-							d.fatalf(t, "no expression for index-constraints")
+							d.Fatalf(t, "no expression for index-constraints")
 						}
 						var ic IndexConstraints
 
@@ -504,7 +307,7 @@ func TestOpt(t *testing.T) {
 						}
 						return buf.String()
 					default:
-						d.fatalf(t, "unsupported command: %s", cmd)
+						d.Fatalf(t, "unsupported command: %s", cmd)
 						return ""
 					}
 				}
