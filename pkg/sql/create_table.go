@@ -471,7 +471,8 @@ func resolveFK(
 
 	if d.Actions.Delete != tree.NoAction &&
 		d.Actions.Delete != tree.Restrict &&
-		d.Actions.Delete != tree.Cascade {
+		d.Actions.Delete != tree.Cascade &&
+		d.Actions.Delete != tree.SetNull {
 		feature := fmt.Sprintf("unsupported: ON DELETE %s", d.Actions.Delete)
 		return pgerror.Unimplemented(feature, feature)
 	}
@@ -518,6 +519,18 @@ func resolveFK(
 		}
 	}
 
+	// Don't add a SET NULL action on an index that has any column that is NOT
+	// NULL.
+	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
+		for _, sourceColumn := range srcCols {
+			if !sourceColumn.Nullable {
+				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+					"cannot add a SET NULL cascading action on column \"%s\" which has a NOT NULL constraint",
+					sourceColumn.Name,
+				)
+			}
+		}
+	}
 	ref := sqlbase.ForeignKeyReference{
 		Table:           target.ID,
 		Index:           targetIdxID,
