@@ -86,7 +86,7 @@ query TITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 ----
 ordinality  0  ordinality  ·      ·            (x, "ordinality")  x!=NULL; key(x); weak-key("ordinality")
- └── scan   1  scan        ·      ·            (x, "ordinality")  x!=NULL; key(x); weak-key("ordinality")
+ └── scan   1  scan        ·      ·            (x)                x!=NULL; key(x)
 ·           1  ·           table  foo@primary  ·                  ·
 ·           1  ·           spans  /"a\x00"-    ·                  ·
 
@@ -97,6 +97,6 @@ EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 ----
 filter           0  filter      ·      ·            (x, "ordinality")  x!=NULL; key(x); weak-key("ordinality")
  └── ordinality  1  ordinality  ·      ·            (x, "ordinality")  x!=NULL; key(x); weak-key("ordinality")
-      └── scan   2  scan        ·      ·            (x, "ordinality")  x!=NULL; key(x); weak-key("ordinality")
+      └── scan   2  scan        ·      ·            (x)                x!=NULL; key(x)
 ·                2  ·           table  foo@primary  ·                  ·
 ·                2  ·           spans  ALL          ·                  ·

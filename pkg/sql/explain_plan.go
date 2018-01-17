@@ -263,11 +263,11 @@ func (p *planner) populateExplain(
 				emptyString,                          // Ordering
 			}
 			if entry.plan != nil {
-				cols := planColumns(plan)
+				cols := planColumns(entry.plan)
 				// Columns metadata.
 				row[5] = tree.NewDString(formatColumns(cols, e.showTypes))
 				// Ordering metadata.
-				row[6] = tree.NewDString(planPhysicalProps(plan).AsString(cols))
+				row[6] = tree.NewDString(planPhysicalProps(entry.plan).AsString(cols))
 			}
 		}
 		if _, err := v.rows.AddRow(ctx, row); err != nil {
