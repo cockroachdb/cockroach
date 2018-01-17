@@ -9,13 +9,13 @@ CREATE TABLE t (
 query TITTTTT colnames
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
-Tree         Level  Type    Field          Description       Columns  Ordering
-insert       0      insert  ·              ·                 ()       ·
- │           0      ·       into           t(k, v)           ·        ·
- └── values  1      values  ·              ·                 ()       ·
-·            1      ·       size           2 columns, 1 row  ·        ·
-·            1      ·       row 0, expr 0  (1)[int]          ·        ·
-·            1      ·       row 0, expr 1  (2)[int]          ·        ·
+Tree         Level  Type    Field          Description       Columns                     Ordering
+insert       0      insert  ·              ·                 ()                          ·
+ │           0      ·       into           t(k, v)           ·                           ·
+ └── values  1      values  ·              ·                 (column1 int, column2 int)  ·
+·            1      ·       size           2 columns, 1 row  ·                           ·
+·            1      ·       row 0, expr 0  (1)[int]          ·                           ·
+·            1      ·       row 0, expr 1  (2)[int]          ·                           ·
 
 statement ok
 INSERT INTO t VALUES (1, 2)
@@ -25,7 +25,7 @@ EXPLAIN (TYPES) SELECT 42
 ----
 render         0  render    ·         ·          ("42" int)  "42"=CONST
  │             0  ·         render 0  (42)[int]  ·           ·
- └── emptyrow  1  emptyrow  ·         ·          ("42" int)  "42"=CONST
+ └── emptyrow  1  emptyrow  ·         ·          ()          ·
 
 query TITTTTT
 EXPLAIN (TYPES) SELECT * FROM t
@@ -37,20 +37,20 @@ scan  0  scan  ·      ·          (k int, v int)  k!=NULL; key(k)
 query TITTTTT
 EXPLAIN (TYPES,SYMVARS) SELECT k FROM t
 ----
-render     0  render  ·         ·          (k int)  k!=NULL; key(k)
- │         0  ·       render 0  (@1)[int]  ·        ·
- └── scan  1  scan    ·         ·          (k int)  k!=NULL; key(k)
-·          1  ·       table     t@primary  ·        ·
-·          1  ·       spans     ALL        ·        ·
+render     0  render  ·         ·          (k int)                  k!=NULL; key(k)
+ │         0  ·       render 0  (@1)[int]  ·                        ·
+ └── scan  1  scan    ·         ·          (k int, v[omitted] int)  k!=NULL; key(k)
+·          1  ·       table     t@primary  ·                        ·
+·          1  ·       spans     ALL        ·                        ·
 
 query TITTTTT
 EXPLAIN (TYPES,QUALIFY) SELECT k FROM t
 ----
-render     0  render  ·         ·                (k int)  k!=NULL; key(k)
- │         0  ·       render 0  (test.t.k)[int]  ·        ·
- └── scan  1  scan    ·         ·                (k int)  k!=NULL; key(k)
-·          1  ·       table     t@primary        ·        ·
-·          1  ·       spans     ALL              ·        ·
+render     0  render  ·         ·                (k int)                  k!=NULL; key(k)
+ │         0  ·       render 0  (test.t.k)[int]  ·                        ·
+ └── scan  1  scan    ·         ·                (k int, v[omitted] int)  k!=NULL; key(k)
+·          1  ·       table     t@primary        ·                        ·
+·          1  ·       spans     ALL              ·                        ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM t WHERE v > 123
@@ -85,98 +85,98 @@ values  0  values  ·              ·                  (column1 int, column2 int
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
 ----
-render                    0  render  ·            ·                                                                          (z int, v int)  ·
- │                        0  ·       render 0     ((2)[int] * (count)[int])[int]                                             ·               ·
- │                        0  ·       render 1     (v)[int]                                                                   ·               ·
- └── filter               1  filter  ·            ·                                                                          (z int, v int)  ·
-      │                   1  ·       filter       ((count)[int] > (1)[int])[bool]                                            ·               ·
-      └── group           2  group   ·            ·                                                                          (z int, v int)  ·
-           │              2  ·       aggregate 0  (v)[int]                                                                   ·               ·
-           │              2  ·       aggregate 1  (count((k)[int]))[int]                                                     ·               ·
-           │              2  ·       aggregate 2  (count((k)[int]))[int]                                                     ·               ·
-           │              2  ·       aggregate 3  (v)[int]                                                                   ·               ·
-           │              2  ·       group by     @1-@1                                                                      ·               ·
-           └── render     3  render  ·            ·                                                                          (z int, v int)  ·
-                │         3  ·       render 0     (v)[int]                                                                   ·               ·
-                │         3  ·       render 1     (k)[int]                                                                   ·               ·
-                └── scan  4  scan    ·            ·                                                                          (z int, v int)  ·
-·                         4  ·       table        t@primary                                                                  ·               ·
-·                         4  ·       filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·               ·
+render                    0  render  ·            ·                                                                          (z int, v int)                        ·
+ │                        0  ·       render 0     ((2)[int] * (count)[int])[int]                                             ·                                     ·
+ │                        0  ·       render 1     (v)[int]                                                                   ·                                     ·
+ └── filter               1  filter  ·            ·                                                                          (v int, count int, count int, v int)  ·
+      │                   1  ·       filter       ((count)[int] > (1)[int])[bool]                                            ·                                     ·
+      └── group           2  group   ·            ·                                                                          (v int, count int, count int, v int)  ·
+           │              2  ·       aggregate 0  (v)[int]                                                                   ·                                     ·
+           │              2  ·       aggregate 1  (count((k)[int]))[int]                                                     ·                                     ·
+           │              2  ·       aggregate 2  (count((k)[int]))[int]                                                     ·                                     ·
+           │              2  ·       aggregate 3  (v)[int]                                                                   ·                                     ·
+           │              2  ·       group by     @1-@1                                                                      ·                                     ·
+           └── render     3  render  ·            ·                                                                          (v int, k int)                        ·
+                │         3  ·       render 0     (v)[int]                                                                   ·                                     ·
+                │         3  ·       render 1     (k)[int]                                                                   ·                                     ·
+                └── scan  4  scan    ·            ·                                                                          (k int, v int)                        ·
+·                         4  ·       table        t@primary                                                                  ·                                     ·
+·                         4  ·       filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·                                     ·
 
 
 query TITTTTT
 EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
 ----
-render                    0  render  ·            ·                                                                          (z int, v int)  ·
- │                        0  ·       render 0     ((2)[int] * (count)[int])[int]                                             ·               ·
- │                        0  ·       render 1     (v)[int]                                                                   ·               ·
- └── filter               1  filter  ·            ·                                                                          (z int, v int)  ·
-      │                   1  ·       filter       ((count)[int] > (1)[int])[bool]                                            ·               ·
-      └── group           2  group   ·            ·                                                                          (z int, v int)  ·
-           │              2  ·       aggregate 0  (v)[int]                                                                   ·               ·
-           │              2  ·       aggregate 1  (count((k)[int]))[int]                                                     ·               ·
-           │              2  ·       aggregate 2  (count((k)[int]))[int]                                                     ·               ·
-           │              2  ·       aggregate 3  (v)[int]                                                                   ·               ·
-           │              2  ·       group by     @1-@1                                                                      ·               ·
-           └── render     3  render  ·            ·                                                                          (z int, v int)  ·
-                │         3  ·       render 0     (v)[int]                                                                   ·               ·
-                │         3  ·       render 1     (k)[int]                                                                   ·               ·
-                └── scan  4  scan    ·            ·                                                                          (z int, v int)  ·
-·                         4  ·       table        t@primary                                                                  ·               ·
-·                         4  ·       spans        ALL                                                                        ·               ·
-·                         4  ·       filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·               ·
+render                    0  render  ·            ·                                                                          (z int, v int)                        ·
+ │                        0  ·       render 0     ((2)[int] * (count)[int])[int]                                             ·                                     ·
+ │                        0  ·       render 1     (v)[int]                                                                   ·                                     ·
+ └── filter               1  filter  ·            ·                                                                          (v int, count int, count int, v int)  count!=NULL
+      │                   1  ·       filter       ((count)[int] > (1)[int])[bool]                                            ·                                     ·
+      └── group           2  group   ·            ·                                                                          (v int, count int, count int, v int)  ·
+           │              2  ·       aggregate 0  (v)[int]                                                                   ·                                     ·
+           │              2  ·       aggregate 1  (count((k)[int]))[int]                                                     ·                                     ·
+           │              2  ·       aggregate 2  (count((k)[int]))[int]                                                     ·                                     ·
+           │              2  ·       aggregate 3  (v)[int]                                                                   ·                                     ·
+           │              2  ·       group by     @1-@1                                                                      ·                                     ·
+           └── render     3  render  ·            ·                                                                          (v int, k int)                        v!=NULL; k!=NULL; key(k)
+                │         3  ·       render 0     (v)[int]                                                                   ·                                     ·
+                │         3  ·       render 1     (k)[int]                                                                   ·                                     ·
+                └── scan  4  scan    ·            ·                                                                          (k int, v int)                        k!=NULL; v!=NULL; key(k)
+·                         4  ·       table        t@primary                                                                  ·                                     ·
+·                         4  ·       spans        ALL                                                                        ·                                     ·
+·                         4  ·       filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·                                     ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1
 ----
-delete          0  delete  ·         ·                            ()  ·
- │              0  ·       from      t                            ·   ·
- └── render     1  render  ·         ·                            ()  ·
-      │         1  ·       render 0  (k)[int]                     ·   ·
-      └── scan  2  scan    ·         ·                            ()  ·
-·               2  ·       table     t@primary                    ·   ·
-·               2  ·       filter    ((v)[int] > (1)[int])[bool]  ·   ·
+delete          0  delete  ·         ·                            ()              ·
+ │              0  ·       from      t                            ·               ·
+ └── render     1  render  ·         ·                            (k int)         ·
+      │         1  ·       render 0  (k)[int]                     ·               ·
+      └── scan  2  scan    ·         ·                            (k int, v int)  ·
+·               2  ·       table     t@primary                    ·               ·
+·               2  ·       filter    ((v)[int] > (1)[int])[bool]  ·               ·
 
 query TITTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-delete          0  delete  ·         ·                            ()  ·
- │              0  ·       from      t                            ·   ·
- └── render     1  render  ·         ·                            ()  ·
-      │         1  ·       render 0  (k)[int]                     ·   ·
-      └── scan  2  scan    ·         ·                            ()  ·
-·               2  ·       table     t@primary                    ·   ·
-·               2  ·       spans     ALL                          ·   ·
-·               2  ·       filter    ((v)[int] > (1)[int])[bool]  ·   ·
+delete          0  delete  ·         ·                            ()              ·
+ │              0  ·       from      t                            ·               ·
+ └── render     1  render  ·         ·                            (k int)         k!=NULL; key(k)
+      │         1  ·       render 0  (k)[int]                     ·               ·
+      └── scan  2  scan    ·         ·                            (k int, v int)  k!=NULL; v!=NULL; key(k)
+·               2  ·       table     t@primary                    ·               ·
+·               2  ·       spans     ALL                          ·               ·
+·               2  ·       filter    ((v)[int] > (1)[int])[bool]  ·               ·
 
 query TITTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-update          0  update  ·         ·                              ()  ·
- │              0  ·       table     t                              ·   ·
- │              0  ·       set       v                              ·   ·
- └── render     1  render  ·         ·                              ()  ·
-      │         1  ·       render 0  (k)[int]                       ·   ·
-      │         1  ·       render 1  (v)[int]                       ·   ·
-      │         1  ·       render 2  ((k)[int] + (1)[int])[int]     ·   ·
-      └── scan  2  scan    ·         ·                              ()  ·
-·               2  ·       table     t@primary                      ·   ·
-·               2  ·       spans     ALL                            ·   ·
-·               2  ·       filter    ((v)[int] > (123)[int])[bool]  ·   ·
+update          0  update  ·         ·                              ()                           ·
+ │              0  ·       table     t                              ·                            ·
+ │              0  ·       set       v                              ·                            ·
+ └── render     1  render  ·         ·                              (k int, v int, "k + 1" int)  k!=NULL; v!=NULL; key(k)
+      │         1  ·       render 0  (k)[int]                       ·                            ·
+      │         1  ·       render 1  (v)[int]                       ·                            ·
+      │         1  ·       render 2  ((k)[int] + (1)[int])[int]     ·                            ·
+      └── scan  2  scan    ·         ·                              (k int, v int)               k!=NULL; v!=NULL; key(k)
+·               2  ·       table     t@primary                      ·                            ·
+·               2  ·       spans     ALL                            ·                            ·
+·               2  ·       filter    ((v)[int] > (123)[int])[bool]  ·                            ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-update          0  update  ·         ·                              ()  ·
- │              0  ·       table     t                              ·   ·
- │              0  ·       set       v                              ·   ·
- └── render     1  render  ·         ·                              ()  ·
-      │         1  ·       render 0  (k)[int]                       ·   ·
-      │         1  ·       render 1  (v)[int]                       ·   ·
-      │         1  ·       render 2  ((k)[int] + (1)[int])[int]     ·   ·
-      └── scan  2  scan    ·         ·                              ()  ·
-·               2  ·       table     t@primary                      ·   ·
-·               2  ·       filter    ((v)[int] > (123)[int])[bool]  ·   ·
+update          0  update  ·         ·                              ()                           ·
+ │              0  ·       table     t                              ·                            ·
+ │              0  ·       set       v                              ·                            ·
+ └── render     1  render  ·         ·                              (k int, v int, "k + 1" int)  ·
+      │         1  ·       render 0  (k)[int]                       ·                            ·
+      │         1  ·       render 1  (v)[int]                       ·                            ·
+      │         1  ·       render 2  ((k)[int] + (1)[int])[int]     ·                            ·
+      └── scan  2  scan    ·         ·                              (k int, v int)               ·
+·               2  ·       table     t@primary                      ·                            ·
+·               2  ·       filter    ((v)[int] > (123)[int])[bool]  ·                            ·
 
 query TITTTTT
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
@@ -192,63 +192,63 @@ union        0  union   ·              ·                (column1 int)  ·
 query TITTTTT
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-render     0  render  ·         ·          (k int)  k!=NULL; key(k)
- │         0  ·       render 0  (k)[int]   ·        ·
- └── scan  1  scan    ·         ·          (k int)  k!=NULL; key(k)
-·          1  ·       table     t@primary  ·        ·
-·          1  ·       spans     ALL        ·        ·
+render     0  render  ·         ·          (k int)                  k!=NULL; key(k)
+ │         0  ·       render 0  (k)[int]   ·                        ·
+ └── scan  1  scan    ·         ·          (k int, v[omitted] int)  k!=NULL; key(k)
+·          1  ·       table     t@primary  ·                        ·
+·          1  ·       spans     ALL        ·                        ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT DISTINCT k FROM t
 ----
-distinct        0  distinct  ·         ·          (k int)  weak-key(k)
- └── render     1  render    ·         ·          (k int)  weak-key(k)
-      │         1  ·         render 0  (k)[int]   ·        ·
-      └── scan  2  scan      ·         ·          (k int)  weak-key(k)
-·               2  ·         table     t@primary  ·        ·
+distinct        0  distinct  ·         ·          (k int)                  weak-key(k)
+ └── render     1  render    ·         ·          (k int)                  ·
+      │         1  ·         render 0  (k)[int]   ·                        ·
+      └── scan  2  scan      ·         ·          (k int, v[omitted] int)  ·
+·               2  ·         table     t@primary  ·                        ·
 
 query TITTTTT
 EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 ----
-sort            0  sort    ·         ·          (v int)  +v
- │              0  ·       order     +v         ·        ·
- └── render     1  render  ·         ·          (v int)  +v
-      │         1  ·       render 0  (v)[int]   ·        ·
-      └── scan  2  scan    ·         ·          (v int)  +v
-·               2  ·       table     t@primary  ·        ·
-·               2  ·       spans     ALL        ·        ·
+sort            0  sort    ·         ·          (v int)                  +v
+ │              0  ·       order     +v         ·                        ·
+ └── render     1  render  ·         ·          (v int)                  ·
+      │         1  ·       render 0  (v)[int]   ·                        ·
+      └── scan  2  scan    ·         ·          (k[omitted] int, v int)  k!=NULL; key(k)
+·               2  ·       table     t@primary  ·                        ·
+·               2  ·       spans     ALL        ·                        ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t ORDER BY v
 ----
-nosort          0  nosort  ·         ·          (v int)  ·
- │              0  ·       order     +v         ·        ·
- └── render     1  render  ·         ·          (v int)  ·
-      │         1  ·       render 0  (v)[int]   ·        ·
-      └── scan  2  scan    ·         ·          (v int)  ·
-·               2  ·       table     t@primary  ·        ·
+nosort          0  nosort  ·         ·          (v int)                  ·
+ │              0  ·       order     +v         ·                        ·
+ └── render     1  render  ·         ·          (v int)                  ·
+      │         1  ·       render 0  (v)[int]   ·                        ·
+      └── scan  2  scan    ·         ·          (k[omitted] int, v int)  ·
+·               2  ·       table     t@primary  ·                        ·
 
 query TITTTTT
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
 ----
-limit           0  limit   ·         ·          (v int)  ·
- │              0  ·       count     (1)[int]   ·        ·
- └── render     1  render  ·         ·          (v int)  ·
-      │         1  ·       render 0  (v)[int]   ·        ·
-      └── scan  2  scan    ·         ·          (v int)  ·
-·               2  ·       table     t@primary  ·        ·
-·               2  ·       spans     ALL        ·        ·
-·               2  ·       limit     1          ·        ·
+limit           0  limit   ·         ·          (v int)                  ·
+ │              0  ·       count     (1)[int]   ·                        ·
+ └── render     1  render  ·         ·          (v int)                  ·
+      │         1  ·       render 0  (v)[int]   ·                        ·
+      └── scan  2  scan    ·         ·          (k[omitted] int, v int)  k!=NULL; key(k)
+·               2  ·       table     t@primary  ·                        ·
+·               2  ·       spans     ALL        ·                        ·
+·               2  ·       limit     1          ·                        ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT v FROM t LIMIT 1
 ----
-limit           0  limit   ·         ·          (v int)  ·
- │              0  ·       count     (1)[int]   ·        ·
- └── render     1  render  ·         ·          (v int)  ·
-      │         1  ·       render 0  (v)[int]   ·        ·
-      └── scan  2  scan    ·         ·          (v int)  ·
-·               2  ·       table     t@primary  ·        ·
+limit           0  limit   ·         ·          (v int)                  ·
+ │              0  ·       count     (1)[int]   ·                        ·
+ └── render     1  render  ·         ·          (v int)                  ·
+      │         1  ·       render 0  (v)[int]   ·                        ·
+      └── scan  2  scan    ·         ·          (k[omitted] int, v int)  ·
+·               2  ·       table     t@primary  ·                        ·
 
 statement ok
 CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
@@ -256,47 +256,47 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query TITTTTT
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-render           0  render      ·         ·                             (x int, y int)  x!=NULL; y!=NULL
- │               0  ·           render 0  (x)[int]                      ·               ·
- │               0  ·           render 1  (y)[int]                      ·               ·
- └── index-join  1  index-join  ·         ·                             (x int, y int)  x!=NULL; y!=NULL
-      ├── scan   2  scan        ·         ·                             (x int, y int)  x!=NULL; y!=NULL
-      │          2  ·           table     tt@a                          ·               ·
-      │          2  ·           spans     /!NULL-/10                    ·               ·
-      └── scan   2  scan        ·         ·                             (x int, y int)  x!=NULL; y!=NULL
-·                2  ·           table     tt@primary                    ·               ·
-·                2  ·           filter    ((y)[int] > (10)[int])[bool]  ·               ·
+render           0  render      ·         ·                             (x int, y int)                                       x!=NULL; y!=NULL
+ │               0  ·           render 0  (x)[int]                      ·                                                    ·
+ │               0  ·           render 1  (y)[int]                      ·                                                    ·
+ └── index-join  1  index-join  ·         ·                             (x int, y int, rowid[hidden,omitted] int)            x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
+      ├── scan   2  scan        ·         ·                             (x[omitted] int, y[omitted] int, rowid[hidden] int)  x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
+      │          2  ·           table     tt@a                          ·                                                    ·
+      │          2  ·           spans     /!NULL-/10                    ·                                                    ·
+      └── scan   2  scan        ·         ·                             (x int, y int, rowid[hidden,omitted] int)            ·
+·                2  ·           table     tt@primary                    ·                                                    ·
+·                2  ·           filter    ((y)[int] > (10)[int])[bool]  ·                                                    ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-render     0  render  ·         ·                                                                          (x int, y int)  ·
- │         0  ·       render 0  (x)[int]                                                                   ·               ·
- │         0  ·       render 1  (y)[int]                                                                   ·               ·
- └── scan  1  scan    ·         ·                                                                          (x int, y int)  ·
-·          1  ·       table     tt@primary                                                                 ·               ·
-·          1  ·       filter    ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
+render     0  render  ·         ·                                                                          (x int, y int)                             ·
+ │         0  ·       render 0  (x)[int]                                                                   ·                                          ·
+ │         0  ·       render 1  (y)[int]                                                                   ·                                          ·
+ └── scan  1  scan    ·         ·                                                                          (x int, y int, rowid[hidden,omitted] int)  ·
+·          1  ·       table     tt@primary                                                                 ·                                          ·
+·          1  ·       filter    ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·                                          ·
 
 query TITTTTT
 EXPLAIN (TYPES) SELECT $1 + 2 AS a
 ----
 render         0  render    ·         ·                            (a int)  a=CONST
  │             0  ·         render 0  (($1)[int] + (2)[int])[int]  ·        ·
- └── emptyrow  1  emptyrow  ·         ·                            (a int)  a=CONST
+ └── emptyrow  1  emptyrow  ·         ·                            ()       ·
 
 query TITTTTT
 EXPLAIN (TYPES,NONORMALIZE) SELECT ABS(2-3) AS a
 ----
 render         0  render    ·         ·                      (a int)  a=CONST
  │             0  ·         render 0  (abs((-1)[int]))[int]  ·        ·
- └── emptyrow  1  emptyrow  ·         ·                      (a int)  a=CONST
+ └── emptyrow  1  emptyrow  ·         ·                      ()       ·
 
 query TITTTTT
 EXPLAIN (TYPES) SELECT ABS(2-3) AS a
 ----
 render         0  render    ·         ·         (a int)  a=CONST
  │             0  ·         render 0  (1)[int]  ·        ·
- └── emptyrow  1  emptyrow  ·         ·         (a int)  a=CONST
+ └── emptyrow  1  emptyrow  ·         ·         ()       ·
 
 # Check array subscripts (#13811)
 query TITTTTT
@@ -304,6 +304,6 @@ EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
 render              0  render    ·         ·                                           ("x[1]" int)  ·
  │                  0  ·         render 0  ((x)[int[]][(1)[int]])[int]                 ·             ·
- └── render         1  render    ·         ·                                           ("x[1]" int)  ·
+ └── render         1  render    ·         ·                                           (x int[])     x=CONST
       │             1  ·         render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·             ·
-      └── emptyrow  2  emptyrow  ·         ·                                           ("x[1]" int)  ·
+      └── emptyrow  2  emptyrow  ·         ·                                           ()            ·
