@@ -161,6 +161,8 @@ type MultiRowFetcher struct {
 	// decoding values in that row.
 	neededValueCols int
 
+	knownPrefixLength int
+
 	// returnRangeInfo, if set, causes the underlying kvFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
 	// requests. This has some cost, so it's only enabled by DistSQL when this
@@ -290,6 +292,8 @@ func (mrf *MultiRowFetcher) Init(
 		if !mrf.mustDecodeIndexKey && (!table.neededCols.Empty() || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0) {
 			mrf.mustDecodeIndexKey = true
 		}
+
+		mrf.knownPrefixLength = len(MakeIndexKeyPrefix(table.desc, table.index.ID))
 
 		var indexColumnIDs []ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
@@ -490,9 +494,10 @@ func (mrf *MultiRowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok 
 	// If there is only one table to check keys for, there is no need
 	// to go through the equivalence signature checks.
 	if len(mrf.tables) == 1 {
-		return DecodeIndexKey(
+		return DecodeIndexKeyWithPrefixLen(
 			mrf.currentTable.desc,
 			mrf.currentTable.index,
+			mrf.knownPrefixLength,
 			mrf.currentTable.keyValTypes,
 			mrf.currentTable.keyVals,
 			mrf.currentTable.indexColumnDirs,

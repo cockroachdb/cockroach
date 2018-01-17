@@ -770,18 +770,35 @@ func DecodeIndexKey(
 	colDirs []encoding.Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, _ error) {
+	knownPrefixLength := len(MakeIndexKeyPrefix(desc, index.ID))
+	return DecodeIndexKeyWithPrefixLen(desc, index, knownPrefixLength, types, vals, colDirs, key)
+}
+
+func DecodeIndexKeyWithPrefixLen(
+	desc *TableDescriptor,
+	index *IndexDescriptor,
+	knownPrefixLength int,
+	types []ColumnType,
+	vals []EncDatum,
+	colDirs []encoding.Direction,
+	key []byte,
+) (remainingKey []byte, matches bool, _ error) {
 	var decodedTableID ID
 	var decodedIndexID IndexID
 	var err error
 
 	if len(index.Interleave.Ancestors) > 0 {
-		for _, ancestor := range index.Interleave.Ancestors {
-			key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
-			if err != nil {
-				return nil, false, err
-			}
-			if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
-				return nil, false, nil
+		for i, ancestor := range index.Interleave.Ancestors {
+			if i == 0 {
+				key = key[knownPrefixLength:]
+			} else {
+				key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
+				if err != nil {
+					return nil, false, err
+				}
+				if decodedTableID != ancestor.TableID || decodedIndexID != ancestor.IndexID {
+					return nil, false, nil
+				}
 			}
 
 			length := int(ancestor.SharedPrefixLen)
@@ -798,14 +815,16 @@ func DecodeIndexKey(
 				return nil, false, nil
 			}
 		}
-	}
 
-	key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
-	if err != nil {
-		return nil, false, err
-	}
-	if decodedTableID != desc.ID || decodedIndexID != index.ID {
-		return nil, false, nil
+		key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
+		if err != nil {
+			return nil, false, err
+		}
+		if decodedTableID != desc.ID || decodedIndexID != index.ID {
+			return nil, false, nil
+		}
+	} else {
+		key = key[knownPrefixLength:]
 	}
 
 	key, err = DecodeKeyVals(vals, colDirs, key)
