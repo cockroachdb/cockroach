@@ -506,6 +506,161 @@ func TestHashJoiner(t *testing.T) {
 				{null, null, null, null, null},
 			},
 		},
+		{
+			// Ensure semi join doesn't emit extra rows when
+			// there are multiple matching rows in the
+			// rightInput and the rightInput is smaller.
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0},
+				RightEqColumns: []uint32{0},
+				Type:           JoinType_LEFT_SEMI,
+				// Implicit @1 = @3 constraint.
+			},
+			outCols:   []uint32{0},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[2], v[1]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0]},
+				{v[2]},
+				{v[2]},
+			},
+		},
+		{
+			// Ensure semi join doesn't emit extra rows when
+			// there are multiple matching rows in the
+			// rightInput and the leftInput is smaller
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0},
+				RightEqColumns: []uint32{0},
+				Type:           JoinType_LEFT_SEMI,
+				// Implicit @1 = @3 constraint.
+			},
+			outCols:   []uint32{0},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[2], v[1]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0]},
+				{v[0]},
+				{v[2]},
+			},
+		},
+		{
+			// Ensure nulls don't match with any value
+			// for semi joins.
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0},
+				RightEqColumns: []uint32{0},
+				Type:           JoinType_LEFT_SEMI,
+				// Implicit @1 = @3 constraint.
+			},
+			outCols:   []uint32{0},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{null, v[1]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0]},
+				{v[0]},
+			},
+		},
+		{
+			// Ensure that nulls don't match
+			// with nulls for semiJoins
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0},
+				RightEqColumns: []uint32{0},
+				Type:           JoinType_LEFT_SEMI,
+				// Implicit @1 = @3 constraint.
+			},
+			outCols:   []uint32{0},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{null, v[1]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{null, v[1]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0]},
+			},
+		},
+		{
+			// Ensure that semi joins respect OnExprs.
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0},
+				RightEqColumns: []uint32{0},
+				Type:           JoinType_LEFT_SEMI,
+				OnExpr:         Expression{Expr: "@1 > 1"},
+				// Implicit @1 = @3 constraint.
+			},
+			outCols:   []uint32{0, 1},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+				{v[2], v[2]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[5]},
+				{v[2], v[6]},
+				{v[3], v[3]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[1]},
+				{v[2], v[2]},
+			},
+		},
 	}
 
 	ctx := context.Background()
@@ -596,6 +751,116 @@ func TestHashJoiner(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestHashJoinerError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	v := [10]sqlbase.EncDatum{}
+	for i := range v {
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+	}
+
+	testCases := []struct {
+		description string
+		spec        HashJoinerSpec
+		outCols     []uint32
+		leftTypes   []sqlbase.ColumnType
+		leftInput   sqlbase.EncDatumRows
+		rightTypes  []sqlbase.ColumnType
+		rightInput  sqlbase.EncDatumRows
+		expectedErr error
+	}{
+		{
+			description: "Ensure that columns from the right input cannot be in the output.",
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0},
+				RightEqColumns: []uint32{0},
+				Type:           JoinType_LEFT_SEMI,
+				// Implicit @1 = @3 constraint.
+			},
+			outCols:   []uint32{0, 1, 2},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+				{v[2], v[2]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[5]},
+				{v[2], v[6]},
+				{v[3], v[3]},
+			},
+			expectedErr: errors.Errorf("invalid output column %d (only %d available)", 2, 2),
+		},
+	}
+
+	ctx := context.Background()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+
+	for _, c := range testCases {
+		// testFunc is a helper function that runs a hashJoin with the current
+		// test case after running the provided setup function.
+		testFunc := func(t *testing.T, setup func(h *hashJoiner)) error {
+			leftInput := NewRowBuffer(c.leftTypes, c.leftInput, RowBufferArgs{})
+			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
+			out := &RowBuffer{}
+			flowCtx := FlowCtx{
+				Ctx:         ctx,
+				Settings:    cluster.MakeTestingClusterSettings(),
+				EvalCtx:     evalCtx,
+				TempStorage: tempEngine,
+				diskMonitor: &diskMonitor,
+			}
+
+			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+			h, err := newHashJoiner(&flowCtx, &c.spec, leftInput, rightInput, &post, out)
+			if err != nil {
+				return err
+			}
+			outTypes := h.OutputTypes()
+			setup(h)
+			h.Run(nil)
+
+			if !out.ProducerClosed {
+				return errors.New("output RowReceiver not closed")
+			}
+
+			return checkExpectedRows(outTypes, nil, out)
+		}
+
+		t.Run(c.description, func(t *testing.T) {
+			if err := testFunc(t, func(h *hashJoiner) {
+				h.initialBufferSize = 1024 * 32
+			}); err == nil {
+				t.Errorf("Expected an error:%s, but found nil", c.expectedErr)
+			} else if err.Error() != c.expectedErr.Error() {
+				t.Errorf("HashJoinerErrorTest: expected\n%s, but found\n%v", c.expectedErr, err)
+			}
+		})
 	}
 }
 
