@@ -16,10 +16,9 @@ package sql_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -184,7 +182,7 @@ func TestAsOfTime(t *testing.T) {
 	// Subqueries shouldn't work.
 	_, err := db.Query(
 		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s)", tsVal1))
-	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top level SELECT statement") {
+	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top-level statement") {
 		t.Fatalf("expected not supported, got: %v", err)
 	}
 
@@ -212,7 +210,7 @@ func TestAsOfTime(t *testing.T) {
 	// Can't use in a transaction.
 	_, err = db.Query(
 		fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
-	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top level SELECT statement") {
+	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top-level statement") {
 		t.Fatalf("expected not supported, got: %v", err)
 	}
 }
@@ -224,8 +222,6 @@ func TestAsOfRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, cmdFilters := tests.CreateTestServerParams()
-	// Disable one phase commits because they cannot be restarted.
-	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 

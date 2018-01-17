@@ -16,14 +16,14 @@ package localcluster
 
 import (
 	"bytes"
+	"context"
+	gosql "database/sql"
 	"net"
 	"os/exec"
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/pkg/errors"
 )
 
@@ -31,6 +31,8 @@ import (
 type LocalCluster struct {
 	*Cluster
 }
+
+var _ cluster.Cluster = &LocalCluster{}
 
 // Port implements cluster.Cluster.
 func (b *LocalCluster) Port(ctx context.Context, i int) string {
@@ -42,9 +44,9 @@ func (b *LocalCluster) NumNodes() int {
 	return len(b.Nodes)
 }
 
-// NewClient implements cluster.Cluster.
-func (b *LocalCluster) NewClient(ctx context.Context, i int) (*client.DB, error) {
-	return b.Client(i), nil
+// NewDB implements the Cluster interface.
+func (b *LocalCluster) NewDB(ctx context.Context, i int) (*gosql.DB, error) {
+	return gosql.Open("postgres", b.PGUrl(ctx, i))
 }
 
 // PGUrl implements cluster.Cluster.

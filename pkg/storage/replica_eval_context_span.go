@@ -15,8 +15,9 @@
 package storage
 
 import (
+	"context"
+
 	opentracing "github.com/opentracing/opentracing-go"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -64,6 +65,11 @@ func (rec *SpanSetReplicaEvalContext) GetRangeID() roachpb.RangeID {
 // ClusterSettings returns the cluster settings.
 func (rec *SpanSetReplicaEvalContext) ClusterSettings() *cluster.Settings {
 	return rec.i.ClusterSettings()
+}
+
+// Clock returns the Replica's clock.
+func (rec *SpanSetReplicaEvalContext) Clock() *hlc.Clock {
+	return rec.i.Clock()
 }
 
 // DB returns the Replica's client DB.

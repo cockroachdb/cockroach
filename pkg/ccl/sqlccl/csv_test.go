@@ -9,6 +9,7 @@
 package sqlccl
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -17,12 +18,12 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -455,6 +456,9 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Get the number of existing jobs.
+	baseNumJobs := jobutils.GetSystemJobsCount(t, sqlDB)
+
 	if err := ioutil.WriteFile(filepath.Join(dir, "empty.csv"), nil, 0666); err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +468,9 @@ func TestImportStmt(t *testing.T) {
 	files, filesWithOpts, dups := makeCSVData(t, dir, numFiles, rowsPerFile)
 	expectedRows := numFiles * rowsPerFile
 
-	for i, tc := range []struct {
+	// Support subtests by keeping track of the number of jobs that are executed.
+	i := -1
+	for _, tc := range []struct {
 		name    string
 		query   string        // must have one `%s` for the files list.
 		args    []interface{} // will have backupPath appended
@@ -513,6 +519,15 @@ func TestImportStmt(t *testing.T) {
 			"",
 		},
 		{
+			// Force some SST splits.
+			"schema-in-file-sstsize-dist",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed, sstsize = '10K'`,
+			schema,
+			files,
+			`WITH distributed, sstsize = '10K', temp = %s, transform_only`,
+			"",
+		},
+		{
 			"schema-in-query-dist",
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, distributed, transform_only`,
 			nil,
@@ -550,6 +565,22 @@ func TestImportStmt(t *testing.T) {
 			schema,
 			append(empty, files...),
 			`WITH temp = %s, transform_only`,
+			"",
+		},
+		{
+			"empty-file-dist",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
+			schema,
+			empty,
+			`WITH distributed, temp = %s, transform_only`,
+			"",
+		},
+		{
+			"empty-with-files-dist",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
+			schema,
+			append(empty, files...),
+			`WITH distributed, temp = %s, transform_only`,
 			"",
 		},
 		// NB: successes above, failures below, because we check the i-th job.
@@ -603,6 +634,7 @@ func TestImportStmt(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			i++
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE csv%d`, i))
 			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = csv%d`, i))
 
@@ -628,7 +660,7 @@ func TestImportStmt(t *testing.T) {
 			}
 
 			const jobPrefix = `IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
-			if err := jobutils.VerifySystemJob(t, sqlDB, i*2, jobs.TypeImport, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+i*2, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", "), `'`+backupPath+`'`),
 			}); err != nil {
@@ -680,6 +712,18 @@ func TestImportStmt(t *testing.T) {
 			if result != expectedNulls {
 				t.Fatalf("expected %d rows, got %d", expectedNulls, result)
 			}
+
+			// Verify sstsize created > 1 SST files.
+			if tc.name == "schema-in-file-sstsize-dist" {
+				pattern := filepath.Join(dir, fmt.Sprintf("%d", i), "*.sst")
+				matches, err := filepath.Glob(pattern)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(matches) < 2 {
+					t.Fatal("expected > 1 SST files")
+				}
+			}
 		})
 	}
 
@@ -691,6 +735,13 @@ func TestImportStmt(t *testing.T) {
 		if !testutils.IsError(err, "expected 1 fields, got 2") {
 			t.Fatalf("unexpected: %v", err)
 		}
+
+		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
+		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s) WITH temp = $2, transform_only`, files[0]), schema[0], nodetmp)
+		if !testutils.IsError(err, `file specifies a schema for table "t"`) {
+			t.Fatalf("unexpected: %v", err)
+		}
+
 		// Expect it to succeed with correct columns.
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT, b STRING) CSV DATA (%s) WITH temp = $1, transform_only`, files[0]), nodetmp)
 	})
@@ -773,8 +824,9 @@ func BenchmarkConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	create := stmt.(*tree.CreateTable)
+	st := cluster.MakeTestingClusterSettings()
 
-	tableDesc, err := makeCSVTableDescriptor(ctx, create, sqlbase.ID(100), sqlbase.ID(100), 1)
+	tableDesc, err := makeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), 1)
 	if err != nil {
 		b.Fatal(err)
 	}

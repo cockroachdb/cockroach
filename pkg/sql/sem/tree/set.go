@@ -23,8 +23,6 @@
 
 package tree
 
-import "bytes"
-
 // SetVar represents a SET or RESET statement.
 type SetVar struct {
 	Name   VarName
@@ -32,16 +30,16 @@ type SetVar struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *SetVar) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("SET ")
+func (node *SetVar) Format(ctx *FmtCtx) {
+	ctx.WriteString("SET ")
 	if node.Name == nil {
-		buf.WriteString("ROW (")
-		FormatNode(buf, f, node.Values)
-		buf.WriteString(")")
+		ctx.WriteString("ROW (")
+		ctx.FormatNode(&node.Values)
+		ctx.WriteString(")")
 	} else {
-		FormatNode(buf, f, node.Name)
-		buf.WriteString(" = ")
-		FormatNode(buf, f, node.Values)
+		ctx.FormatNode(node.Name)
+		ctx.WriteString(" = ")
+		ctx.FormatNode(&node.Values)
 	}
 }
 
@@ -52,11 +50,11 @@ type SetClusterSetting struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *SetClusterSetting) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("SET CLUSTER SETTING ")
-	FormatNode(buf, f, node.Name)
-	buf.WriteString(" = ")
-	FormatNode(buf, f, node.Value)
+func (node *SetClusterSetting) Format(ctx *FmtCtx) {
+	ctx.WriteString("SET CLUSTER SETTING ")
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" = ")
+	ctx.FormatNode(node.Value)
 }
 
 // SetTransaction represents a SET TRANSACTION statement.
@@ -65,21 +63,18 @@ type SetTransaction struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *SetTransaction) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("SET TRANSACTION")
-	node.Modes.Format(buf, f)
+func (node *SetTransaction) Format(ctx *FmtCtx) {
+	ctx.WriteString("SET TRANSACTION")
+	node.Modes.Format(ctx)
 }
 
-// SetDefaultIsolation represents a SET SESSION CHARACTERISTICS AS TRANSACTION statement.
-type SetDefaultIsolation struct {
-	Isolation IsolationLevel
+// SetSessionCharacteristics represents a SET SESSION CHARACTERISTICS AS TRANSACTION statement.
+type SetSessionCharacteristics struct {
+	Modes TransactionModes
 }
 
 // Format implements the NodeFormatter interface.
-func (node *SetDefaultIsolation) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL")
-	if node.Isolation != UnspecifiedIsolation {
-		buf.WriteByte(' ')
-		buf.WriteString(node.Isolation.String())
-	}
+func (node *SetSessionCharacteristics) Format(ctx *FmtCtx) {
+	ctx.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION")
+	node.Modes.Format(ctx)
 }

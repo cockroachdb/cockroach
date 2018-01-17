@@ -15,6 +15,7 @@
 package gossip
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -22,8 +23,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

@@ -16,10 +16,10 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -113,7 +113,7 @@ type SchemaAccessor interface {
 var _ SchemaAccessor = &planner{}
 
 func (p *planner) getVirtualTabler() VirtualTabler {
-	return &p.session.virtualSchemas
+	return p.extendedEvalCtx.VirtualSchemas
 }
 
 // getTableOrViewDesc returns a table descriptor for either a table or view,
@@ -575,15 +575,30 @@ func getTableNames(
 	return tableNames, nil
 }
 
-func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, error) {
+// getAliasedTableName returns the underlying table name for a TableExpr that
+// could be either an alias or a normal table name. It also returns the original
+// table name, which will be equal to the alias name if the input is an alias,
+// or identical to the table name if the input is a normal table name.
+func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName, error) {
+	var alias *tree.TableName
 	if ate, ok := n.(*tree.AliasedTableExpr); ok {
 		n = ate.Expr
+		// It's okay to ignore the As columns here, as they're not permitted in
+		// DML aliases where this function is used.
+		alias = &tree.TableName{TableName: ate.As.Alias}
 	}
 	table, ok := n.(*tree.NormalizableTableName)
 	if !ok {
-		return nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	return table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := table.NormalizeWithDatabaseName(p.SessionData().Database)
+	if err != nil {
+		return nil, nil, err
+	}
+	if alias == nil {
+		alias = tn
+	}
+	return tn, alias, nil
 }
 
 // createSchemaChangeJob finalizes the current mutations in the table
@@ -630,14 +645,15 @@ func (p *planner) notifySchemaChange(
 	sc := SchemaChanger{
 		tableID:              tableDesc.GetID(),
 		mutationID:           mutationID,
-		nodeID:               p.evalCtx.NodeID,
+		nodeID:               p.extendedEvalCtx.NodeID,
 		leaseMgr:             p.LeaseMgr(),
 		jobRegistry:          p.ExecCfg().JobRegistry,
 		leaseHolderCache:     p.ExecCfg().LeaseHolderCache,
 		rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
 		clock:                p.ExecCfg().Clock,
+		settings:             p.ExecCfg().Settings,
 	}
-	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
+	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }
 
 // writeTableDesc implements the SchemaAccessor interface.
@@ -649,13 +665,13 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	// have written, but if they are followed by other statements that modify
 	// the descriptor the verification of the overwritten descriptor cannot be
 	// done.
-	p.session.setTestingVerifyMetadata(nil)
+	p.testingVerifyMetadata().setTestingVerifyMetadata(nil)
 
-	p.session.tables.addUncommittedTable(*tableDesc)
+	p.Tables().addUncommittedTable(*tableDesc)
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	descVal := sqlbase.WrapDescriptor(tableDesc)
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
 	}
 	return p.txn.Put(ctx, descKey, descVal)
@@ -704,13 +720,13 @@ func expandTableGlob(
 func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableName) error {
 	t := *tn
 
-	descFunc := p.session.tables.getTableVersion
+	descFunc := p.Tables().getTableVersion
 	if p.avoidCachedDescriptors {
 		descFunc = getTableOrViewDesc
 	}
 
-	if p.session.Database != "" {
-		t.DatabaseName = tree.Name(p.session.Database)
+	if p.SessionData().Database != "" {
+		t.DatabaseName = tree.Name(p.SessionData().Database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
@@ -724,7 +740,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableNa
 
 	// Not found using the current session's database, so try
 	// the search path instead.
-	iter := p.session.SearchPath.Iter()
+	iter := p.SessionData().SearchPath.Iter()
 	for database, ok := iter(); ok; database, ok = iter() {
 		t.DatabaseName = tree.Name(database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
@@ -813,7 +829,7 @@ func (p *planner) findTableContainingIndex(
 func (p *planner) expandIndexName(
 	ctx context.Context, index *tree.TableNameWithIndex, requireTable bool,
 ) (*tree.TableName, error) {
-	tn, err := index.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := index.Table.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -863,7 +879,7 @@ func (p *planner) getTableAndIndex(
 	var err error
 	if tableWithIndex == nil {
 		// Variant: ALTER TABLE
-		tn, err = table.NormalizeWithDatabaseName(p.session.Database)
+		tn, err = table.NormalizeWithDatabaseName(p.SessionData().Database)
 	} else {
 		// Variant: ALTER INDEX
 		tn, err = p.expandIndexName(ctx, tableWithIndex, true /* requireTable */)

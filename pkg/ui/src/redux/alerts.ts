@@ -155,7 +155,7 @@ export const newVersionNotificationSelector = createSelector(
       // Note that this explicitly does not use util/docs to create the link,
       // since we want to link to the updated version, not the version currently
       // running on the cluster.
-      link: "https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html",
+      link: "https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html",
       dismiss: (dispatch) => {
         const dismissedAt = moment();
         // Dismiss locally.

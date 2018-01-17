@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -43,7 +43,7 @@ func (p *planner) analyzeExpr(
 	// is expected. Tell this to replaceSubqueries.  (See UPDATE for a
 	// counter-example; cases where a subquery is an operand of a
 	// comparison are handled specially in the subqueryVisitor already.)
-	replaced, err := p.replaceSubqueries(ctx, raw, 1 /* one value expected */)
+	replaced, err := p.analyzeSubqueries(ctx, raw, 1 /* one value expected */)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (p *planner) analyzeExpr(
 		if err != nil {
 			return nil, err
 		}
-		p.hasStar = p.hasStar || hasStar
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 	}
 
 	// Type check.
@@ -76,5 +76,5 @@ func (p *planner) analyzeExpr(
 	}
 
 	// Normalize.
-	return p.txCtx.NormalizeExpr(&p.evalCtx, typedExpr)
+	return p.txCtx.NormalizeExpr(p.EvalContext(), typedExpr)
 }

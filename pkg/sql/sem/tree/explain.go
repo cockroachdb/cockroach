@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"strings"
 )
 
@@ -31,17 +30,17 @@ type Explain struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Explain) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("EXPLAIN ")
+func (node *Explain) Format(ctx *FmtCtx) {
+	ctx.WriteString("EXPLAIN ")
 	if len(node.Options) > 0 {
-		buf.WriteByte('(')
+		ctx.WriteByte('(')
 		for i, opt := range node.Options {
 			if i > 0 {
-				buf.WriteString(", ")
+				ctx.WriteString(", ")
 			}
-			buf.WriteString(strings.ToUpper(opt))
+			ctx.WriteString(strings.ToUpper(opt))
 		}
-		buf.WriteString(") ")
+		ctx.WriteString(") ")
 	}
-	FormatNode(buf, f, node.Statement)
+	ctx.FormatNode(node.Statement)
 }

@@ -14,10 +14,6 @@
 
 package tree
 
-import (
-	"bytes"
-)
-
 // ZoneSpecifier represents a reference to a configurable zone of the keyspace.
 type ZoneSpecifier struct {
 	// Only one of NamedZone, Database or TableOrIndex may be set.
@@ -41,28 +37,29 @@ func (node ZoneSpecifier) TargetsIndex() bool {
 }
 
 // Format implements the NodeFormatter interface.
-func (node ZoneSpecifier) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *ZoneSpecifier) Format(ctx *FmtCtx) {
+	if node.Partition != "" {
+		ctx.WriteString("PARTITION ")
+		ctx.FormatNode(&node.Partition)
+		ctx.WriteString(" OF ")
+	}
 	if node.NamedZone != "" {
-		buf.WriteString("RANGE ")
-		FormatNode(buf, f, &node.NamedZone)
+		ctx.WriteString("RANGE ")
+		ctx.FormatNode(&node.NamedZone)
 	} else if node.Database != "" {
-		buf.WriteString("DATABASE ")
-		FormatNode(buf, f, &node.Database)
+		ctx.WriteString("DATABASE ")
+		ctx.FormatNode(&node.Database)
 	} else {
 		if node.TargetsIndex() {
-			buf.WriteString("INDEX ")
+			ctx.WriteString("INDEX ")
 		} else {
-			buf.WriteString("TABLE ")
+			ctx.WriteString("TABLE ")
 		}
-		FormatNode(buf, f, &node.TableOrIndex)
-	}
-	if node.Partition != "" {
-		buf.WriteString(" PARTITION ")
-		FormatNode(buf, f, &node.Partition)
+		ctx.FormatNode(&node.TableOrIndex)
 	}
 }
 
-func (node ZoneSpecifier) String() string { return AsString(node) }
+func (node *ZoneSpecifier) String() string { return AsString(node) }
 
 // ShowZoneConfig represents an EXPERIMENTAL SHOW ZONE CONFIGURATION...
 // statement.
@@ -71,12 +68,12 @@ type ShowZoneConfig struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowZoneConfig) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 	if node.ZoneSpecifier == (ZoneSpecifier{}) {
-		buf.WriteString("EXPERIMENTAL SHOW ZONE CONFIGURATIONS")
+		ctx.WriteString("EXPERIMENTAL SHOW ZONE CONFIGURATIONS")
 	} else {
-		buf.WriteString("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR ")
-		FormatNode(buf, f, node.ZoneSpecifier)
+		ctx.WriteString("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR ")
+		ctx.FormatNode(&node.ZoneSpecifier)
 	}
 }
 
@@ -88,9 +85,9 @@ type SetZoneConfig struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *SetZoneConfig) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
-	FormatNode(buf, f, node.ZoneSpecifier)
-	buf.WriteString(" EXPERIMENTAL CONFIGURE ZONE ")
-	FormatNode(buf, f, node.YAMLConfig)
+func (node *SetZoneConfig) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER ")
+	ctx.FormatNode(&node.ZoneSpecifier)
+	ctx.WriteString(" EXPERIMENTAL CONFIGURE ZONE ")
+	ctx.FormatNode(node.YAMLConfig)
 }

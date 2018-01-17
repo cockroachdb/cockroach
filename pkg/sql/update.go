@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -45,8 +44,12 @@ type updateNode struct {
 	checkHelper   checkHelper
 	sourceSlots   []sourceSlot
 
-	run updateRun
+	run        updateRun
+	autoCommit autoCommitOpt
 }
+
+// updateNode implements the autoCommitNode interface.
+var _ autoCommitNode = &updateNode{}
 
 // Update updates columns for a selection of rows from a table.
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
@@ -55,13 +58,20 @@ type updateNode struct {
 func (p *planner) Update(
 	ctx context.Context, n *tree.Update, desiredTypes []types.T,
 ) (planNode, error) {
-	if n.Where == nil && p.session.SafeUpdates {
+	if n.Where == nil && p.SessionData().SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
+	}
+	resetter, err := p.initWith(ctx, n.With)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
 	}
 
 	tracing.AnnotateTrace()
 
-	tn, err := p.getAliasedTableName(n.Table)
+	tn, alias, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +83,8 @@ func (p *planner) Update(
 
 	setExprs := make([]*tree.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
-		// Replace the sub-query nodes.
-		newExpr, err := p.replaceSubqueries(ctx, expr.Expr, len(expr.Names))
+		// Analyze the sub-query nodes.
+		newExpr, err := p.analyzeSubqueries(ctx, expr.Expr, len(expr.Names))
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +102,8 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.txCtx, &p.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(
+		updateCols, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -104,26 +115,36 @@ func (p *planner) Update(
 		requestedCols = en.tableDesc.Columns
 	}
 
-	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckUpdates)
-	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
-		return nil, err
-	}
-	ru, err := sqlbase.MakeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols,
-		requestedCols, sqlbase.RowUpdaterDefault, &p.alloc)
+	fkTables, err := sqlbase.TablesNeededForFKs(
+		ctx, *en.tableDesc, sqlbase.CheckUpdates, p.lookupFKTable, p.CheckPrivilege,
+	)
 	if err != nil {
 		return nil, err
 	}
-	tw := tableUpdater{ru: ru, autoCommit: p.autoCommit}
+	ru, err := sqlbase.MakeRowUpdater(
+		p.txn,
+		en.tableDesc,
+		fkTables,
+		updateCols,
+		requestedCols,
+		sqlbase.RowUpdaterDefault,
+		p.EvalContext(),
+		&p.alloc,
+	)
+	if err != nil {
+		return nil, err
+	}
+	tw := tableUpdater{ru: ru}
 
 	tracing.AnnotateTrace()
 
 	// We construct a query containing the columns being updated, and then later merge the values
 	// they are being updated with into that renderNode to ideally reuse some of the queries.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
+		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols, true /* forUpdateOrDelete */),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, n.OrderBy, n.Limit, nil /*desiredTypes*/, publicAndNonPublicColumns)
+	}, n.OrderBy, n.Limit, nil /* with */, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +192,7 @@ func (p *planner) Update(
 
 					currentUpdateIdx++
 				}
-			case *subquery:
+			case *tree.Subquery:
 				selectExpr := tree.SelectExpr{Expr: t}
 				desiredTupleType := make(types.TTuple, len(setExpr.Names))
 				for i := range setExpr.Names {
@@ -237,7 +258,7 @@ func (p *planner) Update(
 		return nil, err
 	}
 	if err := un.run.initEditNode(
-		ctx, &un.editNodeBase, rows, &un.tw, tn, n.Returning, desiredTypes); err != nil {
+		ctx, &un.editNodeBase, rows, &un.tw, alias, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 	return un, nil
@@ -249,11 +270,11 @@ type updateRun struct {
 	editNodeRun
 }
 
-func (u *updateNode) Start(params runParams) error {
+func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	return u.run.tw.init(params.p.txn)
+	return u.run.tw.init(params.p.txn, params.EvalContext())
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {
@@ -264,7 +285,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			_, err = u.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			_, err = u.tw.finalize(params.ctx, u.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}
@@ -293,7 +314,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 	if err := u.checkHelper.loadRow(u.updateColsIdx, updateValues, true); err != nil {
 		return false, err
 	}
-	if err := u.checkHelper.check(params.evalCtx); err != nil {
+	if err := u.checkHelper.check(params.EvalContext()); err != nil {
 		return false, err
 	}
 
@@ -313,7 +334,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 
 	// Update the row values.
 	newValues, err := u.tw.row(
-		params.ctx, append(oldValues, updateValues...), params.p.session.Tracing.KVTracingEnabled(),
+		params.ctx, append(oldValues, updateValues...), params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	)
 	if err != nil {
 		return false, err
@@ -339,6 +360,11 @@ func (u *updateNode) Close(ctx context.Context) {
 	updateNodePool.Put(u)
 }
 
+// enableAutoCommit is part of the autoCommitNode interface.
+func (u *updateNode) enableAutoCommit() {
+	u.autoCommit = autoCommitEnabled
+}
+
 // editNode (Base, Run) is shared between all row updating
 // statements (DELETE, UPDATE, INSERT).
 
@@ -353,7 +379,7 @@ type editNodeBase struct {
 func (p *planner) makeEditNode(
 	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
 ) (editNodeBase, error) {
-	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return editNodeBase{}, err
 	}
@@ -408,12 +434,9 @@ func (r *editNodeRun) initEditNode(
 func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
-		if err := en.p.txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
+		return en.p.txn.SetSystemConfigTrigger()
 	}
-
-	return r.rows.Start(params)
+	return nil
 }
 
 // sourceSlot abstracts the idea that our update sources can either be tuples
@@ -497,8 +520,8 @@ func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.UnresolvedNames, e
 		if expr.Tuple {
 			n := -1
 			switch t := expr.Expr.(type) {
-			case *subquery:
-				if tup, ok := t.typ.(types.TTuple); ok {
+			case *tree.Subquery:
+				if tup, ok := t.ResolvedType().(types.TTuple); ok {
 					n = len(tup)
 				}
 			case *tree.Tuple:

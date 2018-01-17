@@ -1,8 +1,3 @@
-// tslint:disable-next-line:no-var-requires
-const spinner = require<string>("assets/spinner.gif");
-// tslint:disable-next-line:no-var-requires
-const noResults = require<string>("assets/noresults.svg");
-
 import _ from "lodash";
 import moment from "moment";
 import { Line } from "rc-progress";
@@ -16,11 +11,15 @@ import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
 import docsURL from "src/util/docs";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+import { ExpandableString } from "src/views/shared/components/expandableString";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+
+import spinner from "assets/spinner.gif";
+import noResults from "assets/noresults.svg";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
@@ -128,7 +127,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Description",
-    cell: job => job.description,
+    cell: job => <ExpandableString long={job.description} />,
     sort: job => job.description,
     className: "jobs-table__cell--description",
   },
@@ -185,7 +184,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
         <div className="section-heading__tooltip">
           <ToolTipWrapper text={titleTooltip}>
             <div className="section-heading__tooltip-hover-area">
-              <div className="section-heading__info-icon">!</div>
+              <div className="section-heading__info-icon">i</div>
             </div>
           </ToolTipWrapper>
         </div>

@@ -51,7 +51,7 @@ new engineers.
 
    ```shell
    go get -d github.com/cockroachdb/cockroach
-   cd $GOPATH/src/github.com/cockroachdb/cockroach
+   cd $(go env GOPATH)/src/github.com/cockroachdb/cockroach
    ```
 
 3. Run `make build`, `make test`, or anything else our Makefile offers.
@@ -79,6 +79,10 @@ be run as shown in the [README](README.md).
   regenerate the associated `.pb.{go,cc,h}` or `.js` files using `make
   generate`.
 
+- If you edit the SQL built-in functions or operators or update the SQL grammar,
+  you will need to manually regenerate the associated `docs/generated` files via
+  `make generate PKG=./docs/...`.
+
 - You can also run `build/builder.sh make generate` from the
   repository root to get the intended result.
 
@@ -92,7 +96,7 @@ be run as shown in the [README](README.md).
 
 ## Style Guide
 
-See our separate [style guide](STYLE.md) document.
+See our separate [style guide](docs/style.md) document.
 
 ## Commit Messages
 
@@ -127,6 +131,9 @@ following guidelines:
   - build change (e.g., compatibility with older CPUs)
   - enterprise change (e.g., change to backup/restore)
   - backwards-incompatible change
+
+  This list is also documented in the commit message template, which lives in
+  githooks/prepare-commit-msg.
 
   For example, a commit like ["distsql: pre-reserve memory needed
   to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)

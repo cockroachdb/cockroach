@@ -52,11 +52,13 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    * actionNamespace - A unique namespace for the redux actions.
    * invalidationPeriod (optional) - The duration after
    *   data is received after which it will be invalidated.
+   * requestTimeout (optional)
    */
   constructor(
     protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>,
     public actionNamespace: string,
     protected invalidationPeriod?: moment.Duration,
+    protected requestTimeout?: moment.Duration,
   ) {
     // check actionNamespace
     assert.notProperty(CachedDataReducer.namespaces, actionNamespace, "Expected actionNamespace to be unique.");
@@ -72,7 +74,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
    * setTimeSource overrides the source of timestamps used by this component.
    * Intended for use in tests only.
    */
-  setTimeSource(timeSource: {(): moment.Moment}) {
+  setTimeSource(timeSource: { (): moment.Moment }) {
     this.timeSource = timeSource;
   }
 
@@ -175,7 +177,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       // Note that after dispatching requestData, state.inFlight is true
       dispatch(this.requestData(req));
       // Fetch data from the servers. Return the promise for use in tests.
-      return this.apiEndpoint(req, this.invalidationPeriod).then((data) => {
+      return this.apiEndpoint(req, this.requestTimeout).then((data) => {
         // Dispatch the results to the store.
         dispatch(this.receiveData(data, req));
       }).catch((error: Error) => {
@@ -193,7 +195,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
     };
   }
 
-  private timeSource: {(): moment.Moment} = () => moment();
+  private timeSource: { (): moment.Moment } = () => moment();
 }
 
 /**
@@ -216,19 +218,26 @@ export class KeyedCachedDataReducer<TRequest, TResponseMessage> {
    *   as a key to store data returned from that request
    * invalidationPeriod (optional) - The duration after
    *   data is received after which it will be invalidated.
-   *
-   * apiEndpoint, actionNamespace, and invalidationPeriod are all passed
-   * to the CachedDataReducer constructor
+   * requestTimeout (optional)
+   * apiEndpoint, actionNamespace, invalidationPeriod and requestTimeout are all
+   * passed to the CachedDataReducer constructor
    */
-  constructor(protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>, public actionNamespace: string, private requestToID: (req: TRequest) => string, protected invalidationPeriod?: moment.Duration) {
-    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage>(apiEndpoint, actionNamespace, invalidationPeriod);
+  constructor(
+    protected apiEndpoint: (req: TRequest) => Promise<TResponseMessage>,
+    public actionNamespace: string, private requestToID: (req: TRequest) => string,
+    protected invalidationPeriod?: moment.Duration,
+    protected requestTimeout?: moment.Duration,
+  ) {
+    this.cachedDataReducer = new CachedDataReducer<TRequest, TResponseMessage>(
+      apiEndpoint, actionNamespace, invalidationPeriod, requestTimeout,
+    );
   }
 
   /**
    * setTimeSource overrides the source of timestamps used by this component.
    * Intended for use in tests only.
    */
-  setTimeSource(timeSource: {(): moment.Moment}) {
+  setTimeSource(timeSource: { (): moment.Moment }) {
     this.cachedDataReducer.setTimeSource(timeSource);
   }
 

@@ -15,11 +15,11 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,6 +51,10 @@ type FlowID struct {
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
 	log.AmbientContext
+
+	// Context used for all execution within the flow.
+	// Created in Start(), canceled in Cleanup().
+	Ctx context.Context
 
 	Settings *cluster.Settings
 
@@ -146,10 +150,6 @@ type Flow struct {
 	doneFn func()
 
 	status flowStatus
-
-	// Context used for all execution within the flow.
-	// Created in Start(), canceled in Cleanup().
-	ctx context.Context
 
 	// Cancel function for ctx. Call this to cancel the flow (safe to be called
 	// multiple times).
@@ -372,6 +372,52 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 		if err != nil {
 			return err
 		}
+
+		// If the processor implements RowSource try to hook it up directly to the
+		// input of a later processor.
+		source, ok := f.processors[i].(RowSource)
+		if !ok {
+			continue
+		}
+		pspec := &spec.Processors[i]
+		if len(pspec.Output) != 1 {
+			// The processor has more than one output, use the normal routing
+			// machinery.
+			continue
+		}
+		ospec := &pspec.Output[0]
+		if ospec.Type != OutputRouterSpec_PASS_THROUGH {
+			// The output is not pass-through and thus is being sent through a
+			// router.
+			continue
+		}
+		if len(ospec.Streams) != 1 {
+			// The output contains more than one stream.
+			continue
+		}
+
+		for pIdx, ps := range spec.Processors {
+			if pIdx <= i {
+				// Skip processors which have already been created.
+				continue
+			}
+			for inIdx, in := range ps.Input {
+				// Look for "simple" inputs: an unordered input (which, by definition,
+				// doesn't require an ordered synchronizer), with a single input stream
+				// (which doesn't require a MultiplexedRowChannel).
+				if in.Type != InputSyncSpec_UNORDERED {
+					continue
+				}
+				if len(in.Streams) != 1 {
+					continue
+				}
+				if in.Streams[0].StreamID != ospec.Streams[0].StreamID {
+					continue
+				}
+				inputSyncs[pIdx][inIdx] = source
+				f.processors[i] = nil
+			}
+		}
 	}
 	return nil
 }
@@ -389,7 +435,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	)
 	f.status = FlowRunning
 
-	f.ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	f.Ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
@@ -398,25 +444,27 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	f.waitGroup.Add(len(f.inboundStreams))
 
 	if err := f.flowRegistry.RegisterFlow(
-		f.ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout,
+		f.Ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout,
 	); err != nil {
 		if f.syncFlowConsumer != nil {
 			// For sync flows, the error goes to the consumer.
-			f.syncFlowConsumer.Push(nil /* row */, ProducerMetadata{Err: err})
+			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
 		return err
 	}
 	if log.V(1) {
-		log.Infof(f.ctx, "registered flow %s", f.id.Short())
+		log.Infof(f.Ctx, "registered flow %s", f.id.Short())
 	}
 	for _, s := range f.startables {
-		s.start(f.ctx, &f.waitGroup, f.ctxCancel)
+		s.start(f.Ctx, &f.waitGroup, f.ctxCancel)
 	}
-	f.waitGroup.Add(len(f.processors))
 	for _, p := range f.processors {
-		go p.Run(f.ctx, &f.waitGroup)
+		if p != nil {
+			f.waitGroup.Add(1)
+			go p.Run(&f.waitGroup)
+		}
 	}
 	return nil
 }
@@ -432,7 +480,7 @@ func (f *Flow) Wait() {
 	}()
 
 	select {
-	case <-f.ctx.Done():
+	case <-f.Ctx.Done():
 		f.cancel()
 		<-waitChan
 	case <-waitChan:
@@ -463,15 +511,6 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	f.doneFn = nil
 }
 
-// RunSync runs the processors in the flow in order (serially), in the same
-// context (no goroutines are spawned).
-func (f *Flow) RunSync(ctx context.Context) {
-	for _, p := range f.processors {
-		p.Run(ctx, nil)
-	}
-	f.Cleanup(ctx)
-}
-
 // cancel iterates through all unconnected streams of this flow and marks them canceled.
 // If the syncFlowConsumer is of type CancellableRowReceiver, mark it as canceled.
 // This function is called in Wait() after the associated context has been canceled.
@@ -494,7 +533,7 @@ func (f *Flow) cancel() {
 			// receiver and prevent it from being connected.
 			is.receiver.Push(
 				nil, /* row */
-				ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
+				&ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
 			is.receiver.ProducerDone()
 			f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
 		}
@@ -506,5 +545,3 @@ func (f *Flow) cancel() {
 		}
 	}
 }
-
-var _ = (*Flow).RunSync

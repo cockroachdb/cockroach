@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Expr represents an expression.
@@ -102,13 +103,13 @@ var _ Operator = ComparisonOperator(0)
 // if the expression involves an operator. It is used internally when the
 // expression is part of another expression and we know it is preceded or
 // followed by an operator.
-func exprFmtWithParen(buf *bytes.Buffer, f FmtFlags, e Expr) {
+func exprFmtWithParen(ctx *FmtCtx, e Expr) {
 	if _, ok := e.(operatorExpr); ok {
-		buf.WriteByte('(')
-		FormatNode(buf, f, e)
-		buf.WriteByte(')')
+		ctx.WriteByte('(')
+		ctx.FormatNode(e)
+		ctx.WriteByte(')')
 	} else {
-		FormatNode(buf, f, e)
+		ctx.FormatNode(e)
 	}
 }
 
@@ -139,35 +140,33 @@ type AndExpr struct {
 
 func (*AndExpr) operatorExpr() {}
 
-func binExprFmtWithParen(buf *bytes.Buffer, f FmtFlags, e1 Expr, op string, e2 Expr, pad bool) {
-	exprFmtWithParen(buf, f, e1)
+func binExprFmtWithParen(ctx *FmtCtx, e1 Expr, op string, e2 Expr, pad bool) {
+	exprFmtWithParen(ctx, e1)
 	if pad {
-		buf.WriteByte(' ')
+		ctx.WriteByte(' ')
 	}
-	buf.WriteString(op)
+	ctx.WriteString(op)
 	if pad {
-		buf.WriteByte(' ')
+		ctx.WriteByte(' ')
 	}
-	exprFmtWithParen(buf, f, e2)
+	exprFmtWithParen(ctx, e2)
 }
 
-func binExprFmtWithParenAndSubOp(
-	buf *bytes.Buffer, f FmtFlags, e1 Expr, subOp, op string, e2 Expr,
-) {
-	exprFmtWithParen(buf, f, e1)
-	buf.WriteByte(' ')
+func binExprFmtWithParenAndSubOp(ctx *FmtCtx, e1 Expr, subOp, op string, e2 Expr) {
+	exprFmtWithParen(ctx, e1)
+	ctx.WriteByte(' ')
 	if subOp != "" {
-		buf.WriteString(subOp)
-		buf.WriteByte(' ')
+		ctx.WriteString(subOp)
+		ctx.WriteByte(' ')
 	}
-	buf.WriteString(op)
-	buf.WriteByte(' ')
-	exprFmtWithParen(buf, f, e2)
+	ctx.WriteString(op)
+	ctx.WriteByte(' ')
+	exprFmtWithParen(ctx, e2)
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AndExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	binExprFmtWithParen(buf, f, node.Left, "AND", node.Right, true)
+func (node *AndExpr) Format(ctx *FmtCtx) {
+	binExprFmtWithParen(ctx, node.Left, "AND", node.Right, true)
 }
 
 // NewTypedAndExpr returns a new AndExpr that is verified to be well-typed.
@@ -197,8 +196,8 @@ type OrExpr struct {
 func (*OrExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
-func (node *OrExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	binExprFmtWithParen(buf, f, node.Left, "OR", node.Right, true)
+func (node *OrExpr) Format(ctx *FmtCtx) {
+	binExprFmtWithParen(ctx, node.Left, "OR", node.Right, true)
 }
 
 // NewTypedOrExpr returns a new OrExpr that is verified to be well-typed.
@@ -228,9 +227,9 @@ type NotExpr struct {
 func (*NotExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
-func (node *NotExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("NOT ")
-	exprFmtWithParen(buf, f, node.Expr)
+func (node *NotExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString("NOT ")
+	exprFmtWithParen(ctx, node.Expr)
 }
 
 // NewTypedNotExpr returns a new NotExpr that is verified to be well-typed.
@@ -253,10 +252,10 @@ type ParenExpr struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ParenExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('(')
-	FormatNode(buf, f, node.Expr)
-	buf.WriteByte(')')
+func (node *ParenExpr) Format(ctx *FmtCtx) {
+	ctx.WriteByte('(')
+	ctx.FormatNode(node.Expr)
+	ctx.WriteByte(')')
 }
 
 // TypedInnerExpr returns the ParenExpr's inner expression as a TypedExpr.
@@ -303,8 +302,6 @@ const (
 	NotRegIMatch
 	IsDistinctFrom
 	IsNotDistinctFrom
-	Is
-	IsNot
 	Contains
 	ContainedBy
 	Existence
@@ -350,8 +347,6 @@ var comparisonOpName = [...]string{
 	NotRegIMatch:      "!~*",
 	IsDistinctFrom:    "IS DISTINCT FROM",
 	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
-	Is:                "IS",
-	IsNot:             "IS NOT",
 	Contains:          "@>",
 	ContainedBy:       "<@",
 	Existence:         "?",
@@ -394,12 +389,17 @@ type ComparisonExpr struct {
 func (*ComparisonExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
-func (node *ComparisonExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	opStr := node.Operator.String()
+	if node.Operator == IsDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		opStr = "IS NOT"
+	} else if node.Operator == IsNotDistinctFrom && (node.Right == DNull || node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		opStr = "IS"
+	}
 	if node.Operator.hasSubOperator() {
-		binExprFmtWithParenAndSubOp(buf, f, node.Left, node.SubOperator.String(), opStr, node.Right)
+		binExprFmtWithParenAndSubOp(ctx, node.Left, node.SubOperator.String(), opStr, node.Right)
 	} else {
-		binExprFmtWithParen(buf, f, node.Left, opStr, node.Right, true)
+		binExprFmtWithParen(ctx, node.Left, opStr, node.Right, true)
 	}
 }
 
@@ -411,17 +411,38 @@ func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *Compa
 	return node
 }
 
+// NewTypedComparisonExprWithSubOp returns a new ComparisonExpr that is verified to be well-typed.
+func NewTypedComparisonExprWithSubOp(
+	op, subOp ComparisonOperator, left, right TypedExpr,
+) *ComparisonExpr {
+	node := &ComparisonExpr{Operator: op, SubOperator: subOp, Left: left, Right: right}
+	node.typ = types.Bool
+	node.memoizeFn()
+	return node
+}
+
 func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
 	switch node.Operator {
-	case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
+	case IsDistinctFrom, IsNotDistinctFrom:
 		// Is and related operators do not memoize a CmpOp.
 		return
 	case Any, Some, All:
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
-		rightRet = rightRet.(types.TArray).Typ
+		// The right operand is either an array or a tuple/subquery.
+		switch t := rightRet.(type) {
+		case types.TArray:
+			// For example:
+			//   x = ANY(ARRAY[1,2])
+			rightRet = t.Typ
+		case types.TTuple:
+			// For example:
+			//   x = ANY(SELECT y FROM t)
+			//   x = ANY(1,2)
+			rightRet = t[0]
+		}
 	}
 
 	fn, ok := CmpOps[fOp].lookupImpl(leftRet, rightRet)
@@ -466,11 +487,13 @@ func sameTypeOrNull(left, right types.T) bool {
 	return left == types.Null || right == types.Null || left.Equivalent(right)
 }
 
-// RangeCond represents a BETWEEN or a NOT BETWEEN expression.
+// RangeCond represents a BETWEEN [SYMMETRIC] or a NOT BETWEEN [SYMMETRIC]
+// expression.
 type RangeCond struct {
-	Not      bool
-	Left     Expr
-	From, To Expr
+	Not       bool
+	Symmetric bool
+	Left      Expr
+	From, To  Expr
 
 	typeAnnotation
 }
@@ -478,14 +501,17 @@ type RangeCond struct {
 func (*RangeCond) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
-func (node *RangeCond) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *RangeCond) Format(ctx *FmtCtx) {
 	notStr := " BETWEEN "
 	if node.Not {
 		notStr = " NOT BETWEEN "
 	}
-	exprFmtWithParen(buf, f, node.Left)
-	buf.WriteString(notStr)
-	binExprFmtWithParen(buf, f, node.From, "AND", node.To, true)
+	exprFmtWithParen(ctx, node.Left)
+	ctx.WriteString(notStr)
+	if node.Symmetric {
+		ctx.WriteString("SYMMETRIC ")
+	}
+	binExprFmtWithParen(ctx, node.From, "AND", node.To, true)
 }
 
 // TypedLeft returns the RangeCond's left expression as a TypedExpr.
@@ -515,33 +541,20 @@ type IsOfTypeExpr struct {
 func (*IsOfTypeExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
-func (node *IsOfTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	exprFmtWithParen(buf, f, node.Expr)
-	buf.WriteString(" IS")
+func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
+	exprFmtWithParen(ctx, node.Expr)
+	ctx.WriteString(" IS")
 	if node.Not {
-		buf.WriteString(" NOT")
+		ctx.WriteString(" NOT")
 	}
-	buf.WriteString(" OF (")
+	ctx.WriteString(" OF (")
 	for i, t := range node.Types {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		t.Format(buf, f.encodeFlags)
+		t.Format(ctx.Buffer, ctx.flags.EncodeFlags())
 	}
-	buf.WriteByte(')')
-}
-
-// ExistsExpr represents an EXISTS expression.
-type ExistsExpr struct {
-	Subquery Expr
-
-	typeAnnotation
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ExistsExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("EXISTS ")
-	exprFmtWithParen(buf, f, node.Subquery)
+	ctx.WriteByte(')')
 }
 
 // IfExpr represents an IF expression.
@@ -569,14 +582,14 @@ func (node *IfExpr) TypedElseExpr() TypedExpr {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *IfExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("IF(")
-	FormatNode(buf, f, node.Cond)
-	buf.WriteString(", ")
-	FormatNode(buf, f, node.True)
-	buf.WriteString(", ")
-	FormatNode(buf, f, node.Else)
-	buf.WriteByte(')')
+func (node *IfExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString("IF(")
+	ctx.FormatNode(node.Cond)
+	ctx.WriteString(", ")
+	ctx.FormatNode(node.True)
+	ctx.WriteString(", ")
+	ctx.FormatNode(node.Else)
+	ctx.WriteByte(')')
 }
 
 // NullIfExpr represents a NULLIF expression.
@@ -588,12 +601,12 @@ type NullIfExpr struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *NullIfExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("NULLIF(")
-	FormatNode(buf, f, node.Expr1)
-	buf.WriteString(", ")
-	FormatNode(buf, f, node.Expr2)
-	buf.WriteByte(')')
+func (node *NullIfExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString("NULLIF(")
+	ctx.FormatNode(node.Expr1)
+	ctx.WriteString(", ")
+	ctx.FormatNode(node.Expr2)
+	ctx.WriteByte(')')
 }
 
 // CoalesceExpr represents a COALESCE or IFNULL expression.
@@ -610,19 +623,19 @@ func (node *CoalesceExpr) TypedExprAt(idx int) TypedExpr {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CoalesceExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(node.Name)
-	buf.WriteByte('(')
-	FormatNode(buf, f, node.Exprs)
-	buf.WriteByte(')')
+func (node *CoalesceExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString(node.Name)
+	ctx.WriteByte('(')
+	ctx.FormatNode(&node.Exprs)
+	ctx.WriteByte(')')
 }
 
 // DefaultVal represents the DEFAULT expression.
 type DefaultVal struct{}
 
 // Format implements the NodeFormatter interface.
-func (node DefaultVal) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DEFAULT")
+func (node DefaultVal) Format(ctx *FmtCtx) {
+	ctx.WriteString("DEFAULT")
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -632,8 +645,16 @@ func (DefaultVal) ResolvedType() types.T { return nil }
 type MaxVal struct{}
 
 // Format implements the NodeFormatter interface.
-func (node MaxVal) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("MAXVALUE")
+func (node MaxVal) Format(ctx *FmtCtx) {
+	ctx.WriteString("MAXVALUE")
+}
+
+// MinVal represents the MINVALUE expression.
+type MinVal struct{}
+
+// Format implements the NodeFormatter interface.
+func (node MinVal) Format(ctx *FmtCtx) {
+	ctx.WriteString("MINVALUE")
 }
 
 // Placeholder represents a named placeholder.
@@ -649,13 +670,13 @@ func NewPlaceholder(name string) *Placeholder {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Placeholder) Format(buf *bytes.Buffer, f FmtFlags) {
-	if f.placeholderFormat != nil {
-		f.placeholderFormat(buf, f, node)
+func (node *Placeholder) Format(ctx *FmtCtx) {
+	if ctx.placeholderFormat != nil {
+		ctx.placeholderFormat(ctx, node)
 		return
 	}
-	buf.WriteByte('$')
-	buf.WriteString(node.Name)
+	ctx.WriteByte('$')
+	ctx.WriteString(node.Name)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -676,19 +697,61 @@ type Tuple struct {
 	types types.TTuple
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Tuple) Format(buf *bytes.Buffer, f FmtFlags) {
-	if node.Row {
-		buf.WriteString("ROW")
+// NewTypedTuple returns a new Tuple that is verified to be well-typed.
+func NewTypedTuple(typedExprs TypedExprs) *Tuple {
+	node := &Tuple{
+		Exprs: make(Exprs, len(typedExprs)),
+		types: make(types.TTuple, len(typedExprs)),
 	}
-	buf.WriteByte('(')
-	FormatNode(buf, f, node.Exprs)
-	buf.WriteByte(')')
+	for i := range typedExprs {
+		node.Exprs[i] = typedExprs[i].(Expr)
+		node.types[i] = typedExprs[i].ResolvedType()
+	}
+	return node
+}
+
+// Format implements the NodeFormatter interface.
+func (node *Tuple) Format(ctx *FmtCtx) {
+	if node.Row {
+		ctx.WriteString("ROW")
+	}
+	ctx.WriteByte('(')
+	ctx.FormatNode(&node.Exprs)
+	ctx.WriteByte(')')
 }
 
 // ResolvedType implements the TypedExpr interface.
 func (node *Tuple) ResolvedType() types.T {
 	return node.types
+}
+
+// Truncate returns a new Tuple that contains only a prefix of the original
+// expressions. E.g.
+//   Tuple:       (1, 2, 3)
+//   Truncate(2): (1, 2)
+func (node *Tuple) Truncate(prefix int) *Tuple {
+	return &Tuple{
+		Exprs: append(Exprs(nil), node.Exprs[:prefix]...),
+		Row:   node.Row,
+		types: append(types.TTuple(nil), node.types[:prefix]...),
+	}
+}
+
+// Project returns a new Tuple that contains a subset of the original
+// expressions. E.g.
+//  Tuple:           (1, 2, 3)
+//  Project({0, 2}): (1, 3)
+func (node *Tuple) Project(set util.FastIntSet) *Tuple {
+	t := &Tuple{
+		Exprs: make(Exprs, 0, set.Len()),
+		Row:   node.Row,
+		types: make(types.TTuple, 0, set.Len()),
+	}
+	for i, ok := set.Next(0); ok; i, ok = set.Next(i + 1) {
+		t.Exprs = append(t.Exprs, node.Exprs[i])
+		t.types = append(t.types, node.types[i])
+	}
+	return t
 }
 
 // Array represents an array constructor.
@@ -699,10 +762,10 @@ type Array struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Array) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ARRAY[")
-	FormatNode(buf, f, node.Exprs)
-	buf.WriteByte(']')
+func (node *Array) Format(ctx *FmtCtx) {
+	ctx.WriteString("ARRAY[")
+	ctx.FormatNode(&node.Exprs)
+	ctx.WriteByte(']')
 }
 
 // ArrayFlatten represents a subquery array constructor.
@@ -713,9 +776,9 @@ type ArrayFlatten struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ArrayFlatten) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ARRAY")
-	exprFmtWithParen(buf, f, node.Subquery)
+func (node *ArrayFlatten) Format(ctx *FmtCtx) {
+	ctx.WriteString("ARRAY ")
+	exprFmtWithParen(ctx, node.Subquery)
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression
@@ -723,12 +786,12 @@ func (node *ArrayFlatten) Format(buf *bytes.Buffer, f FmtFlags) {
 type Exprs []Expr
 
 // Format implements the NodeFormatter interface.
-func (node Exprs) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, n := range node {
+func (node *Exprs) Format(ctx *FmtCtx) {
+	for i, n := range *node {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 }
 
@@ -736,10 +799,10 @@ func (node Exprs) Format(buf *bytes.Buffer, f FmtFlags) {
 // because it's not parenthesized.
 type TypedExprs []TypedExpr
 
-func (node TypedExprs) String() string {
+func (node *TypedExprs) String() string {
 	var prefix string
 	var buf bytes.Buffer
-	for _, n := range node {
+	for _, n := range *node {
 		fmt.Fprintf(&buf, "%s%s", prefix, n)
 		prefix = ", "
 	}
@@ -749,14 +812,39 @@ func (node TypedExprs) String() string {
 // Subquery represents a subquery.
 type Subquery struct {
 	Select SelectStatement
+	Exists bool
+
+	// Idx is a query-unique index for the subquery.
+	// Subqueries are 1-indexed to ensure that the default
+	// value 0 can be used to detect uninitialized subqueries.
+	Idx int
+
+	typeAnnotation
+}
+
+// SetType forces the type annotation on the Subquery node.
+func (node *Subquery) SetType(t types.T) {
+	node.typ = t
 }
 
 // Variable implements the VariableExpr interface.
 func (*Subquery) Variable() {}
 
 // Format implements the NodeFormatter interface.
-func (node *Subquery) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, node.Select)
+func (node *Subquery) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(FmtSymbolicSubqueries) {
+		ctx.Printf("@S%d", node.Idx)
+	} else {
+		// Ensure that type printing is disabled during the recursion, as
+		// the type annotations are not available in subqueries.
+		noTypesCtx := *ctx
+		noTypesCtx.flags &= ^FmtShowTypes
+
+		if node.Exists {
+			noTypesCtx.WriteString("EXISTS ")
+		}
+		noTypesCtx.FormatNode(node.Select)
+	}
 }
 
 // BinaryOperator represents a binary operator.
@@ -837,6 +925,14 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 	return node.Right.(TypedExpr)
 }
 
+// NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
+func NewTypedBinaryExpr(op BinaryOperator, left, right TypedExpr, typ types.T) *BinaryExpr {
+	node := &BinaryExpr{Operator: op, Left: left, Right: right}
+	node.typ = typ
+	node.memoizeFn()
+	return node
+}
+
 func (*BinaryExpr) operatorExpr() {}
 
 func (node *BinaryExpr) memoizeFn() {
@@ -869,8 +965,8 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 }
 
 // Format implements the NodeFormatter interface.
-func (node *BinaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	binExprFmtWithParen(buf, f, node.Left, node.Operator.String(), node.Right, node.Operator.isPadded())
+func (node *BinaryExpr) Format(ctx *FmtCtx) {
+	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.isPadded())
 }
 
 // UnaryOperator represents a unary operator.
@@ -910,14 +1006,29 @@ type UnaryExpr struct {
 func (*UnaryExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
-func (node *UnaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(node.Operator.String())
-	exprFmtWithParen(buf, f, node.Expr)
+func (node *UnaryExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString(node.Operator.String())
+	exprFmtWithParen(ctx, node.Expr)
 }
 
 // TypedInnerExpr returns the UnaryExpr's inner expression as a TypedExpr.
 func (node *UnaryExpr) TypedInnerExpr() TypedExpr {
 	return node.Expr.(TypedExpr)
+}
+
+// NewTypedUnaryExpr returns a new UnaryExpr that is well-typed.
+func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ types.T) *UnaryExpr {
+	node := &UnaryExpr{Operator: op, Expr: expr}
+	node.typ = typ
+	innerType := expr.ResolvedType()
+	for _, o := range UnaryOps[op] {
+		o := o.(UnaryOp)
+		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
+			node.fn = o
+			return node
+		}
+	}
+	panic(fmt.Sprintf("invalid TypedExpr with unary op %d: %s", op, expr))
 }
 
 // FuncExpr represents a function call.
@@ -931,6 +1042,12 @@ type FuncExpr struct {
 
 	typeAnnotation
 	fn Builtin
+}
+
+// ResolvedFunc returns the function definition; can only be called after
+// Resolve (which happens during TypeCheck).
+func (node *FuncExpr) ResolvedFunc() *FunctionDefinition {
+	return node.Func.FunctionReference.(*FunctionDefinition)
 }
 
 // GetAggregateConstructor exposes the AggregateFunc field for use by
@@ -997,30 +1114,33 @@ var funcTypeName = [...]string{
 }
 
 // Format implements the NodeFormatter interface.
-func (node *FuncExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *FuncExpr) Format(ctx *FmtCtx) {
 	var typ string
 	if node.Type != 0 {
 		typ = funcTypeName[node.Type] + " "
 	}
-	fmtDisableAnonymize := *f
-	fmtDisableAnonymize.anonymize = false
-	FormatNode(buf, &fmtDisableAnonymize, node.Func)
-	buf.WriteByte('(')
-	buf.WriteString(typ)
-	FormatNode(buf, f, node.Exprs)
-	buf.WriteByte(')')
+
+	// We need to remove name anonimization for the function name in
+	// particular. Do this by overriding the flags.
+	subCtx := ctx.CopyWithFlags(ctx.flags & ^FmtAnonymize)
+	subCtx.FormatNode(&node.Func)
+
+	ctx.WriteByte('(')
+	ctx.WriteString(typ)
+	ctx.FormatNode(&node.Exprs)
+	ctx.WriteByte(')')
 	if window := node.WindowDef; window != nil {
-		buf.WriteString(" OVER ")
+		ctx.WriteString(" OVER ")
 		if window.Name != "" {
-			FormatNode(buf, f, window.Name)
+			ctx.FormatNode(&window.Name)
 		} else {
-			FormatNode(buf, f, window)
+			ctx.FormatNode(window)
 		}
 	}
 	if node.Filter != nil {
-		buf.WriteString(" FILTER (WHERE ")
-		FormatNode(buf, f, node.Filter)
-		buf.WriteString(")")
+		ctx.WriteString(" FILTER (WHERE ")
+		ctx.FormatNode(node.Filter)
+		ctx.WriteString(")")
 	}
 }
 
@@ -1034,22 +1154,22 @@ type CaseExpr struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CaseExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CASE ")
+func (node *CaseExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString("CASE ")
 	if node.Expr != nil {
-		FormatNode(buf, f, node.Expr)
-		buf.WriteByte(' ')
+		ctx.FormatNode(node.Expr)
+		ctx.WriteByte(' ')
 	}
 	for _, when := range node.Whens {
-		FormatNode(buf, f, when)
-		buf.WriteByte(' ')
+		ctx.FormatNode(when)
+		ctx.WriteByte(' ')
 	}
 	if node.Else != nil {
-		buf.WriteString("ELSE ")
-		FormatNode(buf, f, node.Else)
-		buf.WriteByte(' ')
+		ctx.WriteString("ELSE ")
+		ctx.FormatNode(node.Else)
+		ctx.WriteByte(' ')
 	}
-	buf.WriteString("END")
+	ctx.WriteString("END")
 }
 
 // When represents a WHEN sub-expression.
@@ -1059,11 +1179,11 @@ type When struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *When) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("WHEN ")
-	FormatNode(buf, f, node.Cond)
-	buf.WriteString(" THEN ")
-	FormatNode(buf, f, node.Val)
+func (node *When) Format(ctx *FmtCtx) {
+	ctx.WriteString("WHEN ")
+	ctx.FormatNode(node.Cond)
+	ctx.WriteString(" THEN ")
+	ctx.FormatNode(node.Val)
 }
 
 type castSyntaxMode int
@@ -1085,29 +1205,30 @@ type CastExpr struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *CastExpr) Format(ctx *FmtCtx) {
+	buf := ctx.Buffer
 	switch node.SyntaxMode {
 	case CastPrepend:
 		// This is a special case for things like INTERVAL '1s'. These only work
 		// with string constats; if the underlying expression was changed, we fall
 		// back to the short syntax.
 		if _, ok := node.Expr.(*StrVal); ok {
-			node.Type.Format(buf, f.encodeFlags)
-			buf.WriteByte(' ')
-			FormatNode(buf, f, node.Expr)
+			node.Type.Format(buf, ctx.flags.EncodeFlags())
+			ctx.WriteByte(' ')
+			ctx.FormatNode(node.Expr)
 			break
 		}
 		fallthrough
 	case CastShort:
-		exprFmtWithParen(buf, f, node.Expr)
-		buf.WriteString("::")
-		node.Type.Format(buf, f.encodeFlags)
+		exprFmtWithParen(ctx, node.Expr)
+		ctx.WriteString("::")
+		node.Type.Format(buf, ctx.flags.EncodeFlags())
 	default:
-		buf.WriteString("CAST(")
-		FormatNode(buf, f, node.Expr)
-		buf.WriteString(" AS ")
-		node.Type.Format(buf, f.encodeFlags)
-		buf.WriteByte(')')
+		ctx.WriteString("CAST(")
+		ctx.FormatNode(node.Expr)
+		ctx.WriteString(" AS ")
+		node.Type.Format(buf, ctx.flags.EncodeFlags())
+		ctx.WriteByte(')')
 	}
 }
 
@@ -1174,7 +1295,10 @@ func validCastTypes(t types.T) []types.T {
 		if t.FamilyEqual(types.FamCollatedString) {
 			return stringCastTypes
 		} else if t.FamilyEqual(types.FamArray) {
-			return arrayCastTypes
+			ret := make([]types.T, len(arrayCastTypes)+1)
+			copy(ret, arrayCastTypes)
+			ret[len(ret)-1] = t
+			return ret
 		}
 		return nil
 	}
@@ -1184,9 +1308,9 @@ func validCastTypes(t types.T) []types.T {
 type ArraySubscripts []*ArraySubscript
 
 // Format implements the NodeFormatter interface.
-func (a ArraySubscripts) Format(buf *bytes.Buffer, f FmtFlags) {
-	for _, s := range a {
-		FormatNode(buf, f, s)
+func (a *ArraySubscripts) Format(ctx *FmtCtx) {
+	for _, s := range *a {
+		ctx.FormatNode(s)
 	}
 }
 
@@ -1199,9 +1323,9 @@ type IndirectionExpr struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *IndirectionExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	exprFmtWithParen(buf, f, node.Expr)
-	FormatNode(buf, f, node.Indirection)
+func (node *IndirectionExpr) Format(ctx *FmtCtx) {
+	exprFmtWithParen(ctx, node.Expr)
+	ctx.FormatNode(&node.Indirection)
 }
 
 type annotateSyntaxMode int
@@ -1221,19 +1345,20 @@ type AnnotateTypeExpr struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AnnotateTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
+	buf := ctx.Buffer
 	switch node.SyntaxMode {
 	case AnnotateShort:
-		exprFmtWithParen(buf, f, node.Expr)
-		buf.WriteString(":::")
-		node.Type.Format(buf, f.encodeFlags)
+		exprFmtWithParen(ctx, node.Expr)
+		ctx.WriteString(":::")
+		node.Type.Format(buf, ctx.flags.EncodeFlags())
 
 	default:
-		buf.WriteString("ANNOTATE_TYPE(")
-		FormatNode(buf, f, node.Expr)
-		buf.WriteString(", ")
-		node.Type.Format(buf, f.encodeFlags)
-		buf.WriteByte(')')
+		ctx.WriteString("ANNOTATE_TYPE(")
+		ctx.FormatNode(node.Expr)
+		ctx.WriteString(", ")
+		node.Type.Format(buf, ctx.flags.EncodeFlags())
+		ctx.WriteByte(')')
 	}
 }
 
@@ -1255,10 +1380,10 @@ type CollateExpr struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CollateExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	exprFmtWithParen(buf, f, node.Expr)
-	buf.WriteString(" COLLATE ")
-	lex.EncodeUnrestrictedSQLIdent(buf, node.Locale, lex.EncodeFlags{})
+func (node *CollateExpr) Format(ctx *FmtCtx) {
+	exprFmtWithParen(ctx, node.Expr)
+	ctx.WriteString(" COLLATE ")
+	lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, node.Locale, lex.EncNoFlags)
 }
 
 func (node *AliasedTableExpr) String() string { return AsString(node) }
@@ -1293,16 +1418,15 @@ func (node *DArray) String() string           { return AsString(node) }
 func (node *DTable) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
-func (node *ExistsExpr) String() string       { return AsString(node) }
-func (node Exprs) String() string             { return AsString(node) }
+func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
 func (node *IfExpr) String() string           { return AsString(node) }
 func (node *IndexedVar) String() string       { return AsString(node) }
 func (node *IndirectionExpr) String() string  { return AsString(node) }
 func (node *IsOfTypeExpr) String() string     { return AsString(node) }
-func (node Name) String() string              { return AsString(node) }
-func (node UnrestrictedName) String() string  { return AsString(node) }
+func (node *Name) String() string             { return AsString(node) }
+func (node *UnrestrictedName) String() string { return AsString(node) }
 func (node *NotExpr) String() string          { return AsString(node) }
 func (node *NullIfExpr) String() string       { return AsString(node) }
 func (node *NumVal) String() string           { return AsString(node) }
@@ -1316,6 +1440,7 @@ func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
 func (node MaxVal) String() string            { return AsString(node) }
+func (node MinVal) String() string            { return AsString(node) }
 func (node *Placeholder) String() string      { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
-func (list NameList) String() string          { return AsString(list) }
+func (list *NameList) String() string         { return AsString(list) }

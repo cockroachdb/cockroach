@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"strconv"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -33,11 +32,11 @@ func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error
 	if p.isPreparing {
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidPreparedStatementDefinitionError,
 			"can't prepare an EXECUTE statement")
-	} else if p.plannedExecute {
+	} else if p.curPlan.plannedExecute {
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"can't have more than 1 EXECUTE per statement")
 	}
-	p.plannedExecute = true
+	p.curPlan.plannedExecute = true
 	ps, newPInfo, err := getPreparedStatementForExecute(p.session, n)
 	if err != nil {
 		return nil, err
@@ -45,7 +44,7 @@ func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error
 
 	p.semaCtx.Placeholders.Assign(newPInfo)
 
-	return p.newPlan(ctx, ps.Statement, nil)
+	return p.newPlan(ctx, ps.Statement, nil /* desiredTypes */)
 }
 
 // getPreparedStatementForExecute implements the EXECUTE foo(args) SQL
@@ -76,7 +75,7 @@ func getPreparedStatementForExecute(
 		if err != nil {
 			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
-		if err := t.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
+		if err := t.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.data.SearchPath); err != nil {
 			return ps, pInfo, err
 		}
 		qArgs[idx] = typedExpr

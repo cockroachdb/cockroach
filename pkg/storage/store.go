@@ -16,6 +16,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -28,9 +29,8 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -44,8 +44,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/compactor"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -136,7 +138,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
-		MetricsSampleInterval:       metric.TestSampleInterval,
+		TimestampCachePageSize:      tscache.TestSklPageSize,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 	}
@@ -352,9 +354,10 @@ type Store struct {
 	cfg                StoreConfig
 	db                 *client.DB
 	engine             engine.Engine               // The underlying key-value store
+	compactor          *compactor.Compactor        // Schedules compaction of the engine
 	tsCache            tscache.Cache               // Most recent timestamps for keys / key ranges
 	allocator          Allocator                   // Makes allocation decisions
-	rangeIDAlloc       *idAllocator                // Range ID allocator
+	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
 	gcQueue            *gcQueue                    // Garbage collection queue
 	splitQueue         *splitQueue                 // Range splitting queue
 	replicateQueue     *replicateQueue             // Replication queue
@@ -619,10 +622,10 @@ type StoreConfig struct {
 	// to be applied concurrently.
 	concurrentSnapshotApplyLimit int
 
-	// MetricsSampleInterval is (server.Context).MetricsSampleInterval
-	MetricsSampleInterval time.Duration
+	// TimestampCachePageSize is (server.Config).TimestampCachePageSize
+	TimestampCachePageSize uint32
 
-	// HistogramWindowInterval is (server.Context).HistogramWindowInterval
+	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
 
 	// EnableEpochRangeLeases controls whether epoch-based range leases are used.
@@ -720,6 +723,8 @@ type StoreTestingKnobs struct {
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
 	// queue.
 	DisableTimeSeriesMaintenanceQueue bool
+	// DisableRaftSnapshotQueue disables the raft snapshot queue.
+	DisableRaftSnapshotQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
 	// DisablePeriodicGossips disables periodic gossiping.
@@ -857,8 +862,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.Unlock()
 
 	tsCacheMetrics := tscache.MakeMetrics()
-	s.tsCache = tscache.New(cfg.Clock, tsCacheMetrics)
+	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
 	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
+
+	s.compactor = compactor.NewCompactor(s.engine.(engine.WithSSTables), s.Capacity)
+	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
@@ -897,6 +905,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	}
 	if cfg.TestingKnobs.DisableTimeSeriesMaintenanceQueue {
 		s.setTimeSeriesMaintenanceQueueActive(false)
+	}
+	if cfg.TestingKnobs.DisableRaftSnapshotQueue {
+		s.setRaftSnapshotQueueActive(false)
 	}
 	if cfg.TestingKnobs.DisableScanner {
 		s.setScannerActive(false)
@@ -944,16 +955,16 @@ func (s *Store) SetDraining(drain bool) {
 				defer wg.Done()
 				var drainingLease roachpb.Lease
 				for {
-					var leaseCh <-chan *roachpb.Error
+					var llHandle *leaseRequestHandle
 					r.mu.Lock()
 					lease, nextLease := r.getLeaseRLocked()
 					if nextLease != nil && nextLease.OwnedBy(s.StoreID()) {
-						leaseCh = r.mu.pendingLeaseRequest.JoinRequest()
+						llHandle = r.mu.pendingLeaseRequest.JoinRequest()
 					}
 					r.mu.Unlock()
 
-					if leaseCh != nil {
-						<-leaseCh
+					if llHandle != nil {
+						<-llHandle.C()
 						continue
 					}
 					drainingLease = lease
@@ -995,6 +1006,81 @@ func (s *Store) SetDraining(drain bool) {
 // IsStarted returns true if the Store has been started.
 func (s *Store) IsStarted() bool {
 	return atomic.LoadInt32(&s.started) == 1
+}
+
+// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing ( such as
+// RaftHardStateKey, RaftTombstoneKey, and many others). Such keys could in principle exist at any
+// RangeID, and this helper efficiently discovers all the keys of the desired type (as specified by
+// the supplied `keyFn`) and, for each key-value pair discovered, unmarshals it into `msg` and then
+// invokes `f`.
+//
+// Iteration stops on the first error (and will pass through that error).
+func IterateIDPrefixKeys(
+	ctx context.Context,
+	eng engine.Reader,
+	keyFn func(roachpb.RangeID) roachpb.Key,
+	msg protoutil.Message,
+	f func(_ roachpb.RangeID) (more bool, _ error),
+) error {
+	rangeID := roachpb.RangeID(1)
+	iter := eng.NewIterator(false /* prefix */)
+
+	for {
+		bumped := false
+		mvccKey := engine.MakeMVCCMetadataKey(keyFn(rangeID))
+		iter.Seek(mvccKey)
+
+		if ok, err := iter.Valid(); !ok {
+			return err
+		}
+
+		unsafeKey := iter.UnsafeKey()
+
+		if !bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
+			// Left the local keyspace, so we're done.
+			return nil
+		}
+
+		curRangeID, _, _, _, err := keys.DecodeRangeIDKey(unsafeKey.Key)
+		if err != nil {
+			return err
+		}
+
+		if curRangeID > rangeID {
+			// `bumped` is always `false` here, but let's be explicit.
+			if !bumped {
+				rangeID = curRangeID
+				bumped = true
+			}
+			mvccKey = engine.MakeMVCCMetadataKey(keyFn(rangeID))
+		}
+
+		if !unsafeKey.Key.Equal(mvccKey.Key) {
+			if !bumped {
+				// Don't increment the rangeID if it has already been incremented
+				// above, or we could skip past a value we ought to see.
+				rangeID++
+				bumped = true // for completeness' sake; continuing below anyway
+			}
+			continue
+		}
+
+		ok, err := engine.MVCCGetProto(
+			ctx, eng, unsafeKey.Key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, msg,
+		)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey.Key, msg)
+		}
+
+		more, err := f(rangeID)
+		if !more || err != nil {
+			return err
+		}
+		rangeID++
+	}
 }
 
 // IterateRangeDescriptors calls the provided function with each descriptor
@@ -1082,8 +1168,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Create ID allocators.
-	idAlloc, err := newIDAllocator(
-		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, 2 /* min ID */, rangeIDAllocCount, s.stopper,
+	idAlloc, err := idalloc.NewAllocator(
+		s.cfg.AmbientCtx, keys.RangeIDGenerator, s.db, 2 /* minID */, rangeIDAllocCount, s.stopper,
 	)
 	if err != nil {
 		return err
@@ -1092,6 +1178,34 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
+
+	// Migrate legacy tombstones away if we can. We want to do this when the node boots with a
+	// cluster version as below or higher, i.e. not when the upgrade happens for a running node.
+	// In fact, we do it on *every* such boot (i.e. not only once); this is because we want the
+	// migration to run when the v2.1 binary is started (the next release at the time of writing
+	// is v2.0) so that that version doesn't have to know about legacy tombstones (outside of
+	// this migration).
+	//
+	// NB: we could defer this migration until we actually release v2.1, but that would open the
+	// code up to rot and requires more tracking of this migration than it seems worth it.
+	// However, should this be found to impact startup times too much, it can be removed and
+	// later reintroduced (in a way that runs it only once, in v2.1).
+	//
+	// Note that `Settings.Version` is the persisted cluster version and has not been updated
+	// via Gossip (see `(*Node).start`).
+	if s.cfg.Settings.Version.IsMinSupported(cluster.VersionUnreplicatedTombstoneKey) {
+		tBegin := timeutil.Now()
+		if err := migrateLegacyTombstones(ctx, s.engine); err != nil {
+			return errors.Wrapf(err, "migrating legacy tombstones for %v", s.engine)
+		}
+		f := log.Eventf
+
+		dur := timeutil.Since(tBegin)
+		if dur > 10*time.Second {
+			f = log.Infof
+		}
+		f(ctx, "ran legacy tombstone migration in %s", dur)
+	}
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
@@ -1198,6 +1312,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 		log.Event(ctx, "computed initial metrics")
+	}
+
+	// Start the storage engine compactor.
+	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
+		s.compactor.Start(s.AnnotateCtx(context.Background()), s.Tracer(), s.stopper)
 	}
 
 	// Set the started flag (for unittests).
@@ -1756,6 +1875,9 @@ func (s *Store) DB() *client.DB { return s.cfg.DB }
 // Gossip accessor.
 func (s *Store) Gossip() *gossip.Gossip { return s.cfg.Gossip }
 
+// Compactor accessor.
+func (s *Store) Compactor() *compactor.Compactor { return s.compactor }
+
 // Stopper accessor.
 func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 
@@ -1775,9 +1897,9 @@ func (s *Store) IsDraining() bool {
 // range ID and returns a RangeDescriptor whose Replicas are a copy
 // of the supplied replicas slice, with appropriate ReplicaIDs assigned.
 func (s *Store) NewRangeDescriptor(
-	start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
+	ctx context.Context, start, end roachpb.RKey, replicas []roachpb.ReplicaDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
-	id, err := s.rangeIDAlloc.Allocate()
+	id, err := s.rangeIDAlloc.Allocate(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1792,6 +1914,21 @@ func (s *Store) NewRangeDescriptor(
 		desc.Replicas[i].ReplicaID = roachpb.ReplicaID(i + 1)
 	}
 	return desc, nil
+}
+
+// splitPreApply is called when the raft command is applied. Any
+// changes to the given ReadWriter will be written atomically with the
+// split commit.
+func splitPreApply(
+	ctx context.Context, st *cluster.Settings, eng engine.ReadWriter, split roachpb.SplitTrigger,
+) {
+	// Update the raft HardState with the new Commit value now that the
+	// replica is initialized (combining it with existing or default
+	// Term and Vote).
+	rsl := stateloader.Make(st, split.RightDesc.RangeID)
+	if err := rsl.SynthesizeRaftState(ctx, eng); err != nil {
+		log.Fatal(ctx, err)
+	}
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual
@@ -1818,19 +1955,7 @@ func splitPostApply(
 		}
 	}
 
-	{
-		// Finish up the initialization of the RHS' RaftState now that we have
-		// committed the split Batch (which included the initialization of the
-		// ReplicaState). This will synthesize and persist the correct lastIndex and
-		// HardState.
-		rsl := stateloader.Make(r.store.cfg.Settings, split.RightDesc.RangeID)
-		if err := rsl.SynthesizeRaftState(ctx, r.store.Engine()); err != nil {
-			log.Fatal(ctx, err)
-		}
-	}
-
 	// Finish initialization of the RHS.
-
 	r.mu.Lock()
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
@@ -3028,19 +3153,16 @@ func (s *Store) processRaftSnapshotRequest(
 		var addedPlaceholder bool
 		var removePlaceholder bool
 		if !r.IsInitialized() {
-			if earlyReturn := func() bool {
+			if err := func() error {
 				s.mu.Lock()
 				defer s.mu.Unlock()
 				placeholder, err := s.canApplySnapshotLocked(ctx, inSnap.State.Desc)
 				if err != nil {
-					// If the storage cannot accept the snapshot, drop it before
-					// passing it to RawNode.Step, since our error handling
-					// options past that point are limited.
-					// TODO(arjun): Now that we have better raft transport error
-					// handling, consider if this error should be returned and
-					// handled by the sending store.
+					// If the storage cannot accept the snapshot, return an
+					// error before passing it to RawNode.Step, since our
+					// error handling options past that point are limited.
 					log.Infof(ctx, "cannot apply snapshot: %s", err)
-					return true
+					return err
 				}
 
 				if placeholder != nil {
@@ -3053,9 +3175,9 @@ func (s *Store) processRaftSnapshotRequest(
 					}
 					addedPlaceholder = true
 				}
-				return false
-			}(); earlyReturn {
 				return nil
+			}(); err != nil {
+				return roachpb.NewError(err)
 			}
 
 			if addedPlaceholder {
@@ -3420,7 +3542,7 @@ func sendSnapshot(
 		}
 		var key engine.MVCCKey
 		var value []byte
-		alloc, key, value = snap.Iter.allocIterKeyValue(alloc)
+		alloc, key, value = snap.Iter.AllocIterKeyValue(alloc)
 		if bytes.HasPrefix(key.Key, unreplicatedPrefix) {
 			continue
 		}
@@ -3929,15 +4051,25 @@ func (s *Store) tryGetOrCreateReplica(
 	// No replica currently exists, so we'll try to create one. Before creating
 	// the replica, see if there is a tombstone which would indicate that this is
 	// a stale message.
-	tombstoneKey := keys.RaftTombstoneKey(rangeID)
-	var tombstone roachpb.RaftTombstone
-	if ok, err := engine.MVCCGetProto(
-		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
-	); err != nil {
-		return nil, false, err
-	} else if ok {
-		if replicaID != 0 && replicaID < tombstone.NextReplicaID {
-			return nil, false, &roachpb.RaftGroupDeletedError{}
+	tombstoneKeys := []roachpb.Key{
+		keys.RaftTombstoneKey(rangeID),
+		keys.RaftTombstoneIncorrectLegacyKey(rangeID),
+	}
+
+	var minReplicaID roachpb.ReplicaID
+	for _, tombstoneKey := range tombstoneKeys {
+		var tombstone roachpb.RaftTombstone
+		if ok, err := engine.MVCCGetProto(
+			ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, true, nil, &tombstone,
+		); err != nil {
+			return nil, false, err
+		} else if ok {
+			if replicaID != 0 && replicaID < tombstone.NextReplicaID {
+				return nil, false, &roachpb.RaftGroupDeletedError{}
+			}
+			if minReplicaID < tombstone.NextReplicaID {
+				minReplicaID = tombstone.NextReplicaID
+			}
 		}
 	}
 
@@ -3954,7 +4086,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
-	repl.mu.minReplicaID = tombstone.NextReplicaID
+	repl.mu.minReplicaID = minReplicaID
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
@@ -4273,24 +4405,31 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	return nil
 }
 
+// StoreKeySpanStats carries the result of a stats computation over a key range.
+type StoreKeySpanStats struct {
+	ReplicaCount         int
+	MVCC                 enginepb.MVCCStats
+	ApproximateDiskBytes uint64
+}
+
 // ComputeStatsForKeySpan computes the aggregated MVCCStats for all replicas on
 // this store which contain any keys in the supplied range.
-func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.MVCCStats, int) {
-	var output enginepb.MVCCStats
-	var count int
+func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeySpanStats, error) {
+	var result StoreKeySpanStats
 
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		desc := repl.Desc()
 		if bytes.Compare(startKey, desc.EndKey) >= 0 || bytes.Compare(desc.StartKey, endKey) >= 0 {
 			return true // continue
 		}
-
-		output.Add(repl.GetMVCCStats())
-		count++
+		result.MVCC.Add(repl.GetMVCCStats())
+		result.ReplicaCount++
 		return true
 	})
 
-	return output, count
+	var err error
+	result.ApproximateDiskBytes, err = s.engine.ApproximateDiskBytes(startKey.AsRawKey(), endKey.AsRawKey())
+	return result, err
 }
 
 // AllocatorDryRun runs the given replica through the allocator without actually

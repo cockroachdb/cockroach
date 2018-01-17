@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -109,8 +108,8 @@ func (p *planner) makeIndexJoin(
 	table := p.Scan()
 	table.desc = origScan.desc
 	// Note: initDescDefaults can only error out if its 3rd argument is not nil.
-	_ = table.initDescDefaults(p.planDeps, origScan.scanVisibility, nil)
-	table.initOrdering(0, &p.evalCtx)
+	_ = table.initDescDefaults(p.curPlan.deps, origScan.scanVisibility, nil /* wantedColumns */)
+	table.initOrdering(0 /* exactPrefix */, p.EvalContext())
 	table.disableBatchLimit()
 
 	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
@@ -174,9 +173,9 @@ func (p *planner) makeIndexJoin(
 
 	// Ensure that the remaining indexed vars are transferred to the
 	// table scanNode fully.
-	table.filter = table.filterVars.Rebind(table.filter, true, false)
+	table.filter = table.filterVars.Rebind(table.filter, true /* alsoReset */, false /* normalizeToNonNil */)
 
-	indexScan.initOrdering(exactPrefix, &p.evalCtx)
+	indexScan.initOrdering(exactPrefix, p.EvalContext())
 
 	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
 
@@ -207,13 +206,6 @@ type indexJoinRun struct {
 	// setNeededColumns(). So there may be more columns in
 	// colIDtoRowIndex than effectively accessed.
 	colIDtoRowIndex map[sqlbase.ColumnID]int
-}
-
-func (n *indexJoinNode) Start(params runParams) error {
-	if err := n.table.Start(params); err != nil {
-		return err
-	}
-	return n.index.Start(params)
 }
 
 const indexJoinBatchSize = 100

@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"math"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -35,6 +34,13 @@ func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, erro
 		return plan, err
 	}
 	plan = p.simplifyOrderings(plan, nil)
+
+	if p.autoCommit {
+		if ac, ok := plan.(autoCommitNode); ok {
+			ac.enableAutoCommit()
+		}
+	}
+
 	return plan, nil
 }
 
@@ -72,6 +78,12 @@ func doExpandPlan(
 		}
 
 	case *showTraceNode:
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
+		if err != nil {
+			return plan, err
+		}
+
+	case *showTraceReplicaNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
 			return plan, err
@@ -190,42 +202,7 @@ func doExpandPlan(
 		n.needSort = (match < len(n.ordering))
 
 	case *distinctNode:
-		// TODO(radu/knz): perhaps we can propagate the DISTINCT
-		// clause as desired ordering for the source node.
-		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
-		if err != nil {
-			return plan, err
-		}
-
-		pp := planPhysicalProps(n.plan)
-		if !pp.isEmpty() {
-			// If any of the columns form a key, we already know that all rows are
-			// unique. Elide the distinctNode.
-			for _, k := range pp.weakKeys {
-				if k.SubsetOf(pp.notNullCols) {
-					return n.plan, nil
-				}
-			}
-
-			// The distinctNode can take advantage of any ordering. It only needs to
-			// know the set of columns S that contribute to the ordering (it keeps
-			// track of distinct elements within each group of rows with equal values
-			// on S).
-			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
-			for i := range n.columnsInOrder {
-				group := pp.eqGroups.Find(i)
-				if pp.constantCols.Contains(group) {
-					n.columnsInOrder[i] = true
-					continue
-				}
-				for _, g := range pp.ordering {
-					if g.ColIdx == group {
-						n.columnsInOrder[i] = true
-						break
-					}
-				}
-			}
-		}
+		plan, err = expandDistinctNode(ctx, p, params, n)
 
 	case *scanNode:
 		plan, err = expandScanNode(ctx, p, params, n)
@@ -252,6 +229,7 @@ func doExpandPlan(
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
 	case *valuesNode:
+	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
@@ -261,7 +239,7 @@ func doExpandPlan(
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
-	case *createUserNode:
+	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
 	case *createStatsNode:
@@ -270,7 +248,7 @@ func doExpandPlan(
 	case *dropTableNode:
 	case *dropViewNode:
 	case *dropSequenceNode:
-	case *dropUserNode:
+	case *DropUserNode:
 	case *zeroNode:
 	case *unaryNode:
 	case *hookFnNode:
@@ -299,6 +277,58 @@ func elideDoubleSort(parent, source *sortNode) {
 	for i, col := range parent.columns {
 		mutSourceCols[i].Name = col.Name
 	}
+}
+
+func expandDistinctNode(
+	ctx context.Context, p *planner, params expandParameters, d *distinctNode,
+) (planNode, error) {
+	// TODO(radu/knz): perhaps we can propagate the DISTINCT
+	// clause as desired ordering for the source node.
+	var err error
+	d.plan, err = doExpandPlan(ctx, p, params, d.plan)
+	if err != nil {
+		return d, err
+	}
+
+	// We use the physical properties of the distinctNode but projected
+	// to the OnExprs (since the other columns are irrelevant to the
+	// bookkeeping below).
+	distinctOnPp := d.projectChildPropsToOnExprs()
+
+	for _, k := range distinctOnPp.weakKeys {
+		// If there is a strong key on the DISTINCT ON columns, then we
+		// can elide the distinct node.
+		// Since distinctNode does not project columns, this is fine
+		// (it has a parent renderNode).
+		if k.SubsetOf(distinctOnPp.notNullCols) {
+			return d.plan, nil
+		}
+	}
+
+	if !distinctOnPp.isEmpty() {
+		// distinctNode uses ordering to optimize "distinctification".
+		// If the columns are sorted in a certain direction and the column
+		// values "change", no subsequent rows can possibly have the same
+		// column values again. We can thus clear out our bookkeeping.
+		// This needs to be planColumns(n.plan) and not planColumns(n) since
+		// distinctNode is "distinctifying" on the child plan's output rows.
+		d.columnsInOrder = make([]bool, len(planColumns(d.plan)))
+		for i := range d.columnsInOrder {
+			group := distinctOnPp.eqGroups.Find(i)
+			if distinctOnPp.constantCols.Contains(group) {
+				d.columnsInOrder[i] = true
+				continue
+			}
+			for _, g := range distinctOnPp.ordering {
+				if g.ColIdx == group {
+					d.columnsInOrder[i] = true
+					break
+				}
+			}
+		}
+	}
+
+	return d, nil
 }
 
 func expandScanNode(
@@ -338,7 +368,6 @@ func expandRenderNode(
 	}
 
 	// Elide the render node if it renders its source as-is.
-
 	sourceCols := planColumns(r.source.plan)
 	if len(r.columns) == len(sourceCols) {
 		// We don't drop renderNodes which have a different number of
@@ -458,6 +487,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *showTraceNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
 
+	case *showTraceReplicaNode:
+		n.plan = p.simplifyOrderings(n.plan, nil)
+
 	case *explainPlanNode:
 		if n.expanded {
 			n.plan = p.simplifyOrderings(n.plan, nil)
@@ -473,7 +505,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *filterNode:
 		n.source.plan = p.simplifyOrderings(n.source.plan, usefulOrdering)
-		n.computePhysicalProps(&p.evalCtx)
+		n.computePhysicalProps(p.EvalContext())
 
 	case *joinNode:
 		// In DistSQL, we may take advantage of matching orderings on equality
@@ -557,9 +589,11 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		}
 
 	case *distinctNode:
-		// distinctNode uses whatever order the underlying node presents (regardless
-		// of any ordering requirement on distinctNode itself).
-		sourceOrdering := planPhysicalProps(n.plan)
+		// distinctNode uses the ordering computed from its source but
+		// trimmed to the DISTINCT ON columns (if applicable).
+		// Any useful ordering pertains only to the columns
+		// we're distinctifying on.
+		sourceOrdering := n.projectChildPropsToOnExprs()
 		n.plan = p.simplifyOrderings(n.plan, sourceOrdering.ordering)
 
 	case *scanNode:
@@ -583,6 +617,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.rows = p.simplifyOrderings(n.rows, nil)
 
 	case *valuesNode:
+	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
@@ -592,7 +627,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
-	case *createUserNode:
+	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
 	case *createStatsNode:
@@ -601,7 +636,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *dropTableNode:
 	case *dropViewNode:
 	case *dropSequenceNode:
-	case *dropUserNode:
+	case *DropUserNode:
 	case *zeroNode:
 	case *unaryNode:
 	case *hookFnNode:

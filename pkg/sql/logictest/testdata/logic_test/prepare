@@ -80,7 +80,7 @@ EXECUTE a(3, 1)
 query error could not parse "foo" as type int
 EXECUTE a('foo', 1)
 
-query error incompatible type for EXECUTE parameter expression: int vs decimal
+query error expected EXECUTE parameter expression to have type int, but '3.5' has type decimal
 EXECUTE a(3.5, 1)
 
 query error aggregate functions are not allowed in EXECUTE parameters
@@ -152,7 +152,7 @@ EXECUTE i(2)
 query error could not parse "foo" as type int
 EXECUTE i('foo')
 
-query error incompatible type for EXECUTE parameter expression: int vs decimal
+query error expected EXECUTE parameter expression to have type int, but '2.3' has type decimal
 EXECUTE i(2.3)
 
 query I

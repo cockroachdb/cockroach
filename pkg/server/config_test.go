@@ -15,12 +15,11 @@
 package server
 
 import (
+	"context"
 	"os"
 	"reflect"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/kr/pretty"
 
@@ -91,10 +90,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	resetEnvVar := func() {
 		// Reset all environment variables in case any were already set.
-		if err := os.Unsetenv("COCKROACH_LINEARIZABLE"); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Unsetenv("COCKROACH_METRICS_SAMPLE_INTERVAL"); err != nil {
+		if err := os.Unsetenv("COCKROACH_EXPERIMENTAL_LINEARIZABLE"); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
@@ -126,14 +122,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	// Set all the environment variables to valid values and ensure they are set
 	// correctly.
-	if err := os.Setenv("COCKROACH_LINEARIZABLE", "true"); err != nil {
+	if err := os.Setenv("COCKROACH_EXPERIMENTAL_LINEARIZABLE", "true"); err != nil {
 		t.Fatal(err)
 	}
 	cfgExpected.Linearizable = true
-	if err := os.Setenv("COCKROACH_METRICS_SAMPLE_INTERVAL", "1h10m"); err != nil {
-		t.Fatal(err)
-	}
-	cfgExpected.MetricsSampleInterval = time.Hour + time.Minute*10
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "48h"); err != nil {
 		t.Fatal(err)
 	}
@@ -150,8 +142,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	}
 
 	for _, envVar := range []string{
-		"COCKROACH_LINEARIZABLE",
-		"COCKROACH_METRICS_SAMPLE_INTERVAL",
+		"COCKROACH_EXPERIMENTAL_LINEARIZABLE",
 		"COCKROACH_SCAN_INTERVAL",
 		"COCKROACH_SCAN_MAX_IDLE_TIME",
 	} {

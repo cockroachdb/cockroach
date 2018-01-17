@@ -15,22 +15,21 @@
 package sql
 
 import (
+	"context"
+	"fmt"
 	"sort"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -96,7 +95,9 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 
 // runBackfill runs the backfill for the schema changer.
 func (sc *SchemaChanger) runBackfill(
-	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, evalCtx tree.EvalContext,
+	ctx context.Context,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	evalCtx *extendedEvalContext,
 ) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
@@ -175,6 +176,11 @@ func (sc *SchemaChanger) runBackfill(
 		return err
 	}
 
+	// Remove index zone configs.
+	if err := sc.removeIndexZoneConfigs(ctx, tableDesc.ID, droppedIndexDescs); err != nil {
+		return err
+	}
+
 	// Add and drop columns.
 	if needColumnBackfill {
 		if err := sc.truncateAndBackfillColumns(ctx, evalCtx, lease, version); err != nil {
@@ -192,55 +198,6 @@ func (sc *SchemaChanger) runBackfill(
 	return nil
 }
 
-func (sc *SchemaChanger) maybeWriteResumeSpan(
-	ctx context.Context,
-	txn *client.Txn,
-	version sqlbase.DescriptorVersion,
-	resume roachpb.Span,
-	mutationIdx int,
-	lastCheckpoint *time.Time,
-) error {
-	checkpointInterval := checkpointInterval
-	if sc.testingKnobs.WriteCheckpointInterval > 0 {
-		checkpointInterval = sc.testingKnobs.WriteCheckpointInterval
-	}
-	if timeutil.Since(*lastCheckpoint) < checkpointInterval {
-		return nil
-	}
-	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
-	if err != nil {
-		return err
-	}
-	if tableDesc.Version != version {
-		return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
-	}
-
-	mutationID := tableDesc.Mutations[mutationIdx].MutationID
-	jobID, err := sc.getJobIDForMutation(ctx, version, mutationID)
-	if err != nil {
-		return err
-	}
-
-	resumeSpanIndex := distsqlrun.GetResumeSpanIndexofMutationID(tableDesc, mutationIdx)
-	resumeSpans, err := distsqlrun.GetResumeSpansFromJob(ctx, sc.jobRegistry, txn, jobID, resumeSpanIndex)
-	if err != nil {
-		return err
-	}
-	if len(resumeSpans) > 0 {
-		resumeSpans[0] = resume
-	} else {
-		resumeSpans = append(resumeSpans, resume)
-	}
-
-	err = distsqlrun.SetResumeSpansInJob(ctx, resumeSpans, sc.jobRegistry, mutationIdx, txn, jobID)
-	if err != nil {
-		return err
-	}
-
-	*lastCheckpoint = timeutil.Now()
-	return nil
-}
-
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, error) {
@@ -252,6 +209,38 @@ func (sc *SchemaChanger) getTableVersion(
 		return nil, errors.Errorf("table version mismatch: %d, expected=%d", tableDesc.Version, version)
 	}
 	return tableDesc, nil
+}
+
+func (sc *SchemaChanger) removeIndexZoneConfigs(
+	ctx context.Context, tableID sqlbase.ID, indexDescs []sqlbase.IndexDescriptor,
+) error {
+	if len(indexDescs) == 0 {
+		return nil
+	}
+
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+
+		zone, err := getZoneConfigRaw(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+
+		for _, indexDesc := range indexDescs {
+			zone.DeleteIndexSubzones(uint32(indexDesc.ID))
+		}
+
+		_, err = writeZoneConfig(ctx, txn, sc.settings, sc.leaseMgr, sc.tableID, tableDesc, zone)
+		if sqlbase.IsCCLRequiredError(err) {
+			return sqlbase.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
+				"because table %q has at least one remaining index or partition with a zone config",
+				tableDesc.Name))
+		}
+		return err
+	})
 }
 
 func (sc *SchemaChanger) truncateIndexes(
@@ -268,7 +257,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	alloc := &sqlbase.DatumAlloc{}
 	for _, desc := range dropped {
 		var resume roachpb.Span
-		lastCheckpoint := timeutil.Now()
 		for row, done := int64(0), false; !done; row += chunkSize {
 			// First extend the schema change lease.
 			if err := sc.ExtendLease(ctx, lease); err != nil {
@@ -297,25 +285,21 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 
-				rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false, alloc)
-				if err != nil {
-					return err
-				}
-				td := tableDeleter{rd: rd, alloc: alloc}
-				if err := td.init(txn); err != nil {
-					return err
-				}
-				resume, err = td.deleteIndex(
-					ctx, &desc, resumeAt, chunkSize, false, /* traceKV */
+				rd, err := sqlbase.MakeRowDeleter(
+					txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
 				)
 				if err != nil {
 					return err
 				}
-				if err := sc.maybeWriteResumeSpan(ctx, txn, version, resume, mutationIdx, &lastCheckpoint); err != nil {
+				td := tableDeleter{rd: rd, alloc: alloc}
+				if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
 					return err
 				}
+				resume, err = td.deleteIndex(
+					ctx, &desc, resumeAt, chunkSize, noAutoCommit, false, /* traceKV */
+				)
 				done = resume.Key == nil
-				return nil
+				return err
 			}); err != nil {
 				return err
 			}
@@ -446,7 +430,7 @@ func (sc *SchemaChanger) nRanges(
 // MutationFilter.
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
@@ -511,7 +495,7 @@ func (sc *SchemaChanger) distBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				if err := sc.job.Progressed(ctx, fractionCompleted, jobs.Noop); err != nil {
+				if err := sc.job.Progressed(ctx, jobs.FractionUpdater(fractionCompleted)); err != nil {
 					log.Infof(ctx, "Ignoring error reporting progress %f for job %d: %v", fractionCompleted, *sc.job.ID(), err)
 				}
 			}
@@ -527,7 +511,9 @@ func (sc *SchemaChanger) distBackfill(
 			// backfiller processor.
 			var otherTableDescs []sqlbase.TableDescriptor
 			if backfillType == columnBackfill {
-				fkTables := sqlbase.TablesNeededForFKs(*tableDesc, sqlbase.CheckUpdates)
+				fkTables, _ := sqlbase.TablesNeededForFKs(
+					ctx, *tableDesc, sqlbase.CheckUpdates, sqlbase.NoLookup, sqlbase.NoCheckPrivilege,
+				)
 				for k := range fkTables {
 					table, err := tc.getTableVersionByID(ctx, txn, k)
 					if err != nil {
@@ -536,7 +522,7 @@ func (sc *SchemaChanger) distBackfill(
 					otherTableDescs = append(otherTableDescs, *table)
 				}
 			}
-			recv, err := makeDistSQLReceiver(
+			recv := makeDistSQLReceiver(
 				ctx,
 				nil, /* resultWriter */
 				sc.rangeDescriptorCache,
@@ -546,17 +532,16 @@ func (sc *SchemaChanger) distBackfill(
 					_ = sc.clock.Update(ts)
 				},
 			)
-			if err != nil {
-				return err
-			}
-			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, &evalCtx, txn)
+			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
 				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
 			)
 			if err != nil {
 				return err
 			}
-			if err := sc.distSQLPlanner.Run(&planCtx, txn, &plan, &recv, evalCtx); err != nil {
+			if err := sc.distSQLPlanner.Run(
+				&planCtx, txn, &plan, &recv, evalCtx,
+			); err != nil {
 				return err
 			}
 
@@ -570,7 +555,7 @@ func (sc *SchemaChanger) distBackfill(
 
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
@@ -602,7 +587,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {

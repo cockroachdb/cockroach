@@ -16,12 +16,10 @@
 package kv
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"time"
-
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,8 +42,7 @@ type SendOptions struct {
 
 type batchClient struct {
 	remoteAddr string
-	conn       *grpc.ClientConn
-	client     roachpb.InternalClient
+	conn       *rpc.Connection
 	args       roachpb.BatchRequest
 	healthy    bool
 	pending    bool
@@ -83,6 +80,9 @@ type Transport interface {
 	// IsExhausted returns true if there are no more replicas to try.
 	IsExhausted() bool
 
+	// GetPending returns the replica(s) to which requests are still pending.
+	GetPending() []roachpb.ReplicaDescriptor
+
 	// SendNext sends the rpc (captured at creation time) to the next
 	// replica. May panic if the transport is exhausted. Should not
 	// block; the transport is responsible for starting other goroutines
@@ -118,17 +118,13 @@ func grpcTransportFactoryImpl(
 ) (Transport, error) {
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {
-		conn, err := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
-		if err != nil {
-			return nil, err
-		}
+		conn := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
 		argsCopy := args
 		argsCopy.Replica = replica.ReplicaDescriptor
 		remoteAddr := replica.NodeDesc.Address.String()
 		clients = append(clients, batchClient{
 			remoteAddr: remoteAddr,
 			conn:       conn,
-			client:     roachpb.NewInternalClient(conn),
 			args:       argsCopy,
 			healthy:    rpcContext.ConnHealth(remoteAddr) == nil,
 		})
@@ -164,14 +160,27 @@ func (gt *grpcTransport) IsExhausted() bool {
 	if gt.clientIndex < len(gt.orderedClients) {
 		return false
 	}
-	return !gt.maybeResurrectRetryables()
+	return !gt.maybeResurrectRetryablesLocked()
 }
 
-// maybeResurrectRetryables moves already-tried replicas which
+// GetPending returns the replica(s) to which requests are still pending.
+func (gt *grpcTransport) GetPending() []roachpb.ReplicaDescriptor {
+	gt.clientPendingMu.Lock()
+	defer gt.clientPendingMu.Unlock()
+	var pending []roachpb.ReplicaDescriptor
+	for i := range gt.orderedClients {
+		if gt.orderedClients[i].pending {
+			pending = append(pending, gt.orderedClients[i].args.Replica)
+		}
+	}
+	return pending
+}
+
+// maybeResurrectRetryablesLocked moves already-tried replicas which
 // experienced a retryable error (currently this means a
 // NotLeaseHolderError) into a newly-active state so that they can be
 // retried. Returns true if any replicas were moved to active.
-func (gt *grpcTransport) maybeResurrectRetryables() bool {
+func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 	var resurrect []batchClient
 	for i := 0; i < gt.clientIndex; i++ {
 		if c := gt.orderedClients[i]; !c.pending && c.retryable && timeutil.Since(c.deadline) >= 0 {
@@ -235,7 +244,14 @@ func (gt *grpcTransport) send(
 		}
 
 		log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
-		reply, err := client.client.Batch(ctx, &client.args)
+		conn, err := client.conn.Connect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := grpcutil.ConnectionReady(conn); err != nil {
+			return nil, err
+		}
+		reply, err := roachpb.NewInternalClient(conn).Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
@@ -378,6 +394,10 @@ type senderTransport struct {
 
 func (s *senderTransport) IsExhausted() bool {
 	return s.called
+}
+
+func (s *senderTransport) GetPending() []roachpb.ReplicaDescriptor {
+	return []roachpb.ReplicaDescriptor{s.args.Replica}
 }
 
 func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {

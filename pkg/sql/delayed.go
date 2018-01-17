@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,9 +31,11 @@ type delayedNode struct {
 	plan        planNode
 }
 
+// delayedNode implements the autoCommitNode interface.
+var _ autoCommitNode = &delayedNode{}
+
 type nodeConstructor func(context.Context, *planner) (planNode, error)
 
-func (d *delayedNode) Start(params runParams) error        { return d.plan.Start(params) }
 func (d *delayedNode) Next(params runParams) (bool, error) { return d.plan.Next(params) }
 func (d *delayedNode) Values() tree.Datums                 { return d.plan.Values() }
 
@@ -41,5 +43,12 @@ func (d *delayedNode) Close(ctx context.Context) {
 	if d.plan != nil {
 		d.plan.Close(ctx)
 		d.plan = nil
+	}
+}
+
+// enableAutoCommit is part of the autoCommitNode interface.
+func (d *delayedNode) enableAutoCommit() {
+	if ac, ok := d.plan.(autoCommitNode); ok {
+		ac.enableAutoCommit()
 	}
 }

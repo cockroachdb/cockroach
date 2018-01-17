@@ -19,10 +19,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // DefaultRotationPeriod is the rotation period used if not specified.
 const DefaultRotationPeriod = time.Hour * 24 * 7 // 1 week, give or take time changes.
+
+// Special value of key paths to mean "no encryption". We do not accept empty fields.
+const plaintextFieldValue = "plain"
 
 // StoreEncryptionSpec contains the details that can be specified in the cli via
 // the --enterprise-encryption flag.
@@ -31,6 +35,20 @@ type StoreEncryptionSpec struct {
 	KeyPath        string
 	OldKeyPath     string
 	RotationPeriod time.Duration
+}
+
+// Convert to a serialized EncryptionOptions protobuf.
+func (es StoreEncryptionSpec) toEncryptionOptions() ([]byte, error) {
+	opts := EncryptionOptions{
+		KeySource: EncryptionKeySource_KeyFiles,
+		KeyFiles: &EncryptionKeyFiles{
+			CurrentKey: es.KeyPath,
+			OldKey:     es.OldKeyPath,
+		},
+		DataKeyRotationPeriod: int64(es.RotationPeriod / time.Second),
+	}
+
+	return protoutil.Marshal(&opts)
 }
 
 // String returns a fully parsable version of the encryption spec.
@@ -79,16 +97,24 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 				return StoreEncryptionSpec{}, err
 			}
 		case "key":
-			var err error
-			es.KeyPath, err = base.GetAbsoluteStorePath("key", value)
-			if err != nil {
-				return StoreEncryptionSpec{}, err
+			if value == plaintextFieldValue {
+				es.KeyPath = plaintextFieldValue
+			} else {
+				var err error
+				es.KeyPath, err = base.GetAbsoluteStorePath("key", value)
+				if err != nil {
+					return StoreEncryptionSpec{}, err
+				}
 			}
 		case "old-key":
-			var err error
-			es.OldKeyPath, err = base.GetAbsoluteStorePath("old-key", value)
-			if err != nil {
-				return StoreEncryptionSpec{}, err
+			if value == plaintextFieldValue {
+				es.OldKeyPath = plaintextFieldValue
+			} else {
+				var err error
+				es.OldKeyPath, err = base.GetAbsoluteStorePath("old-key", value)
+				if err != nil {
+					return StoreEncryptionSpec{}, err
+				}
 			}
 		case "rotation-period":
 			var err error
@@ -181,6 +207,11 @@ func PopulateStoreSpecWithEncryption(
 			// TODO(mberhault): figure out how to pass encryption settings through to C++-CCL.
 			// Tell the store we absolutely need the switching env.
 			storeSpecs.Specs[i].UseSwitchingEnv = true
+			opts, err := es.toEncryptionOptions()
+			if err != nil {
+				return err
+			}
+			storeSpecs.Specs[i].ExtraOptions = opts
 			found = true
 			break
 		}

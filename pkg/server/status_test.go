@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -374,12 +374,12 @@ func TestMetricsRecording(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		MetricsSampleInterval: 5 * time.Millisecond})
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	// Verify that metrics for the current timestamp are recorded. This should
-	// be true very quickly.
+	// be true very quickly even though DefaultMetricsSampleInterval is large,
+	// because the server writes an entry eagerly on startup.
 	testutils.SucceedsSoon(t, func() error {
 		now := s.Clock().PhysicalNow()
 
@@ -554,7 +554,9 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop(context.TODO())
-	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, ts.RPCContext().Config, ts.Clock(), rpcStopper)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, ts.RPCContext().Config, ts.Clock(),
+		rpcStopper, &ts.ClusterSettings().Version)
 	request := serverpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
@@ -562,7 +564,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	}
 
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url)
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -587,11 +589,13 @@ func TestNodesGRPCResponse(t *testing.T) {
 	defer ts.Stopper().Stop(context.TODO())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
-	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper())
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
+		&ts.ClusterSettings().Version)
 	var request serverpb.NodesRequest
 
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url)
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

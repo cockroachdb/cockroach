@@ -15,6 +15,8 @@
 package sql
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"regexp"
@@ -25,7 +27,6 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,13 +36,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -86,57 +91,11 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"Default distributed SQL execution mode",
 	"Auto",
 	map[int64]string{
-		int64(DistSQLOff):  "Off",
-		int64(DistSQLAuto): "Auto",
-		int64(DistSQLOn):   "On",
+		int64(sessiondata.DistSQLOff):  "Off",
+		int64(sessiondata.DistSQLAuto): "Auto",
+		int64(sessiondata.DistSQLOn):   "On",
 	},
 )
-
-// DistSQLExecMode controls if and when the Executor uses DistSQL.
-type DistSQLExecMode int64
-
-const (
-	// DistSQLOff means that we never use distSQL.
-	DistSQLOff DistSQLExecMode = iota
-	// DistSQLAuto means that we automatically decide on a case-by-case basis if
-	// we use distSQL.
-	DistSQLAuto
-	// DistSQLOn means that we use distSQL for queries that are supported.
-	DistSQLOn
-	// DistSQLAlways means that we only use distSQL; unsupported queries fail.
-	DistSQLAlways
-)
-
-func (m DistSQLExecMode) String() string {
-	switch m {
-	case DistSQLOff:
-		return "off"
-	case DistSQLAuto:
-		return "auto"
-	case DistSQLOn:
-		return "on"
-	case DistSQLAlways:
-		return "always"
-	default:
-		return fmt.Sprintf("invalid (%d)", m)
-	}
-}
-
-// DistSQLExecModeFromString converts a string into a DistSQLExecMode
-func DistSQLExecModeFromString(val string) DistSQLExecMode {
-	switch strings.ToUpper(val) {
-	case "OFF":
-		return DistSQLOff
-	case "AUTO":
-		return DistSQLAuto
-	case "ON":
-		return DistSQLOn
-	case "ALWAYS":
-		return DistSQLAlways
-	default:
-		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
-	}
-}
 
 // queryPhase represents a phase during a query's execution.
 type queryPhase int
@@ -168,15 +127,8 @@ type queryMeta struct {
 	// Current phase of execution of query.
 	phase queryPhase
 
-	// Context associated with this query's transaction.
-	ctx context.Context
-
 	// Cancellation function for the context associated with this query's transaction.
-	// Set to session.txnState.cancel in executor.
 	ctxCancel context.CancelFunc
-
-	// Reference to the Session that contains this query.
-	session *Session
 }
 
 // cancel cancels the query associated with this queryMeta, by closing the associated
@@ -188,38 +140,14 @@ func (q *queryMeta) cancel() {
 // Session contains the state of a SQL client connection.
 // Create instances using NewSession().
 type Session struct {
-	//
-	// Session parameters, user-configurable.
-	//
-
-	// Database indicates the "current" database for the purpose of
-	// resolving names. See searchAndQualifyDatabase() for details.
-	Database string
-	// DefaultIsolationLevel indicates the default isolation level of
-	// newly created transactions.
-	DefaultIsolationLevel enginepb.IsolationType
-	// DistSQLMode indicates whether to run queries using the distributed
-	// execution engine.
-	DistSQLMode DistSQLExecMode
-	// Location indicates the current time zone.
-	Location *time.Location
-	// SearchPath is a list of databases that will be searched for a table name
-	// before the database. Currently, this is used only for SELECTs.
-	// Names in the search path must have been normalized already.
-	SearchPath tree.SearchPath
-	// User is the name of the user logged into the session.
-	User string
-	// SafeUpdates causes errors when the client
-	// sends syntax that may have unwanted side effects.
-	SafeUpdates bool
+	// data contains user-configurable session-scoped variables. This is the
+	// authoritative copy of these variables; a planner's evalCtx gets a copy.
+	data        sessiondata.SessionData
+	dataMutator sessionDataMutator
 
 	//
 	// Session parameters, non-user-configurable.
 	//
-
-	// defaults is used to restore default configuration values into
-	// SET ... TO DEFAULT statements.
-	defaults sessionDefaults
 
 	// ClientAddr is the client's IP address and port.
 	ClientAddr string
@@ -236,10 +164,8 @@ type Session struct {
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
 	// virtualSchemas aliases Executor.virtualSchemas.
-	// It is duplicated in Session to provide easier access to
-	// the various methods that need this reference.
-	// TODO(knz): place this in an executionContext parameter-passing
-	// structure.
+	// It is duplicated in Session so that it can find its way to the planners'
+	// EvalContext.
 	virtualSchemas virtualSchemaHolder
 
 	// planner is the "default planner" on a session, to save planner allocations
@@ -332,10 +258,6 @@ type Session struct {
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
 		LastActiveQuery tree.Statement
-
-		// sequenceState stores state related to calls to sequence
-		// builtins currval(), nextval(), and lastval().
-		SequenceState sequenceState
 	}
 
 	//
@@ -372,7 +294,7 @@ type Session struct {
 }
 
 // sessionDefaults mirrors fields in Session, for restoring default
-// configuration values in SET ... TO DEFAULT statements.
+// configuration values in SET ... TO DEFAULT (or RESET ...) statements.
 type sessionDefaults struct {
 	applicationName string
 	database        string
@@ -421,7 +343,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	defer r.Unlock()
 
 	for session := range r.store {
-		if !(username == security.RootUser || username == session.User) {
+		if !(username == security.RootUser || username == session.data.User) {
 			// Skip this session.
 			continue
 		}
@@ -459,36 +381,45 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
-	distSQLMode := DistSQLExecMode(DistSQLClusterExecMode.Get(&e.cfg.Settings.SV))
+	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&e.cfg.Settings.SV))
 
 	s := &Session{
-		Database:         args.Database,
-		DistSQLMode:      distSQLMode,
-		SearchPath:       sqlbase.DefaultSearchPath,
-		Location:         time.UTC,
-		User:             args.User,
+		data: sessiondata.SessionData{
+			Database:      args.Database,
+			DistSQLMode:   distSQLMode,
+			SearchPath:    sqlbase.DefaultSearchPath,
+			Location:      time.UTC,
+			User:          args.User,
+			SequenceState: sessiondata.NewSequenceState(),
+		},
 		virtualSchemas:   e.virtualSchemas,
 		execCfg:          &e.cfg,
 		distSQLPlanner:   e.distSQLPlanner,
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:       memMetrics,
 		sqlStats:         &e.sqlStats,
-		defaults: sessionDefaults{
-			applicationName: args.ApplicationName,
-			database:        args.Database,
-		},
 		tables: TableCollection{
 			leaseMgr:      e.cfg.LeaseManager,
 			databaseCache: e.getDatabaseCache(),
 		},
 	}
+	s.dataMutator = sessionDataMutator{
+		data: &s.data,
+		s:    s,
+		defaults: sessionDefaults{
+			applicationName: args.ApplicationName,
+			database:        args.Database,
+		},
+		settings:       e.cfg.Settings,
+		curTxnReadOnly: &s.TxnState.readOnly,
+		sessionTracing: &s.Tracing,
+	}
 	s.phaseTimes[sessionInit] = timeutil.Now()
-	s.resetApplicationName(args.ApplicationName)
+	s.dataMutator.SetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
 	s.Tracing.session = s
 	s.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
-	s.mu.SequenceState = newSequenceState()
 	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 
 	remoteStr := "<admin>"
@@ -566,7 +497,7 @@ func (s *Session) Finish(e *Executor) {
 	}
 
 	if s.Tracing.Enabled() {
-		if err := s.Tracing.StopTracing(); err != nil {
+		if err := s.dataMutator.StopSessionTracing(); err != nil {
 			log.Infof(s.context, "error stopping tracing: %s", err)
 		}
 	}
@@ -627,26 +558,35 @@ func (s *Session) Ctx() context.Context {
 	return s.context
 }
 
-func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
+func (s *Session) resetPlanner(
+	p *planner,
+	txn *client.Txn,
+	txnTimestamp time.Time,
+	stmtTimestamp time.Time,
+	reCache *tree.RegexpCache,
+) {
 	p.session = s
+	p.txn = txn
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
 	p.phaseTimes = s.phaseTimes
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(s.Ctx())
 
-	p.semaCtx = tree.MakeSemaContext(s.User == security.RootUser)
-	p.semaCtx.Location = &s.Location
-	p.semaCtx.SearchPath = s.SearchPath
+	p.semaCtx = tree.MakeSemaContext(s.data.User == security.RootUser)
+	p.semaCtx.Location = &s.data.Location
+	p.semaCtx.SearchPath = s.data.SearchPath
 
-	p.evalCtx = s.evalCtx()
-	p.evalCtx.Planner = p
-	if e != nil {
-		p.evalCtx.ClusterID = e.cfg.ClusterID()
-		p.evalCtx.NodeID = e.cfg.NodeID.Get()
-		p.evalCtx.ReCache = e.reCache
+	p.extendedEvalCtx = s.extendedEvalCtx(txn, txnTimestamp, stmtTimestamp)
+	p.extendedEvalCtx.Planner = p
+	if s.execCfg != nil {
+		p.extendedEvalCtx.ClusterID = s.execCfg.ClusterID()
+		p.extendedEvalCtx.NodeID = s.execCfg.NodeID.Get()
 	}
+	p.extendedEvalCtx.ReCache = reCache
 
-	p.setTxn(txn)
+	p.sessionDataMutator = s.dataMutator
+	p.preparedStatements = &s.PreparedStatements
+	p.autoCommit = false
 }
 
 // FinishPlan releases the resources that were consumed by the currently active
@@ -675,21 +615,59 @@ func (s *Session) FinishPlan() {
 // newPlanner creates a planner inside the scope of the given Session. The
 // statement executed by the planner will be executed in txn. The planner
 // should only be used to execute one statement.
-func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
+func (s *Session) newPlanner(
+	txn *client.Txn, txnTimestamp time.Time, stmtTimestamp time.Time, reCache *tree.RegexpCache,
+) *planner {
 	p := &planner{}
-	s.resetPlanner(p, e, txn)
+	s.resetPlanner(p, txn, txnTimestamp, stmtTimestamp, reCache)
 	return p
 }
 
-// evalCtx creates a tree.EvalContext from the Session's current configuration.
-func (s *Session) evalCtx() tree.EvalContext {
-	return tree.EvalContext{
-		Location:    &s.Location,
-		Database:    s.Database,
-		User:        s.User,
-		SearchPath:  s.SearchPath,
-		CtxProvider: s,
-		Mon:         &s.TxnState.mon,
+// extendedEvalCtx creates an evaluation context from the Session's current
+// configuration.
+func (s *Session) extendedEvalCtx(
+	txn *client.Txn, txnTimestamp time.Time, stmtTimestamp time.Time,
+) extendedEvalContext {
+	var evalContextTestingKnobs tree.EvalContextTestingKnobs
+	var st *cluster.Settings
+	var statusServer serverpb.StatusServer
+	if s.execCfg != nil {
+		evalContextTestingKnobs = s.execCfg.EvalContextTestingKnobs
+		// TODO(tschottdorf): it looks like this should always be provided.
+		// Perhaps `*Settings` should live somewhere else.
+		st = s.execCfg.Settings
+		statusServer = s.execCfg.StatusServer
+	}
+	var clusterTs hlc.Timestamp
+	if txn != nil {
+		clusterTs = txn.OrigTimestamp()
+	}
+	return extendedEvalContext{
+		EvalContext: tree.EvalContext{
+			Txn:              txn,
+			SessionData:      s.data,
+			ApplicationName:  s.dataMutator.ApplicationName(),
+			TxnState:         getTransactionState(&s.TxnState),
+			TxnReadOnly:      s.TxnState.readOnly,
+			Settings:         st,
+			CtxProvider:      s,
+			Mon:              &s.TxnState.mon,
+			TestingKnobs:     evalContextTestingKnobs,
+			StmtTimestamp:    stmtTimestamp,
+			TxnTimestamp:     txnTimestamp,
+			ClusterTimestamp: clusterTs,
+		},
+		SessionMutator:        s.dataMutator,
+		VirtualSchemas:        &s.virtualSchemas,
+		Tracing:               &s.Tracing,
+		StatusServer:          statusServer,
+		MemMetrics:            s.memMetrics,
+		Tables:                &s.tables,
+		ExecCfg:               s.execCfg,
+		DistSQLPlanner:        s.distSQLPlanner,
+		TestingVerifyMetadata: s,
+		TxnModesSetter:        &s.TxnState,
+		SchemaChangers:        &s.TxnState.schemaChangers,
 	}
 }
 
@@ -701,11 +679,7 @@ func (s *Session) resetForBatch(e *Executor) {
 	s.TxnState.schemaChangers.curGroupNum++
 }
 
-// setTestingVerifyMetadata sets a callback to be called after the Session
-// is done executing the current SQL statement. It can be used to verify
-// assumptions about how metadata will be asynchronously updated.
-// Note that this can overwrite a previous callback that was waiting to be
-// verified, which is not ideal.
+// setTestingVerifyMetadata implements the testingVerifyMetadata interface.
 func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 	s.testingVerifyMetadataFn = fn
 	s.verifyFnCheckedOnce = false
@@ -717,7 +691,6 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) {
 	s.mu.Lock()
 	s.mu.ActiveQueries[queryID] = queryMeta
-	queryMeta.session = s
 	s.mu.Unlock()
 	// addActiveQuery is called from the main goroutine of the session;
 	// and at this stage, this query is a synchronous query for our purposes.
@@ -866,7 +839,7 @@ func (s *Session) serialize() serverpb.Session {
 	}
 
 	return serverpb.Session{
-		Username:        s.User,
+		Username:        s.data.User,
 		ClientAddress:   s.ClientAddr,
 		ApplicationName: s.mu.ApplicationName,
 		Start:           s.phaseTimes[sessionInit].UTC(),
@@ -999,6 +972,9 @@ type txnState struct {
 	// The transaction's priority.
 	priority roachpb.UserPriority
 
+	// The transaction's read only state.
+	readOnly bool
+
 	// mon tracks txn-bound objects like the running state of
 	// planNode in the midst of performing a computation. We
 	// host this here instead of TxnState because TxnState is
@@ -1041,6 +1017,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	sqlTimestamp time.Time,
 	isolation enginepb.IsolationType,
 	priority roachpb.UserPriority,
+	readOnly bool,
 ) {
 	if ts.sp != nil || ts.txnResults != nil {
 		log.Fatalf(s.Ctx(),
@@ -1125,6 +1102,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	if err := ts.setPriority(priority); err != nil {
 		panic(err)
 	}
+	ts.setReadOnly(readOnly)
 
 	// Discard the old schemaChangers, if any.
 	ts.schemaChangers = schemaChangerCollection{}
@@ -1273,6 +1251,10 @@ func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
 	return nil
 }
 
+func (ts *txnState) setReadOnly(readOnly bool) {
+	ts.readOnly = readOnly
+}
+
 // isSerializableRestart returns true if the KV transaction is serializable and
 // its timestamp has been pushed. Used to detect whether the SQL txn will be
 // allowed to commit.
@@ -1290,6 +1272,63 @@ func (ts *txnState) isSerializableRestart() bool {
 		return false
 	}
 	return txn.IsSerializableRestart()
+}
+
+func (ts *txnState) setTransactionModes(modes tree.TransactionModes) error {
+	if err := ts.setSQLIsolationLevel(modes.Isolation); err != nil {
+		return err
+	}
+	if err := ts.setUserPriority(modes.UserPriority); err != nil {
+		return err
+	}
+	return ts.setReadWriteMode(modes.ReadWriteMode)
+}
+
+func (ts *txnState) setSQLIsolationLevel(level tree.IsolationLevel) error {
+	var iso enginepb.IsolationType
+	switch level {
+	case tree.UnspecifiedIsolation:
+		return nil
+	case tree.SnapshotIsolation:
+		iso = enginepb.SNAPSHOT
+	case tree.SerializableIsolation:
+		iso = enginepb.SERIALIZABLE
+	default:
+		return errors.Errorf("unknown isolation level: %s", level)
+	}
+
+	return ts.setIsolationLevel(iso)
+}
+
+func (ts *txnState) setUserPriority(userPriority tree.UserPriority) error {
+	var up roachpb.UserPriority
+	switch userPriority {
+	case tree.UnspecifiedUserPriority:
+		return nil
+	case tree.Low:
+		up = roachpb.MinUserPriority
+	case tree.Normal:
+		up = roachpb.NormalUserPriority
+	case tree.High:
+		up = roachpb.MaxUserPriority
+	default:
+		return errors.Errorf("unknown user priority: %s", userPriority)
+	}
+	return ts.setPriority(up)
+}
+
+func (ts *txnState) setReadWriteMode(readWriteMode tree.ReadWriteMode) error {
+	switch readWriteMode {
+	case tree.UnspecifiedReadWriteMode:
+		return nil
+	case tree.ReadOnly:
+		ts.setReadOnly(true)
+	case tree.ReadWrite:
+		ts.setReadOnly(false)
+	default:
+		return errors.Errorf("unknown read mode: %s", readWriteMode)
+	}
+	return nil
 }
 
 type schemaChangerCollection struct {
@@ -1337,7 +1376,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.distSQLPlanner = e.distSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			evalCtx := createSchemaChangeEvalCtx(e.cfg.Clock.Now())
-			if err := sc.exec(ctx, true /* inSession */, evalCtx); err != nil {
+			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
@@ -1366,17 +1405,63 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	return firstError
 }
 
+const panicLogOutputCutoffChars = 500
+
+// AnonymizeStatementsForReporting transforms an action, SQL statements, and a value
+// (usually a recovered panic) into an error that will be useful when passed to
+// our error reporting as it exposes a scrubbed version of the statements.
+func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) error {
+	var anonymized []string
+	{
+		stmts, err := parser.Parse(sqlStmts)
+		if err == nil {
+			var f struct {
+				buf              bytes.Buffer
+				anonCtx, hideCtx tree.FmtCtx
+			}
+			f.anonCtx = tree.MakeFmtCtx(&f.buf, tree.FmtAnonymize)
+			f.hideCtx = tree.MakeFmtCtx(&f.buf, tree.FmtHideConstants)
+			for _, stmt := range NewStatementList(stmts) {
+				f.anonCtx.FormatNode(stmt.AST)
+				stmt.AST, err = parser.ParseOne(f.buf.String())
+				f.buf.Reset()
+				if err != nil {
+					f.buf.WriteString("[unknown]")
+				} else {
+					f.hideCtx.FormatNode(stmt.AST)
+				}
+
+				anonymized = append(anonymized, f.buf.String())
+				f.buf.Reset()
+			}
+		}
+	}
+	anonStmtsStr := strings.Join(anonymized, "; ")
+	if len(anonStmtsStr) > panicLogOutputCutoffChars {
+		anonStmtsStr = anonStmtsStr[:panicLogOutputCutoffChars] + " [...]"
+	}
+
+	return log.Safe(
+		fmt.Sprintf("panic while %s %d statements: %s", action, len(anonymized), anonStmtsStr),
+	).WithCause(r)
+}
+
 // maybeRecover catches SQL panics and does some log reporting before
 // propagating the panic further.
+//
 // TODO(knz): this is where we can place code to recover from
 // recoverable panics.
-func (s *Session) maybeRecover(action, stmt string) {
+func (s *Session) maybeRecover(action, stmts string) {
 	if r := recover(); r != nil {
-		err := errors.Errorf("panic while %s %q: %s", action, stmt, r)
+		// A warning header guaranteed to go to stderr. This is unanonymized.
+		cutStmts := stmts
+		if len(cutStmts) > panicLogOutputCutoffChars {
+			cutStmts = stmts[:panicLogOutputCutoffChars] + " [...]"
+		}
 
-		// A short warning header guaranteed to go to stderr.
 		log.Shout(s.Ctx(), log.Severity_ERROR,
-			"a SQL panic has occurred!")
+			fmt.Sprintf("a SQL panic has occurred while %s %q: %s",
+				action, cutStmts, r))
 		// TODO(knz): log panic details to logs once panics
 		// are not propagated to the top-level and printed out by the Go runtime.
 
@@ -1386,9 +1471,16 @@ func (s *Session) maybeRecover(action, stmt string) {
 		// tracing / kv subsystem is broken and we can't resume from that.
 		s.EmergencyClose()
 
-		// Propagate the panic further.
-		panic(err)
+		safeErr := AnonymizeStatementsForReporting(action, stmts, r)
+
+		// Propagate the (sanitized) panic further.
+		panic(safeErr)
 	}
+}
+
+// Location exports the location session variable.
+func (s *Session) Location() *time.Location {
+	return s.data.Location
 }
 
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
@@ -1780,4 +1872,88 @@ type spanWithIndex struct {
 	// txnIdx is the 0-based index of the transaction in which this span was
 	// recorded.
 	txnIdx int
+}
+
+// sessionDataMutator is the interface used by sessionVars to change the session
+// state. It mostly mutates the Session's SessionData, but not exclusively (e.g.
+// see curTxnReadOnly).
+type sessionDataMutator struct {
+	data     *sessiondata.SessionData
+	s        *Session
+	defaults sessionDefaults
+	settings *cluster.Settings
+	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
+	curTxnReadOnly *bool
+	sessionTracing *SessionTracing
+}
+
+// SetApplicationName initializes both Session.mu.ApplicationName and
+// the cached pointer to per-application statistics. It is meant to be
+// used upon session initialization and upon SET APPLICATION_NAME.
+func (m *sessionDataMutator) SetApplicationName(appName string) {
+	s := m.s
+	s.mu.Lock()
+	s.mu.ApplicationName = appName
+	s.mu.Unlock()
+	if s.sqlStats != nil {
+		s.appStats = s.sqlStats.getStatsForApplication(appName)
+	}
+}
+
+// ApplicationName returns the session's "application_name" variable. This is
+// not a setter method, but the method is here nevertheless because
+// ApplicationName is not part of SessionData because accessing it needs
+// locking.
+func (m *sessionDataMutator) ApplicationName() string {
+	m.s.mu.RLock()
+	defer m.s.mu.RUnlock()
+	return m.s.mu.ApplicationName
+}
+
+func (m *sessionDataMutator) SetDatabase(dbName string) {
+	m.data.Database = dbName
+}
+
+func (m *sessionDataMutator) SetDefaultIsolationLevel(iso enginepb.IsolationType) {
+	m.data.DefaultIsolationLevel = iso
+}
+
+func (m *sessionDataMutator) SetDefaultReadOnly(val bool) {
+	m.data.DefaultReadOnly = val
+}
+
+func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
+	m.data.DistSQLMode = val
+}
+
+func (m *sessionDataMutator) SetSafeUpdates(val bool) {
+	m.data.SafeUpdates = val
+}
+
+func (m *sessionDataMutator) SetSearchPath(val sessiondata.SearchPath) {
+	m.data.SearchPath = val
+}
+
+func (m *sessionDataMutator) SetLocation(loc *time.Location) {
+	m.data.Location = loc
+}
+
+func (m *sessionDataMutator) SetReadOnly(val bool) {
+	*m.curTxnReadOnly = val
+}
+
+func (m *sessionDataMutator) StopSessionTracing() error {
+	return m.sessionTracing.StopTracing()
+}
+
+func (m *sessionDataMutator) StartSessionTracing(
+	recType tracing.RecordingType, kvTracingEnabled bool,
+) error {
+	return m.sessionTracing.StartTracing(recType, kvTracingEnabled)
+}
+
+// RecordLatestSequenceValue records that value to which the session incremented
+// a sequence.
+func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
+	m.data.SequenceState.RecordValue(seqID, val)
 }

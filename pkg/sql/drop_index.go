@@ -15,13 +15,13 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type dropIndexNode struct {
@@ -67,7 +67,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	return &dropIndexNode{n: n, idxNames: idxNames}, nil
 }
 
-func (n *dropIndexNode) Start(params runParams) error {
+func (n *dropIndexNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
@@ -83,8 +83,8 @@ func (n *dropIndexNode) Start(params runParams) error {
 		}
 
 		if err := params.p.dropIndexByName(
-			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkOutboundFK,
-			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
+			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 		); err != nil {
 			return err
 		}
@@ -101,15 +101,16 @@ type fullIndexName struct {
 	idxName tree.UnrestrictedName
 }
 
-// dropIdxFKCheck is used when dropping an index to signal whether it is okay to
-// do so even if it is in use as an *outbound FK*. This is a subset of what is
-// implied by DropBehavior CASCADE, which implies dropping *all* dependencies.
-// This is used e.g. when the element constrained is being dropped anyway.
-type dropIdxFKCheck bool
+// dropIndexConstraintBehavior is used when dropping an index to signal whether
+// it is okay to do so even if it is in use as a constraint (outbound FK or
+// unique). This is a subset of what is implied by DropBehavior CASCADE, which
+// implies dropping *all* dependencies. This is used e.g. when the element
+// constrained is being dropped anyway.
+type dropIndexConstraintBehavior bool
 
 const (
-	checkOutboundFK  dropIdxFKCheck = true
-	ignoreOutboundFK dropIdxFKCheck = false
+	checkIdxConstraint  dropIndexConstraintBehavior = true
+	ignoreIdxConstraint dropIndexConstraintBehavior = false
 )
 
 func (p *planner) dropIndexByName(
@@ -118,7 +119,7 @@ func (p *planner) dropIndexByName(
 	tableDesc *sqlbase.TableDescriptor,
 	ifExists bool,
 	behavior tree.DropBehavior,
-	outboundFKCheck dropIdxFKCheck,
+	constraintBehavior dropIndexConstraintBehavior,
 	jobDesc string,
 ) error {
 	idx, dropped, err := tableDesc.FindIndexByName(string(idxName))
@@ -135,11 +136,12 @@ func (p *planner) dropIndexByName(
 	if dropped {
 		return nil
 	}
+
 	// Queue the mutation.
 	var droppedViews []string
 	if idx.ForeignKey.IsSet() {
-		if behavior != tree.DropCascade && outboundFKCheck != ignoreOutboundFK {
-			return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
+		if behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
+			return errors.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 		}
 		if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
 			return err
@@ -165,6 +167,10 @@ func (p *planner) dropIndexByName(
 		if err := p.removeInterleave(ctx, ref); err != nil {
 			return err
 		}
+	}
+
+	if idx.Unique && behavior != tree.DropCascade && constraintBehavior != ignoreIdxConstraint {
+		return errors.Errorf("index %q is in use as unique constraint (use CASCADE if you really want to drop it)", idx.Name)
 	}
 
 	for _, tableRef := range tableDesc.DependedOnBy {
@@ -222,7 +228,7 @@ func (p *planner) dropIndexByName(
 		p.txn,
 		EventLogDropIndex,
 		int32(tableDesc.ID),
-		int32(p.evalCtx.NodeID),
+		int32(p.extendedEvalCtx.NodeID),
 		struct {
 			TableName           string
 			IndexName           string
@@ -230,7 +236,7 @@ func (p *planner) dropIndexByName(
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{tableDesc.Name, string(idxName), jobDesc, p.session.User, uint32(mutationID),
+		}{tableDesc.Name, string(idxName), jobDesc, p.SessionData().User, uint32(mutationID),
 			droppedViews},
 	); err != nil {
 		return err

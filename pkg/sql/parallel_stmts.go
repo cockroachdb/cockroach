@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -73,15 +72,18 @@ func MakeParallelizeQueue(analyzer DependencyAnalyzer) ParallelizeQueue {
 	}
 }
 
-// Add inserts a new plan in the queue and executes the provided function when
-// all plans that it depends on have completed successfully, obeying the guarantees
-// made by the ParallelizeQueue above. The exec function should be used to run the
-// planNode and return any error observed during its execution.
+// Add inserts the current plan in the queue and executes the provided
+// function when all plans that it depends on have completed
+// successfully, obeying the guarantees made by the ParallelizeQueue
+// above.
 //
 // Add should not be called concurrently with Wait. See Wait's comment for more
 // details.
-func (pq *ParallelizeQueue) Add(params runParams, plan planNode, exec func(planNode) error) error {
-	prereqs, finishLocked, err := pq.insertInQueue(params, plan)
+func (pq *ParallelizeQueue) Add(params runParams, exec func() error) error {
+	// plan is used as a hash key in the data structures, we don't
+	// consider it further here.
+	plan := params.p.curPlan.plan
+	prereqs, finishLocked, err := pq.insertInQueue(params)
 	if err != nil {
 		plan.Close(params.ctx)
 		return err
@@ -90,7 +92,10 @@ func (pq *ParallelizeQueue) Add(params runParams, plan planNode, exec func(planN
 	pq.runningGroup.Add(1)
 	go func() {
 		defer pq.runningGroup.Done()
-		defer plan.Close(params.ctx)
+		// Be careful to close the planner's top-level node, and not just
+		// the hash key retrieved above -- there may be more work done by
+		// this close() method than plan.Close().
+		defer params.p.curPlan.close(params.ctx)
 
 		// Block on the execution of each prerequisite plan blocking us.
 		for _, prereq := range prereqs {
@@ -111,7 +116,10 @@ func (pq *ParallelizeQueue) Add(params runParams, plan planNode, exec func(planN
 		}
 
 		// Execute the plan.
-		err := exec(plan)
+		// No need to give it the plan it needs to operate on -- it will
+		// know about the current plan from its captured planner
+		// reference.
+		err := exec()
 
 		pq.mu.Lock()
 		if err != nil {
@@ -127,19 +135,18 @@ func (pq *ParallelizeQueue) Add(params runParams, plan planNode, exec func(planN
 // channels of prerequisite blocking the new plan from executing. It also returns a
 // function to call when the new plan has finished executing. This function must be
 // called while pq.mu is held.
-func (pq *ParallelizeQueue) insertInQueue(
-	params runParams, newPlan planNode,
-) ([]doneChan, func(), error) {
+func (pq *ParallelizeQueue) insertInQueue(params runParams) ([]doneChan, func(), error) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
 	// Determine the set of prerequisite plans.
-	prereqs, err := pq.prereqsForPlanLocked(params, newPlan)
+	prereqs, err := pq.prereqsForPlanLocked(params)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Insert newPlan in running set.
+	// Insert the current plan in running set.
+	newPlan := params.p.curPlan.plan
 	newDoneChan := make(doneChan)
 	pq.plans[newPlan] = newDoneChan
 	finish := func() {
@@ -159,18 +166,17 @@ func (pq *ParallelizeQueue) insertInQueue(
 // that a new plan is dependent on. It returns a slice of doneChans for each plan
 // in this set. Returns a nil slice if the plan has no prerequisites and can be run
 // immediately.
-func (pq *ParallelizeQueue) prereqsForPlanLocked(
-	params runParams, newPlan planNode,
-) ([]doneChan, error) {
+func (pq *ParallelizeQueue) prereqsForPlanLocked(params runParams) ([]doneChan, error) {
 	// First, submit the planNode to the analyzer for analysis. This assures
 	// that the analysis takes place before the plan is executed, even if
 	// no calls to analyzer.Independent are necessary at this time.
-	if err := pq.analyzer.Analyze(params, newPlan); err != nil {
+	if err := pq.analyzer.Analyze(params); err != nil {
 		return nil, err
 	}
 
 	// Add all plans from the plan set that this new plan is dependent on.
 	var prereqs []doneChan
+	newPlan := params.p.curPlan.plan
 	for plan, doneChan := range pq.plans {
 		if !pq.analyzer.Independent(plan, newPlan) {
 			prereqs = append(prereqs, doneChan)
@@ -225,11 +231,11 @@ func (pq *ParallelizeQueue) Errs() []error {
 // goroutines concurrently.
 type DependencyAnalyzer interface {
 	// Analyze collects any upfront analysis that is necessary to make future
-	// independence decisions about the planNode. It must be called before
-	// calling Independent for each planNode, and the planNode provided must
+	// independence decisions about the current plan. It must be called before
+	// calling Independent for each planNode, and the current plan provided must
 	// not be running when Analyze is called. Analyze is allowed to mutate the
 	// provided planner if necessary.
-	Analyze(runParams, planNode) error
+	Analyze(runParams) error
 	// Independent determines if the provided planNodess are independent from
 	// one another. Either planNode may be running when Independent is called,
 	// so the method will not modify the plans in any way. Implementations of
@@ -252,8 +258,8 @@ func (f dependencyAnalyzerFunc) Independent(p1 planNode, p2 planNode) bool {
 	return f(p1, p2)
 }
 
-func (f dependencyAnalyzerFunc) Analyze(_ runParams, _ planNode) error { return nil }
-func (f dependencyAnalyzerFunc) Clear(_ planNode)                      {}
+func (f dependencyAnalyzerFunc) Analyze(_ runParams) error { return nil }
+func (f dependencyAnalyzerFunc) Clear(_ planNode)          {}
 
 // NoDependenciesAnalyzer is a DependencyAnalyzer that performs no analysis on
 // planNodes and asserts that all plans are independent.
@@ -288,7 +294,8 @@ func NewSpanBasedDependencyAnalyzer() DependencyAnalyzer {
 	}
 }
 
-func (a *spanBasedDependencyAnalyzer) Analyze(params runParams, p planNode) error {
+func (a *spanBasedDependencyAnalyzer) Analyze(params runParams) error {
+	p := params.p.curPlan.plan
 	readSpans, writeSpans, err := collectSpans(params, p)
 	if err != nil {
 		return err

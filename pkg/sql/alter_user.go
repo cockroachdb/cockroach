@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -62,7 +62,7 @@ type alterUserSetPasswordRun struct {
 	rowsAffected int
 }
 
-func (n *alterUserSetPasswordNode) Start(params runParams) error {
+func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err
@@ -78,7 +78,7 @@ func (n *alterUserSetPasswordNode) Start(params runParams) error {
 		params.ctx,
 		"create-user",
 		params.p.txn,
-		`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
+		`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1 AND "isRole" = false`,
 		normalizedUsername,
 		hashedPassword,
 	)

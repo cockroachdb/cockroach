@@ -15,11 +15,11 @@
 package distsqlrun
 
 import (
+	"context"
 	"io"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -259,10 +260,13 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	evalCtx := tree.EvalContext{
-		Location:     &location,
-		Database:     req.EvalContext.Database,
-		User:         req.EvalContext.User,
-		SearchPath:   tree.MakeSearchPath(req.EvalContext.SearchPath),
+		Settings: ds.ServerConfig.Settings,
+		SessionData: sessiondata.SessionData{
+			Location:   location,
+			Database:   req.EvalContext.Database,
+			User:       req.EvalContext.User,
+			SearchPath: sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+		},
 		ClusterID:    ds.ServerConfig.ClusterID,
 		NodeID:       nodeID,
 		ReCache:      ds.regexpCache,
@@ -309,7 +313,7 @@ func (ds *ServerImpl) setupFlow(
 	return ctx, f, nil
 }
 
-// SetupSyncFlow sets up a synchoronous flow, connecting the sync response
+// SetupSyncFlow sets up a synchronous flow, connecting the sync response
 // output stream to the given RowReceiver. The flow is not started. The flow
 // will be associated with the given context.
 // Note: the returned context contains a span that must be finished through
@@ -343,12 +347,14 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 		ctx, ctxCancel := contextutil.WithCancel(ctx)
 		defer ctxCancel()
 		mbox.start(ctx, &f.waitGroup, ctxCancel)
+		ds.Metrics.FlowStart()
 		if err := f.Start(ctx, func() {}); err != nil {
 			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 				"The error should have gone to the consumer.", err)
 		}
 		f.Wait()
 		f.Cleanup(ctx)
+		ds.Metrics.FlowStop()
 	}); err != nil {
 		return err
 	}

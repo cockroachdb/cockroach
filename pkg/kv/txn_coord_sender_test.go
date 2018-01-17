@@ -16,6 +16,7 @@ package kv
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -23,12 +24,13 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -63,14 +65,15 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 // createTestDB creates a local test server and starts it. The caller
 // is responsible for stopping the test server.
 func createTestDB(t testing.TB) (*localtestcluster.LocalTestCluster, *TxnCoordSender) {
-	return createTestDBWithContext(t, client.DefaultDBContext())
+	return createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), nil)
 }
 
-func createTestDBWithContext(
-	t testing.TB, dbCtx client.DBContext,
+func createTestDBWithContextAndKnobs(
+	t testing.TB, dbCtx client.DBContext, knobs *storage.StoreTestingKnobs,
 ) (*localtestcluster.LocalTestCluster, *TxnCoordSender) {
 	s := &localtestcluster.LocalTestCluster{
-		DBContext: &dbCtx,
+		DBContext:         &dbCtx,
+		StoreTestingKnobs: knobs,
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
 	return s, s.Sender.(*TxnCoordSender)
@@ -297,6 +300,110 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	keys, _ := roachpb.MergeSpans(txnMeta.keys)
 	if len(keys) != 2 {
 		t.Errorf("expected 2 entries in keys range group; got %v", keys)
+	}
+}
+
+// TestTxnCoordSenderCondenseIntentSpans verifies that intent spans
+// are condensed along range boundaries when they exceed the maximum
+// intent bytes threshold.
+func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	a := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key(nil)}
+	b := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key(nil)}
+	c := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key(nil)}
+	d := roachpb.Span{Key: roachpb.Key("dddddd"), EndKey: roachpb.Key(nil)}
+	e := roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key(nil)}
+	aToBClosed := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b").Next()}
+	cToEClosed := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("e").Next()}
+	fTof0 := roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("f0")}
+	g := roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key(nil)}
+	g0Tog1 := roachpb.Span{Key: roachpb.Key("g0"), EndKey: roachpb.Key("g1")}
+	fTog1Closed := roachpb.Span{Key: roachpb.Key("f"), EndKey: roachpb.Key("g1")}
+	testCases := []struct {
+		span        roachpb.Span
+		expKeys     []roachpb.Span
+		expKeysSize int64
+	}{
+		{span: a, expKeys: []roachpb.Span{a}, expKeysSize: 1},
+		{span: b, expKeys: []roachpb.Span{a, b}, expKeysSize: 2},
+		{span: c, expKeys: []roachpb.Span{a, b, c}, expKeysSize: 3},
+		{span: d, expKeys: []roachpb.Span{a, b, c, d}, expKeysSize: 9},
+		// Note that c-e condenses and then lists first.
+		{span: e, expKeys: []roachpb.Span{cToEClosed, a, b}, expKeysSize: 5},
+		{span: fTof0, expKeys: []roachpb.Span{cToEClosed, a, b, fTof0}, expKeysSize: 8},
+		{span: g, expKeys: []roachpb.Span{cToEClosed, a, b, fTof0, g}, expKeysSize: 9},
+		{span: g0Tog1, expKeys: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed}, expKeysSize: 9},
+		// Add a key in the middle of a span, which will get merged on commit.
+		{span: c, expKeys: []roachpb.Span{cToEClosed, aToBClosed, fTog1Closed}, expKeysSize: 9},
+	}
+	splits := []roachpb.Span{
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+		{Key: roachpb.Key("c"), EndKey: roachpb.Key("f")},
+		{Key: roachpb.Key("f"), EndKey: roachpb.Key("j")},
+	}
+	descs := []roachpb.RangeDescriptor{testMetaRangeDescriptor}
+	for i, s := range splits {
+		descs = append(descs, roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(2 + i),
+			StartKey: roachpb.RKey(s.Key),
+			EndKey:   roachpb.RKey(s.EndKey),
+			Replicas: []roachpb.ReplicaDescriptor{{NodeID: 1, StoreID: 1}},
+		})
+	}
+	descDB := mockRangeDescriptorDBForDescs(descs...)
+	s, txnCoord := createTestDB(t)
+	st := s.Store.ClusterSettings()
+	maxTxnIntentsBytes.Override(&st.SV, 10) /* 10 bytes and it will condense */
+	defer s.Stop()
+	defer teardownHeartbeats(txnCoord)
+
+	// Check end transaction intents, which should exclude the intent at
+	// key "c" as it's merged with the cToEClosed span.
+	expIntents := []roachpb.Span{fTog1Closed, cToEClosed, a, b}
+	var sendFn rpcSendFn = func(
+		_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest, _ *rpc.Context,
+	) (*roachpb.BatchResponse, error) {
+		if req, ok := args.GetArg(roachpb.EndTransaction); ok {
+			if a, e := req.(*roachpb.EndTransactionRequest).IntentSpans, expIntents; !reflect.DeepEqual(a, e) {
+				t.Errorf("expected end transaction to have intents %+v; got %+v", e, a)
+			}
+		}
+		return args.CreateReply(), nil
+	}
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      s.Clock,
+		TestingKnobs: DistSenderTestingKnobs{
+			TransportFactory: adaptLegacyTransport(sendFn),
+		},
+		RangeDescriptorDB: descDB,
+	}
+	txnCoord.wrapped = NewDistSender(cfg, s.Gossip)
+
+	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */)
+	txnID := txn.Proto().ID
+	for i, tc := range testCases {
+		if tc.span.EndKey != nil {
+			if err := txn.DelRange(context.TODO(), tc.span.Key, tc.span.EndKey); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if err := txn.Put(context.TODO(), tc.span.Key, []byte("value")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		txnCoord.txnMu.Lock()
+		txnMeta, ok := txnCoord.txnMu.txns[txnID]
+		if !ok {
+			t.Fatalf("expected a transaction to be created on coordinator")
+		}
+		if a, e := txnMeta.keysSize, tc.expKeysSize; a != e {
+			t.Errorf("%d: keys size expected %d; got %d", i, e, a)
+		}
+		if a, e := txnMeta.keys, tc.expKeys; !reflect.DeepEqual(a, e) {
+			t.Errorf("%d: expected keys %+v; got %+v", i, e, a)
+		}
+		txnCoord.txnMu.Unlock()
 	}
 }
 
@@ -749,6 +856,59 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 	verifyCleanup(key, sender, s.Eng, t)
 }
 
+// TestTxnCoordSenderGCWithAmbiguousResultErr verifies that the coordinator
+// cleans up extant transactions and intents after an ambiguous result error is
+// observed, even if the error is on the first request.
+func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testutils.RunTrueAndFalse(t, "errOnFirst", func(t *testing.T, errOnFirst bool) {
+		key := roachpb.Key("a")
+		are := roachpb.NewAmbiguousResultError("very ambiguous")
+		knobs := &storage.StoreTestingKnobs{
+			TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+				for _, req := range ba.Requests {
+					if putReq, ok := req.GetInner().(*roachpb.PutRequest); ok && putReq.Key.Equal(key) {
+						return roachpb.NewError(are)
+					}
+				}
+				return nil
+			},
+		}
+
+		s, sender := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), knobs)
+		defer s.Stop()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */)
+		if !errOnFirst {
+			otherKey := roachpb.Key("other")
+			if err := txn.Put(ctx, otherKey, []byte("value")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := txn.Put(ctx, key, []byte("value")); !testutils.IsError(err, "result is ambiguous") {
+			t.Fatalf("expected error %v, found %v", are, err)
+		}
+		txnID := txn.Proto().ID
+
+		// After the context is canceled, the transaction should be cleaned up.
+		cancel()
+		testutils.SucceedsSoon(t, func() error {
+			// Locking the TxnCoordSender to prevent a data race.
+			sender.txnMu.Lock()
+			_, ok := sender.txnMu.txns[txnID]
+			sender.txnMu.Unlock()
+			if ok {
+				return errors.Errorf("expected garbage collection")
+			}
+			return nil
+		})
+
+		verifyCleanup(key, sender, s.Eng, t)
+	})
+}
+
 // TestTxnCoordSenderTxnUpdatedOnError verifies that errors adjust the
 // response transaction's timestamp and priority as appropriate.
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
@@ -786,7 +946,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				txn.UpdateObservedTimestamp(nodeID, plus10)
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						hlc.Timestamp{}, hlc.Timestamp{}),
+						hlc.Timestamp{}, hlc.Timestamp{}, nil),
 					txn)
 				pErr.OriginNode = nodeID
 				return pErr
@@ -1570,7 +1730,7 @@ func TestContextDoneNil(t *testing.T) {
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	testCases := []struct {
 		err   error
@@ -1584,7 +1744,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				// recorded on the origin.
 				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0))
 				return roachpb.NewErrorWithTxn(
-					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}),
+					roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil),
 					&txn)
 			},
 			abort: true},
@@ -1665,65 +1825,5 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				t.Errorf("%T: found unexpected abort", test.err)
 			}
 		})
-	}
-}
-
-func TestTooManyIntents(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	s, _ := createTestDB(t)
-	defer s.Stop()
-
-	st := s.Store.ClusterSettings()
-	st.Manual.Store(true)
-
-	maxIntents.Override(&st.SV, 3)
-
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */)
-	for i := 0; i < int(maxIntents.Get(&st.SV)); i++ {
-		key := roachpb.Key(fmt.Sprintf("a%d", i))
-		if pErr := txn.Put(ctx, key, []byte("value")); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-	// The request that puts us over the limit causes an error. Note
-	// that this is a best-effort detection after the intents are
-	// written.
-	key := roachpb.Key(fmt.Sprintf("a%d", maxIntents.Get(&st.SV)))
-	if err := txn.Put(ctx, key, []byte("value")); !testutils.IsError(err,
-		"transaction is too large") {
-		t.Fatalf("did not get expected error: %v", err)
-	}
-}
-
-func TestTooManyIntentsAtCommit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	s, _ := createTestDB(t)
-	defer s.Stop()
-
-	st := s.Store.ClusterSettings()
-	st.Manual.Store(true)
-	maxIntents.Override(&st.SV, 3)
-
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */)
-	b := txn.NewBatch()
-	for i := 0; i < 1+int(maxIntents.Get(&st.SV)); i++ {
-		key := roachpb.Key(fmt.Sprintf("a%d", i))
-		b.Put(key, []byte("value"))
-	}
-	if err := txn.CommitInBatch(ctx, b); !testutils.IsError(err,
-		"transaction is too large") {
-		t.Fatalf("did not get expected error: %v", err)
-	}
-
-	// Check that the "transaction too large" error was generated before
-	// writing to the database instead of after.
-	if kv, err := s.DB.Get(ctx, "a0"); err != nil {
-		t.Fatal(err)
-	} else if kv.Exists() {
-		t.Fatal("did not expect value to exist")
 	}
 }

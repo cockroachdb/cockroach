@@ -15,11 +15,11 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -59,8 +59,7 @@ func (p *planner) Values(
 
 	v.columns = make(sqlbase.ResultColumns, 0, numCols)
 
-	defer func(prev bool) { p.hasSubqueries = prev }(p.hasSubqueries)
-	p.hasSubqueries = false
+	lastKnownSubqueryIndex := len(p.curPlan.subqueryPlans)
 
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
@@ -73,7 +72,7 @@ func (p *planner) Values(
 
 		for i, expr := range tuple.Exprs {
 			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				expr, "VALUES", p.session.SearchPath,
+				expr, "VALUES", p.SessionData().SearchPath,
 			); err != nil {
 				return nil, err
 			}
@@ -106,7 +105,7 @@ func (p *planner) Values(
 	// that it must always be called unless an error is returned from a planNode
 	// constructor. This would simplify the Close contract, but would make some
 	// code (like in planner.SelectClause) more messy.
-	v.isConst = !p.hasSubqueries
+	v.isConst = (len(p.curPlan.subqueryPlans) == lastKnownSubqueryIndex)
 	return v, nil
 }
 
@@ -116,7 +115,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 		isConst: true,
 		valuesRun: valuesRun{
 			rows: sqlbase.NewRowContainer(
-				p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
+				p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
 			),
 		},
 	}
@@ -128,11 +127,10 @@ type valuesRun struct {
 	nextRow int // The index of the next row.
 }
 
-// Start implements the planNode interface.
-func (n *valuesNode) Start(params runParams) error {
+func (n *valuesNode) startExec(params runParams) error {
 	if n.rows != nil {
 		if !n.isConst {
-			log.Fatalf(params.ctx, "valuesNode evaluted twice")
+			log.Fatalf(params.ctx, "valuesNode evaluated twice")
 		}
 		return nil
 	}
@@ -142,7 +140,7 @@ func (n *valuesNode) Start(params runParams) error {
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
-		params.evalCtx.Mon.MakeBoundAccount(),
+		params.extendedEvalCtx.Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
 		len(n.n.Tuples),
 	)
@@ -154,7 +152,7 @@ func (n *valuesNode) Start(params runParams) error {
 				row[i] = tree.DNull
 			} else {
 				var err error
-				row[i], err = typedExpr.Eval(params.evalCtx)
+				row[i], err = typedExpr.Eval(params.EvalContext())
 				if err != nil {
 					return err
 				}

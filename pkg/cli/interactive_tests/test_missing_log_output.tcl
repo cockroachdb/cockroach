@@ -70,6 +70,28 @@ end_test
 interrupt
 eexpect ":/# "
 
+start_test "Check that panic reports are printed to the log even when --logtostderr is specified"
+send "$argv start -s=path=logs/db --insecure --logtostderr\r"
+eexpect "CockroachDB node starting"
+
+system "$argv sql --insecure -e \"select crdb_internal.force_panic('helloworld')\" || true"
+# Check the panic is reported on the server's stderr
+eexpect "panic: helloworld"
+eexpect "panic while executing"
+eexpect "goroutine"
+eexpect ":/# "
+# Check the panic is reported on the server log file
+send "cat logs/db/logs/cockroach.log\r"
+eexpect "a panic has occurred"
+eexpect "panic while executing"
+eexpect "helloworld"
+eexpect "goroutine"
+eexpect ":/# "
+
+end_test
+
+
+
 start_server $argv
 
 start_test "Test that quit does not emit unwanted logging output"

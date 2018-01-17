@@ -1,6 +1,6 @@
 # LogicTest: default parallel-stmts distsql
 
-statement error incompatible type for DEFAULT expression: int vs bool
+statement error expected DEFAULT expression to have type int, but 'false' has type bool
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 
 statement error DEFAULT expression .* may not contain variable sub-expressions

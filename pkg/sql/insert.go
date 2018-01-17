@@ -15,11 +15,11 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -57,7 +57,12 @@ type insertNode struct {
 	tw         tableWriter
 
 	run insertRun
+
+	autoCommit autoCommitOpt
 }
+
+// insertNode implements the autoCommitNode interface.
+var _ autoCommitNode = &insertNode{}
 
 // Insert inserts rows into the database.
 // Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
@@ -66,7 +71,14 @@ type insertNode struct {
 func (p *planner) Insert(
 	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
 ) (planNode, error) {
-	tn, err := p.getAliasedTableName(n.Table)
+	resetter, err := p.initWith(ctx, n.With)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
+	}
+	tn, alias, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +114,7 @@ func (p *planner) Insert(
 	numInputColumns := len(cols)
 
 	cols, defaultExprs, err :=
-		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.txCtx, &p.evalCtx)
+		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +167,10 @@ func (p *planner) Insert(
 		}
 	}
 
-	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckInserts)
-	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
+	fkTables, err := sqlbase.TablesNeededForFKs(
+		ctx, *en.tableDesc, sqlbase.CheckInserts, p.lookupFKTable, p.CheckPrivilege,
+	)
+	if err != nil {
 		return nil, err
 	}
 	ri, err := sqlbase.MakeRowInserter(p.txn, en.tableDesc, fkTables, cols,
@@ -168,7 +182,7 @@ func (p *planner) Insert(
 	var tw tableWriter
 	if n.OnConflict == nil {
 		ti := tableInserterPool.Get().(*tableInserter)
-		*ti = tableInserter{ri: ri, autoCommit: p.autoCommit}
+		*ti = tableInserter{ri: ri}
 		tw = ti
 	} else {
 		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
@@ -183,10 +197,8 @@ func (p *planner) Insert(
 			tu := tableUpserterPool.Get().(*tableUpserter)
 			*tu = tableUpserter{
 				ri:            ri,
-				autoCommit:    p.autoCommit,
 				conflictIndex: *conflictIndex,
 				alloc:         &p.alloc,
-				mon:           &p.session.TxnState.mon,
 				collectRows:   isUpsertReturning,
 			}
 			tw = tu
@@ -218,16 +230,16 @@ func (p *planner) Insert(
 				return nil, err
 			}
 
-			fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckUpdates)
-			if err := p.fillFKTableMap(ctx, fkTables); err != nil {
+			fkTables, err := sqlbase.TablesNeededForFKs(
+				ctx, *en.tableDesc, sqlbase.CheckUpdates, p.lookupFKTable, p.CheckPrivilege,
+			)
+			if err != nil {
 				return nil, err
 			}
 			tu := tableUpserterPool.Get().(*tableUpserter)
 			*tu = tableUpserter{
 				ri:            ri,
-				autoCommit:    p.autoCommit,
 				alloc:         &p.alloc,
-				mon:           &p.session.TxnState.mon,
 				collectRows:   isUpsertReturning,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
@@ -257,7 +269,7 @@ func (p *planner) Insert(
 	}
 
 	if err := in.run.initEditNode(
-		ctx, &in.editNodeBase, rows, in.tw, tn, n.Returning, desiredTypes); err != nil {
+		ctx, &in.editNodeBase, rows, in.tw, alias, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 
@@ -279,7 +291,7 @@ type insertRun struct {
 	rowsUpserted  *sqlbase.RowContainer
 }
 
-func (n *insertNode) Start(params runParams) error {
+func (n *insertNode) startExec(params runParams) error {
 	// Prepare structures for building values to pass to rh.
 	// TODO(couchand): Delete this, use tablewriter interface.
 	if n.rh.exprs != nil {
@@ -308,7 +320,7 @@ func (n *insertNode) Start(params runParams) error {
 		return err
 	}
 
-	return n.run.tw.init(params.p.txn)
+	return n.run.tw.init(params.p.txn, params.EvalContext())
 }
 
 func (n *insertNode) Next(params runParams) (bool, error) {
@@ -370,14 +382,15 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			rows, err := n.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			rows, err := n.tw.finalize(
+				params.ctx, n.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 			if err != nil {
 				return false, err
 			}
 
 			if n.run.isUpsertReturning {
 				n.run.rowsUpserted = sqlbase.NewRowContainer(
-					params.p.session.TxnState.makeBoundAccount(),
+					params.EvalContext().Mon.MakeBoundAccount(),
 					sqlbase.ColTypeInfoFromResCols(n.rh.columns),
 					rows.Len(),
 				)
@@ -401,7 +414,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 		n.defaultExprs,
 		n.run.insertColIDtoRowIndex,
 		n.insertCols,
-		*params.evalCtx,
+		*params.EvalContext(),
 		n.tableDesc,
 		n.run.rows.Values(),
 	)
@@ -412,11 +425,11 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 	if err := n.checkHelper.loadRow(n.run.insertColIDtoRowIndex, rowVals, false); err != nil {
 		return false, err
 	}
-	if err := n.checkHelper.check(params.evalCtx); err != nil {
+	if err := n.checkHelper.check(params.EvalContext()); err != nil {
 		return false, err
 	}
 
-	_, err = n.tw.row(params.ctx, rowVals, params.p.session.Tracing.KVTracingEnabled())
+	_, err = n.tw.row(params.ctx, rowVals, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 	if err != nil {
 		return false, err
 	}
@@ -504,14 +517,15 @@ func (p *planner) processColumns(
 
 	cols := make([]sqlbase.ColumnDescriptor, len(node))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(node))
-	for i, n := range node {
-		c, err := n.NormalizeUnqualifiedColumnItem()
+	for i := range node {
+		c, err := node[i].NormalizeUnqualifiedColumnItem()
 		if err != nil {
 			return nil, err
 		}
 
 		if len(c.Selector) > 0 {
-			return nil, pgerror.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", n)
+			return nil, pgerror.UnimplementedWithIssueErrorf(8318,
+				"compound types not supported yet: %q", &node[i])
 		}
 
 		col, err := tableDesc.FindActiveColumnByName(string(c.ColumnName))
@@ -520,7 +534,7 @@ func (p *planner) processColumns(
 		}
 
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, fmt.Errorf("multiple assignments to the same column %q", n)
+			return nil, fmt.Errorf("multiple assignments to the same column %q", &node[i])
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col
@@ -659,4 +673,9 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 
 func (n *insertNode) isUpsert() bool {
 	return n.n.OnConflict != nil
+}
+
+// enableAutoCommit is part of the autoCommitNode interface.
+func (n *insertNode) enableAutoCommit() {
+	n.autoCommit = autoCommitEnabled
 }

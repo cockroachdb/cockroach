@@ -8,6 +8,8 @@ cd "${LOG_DIR}"
 
 KEY_NAME="${KEY_NAME-google_compute_engine}"
 
+[ -f "$HOME/.ssh/$KEY_NAME" ] || ssh-keygen -f "$HOME/.ssh/$KEY_NAME" -N ''
+
 SSH_OPTIONS=(-o "ServerAliveInterval=60" -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}")
 
 # Ensure that the terraform config is canceled if one of the run scripts fails

@@ -6,19 +6,70 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-#include <memory>
-#include <rocksdb/iterator.h>
-#include <rocksdb/comparator.h>
-#include <rocksdb/write_batch.h>
-#include <rocksdb/utilities/write_batch_with_index.h>
-#include <libroachccl.h>
 #include "../db.h"
+#include <iostream>
+#include <libroachccl.h>
+#include <memory>
+#include <rocksdb/comparator.h>
+#include <rocksdb/iterator.h>
+#include <rocksdb/utilities/write_batch_with_index.h>
+#include <rocksdb/write_batch.h>
+#include "ccl/baseccl/encryption_options.pb.h"
+#include "key_manager.h"
 
-const DBStatus kSuccess = { NULL, 0 };
+const DBStatus kSuccess = {NULL, 0};
 
-DBStatus DBBatchReprVerify(
-  DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats
-) {
+// DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
+// needed.
+rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts) {
+  DBSlice options = db_opts.extra_options;
+  if (options.len == 0) {
+    return rocksdb::Status::OK();
+  }
+
+  cockroach::ccl::baseccl::EncryptionOptions opts;
+  if (!opts.ParseFromArray(options.data, options.len)) {
+    return rocksdb::Status::InvalidArgument("failed to parse extra options");
+  }
+
+  if (opts.key_source() != cockroach::ccl::baseccl::KeyFiles) {
+    return rocksdb::Status::InvalidArgument("unknown encryption key source");
+  }
+
+  std::cout << "found encryption options:\n"
+            << "  active key: " << opts.key_files().current_key() << "\n"
+            << "  old key: " << opts.key_files().old_key() << "\n"
+            << "  rotation duration: " << opts.data_key_rotation_period() << "\n";
+
+  // Initialize store key manager.
+  std::shared_ptr<FileKeyManager> store_key_manager(new FileKeyManager(
+      rocksdb::Env::Default(), opts.key_files().current_key(), opts.key_files().old_key()));
+  rocksdb::Status status = store_key_manager->LoadKeys();
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Initialize data key manager.
+  std::shared_ptr<DataKeyManager> data_key_manager(
+      new DataKeyManager(rocksdb::Env::Default(), db_dir, opts.data_key_rotation_period()));
+  status = data_key_manager->LoadKeys();
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Generate a new data key if needed by giving the active store key info to the data key manager.
+  std::unique_ptr<enginepbccl::KeyInfo> store_key = store_key_manager->CurrentKeyInfo();
+  assert(store_key != nullptr);
+  status = data_key_manager->SetActiveStoreKey(std::move(store_key));
+  if (!status.ok()) {
+    return status;
+  }
+
+  return rocksdb::Status::InvalidArgument("encryption is not supported");
+}
+
+DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos,
+                           MVCCStatsResult* stats) {
   const rocksdb::Comparator* kComparator = CockroachComparator();
 
   // TODO(dan): Inserting into a batch just to iterate over it is unfortunate.

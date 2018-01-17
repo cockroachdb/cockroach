@@ -15,6 +15,7 @@
 package storage_test
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

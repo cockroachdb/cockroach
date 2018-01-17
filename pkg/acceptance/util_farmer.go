@@ -15,6 +15,8 @@
 package acceptance
 
 import (
+	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -23,13 +25,12 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	cl "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -99,7 +100,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 	}
 	var stores string
 	for j := 0; j < *flagStores; j++ {
-		stores += " --store=/mnt/data" + strconv.Itoa(j)
+		stores += fmt.Sprintf(" --store=/mnt/data%d/cockroach-data", j)
 	}
 
 	var name string
@@ -152,7 +153,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		// Set a bogus address, to be used by the clock skew checks as the ID of
 		// this "node". We can't leave it blank.
 		Addr: "acceptance test client",
-	}, clientClock, stopper)
+	}, clientClock, stopper, &cl.MakeTestingClusterSettings().Version)
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(context.Background()); err != nil {
 			t.Fatal(err)

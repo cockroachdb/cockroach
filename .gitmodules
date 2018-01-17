@@ -17,3 +17,6 @@
 [submodule "c-deps/cryptopp"]
 	path = c-deps/cryptopp
 	url = https://github.com/cockroachdb/cryptopp.git
+[submodule "c-deps/googletest"]
+	path = c-deps/googletest
+	url = https://github.com/cockroachdb/googletest

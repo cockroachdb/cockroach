@@ -15,11 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -36,7 +35,7 @@ func TestServer(t *testing.T) {
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
+	conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

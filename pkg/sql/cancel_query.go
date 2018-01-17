@@ -15,10 +15,10 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,10 +49,10 @@ func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNod
 	}, nil
 }
 
-func (n *cancelQueryNode) Start(params runParams) error {
-	statusServer := params.p.session.execCfg.StatusServer
+func (n *cancelQueryNode) startExec(params runParams) error {
+	statusServer := params.extendedEvalCtx.StatusServer
 
-	queryIDDatum, err := n.queryID.Eval(params.evalCtx)
+	queryIDDatum, err := n.queryID.Eval(params.EvalContext())
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (n *cancelQueryNode) Start(params runParams) error {
 	request := &serverpb.CancelQueryRequest{
 		NodeId:   fmt.Sprintf("%d", nodeID),
 		QueryID:  queryIDString,
-		Username: params.p.session.User,
+		Username: params.SessionData().User,
 	}
 
 	response, err := statusServer.CancelQuery(params.ctx, request)

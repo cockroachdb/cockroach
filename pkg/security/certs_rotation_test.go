@@ -17,14 +17,13 @@
 package security_test
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"

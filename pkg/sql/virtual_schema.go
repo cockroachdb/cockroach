@@ -15,12 +15,11 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -202,7 +201,13 @@ func initVirtualTableDesc(
 	return p.makeTableDesc(ctx, create, 0, keys.VirtualDescriptorID, hlc.Timestamp{}, emptyPrivileges, nil)
 }
 
+// entries is part of the VirtualTabler interface.
+func (vs *virtualSchemaHolder) getEntries() map[string]virtualSchemaEntry {
+	return vs.entries
+}
+
 // getVirtualSchemaEntry retrieves a virtual schema entry given a database name.
+// getVirtualSchemaEntry is part of the VirtualTabler interface.
 func (vs *virtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
 	if vs == nil {
 		return virtualSchemaEntry{}, false
@@ -221,6 +226,7 @@ func (vs *virtualSchemaHolder) getVirtualDatabaseDesc(name string) *sqlbase.Data
 }
 
 // isVirtualDatabase checks if the provided name corresponds to a virtual database.
+// isVirtualDatabase is part of the VirtualTabler interface.
 func (vs *virtualSchemaHolder) isVirtualDatabase(name string) bool {
 	_, ok := vs.getVirtualSchemaEntry(name)
 	return ok
@@ -236,6 +242,7 @@ func (e *Executor) IsVirtualDatabase(name string) bool {
 // pair. The function will return the table's virtual table entry if the name matches
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
+// getVirtualTableEntry is part of the VirtualTabler interface.
 func (vs *virtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
 	if db, ok := vs.getVirtualSchemaEntry(string(tn.DatabaseName)); ok {
 		if t, ok := db.tables[string(tn.TableName)]; ok {
@@ -251,10 +258,14 @@ type VirtualTabler interface {
 	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error)
 	getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
+	getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error)
+	isVirtualDatabase(name string) bool
+	getEntries() map[string]virtualSchemaEntry
 }
 
 // getVirtualTableDesc checks if the provided name matches a virtual database/table
 // pair, and returns its descriptor if it does.
+// getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *virtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
@@ -288,4 +299,16 @@ func (nilVirtualTabler) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDes
 
 func (nilVirtualTabler) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
 	return virtualSchemaEntry{}, false
+}
+
+func (nilVirtualTabler) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
+	return virtualTableEntry{}, nil
+}
+
+func (nilVirtualTabler) isVirtualDatabase(name string) bool {
+	return false
+}
+
+func (nilVirtualTabler) getEntries() map[string]virtualSchemaEntry {
+	return nil
 }

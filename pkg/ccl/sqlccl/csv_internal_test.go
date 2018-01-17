@@ -9,17 +9,17 @@
 package sqlccl
 
 import (
+	"context"
 	"testing"
 
-	"golang.org/x/net/context"
-
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestMakeCSVTableDescriptorErrors(t *testing.T) {
+func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
@@ -62,6 +62,7 @@ func TestMakeCSVTableDescriptorErrors(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	for _, tc := range tests {
 		t.Run(tc.stmt, func(t *testing.T) {
 			stmt, err := parser.ParseOne(tc.stmt)
@@ -72,7 +73,7 @@ func TestMakeCSVTableDescriptorErrors(t *testing.T) {
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}
-			_, err = makeCSVTableDescriptor(ctx, create, defaultCSVParentID, defaultCSVTableID, 0)
+			_, err = makeSimpleTableDescriptor(ctx, st, create, defaultCSVParentID, defaultCSVTableID, 0)
 			if !testutils.IsError(err, tc.error) {
 				t.Fatalf("expected %v, got %+v", tc.error, err)
 			}

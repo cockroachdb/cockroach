@@ -15,15 +15,14 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
 	"text/tabwriter"
 
-	"github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -110,11 +109,6 @@ var cockroachCmd = &cobra.Command{
 	// in fact, a result of a bad invocation, e.g. too many arguments.
 	SilenceUsage: true,
 }
-
-// isInteractive indicates whether both stdin and stdout refer to the
-// terminal.
-var isInteractive = isatty.IsTerminal(os.Stdout.Fd()) &&
-	isatty.IsTerminal(os.Stdin.Fd())
 
 func init() {
 	cobra.EnableCommandSorting = false

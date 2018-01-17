@@ -10,6 +10,7 @@ package sqlccl_test
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -30,7 +31,6 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -48,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -92,11 +94,18 @@ func backupRestoreTestSetupWithParams(
 	if numAccounts == 0 {
 		splits = 0
 	}
-	bankData := sampledataccl.Bank(numAccounts, payloadSize, splits)
+	bankData := bank.FromConfig(numAccounts, payloadSize, splits)
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
-	if err := sampledataccl.Setup(sqlDB.DB, bankData); err != nil {
+	sqlDB.Exec(t, `CREATE DATABASE data`)
+	sqlDB.Exec(t, `USE data`)
+	const insertBatchSize = 1000
+	if _, err := workload.Setup(sqlDB.DB, bankData.Tables(), insertBatchSize); err != nil {
 		t.Fatalf("%+v", err)
+	}
+	if err := bank.Split(sqlDB.DB, bankData); err != nil {
+		// This occasionally flakes, so ignore errors.
+		t.Logf("failed to split: %+v", err)
 	}
 
 	if err := tc.WaitForFullReplication(); err != nil {
@@ -368,6 +377,9 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
+	// Get the number of existing jobs.
+	baseNumJobs := jobutils.GetSystemJobsCount(t, sqlDB)
+
 	sanitizedIncDir := localFoo + "/inc"
 	incDir := sanitizedIncDir + "?secretCredentialsHere"
 
@@ -402,7 +414,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(t, `SET DATABASE = data`)
 
 	sqlDB.Exec(t, `BACKUP bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobs.TypeBackup, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobs.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`BACKUP data.bank TO '%s' INCREMENTAL FROM '%s'`,
@@ -417,7 +429,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `RESTORE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, 2, jobs.TypeRestore, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobs.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`RESTORE data.bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
@@ -1785,7 +1797,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 
 	const numAccounts = 10
-	bankData := sampledataccl.BankRows(numAccounts)
+	bankData := bank.FromRows(numAccounts).Tables()[0]
 	if _, err := sampledataccl.ToBackup(t, bankData, filepath.Join(dir, "foo")); err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -1885,15 +1897,15 @@ func TestTimestampMismatch(t *testing.T) {
 		// Missing the initial full backup.
 		_, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`,
 			localFoo, incrementalT1FromFull)
-		if !testutils.IsError(err, "no backup covers time") {
-			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		if !testutils.IsError(err, "backups out of order") {
+			t.Errorf("expected 'backups out of order' error got: %+v", err)
 		}
 
 		// Missing an intermediate incremental backup.
 		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
 			localFoo, fullBackup, incrementalT2FromT1)
-		if !testutils.IsError(err, "no backup covers time") {
-			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		if !testutils.IsError(err, "backups out of order") {
+			t.Errorf("expected 'backups out of order' error got: %+v", err)
 		}
 
 		// Backups specified out of order.
@@ -1906,8 +1918,8 @@ func TestTimestampMismatch(t *testing.T) {
 		// Missing data for one table in the most recent backup.
 		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
 			localFoo, fullBackup, incrementalT3FromT1OneTable)
-		if !testutils.IsError(err, "no backup covers time") {
-			t.Errorf("expected 'no backup covers time' error got: %+v", err)
+		if !testutils.IsError(err, "previous backup does not contain table") {
+			t.Errorf("expected 'previous backup does not contain table' error got: %+v", err)
 		}
 	})
 
@@ -2429,16 +2441,35 @@ func TestBackupRestoreIncrementalAddTable(t *testing.T) {
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
+	sqlDB.Exec(t, `CREATE DATABASE data2`)
 	sqlDB.Exec(t, `CREATE TABLE data.t (s string PRIMARY KEY)`)
 	full, inc := filepath.Join(localFoo, "full"), filepath.Join(localFoo, "inc")
 
 	sqlDB.Exec(t, `INSERT INTO data.t VALUES ('before')`)
-	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, full)
+	sqlDB.Exec(t, `BACKUP data.*, data2.* TO $1`, full)
 	sqlDB.Exec(t, `UPDATE data.t SET s = 'after'`)
 
-	sqlDB.Exec(t, `CREATE TABLE data.t2 (i int)`)
-	_, err := sqlDB.DB.Exec("BACKUP DATABASE data TO $1 INCREMENTAL FROM $2", inc, full)
-	if !testutils.IsError(err, "a new full backup may be required") {
+	sqlDB.Exec(t, `CREATE TABLE data2.t2 (i int)`)
+	sqlDB.Exec(t, "BACKUP data.*, data2.* TO $1 INCREMENTAL FROM $2", inc, full)
+}
+func TestBackupRestoreIncrementalAddTableMissing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	sqlDB.Exec(t, `CREATE DATABASE data2`)
+	sqlDB.Exec(t, `CREATE TABLE data.t (s string PRIMARY KEY)`)
+	full, inc := filepath.Join(localFoo, "full"), filepath.Join(localFoo, "inc")
+
+	sqlDB.Exec(t, `INSERT INTO data.t VALUES ('before')`)
+	sqlDB.Exec(t, `BACKUP data.* TO $1`, full)
+	sqlDB.Exec(t, `UPDATE data.t SET s = 'after'`)
+
+	sqlDB.Exec(t, `CREATE TABLE data2.t2 (i int)`)
+	if _, err := sqlDB.DB.Exec("BACKUP data.*, data2.* TO $1 INCREMENTAL FROM $2", inc, full); !testutils.IsError(
+		err, "previous backup does not contain table",
+	) {
 		t.Fatal(err)
 	}
 }
@@ -2457,11 +2488,7 @@ func TestBackupRestoreIncrementalTrucateTable(t *testing.T) {
 	sqlDB.Exec(t, `UPDATE data.t SET s = 'after'`)
 	sqlDB.Exec(t, `TRUNCATE data.t`)
 
-	if _, err := sqlDB.DB.Exec("BACKUP DATABASE data TO $1 INCREMENTAL FROM $2", inc, full); !testutils.IsError(
-		err, "a new full backup may be required",
-	) {
-		t.Fatal(err)
-	}
+	sqlDB.Exec(t, "BACKUP DATABASE data TO $1 INCREMENTAL FROM $2", inc, full)
 }
 
 func TestBackupRestoreIncrementalDropTable(t *testing.T) {

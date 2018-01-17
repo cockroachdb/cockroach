@@ -1,5 +1,5 @@
 - Feature Name: Backup & Restore
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-07-13
 - Authors: Daniel Harrison
 - RFC PR: [#8966](https://github.com/cockroachdb/cockroach/pull/8966)

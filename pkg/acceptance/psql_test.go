@@ -15,10 +15,10 @@
 package acceptance
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"golang.org/x/net/context"
 )
 
 func TestDockerPSQL(t *testing.T) {

@@ -16,9 +16,8 @@
 package storage
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -48,8 +47,8 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 		); !testutils.IsPError(pErr, "unexpected (ABORTED|COMMITTED) intent") {
 			t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
 		}
-		if cnt := len(tc.store.intentResolver.mu.inFlight); cnt != 0 {
-			t.Errorf("expected no inflight refcount map entries, found %d", cnt)
+		if cnt := len(tc.store.intentResolver.mu.inFlightPushes); cnt != 0 {
+			t.Errorf("expected no inflight pushe refcount map entries, found %d", cnt)
 		}
 	}
 }

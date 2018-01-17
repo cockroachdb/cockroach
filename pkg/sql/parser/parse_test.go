@@ -84,6 +84,8 @@ func TestParse(t *testing.T) {
 		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f)`},
 		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d.e (f, g)`},
 		{`CREATE UNIQUE INDEX a ON b.c (d)`},
+		{`CREATE INVERTED INDEX a ON b (c)`},
+		{`CREATE INVERTED INDEX a ON b.c (d)`},
 
 		{`CREATE TABLE a ()`},
 		{`CREATE TABLE a (b INT)`},
@@ -180,7 +182,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
 		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))`},
-		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES < 1, PARTITION p2 VALUES < (2, MAXVALUE), PARTITION p3 VALUES < MAXVALUE)`},
+		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (MINVALUE) TO (1), PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))`},
 		// This monstrosity was added on the assumption that it's more readable
 		// than all on one line. Feel free to rip it out if you come across it
 		// and disagree.
@@ -189,7 +191,7 @@ func TestParse(t *testing.T) {
 				PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (
 					PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)
 				), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (
-					PARTITION p2_1 VALUES < 7 PARTITION BY LIST (d) (
+					PARTITION p2_1 VALUES FROM (7) TO (8) PARTITION BY LIST (d) (
 						PARTITION p2_1_1 VALUES IN (8)
 					)
 				)
@@ -201,6 +203,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))`},
 		{`CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))`},
 		{`CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))`},
+		{`ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))`},
+		{`ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))`},
 
 		{`CREATE TABLE a AS SELECT * FROM b`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b`},
@@ -237,9 +241,7 @@ func TestParse(t *testing.T) {
 		{`CREATE SEQUENCE a MINVALUE 1000`},
 		{`CREATE SEQUENCE a START 1000`},
 		{`CREATE SEQUENCE a START WITH 1000`},
-		{`CREATE SEQUENCE a CYCLE`},
-		{`CREATE SEQUENCE a NO CYCLE`},
-		{`CREATE SEQUENCE a INCREMENT 5 NO MAXVALUE MINVALUE 1 START 3 NO CYCLE`},
+		{`CREATE SEQUENCE a INCREMENT 5 NO MAXVALUE MINVALUE 1 START 3`},
 
 		{`CREATE STATISTICS a ON col1 FROM t`},
 		{`CREATE STATISTICS a ON col1, col2 FROM t`},
@@ -328,6 +330,7 @@ func TestParse(t *testing.T) {
 		{`SHOW CONSTRAINTS FROM a`},
 		{`SHOW CONSTRAINTS FROM a.b.c`},
 		{`SHOW TABLES FROM a; SHOW COLUMNS FROM b`},
+		{`SHOW ROLES`},
 		{`SHOW USERS`},
 		{`SHOW JOBS`},
 		{`SHOW CLUSTER QUERIES`},
@@ -341,8 +344,10 @@ func TestParse(t *testing.T) {
 		{`SHOW KV TRACE FOR TABLE foo`},
 		{`SHOW COMPACT TRACE FOR TABLE foo`},
 		{`SHOW COMPACT KV TRACE FOR TABLE foo`},
+		{`SHOW EXPERIMENTAL_REPLICA TRACE FOR SELECT 42`},
 		{`SHOW STATISTICS FOR TABLE t`},
 		{`SHOW STATISTICS FOR TABLE d.t`},
+		{`SHOW HISTOGRAM 123`},
 		{`SHOW TESTING_RANGES FROM TABLE d.t`},
 		{`SHOW TESTING_RANGES FROM TABLE t`},
 		{`SHOW TESTING_RANGES FROM INDEX d.t@i`},
@@ -355,15 +360,12 @@ func TestParse(t *testing.T) {
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE meta`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE db`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE db.t`},
-		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE db.t PARTITION p`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p OF TABLE db.t`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE t`},
-		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE t PARTITION p`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p OF TABLE t`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX db.t@i`},
-		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX db.t@i PARTITION p`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX t@i`},
-		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX t@i PARTITION p`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX i`},
-		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX i PARTITION p`},
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
@@ -373,6 +375,10 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
+
+		{`SHOW TRANSACTION STATUS`},
+
+		{`SHOW SYNTAX 'select 1'`},
 
 		{`PREPARE a AS SELECT 1`},
 		{`PREPARE a (INT) AS SELECT $1`},
@@ -417,6 +423,8 @@ func TestParse(t *testing.T) {
 		{`GRANT SELECT, INSERT ON DATABASE bar TO foo, bar, baz`},
 		{`GRANT SELECT, INSERT ON DATABASE db1, db2 TO foo, bar, baz`},
 		{`GRANT SELECT, INSERT ON DATABASE db1, db2 TO "test-user"`},
+		{`GRANT rolea, roleb TO usera, userb`},
+		{`GRANT rolea, roleb TO usera, userb WITH ADMIN OPTION`},
 
 		// Tables are the default, but can also be specified with
 		// REVOKE x ON TABLE y. However, the stringer does not output TABLE.
@@ -426,6 +434,8 @@ func TestParse(t *testing.T) {
 		{`REVOKE ALL ON DATABASE foo FROM root, test`},
 		{`REVOKE SELECT, INSERT ON DATABASE bar FROM foo, bar, baz`},
 		{`REVOKE SELECT, INSERT ON DATABASE db1, db2 FROM foo, bar, baz`},
+		{`REVOKE rolea, roleb FROM usera, userb`},
+		{`REVOKE ADMIN OPTION FOR rolea, roleb FROM usera, userb`},
 
 		{`INSERT INTO a VALUES (1)`},
 		{`INSERT INTO a.b VALUES (1)`},
@@ -483,7 +493,7 @@ func TestParse(t *testing.T) {
 		{`SELECT true = false`},
 		{`SELECT (true = false)`},
 		{`SELECT (ARRAY['a', 'b'])[2]`},
-		{`SELECT (ARRAY(VALUES (1), (2)))[1]`},
+		{`SELECT (ARRAY (VALUES (1), (2)))[1]`},
 		{`SELECT (SELECT 1)`},
 		{`SELECT ((SELECT 1))`},
 		{`SELECT (SELECT ARRAY['a', 'b'])[2]`},
@@ -630,7 +640,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a ~* c`},
 		{`SELECT a FROM t WHERE a !~* c`},
 		{`SELECT a FROM t WHERE a BETWEEN b AND c`},
+		{`SELECT a FROM t WHERE a BETWEEN SYMMETRIC b AND c`},
 		{`SELECT a FROM t WHERE a NOT BETWEEN b AND c`},
+		{`SELECT a FROM t WHERE a NOT BETWEEN SYMMETRIC b AND c`},
 		{`SELECT a FROM t WHERE a IS NULL`},
 		{`SELECT a FROM t WHERE a IS NOT NULL`},
 		{`SELECT a FROM t WHERE a IS true`},
@@ -851,15 +863,12 @@ func TestParse(t *testing.T) {
 		{`ALTER RANGE meta EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER DATABASE db EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER TABLE db.t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
-		{`ALTER TABLE db.t PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER PARTITION p OF TABLE db.t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
-		{`ALTER TABLE t PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER PARTITION p OF TABLE t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER INDEX db.t@i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
-		{`ALTER INDEX db.t@i PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
-		{`ALTER INDEX t@i PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER INDEX i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
-		{`ALTER INDEX i PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE b'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE NULL`},
 
@@ -869,12 +878,16 @@ func TestParse(t *testing.T) {
 		{`ALTER SEQUENCE IF EXISTS a INCREMENT BY 5 START WITH 1000`},
 
 		{`EXPERIMENTAL SCRUB DATABASE x`},
+		{`EXPERIMENTAL SCRUB DATABASE x AS OF SYSTEM TIME 1`},
 		{`EXPERIMENTAL SCRUB TABLE x`},
-		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS INDEX ALL`},
+		{`EXPERIMENTAL SCRUB TABLE x AS OF SYSTEM TIME 1`},
+		{`EXPERIMENTAL SCRUB TABLE x AS OF SYSTEM TIME 1 WITH OPTIONS INDEX ALL`},
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS INDEX (index_name)`},
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL`},
-		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX (index_name)`},
-		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX ALL`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS CONSTRAINT ALL`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS CONSTRAINT (cst_name)`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX (index_name), CONSTRAINT (cst_name)`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX ALL, CONSTRAINT ALL`},
 
 		{`BACKUP foo TO 'bar'`},
 		{`BACKUP foo.foo, baz.baz TO 'bar'`},
@@ -1003,6 +1016,9 @@ func TestParse2(t *testing.T) {
 		// Alternate not-equal operator.
 		{`SELECT a FROM t WHERE a <> b`,
 			`SELECT a FROM t WHERE a != b`},
+		// BETWEEN ASYMMETRIC is noise for BETWEEN.
+		{`SELECT a FROM t WHERE a BETWEEN ASYMMETRIC b AND c`,
+			`SELECT a FROM t WHERE a BETWEEN b AND c`},
 		// OUTER is syntactic sugar.
 		{`SELECT a FROM t1 LEFT OUTER JOIN t2 ON a = b`,
 			`SELECT a FROM t1 LEFT JOIN t2 ON a = b`},
@@ -1239,8 +1255,19 @@ func TestParse2(t *testing.T) {
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 		{`DROP USER foo, bar`,
 			`DROP USER 'foo', 'bar'`},
+		{`DROP USER IF EXISTS foo, bar`,
+			`DROP USER IF EXISTS 'foo', 'bar'`},
 		{`ALTER USER foo WITH PASSWORD bar`,
 			`ALTER USER 'foo' WITH PASSWORD 'bar'`},
+
+		{`CREATE ROLE foo`,
+			`CREATE ROLE 'foo'`},
+		{`CREATE ROLE IF NOT EXISTS foo`,
+			`CREATE ROLE IF NOT EXISTS 'foo'`},
+		{`DROP ROLE foo, bar`,
+			`DROP ROLE 'foo', 'bar'`},
+		{`DROP ROLE IF EXISTS foo, bar`,
+			`DROP ROLE IF EXISTS 'foo', 'bar'`},
 
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)`,
@@ -1310,6 +1337,10 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT ON DELETE RESTRICT)`,
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT)`,
 		},
+		{
+			`CREATE INDEX a ON b (c) USING GIN`,
+			`CREATE INVERTED INDEX a ON b (c)`,
+		},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
@@ -1317,7 +1348,7 @@ func TestParse2(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := tree.AsStringWithFlags(stmts, tree.FmtSimpleWithPasswords)
+		s := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1348,7 +1379,7 @@ func TestParseTree(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := tree.AsStringWithFlags(stmts, tree.FmtAlwaysGroupExprs)
+		s := tree.AsStringWithFlags(&stmts, tree.FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}

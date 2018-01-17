@@ -15,15 +15,15 @@
 package sql_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"sync"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -56,6 +56,10 @@ func TestIndexBackfiller(t *testing.T) {
 				// Wait until we get a signal to begin backfill.
 				<-moveToBackfill
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 

@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -44,8 +43,8 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	if desc.ID != 0 {
 		t.Fatalf("expected ID == 0, got %d", desc.ID)
 	}
-	if len(desc.GetPrivileges().Users) != 1 {
-		t.Fatalf("wrong number of privilege users, expected 1, got: %d", len(desc.GetPrivileges().Users))
+	if len(desc.GetPrivileges().Users) != 2 {
+		t.Fatalf("wrong number of privilege users, expected 2, got: %d", len(desc.GetPrivileges().Users))
 	}
 }
 
@@ -67,7 +66,7 @@ func TestDatabaseAccessors(t *testing.T) {
 		p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
 		defer finishInternalPlanner(p)
 		p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
-		p.session.Database = "test"
+		p.session.data.Database = "test"
 
 		_, err := p.session.tables.databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
 		return err

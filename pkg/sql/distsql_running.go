@@ -15,11 +15,11 @@
 package sql
 
 import (
+	"context"
 	"sync/atomic"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -58,7 +58,7 @@ type runnerResult struct {
 func (req runnerRequest) run() {
 	res := runnerResult{nodeID: req.nodeID}
 
-	conn, err := req.rpcContext.GRPCDial(req.nodeAddress)
+	conn, err := req.rpcContext.GRPCDial(req.nodeAddress).Connect(req.ctx)
 	if err != nil {
 		res.err = err
 	} else {
@@ -109,7 +109,7 @@ func (dsp *DistSQLPlanner) Run(
 	txn *client.Txn,
 	plan *physicalPlan,
 	recv *distSQLReceiver,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 ) error {
 	ctx := planCtx.ctx
 
@@ -139,8 +139,8 @@ func (dsp *DistSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx)
-	iter := evalCtx.SearchPath.Iter()
+	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx.EvalContext)
+	iter := evalCtx.SessionData.SearchPath.Iter()
 	for s, ok := iter(); ok; s, ok = iter() {
 		evalCtxProto.SearchPath = append(evalCtxProto.SearchPath, s)
 	}
@@ -297,7 +297,7 @@ func makeDistSQLReceiver(
 	leaseCache *kv.LeaseHolderCache,
 	txn *client.Txn,
 	updateClock func(observedTs hlc.Timestamp),
-) (distSQLReceiver, error) {
+) distSQLReceiver {
 	return distSQLReceiver{
 		ctx:          ctx,
 		resultWriter: resultWriter,
@@ -305,14 +305,14 @@ func makeDistSQLReceiver(
 		leaseCache:   leaseCache,
 		txn:          txn,
 		updateClock:  updateClock,
-	}, nil
+	}
 }
 
 // Push is part of the RowReceiver interface.
 func (r *distSQLReceiver) Push(
-	row sqlbase.EncDatumRow, meta distsqlrun.ProducerMetadata,
+	row sqlbase.EncDatumRow, meta *distsqlrun.ProducerMetadata,
 ) distsqlrun.ConsumerStatus {
-	if !meta.Empty() {
+	if meta != nil {
 		if meta.Err != nil && r.err == nil {
 			if r.txn != nil {
 				if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
@@ -437,9 +437,9 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	txn *client.Txn,
 	tree planNode,
 	recv *distSQLReceiver,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 ) error {
-	planCtx := dsp.newPlanningCtx(ctx, &evalCtx, txn)
+	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 

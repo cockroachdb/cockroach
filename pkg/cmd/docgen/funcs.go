@@ -32,35 +32,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-var functionsCmd = &cobra.Command{
-	Use:   "functions <output-dir>",
-	Short: "generate markdown documentation of functions and operators",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		outDir := filepath.Join("docs", "generated", "sql")
-		if len(args) > 0 {
-			outDir = args[0]
-		}
+func init() {
+	cmds = append(cmds, &cobra.Command{
+		Use:   "functions <output-dir>",
+		Short: "generate markdown documentation of functions and operators",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			outDir := filepath.Join("docs", "generated", "sql")
+			if len(args) > 0 {
+				outDir = args[0]
+			}
 
-		if stat, err := os.Stat(outDir); err != nil {
-			return err
-		} else if !stat.IsDir() {
-			return errors.Errorf("%q is not a directory", outDir)
-		}
+			if stat, err := os.Stat(outDir); err != nil {
+				return err
+			} else if !stat.IsDir() {
+				return errors.Errorf("%q is not a directory", outDir)
+			}
 
-		if err := ioutil.WriteFile(
-			filepath.Join(outDir, "functions.md"), generateFunctions(builtins.Builtins, true), 0644,
-		); err != nil {
-			return err
-		}
-		if err := ioutil.WriteFile(
-			filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.Aggregates, false), 0644,
-		); err != nil {
-			return err
-		}
-		return ioutil.WriteFile(
-			filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
-		)
-	},
+			if err := ioutil.WriteFile(
+				filepath.Join(outDir, "functions.md"), generateFunctions(builtins.Builtins, true), 0644,
+			); err != nil {
+				return err
+			}
+			if err := ioutil.WriteFile(
+				filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.Aggregates, false), 0644,
+			); err != nil {
+				return err
+			}
+			return ioutil.WriteFile(
+				filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
+			)
+		},
+	})
 }
 
 type operation struct {

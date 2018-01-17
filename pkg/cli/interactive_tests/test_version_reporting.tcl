@@ -33,7 +33,8 @@ start_server $argv
 send "select 1;\r"
 eexpect "driver: bad connection"
 # Check that the prompt immediately succeeds the error message
-eexpect "connection lost; opening new connection: all session settings will be lost"
+eexpect "connection lost"
+eexpect "opening new connection: all session settings will be lost"
 expect {
     "\r\n# " {
 	report "unexpected server message"
@@ -61,15 +62,21 @@ eexpect "New ID:"
 eexpect root@
 end_test
 
-start_test "Check that the client picks up a new server version."
-force_stop_server $argv
-set env(COCKROACH_TESTING_VERSION_TAG) "fakever"
+interrupt
+eexpect eof
+
+stop_server $argv
+
+start_test "Check that the client picks up a new server version, and warns about lower versions."
+set env(COCKROACH_TESTING_VERSION_TAG) "v0.1-fakever"
 start_server $argv
+set env(COCKROACH_TESTING_VERSION_TAG) "v0.2-fakever"
+spawn $argv sql
 send "select 1;\r"
-eexpect "opening new connection"
 eexpect "# Client version: CockroachDB"
 eexpect "# Server version: CockroachDB"
 eexpect "fakever"
+eexpect "warning: server version older than client"
 eexpect root@
 end_test
 

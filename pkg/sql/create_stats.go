@@ -15,11 +15,12 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type createStatsNode struct {
@@ -65,10 +66,6 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 		tableDesc:   tableDesc,
 		columns:     columnIDs,
 	}, nil
-}
-
-func (*createStatsNode) Start(runParams) error {
-	return errors.Errorf("statistics can only be created via DistSQL")
 }
 
 func (*createStatsNode) Next(runParams) (bool, error) { panic("not implemented") }

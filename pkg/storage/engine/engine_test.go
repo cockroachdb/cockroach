@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -23,7 +24,6 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"

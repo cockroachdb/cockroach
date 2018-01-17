@@ -15,12 +15,12 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -74,6 +74,9 @@ var (
 	metaEpochIncrements = metric.Metadata{
 		Name: "liveness.epochincrements",
 		Help: "Number of times this node has incremented its liveness epoch"}
+	metaHeartbeatLatency = metric.Metadata{
+		Name: "liveness.heartbeatlatency",
+		Help: "Node liveness heartbeat latency"}
 )
 
 // IsLive returns whether the node is considered live at the given time with the
@@ -93,6 +96,7 @@ type LivenessMetrics struct {
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  *metric.Counter
 	EpochIncrements    *metric.Counter
+	HeartbeatLatency   *metric.Histogram
 }
 
 // IsLiveCallback is invoked when a node's IsLive state changes to true.
@@ -140,6 +144,7 @@ func NewNodeLiveness(
 	g *gossip.Gossip,
 	livenessThreshold time.Duration,
 	renewalDuration time.Duration,
+	histogramWindow time.Duration,
 ) *NodeLiveness {
 	nl := &NodeLiveness{
 		ambientCtx:        ambient,
@@ -157,6 +162,7 @@ func NewNodeLiveness(
 		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
 		HeartbeatFailures:  metric.NewCounter(metaHeartbeatFailures),
 		EpochIncrements:    metric.NewCounter(metaEpochIncrements),
+		HeartbeatLatency:   metric.NewLatency(metaHeartbeatLatency, histogramWindow),
 	}
 	nl.pauseHeartbeat.Store(false)
 	nl.mu.nodes = map[roachpb.NodeID]Liveness{}
@@ -338,7 +344,9 @@ func (nl *NodeLiveness) StartHeartbeat(
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				func() {
-					ctx, cancel := context.WithTimeout(context.Background(), nl.heartbeatInterval/2)
+					// Give the context a timeout approximately as long as the time we
+					// have left before our liveness entry expires.
+					ctx, cancel := context.WithTimeout(context.Background(), nl.livenessThreshold-nl.heartbeatInterval)
 					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "heartbeat")
 					defer cancel()
 					defer sp.Finish()
@@ -412,7 +420,9 @@ func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, liveness *Liveness, incrementEpoch bool,
 ) error {
 	defer func(start time.Time) {
-		if dur := timeutil.Now().Sub(start); dur > time.Second {
+		dur := timeutil.Now().Sub(start)
+		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
+		if dur > time.Second {
 			log.Warningf(ctx, "slow heartbeat took %0.1fs", dur.Seconds())
 		}
 	}(timeutil.Now())
@@ -572,8 +582,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 		return err
 	}
 
-	log.VEventf(ctx, 1, "incremented node %d liveness epoch to %d",
-		newLiveness.NodeID, newLiveness.Epoch)
+	log.Infof(ctx, "incremented n%d liveness epoch to %d", newLiveness.NodeID, newLiveness.Epoch)
 	nl.maybeUpdate(newLiveness)
 	nl.metrics.EpochIncrements.Inc(1)
 	return nil

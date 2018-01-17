@@ -37,22 +37,25 @@ const singleQuote = '\''
 
 // Scanner lexes SQL statements.
 type Scanner struct {
-	in        string
-	pos       int
-	tokBuf    sqlSymType
-	lastTok   sqlSymType
-	nextTok   *sqlSymType
-	lastError struct {
-		msg                  string
-		hint                 string
-		detail               string
-		unimplementedFeature string
-	}
+	in          string
+	pos         int
+	tokBuf      sqlSymType
+	lastTok     sqlSymType
+	nextTok     *sqlSymType
+	lastError   *scanErr
 	stmts       []tree.Statement
-	identQuote  int
-	stringQuote int
+	identQuote  int8
+	stringQuote int8
 
 	initialized bool
+}
+
+// scanErr holds error state for a Scanner.
+type scanErr struct {
+	msg                  string
+	hint                 string
+	detail               string
+	unimplementedFeature string
 }
 
 // MakeScanner makes a Scanner from str.
@@ -131,6 +134,12 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	return lval.id
 }
 
+func (s *Scanner) initLastErr() {
+	if s.lastError == nil {
+		s.lastError = new(scanErr)
+	}
+}
+
 // Unimplemented wraps Error, setting lastUnimplementedError.
 func (s *Scanner) Unimplemented(feature string) {
 	s.Error("unimplemented")
@@ -144,32 +153,8 @@ func (s *Scanner) UnimplementedWithIssue(issue int) {
 	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
-// SetHelp marks the "last error" field in the Scanner to become a
-// help text. This method is invoked in the error action of the
-// parser, so the help text is only produced if the last token
-// encountered was HELPTOKEN -- other cases are just syntax errors,
-// and in that case we do not want the help text to overwrite the
-// lastError field, which was set earlier to contain details about the
-// syntax error.
-func (s *Scanner) SetHelp(msg HelpMessage) {
-	if s.lastTok.id == HELPTOKEN {
-		s.populateHelpMsg(msg.String())
-	} else {
-		if msg.Command != "" {
-			s.lastError.hint = `try \h ` + msg.Command
-		} else {
-			s.lastError.hint = `try \hf ` + msg.Function
-		}
-	}
-}
-
-func (s *Scanner) populateHelpMsg(msg string) {
-	s.lastError.unimplementedFeature = ""
-	s.lastError.msg = "help token in input"
-	s.lastError.hint = msg
-}
-
 func (s *Scanner) Error(e string) {
+	s.initLastErr()
 	if s.lastTok.id == ERROR {
 		// This is a tokenizer (lexical) error: just emit the invalid
 		// input as error.
@@ -197,6 +182,33 @@ func (s *Scanner) Error(e string) {
 	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", s.lastTok.pos-j))
 	s.lastError.detail = buf.String()
 	s.lastError.unimplementedFeature = ""
+}
+
+// SetHelp marks the "last error" field in the Scanner to become a
+// help text. This method is invoked in the error action of the
+// parser, so the help text is only produced if the last token
+// encountered was HELPTOKEN -- other cases are just syntax errors,
+// and in that case we do not want the help text to overwrite the
+// lastError field, which was set earlier to contain details about the
+// syntax error.
+func (s *Scanner) SetHelp(msg HelpMessage) {
+	if s.lastTok.id == HELPTOKEN {
+		s.populateHelpMsg(msg.String())
+	} else {
+		s.initLastErr()
+		if msg.Command != "" {
+			s.lastError.hint = `try \h ` + msg.Command
+		} else {
+			s.lastError.hint = `try \hf ` + msg.Function
+		}
+	}
+}
+
+func (s *Scanner) populateHelpMsg(msg string) {
+	s.initLastErr()
+	s.lastError.unimplementedFeature = ""
+	s.lastError.msg = "help token in input"
+	s.lastError.hint = msg
 }
 
 func (s *Scanner) scan(lval *sqlSymType) {
@@ -227,9 +239,9 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		}
 		return
 
-	case s.identQuote:
+	case int(s.identQuote):
 		// "[^"]"
-		if s.scanString(lval, s.identQuote, false, true) {
+		if s.scanString(lval, int(s.identQuote), false, true) {
 			lval.id = IDENT
 		}
 		return
@@ -241,16 +253,16 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		}
 		return
 
-	case s.stringQuote:
+	case int(s.stringQuote):
 		// '[^']'
-		if s.scanString(lval, s.stringQuote, false, true) {
+		if s.scanString(lval, int(s.stringQuote), false, true) {
 			lval.id = SCONST
 		}
 		return
 
 	case 'b', 'B':
 		// Bytes?
-		if t := s.peek(); t == singleQuote || t == s.stringQuote {
+		if t := s.peek(); t == singleQuote || t == int(s.stringQuote) {
 			// [bB]'[^']'
 			s.pos++
 			if s.scanString(lval, t, true, false) {
@@ -267,7 +279,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 
 	case 'e', 'E':
 		// Escaped string?
-		if t := s.peek(); t == singleQuote || t == s.stringQuote {
+		if t := s.peek(); t == singleQuote || t == int(s.stringQuote) {
 			// [eE]'[^']'
 			s.pos++
 			if s.scanString(lval, t, true, true) {
@@ -280,7 +292,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 
 	case 'x', 'X':
 		// Hex literal?
-		if t := s.peek(); t == singleQuote || t == s.stringQuote {
+		if t := s.peek(); t == singleQuote || t == int(s.stringQuote) {
 			// [xX]'[a-f0-9]'
 			s.pos++
 			if s.scanStringOrHex(lval, t, false, false, true) {

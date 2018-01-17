@@ -16,6 +16,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -33,7 +34,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -162,7 +163,8 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 	if tc.gossip == nil {
-		rpcContext := rpc.NewContext(cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock, stopper)
+		rpcContext := rpc.NewContext(
+			cfg.AmbientCtx, &base.Config{Insecure: true}, cfg.Clock, stopper, &cfg.Settings.Version)
 		server := rpc.NewServer(rpcContext) // never started
 		tc.gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	}
@@ -710,11 +712,12 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 
 	lease, _ := tc.repl.GetLease()
 	invalidLease := lease
+	invalidLease.Sequence++
 	invalidLease.Replica.StoreID += 12345
 
 	raftCmd := storagebase.RaftCommand{
-		ProposerLease:   lease,
-		ProposerReplica: invalidLease.Replica,
+		ProposerLeaseSequence: lease.Sequence,
+		ProposerReplica:       invalidLease.Replica,
 		ReplicatedEvalResult: storagebase.ReplicatedEvalResult{
 			IsLeaseRequest: true,
 			State: &storagebase.ReplicaState{
@@ -1208,7 +1211,7 @@ func TestReplicaDrainLease(t *testing.T) {
 
 	tc.store.SetDraining(true)
 	tc.repl.mu.Lock()
-	pErr = <-tc.repl.requestLeaseLocked(context.Background(), status)
+	pErr = <-tc.repl.requestLeaseLocked(status).C()
 	tc.repl.mu.Unlock()
 	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
@@ -1456,6 +1459,15 @@ func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 
 func scanArgs(start, end []byte) roachpb.ScanRequest {
 	return roachpb.ScanRequest{
+		Span: roachpb.Span{
+			Key:    start,
+			EndKey: end,
+		},
+	}
+}
+
+func reverseScanArgs(start, end []byte) roachpb.ReverseScanRequest {
+	return roachpb.ReverseScanRequest{
 		Span: roachpb.Span{
 			Key:    start,
 			EndKey: end,
@@ -1892,10 +1904,10 @@ func TestLeaseConcurrent(t *testing.T) {
 			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
 				status := tc.repl.leaseStatus(*tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
-				leaseCh := tc.repl.requestLeaseLocked(ctx, status)
+				llHandle := tc.repl.requestLeaseLocked(status)
 				tc.repl.mu.Unlock()
 				wg.Done()
-				pErr := <-leaseCh
+				pErr := <-llHandle.C()
 				// Mutate the errors as we receive them to expose races.
 				if pErr != nil {
 					pErr.OriginNode = 0
@@ -3196,6 +3208,76 @@ func TestReplicaUseTSCache(t *testing.T) {
 	}
 	if respH.Timestamp.WallTime != tc.Clock().Now().WallTime {
 		t.Errorf("expected write timestamp to upgrade to 1s; got %s", respH.Timestamp)
+	}
+}
+
+func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	// Set clock to time 1s and do the conditional put.
+	t0 := 1 * time.Second
+	tc.manualClock.Set(t0.Nanoseconds())
+
+	// CPut args which expect value "1" to write "0".
+	key := []byte("a")
+	cpArgs := cPutArgs(key, []byte("1"), []byte("0"))
+	_, pErr := tc.SendWrapped(&cpArgs)
+	cfErr, ok := pErr.GetDetail().(*roachpb.ConditionFailedError)
+	if !ok {
+		t.Errorf("expected ConditionFailedError; got %v", pErr)
+	}
+	if cfErr.ActualValue != nil {
+		t.Errorf("expected empty actual value; got %s", cfErr.ActualValue)
+	}
+
+	// Try a transactional put at a lower timestamp and ensure it is pushed.
+	pArgs := putArgs(key, []byte("value"))
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+	txn.OrigTimestamp, txn.Timestamp = makeTS(1, 0), makeTS(1, 0)
+	h := roachpb.Header{Txn: txn}
+	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), h, &pArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if respH.Txn.Timestamp.WallTime != t0.Nanoseconds() {
+		t.Errorf("expected write timestamp to upgrade to 1s; got %s", respH.Txn.Timestamp)
+	}
+
+	// Try a conditional put at a later timestamp which will fail
+	// because there's now a transaction intent. This failure will
+	// not update the timestamp cache.
+	t1 := 2 * time.Second
+	tc.manualClock.Set(t1.Nanoseconds())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	_, pErr = tc.SendWrapped(&cpArgs)
+	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+		t.Errorf("expected WriteIntentError; got %v", pErr)
+	}
+
+	// Abort the intent and try to write again to ensure the timestamp
+	// cache wasn't updated by the second failed conditional put.
+	rArgs := &roachpb.ResolveIntentRequest{
+		Span:      pArgs.Header(),
+		IntentTxn: txn.TxnMeta,
+		Status:    roachpb.ABORTED,
+	}
+	txn.Sequence++
+	h = roachpb.Header{Timestamp: txn.Timestamp}
+	if _, pErr = tc.SendWrappedWith(h, rArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	_, respH, pErr = SendWrapped(context.Background(), tc.Sender(), h, &pArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if respH.Timestamp.WallTime != t0.Nanoseconds() {
+		t.Errorf("expected write timestamp to succeed at 1s; got %s", respH.Timestamp)
 	}
 }
 
@@ -5689,7 +5771,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	// The initial stats contain no lease, but there will be an initial
 	// nontrivial lease requested with the first write below.
 	baseStats.Add(enginepb.MVCCStats{
-		SysBytes: 22,
+		SysBytes: 24,
 	})
 
 	// Our clock might not be set to zero.
@@ -6646,7 +6728,7 @@ func TestProposalOverhead(t *testing.T) {
 	// NB: the expected overhead reflects the space overhead currently present in
 	// Raft commands. This test will fail if that overhead changes. Try to make
 	// this number go down and not up.
-	const expectedOverhead = 105
+	const expectedOverhead = 59
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
@@ -6749,6 +6831,27 @@ func TestReplicaDestroy(t *testing.T) {
 	// Now try a fresh descriptor and succeed.
 	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *repl.Desc(), true); err != nil {
 		t.Fatal(err)
+	}
+
+	iter := rditer.NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* replicatedOnly */)
+	defer iter.Close()
+	if ok, err := iter.Valid(); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		// If the range is destroyed, only a tombstone key should be there.
+		k1 := iter.Key().Key
+		if tombstoneKey := keys.RaftTombstoneKey(tc.repl.RangeID); !bytes.Equal(k1, tombstoneKey) {
+			t.Errorf("expected a tombstone key %q, but found %q", tombstoneKey, k1)
+		}
+
+		iter.Next()
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			t.Errorf("expected a destroyed replica to have only a tombstone key, but found more")
+		}
+	} else {
+		t.Errorf("expected a tombstone key, but got an empty iteration")
 	}
 }
 
@@ -7113,6 +7216,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			// Pick a key unlikely to be used by background processes.
 			key := []byte("acdfg")
 			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			cfg := TestStoreConfig(nil)
 			if !cancelEarly {
 				cfg.TestingKnobs.TestingProposalFilter =
@@ -8701,6 +8805,98 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 	if len(propRes.Intents) != 0 {
 		t.Fatal("expected intents to have been cleared")
+	}
+}
+
+func TestSplitMsgApps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	msgApp := func(idx uint64) raftpb.Message {
+		return raftpb.Message{Index: idx, Type: raftpb.MsgApp}
+	}
+	otherMsg := func(idx uint64) raftpb.Message {
+		return raftpb.Message{Index: idx, Type: raftpb.MsgVote}
+	}
+	formatMsgs := func(msgs []raftpb.Message) string {
+		strs := make([]string, len(msgs))
+		for i, msg := range msgs {
+			strs[i] = fmt.Sprintf("{%s:%d}", msg.Type, msg.Index)
+		}
+		return fmt.Sprint(strs)
+	}
+
+	testCases := []struct {
+		msgsIn, msgAppsOut, otherMsgsOut []raftpb.Message
+	}{
+		// No msgs.
+		{
+			msgsIn:       []raftpb.Message{},
+			msgAppsOut:   []raftpb.Message{},
+			otherMsgsOut: []raftpb.Message{},
+		},
+		// Only msgApps.
+		{
+			msgsIn:       []raftpb.Message{msgApp(1)},
+			msgAppsOut:   []raftpb.Message{msgApp(1)},
+			otherMsgsOut: []raftpb.Message{},
+		},
+		{
+			msgsIn:       []raftpb.Message{msgApp(1), msgApp(2)},
+			msgAppsOut:   []raftpb.Message{msgApp(1), msgApp(2)},
+			otherMsgsOut: []raftpb.Message{},
+		},
+		{
+			msgsIn:       []raftpb.Message{msgApp(2), msgApp(1)},
+			msgAppsOut:   []raftpb.Message{msgApp(2), msgApp(1)},
+			otherMsgsOut: []raftpb.Message{},
+		},
+		// Only otherMsgs.
+		{
+			msgsIn:       []raftpb.Message{otherMsg(1)},
+			msgAppsOut:   []raftpb.Message{},
+			otherMsgsOut: []raftpb.Message{otherMsg(1)},
+		},
+		{
+			msgsIn:       []raftpb.Message{otherMsg(1), otherMsg(2)},
+			msgAppsOut:   []raftpb.Message{},
+			otherMsgsOut: []raftpb.Message{otherMsg(1), otherMsg(2)},
+		},
+		{
+			msgsIn:       []raftpb.Message{otherMsg(2), otherMsg(1)},
+			msgAppsOut:   []raftpb.Message{},
+			otherMsgsOut: []raftpb.Message{otherMsg(2), otherMsg(1)},
+		},
+		// Mixed msgApps and otherMsgs.
+		{
+			msgsIn:       []raftpb.Message{msgApp(1), otherMsg(2)},
+			msgAppsOut:   []raftpb.Message{msgApp(1)},
+			otherMsgsOut: []raftpb.Message{otherMsg(2)},
+		},
+		{
+			msgsIn:       []raftpb.Message{otherMsg(1), msgApp(2)},
+			msgAppsOut:   []raftpb.Message{msgApp(2)},
+			otherMsgsOut: []raftpb.Message{otherMsg(1)},
+		},
+		{
+			msgsIn:       []raftpb.Message{msgApp(1), otherMsg(2), msgApp(3)},
+			msgAppsOut:   []raftpb.Message{msgApp(1), msgApp(3)},
+			otherMsgsOut: []raftpb.Message{otherMsg(2)},
+		},
+		{
+			msgsIn:       []raftpb.Message{otherMsg(1), msgApp(2), otherMsg(3)},
+			msgAppsOut:   []raftpb.Message{msgApp(2)},
+			otherMsgsOut: []raftpb.Message{otherMsg(1), otherMsg(3)},
+		},
+	}
+	for _, c := range testCases {
+		inStr := formatMsgs(c.msgsIn)
+		t.Run(inStr, func(t *testing.T) {
+			msgAppsRes, otherMsgsRes := splitMsgApps(c.msgsIn)
+			if !reflect.DeepEqual(msgAppsRes, c.msgAppsOut) || !reflect.DeepEqual(otherMsgsRes, c.otherMsgsOut) {
+				t.Errorf("expected splitMsgApps(%s)=%s/%s, found %s/%s", inStr, formatMsgs(c.msgAppsOut),
+					formatMsgs(c.otherMsgsOut), formatMsgs(msgAppsRes), formatMsgs(otherMsgsRes))
+			}
+		})
 	}
 }
 

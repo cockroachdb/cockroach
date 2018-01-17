@@ -57,7 +57,7 @@ const (
 	durationMarker       byte = durationBigNegMarker + 1
 	durationBigPosMarker byte = durationMarker + 1 // Only used for durations > MaxInt64 nanos.
 
-	decimalNaN              = durationBigPosMarker + 1
+	decimalNaN              = durationBigPosMarker + 1 // 24
 	decimalNegativeInfinity = decimalNaN + 1
 	decimalNegLarge         = decimalNegativeInfinity + 1
 	decimalNegMedium        = decimalNegLarge + 11
@@ -1320,11 +1320,11 @@ func EncodeNonsortingUvarint(appendTo []byte, x uint64) []byte {
 func DecodeNonsortingUvarint(buf []byte) (remaining []byte, length int, value uint64, err error) {
 	// TODO(dan): Handle overflow.
 	for i, b := range buf {
-		value <<= 7
 		value += uint64(b & 0x7f)
 		if b < 0x80 {
 			return buf[i+1:], i + 1, value, nil
 		}
+		value <<= 7
 	}
 	return buf, 0, 0, nil
 }
@@ -1799,41 +1799,50 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
+	length, err = PeekValueLengthWithOffsetsAndType(b, dataOffset, typ)
+	return typeOffset, length, err
+}
+
+// PeekValueLengthWithOffsetsAndType is the same as PeekValueLength, except it
+// expects a dataOffset and typ value from a previous call to DecodeValueTag
+// on its input byte slice. Use this if you've already called DecodeValueTag
+// on the input for another reason, to avoid it getting called twice.
+func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (length int, err error) {
 	b = b[dataOffset:]
 	switch typ {
 	case Null:
-		return typeOffset, dataOffset, nil
+		return dataOffset, nil
 	case True, False:
-		return typeOffset, dataOffset, nil
+		return dataOffset, nil
 	case Int:
 		_, n, _, err := DecodeNonsortingStdlibVarint(b)
-		return typeOffset, dataOffset + n, err
+		return dataOffset + n, err
 	case Float:
-		return typeOffset, dataOffset + floatValueEncodedLength, nil
+		return dataOffset + floatValueEncodedLength, nil
 	case Bytes, Array, JSON:
 		_, n, i, err := DecodeNonsortingUvarint(b)
-		return typeOffset, dataOffset + n + int(i), err
+		return dataOffset + n + int(i), err
 	case Decimal:
 		_, n, i, err := DecodeNonsortingStdlibUvarint(b)
-		return typeOffset, dataOffset + n + int(i), err
+		return dataOffset + n + int(i), err
 	case Time:
 		n, err := getMultiNonsortingVarintLen(b, 2)
-		return typeOffset, dataOffset + n, err
+		return dataOffset + n, err
 	case Duration:
 		n, err := getMultiNonsortingVarintLen(b, 3)
-		return typeOffset, dataOffset + n, err
+		return dataOffset + n, err
 	case UUID:
-		return typeOffset, dataOffset + uuidValueEncodedLength, err
+		return dataOffset + uuidValueEncodedLength, err
 	case IPAddr:
 		family := ipaddr.IPFamily(b[0])
 		if family == ipaddr.IPv4family {
-			return typeOffset, dataOffset + ipaddr.IPv4size, err
+			return dataOffset + ipaddr.IPv4size, err
 		} else if family == ipaddr.IPv6family {
-			return typeOffset, dataOffset + ipaddr.IPv6size, err
+			return dataOffset + ipaddr.IPv6size, err
 		}
-		return 0, 0, errors.Errorf("got invalid INET IP family: %d", family)
+		return 0, errors.Errorf("got invalid INET IP family: %d", family)
 	default:
-		return 0, 0, errors.Errorf("unknown type %s", typ)
+		return 0, errors.Errorf("unknown type %s", typ)
 	}
 }
 
@@ -1954,18 +1963,23 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 
 // DecomposeKeyTokens breaks apart a key into its individual key-encoded values
 // and returns a slice of byte slices, one for each key-encoded value.
-func DecomposeKeyTokens(b []byte) ([][]byte, error) {
+// It also returns whether the key contains a NULL value.
+func DecomposeKeyTokens(b []byte) (tokens [][]byte, containsNull bool, err error) {
 	var out [][]byte
 
 	for len(b) > 0 {
 		tokenLen, err := PeekLength(b)
 		if err != nil {
-			return nil, err
+			return nil, false, err
+		}
+
+		if PeekType(b) == Null {
+			containsNull = true
 		}
 
 		out = append(out, b[:tokenLen])
 		b = b[tokenLen:]
 	}
 
-	return out, nil
+	return out, containsNull, nil
 }

@@ -136,7 +136,7 @@ var Builtins = map[string][]tree.Builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		tree.Builtin{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -159,7 +159,7 @@ var Builtins = map[string][]tree.Builtin{
 
 	"concat_ws": {
 		tree.Builtin{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -1019,7 +1019,7 @@ CockroachDB supports the following flags:
 			Category:   categorySequences,
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				val, err := evalCtx.Planner.GetLastSequenceValue(evalCtx.Ctx())
+				val, err := evalCtx.SessionData.SequenceState.GetLastValue()
 				if err != nil {
 					return nil, err
 				}
@@ -1337,17 +1337,54 @@ CockroachDB supports the following flags:
 		},
 	},
 
-	// https://www.postgresql.org/docs/10/static/functions-datetime.html#functions-datetime-trunc
+	// https://www.postgresql.org/docs/10/static/functions-datetime.html#FUNCTIONS-DATETIME-TRUNC
+	//
+	// PostgreSQL documents date_trunc for timestamp, timestamptz and
+	// interval. It will also handle date and time inputs by casting them,
+	// so we support those for compatibility. This gives us the following
+	// function signatures:
+	//
+	//  date_trunc(string, time)        -> interval
+	//  date_trunc(string, date)        -> timestamptz
+	//  date_trunc(string, timestamp)   -> timestamp
+	//  date_trunc(string, timestamptz) -> timestamptz
+	//
+	// See the following snippet from running the functions in PostgreSQL:
+	//
+	// 		postgres=# select pg_typeof(date_trunc('month', '2017-04-11 00:00:00'::timestamp));
+	// 							pg_typeof
+	// 		-----------------------------
+	// 		timestamp without time zone
+	//
+	// 		postgres=# select pg_typeof(date_trunc('month', '2017-04-11 00:00:00'::date));
+	// 						pg_typeof
+	// 		--------------------------
+	// 		timestamp with time zone
+	//
+	// 		postgres=# select pg_typeof(date_trunc('month', '2017-04-11 00:00:00'::time));
+	// 		pg_typeof
+	// 		-----------
+	// 		interval
+	//
+	// This implicit casting behavior is mentioned in the PostgreSQL documentation:
+	// https://www.postgresql.org/docs/10/static/functions-datetime.html
+	// > source is a value expression of type timestamp or interval. (Values
+	// > of type date and time are cast automatically to timestamp or interval,
+	// > respectively.)
+	//
 	"date_trunc": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
 			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// extract timeSpan fromTime.
-				fromTS := args[1].(*tree.DTimestamp)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				fromTS := args[1].(*tree.DTimestamp)
+				tsTZ, err := truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDTimestamp(tsTZ.Time.In(ctx.GetLocation()), time.Microsecond), nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
@@ -1356,7 +1393,7 @@ CockroachDB supports the following flags:
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: tree.FixedReturnType(types.Date),
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
@@ -1371,12 +1408,16 @@ CockroachDB supports the following flags:
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
-			ReturnType: tree.FixedReturnType(types.Time),
+			ReturnType: tree.FixedReturnType(types.Interval),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				fromTime := args[1].(*tree.DTime)
-				return truncateTime(fromTime, timeSpan)
+				time, err := truncateTime(fromTime, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DInterval{Duration: duration.Duration{Nanos: int64(*time) * 1000}}, nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero.\n\n" +
@@ -1557,9 +1598,52 @@ CockroachDB supports the following flags:
 	// implemented.
 	},
 
+	"json_extract_path": {jsonExtractPathImpl},
+
+	"jsonb_extract_path": {jsonExtractPathImpl},
+
+	"json_set": {jsonSetImpl, jsonSetWithCreateMissingImpl},
+
+	"jsonb_set": {jsonSetImpl, jsonSetWithCreateMissingImpl},
+
+	"jsonb_pretty": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.JSON}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s, err := json.Pretty(tree.MustBeDJSON(args[0]).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info: "Returns the given JSON value as a STRING indented and with newlines.",
+		},
+	},
+
 	"json_typeof": {jsonTypeOfImpl},
 
 	"jsonb_typeof": {jsonTypeOfImpl},
+
+	"to_json": {toJSONImpl},
+
+	"to_jsonb": {toJSONImpl},
+
+	"json_build_array": {jsonBuildArrayImpl},
+
+	"jsonb_build_array": {jsonBuildArrayImpl},
+
+	"json_build_object": {jsonBuildObjectImpl},
+
+	"jsonb_build_object": {jsonBuildObjectImpl},
+
+	"json_object": jsonObjectImpls,
+
+	"jsonb_object": jsonObjectImpls,
+
+	"json_strip_nulls": {jsonStripNullsImpl},
+
+	"jsonb_strip_nulls": {jsonStripNullsImpl},
 
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
@@ -1946,7 +2030,7 @@ CockroachDB supports the following flags:
 	"array_positions": arrayBuiltin(func(typ types.T) tree.Builtin {
 		return tree.Builtin{
 			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
+			ReturnType:   tree.FixedReturnType(types.TArray{Typ: types.Int}),
 			Category:     categoryArray,
 			NullableArgs: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -1987,10 +2071,10 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if len(ctx.Database) == 0 {
+				if len(ctx.SessionData.Database) == 0 {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.Database), nil
+				return tree.NewDString(ctx.SessionData.Database), nil
 			},
 			Info: "Returns the current database.",
 		},
@@ -2002,10 +2086,10 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if len(ctx.Database) == 0 {
+				if len(ctx.SessionData.Database) == 0 {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.Database), nil
+				return tree.NewDString(ctx.SessionData.Database), nil
 			},
 			Info: "Returns the current schema. This function is provided for " +
 				"compatibility with PostgreSQL. For a new CockroachDB application, " +
@@ -2024,19 +2108,19 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				includePgCatalog := *(args[0].(*tree.DBool))
 				schemas := tree.NewDArray(types.String)
-				if len(ctx.Database) != 0 {
-					if err := schemas.Append(tree.NewDString(ctx.Database)); err != nil {
+				if len(ctx.SessionData.Database) != 0 {
+					if err := schemas.Append(tree.NewDString(ctx.SessionData.Database)); err != nil {
 						return nil, err
 					}
 				}
 				var iter func() (string, bool)
 				if includePgCatalog {
-					iter = ctx.SearchPath.Iter()
+					iter = ctx.SessionData.SearchPath.Iter()
 				} else {
-					iter = ctx.SearchPath.IterWithoutImplicitPGCatalog()
+					iter = ctx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
 				}
 				for p, ok := iter(); ok; p, ok = iter() {
-					if p == ctx.Database {
+					if p == ctx.SessionData.Database {
 						continue
 					}
 					if err := schemas.Append(tree.NewDString(p)); err != nil {
@@ -2055,13 +2139,32 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if len(ctx.User) == 0 {
+				if len(ctx.SessionData.User) == 0 {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.User), nil
+				return tree.NewDString(ctx.SessionData.User), nil
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",
+		},
+	},
+
+	"crdb_internal.node_executable_version": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Category:   categorySystemInfo,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				v := "unknown"
+				// TODO(tschottdorf): we should always have a Settings, but there
+				// are many random places that create an ad-hoc EvalContext that
+				// they only partially populate.
+				if st := ctx.Settings; st != nil {
+					v = st.Version.ServerVersion.String()
+				}
+				return tree.NewDString(v), nil
+			},
+			Info: "Returns the version of CockroachDB this node is running.",
 		},
 	},
 
@@ -2371,6 +2474,86 @@ var (
 	jsonObjectDString  = tree.NewDString("object")
 )
 
+var (
+	errJSONObjectNotEvenNumberOfElements = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+		"array must have even number of elements")
+	errJSONObjectNullValueForKey = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+		"null value not allowed for object key")
+	errJSONObjectMismatchedArrayDim = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+		"mismatched array dimensions")
+)
+
+var jsonExtractPathImpl = tree.Builtin{
+	Types:      tree.VariadicType{FixedTypes: []types.T{types.JSON}, VarType: types.String},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		j := tree.MustBeDJSON(args[0])
+		path := make([]string, len(args)-1)
+		for i, v := range args {
+			if i == 0 {
+				continue
+			}
+			path[i-1] = string(tree.MustBeDString(v))
+		}
+		result, err := json.FetchPath(j.JSON, path)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil {
+			return tree.DNull, nil
+		}
+		return &tree.DJSON{JSON: result}, nil
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments.",
+}
+
+func darrayToStringSlice(d tree.DArray) []string {
+	result := make([]string, len(d.Array))
+	for i, s := range d.Array {
+		result[i] = string(tree.MustBeDString(s))
+	}
+	return result
+}
+
+var jsonSetImpl = tree.Builtin{
+	Types: tree.ArgTypes{
+		{"val", types.JSON},
+		{"path", types.TArray{Typ: types.String}},
+		{"to", types.JSON},
+	},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
+		j, err := json.DeepSet(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, true)
+		if err != nil {
+			return nil, err
+		}
+		return &tree.DJSON{JSON: j}, nil
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments.",
+}
+
+var jsonSetWithCreateMissingImpl = tree.Builtin{
+	Types: tree.ArgTypes{
+		{"val", types.JSON},
+		{"path", types.TArray{Typ: types.String}},
+		{"to", types.JSON},
+		{"create_missing", types.Bool},
+	},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
+		j, err := json.DeepSet(tree.MustBeDJSON(args[0]).JSON, path, tree.MustBeDJSON(args[2]).JSON, bool(*(args[3].(*tree.DBool))))
+		if err != nil {
+			return nil, err
+		}
+		return &tree.DJSON{JSON: j}, nil
+	},
+	Info: "Returns the JSON value pointed to by the variadic arguments. " +
+		"If `create_missing` is false, new keys will not be inserted to objects " +
+		"and values will not be prepended or appended to arrays.",
+}
+
 var jsonTypeOfImpl = tree.Builtin{
 	Types:      tree.ArgTypes{{"val", types.JSON}},
 	ReturnType: tree.FixedReturnType(types.String),
@@ -2393,6 +2576,145 @@ var jsonTypeOfImpl = tree.Builtin{
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected JSON type %d", t)
 	},
 	Info: "Returns the type of the outermost JSON value as a text string.",
+}
+
+var jsonBuildObjectImpl = tree.Builtin{
+	Types:        tree.VariadicType{VarType: types.Any},
+	ReturnType:   tree.FixedReturnType(types.JSON),
+	NullableArgs: true,
+	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		if len(args)%2 != 0 {
+			return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+				"argument list must have even number of elements")
+		}
+
+		builder := json.NewBuilder()
+		for i := 0; i < len(args); i += 2 {
+			if args[i] == tree.DNull {
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"argument %d cannot be null", i+1)
+			}
+
+			key, err := asJSONBuildObjectKey(args[i])
+			if err != nil {
+				return nil, err
+			}
+
+			val, err := asJSON(args[i+1])
+			if err != nil {
+				return nil, err
+			}
+
+			builder.Add(key, val)
+		}
+
+		return tree.NewDJSON(builder.Build()), nil
+	},
+	Info: "Builds a JSON object out of a variadic argument list.",
+}
+
+var toJSONImpl = tree.Builtin{
+	Types:      tree.ArgTypes{{"val", types.Any}},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		j, err := asJSON(args[0])
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDJSON(j), nil
+	},
+	Info: "Returns the value as JSON or JSONB.",
+}
+
+var jsonBuildArrayImpl = tree.Builtin{
+	Types:        tree.VariadicType{VarType: types.Any},
+	ReturnType:   tree.FixedReturnType(types.JSON),
+	NullableArgs: true,
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		jsons := make([]json.JSON, len(args))
+		for i, arg := range args {
+			j, err := asJSON(arg)
+			if err != nil {
+				return nil, err
+			}
+			jsons[i] = j
+		}
+		return tree.NewDJSON(json.FromArrayOfJSON(jsons)), nil
+	},
+	Info: "Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.",
+}
+
+var jsonObjectImpls = []tree.Builtin{
+	{
+		Types:      tree.ArgTypes{{"texts", types.TArray{Typ: types.String}}},
+		ReturnType: tree.FixedReturnType(types.JSON),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			arr := tree.MustBeDArray(args[0])
+			if arr.Len()%2 != 0 {
+				return nil, errJSONObjectNotEvenNumberOfElements
+			}
+			builder := json.NewBuilder()
+			for i := 0; i < arr.Len(); i += 2 {
+				if arr.Array[i] == tree.DNull {
+					return nil, errJSONObjectNullValueForKey
+				}
+				key, err := asJSONObjectKey(arr.Array[i])
+				if err != nil {
+					return nil, err
+				}
+				val, err := asJSON(arr.Array[i+1])
+				if err != nil {
+					return nil, err
+				}
+				builder.Add(key, val)
+			}
+			return tree.NewDJSON(builder.Build()), nil
+		},
+		Info: "Builds a JSON or JSONB object out of a text array. The array must have " +
+			"exactly one dimension with an even number of members, in which case " +
+			"they are taken as alternating key/value pairs.",
+	},
+	{
+		Types: tree.ArgTypes{{"keys", types.TArray{Typ: types.String}},
+			{"values", types.TArray{Typ: types.String}}},
+		ReturnType: tree.FixedReturnType(types.JSON),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			keys := tree.MustBeDArray(args[0])
+			values := tree.MustBeDArray(args[1])
+			if keys.Len() != values.Len() {
+				return nil, errJSONObjectMismatchedArrayDim
+			}
+			builder := json.NewBuilder()
+			for i := 0; i < keys.Len(); i++ {
+				if keys.Array[i] == tree.DNull {
+					return nil, errJSONObjectNullValueForKey
+				}
+				key, err := asJSONObjectKey(keys.Array[i])
+				if err != nil {
+					return nil, err
+				}
+				val, err := asJSON(values.Array[i])
+				if err != nil {
+					return nil, err
+				}
+				builder.Add(key, val)
+			}
+			return tree.NewDJSON(builder.Build()), nil
+		},
+		Info: "This form of json_object takes keys and values pairwise from two " +
+			"separate arrays. In all other respects it is identical to the " +
+			"one-argument form.",
+	},
+}
+
+var jsonStripNullsImpl = tree.Builtin{
+	Types:      tree.ArgTypes{{"from_json", types.JSON}},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		j, _, err := tree.MustBeDJSON(args[0]).StripNulls()
+		return tree.NewDJSON(j), err
+	},
+	Info: "Returns from_json with all object fields that have null values omitted. Other null values are untouched.",
 }
 
 func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {
@@ -2553,7 +2875,7 @@ func feedHash(h hash.Hash, args tree.Datums) {
 func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2564,7 +2886,7 @@ func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{Typ: types.Bytes},
+			Types:        tree.VariadicType{VarType: types.Bytes},
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2580,7 +2902,7 @@ func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
 func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2591,7 +2913,7 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{Typ: types.Bytes},
+			Types:        tree.VariadicType{VarType: types.Bytes},
 			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2606,7 +2928,7 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
 func hash64Builtin(newHash func() hash.Hash64, info string) []tree.Builtin {
 	return []tree.Builtin{
 		{
-			Types:        tree.VariadicType{Typ: types.String},
+			Types:        tree.VariadicType{VarType: types.String},
 			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -2617,7 +2939,7 @@ func hash64Builtin(newHash func() hash.Hash64, info string) []tree.Builtin {
 			Info: info,
 		},
 		{
-			Types:        tree.VariadicType{Typ: types.Bytes},
+			Types:        tree.VariadicType{VarType: types.Bytes},
 			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -3054,7 +3376,7 @@ func extractStringFromTimestamp(
 	}
 }
 
-func truncateTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
+func truncateTime(fromTime *tree.DTime, timeSpan string) (*tree.DTime, error) {
 	t := timeofday.TimeOfDay(*fromTime)
 	hour := t.Hour()
 	min := t.Minute()
@@ -3085,7 +3407,7 @@ func truncateTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 
 func truncateTimestamp(
 	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
-) (tree.Datum, error) {
+) (*tree.DTimestampTZ, error) {
 	year := fromTime.Year()
 	month := fromTime.Month()
 	day := fromTime.Day()
@@ -3146,4 +3468,76 @@ func truncateTimestamp(
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond), nil
+}
+
+func asJSON(d tree.Datum) (json.JSON, error) {
+	switch t := d.(type) {
+	case *tree.DBool:
+		return json.FromBool(bool(*t)), nil
+	case *tree.DInt:
+		return json.FromInt(int(*t)), nil
+	case *tree.DFloat:
+		return json.FromFloat64(float64(*t))
+	case *tree.DDecimal:
+		return json.FromDecimal(t.Decimal), nil
+	case *tree.DString:
+		return json.FromString(string(*t)), nil
+	case *tree.DCollatedString:
+		return json.FromString(t.Contents), nil
+	case *tree.DJSON:
+		return t.JSON, nil
+	case *tree.DArray:
+		jsons := make([]json.JSON, t.Len())
+		for i, e := range t.Array {
+			var err error
+			jsons[i], err = asJSON(e)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return json.FromArrayOfJSON(jsons), nil
+	case *tree.DTuple:
+		builder := json.NewBuilder()
+		for i, e := range t.D {
+			j, err := asJSON(e)
+			if err != nil {
+				return nil, err
+			}
+			builder.Add(fmt.Sprintf("f%d", i+1), j)
+		}
+		return builder.Build(), nil
+	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime:
+		return json.FromString(tree.AsStringWithFlags(t, tree.FmtBareStrings)), nil
+	default:
+		if d == tree.DNull {
+			return json.MakeJSON(nil)
+		}
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSON", d)
+	}
+}
+
+// Converts a scalar Datum to its string representation
+func asJSONBuildObjectKey(d tree.Datum) (string, error) {
+	switch t := d.(type) {
+	case *tree.DJSON, *tree.DArray, *tree.DTuple:
+		return "", pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+			"key value must be scalar, not array, tuple, or json")
+	case *tree.DString:
+		return string(*t), nil
+	case *tree.DCollatedString:
+		return t.Contents, nil
+	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DOid, *tree.DTime:
+		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
+	default:
+		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for key value", d)
+	}
+}
+
+func asJSONObjectKey(d tree.Datum) (string, error) {
+	switch t := d.(type) {
+	case *tree.DString:
+		return string(*t), nil
+	default:
+		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSONObjectKey", d)
+	}
 }

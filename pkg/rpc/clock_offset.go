@@ -15,10 +15,9 @@
 package rpc
 
 import (
+	"context"
 	"math"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"

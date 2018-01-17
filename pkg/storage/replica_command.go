@@ -16,19 +16,16 @@ package storage
 
 import (
 	"bytes"
-	"crypto/sha512"
-	"encoding/binary"
+	"context"
 	"fmt"
-	"io"
 	"math"
+	"math/rand"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -47,17 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-)
-
-const (
-	// collectChecksumTimeout controls how long we'll wait to collect a checksum
-	// for a CheckConsistency request. We need to bound the time that we wait
-	// because the checksum might never be computed for a replica if that replica
-	// is caught up via a snapshot and never performs the ComputeChecksum
-	// operation.
-	collectChecksumTimeout = 5 * time.Second
 )
 
 // evaluateCommand delegates to the eval method for the given
@@ -311,7 +297,7 @@ func evalEndTransaction(
 			}
 			// Use alwaysReturn==true because the transaction is definitely
 			// aborted, no matter what happens to this command.
-			return result.FromIntents(externalIntents, args, true /* alwaysReturn */), nil
+			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */), nil
 		}
 		// If the transaction was previously aborted by a concurrent writer's
 		// push, any intents written are still open. It's only now that we know
@@ -321,9 +307,8 @@ func evalEndTransaction(
 		// Similarly to above, use alwaysReturn==true. The caller isn't trying
 		// to abort, but the transaction is definitely aborted and its intents
 		// can go.
-		return result.FromIntents(roachpb.AsIntents(
-			args.IntentSpans, reply.Txn), args, true, /* alwaysReturn */
-		), roachpb.NewTransactionAbortedError()
+		reply.Txn.Intents = args.IntentSpans
+		return result.FromEndTxn(reply.Txn, true /* alwaysReturn */), roachpb.NewTransactionAbortedError()
 
 	case roachpb.PENDING:
 		if h.Txn.Epoch < reply.Txn.Epoch {
@@ -432,7 +417,7 @@ func evalEndTransaction(
 	// We specify alwaysReturn==false because if the commit fails below Raft, we
 	// don't want the intents to be up for resolution. That should happen only
 	// if the commit actually happens; otherwise, we risk losing writes.
-	intentsResult := result.FromIntents(externalIntents, args, false /* alwaysReturn */)
+	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */)
 	intentsResult.Local.UpdatedTxns = &[]*roachpb.Transaction{reply.Txn}
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
@@ -478,7 +463,11 @@ func isEndTransactionTriggeringRetryError(
 // resolveLocalIntents synchronously resolves any intents that are
 // local to this range in the same batch. The remainder are collected
 // and returned so that they can be handed off to asynchronous
-// processing.
+// processing. Note that there is a maximum intent resolution
+// allowance of intentResolverBatchSize meant to avoid creating a
+// batch which is too large for Raft. Any local intents which exceed
+// the allowance are treated as external and are resolved
+// asynchronously with the external intents.
 func resolveLocalIntents(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -487,7 +476,7 @@ func resolveLocalIntents(
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 	knobs batcheval.TestingKnobs,
-) []roachpb.Intent {
+) []roachpb.Span {
 	var preMergeDesc *roachpb.RangeDescriptor
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
@@ -497,18 +486,25 @@ func resolveLocalIntents(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	iterAndBuf := engine.GetIterAndBuf(batch)
+	min, max := txn.TimeBounds()
+	iter := batch.NewTimeBoundIterator(min, max)
+	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
-	var externalIntents []roachpb.Intent
+	var externalIntents []roachpb.Span
+	var resolveAllowance int64 = intentResolverBatchSize
 	for _, span := range args.IntentSpans {
 		if err := func() error {
+			if resolveAllowance == 0 {
+				externalIntents = append(externalIntents, span)
+				return nil
+			}
 			intent := roachpb.Intent{Span: span, Txn: txn.TxnMeta, Status: txn.Status}
 			if len(span.EndKey) == 0 {
 				// For single-key intents, do a KeyAddress-aware check of
 				// whether it's contained in our Range.
 				if !containsKey(*desc, span.Key) {
-					externalIntents = append(externalIntents, intent)
+					externalIntents = append(externalIntents, span)
 					return nil
 				}
 				resolveMS := ms
@@ -519,22 +515,26 @@ func resolveLocalIntents(
 					// merge trigger.
 					resolveMS = nil
 				}
+				resolveAllowance--
 				return engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMS, intent)
 			}
 			// For intent ranges, cut into parts inside and outside our key
 			// range. Resolve locally inside, delegate the rest. In particular,
 			// an intent range for range-local data is correctly considered local.
 			inSpan, outSpans := intersectSpan(span, *desc)
-			for _, span := range outSpans {
-				outIntent := intent
-				outIntent.Span = span
-				externalIntents = append(externalIntents, outIntent)
-			}
+			externalIntents = append(externalIntents, outSpans...)
 			if inSpan != nil {
 				intent.Span = *inSpan
-				num, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, math.MaxInt64)
+				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, resolveAllowance)
 				if knobs.NumKeysEvaluatedForRangeIntentResolution != nil {
 					atomic.AddInt64(knobs.NumKeysEvaluatedForRangeIntentResolution, num)
+				}
+				resolveAllowance -= num
+				if resumeSpan != nil {
+					if resolveAllowance != 0 {
+						log.Fatalf(ctx, "expected resolve allowance to be exactly 0 resolving %s; got %d", intent.Span, resolveAllowance)
+					}
+					externalIntents = append(externalIntents, *resumeSpan)
 				}
 				return err
 			}
@@ -559,7 +559,7 @@ func updateTxnWithExternalIntents(
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
-	externalIntents []roachpb.Intent,
+	externalIntents []roachpb.Span,
 ) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
 	if txnAutoGC && len(externalIntents) == 0 {
@@ -568,10 +568,7 @@ func updateTxnWithExternalIntents(
 		}
 		return engine.MVCCDelete(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
-	txn.Intents = make([]roachpb.Span, len(externalIntents))
-	for i := range externalIntents {
-		txn.Intents[i] = externalIntents[i].Span
-	}
+	txn.Intents = externalIntents
 	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, txn)
 }
 
@@ -698,403 +695,6 @@ func runCommitTrigger(
 	return result.Result{}, nil
 }
 
-// CheckConsistency runs a consistency check on the range. It first applies a
-// ComputeChecksum command on the range. It then issues CollectChecksum commands
-// to the other replicas.
-//
-// TODO(tschottdorf): We should call this AdminCheckConsistency.
-func (r *Replica) CheckConsistency(
-	ctx context.Context, args roachpb.CheckConsistencyRequest,
-) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	desc := r.Desc()
-	key := desc.StartKey.AsRawKey()
-	endKey := desc.EndKey.AsRawKey()
-	id := uuid.MakeV4()
-	// Send a ComputeChecksum to all the replicas of the range.
-	{
-		var ba roachpb.BatchRequest
-		ba.RangeID = desc.RangeID
-		checkArgs := &roachpb.ComputeChecksumRequest{
-			Span: roachpb.Span{
-				Key:    key,
-				EndKey: endKey,
-			},
-			Version:    batcheval.ReplicaChecksumVersion,
-			ChecksumID: id,
-			Snapshot:   args.WithDiff,
-		}
-		ba.Add(checkArgs)
-		ba.Timestamp = r.store.Clock().Now()
-		_, pErr := r.Send(ctx, ba)
-		if pErr != nil {
-			return roachpb.CheckConsistencyResponse{}, pErr
-		}
-	}
-
-	// Get local checksum. This might involving waiting for it.
-	c, err := r.getChecksum(ctx, id)
-	if err != nil {
-		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(
-			errors.Wrapf(err, "could not compute checksum for range [%s, %s]", key, endKey))
-	}
-
-	// Get remote checksums.
-	localReplica, err := r.GetReplicaDescriptor()
-	if err != nil {
-		return roachpb.CheckConsistencyResponse{},
-			roachpb.NewError(errors.Wrap(err, "could not get replica descriptor"))
-	}
-	var inconsistencyCount uint32
-	var wg sync.WaitGroup
-	for _, replica := range desc.Replicas {
-		if replica == localReplica {
-			continue
-		}
-		wg.Add(1)
-		replica := replica // per-iteration copy
-		if err := r.store.Stopper().RunAsyncTask(ctx, "storage.Replica: checking consistency",
-			func(ctx context.Context) {
-				ctx, cancel := context.WithTimeout(ctx, collectChecksumTimeout)
-				defer cancel()
-				defer wg.Done()
-				addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
-				if err != nil {
-					log.Error(ctx, errors.Wrapf(err, "could not resolve node ID %d", replica.NodeID))
-					return
-				}
-				conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String())
-				if err != nil {
-					log.Error(ctx,
-						errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr))
-					return
-				}
-				client := NewConsistencyClient(conn)
-				req := &CollectChecksumRequest{
-					StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
-					r.RangeID,
-					id,
-					c.checksum,
-				}
-				resp, err := client.CollectChecksum(ctx, req)
-				if err != nil {
-					log.Error(ctx, errors.Wrapf(err, "could not CollectChecksum from replica %s", replica))
-					return
-				}
-				if bytes.Equal(c.checksum, resp.Checksum) {
-					return
-				}
-				atomic.AddUint32(&inconsistencyCount, 1)
-				var buf bytes.Buffer
-				_, _ = fmt.Fprintf(&buf, "replica %s is inconsistent: expected checksum %x, got %x",
-					replica, c.checksum, resp.Checksum)
-				if c.snapshot != nil && resp.Snapshot != nil {
-					diff := diffRange(c.snapshot, resp.Snapshot)
-					if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
-						report(r.store.Ident, diff)
-					}
-					buf.WriteByte('\n')
-					_, _ = diff.WriteTo(&buf)
-				}
-				log.Error(ctx, buf.String())
-			}); err != nil {
-			log.Error(ctx, errors.Wrap(err, "could not run async CollectChecksum"))
-			wg.Done()
-		}
-	}
-	wg.Wait()
-
-	logFunc := log.Fatalf
-	if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
-		p(r.store.Ident)
-		logFunc = log.Errorf
-	}
-
-	if inconsistencyCount == 0 {
-	} else if args.WithDiff {
-		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
-	} else {
-		if err := r.store.stopper.RunAsyncTask(
-			r.AnnotateCtx(context.Background()), "storage.Replica: checking consistency (re-run)", func(ctx context.Context) {
-				log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
-					inconsistencyCount)
-				// Keep the request from crossing the local->global boundary.
-				if bytes.Compare(key, keys.LocalMax) < 0 {
-					key = keys.LocalMax
-				}
-				if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
-					logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", err)
-				}
-			}); err != nil {
-			log.Error(ctx, errors.Wrap(err, "could not rerun consistency check"))
-		}
-	}
-
-	return roachpb.CheckConsistencyResponse{}, nil
-}
-
-// getChecksum waits for the result of ComputeChecksum and returns it.
-// It returns false if there is no checksum being computed for the id,
-// or it has already been GCed.
-func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (ReplicaChecksum, error) {
-	now := timeutil.Now()
-	r.mu.Lock()
-	r.gcOldChecksumEntriesLocked(now)
-	c, ok := r.mu.checksums[id]
-	if !ok {
-		if d, dOk := ctx.Deadline(); dOk {
-			c.gcTimestamp = d
-		}
-		c.notify = make(chan struct{})
-		r.mu.checksums[id] = c
-	}
-	r.mu.Unlock()
-	// Wait
-	select {
-	case <-r.store.Stopper().ShouldStop():
-		return ReplicaChecksum{},
-			errors.Errorf("store has stopped while waiting for compute checksum (ID = %s)", id)
-	case <-ctx.Done():
-		return ReplicaChecksum{},
-			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
-	case <-c.notify:
-	}
-	if log.V(1) {
-		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
-	}
-	r.mu.RLock()
-	c, ok = r.mu.checksums[id]
-	r.mu.RUnlock()
-	if !ok {
-		return ReplicaChecksum{}, errors.Errorf("no map entry for checksum (ID = %s)", id)
-	}
-	if c.checksum == nil {
-		return ReplicaChecksum{}, errors.Errorf(
-			"checksum is nil, most likely because the async computation could not be run (ID = %s)", id)
-	}
-	return c, nil
-}
-
-// computeChecksumDone adds the computed checksum, sets a deadline for GCing the
-// checksum, and sends out a notification.
-func (r *Replica) computeChecksumDone(
-	ctx context.Context, id uuid.UUID, sha []byte, snapshot *roachpb.RaftSnapshotData,
-) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if c, ok := r.mu.checksums[id]; ok {
-		c.checksum = sha
-		c.gcTimestamp = timeutil.Now().Add(batcheval.ReplicaChecksumGCInterval)
-		c.snapshot = snapshot
-		r.mu.checksums[id] = c
-		// Notify
-		close(c.notify)
-	} else {
-		// ComputeChecksum adds an entry into the map, and the entry can
-		// only be GCed once the gcTimestamp is set above. Something
-		// really bad happened.
-		log.Errorf(ctx, "no map entry for checksum (ID = %s)", id)
-	}
-}
-
-// sha512 computes the SHA512 hash of all the replica data at the snapshot.
-// It will dump all the k:v data into snapshot if it is provided.
-func (r *Replica) sha512(
-	desc roachpb.RangeDescriptor, snap engine.Reader, snapshot *roachpb.RaftSnapshotData,
-) ([]byte, error) {
-	hasher := sha512.New()
-	tombstoneKey := engine.MakeMVCCMetadataKey(keys.RaftTombstoneKey(desc.RangeID))
-
-	// Iterate over all the data in the range.
-	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
-	defer iter.Close()
-
-	var legacyTimestamp hlc.LegacyTimestamp
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil {
-			return nil, err
-		} else if !ok {
-			break
-		}
-		key := iter.Key()
-		if key.Equal(tombstoneKey) {
-			// Skip the tombstone key which is marked as replicated even though it
-			// isn't.
-			//
-			// TODO(peter): Figure out a way to migrate this key to the unreplicated
-			// key space.
-			continue
-		}
-		value := iter.Value()
-
-		if snapshot != nil {
-			// Add the k:v into the debug message.
-			snapshot.KV = append(snapshot.KV, roachpb.RaftSnapshotData_KeyValue{Key: key.Key, Value: value, Timestamp: key.Timestamp})
-		}
-
-		// Encode the length of the key and value.
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(key.Key))); err != nil {
-			return nil, err
-		}
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(value))); err != nil {
-			return nil, err
-		}
-		if _, err := hasher.Write(key.Key); err != nil {
-			return nil, err
-		}
-		legacyTimestamp = hlc.LegacyTimestamp(key.Timestamp)
-		timestamp, err := protoutil.Marshal(&legacyTimestamp)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := hasher.Write(timestamp); err != nil {
-			return nil, err
-		}
-		if _, err := hasher.Write(value); err != nil {
-			return nil, err
-		}
-	}
-	sha := make([]byte, 0, sha512.Size)
-	return hasher.Sum(sha), nil
-}
-
-// ReplicaSnapshotDiff is a part of a []ReplicaSnapshotDiff which represents a diff between
-// two replica snapshots. For now it's only a diff between their KV pairs.
-type ReplicaSnapshotDiff struct {
-	// LeaseHolder is set to true of this k:v pair is only present on the lease
-	// holder.
-	LeaseHolder bool
-	Key         roachpb.Key
-	Timestamp   hlc.Timestamp
-	Value       []byte
-}
-
-// ReplicaSnapshotDiffSlice groups multiple ReplicaSnapshotDiff records and
-// exposes a formatting helper.
-type ReplicaSnapshotDiffSlice []ReplicaSnapshotDiff
-
-// WriteTo writes a string representation of itself to the given writer.
-func (rsds ReplicaSnapshotDiffSlice) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write([]byte("--- leaseholder\n+++ follower\n"))
-	if err != nil {
-		return 0, err
-	}
-	for _, d := range rsds {
-		prefix := "+"
-		if d.LeaseHolder {
-			// follower (RHS) has something proposer (LHS) does not have
-			prefix = "-"
-		}
-		ts := d.Timestamp
-		const format = `%s%d.%09d,%d %s
-%s  ts:%s
-%s  value:%s
-%s  raw_key:%x raw_value:%x
-`
-		// TODO(tschottdorf): add pretty-printed value. We have the code in
-		// cli/debug.go (printKeyValue).
-		var prettyTime string
-		if d.Timestamp == (hlc.Timestamp{}) {
-			prettyTime = "<zero>"
-		} else {
-			prettyTime = d.Timestamp.GoTime().UTC().String()
-		}
-		num, err := fmt.Fprintf(w, format,
-			prefix, ts.WallTime/1E9, ts.WallTime%1E9, ts.Logical, d.Key,
-			prefix, prettyTime,
-			prefix, d.Value,
-			prefix, d.Key, d.Value)
-		if err != nil {
-			return 0, err
-		}
-		n += num
-	}
-	return int64(n), nil
-}
-
-func (rsds ReplicaSnapshotDiffSlice) String() string {
-	var buf bytes.Buffer
-	_, _ = rsds.WriteTo(&buf)
-	return buf.String()
-}
-
-// diffs the two k:v dumps between the lease holder and the replica.
-func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
-	if l == nil || r == nil {
-		return nil
-	}
-	var diff []ReplicaSnapshotDiff
-	i, j := 0, 0
-	for {
-		var e, v roachpb.RaftSnapshotData_KeyValue
-		if i < len(l.KV) {
-			e = l.KV[i]
-		}
-		if j < len(r.KV) {
-			v = r.KV[j]
-		}
-
-		addLeaseHolder := func() {
-			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: true, Key: e.Key, Timestamp: e.Timestamp, Value: e.Value})
-			i++
-		}
-		addReplica := func() {
-			diff = append(diff, ReplicaSnapshotDiff{LeaseHolder: false, Key: v.Key, Timestamp: v.Timestamp, Value: v.Value})
-			j++
-		}
-
-		// Compare keys.
-		var comp int
-		// Check if it has finished traversing over all the lease holder keys.
-		if e.Key == nil {
-			if v.Key == nil {
-				// Done traversing over all the replica keys. Done!
-				break
-			} else {
-				comp = 1
-			}
-		} else {
-			// Check if it has finished traversing over all the replica keys.
-			if v.Key == nil {
-				comp = -1
-			} else {
-				// Both lease holder and replica keys exist. Compare them.
-				comp = bytes.Compare(e.Key, v.Key)
-			}
-		}
-		switch comp {
-		case -1:
-			addLeaseHolder()
-
-		case 0:
-			// Timestamp sorting is weird. Timestamp{} sorts first, the
-			// remainder sort in descending order. See storage/engine/doc.go.
-			if e.Timestamp != v.Timestamp {
-				if e.Timestamp == (hlc.Timestamp{}) {
-					addLeaseHolder()
-				} else if v.Timestamp == (hlc.Timestamp{}) {
-					addReplica()
-				} else if v.Timestamp.Less(e.Timestamp) {
-					addLeaseHolder()
-				} else {
-					addReplica()
-				}
-			} else if !bytes.Equal(e.Value, v.Value) {
-				addLeaseHolder()
-				addReplica()
-			} else {
-				// No diff; skip.
-				i++
-				j++
-			}
-
-		case 1:
-			addReplica()
-
-		}
-	}
-	return diff
-}
-
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args roachpb.AdminSplitRequest,
@@ -1218,7 +818,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Event(ctx, "found split key")
 
 	// Create right hand side range descriptor with the newly-allocated Range ID.
-	rightDesc, err := r.store.NewRangeDescriptor(splitKey, desc.EndKey, desc.Replicas)
+	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
 		return reply, true,
 			roachpb.NewErrorf("unable to allocate right hand side range descriptor: %s", err)
@@ -2385,7 +1985,8 @@ func TestingRelocateRange(
 
 	canRetry := func(err error) bool {
 		whitelist := []string{
-			"snapshot intersects existing range",
+			snapshotApplySemBusyMsg,
+			IntersectingSnapshotMsg,
 		}
 		for _, substr := range whitelist {
 			if strings.Contains(err.Error(), substr) {
@@ -2505,6 +2106,21 @@ func (r *Replica) adminScatter(
 			allowLeaseTransfer = true
 		}
 		re.Reset()
+	}
+
+	// If we've been asked to randomize the leases beyond what the replicate
+	// queue would do on its own (#17341), do so after the replicate queue is
+	// done by transferring the lease to any of the given N replicas with
+	// probability 1/N of choosing each.
+	if args.RandomizeLeases && r.OwnsValidLease(r.store.Clock().Now()) {
+		desc := r.Desc()
+		newLeaseholderIdx := rand.Intn(len(desc.Replicas))
+		targetStoreID := desc.Replicas[newLeaseholderIdx].StoreID
+		if targetStoreID != r.store.StoreID() {
+			if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
+				log.Warningf(ctx, "failed to scatter lease to s%d: %s", targetStoreID, err)
+			}
+		}
 	}
 
 	desc := r.Desc()

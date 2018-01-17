@@ -15,27 +15,29 @@
 package sql
 
 import (
+	"context"
 	"sort"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 const (
 	informationSchemaName = "information_schema"
-	pgCatalogName         = tree.PgCatalogName
+	pgCatalogName         = sessiondata.PgCatalogName
 )
 
 var informationSchema = virtualSchema{
 	name: informationSchemaName,
 	tables: []virtualSchemaTable{
+		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
 		informationSchemaKeyColumnUsageTable,
 		informationSchemaSchemataTable,
@@ -98,6 +100,47 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 	return tree.DNull
 }
 
+var informationSchemaColumnPrivileges = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.column_privileges (
+	GRANTOR STRING NOT NULL DEFAULT '',
+	GRANTEE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
+	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	COLUMN_NAME STRING NOT NULL DEFAULT '',
+	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
+	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
+			for _, u := range table.Privileges.Users {
+				for _, privilege := range columndata {
+					if privilege.Mask()&u.Privileges != 0 {
+						for _, cd := range table.Columns {
+							if err := addRow(
+								tree.DNull,                          // grantor
+								tree.NewDString(u.User),             // grantee
+								defString,                           // table_catalog
+								tree.NewDString(db.Name),            // table_schema
+								tree.NewDString(table.Name),         // table_name
+								tree.NewDString(cd.Name),            // column_name
+								tree.NewDString(privilege.String()), // privilege_type
+								tree.DNull,                          // is_grantable
+							); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
+			return nil
+		})
+	},
+}
+
 var informationSchemaColumnsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.columns (
@@ -113,7 +156,10 @@ CREATE TABLE information_schema.columns (
 	CHARACTER_OCTET_LENGTH INT,
 	NUMERIC_PRECISION INT,
 	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT
+	DATETIME_PRECISION INT,
+	CHARACTER_SET_CATALOG STRING,
+	CHARACTER_SET_SCHEMA STRING,
+	CHARACTER_SET_NAME STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -136,6 +182,9 @@ CREATE TABLE information_schema.columns (
 					numericPrecision(column.Type),            // numeric_precision
 					numericScale(column.Type),                // numeric_scale
 					datetimePrecision(column.Type),           // datetime_precision
+					tree.DNull,                               // character_set_catalog
+					tree.DNull,                               // character_set_schema
+					tree.DNull,                               // character_set_name
 				)
 			})
 		})
@@ -259,7 +308,7 @@ CREATE TABLE information_schema.schema_privileges (
 				for _, privilege := range u.Privileges {
 					if err := addRow(
 						tree.NewDString(u.User),    // grantee
-						defString,                  // table_catalog,
+						defString,                  // table_catalog
 						tree.NewDString(db.Name),   // table_schema
 						tree.NewDString(privilege), // privilege_type
 						tree.DNull,                 // is_grantable
@@ -323,7 +372,7 @@ CREATE TABLE information_schema.sequences (
 				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.MinValue)),  // min value
 				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.MaxValue)),  // max value
 				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.Increment)), // increment
-				yesOrNoDatum(table.SequenceOpts.Cycle),                           // cycle
+				noString, // cycle
 			)
 		})
 	},
@@ -474,15 +523,17 @@ CREATE TABLE information_schema.user_privileges (
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		grantee := tree.NewDString(security.RootUser)
-		for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
-			if err := addRow(
-				grantee,            // grantee
-				defString,          // table_catalog
-				tree.NewDString(p), // privilege_type
-				tree.DNull,         // is_grantable
-			); err != nil {
-				return err
+		for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
+			grantee := tree.NewDString(u)
+			for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
+				if err := addRow(
+					grantee,            // grantee
+					defString,          // table_catalog
+					tree.NewDString(p), // privilege_type
+					tree.DNull,         // is_grantable
+				); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -505,14 +556,14 @@ CREATE TABLE information_schema.table_privileges (
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			for _, u := range table.Privileges.Show() {
-				for _, privilege := range u.Privileges {
+				for _, priv := range u.Privileges {
 					if err := addRow(
 						tree.DNull,                  // grantor
 						tree.NewDString(u.User),     // grantee
-						defString,                   // table_catalog,
+						defString,                   // table_catalog
 						tree.NewDString(db.Name),    // table_schema
 						tree.NewDString(table.Name), // table_name
-						tree.NewDString(privilege),  // privilege_type
+						tree.NewDString(priv),       // privilege_type
 						tree.DNull,                  // is_grantable
 						tree.DNull,                  // with_hierarchy
 					); err != nil {
@@ -626,7 +677,7 @@ func forEachDatabaseDesc(
 	}
 
 	// Handle virtual schemas.
-	for _, schema := range p.session.virtualSchemas.entries {
+	for _, schema := range p.getVirtualTabler().getEntries() {
 		dbDescs = append(dbDescs, schema.desc)
 	}
 
@@ -746,7 +797,7 @@ func forEachTableDescWithTableLookupInternal(
 	databases := make(map[string]dbDescTables)
 
 	// Handle real schemas.
-	descs, err := getAllDescriptors(ctx, p.txn)
+	descs, err := GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
@@ -784,7 +835,7 @@ func forEachTableDescWithTableLookupInternal(
 	}
 
 	// Handle virtual schemas.
-	for dbName, schema := range p.session.virtualSchemas.entries {
+	for dbName, schema := range p.getVirtualTabler().getEntries() {
 		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
 		for tableName, entry := range schema.tables {
 			dbTables[tableName] = entry.desc
@@ -816,7 +867,7 @@ func forEachTableDescWithTableLookupInternal(
 	}
 	sort.Strings(dbNames)
 	for _, dbName := range dbNames {
-		if !isDatabaseVisible(dbName, prefix, p.session.User) {
+		if !isDatabaseVisible(dbName, prefix, p.SessionData().User) {
 			continue
 		}
 		db := databases[dbName]
@@ -886,18 +937,26 @@ func forEachColumnInIndex(
 	return nil
 }
 
-func forEachUser(ctx context.Context, origPlanner *planner, fn func(username string) error) error {
-	query := `SELECT username FROM system.users`
-	p := makeInternalPlanner("for-each-user", origPlanner.txn, security.RootUser, origPlanner.session.memMetrics)
+func forEachRole(
+	ctx context.Context, origPlanner *planner, fn func(username string, isRole tree.DBool) error,
+) error {
+	query := `SELECT username, "isRole" FROM system.users`
+	p := makeInternalPlanner(
+		"for-each-role", origPlanner.txn, security.RootUser, origPlanner.extendedEvalCtx.MemMetrics)
 	defer finishInternalPlanner(p)
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	for _, row := range rows {
 		username := tree.MustBeDString(row[0])
-		if err := fn(string(username)); err != nil {
+		isRole, ok := row[1].(*tree.DBool)
+		if !ok {
+			return errors.Errorf("isRole should be a boolean value, found %s instead", row[1].ResolvedType())
+		}
+
+		if err := fn(string(username), *isRole); err != nil {
 			return err
 		}
 	}

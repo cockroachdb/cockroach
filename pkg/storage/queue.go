@@ -16,12 +16,12 @@ package storage
 
 import (
 	"container/heap"
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -303,6 +303,13 @@ func (bq *baseQueue) Disabled() bool {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 	return bq.mu.disabled
+}
+
+// SetProcessTimeout sets the timeout for processing a replica.
+func (bq *baseQueue) SetProcessTimeout(dur time.Duration) {
+	bq.processMu.Lock()
+	bq.processTimeout = dur
+	bq.processMu.Unlock()
 }
 
 // Start launches a goroutine to process entries in the queue. The

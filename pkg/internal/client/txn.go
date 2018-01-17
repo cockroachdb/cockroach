@@ -15,10 +15,10 @@
 package client
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -533,19 +533,6 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 	// we're just trying to clean up and will happily log the failed Rollback error
 	// if someone beat us.
 	if txn.status() == roachpb.PENDING {
-		// We don't need to send a rollback if no requests have been sent.
-		txn.mu.Lock()
-		if !txn.mu.active {
-			// Simulate the effect of sending a rollback.
-			txn.mu.finalized = true
-			// Let's set the status to ABORTED; unclear if this is necessary, but
-			// can't hurt.
-			txn.mu.Proto.Status = roachpb.ABORTED
-			txn.mu.Unlock()
-			return
-		}
-		txn.mu.Unlock()
-
 		if replyErr := txn.rollback(ctx); replyErr != nil {
 			if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.status() == roachpb.ABORTED {
 				log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
@@ -786,20 +773,22 @@ func (txn *Txn) Exec(
 			}
 		}
 
-		if _, ok := err.(*roachpb.UnhandledRetryableError); ok {
+		cause := errors.Cause(err)
+
+		if _, ok := cause.(*roachpb.UnhandledRetryableError); ok {
 			// We sent transactional requests, so the TxnCoordSender was supposed to
 			// turn retryable errors into HandledRetryableTxnError.
 			log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.Exec level: %s", err)
 		}
 
-		retErr, retryable := err.(*roachpb.HandledRetryableTxnError)
+		retErr, retryable := cause.(*roachpb.HandledRetryableTxnError)
 		if retryable && !txn.IsRetryableErrMeantForTxn(*retErr) {
 			// Make sure the txn record that err carries is for this txn.
 			// If it's not, we terminate the "retryable" character of the error. We
 			// might get a HandledRetryableTxnError if the closure ran another
 			// transaction internally and let the error propagate upwards.
 			return errors.Wrapf(
-				retErr,
+				err,
 				"retryable error from another txn. Current txn ID: %v", txn.Proto().ID)
 		}
 		if !opt.AutoRetry || !retryable {
@@ -1057,7 +1046,6 @@ func (txn *Txn) Send(
 // verifies that if an EndTransactionRequest is included, then it is the last
 // request in the batch.
 func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
-	firstWriteIdx := -1
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
 		if i < len(ba.Requests)-1 /* if not last*/ {
@@ -1066,12 +1054,10 @@ func firstWriteIndex(ba roachpb.BatchRequest) (int, *roachpb.Error) {
 			}
 		}
 		if roachpb.IsTransactionWrite(args) {
-			if firstWriteIdx == -1 {
-				firstWriteIdx = i
-			}
+			return i, nil
 		}
 	}
-	return firstWriteIdx, nil
+	return -1, nil
 }
 
 // UpdateStateOnRemoteRetryableErr updates the Txn, and the Transaction proto

@@ -1,0 +1,21 @@
+# LogicTest: default
+
+# CCL-only statements error out trying to handle the parsed statements.
+
+statement error pq: unknown statement type: \*tree\.Backup
+BACKUP foo TO "bar"
+
+statement error pq: unknown statement type: \*tree\.Restore
+RESTORE foo FROM "bar"
+
+statement error pq: unknown statement type: \*tree\.CreateRole
+CREATE ROLE foo
+
+statement error pq: unknown statement type: \*tree\.DropRole
+DROP ROLE foo
+
+statement error pq: unknown statement type: \*tree\.GrantRole
+GRANT foo TO testuser
+
+statement error pq: unknown statement type: \*tree\.RevokeRole
+REVOKE foo FROM testuser

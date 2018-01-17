@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -47,7 +46,7 @@ type DatabaseQualifiable interface {
 	QualifyWithDatabase(database string) error
 }
 
-var _ TablePattern = UnresolvedName{}
+var _ TablePattern = &UnresolvedName{}
 var _ TablePattern = &TableName{}
 var _ TablePattern = &AllTablesSelector{}
 var _ DatabaseQualifiable = &AllTablesSelector{}
@@ -55,32 +54,33 @@ var _ DatabaseQualifiable = &TableName{}
 
 // NormalizeTablePattern resolves an UnresolvedName to either a
 // TableName or AllTablesSelector.
-func (n UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
-	if len(n) == 0 || len(n) > 2 {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table name: %q", n)
+func (n *UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
+	ln := len(*n)
+	if ln == 0 || ln > 2 {
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table name: %q", *n)
 	}
 
 	var db Name
 	dbOmitted := true
-	if len(n) > 1 {
-		dbName, ok := n[0].(Name)
+	if ln > 1 {
+		dbName, ok := (*n)[0].(*Name)
 		if !ok {
-			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid database name: %q", n[0])
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid database name: %q", (*n)[0])
 		}
-		db = dbName
+		db = *dbName
 		dbOmitted = false
 	}
 
-	switch t := n[len(n)-1].(type) {
+	switch t := (*n)[ln-1].(type) {
 	case UnqualifiedStar:
 		return &AllTablesSelector{Database: db, DBNameOriginallyOmitted: dbOmitted}, nil
-	case Name:
-		if len(t) == 0 {
-			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "empty table name: %q", n)
+	case *Name:
+		if len(*t) == 0 {
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "empty table name: %q", *n)
 		}
-		return &TableName{DatabaseName: db, TableName: t, DBNameOriginallyOmitted: dbOmitted}, nil
+		return &TableName{DatabaseName: db, TableName: *t, DBNameOriginallyOmitted: dbOmitted}, nil
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table pattern: %q", n)
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table pattern: %q", *n)
 	}
 }
 
@@ -95,12 +95,12 @@ type AllTablesSelector struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (at *AllTablesSelector) Format(buf *bytes.Buffer, f FmtFlags) {
+func (at *AllTablesSelector) Format(ctx *FmtCtx) {
 	if !at.DBNameOriginallyOmitted {
-		FormatNode(buf, f, at.Database)
-		buf.WriteByte('.')
+		ctx.FormatNode(&at.Database)
+		ctx.WriteByte('.')
 	}
-	buf.WriteByte('*')
+	ctx.WriteByte('*')
 }
 func (at *AllTablesSelector) String() string { return AsString(at) }
 
@@ -125,11 +125,11 @@ func (at *AllTablesSelector) QualifyWithDatabase(database string) error {
 type TablePatterns []TablePattern
 
 // Format implements the NodeFormatter interface.
-func (tt TablePatterns) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, t := range tt {
+func (tt *TablePatterns) Format(ctx *FmtCtx) {
+	for i, t := range *tt {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, t)
+		ctx.FormatNode(t)
 	}
 }

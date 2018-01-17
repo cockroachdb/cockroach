@@ -15,11 +15,11 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"unsafe"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -144,15 +144,15 @@ func (p *planner) makeJoin(
 
 	n.run.buffer = &RowBuffer{
 		RowContainer: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
+			p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
 		),
 	}
 
-	n.run.bucketsMemAcc = p.session.TxnState.mon.MakeBoundAccount()
+	n.run.bucketsMemAcc = p.EvalContext().Mon.MakeBoundAccount()
 	n.run.buckets = buckets{
 		buckets: make(map[string]*bucket),
 		rowContainer: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(),
+			p.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
 			0,
 		),
@@ -362,15 +362,7 @@ type joinRun struct {
 	finishedOutput bool
 }
 
-// Start implements the planNode interface.
-func (n *joinNode) Start(params runParams) error {
-	if err := n.left.plan.Start(params); err != nil {
-		return err
-	}
-	if err := n.right.plan.Start(params); err != nil {
-		return err
-	}
-
+func (n *joinNode) startExec(params runParams) error {
 	if err := n.hashJoinStart(params); err != nil {
 		return err
 	}
@@ -458,7 +450,7 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 
 		leftHasRow, err := n.left.plan.Next(params)
 		if err != nil {
-			return false, nil
+			return false, err
 		}
 		if !leftHasRow {
 			break
@@ -549,7 +541,7 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 		// on condition, if the on condition passes we add it to the buffer.
 		foundMatch := false
 		for idx, rrow := range b.Rows() {
-			passesOnCond, err := n.pred.eval(params.evalCtx, n.run.output, lrow, rrow)
+			passesOnCond, err := n.pred.eval(params.EvalContext(), n.run.output, lrow, rrow)
 			if err != nil {
 				return false, err
 			}
@@ -824,4 +816,58 @@ func (n *joinNode) joinOrdering() physicalProps {
 	}
 	info.ordering = info.reduce(info.ordering)
 	return info
+}
+
+// interleavedNodes returns the ancestor on which an interleaved join is
+// defined as well as the descendants of this ancestor which participate in
+// the join. One of the left/right scan nodes is the ancestor and the other
+// descendant. Nils are returned if there is no interleaved relationship.
+// TODO(richardwu): For sibling joins, both left and right tables are
+// "descendants" while the ancestor is some common ancestor. We will need to
+// probably return descendants as a slice.
+//
+// An interleaved join has an equality on some columns of the interleave prefix.
+// The "interleaved join ancestor" is the ancestor which contains all these
+// join columns in its primary key.
+// TODO(richardwu): For prefix/subset joins, this ancestor will be the furthest
+// ancestor down the interleaved hierarchy which contains all the columns of
+// the maximal join prefix (see maximalJoinPrefix in distsql_join.go).
+func (n *joinNode) interleavedNodes() (ancestor *scanNode, descendant *scanNode) {
+	leftScan, leftOk := n.left.plan.(*scanNode)
+	rightScan, rightOk := n.right.plan.(*scanNode)
+
+	if !leftOk || !rightOk {
+		return nil, nil
+	}
+
+	leftAncestors := leftScan.index.Interleave.Ancestors
+	rightAncestors := rightScan.index.Interleave.Ancestors
+
+	// A join between an ancestor and descendant: the descendant of the two
+	// tables must have have more interleaved ancestors than the other,
+	// which makes the other node the potential interleaved ancestor.
+	// TODO(richardwu): The general case where we can have a join
+	// on a common ancestor's primary key requires traversing both
+	// ancestor slices.
+	if len(leftAncestors) > len(rightAncestors) {
+		ancestor = rightScan
+		descendant = leftScan
+	} else {
+		ancestor = leftScan
+		descendant = rightScan
+	}
+
+	// We check the ancestors of the potential descendant to see if any of
+	// them match the potential ancestor.
+	for _, descAncestor := range descendant.index.Interleave.Ancestors {
+		if descAncestor.TableID == ancestor.desc.ID && descAncestor.IndexID == ancestor.index.ID {
+			// If the tables are indeed interleaved, then we return
+			// the potentials as confirmed ancestor-descendant.
+			return ancestor, descendant
+		}
+	}
+
+	// We could not establish an ancestor-descendant relationship so we
+	// return nils for both.
+	return nil, nil
 }

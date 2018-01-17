@@ -15,6 +15,7 @@
 package kv
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"sync"
@@ -23,7 +24,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

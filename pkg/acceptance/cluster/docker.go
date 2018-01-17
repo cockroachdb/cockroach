@@ -15,6 +15,7 @@
 package cluster
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -38,7 +39,6 @@ import (
 	"github.com/docker/go-connections/nat"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )

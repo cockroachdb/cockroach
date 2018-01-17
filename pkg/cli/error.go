@@ -15,12 +15,11 @@
 package cli
 
 import (
+	"context"
 	"net"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-
-	"golang.org/x/net/context"
+	"google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -76,10 +75,9 @@ communicate with a secure cluster).
 
 		// Is it a GRPC-observed context cancellation (i.e. timeout) or a GRPC
 		// connection error?
-		switch {
-		case grpc.Code(err) == codes.DeadlineExceeded:
+		if s, ok := status.FromError(err); ok && s.Code() == codes.DeadlineExceeded {
 			return opTimeout()
-		case grpcutil.IsClosedConnection(unwrappedErr):
+		} else if grpcutil.IsClosedConnection(unwrappedErr) {
 			return connDropped()
 		}
 

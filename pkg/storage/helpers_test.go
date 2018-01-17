@@ -20,12 +20,12 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -176,6 +176,12 @@ func (s *Store) SetRaftSnapshotQueueActive(active bool) {
 // inactive, removals are still processed.
 func (s *Store) SetReplicaScannerActive(active bool) {
 	s.setScannerActive(active)
+}
+
+// SetSplitQueueProcessTimeout sets the timeout for processing a replica in the
+// split queue.
+func (s *Store) SetSplitQueueProcessTimeout(dur time.Duration) {
+	s.splitQueue.SetProcessTimeout(dur)
 }
 
 // GetOrCreateReplica passes through to its lowercase sibling.
@@ -331,6 +337,14 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 		t = w
 	}
 	return t
+}
+
+// PermittingLargeSnapshots returns whether the replica is permitting large
+// snapshots.
+func (r *Replica) PermittingLargeSnapshots() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.permitLargeSnapshots
 }
 
 // GetRaftLogSize returns the raft log size.

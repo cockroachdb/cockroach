@@ -15,9 +15,8 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/pkg/errors"
@@ -36,7 +35,6 @@ import (
 type sampleAggregator struct {
 	processorBase
 
-	flowCtx *FlowCtx
 	input   RowSource
 	inTypes []sqlbase.ColumnType
 	sr      stats.SampleReservoir
@@ -79,9 +77,8 @@ func newSampleAggregator(
 
 	rankCol := len(spec.SampledColumnIDs)
 	s := &sampleAggregator{
-		flowCtx:      flowCtx,
 		input:        input,
-		inTypes:      input.Types(),
+		inTypes:      input.OutputTypes(),
 		tableID:      spec.TableID,
 		sampledCols:  spec.SampledColumnIDs,
 		sketches:     make([]sketchInfo, len(spec.Sketches)),
@@ -103,18 +100,18 @@ func newSampleAggregator(
 
 	s.sr.Init(int(spec.SampleSize))
 
-	if err := s.out.Init(post, []sqlbase.ColumnType{}, &flowCtx.EvalCtx, output); err != nil {
+	if err := s.init(post, []sqlbase.ColumnType{}, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
 // Run is part of the Processor interface.
-func (s *sampleAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (s *sampleAggregator) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := processorSpan(ctx, "sample aggregator")
+	ctx, span := processorSpan(s.flowCtx.Ctx, "sample aggregator")
 	defer tracing.FinishSpan(span)
 
 	earlyExit, err := s.mainLoop(ctx)
@@ -132,7 +129,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	var tmpSketch hyperloglog.Sketch
 	for {
 		row, meta := s.input.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil

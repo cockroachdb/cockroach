@@ -15,10 +15,9 @@
 package testcluster
 
 import (
+	"context"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -208,9 +207,11 @@ func TestStopServer(t *testing.T) {
 	}
 
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: tc.Server(0).ClusterSettings().Tracer}, tc.Server(1).RPCContext().Config, tc.Server(1).Clock(), tc.Stopper(),
+		log.AmbientContext{Tracer: tc.Server(0).ClusterSettings().Tracer},
+		tc.Server(1).RPCContext().Config, tc.Server(1).Clock(), tc.Stopper(),
+		&tc.Server(1).ClusterSettings().Version,
 	)
-	conn, err := rpcContext.GRPCDial(server1.ServingAddr())
+	conn, err := rpcContext.GRPCDial(server1.ServingAddr()).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

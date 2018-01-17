@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"math"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -70,13 +69,37 @@ func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	return err
 }
 
+// callbackResultWriter is a rowResultWriter that runs a callback function
+// on AddRow.
+type callbackResultWriter func(ctx context.Context, row tree.Datums) error
+
+// newCallbackResultWriter creates a new callbackResultWriter.
+func newCallbackResultWriter(
+	fn func(ctx context.Context, row tree.Datums) error,
+) callbackResultWriter {
+	return callbackResultWriter(fn)
+}
+
+// StatementType implements the rowResultWriter interface.
+func (callbackResultWriter) StatementType() tree.StatementType {
+	return tree.Rows
+}
+
+// IncrementRowsAffected implements the rowResultWriter interface.
+func (callbackResultWriter) IncrementRowsAffected(n int) {}
+
+// AddRow implements the rowResultWriter interface.
+func (c callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	return c(ctx, row)
+}
+
 // LoadCSV performs a distributed transformation of the CSV files at from
 // and stores them in enterprise backup format at to.
 func (l *DistLoader) LoadCSV(
 	ctx context.Context,
 	job *jobs.Job,
 	db *client.DB,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 	thisNode roachpb.NodeID,
 	nodes []roachpb.NodeDescriptor,
 	resultRows *RowResultWriter,
@@ -112,31 +135,53 @@ func (l *DistLoader) LoadCSV(
 	colTypeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 	stageID := p.NewStageID()
 
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(from))
 	// Stage 1: for each input file, assign it to a node
+	csvSpecs := make([]*distsqlrun.ReadCSVSpec, 0, len(nodes))
 	for i, input := range from {
-		// TODO(mjibson): attempt to intelligently schedule http files to matching cockroach nodes
-		rcs := distsqlrun.ReadCSVSpec{
-			SampleSize: int32(sampleSize),
-			TableDesc:  *tableDesc,
-			Uri:        input,
-			Options: roachpb.CSVOptions{
-				Comma:   comma,
-				Comment: comment,
-				Nullif:  nullif,
-			},
+		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
+		// creates the spec. Future files just add themselves to the Uris.
+		if i < len(nodes) {
+			csvSpecs = append(csvSpecs, &distsqlrun.ReadCSVSpec{
+				SampleSize: int32(sampleSize),
+				TableDesc:  *tableDesc,
+				Options: roachpb.CSVOptions{
+					Comma:   comma,
+					Comment: comment,
+					Nullif:  nullif,
+				},
+				Progress: distsqlrun.JobProgress{
+					JobID: *job.ID(),
+					Slot:  int32(i),
+				},
+			})
 		}
-		node := nodes[i%len(nodes)]
+		n := i % len(nodes)
+		csvSpecs[n].Uri = append(csvSpecs[n].Uri, input)
+	}
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(csvSpecs))
+	for i, rcs := range csvSpecs {
+		// TODO(mjibson): using the actual file sizes here would improve progress
+		// accuracy.
+		rcs.Progress.Contribution = float32(len(rcs.Uri)) / float32(len(from))
+		node := nodes[i]
 		proc := distsqlplan.Processor{
 			Node: node.NodeID,
 			Spec: distsqlrun.ProcessorSpec{
-				Core:    distsqlrun.ProcessorCoreUnion{ReadCSV: &rcs},
+				Core:    distsqlrun.ProcessorCoreUnion{ReadCSV: rcs},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 				StageID: stageID,
 			},
 		}
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
+	}
+
+	if err := job.SetDetails(ctx, jobs.ImportDetails{
+		Tables: []jobs.ImportDetails_Table{{
+			SamplingProgress: make([]float32, len(csvSpecs)),
+		}},
+	}); err != nil {
+		return err
 	}
 
 	// We only need the key during sorting.
@@ -160,11 +205,43 @@ func (l *DistLoader) LoadCSV(
 		[]sqlbase.ColumnType{colTypeBytes},
 	)
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{colTypeBytes})
-	rowContainer := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
-	rowResultWriter := NewRowResultWriter(tree.Rows, rowContainer)
+	var spans []distsqlrun.OutputRouterSpec_RangeRouterSpec_Span
+	var sstSpecs []distsqlrun.SSTWriterSpec
+	encFn := func(b []byte) []byte {
+		return encoding.EncodeBytesAscending(nil, b)
+	}
+	addSpan := func(start, end []byte) {
+		stream := int32(len(spans) % len(nodes))
+		spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
+			Start:  encFn(start),
+			End:    encFn(end),
+			Stream: stream,
+		})
+		sstSpecs[stream].Spans = append(sstSpecs[stream].Spans, distsqlrun.SSTWriterSpec_SpanName{
+			Name: fmt.Sprintf("%d.sst", len(spans)),
+			End:  end,
+		})
+	}
 
-	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, &evalCtx, nil)
+	tableSpan := tableDesc.TableSpan()
+	prevKey := tableSpan.Key
+	sampleCount := 0
+	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		sampleCount++
+		sampleCount = sampleCount % oversample
+		if sampleCount == 0 {
+			b := row[0].(*tree.DBytes)
+			k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
+			if err != nil {
+				return err
+			}
+			addSpan(prevKey, k)
+			prevKey = k
+		}
+		return nil
+	})
+
+	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, evalCtx, nil /* txn */)
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range nodes {
@@ -174,7 +251,7 @@ func (l *DistLoader) LoadCSV(
 	// of this PlanCtx. https://reviewable.io/reviews/cockroachdb/cockroach/17279#-KqOrLpy9EZwbRKHLYe6:-KqOp00ntQEyzwEthAsl:bd4nzje
 	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
 
-	recv, err := makeDistSQLReceiver(
+	recv := makeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
 		nil, /* rangeCache */
@@ -182,14 +259,20 @@ func (l *DistLoader) LoadCSV(
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
 	)
-	if err != nil {
-		return err
-	}
 	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Record.Description)
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		rowContainer.Clear(ctx)
+		// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
+		spans = nil
+		sstSpecs = make([]distsqlrun.SSTWriterSpec, len(nodes))
+		for i := range nodes {
+			sstSpecs[i] = distsqlrun.SSTWriterSpec{
+				Destination:   to,
+				WalltimeNanos: walltime,
+			}
+		}
+
 		return l.distSQLPlanner.Run(&planCtx, txn, &p, &recv, evalCtx)
 	}); err != nil {
 		return err
@@ -198,31 +281,9 @@ func (l *DistLoader) LoadCSV(
 		return recv.err
 	}
 
-	n := rowContainer.Len()
-	tableSpan := tableDesc.TableSpan()
-	prevKey := tableSpan.Key
-	var spans []distsqlrun.OutputRouterSpec_RangeRouterSpec_Span
-	encFn := func(b []byte) []byte {
-		return encoding.EncodeBytesAscending(nil, b)
-	}
-	for i := oversample - 1; i < n; i += oversample {
-		row := rowContainer.At(i)
-		b := row[0].(*tree.DBytes)
-		k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
-		if err != nil {
-			return err
-		}
-		spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
-			Start: encFn(prevKey),
-			End:   encFn(k),
-		})
-		prevKey = k
-	}
-	rowContainer.Close(ctx)
-	spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
-		Start: encFn(prevKey),
-		End:   encFn(tableSpan.EndKey),
-	})
+	// Add the closing span.
+	addSpan(prevKey, tableSpan.EndKey)
+
 	routerSpec := distsqlrun.OutputRouterSpec_RangeRouterSpec{
 		Spans: spans,
 		Encodings: []distsqlrun.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
@@ -234,9 +295,6 @@ func (l *DistLoader) LoadCSV(
 	}
 
 	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(spans), job.Record.Description)
-	if err := job.Progressed(ctx, 1.0/10.0, jobs.Noop); err != nil {
-		log.Warningf(ctx, "failed to update job progress: %s", err)
-	}
 
 	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
 
@@ -244,30 +302,22 @@ func (l *DistLoader) LoadCSV(
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
-	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(from))
+	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(csvSpecs))
 	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
 	stageID = p.NewStageID()
-	for i, input := range from {
-		// TODO(mjibson): attempt to intelligently schedule http files to matching cockroach nodes
-		rcs := distsqlrun.ReadCSVSpec{
-			Options: roachpb.CSVOptions{
-				Comma:   comma,
-				Comment: comment,
-				Nullif:  nullif,
-			},
-			SampleSize: 0,
-			TableDesc:  *tableDesc,
-			Uri:        input,
-		}
-		node := nodes[i%len(nodes)]
+	// We can reuse the phase 1 ReadCSV specs, just have to clear sampling.
+	for i, rcs := range csvSpecs {
+		rcs.SampleSize = 0
+		node := nodes[i]
 		proc := distsqlplan.Processor{
 			Node: node.NodeID,
 			Spec: distsqlrun.ProcessorSpec{
-				Core: distsqlrun.ProcessorCoreUnion{ReadCSV: &rcs},
+				Core: distsqlrun.ProcessorCoreUnion{ReadCSV: rcs},
 				Output: []distsqlrun.OutputRouterSpec{{
-					Type:            distsqlrun.OutputRouterSpec_BY_RANGE,
-					RangeRouterSpec: routerSpec,
+					Type:             distsqlrun.OutputRouterSpec_BY_RANGE,
+					RangeRouterSpec:  routerSpec,
+					DisableBuffering: true,
 				}},
 				StageID: stageID,
 			},
@@ -288,13 +338,16 @@ func (l *DistLoader) LoadCSV(
 	}
 
 	stageID = p.NewStageID()
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spans))
-	for i := range spans {
-		node := nodes[i%len(nodes)]
-		swSpec := distsqlrun.SSTWriterSpec{
-			Destination:   to,
-			Name:          fmt.Sprintf("%d.sst", i),
-			WalltimeNanos: walltime,
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, 0, len(nodes))
+	for i, node := range nodes {
+		swSpec := sstSpecs[i]
+		if len(swSpec.Spans) == 0 {
+			continue
+		}
+		swSpec.Progress = distsqlrun.JobProgress{
+			JobID:        *job.ID(),
+			Slot:         int32(len(p.ResultRouters)),
+			Contribution: float32(len(swSpec.Spans)) / float32(len(spans)),
 		}
 		proc := distsqlplan.Processor{
 			Node: node.NodeID,
@@ -317,12 +370,23 @@ func (l *DistLoader) LoadCSV(
 				DestInput:        0,
 			})
 		}
-		p.ResultRouters[i] = pIdx
+		p.ResultRouters = append(p.ResultRouters, pIdx)
+	}
+
+	// Clear SamplingProgress and prep second stage job details for progress
+	// tracking.
+	if err := job.SetDetails(ctx, jobs.ImportDetails{
+		Tables: []jobs.ImportDetails_Table{{
+			ReadProgress:  make([]float32, len(csvSpecs)),
+			WriteProgress: make([]float32, len(p.ResultRouters)),
+		}},
+	}); err != nil {
+		return err
 	}
 
 	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
 
-	recv, err = makeDistSQLReceiver(
+	recv = makeDistSQLReceiver(
 		ctx,
 		resultRows,
 		nil, /* rangeCache */
@@ -330,9 +394,6 @@ func (l *DistLoader) LoadCSV(
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
 	)
-	if err != nil {
-		return err
-	}
 
 	defer log.VEventf(ctx, 1, "finished job %s", job.Record.Description)
 	// TODO(dan): We really don't need the txn for this flow, so remove it once

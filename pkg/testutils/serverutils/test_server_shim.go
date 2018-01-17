@@ -65,9 +65,6 @@ type TestServerInterface interface {
 	// as an interface{}.
 	KVClient() interface{}
 
-	// KVDB() returns the *kv.DB instance as an interface{}.
-	KVDB() interface{}
-
 	// RPCContext returns the rpc context used by the test server.
 	RPCContext() *rpc.Context
 
@@ -144,6 +141,12 @@ type TestServerInterface interface {
 	SplitRange(
 		splitKey roachpb.Key,
 	) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
+
+	// ExpectedInitialRangeCount returns the expected number of ranges that should
+	// be on the server after initial (asynchronous) splits have been completed,
+	// assuming no additional information is added outside of the normal bootstrap
+	// process.
+	ExpectedInitialRangeCount() (int, error)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

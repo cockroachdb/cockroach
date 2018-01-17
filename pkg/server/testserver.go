@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -23,7 +24,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -42,6 +42,7 @@ import (
 	migrations "github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -89,7 +90,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 	cfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	cfg.User = security.NodeUser
-	cfg.MetricsSampleInterval = metric.TestSampleInterval
+	cfg.TimestampCachePageSize = tscache.TestSklPageSize
 
 	// Enable web session authentication.
 	cfg.EnableWebSessionAuthentication = true
@@ -119,9 +120,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Insecure = params.Insecure
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
-	if params.MetricsSampleInterval != 0 {
-		cfg.MetricsSampleInterval = params.MetricsSampleInterval
-	}
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)
@@ -364,12 +362,20 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func ExpectedInitialRangeCount(db *client.DB) (int, error) {
-	_, migrationRangeCount, err := migrations.AdditionalInitialDescriptors(
-		context.Background(), db)
+	descriptorIDs, err := migrations.ExpectedDescriptorIDs(context.Background(), db)
 	if err != nil {
-		return 0, errors.Wrap(err, "counting initial migration ranges")
+		return 0, err
 	}
-	return GetBootstrapSchema().InitialRangeCount() + migrationRangeCount, nil
+	maxDescriptorID := descriptorIDs[len(descriptorIDs)-1]
+
+	// System table splits occur at every possible table boundary between the end
+	// of the system config ID space (keys.MaxSystemConfigDescID) and the system
+	// table with the maximum ID (maxDescriptorID), even when an ID within the
+	// span does not have an associated descriptor.
+	systemTableSplits := int(maxDescriptorID - keys.MaxSystemConfigDescID)
+
+	// `n` splits create `n+1` ranges.
+	return len(config.StaticSplits()) + systemTableSplits + 1, nil
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial
@@ -529,9 +535,6 @@ func (ts *TestServer) MustGetSQLNetworkCounter(name string) int64 {
 
 // KVClient is part of TestServerInterface.
 func (ts *TestServer) KVClient() interface{} { return ts.db }
-
-// KVDB is part of TestServerInterface.
-func (ts *TestServer) KVDB() interface{} { return ts.kvDB }
 
 // LeaseManager is part of TestServerInterface.
 func (ts *TestServer) LeaseManager() interface{} {

@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"flag"
 	"fmt"
@@ -28,12 +29,10 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -63,7 +62,7 @@ func newRand() *rand.Rand {
 // a zipf distribution which tilts towards smaller IDs (and hence more
 // contention).
 type zeroSum struct {
-	*localcluster.Cluster
+	*localcluster.LocalCluster
 	numAccounts int
 	chaosType   string
 	accounts    struct {
@@ -83,11 +82,11 @@ type zeroSum struct {
 	}
 }
 
-func newZeroSum(c *localcluster.Cluster, numAccounts int, chaosType string) *zeroSum {
+func newZeroSum(c *localcluster.LocalCluster, numAccounts int, chaosType string) *zeroSum {
 	z := &zeroSum{
-		Cluster:     c,
-		numAccounts: numAccounts,
-		chaosType:   chaosType,
+		LocalCluster: c,
+		numAccounts:  numAccounts,
+		chaosType:    chaosType,
 	}
 	z.accounts.m = make(map[uint64]struct{})
 	return z
@@ -295,9 +294,7 @@ func (z *zeroSum) chaos() {
 func (z *zeroSum) check(d time.Duration) {
 	for {
 		time.Sleep(d)
-
-		client := z.Client(z.RandNode(rand.Intn))
-		if err := client.CheckConsistency(context.Background(), keys.LocalMax, keys.MaxKey, false); err != nil {
+		if err := cluster.Consistent(context.Background(), z.LocalCluster, z.RandNode(rand.Intn)); err != nil {
 			z.maybeLogError(err)
 		}
 	}
@@ -331,25 +328,32 @@ func (z *zeroSum) verify(d time.Duration) {
 
 func (z *zeroSum) rangeInfo() (int, []int) {
 	replicas := make([]int, len(z.Nodes))
-	client := z.Client(z.RandNode(rand.Intn))
-	rows, err := client.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 0)
+	db, err := z.NewDB(context.Background(), z.RandNode(rand.Intn))
 	if err != nil {
 		z.maybeLogError(err)
 		return -1, replicas
 	}
-	for _, row := range rows {
-		desc := &roachpb.RangeDescriptor{}
-		if err := row.ValueProto(desc); err != nil {
-			log.Errorf(context.Background(), "%s: unable to unmarshal range descriptor", row.Key)
-			atomic.AddUint64(&z.stats.errors, 1)
-			continue
+	rows, err := db.Query(`SELECT ARRAY_LENGTH(replicas, 1) FROM crdb_internal.ranges`)
+	if err != nil {
+		z.maybeLogError(err)
+		return -1, replicas
+	}
+	defer rows.Close()
+
+	var count int
+	for rows.Next() {
+		var numReplicas int
+		if err := rows.Scan(&numReplicas); err != nil {
+			z.maybeLogError(err)
+			return -1, replicas
 		}
-		for _, replica := range desc.Replicas {
-			replicas[replica.NodeID-1]++
+		for i := 0; i < numReplicas; i++ {
+			replicas[i]++
 		}
+		count++
 	}
 
-	return len(rows), replicas
+	return count, replicas
 }
 
 func (z *zeroSum) rangeStats(d time.Duration) {
@@ -434,7 +438,7 @@ func main() {
 		PerNodeCfg:  perNodeCfg,
 	}
 
-	c := localcluster.New(cfg)
+	c := &localcluster.LocalCluster{Cluster: localcluster.New(cfg)}
 	defer c.Close()
 
 	log.SetExitFunc(func(code int) {

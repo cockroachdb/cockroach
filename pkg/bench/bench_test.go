@@ -16,6 +16,7 @@ package bench
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
@@ -25,10 +26,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"golang.org/x/net/context"
-
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
+
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -122,6 +123,46 @@ func runBenchmarkSelect3(b *testing.B, db *gosql.DB) {
 
 func BenchmarkSelect3(b *testing.B) {
 	ForEachDB(b, runBenchmarkSelect3)
+}
+
+func BenchmarkCount(b *testing.B) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		defer func() {
+			if _, err := db.Exec(`DROP TABLE IF EXISTS bench.count`); err != nil {
+				b.Fatal(err)
+			}
+		}()
+
+		if _, err := db.Exec(`CREATE TABLE bench.count (k INT PRIMARY KEY, v TEXT)`); err != nil {
+			b.Fatal(err)
+		}
+
+		var buf bytes.Buffer
+		val := 0
+		for i := 0; i < 100; i++ {
+			buf.Reset()
+			buf.WriteString(`INSERT INTO bench.count VALUES `)
+			for j := 0; j < 1000; j++ {
+				if j > 0 {
+					buf.WriteString(", ")
+				}
+				fmt.Fprintf(&buf, "(%d, '%s')", val, strconv.Itoa(val))
+				val++
+			}
+			if _, err := db.Exec(buf.String()); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := db.Exec("SELECT COUNT(*) FROM bench.count"); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
 }
 
 // runBenchmarkInsert benchmarks inserting count rows into a table.
@@ -338,41 +379,30 @@ func runBenchmarkUpsert(b *testing.B, db *gosql.DB, count int) {
 		b.Fatal(err)
 	}
 
-	s := rand.New(rand.NewSource(5432))
-
-	b.ResetTimer()
 	// Upsert in Cockroach doesn't let you conflict the same row twice in one
 	// statement (fwiw, neither does Postgres), so build one statement that
 	// inserts half the values requested by `count` followed by a statement that
 	// updates each of the values just inserted. This also weighs the benchmark
 	// 50/50 for inserts vs updates.
-	var insertBuf bytes.Buffer
-	var updateBuf bytes.Buffer
+	var upsertBuf bytes.Buffer
+	upsertBuf.WriteString(`UPSERT INTO bench.upsert VALUES `)
+	for j := 0; j < count; j += 2 {
+		if j > 0 {
+			upsertBuf.WriteString(`, `)
+		}
+		fmt.Fprintf(&upsertBuf, "($1+%d, unique_rowid())", j)
+	}
+
+	b.ResetTimer()
 	key := 0
 	for i := 0; i < b.N; i++ {
-		// TODO(dan): Once the long form is implemented, use it here so we can have
-		// Postgres benchmarks.
-		insertBuf.Reset()
-		insertBuf.WriteString(`UPSERT INTO bench.upsert VALUES `)
-		updateBuf.Reset()
-		updateBuf.WriteString(`UPSERT INTO bench.upsert VALUES `)
-		j := 0
-		for ; j < count; j += 2 {
-			if j > 0 {
-				insertBuf.WriteString(`, `)
-				updateBuf.WriteString(`, `)
-			}
-			fmt.Fprintf(&insertBuf, "(%d, %d)", key, s.Int())
-			fmt.Fprintf(&updateBuf, "(%d, %d)", key, s.Int())
-			key++
-		}
-		insertBuf.WriteString(`; `)
-		if _, err := updateBuf.WriteTo(&insertBuf); err != nil {
+		if _, err := db.Exec(upsertBuf.String(), key); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := db.Exec(insertBuf.String()); err != nil {
+		if _, err := db.Exec(upsertBuf.String(), key); err != nil {
 			b.Fatal(err)
 		}
+		key += count
 	}
 	b.StopTimer()
 }
@@ -818,6 +848,52 @@ CREATE TABLE bench.insert_distinct (
 	b.StopTimer()
 }
 
+const wideTableSchema = `CREATE TABLE bench.widetable (
+    f1 INT, f2 INT, f3 INT, f4 INT, f5 INT, f6 INT, f7 INT, f8 INT, f9 INT, f10 INT,
+    f11 TEXT, f12 TEXT, f13 TEXT, f14 TEXT, f15 TEXT, f16 TEXT, f17 TEXT, f18 TEXT, f19 TEXT,
+	f20 TEXT,
+    PRIMARY KEY (f1, f2, f3)
+  )`
+
+func insertIntoWideTable(
+	b *testing.B, buf bytes.Buffer, i, count, bigColumnBytes int, s *rand.Rand, db *gosql.DB,
+) {
+	buf.WriteString(`INSERT INTO bench.widetable VALUES `)
+	for j := 0; j < count; j++ {
+		if j != 0 {
+			if j%3 == 0 {
+				buf.WriteString(`;`)
+				if _, err := db.Exec(buf.String()); err != nil {
+					b.Fatal(err)
+				}
+				buf.Reset()
+				buf.WriteString(`INSERT INTO bench.widetable VALUES `)
+			} else {
+				buf.WriteString(`,`)
+			}
+		}
+		buf.WriteString(`(`)
+		for k := 0; k < 20; k++ {
+			if k != 0 {
+				buf.WriteString(`,`)
+			}
+			if k < 10 {
+				fmt.Fprintf(&buf, "%d", i*count+j)
+			} else if k < 19 {
+				fmt.Fprintf(&buf, "'%d'", i*count+j)
+			} else {
+				fmt.Fprintf(&buf, "'%x'", randutil.RandBytes(s, bigColumnBytes))
+			}
+		}
+		buf.WriteString(`)`)
+	}
+	buf.WriteString(`;`)
+	if _, err := db.Exec(buf.String()); err != nil {
+		b.Fatal(err)
+	}
+	buf.Reset()
+}
+
 // runBenchmarkWideTable measures performance on a table with a large number of
 // columns (20), half of which are fixed size, half of which are variable sized
 // and presumed small. 1 of the presumed small columns is actually large.
@@ -835,13 +911,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 		}
 	}()
 
-	const schema = `CREATE TABLE bench.widetable (
-    f1 INT, f2 INT, f3 INT, f4 INT, f5 INT, f6 INT, f7 INT, f8 INT, f9 INT, f10 INT,
-    f11 TEXT, f12 TEXT, f13 TEXT, f14 TEXT, f15 TEXT, f16 TEXT, f17 TEXT, f18 TEXT, f19 TEXT,
-	f20 TEXT,
-    PRIMARY KEY (f1, f2, f3)
-  )`
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(wideTableSchema); err != nil {
 		b.Fatal(err)
 	}
 
@@ -853,36 +923,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 
-		buf.WriteString(`INSERT INTO bench.widetable VALUES `)
-		for j := 0; j < count; j++ {
-			if j != 0 {
-				if j%3 == 0 {
-					buf.WriteString(`;`)
-					if _, err := db.Exec(buf.String()); err != nil {
-						b.Fatal(err)
-					}
-					buf.Reset()
-					buf.WriteString(`INSERT INTO bench.widetable VALUES `)
-				} else {
-					buf.WriteString(`,`)
-				}
-			}
-			buf.WriteString(`(`)
-			for k := 0; k < 20; k++ {
-				if k != 0 {
-					buf.WriteString(`,`)
-				}
-				if k < 10 {
-					fmt.Fprintf(&buf, "%d", i*count+j)
-				} else if k < 19 {
-					fmt.Fprintf(&buf, "'%d'", i*count+j)
-				} else {
-					fmt.Fprintf(&buf, "'%x'", randutil.RandBytes(s, bigColumnBytes))
-				}
-			}
-			buf.WriteString(`)`)
-		}
-		buf.WriteString(`;`)
+		insertIntoWideTable(b, buf, i, count, bigColumnBytes, s, db)
 
 		// These are all updates, but ON CONFLICT DO UPDATE is (much!) faster
 		// because it can do blind writes.
@@ -928,6 +969,25 @@ func BenchmarkWideTable(b *testing.B) {
 				})
 			}
 		})
+	})
+}
+
+func BenchmarkWideTableIgnoreColumns(b *testing.B) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		if _, err := db.Exec(wideTableSchema); err != nil {
+			b.Fatal(err)
+		}
+		var buf bytes.Buffer
+		s := rand.New(rand.NewSource(5432))
+		insertIntoWideTable(b, buf, 0, 10000, 10, s, db)
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := db.Exec("SELECT COUNT(*) FROM bench.widetable WHERE f4 < 10"); err != nil {
+				b.Fatal(err)
+			}
+		}
 	})
 }
 

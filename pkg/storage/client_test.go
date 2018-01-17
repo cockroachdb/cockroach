@@ -23,6 +23,7 @@ client_*.go.
 package storage_test
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -37,7 +38,6 @@ import (
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -115,7 +115,8 @@ func createTestStoreWithEngine(
 	ac := log.AmbientContext{Tracer: tracer}
 	storeCfg.AmbientCtx = ac
 
-	rpcContext := rpc.NewContext(ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper)
+	rpcContext := rpc.NewContext(
+		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, &storeCfg.Settings.Version)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	server := rpc.NewServer(rpcContext) // never started
 	storeCfg.Gossip = gossip.NewTest(
@@ -280,7 +281,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
-			m.transportStopper)
+			m.transportStopper, &st.Version)
 		// Create a breaker which never trips and never backs off to avoid
 		// introducing timing-based flakes.
 		m.rpcContext.BreakerFactory = func() *circuit.Breaker {
@@ -443,6 +444,10 @@ func (t *multiTestContextKVTransport) String() string {
 
 func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
+}
+
+func (t *multiTestContextKVTransport) GetPending() []roachpb.ReplicaDescriptor {
+	return nil
 }
 
 func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- kv.BatchCall) {
@@ -738,7 +743,7 @@ func (m *multiTestContext) addStore(idx int) {
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
-		nlActive, nlRenewal,
+		nlActive, nlRenewal, metric.TestSampleInterval,
 	)
 	m.populateStorePool(idx, m.nodeLivenesses[idx])
 	cfg.DB = m.dbs[idx]
@@ -803,7 +808,7 @@ func (m *multiTestContext) addStore(idx int) {
 	// having to worry about such conditions we pre-warm the connection
 	// cache. See #8440 for an example of the headaches the long dial times
 	// cause.
-	if _, err := m.rpcContext.GRPCDial(ln.Addr().String(), grpc.WithBlock()); err != nil {
+	if _, err := m.rpcContext.GRPCDial(ln.Addr().String()).Connect(ctx); err != nil {
 		m.t.Fatal(err)
 	}
 
@@ -875,6 +880,11 @@ func (m *multiTestContext) stopStore(i int) {
 
 	m.mu.Lock()
 	m.stoppers[i] = nil
+	// Break the transport breaker for this node so that messages sent between a
+	// store stopping and that store restarting will never remain in-flight in
+	// the transport and end up reaching the store. This has been the cause of
+	// flakiness in the past.
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Break()
 	m.senders[i].RemoveStore(m.stores[i])
 	m.stores[i] = nil
 	m.mu.Unlock()
@@ -893,7 +903,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.gossips[i],
-		nlActive, nlRenewal,
+		nlActive, nlRenewal, metric.TestSampleInterval,
 	)
 	m.populateStorePool(i, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]
@@ -909,6 +919,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 		m.t.Fatal(err)
 	}
 	m.senders[i].AddStore(store)
+	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Reset()
 	m.mu.Unlock()
 	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, func(ctx context.Context) {
 		now := m.clock.Now()
@@ -1133,7 +1144,8 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 // at the given key to match the expected slice (across all engines).
 // Fails the test if they do not match.
 func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
-	testutils.SucceedsSoonDepth(1, m.t, func() error {
+	m.t.Helper()
+	testutils.SucceedsSoon(m.t, func() error {
 		actual := m.readIntFromEngines(key)
 		if !reflect.DeepEqual(expected, actual) {
 			return errors.Errorf("expected %v, got %v", expected, actual)
@@ -1201,8 +1213,9 @@ func (m *multiTestContext) advanceClock(ctx context.Context) {
 // getRaftLeader returns the replica that is the current raft leader for the
 // specified rangeID.
 func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Replica {
+	m.t.Helper()
 	var raftLeaderRepl *storage.Replica
-	testutils.SucceedsSoonDepth(1, m.t, func() error {
+	testutils.SucceedsSoon(m.t, func() error {
 		m.mu.RLock()
 		defer m.mu.RUnlock()
 		var latestTerm uint64

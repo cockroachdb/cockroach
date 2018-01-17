@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,7 +34,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+		if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
 			return nil, err
 		}
 
@@ -66,7 +66,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 	}, nil
 }
 
-func (n *dropSequenceNode) Start(params runParams) error {
+func (n *dropSequenceNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
@@ -84,12 +84,12 @@ func (n *dropSequenceNode) Start(params runParams) error {
 			params.p.txn,
 			EventLogDropSequence,
 			int32(droppedDesc.ID),
-			int32(params.evalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID),
 			struct {
 				SequenceName string
 				Statement    string
 				User         string
-			}{droppedDesc.Name, n.n.String(), params.p.session.User},
+			}{droppedDesc.Name, n.n.String(), params.SessionData().User},
 		); err != nil {
 			return err
 		}
@@ -109,9 +109,10 @@ func (p *planner) dropSequenceImpl(
 		return err
 	}
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		return verifyDropTableMetadata(systemConfig, seqDesc.ID, "sequence")
-	})
+	p.testingVerifyMetadata().setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			return verifyDropTableMetadata(systemConfig, seqDesc.ID, "sequence")
+		})
 
 	return nil
 }

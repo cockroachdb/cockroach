@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"reflect"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -49,8 +48,8 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
 			group := &groupNode{}
@@ -67,13 +66,13 @@ func TestDesiredAggregateOrder(t *testing.T) {
 			if _, err := v.extract(expr); err != nil {
 				t.Fatal(err)
 			}
-			ordering := group.desiredAggregateOrdering(&p.evalCtx)
+			ordering := group.desiredAggregateOrdering(p.EvalContext())
 			if !reflect.DeepEqual(d.ordering, ordering) {
 				t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
 			}
 			// Verify we never have a desired ordering if there is a GROUP BY.
 			group.numGroupCols = 1
-			ordering = group.desiredAggregateOrdering(&p.evalCtx)
+			ordering = group.desiredAggregateOrdering(p.EvalContext())
 			if len(ordering) > 0 {
 				t.Fatalf("%s: expected no ordering when there is a GROUP BY, found %v", d.expr, ordering)
 			}

@@ -19,21 +19,20 @@ package client_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
@@ -43,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -115,23 +113,7 @@ func (ss *notifyingSender) Send(
 }
 
 func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
-	return createTestClientForUser(t, s, security.NodeUser, client.DefaultDBContext())
-}
-
-func createTestClientForUser(
-	t *testing.T, s serverutils.TestServerInterface, user string, dbCtx client.DBContext,
-) *client.DB {
-	cfg := &base.Config{
-		User: user,
-	}
-	testutils.FillCerts(cfg)
-
-	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: s.ClusterSettings().Tracer}, cfg, s.Clock(), s.Stopper())
-	conn, err := rpcContext.GRPCDial(s.ServingAddr())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return client.NewDBWithContext(client.NewSender(conn), s.Clock(), dbCtx)
+	return s.KVClient().(*client.DB)
 }
 
 // createTestNotifyClient creates a new client which connects using an HTTP
@@ -307,8 +289,7 @@ func TestClientRunTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	dbCtx := client.DefaultDBContext()
-	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
+	db := createTestClient(t, s)
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -368,8 +349,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	dbCtx := client.DefaultDBContext()
-	db := createTestClientForUser(t, s, security.NodeUser, dbCtx)
+	db := createTestClient(t, s)
 
 	for _, commit := range []bool{true, false} {
 		value := []byte("value")
@@ -841,52 +821,6 @@ func TestConcurrentIncrements(t *testing.T) {
 	}
 }
 
-// TestClientPermissions verifies permission enforcement.
-func TestClientPermissions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-
-	// NodeUser certs are required for all KV operations.
-	// RootUser has no KV privileges whatsoever.
-	nodeClient := createTestClientForUser(t, s, security.NodeUser, client.DefaultDBContext())
-	rootClient := createTestClientForUser(t, s, security.RootUser, client.DefaultDBContext())
-
-	testCases := []struct {
-		path    string
-		client  *client.DB
-		allowed bool
-	}{
-		{"foo", rootClient, false},
-		{"foo", nodeClient, true},
-
-		{testUser + "/foo", rootClient, false},
-		{testUser + "/foo", nodeClient, true},
-
-		{testUser + "foo", rootClient, false},
-		{testUser + "foo", nodeClient, true},
-
-		{testUser, rootClient, false},
-		{testUser, nodeClient, true},
-
-		{"unknown/foo", rootClient, false},
-		{"unknown/foo", nodeClient, true},
-	}
-
-	value := []byte("value")
-	const matchErr = "is not allowed"
-	for tcNum, tc := range testCases {
-		err := tc.client.Put(context.TODO(), tc.path, value)
-		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
-			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
-		}
-		_, err = tc.client.Get(context.TODO(), tc.path)
-		if (err == nil) != tc.allowed || (!tc.allowed && !testutils.IsError(err, matchErr)) {
-			t.Errorf("#%d: expected allowed=%t, got err=%v", tcNum, tc.allowed, err)
-		}
-	}
-}
-
 // TestInconsistentReads tests that the methods that generate inconsistent reads
 // generate outgoing requests with an INCONSISTENT read consistency.
 func TestInconsistentReads(t *testing.T) {
@@ -900,7 +834,7 @@ func TestInconsistentReads(t *testing.T) {
 		}
 		return ba.CreateReply(), nil
 	}
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	db := client.NewDB(senderFn, clock)
 	ctx := context.TODO()
 

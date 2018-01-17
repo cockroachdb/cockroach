@@ -6,11 +6,21 @@ CREATE DATABASE a
 query TTT colnames
 SHOW GRANTS ON DATABASE a
 ----
-Database User Privileges
-a        root ALL
+Database  User   Privileges
+a         admin  ALL
+a         root   ALL
 
 statement error user root does not have ALL privileges
 REVOKE SELECT ON DATABASE a FROM root
+
+statement ok
+CREATE USER readwrite
+
+statement error pq: user or role "test-user" does not exist
+GRANT ALL ON DATABASE a TO readwrite, "test-user"
+
+statement ok
+INSERT INTO system.users VALUES('test-user','');
 
 statement ok
 GRANT ALL ON DATABASE a TO readwrite, "test-user"
@@ -24,9 +34,10 @@ REVOKE SELECT,ALL ON DATABASE a FROM readwrite
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a        readwrite ALL
-a        root      ALL
-a        test-user ALL
+a  admin      ALL
+a  readwrite  ALL
+a  root       ALL
+a  test-user  ALL
 
 # Create table to inherit DB permissions.
 statement ok
@@ -36,6 +47,7 @@ query TTTT colnames
 SHOW GRANTS ON a.t
 ----
 Database  Table  User       Privileges
+a         t      admin      ALL
 a         t      readwrite  ALL
 a         t      root       ALL
 a         t      test-user  ALL
@@ -52,6 +64,7 @@ REVOKE INSERT,UPDATE ON DATABASE a FROM "test-user",readwrite
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
+a  admin      ALL
 a  readwrite  CREATE
 a  readwrite  DELETE
 a  readwrite  DROP
@@ -84,6 +97,7 @@ REVOKE SELECT ON DATABASE a FROM "test-user"
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
+a  admin      ALL
 a  readwrite  CREATE
 a  readwrite  DELETE
 a  readwrite  DROP
@@ -113,7 +127,8 @@ REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
 query TTT
 SHOW GRANTS ON DATABASE a
 ----
-a        root      ALL
+a  admin  ALL
+a  root   ALL
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
@@ -124,6 +139,7 @@ query TTTT colnames
 SHOW GRANTS ON a.t
 ----
 Database  Table  User       Privileges
+a         t      admin      ALL
 a         t      readwrite  ALL
 a         t      root       ALL
 a         t      test-user  ALL

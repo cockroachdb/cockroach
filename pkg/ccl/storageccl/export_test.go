@@ -9,12 +9,12 @@
 package storageccl
 
 import (
+	"bytes"
+	"context"
 	"io/ioutil"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -49,6 +49,7 @@ func TestExportCmd(t *testing.T) {
 				LocalFile: roachpb.ExportStorage_LocalFilePath{Path: "/foo"},
 			},
 			MVCCFilter: mvccFilter,
+			ReturnSST:  true,
 		}
 		res, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
 		if pErr != nil {
@@ -71,7 +72,10 @@ func TestExportCmd(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
-			if err := sst.IngestExternalFile(fileContents); err != nil {
+			if !bytes.Equal(fileContents, file.SST) {
+				t.Fatal("Returned SST and exported SST don't match!")
+			}
+			if err := sst.IngestExternalFile(file.SST); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			start, end := engine.MVCCKey{Key: keys.MinKey}, engine.MVCCKey{Key: keys.MaxKey}

@@ -117,12 +117,12 @@ SELECT 'NaN'::decimal, '-NaN'::decimal, 'sNaN'::decimal, '-sNaN'::decimal
 ----
 NaN NaN NaN NaN
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM t2 WHERE d IS NaN and v IS NaN
 ----
-0  scan  ·      ·
-0  ·     table  t2@primary
-0  ·     spans  /NaN/NaN-/NaN/NaN/#
+scan  ·      ·
+·     table  t2@primary
+·     spans  /NaN/NaN-/NaN/NaN/#
 
 query RR
 SELECT * FROM t2 WHERE d IS NaN and v IS NaN
@@ -130,24 +130,24 @@ SELECT * FROM t2 WHERE d IS NaN and v IS NaN
 NaN NaN
 
 # The NaN suffix is decimalNaNDesc, not decimalNaN(Asc).
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
 ----
-0  scan  ·      ·
-0  ·     table  t2@primary
-0  ·     spans  /Infinity/Infinity-/Infinity/Infinity/#
+scan  ·      ·
+·     table  t2@primary
+·     spans  /Infinity/Infinity-/Infinity/Infinity/#
 
 query RR
 SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
 ----
 Infinity Infinity
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
 ----
-0  scan  ·      ·
-0  ·     table  t2@primary
-0  ·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/#
+scan  ·      ·
+·     table  t2@primary
+·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/#
 
 query RR
 SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
@@ -204,29 +204,29 @@ Infinity
 # - `WHERE d = 'NaN'` should also perform a point lookup.
 # - `WHERE isnan(d)` is a function so it can't perform a point lookup.
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM s WHERE d IS NaN
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  s@s_d_idx
-1  ·       spans  /NaN-/-Infinity
+render     ·      ·
+ └── scan  ·      ·
+·          table  s@s_d_idx
+·          spans  /NaN-/-Infinity
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM s WHERE d = 'NaN'
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  s@s_d_idx
-1  ·       spans  /NaN-/-Infinity
+render     ·      ·
+ └── scan  ·      ·
+·          table  s@s_d_idx
+·          spans  /NaN-/-Infinity
 
-query ITTT
+query TTT
 EXPLAIN SELECT * FROM s WHERE isnan(d)
 ----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  s@s_d_idx
-1  ·       spans  ALL
+render     ·      ·
+ └── scan  ·      ·
+·          table  s@s_d_idx
+·          spans  ALL
 
 query R
 SELECT * FROM s WHERE d = 'NaN'

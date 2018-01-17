@@ -45,6 +45,9 @@ message CollectChecksumResponse {
   bytes checksum = 1;
   // snapshot is set if the roachpb.ComputeChecksumRequest had snapshot = true
   // and the response checksum is different from the request checksum.
+  //
+  // TODO(tschottdorf): with larger ranges, this is no longer tenable.
+  // See https://github.com/cockroachdb/cockroach/issues/21128.
   roachpb.RaftSnapshotData snapshot = 2;
 }
 

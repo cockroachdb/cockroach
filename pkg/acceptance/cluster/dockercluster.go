@@ -16,6 +16,8 @@ package cluster
 
 import (
 	"bytes"
+	"context"
+	gosql "database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -40,21 +42,16 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	roachClient "github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -805,18 +802,9 @@ func (l *DockerCluster) stop(ctx context.Context) {
 	}
 }
 
-// NewClient implements the Cluster interface.
-func (l *DockerCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
-	clock := hlc.NewClock(hlc.UnixNano, 0)
-	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, &base.Config{
-		User:        security.NodeUser,
-		SSLCertsDir: l.CertsDir,
-	}, clock, l.stopper)
-	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(ctx, DefaultTCP).String())
-	if err != nil {
-		return nil, err
-	}
-	return roachClient.NewDB(roachClient.NewSender(conn), clock), nil
+// NewDB implements the Cluster interface.
+func (l *DockerCluster) NewDB(ctx context.Context, i int) (*gosql.DB, error) {
+	return gosql.Open("postgres", l.PGUrl(ctx, i))
 }
 
 // InternalIP returns the IP address used for inter-node communication.

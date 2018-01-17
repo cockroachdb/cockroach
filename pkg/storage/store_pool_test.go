@@ -15,14 +15,16 @@
 package storage
 
 import (
+	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -95,7 +97,9 @@ func createTestStorePool(
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	st := cluster.MakeTestingClusterSettings()
-	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, clock, stopper)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, clock, stopper,
+		&st.Version)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	mnl := newMockNodeLiveness(defaultNodeStatus)
@@ -177,7 +181,12 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		TestTimeUntilStoreDead, false /* deterministic */, NodeLivenessStatus_DEAD)
 	defer stopper.Stop(context.TODO())
 	sg := gossiputil.NewStoreGossiper(g)
-	constraints := config.Constraints{Constraints: []config.Constraint{{Value: "ssd"}, {Value: "dc"}}}
+	constraints := config.Constraints{
+		Constraints: []config.Constraint{
+			{Type: config.Constraint_REQUIRED, Value: "ssd"},
+			{Type: config.Constraint_REQUIRED, Value: "dc"},
+		},
+	}
 	required := []string{"ssd", "dc"}
 	// Nothing yet.
 	sl, _, _ := sp.getStoreList(roachpb.RangeID(0), storeFilterNone)
@@ -317,6 +326,98 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		/* expectedThrottledStoreCount */ 1,
 	); err != nil {
 		t.Error(err)
+	}
+}
+
+// TestStoreListFilter ensures that the store list constraint filtering works
+// properly.
+func TestStoreListFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	constraints := config.Constraints{
+		Constraints: []config.Constraint{
+			{Type: config.Constraint_REQUIRED, Key: "region", Value: "us-west"},
+			{Type: config.Constraint_REQUIRED, Value: "MustMatch"},
+			{Type: config.Constraint_POSITIVE, Value: "MatchingOptional"},
+			{Type: config.Constraint_PROHIBITED, Value: "MustNotMatch"},
+		},
+	}
+
+	stores := []struct {
+		attributes []string
+		locality   []roachpb.Tier
+		expected   bool
+	}{
+		{
+			expected: false,
+		},
+		{
+			attributes: []string{"MustMatch"},
+			expected:   false,
+		},
+		{
+			locality: []roachpb.Tier{{Key: "region", Value: "us-west"}},
+			expected: false,
+		},
+		{
+			attributes: []string{"MustMatch"},
+			locality:   []roachpb.Tier{{Key: "region", Value: "us-west"}},
+			expected:   true,
+		},
+		{
+			attributes: []string{"a", "MustMatch"},
+			locality:   []roachpb.Tier{{Key: "a", Value: "b"}, {Key: "region", Value: "us-west"}},
+			expected:   true,
+		},
+		{
+			attributes: []string{"a", "b", "MustMatch", "c"},
+			locality:   []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "c", Value: "d"}},
+			expected:   true,
+		},
+		{
+			attributes: []string{"MustMatch", "MustNotMatch"},
+			locality:   []roachpb.Tier{{Key: "region", Value: "us-west"}},
+			expected:   false,
+		},
+		{
+			attributes: []string{"MustMatch"},
+			locality:   []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "MustNotMatch", Value: "b"}},
+			expected:   true,
+		},
+		{
+			attributes: []string{"MustMatch"},
+			locality:   []roachpb.Tier{{Key: "region", Value: "us-west"}, {Key: "a", Value: "MustNotMatch"}},
+			expected:   true,
+		},
+	}
+
+	var sl StoreList
+	var expected []roachpb.StoreDescriptor
+	for i, s := range stores {
+		storeDesc := roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(i + 1),
+			Node: roachpb.NodeDescriptor{
+				Locality: roachpb.Locality{
+					Tiers: s.locality,
+				},
+			},
+		}
+		// Randomly stick the attributes in either the node or the store to get
+		// code coverage of both locations.
+		if rand.Intn(2) == 0 {
+			storeDesc.Attrs.Attrs = s.attributes
+		} else {
+			storeDesc.Node.Attrs.Attrs = s.attributes
+		}
+		sl.stores = append(sl.stores, storeDesc)
+		if s.expected {
+			expected = append(expected, storeDesc)
+		}
+	}
+
+	filtered := sl.filter(constraints)
+	if !reflect.DeepEqual(expected, filtered.stores) {
+		t.Errorf("did not get expected stores %s", pretty.Diff(expected, filtered.stores))
 	}
 }
 

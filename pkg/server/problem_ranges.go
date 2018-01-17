@@ -15,11 +15,11 @@
 package server
 
 import (
+	"context"
 	"sort"
 
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +42,7 @@ func (s *statusServer) ProblemRanges(
 	if len(req.NodeID) > 0 {
 		requestedNodeID, _, err := s.parseNodeID(req.NodeID)
 		if err != nil {
-			return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		isLiveMap = map[roachpb.NodeID]bool{
 			requestedNodeID: true,
@@ -65,7 +65,7 @@ func (s *statusServer) ProblemRanges(
 		if err := s.stopper.RunAsyncTask(
 			nodeCtx, "server.statusServer: requesting remote ranges",
 			func(ctx context.Context) {
-				status, err := s.dialNode(nodeID)
+				status, err := s.dialNode(ctx, nodeID)
 				var rangesResponse *serverpb.RangesResponse
 				if err == nil {
 					req := &serverpb.RangesRequest{}
@@ -84,7 +84,7 @@ func (s *statusServer) ProblemRanges(
 					// Context completed, response no longer needed.
 				}
 			}); err != nil {
-			return nil, grpc.Errorf(codes.Internal, err.Error())
+			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 	}
 
@@ -133,7 +133,7 @@ func (s *statusServer) ProblemRanges(
 			sort.Sort(roachpb.RangeIDSlice(problems.UnderreplicatedRangeIDs))
 			response.ProblemsByNodeID[resp.nodeID] = problems
 		case <-ctx.Done():
-			return nil, grpc.Errorf(codes.DeadlineExceeded, ctx.Err().Error())
+			return nil, status.Errorf(codes.DeadlineExceeded, ctx.Err().Error())
 		}
 	}
 

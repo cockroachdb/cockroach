@@ -14,11 +14,6 @@
 
 package tree
 
-import (
-	"bytes"
-	"fmt"
-)
-
 // AlterTable represents an ALTER TABLE statement.
 type AlterTable struct {
 	IfExists bool
@@ -27,26 +22,25 @@ type AlterTable struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTable) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER TABLE ")
+func (node *AlterTable) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TABLE ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, &node.Table)
-	buf.WriteByte(' ')
-	FormatNode(buf, f, node.Cmds)
+	ctx.FormatNode(&node.Table)
+	ctx.FormatNode(&node.Cmds)
 }
 
 // AlterTableCmds represents a list of table alterations.
 type AlterTableCmds []AlterTableCmd
 
 // Format implements the NodeFormatter interface.
-func (node AlterTableCmds) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, n := range node {
+func (node *AlterTableCmds) Format(ctx *FmtCtx) {
+	for i, n := range *node {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(",")
 		}
-		FormatNode(buf, f, n)
+		ctx.FormatNode(n)
 	}
 }
 
@@ -65,6 +59,7 @@ func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
+func (*AlterTablePartitionBy) alterTableCmd()        {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -73,6 +68,7 @@ var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
+var _ AlterTableCmd = &AlterTablePartitionBy{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -89,15 +85,15 @@ type AlterTableAddColumn struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTableAddColumn) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ADD ")
+func (node *AlterTableAddColumn) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ADD ")
 	if node.ColumnKeyword {
-		buf.WriteString("COLUMN ")
+		ctx.WriteString("COLUMN ")
 	}
 	if node.IfNotExists {
-		buf.WriteString("IF NOT EXISTS ")
+		ctx.WriteString("IF NOT EXISTS ")
 	}
-	FormatNode(buf, f, node.ColumnDef)
+	ctx.FormatNode(node.ColumnDef)
 }
 
 // ValidationBehavior specifies whether or not a constraint is validated.
@@ -117,11 +113,11 @@ type AlterTableAddConstraint struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTableAddConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ADD ")
-	FormatNode(buf, f, node.ConstraintDef)
+func (node *AlterTableAddConstraint) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ADD ")
+	ctx.FormatNode(node.ConstraintDef)
 	if node.ValidationBehavior == ValidationSkip {
-		buf.WriteString(" NOT VALID")
+		ctx.WriteString(" NOT VALID")
 	}
 }
 
@@ -134,17 +130,17 @@ type AlterTableDropColumn struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTableDropColumn) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP ")
+func (node *AlterTableDropColumn) Format(ctx *FmtCtx) {
+	ctx.WriteString(" DROP ")
 	if node.ColumnKeyword {
-		buf.WriteString("COLUMN ")
+		ctx.WriteString("COLUMN ")
 	}
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Column)
+	ctx.FormatNode(&node.Column)
 	if node.DropBehavior != DropDefault {
-		fmt.Fprintf(buf, " %s", node.DropBehavior)
+		ctx.Printf(" %s", node.DropBehavior)
 	}
 }
 
@@ -156,14 +152,14 @@ type AlterTableDropConstraint struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTableDropConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP CONSTRAINT ")
+func (node *AlterTableDropConstraint) Format(ctx *FmtCtx) {
+	ctx.WriteString(" DROP CONSTRAINT ")
 	if node.IfExists {
-		buf.WriteString("IF EXISTS ")
+		ctx.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Constraint)
+	ctx.FormatNode(&node.Constraint)
 	if node.DropBehavior != DropDefault {
-		fmt.Fprintf(buf, " %s", node.DropBehavior)
+		ctx.Printf(" %s", node.DropBehavior)
 	}
 }
 
@@ -173,9 +169,9 @@ type AlterTableValidateConstraint struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTableValidateConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("VALIDATE CONSTRAINT ")
-	FormatNode(buf, f, node.Constraint)
+func (node *AlterTableValidateConstraint) Format(ctx *FmtCtx) {
+	ctx.WriteString(" VALIDATE CONSTRAINT ")
+	ctx.FormatNode(&node.Constraint)
 }
 
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
@@ -192,17 +188,17 @@ func (node *AlterTableSetDefault) GetColumn() Name {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTableSetDefault) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
+func (node *AlterTableSetDefault) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER ")
 	if node.ColumnKeyword {
-		buf.WriteString("COLUMN ")
+		ctx.WriteString("COLUMN ")
 	}
-	FormatNode(buf, f, node.Column)
+	ctx.FormatNode(&node.Column)
 	if node.Default == nil {
-		buf.WriteString(" DROP DEFAULT")
+		ctx.WriteString(" DROP DEFAULT")
 	} else {
-		fmt.Fprintf(buf, " SET DEFAULT ")
-		FormatNode(buf, f, node.Default)
+		ctx.WriteString(" SET DEFAULT ")
+		ctx.FormatNode(node.Default)
 	}
 }
 
@@ -219,11 +215,22 @@ func (node *AlterTableDropNotNull) GetColumn() Name {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *AlterTableDropNotNull) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
+func (node *AlterTableDropNotNull) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER ")
 	if node.ColumnKeyword {
-		buf.WriteString("COLUMN ")
+		ctx.WriteString("COLUMN ")
 	}
-	FormatNode(buf, f, node.Column)
-	buf.WriteString(" DROP NOT NULL")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" DROP NOT NULL")
+}
+
+// AlterTablePartitionBy represents an ALTER TABLE PARTITION BY
+// command.
+type AlterTablePartitionBy struct {
+	*PartitionBy
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTablePartitionBy) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.PartitionBy)
 }

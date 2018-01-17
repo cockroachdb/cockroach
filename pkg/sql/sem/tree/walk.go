@@ -183,17 +183,6 @@ func (expr *ComparisonExpr) Walk(v Visitor) Expr {
 	return expr
 }
 
-// Walk implements the Expr interface.
-func (expr *ExistsExpr) Walk(v Visitor) Expr {
-	e, changed := WalkExpr(v, expr.Subquery)
-	if changed {
-		exprCopy := *expr
-		exprCopy.Subquery = e
-		return &exprCopy
-	}
-	return expr
-}
-
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *FuncExpr) CopyNode() *FuncExpr {
 	exprCopy := *expr
@@ -402,7 +391,9 @@ func (expr *RangeCond) Walk(v Visitor) Expr {
 func (expr *Subquery) Walk(v Visitor) Expr {
 	sel, changed := WalkStmt(v, expr.Select)
 	if changed {
-		return &Subquery{sel.(SelectStatement)}
+		exprCopy := *expr
+		exprCopy.Select = sel.(SelectStatement)
+		return &exprCopy
 	}
 	return expr
 }
@@ -486,7 +477,7 @@ func (expr *ArrayFlatten) Walk(v Visitor) Expr {
 func (expr UnqualifiedStar) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
-func (expr UnresolvedName) Walk(_ Visitor) Expr { return expr }
+func (expr *UnresolvedName) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *AllColumnsSelector) Walk(_ Visitor) Expr { return expr }
@@ -503,6 +494,9 @@ func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr MaxVal) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr MinVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *NumVal) Walk(_ Visitor) Expr { return expr }

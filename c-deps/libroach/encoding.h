@@ -12,9 +12,9 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#ifndef ROACHLIB_ENCODING_H
-#define ROACHLIB_ENCODING_H
+#pragma once
 
+#include <rocksdb/slice.h>
 #include <stdint.h>
 
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
@@ -32,8 +32,6 @@ bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value);
 // DecodedUint64 decodes a fixed-length encoded uint64 from a buffer, returning
 // true on a successful decode. The decoded value is returned in *value.
 bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value);
-
-#endif // ROACHLIB_ENCODING_H
 
 // local variables:
 // mode: c++

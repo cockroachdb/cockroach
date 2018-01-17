@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -24,7 +25,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -32,7 +32,6 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -104,7 +103,7 @@ const (
 	MinimumMaxOpenFiles = 1700
 )
 
-// SSTableInfo contains metadata about a single RocksDB sstable. This mirrors
+// SSTableInfo contains metadata about a single sstable. Note this mirrors
 // the C.DBSSTable struct contents.
 type SSTableInfo struct {
 	Level int
@@ -261,6 +260,131 @@ func (s SSTableInfos) ReadAmplification() int {
 	return readAmp
 }
 
+// SSTableInfosByLevel maintains slices of SSTableInfo objects, one
+// per level. The slice for each level contains the SSTableInfo
+// objects for SSTables at that level, sorted by start key.
+type SSTableInfosByLevel struct {
+	// Each level is a slice of SSTableInfos.
+	levels [][]SSTableInfo
+}
+
+// NewSSTableInfosByLevel returns a new SSTableInfosByLevel object
+// based on the supplied SSTableInfos slice.
+func NewSSTableInfosByLevel(s SSTableInfos) SSTableInfosByLevel {
+	var result SSTableInfosByLevel
+	for _, t := range s {
+		for i := len(result.levels); i <= t.Level; i++ {
+			result.levels = append(result.levels, []SSTableInfo{})
+		}
+		result.levels[t.Level] = append(result.levels[t.Level], t)
+	}
+	// Sort each level by start key.
+	for _, l := range result.levels {
+		sort.Slice(l, func(i, j int) bool { return l[i].Start.Less(l[j].Start) })
+	}
+	return result
+}
+
+// MaxLevel returns the maximum level for which there are SSTables.
+func (s *SSTableInfosByLevel) MaxLevel() int {
+	return len(s.levels) - 1
+}
+
+// MaxLevelSpanOverlapsContiguousSSTables returns the maximum level at
+// which the specified key span overlaps either none, one, or at most
+// two contiguous SSTables. Level 0 is returned if no level qualifies.
+//
+// This is useful when considering when to merge two compactions. In
+// this case, the method is called with the "gap" between the two
+// spans to be compacted. When the result is that the gap span touches
+// at most two SSTables at a high level, it suggests that merging the
+// two compactions is a good idea (as the up to two SSTables touched
+// by the gap span, due to containing endpoints of the existing
+// compactions, would be rewritten anyway).
+//
+// As an example, consider the following sstables in a small database:
+//
+// Level 0.
+//  {Level: 0, Size: 20, Start: key("a"), End: key("z")},
+//  {Level: 0, Size: 15, Start: key("a"), End: key("k")},
+// Level 2.
+//  {Level: 2, Size: 200, Start: key("a"), End: key("j")},
+//  {Level: 2, Size: 100, Start: key("k"), End: key("o")},
+//  {Level: 2, Size: 100, Start: key("r"), End: key("t")},
+// Level 6.
+//  {Level: 6, Size: 201, Start: key("a"), End: key("c")},
+//  {Level: 6, Size: 200, Start: key("d"), End: key("f")},
+//  {Level: 6, Size: 300, Start: key("h"), End: key("r")},
+//  {Level: 6, Size: 405, Start: key("s"), End: key("z")},
+//
+// - The span "a"-"c" overlaps only a single SSTable at the max level
+//   (L6). That's great, so we definitely want to compact that.
+// - The span "s"-"t" overlaps zero SSTables at the max level (L6).
+//   Again, great! That means we're going to compact the 3rd L2
+//   SSTable and maybe push that directly to L6.
+func (s *SSTableInfosByLevel) MaxLevelSpanOverlapsContiguousSSTables(span roachpb.Span) int {
+	// Note overlapsMoreTHanTwo should not be called on level 0, where
+	// the SSTables are not guaranteed disjoint.
+	overlapsMoreThanTwo := func(tables []SSTableInfo) bool {
+		// Search to find the first sstable which might overlap the span.
+		i := sort.Search(len(tables), func(i int) bool { return span.Key.Compare(tables[i].End.Key) < 0 })
+		// If no SSTable is overlapped, return false.
+		if i == -1 || i == len(tables) || span.EndKey.Compare(tables[i].Start.Key) < 0 {
+			return false
+		}
+		// Return true if the span is not subsumed by the combination of
+		// this sstable and the next. This logic is complicated and is
+		// covered in the unittest. There are three successive conditions
+		// which together ensure the span doesn't overlap > 2 SSTables.
+		//
+		// - If the first overlapped SSTable is the last.
+		// - If the span does not exceed the end of the next SSTable.
+		// - If the span does not overlap the start of the next next SSTable.
+		if i >= len(tables)-1 {
+			// First overlapped SSTable is the last (right-most) SSTable.
+			//    Span:   [c-----f)
+			//    SSTs: [a---d)
+			// or
+			//    SSTs: [a-----------q)
+			return false
+		}
+		if span.EndKey.Compare(tables[i+1].End.Key) <= 0 {
+			// Span does not reach outside of this SSTable's right neighbor.
+			//    Span:    [c------f)
+			//    SSTs: [a---d) [e-f) ...
+			return false
+		}
+		if i >= len(tables)-2 {
+			// Span reaches outside of this SSTable's right neighbor, but
+			// there are no more SSTables to the right.
+			//    Span:    [c-------------x)
+			//    SSTs: [a---d) [e---q)
+			return false
+		}
+		if span.EndKey.Compare(tables[i+2].Start.Key) <= 0 {
+			// There's another SSTable two to the right, but the span doesn't
+			// reach into it.
+			//    Span:    [c------------x)
+			//    SSTs: [a---d) [e---q) [x--z) ...
+			return false
+		}
+
+		// Touching at least three SSTables.
+		//    Span:    [c-------------y)
+		//    SSTs: [a---d) [e---q) [x--z) ...
+		return true
+	}
+	// Note that we never consider level 0, where SSTables can overlap.
+	// Level 0 is instead returned as a catch-all which means that there
+	// is no level where the span overlaps only two or fewer SSTables.
+	for i := len(s.levels) - 1; i > 0; i-- {
+		if !overlapsMoreThanTwo(s.levels[i]) {
+			return i
+		}
+	}
+	return 0
+}
+
 // RocksDBCache is a wrapper around C.DBCache
 type RocksDBCache struct {
 	cache *C.DBCache
@@ -295,6 +419,11 @@ type RocksDBConfig struct {
 	Attrs roachpb.Attributes
 	// Dir is the data directory for this store.
 	Dir string
+	// If true, creating the instance fails if the target directory does not hold
+	// an initialized RocksDB instance.
+	//
+	// Makes no sense for in-memory instances.
+	MustExist bool
 	// MaxSizeBytes is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size.
 	MaxSizeBytes int64
@@ -310,6 +439,9 @@ type RocksDBConfig struct {
 	// UseSwitchingEnv is true if the switching env is needed (eg: encryption-at-rest).
 	// This may force the store version to versionSwitchingEnv if currently lower.
 	UseSwitchingEnv bool
+	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
+	// to C CCL code.
+	ExtraOptions []byte
 }
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -458,6 +590,8 @@ func (r *RocksDB) open() error {
 			num_cpu:           C.int(runtime.NumCPU()),
 			max_open_files:    C.int(maxOpenFiles),
 			use_switching_env: C.bool(newVersion == versionCurrent),
+			must_exist:        C.bool(r.cfg.MustExist),
+			extra_options:     goToCSlice(r.cfg.ExtraOptions),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Wrap(err, "could not open rocksdb instance")
@@ -661,7 +795,18 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	var totalUsedBytes int64
 	if errOuter := filepath.Walk(r.cfg.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			// This can happen if rocksdb removes files out from under us - just keep
+			// going to get the best estimate we can.
+			if os.IsNotExist(err) {
+				return nil
+			}
+			// Special-case: if the store-dir is configured using the root of some fs,
+			// e.g. "/mnt/db", we might have special fs-created files like lost+found
+			// that we can't read, so just ignore them rather than crashing.
+			if os.IsPermission(err) && filepath.Base(path) == "lost+found" {
+				return nil
+			}
+			return err
 		}
 		if info.Mode().IsRegular() {
 			totalUsedBytes += info.Size()
@@ -697,9 +842,23 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
-// Compact forces compaction on the database.
+// Compact forces compaction over the entire database.
 func (r *RocksDB) Compact() error {
 	return statusToError(C.DBCompact(r.rdb))
+}
+
+// CompactRange forces compaction over a specified range of keys in the database.
+func (r *RocksDB) CompactRange(start, end roachpb.Key) error {
+	return statusToError(C.DBCompactRange(r.rdb, goToCSlice(start), goToCSlice(end)))
+}
+
+// ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
+func (r *RocksDB) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
+	start := MVCCKey{Key: from}
+	end := MVCCKey{Key: to}
+	var result C.uint64_t
+	err := statusToError(C.DBApproximateDiskBytes(r.rdb, goToCKey(start), goToCKey(end), &result))
+	return uint64(result), err
 }
 
 // Destroy destroys the underlying filesystem data associated with the database.
@@ -1167,6 +1326,24 @@ func (r *rocksDBBatchIterator) FindSplitKey(
 	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize, allowMeta2Splits)
 }
 
+func (r *rocksDBBatchIterator) MVCCGet(
+	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent bool,
+) (*roachpb.Value, []roachpb.Intent, error) {
+	r.batch.flushMutations()
+	return r.iter.MVCCGet(key, timestamp, txn, consistent)
+}
+
+func (r *rocksDBBatchIterator) MVCCScan(
+	start, end roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	txn *roachpb.Transaction,
+	consistent, reverse bool,
+) (kvs []byte, intents []byte, err error) {
+	r.batch.flushMutations()
+	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse)
+}
+
 func (r *rocksDBBatchIterator) Key() MVCCKey {
 	return r.iter.Key()
 }
@@ -1328,9 +1505,6 @@ func (r *rocksDBBatch) Clear(key MVCCKey) error {
 }
 
 func (r *rocksDBBatch) ClearRange(start, end MVCCKey) error {
-	if !r.writeOnly {
-		panic("readable batch")
-	}
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
@@ -1379,7 +1553,23 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
 func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
-	panic("not implemented")
+	if r.writeOnly {
+		panic("write-only batch")
+	}
+	if r.distinctOpen {
+		panic("distinct batch open")
+	}
+	// Used the cached iterator, creating it on first access.
+	iter := &r.normalIter
+	if iter.iter.iter == nil {
+		r.ensureBatch()
+		iter.iter.initTimeBound(r.batch, start, end, r)
+	}
+	if iter.batch != nil {
+		panic("iterator already in use")
+	}
+	iter.batch = r
+	return iter
 }
 
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
@@ -1775,6 +1965,94 @@ func (r *rocksDBIterator) FindSplitKey(
 	return MVCCKey{Key: cStringToGoBytes(splitKey)}, nil
 }
 
+func (r *rocksDBIterator) MVCCGet(
+	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent bool,
+) (*roachpb.Value, []roachpb.Intent, error) {
+	if !consistent && txn != nil {
+		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(key) == 0 {
+		return nil, nil, emptyKeyError()
+	}
+
+	state := C.MVCCGet(
+		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
+		goToCTxn(txn), C.bool(consistent),
+	)
+
+	if err := statusToError(state.status); err != nil {
+		return nil, nil, err
+	}
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
+		return nil, nil, err
+	}
+
+	intents, err := buildScanIntents(cSliceToGoBytes(state.intents))
+	if err != nil {
+		return nil, nil, err
+	}
+	if consistent && len(intents) > 0 {
+		return nil, nil, &roachpb.WriteIntentError{Intents: intents}
+	}
+	if state.data.len == 0 {
+		return nil, intents, nil
+	}
+
+	// Extract the value from the batch data. This code would be slightly more
+	// compact using RocksDBBatchReader, but avoiding the allocation has a
+	// measurable impact on benchmarks.
+	repr := cSliceToUnsafeGoBytes(state.data)
+	count, repr, err := rocksDBBatchDecodeHeader(repr)
+	if err != nil {
+		return nil, nil, err
+	}
+	if count > 1 {
+		return nil, nil, errors.Errorf("expected 0 or 1 result, found %d", count)
+	}
+	if count == 0 {
+		return nil, intents, nil
+	}
+	mvccKey, rawValue, _, err := rocksDBBatchDecodeValue(repr)
+	if err != nil {
+		return nil, nil, err
+	}
+	value := &roachpb.Value{
+		RawBytes:  make([]byte, len(rawValue)),
+		Timestamp: mvccKey.Timestamp,
+	}
+	copy(value.RawBytes, rawValue)
+	return value, intents, nil
+}
+
+func (r *rocksDBIterator) MVCCScan(
+	start, end roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	txn *roachpb.Transaction,
+	consistent, reverse bool,
+) (kvs []byte, intents []byte, err error) {
+	if !consistent && txn != nil {
+		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+	}
+	if len(end) == 0 {
+		return nil, nil, emptyKeyError()
+	}
+
+	state := C.MVCCScan(
+		r.iter, goToCSlice(start), goToCSlice(end),
+		goToCTimestamp(timestamp), C.int64_t(max),
+		goToCTxn(txn), C.bool(consistent), C.bool(reverse),
+	)
+
+	if err := statusToError(state.status); err != nil {
+		return nil, nil, err
+	}
+	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
+		return nil, nil, err
+	}
+	return cSliceToGoBytes(state.data), cSliceToGoBytes(state.intents), nil
+}
+
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {
 	ms := enginepb.MVCCStats{}
 	if err := statusToError(stats.status); err != nil {
@@ -1892,28 +2170,14 @@ func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
 	}
 }
 
-// A RocksDBError wraps an error returned from a RocksDB operation.
-type RocksDBError struct {
-	msg string
-}
-
-var _ log.SafeMessager = (*RocksDBError)(nil)
-
-// Error implements the error interface.
-func (err *RocksDBError) Error() string {
-	return err.msg
-}
-
-// SafeMessage implements log.SafeMessager.
-func (err *RocksDBError) SafeMessage() string {
-	// RocksDB errors are of format
-	// <Error Type>: [<Suberror type>] [State]
-	// We extract only the `<Error Type>` part.
-	ps := strings.SplitN(err.msg, ":", 2)
-	if len(ps) < 2 {
-		return "<unknown>"
+func goToCTxn(txn *roachpb.Transaction) C.DBTxn {
+	var r C.DBTxn
+	if txn != nil {
+		r.id = goToCSlice(txn.ID.GetBytes())
+		r.epoch = C.uint32_t(txn.Epoch)
+		r.max_timestamp = goToCTimestamp(txn.MaxTimestamp)
 	}
-	return ps[0]
+	return r
 }
 
 func statusToError(s C.DBStatus) error {
@@ -1921,6 +2185,20 @@ func statusToError(s C.DBStatus) error {
 		return nil
 	}
 	return &RocksDBError{msg: cStringToGoString(s)}
+}
+
+func uncertaintyToError(
+	readTS hlc.Timestamp, existingTS C.DBTimestamp, txn *roachpb.Transaction,
+) error {
+	if existingTS.wall_time != 0 || existingTS.logical != 0 {
+		return roachpb.NewReadWithinUncertaintyIntervalError(
+			readTS, hlc.Timestamp{
+				WallTime: int64(existingTS.wall_time),
+				Logical:  int32(existingTS.logical),
+			},
+			txn)
+	}
+	return nil
 }
 
 // goMerge takes existing and update byte slices that are expected to
@@ -2210,4 +2488,15 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 // equal to Meta2KeyMax (\x03\xff\xff) is considered invalid.
 func IsValidSplitKey(key roachpb.Key, allowMeta2Splits bool) bool {
 	return bool(C.MVCCIsValidSplitKey(goToCSlice(key), C._Bool(allowMeta2Splits)))
+}
+
+// lockFile sets a lock on the specified file using RocksDB's file locking interface.
+func lockFile(filename string) (C.DBFileLock, error) {
+	var lock C.DBFileLock
+	return lock, statusToError(C.DBLockFile(goToCSlice([]byte(filename)), &lock))
+}
+
+// unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
+func unlockFile(lock C.DBFileLock) error {
+	return statusToError(C.DBUnlockFile(lock))
 }

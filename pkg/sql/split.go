@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -97,10 +98,6 @@ type splitRun struct {
 	lastSplitKey []byte
 }
 
-func (n *splitNode) Start(params runParams) error {
-	return n.rows.Start(params)
-}
-
 func (n *splitNode) Next(params runParams) (bool, error) {
 	// TODO(radu): instead of performing the splits sequentially, accumulate all
 	// the split keys and then perform the splits in parallel (e.g. split at the
@@ -115,7 +112,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := params.p.session.execCfg.DB.AdminSplit(params.ctx, rowKey, rowKey); err != nil {
+	if err := params.extendedEvalCtx.ExecCfg.DB.AdminSplit(params.ctx, rowKey, rowKey); err != nil {
 		return false, err
 	}
 

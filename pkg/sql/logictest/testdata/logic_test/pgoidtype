@@ -40,17 +40,20 @@ SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper'::REGPROCEDURE), pg_typeof(
 ----
 regproc  regprocedure  regtype
 
-query O
-SELECT 'pg_constraint'::REGCLASS
+query OO
+SELECT 'pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS
 ----
-pg_constraint
+pg_constraint  pg_constraint
 
-query ITTTTT
+query error relation 'pg_constraint' does not exist
+SELECT 'foo.pg_constraint'::REGCLASS
+
+query TITTTTT
 EXPLAIN (TYPES) SELECT 'pg_constraint'::REGCLASS
 ----
-0  render    ·         ·                          ("'pg_constraint'::REGCLASS" regclass)  "'pg_constraint'::REGCLASS"=CONST
-0  ·         render 0  (pg_constraint)[regclass]  ·                                       ·
-1  emptyrow  ·         ·                          ()                                      ·
+render         0  render    ·         ·                          ("'pg_constraint'::REGCLASS" regclass)  "'pg_constraint'::REGCLASS"=CONST
+ │             0  ·         render 0  (pg_constraint)[regclass]  ·                                       ·
+ └── emptyrow  1  emptyrow  ·         ·                          ("'pg_constraint'::REGCLASS" regclass)  "'pg_constraint'::REGCLASS"=CONST
 
 query OO
 SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS

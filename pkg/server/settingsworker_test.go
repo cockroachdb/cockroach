@@ -15,6 +15,7 @@
 package server_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
@@ -22,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"

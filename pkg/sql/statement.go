@@ -15,8 +15,6 @@
 package sql
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -28,7 +26,6 @@ type Statement struct {
 	ExpectedTypes sqlbase.ResultColumns
 	AnonymizedStr string
 	queryID       uint128.Uint128
-	queryMeta     *queryMeta
 }
 
 func (s Statement) String() string {
@@ -47,14 +44,14 @@ func NewStatementList(stmts tree.StatementList) StatementList {
 	return sl
 }
 
-func (l StatementList) String() string { return tree.AsString(l) }
+func (l *StatementList) String() string { return tree.AsString(l) }
 
 // Format implements the NodeFormatter interface.
-func (l StatementList) Format(buf *bytes.Buffer, f tree.FmtFlags) {
-	for i, s := range l {
+func (l *StatementList) Format(ctx *tree.FmtCtx) {
+	for i := range *l {
 		if i > 0 {
-			buf.WriteString("; ")
+			ctx.WriteString("; ")
 		}
-		tree.FormatNode(buf, f, s.AST)
+		ctx.FormatNode((*l)[i].AST)
 	}
 }

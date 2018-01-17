@@ -16,20 +16,22 @@ package sqlbase
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -267,49 +269,61 @@ func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) 
 	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
 	columnIDs = append(columnIDs, desc.ExtraColumnIDs...)
 	for range desc.ExtraColumnIDs {
-		// Extra columns are encoded ascendingly.
+		// Extra columns are encoded in ascending order.
 		dirs = append(dirs, encoding.Ascending)
 	}
 	return columnIDs, dirs
 }
 
+// ColNamesFormat writes a string describing the column names and directions
+// in this index to the given buffer.
+func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtxWithBuf) {
+	for i := range desc.ColumnNames {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.FormatNameP(&desc.ColumnNames[i])
+		ctx.WriteByte(' ')
+		ctx.WriteString(desc.ColumnDirections[i].String())
+	}
+}
+
 // ColNamesString returns a string describing the column names and directions
 // in this index.
 func (desc *IndexDescriptor) ColNamesString() string {
-	var buf bytes.Buffer
-	for i, name := range desc.ColumnNames {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		fmt.Fprintf(&buf, "%s %s", tree.Name(name), desc.ColumnDirections[i])
-	}
-	return buf.String()
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	desc.ColNamesFormat(f)
+	return f.CloseAndGetString()
 }
-
-var isUnique = map[bool]string{true: "UNIQUE "}
 
 // SQLString returns the SQL string describing this index. If non-empty,
 // "ON tableName" is included in the output in the correct place.
 func (desc *IndexDescriptor) SQLString(tableName string) string {
-	var storing string
-	if len(desc.StoreColumnNames) > 0 {
-		colNames := make(tree.NameList, len(desc.StoreColumnNames))
-		for i, n := range desc.StoreColumnNames {
-			colNames[i] = tree.Name(n)
-		}
-		storing = fmt.Sprintf(" STORING (%s)", tree.AsString(colNames))
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	if desc.Unique {
+		f.WriteString("UNIQUE ")
 	}
-	var onTable string
+	f.WriteString("INDEX ")
 	if tableName != "" {
-		onTable = fmt.Sprintf("ON %s ", tableName)
+		f.WriteString("ON ")
+		f.WriteString(tableName)
 	}
-	return fmt.Sprintf("%sINDEX %s%s (%s)%s",
-		isUnique[desc.Unique],
-		onTable,
-		tree.AsString(tree.Name(desc.Name)),
-		desc.ColNamesString(),
-		storing,
-	)
+	f.FormatNameP(&desc.Name)
+	f.WriteString(" (")
+	desc.ColNamesFormat(f)
+	f.WriteByte(')')
+
+	if len(desc.StoreColumnNames) > 0 {
+		f.WriteString(" STORING (")
+		for i := range desc.StoreColumnNames {
+			if i > 0 {
+				f.WriteString(", ")
+			}
+			f.FormatNameP(&desc.StoreColumnNames[i])
+		}
+		f.WriteByte(')')
+	}
+	return f.CloseAndGetString()
 }
 
 // SetID implements the DescriptorProto interface.
@@ -1263,140 +1277,12 @@ func (desc *TableDescriptor) validateTableIndexes(
 	return nil
 }
 
-// TranslateValueEncodingToSpan parses columns (which are a prefix of the
-// columns of `idxDesc`) encoded with the "value" encoding and returns the
-// parsed datums. It also reencodes them into a key as they would be for
-// `idxDesc` (accounting for index dirs, interleaves, subpartitioning, etc).
-//
-// For a list partitioning, this returned key can be used as a prefix scan to
-// select all rows that have the given columns as a prefix (this is true even if
-// the list partitioning contains DEFAULT).
-//
-// Examples of the key returned for a list partitioning:
-// - (1, 2) -> /table/index/1/2
-// - (1, DEFAULT) -> /table/index/1
-// - (DEFAULT, DEFAULT) -> /table/index
-//
-// For a range partitioning, this returned key can be used as a exclusive end
-// key to select all rows strictly less than ones with the given columns as a
-// prefix (this is true even if the range partitioning contains MAXVALUE).
-//
-// Examples of the key returned for a range partitioning:
-// - (1, 2) -> /table/index/1/3
-// - (1, MAXVALUE) -> /table/index/2
-// - (DEFAULT, DEFAULT) -> (/table/index).PrefixEnd()
-//
-// If DEFAULT or MAXVALUE is encountered, the returned row (both reencoded and
-// parsed datums) will be shorter then len(colIDs); specifically it will contain
-// all the values up to but not including the special one.
-//
-// NB: It is required elsewhere and assumed here that if an entry for a list
-// partitioning contains DEFAULT, everything in that entry "after" also has to
-// be DEFAULT. So, (1, 2, DEFAULT) is valid but (1, DEFAULT, 2) is not.
-// Similarly for range partitioning and MAXVALUE.
-func TranslateValueEncodingToSpan(
-	a *DatumAlloc,
-	tableDesc *TableDescriptor,
-	idxDesc *IndexDescriptor,
-	partDesc *PartitioningDescriptor,
-	valueEncBuf []byte,
-	prefixDatums []tree.Datum,
-) (tree.Datums, []byte, error) {
-	if len(prefixDatums)+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
-		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
-	}
-
-	datums := make(tree.Datums, int(partDesc.NumColumns))
-	specialIdx := -1
-
-	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
-	for i, colID := range colIDs {
-		col, err := tableDesc.FindColumnByID(colID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if _, dataOffset, _, typ, err := encoding.DecodeValueTag(valueEncBuf); err != nil {
-			return nil, nil, errors.Wrap(err, "decoding")
-		} else if typ == encoding.NotNull {
-			if specialIdx == -1 {
-				specialIdx = i
-			}
-			valueEncBuf = valueEncBuf[dataOffset:]
-			continue
-		}
-		datums[i], valueEncBuf, err = DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "decoding")
-		}
-		if specialIdx != -1 {
-			if len(partDesc.List) > 0 && len(partDesc.Range) == 0 {
-				return nil, nil, errors.Errorf(
-					"non-DEFAULT value (%s) not allowed after DEFAULT", datums[i])
-			} else if len(partDesc.Range) > 0 && len(partDesc.List) == 0 {
-				return nil, nil, errors.Errorf(
-					"non-MAXVALUE value (%s) not allowed after MAXVALUE", datums[i])
-			} else {
-				return nil, nil, errors.Errorf("unknown partition type")
-			}
-		}
-	}
-	if len(valueEncBuf) > 0 {
-		return nil, nil, fmt.Errorf("superfluous data in encoded value")
-	}
-	if specialIdx != -1 {
-		datums = datums[:specialIdx]
-	}
-
-	allDatums := append(prefixDatums, datums...)
-	colMap := make(map[ColumnID]int, len(allDatums))
-	for i := range allDatums {
-		colMap[idxDesc.ColumnIDs[i]] = i
-	}
-
-	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, idxDesc.ID)
-	key, _, err := EncodePartialIndexKey(
-		tableDesc, idxDesc, len(allDatums), colMap, allDatums, indexKeyPrefix)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Currently, key looks something like `/table/index/1`. Given a range
-	// partitioning of (1), we're done. This can be used as the exclusive end
-	// key of a scan to fetch all rows strictly less than (1).
-	//
-	// If `specialIdx` is not the sentinel, then we're actually in a case like
-	// `(1, MAXVALUE, ..., MAXVALUE)`. Since this index could have a descending
-	// nullable column, we can't rely on `/table/index/1/0xff` to be _strictly_
-	// larger than everything it should match. Instead, we need `PrefixEnd()`.
-	// This also intuitively makes sense; we're essentially a key that is
-	// guaranteed to be less than `(2, MINVALUE, ..., MINVALUE)`.
-	if specialIdx != -1 && len(partDesc.Range) > 0 {
-		key = roachpb.Key(key).PrefixEnd()
-	}
-
-	return datums, key, nil
-}
-
-func printPartitioningPrefix(datums []tree.Datum, s string) string {
-	var buf bytes.Buffer
-	PrintPartitioningTuple(&buf, datums, len(datums)+1, s)
-	return buf.String()
-}
-
-// PrintPartitioningTuple prints the first `numColumns` datums in a partitioning
-// tuple to `buf`. If `numColumns >= len(datums)`, then `s` (which is expected
-// to be DEFAULT or MAXVALUE) is used to fill.
-func PrintPartitioningTuple(buf *bytes.Buffer, datums []tree.Datum, numColumns int, s string) {
-	for i := 0; i < numColumns; i++ {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		if i < len(datums) {
-			buf.WriteString(tree.AsString(datums[i]))
-		} else {
-			buf.WriteString(s)
-		}
-	}
+// PrimaryKeyString returns the pretty-printed primary key declaration for a
+// table descriptor.
+func (desc *TableDescriptor) PrimaryKeyString() string {
+	return fmt.Sprintf("PRIMARY KEY (%s)",
+		desc.PrimaryIndex.ColNamesString(),
+	)
 }
 
 // validatePartitioningDescriptor validates that a PartitioningDescriptor, which
@@ -1410,7 +1296,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	idxDesc *IndexDescriptor,
 	partDesc *PartitioningDescriptor,
 	colOffset int,
-	partitionNames map[string]struct{},
+	partitionNames map[string]string,
 ) error {
 	if partDesc.NumColumns == 0 {
 		return nil
@@ -1426,11 +1312,10 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			"set it on the root of the interleaved hierarchy instead", idxDesc.Name)
 	}
 
-	// We don't need real prefixes in the TranslateValueEncodingToSpan calls
-	// because we're only using it to look for collisions and the prefix would
-	// be the same for all of them. Faking them out with DNull allows us to make
-	// O(list partition) calls to TranslateValueEncodingToSpan instead of O(list
-	// partition entry).
+	// We don't need real prefixes in the DecodePartitionTuple calls because we're
+	// only using it to look for collisions and the prefix would be the same for
+	// all of them. Faking them out with DNull allows us to make O(list partition)
+	// calls to DecodePartitionTuple instead of O(list partition entry).
 	fakePrefixDatums := make([]tree.Datum, colOffset)
 	for i := range fakePrefixDatums {
 		fakePrefixDatums[i] = tree.DNull
@@ -1443,16 +1328,28 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 		return fmt.Errorf("only one LIST or RANGE partitioning may used")
 	}
 
+	checkName := func(name string) error {
+		if len(name) == 0 {
+			return fmt.Errorf("PARTITION name must be non-empty")
+		}
+		if indexName, exists := partitionNames[name]; exists {
+			if indexName == idxDesc.Name {
+				return fmt.Errorf("PARTITION %s: name must be unique (used twice in index %q)",
+					name, indexName)
+			}
+			return fmt.Errorf("PARTITION %s: name must be unique (used in both index %q and index %q)",
+				name, indexName, idxDesc.Name)
+		}
+		partitionNames[name] = idxDesc.Name
+		return nil
+	}
+
 	if len(partDesc.List) > 0 {
 		listValues := make(map[string]struct{}, len(partDesc.List))
 		for _, p := range partDesc.List {
-			if len(p.Name) == 0 {
-				return fmt.Errorf("PARTITION name must be non-empty")
+			if err := checkName(p.Name); err != nil {
+				return err
 			}
-			if _, exists := partitionNames[p.Name]; exists {
-				return fmt.Errorf("PARTITION %s: name must be unique", p.Name)
-			}
-			partitionNames[p.Name] = struct{}{}
 
 			if len(p.Values) == 0 {
 				return fmt.Errorf("PARTITION %s: must contain values", p.Name)
@@ -1460,18 +1357,13 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			// NB: key encoding is used to check uniqueness because it has
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
-				datums, keyPrefix, err := TranslateValueEncodingToSpan(
+				tuple, keyPrefix, err := DecodePartitionTuple(
 					a, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
 				if err != nil {
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 				}
 				if _, exists := listValues[string(keyPrefix)]; exists {
-					if len(datums) != int(partDesc.NumColumns) {
-						return fmt.Errorf("prefix (%s) cannot be present in more than one partition",
-							printPartitioningPrefix(datums, "DEFAULT"))
-					}
-					return fmt.Errorf("%s cannot be present in more than one partition",
-						tree.AsString(datums))
+					return fmt.Errorf("%s cannot be present in more than one partition", tuple)
 				}
 				listValues[string(keyPrefix)] = struct{}{}
 			}
@@ -1486,39 +1378,38 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	}
 
 	if len(partDesc.Range) > 0 {
-		var lastEndKey []byte
-		rangeValues := make(map[string]struct{}, len(partDesc.Range))
+		tree := interval.NewTree(interval.ExclusiveOverlapper)
 		for _, p := range partDesc.Range {
-			if len(p.Name) == 0 {
-				return fmt.Errorf("partition name must be non-empty")
+			if err := checkName(p.Name); err != nil {
+				return err
 			}
-			if _, exists := partitionNames[p.Name]; exists {
-				return fmt.Errorf("partition name %s must be unique", p.Name)
-			}
-			partitionNames[p.Name] = struct{}{}
 
-			// NB: key encoding is used to check sortedness and uniqueness
-			// because it has to match the behavior of the value when
-			// indexed.
-			datums, endKey, err := TranslateValueEncodingToSpan(
-				a, desc, idxDesc, partDesc, p.UpperBound, fakePrefixDatums)
+			// NB: key encoding is used to check uniqueness because it has to match
+			// the behavior of the value when indexed.
+			fromDatums, fromKey, err := DecodePartitionTuple(
+				a, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
-			if _, exists := rangeValues[string(endKey)]; exists {
-				if len(datums) != int(partDesc.NumColumns) {
-					return fmt.Errorf("prefix (%s) cannot be present in more than one partition",
-						printPartitioningPrefix(datums, "MAXVALUE"))
-				}
-				return fmt.Errorf("%s cannot be present in more than one partition",
-					tree.AsString(datums))
+			toDatums, toKey, err := DecodePartitionTuple(
+				a, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
+			if err != nil {
+				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
-
-			rangeValues[string(endKey)] = struct{}{}
-			if bytes.Compare(lastEndKey, endKey) >= 0 {
-				return fmt.Errorf("values must be strictly increasing: %s vs %s", roachpb.Key(lastEndKey), roachpb.Key(endKey))
+			pi := partitionInterval{p.Name, fromKey, toKey}
+			if overlaps := tree.Get(pi.Range()); len(overlaps) > 0 {
+				return fmt.Errorf("partitions %s and %s overlap",
+					overlaps[0].(partitionInterval).name, p.Name)
 			}
-			lastEndKey = endKey
+			if err := tree.Insert(pi, false /* fast */); err == interval.ErrEmptyRange {
+				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is equal to upper bound %s",
+					p.Name, fromDatums, toDatums)
+			} else if err == interval.ErrInvertedRange {
+				return fmt.Errorf("PARTITION %s: empty range: lower bound %s is greater than upper bound %s",
+					p.Name, fromDatums, toDatums)
+			} else if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("PARTITION %s", p.Name))
+			}
 		}
 	}
 
@@ -1559,7 +1450,7 @@ func (desc *TableDescriptor) FindNonDropPartitionByName(
 // validatePartitioning validates that any PartitioningDescriptors contained in
 // table indexes are well-formed. See validatePartitioningDesc for details.
 func (desc *TableDescriptor) validatePartitioning() error {
-	partitionNames := make(map[string]struct{})
+	partitionNames := make(map[string]string)
 
 	a := &DatumAlloc{}
 	return desc.ForeachNonDropIndex(func(idxDesc *IndexDescriptor) error {
@@ -1718,7 +1609,7 @@ func (desc *TableDescriptor) AddIndex(idx IndexDescriptor, primary bool) error {
 // adds it unless "strict" create (`true` for create but `false` for
 // ifNotExists) is specified.
 //
-// AllocateIDs must be called before the TableDesciptor will be valid.
+// AllocateIDs must be called before the TableDescriptor will be valid.
 func (desc *TableDescriptor) AddColumnToFamilyMaybeCreate(
 	col string, family string, create bool, ifNotExists bool,
 ) error {
@@ -2124,11 +2015,12 @@ func (desc *TableDescriptor) ColumnTypes() []ColumnType {
 }
 
 // ColumnsSelectors generates Select expressions for cols.
-func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
+func ColumnsSelectors(cols []ColumnDescriptor, forUpdateOrDelete bool) tree.SelectExprs {
 	exprs := make(tree.SelectExprs, len(cols))
 	colItems := make([]tree.ColumnItem, len(cols))
 	for i, col := range cols {
 		colItems[i].ColumnName = tree.Name(col.Name)
+		colItems[i].ForUpdateOrDelete = forUpdateOrDelete
 		exprs[i].Expr = &colItems[i]
 	}
 	return exprs
@@ -2161,7 +2053,7 @@ func (c *ColumnType) SQLString() string {
 		if c.Precision > 0 {
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
-		if c.VisibleType == ColumnType_DOUBLE_PRECISON {
+		if c.VisibleType == ColumnType_DOUBLE_PRECISION {
 			return "DOUBLE PRECISION"
 		}
 	case ColumnType_DECIMAL:
@@ -2384,6 +2276,16 @@ func (c *ColumnType) ToDatumType() types.T {
 	}
 }
 
+// ColumnTypesToDatumTypes converts a slice of ColumnTypes to a slice of
+// datum types.
+func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
+	res := make([]types.T, len(colTypes))
+	for i, t := range colTypes {
+		res[i] = t.ToDatumType()
+	}
+	return res
+}
+
 // SetID implements the DescriptorProto interface.
 func (desc *DatabaseDescriptor) SetID(id ID) {
 	desc.ID = id
@@ -2500,17 +2402,20 @@ func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
 
 // SQLString returns the SQL statement describing the column.
 func (desc *ColumnDescriptor) SQLString() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s", tree.AsString(tree.Name(desc.Name)), desc.Type.SQLString())
+	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	f.FormatNameP(&desc.Name)
+	f.WriteByte(' ')
+	f.WriteString(desc.Type.SQLString())
 	if desc.Nullable {
-		buf.WriteString(" NULL")
+		f.WriteString(" NULL")
 	} else {
-		buf.WriteString(" NOT NULL")
+		f.WriteString(" NOT NULL")
 	}
 	if desc.DefaultExpr != nil {
-		fmt.Fprintf(&buf, " DEFAULT %s", *desc.DefaultExpr)
+		f.WriteString(" DEFAULT ")
+		f.WriteString(*desc.DefaultExpr)
 	}
-	return buf.String()
+	return f.CloseAndGetString()
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a
@@ -2521,4 +2426,62 @@ var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 	tree.SetDefault: ForeignKeyReference_SET_DEFAULT,
 	tree.SetNull:    ForeignKeyReference_SET_NULL,
 	tree.Cascade:    ForeignKeyReference_CASCADE,
+}
+
+var _ optbase.Column = &ColumnDescriptor{}
+
+// IsNullable is part of the optbase.Column interface.
+func (desc *ColumnDescriptor) IsNullable() bool {
+	return desc.Nullable
+}
+
+// ColName is part of the optbase.Column interface.
+func (desc *ColumnDescriptor) ColName() string {
+	return desc.Name
+}
+
+// DatumType is part of the optbase.Column interface.
+func (desc *ColumnDescriptor) DatumType() types.T {
+	return desc.Type.ToDatumType()
+}
+
+var _ optbase.Table = &TableDescriptor{}
+
+// TabName is part of the optbase.Table interface.
+func (desc *TableDescriptor) TabName() string {
+	return desc.GetName()
+}
+
+// NumColumns is part of the optbase.Table interface.
+func (desc *TableDescriptor) NumColumns() int {
+	return len(desc.Columns)
+}
+
+// Column is part of the optbase.Table interface.
+func (desc *TableDescriptor) Column(i int) optbase.Column {
+	return &desc.Columns[i]
+}
+
+// PartitionNames returns a slice containing the name of every partition and
+// subpartition in an arbitrary order.
+func (desc *TableDescriptor) PartitionNames() []string {
+	var names []string
+	for _, index := range desc.AllNonDropIndexes() {
+		names = append(names, index.Partitioning.PartitionNames()...)
+	}
+	return names
+}
+
+// PartitionNames returns a slice containing the name of every partition and
+// subpartition in an arbitrary order.
+func (desc *PartitioningDescriptor) PartitionNames() []string {
+	var names []string
+	for _, l := range desc.List {
+		names = append(names, l.Name)
+		names = append(names, l.Subpartitioning.PartitionNames()...)
+	}
+	for _, r := range desc.Range {
+		names = append(names, r.Name)
+	}
+	return names
 }

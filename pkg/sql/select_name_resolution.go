@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // invalidSrcIdx is the srcIdx value returned by findColumn() when there is no match.
@@ -36,7 +37,7 @@ type nameResolutionVisitor struct {
 	err        error
 	sources    multiSourceInfo
 	iVarHelper tree.IndexedVarHelper
-	searchPath tree.SearchPath
+	searchPath sessiondata.SearchPath
 
 	// foundDependentVars is set to true during the analysis if an
 	// expression was found which can change values between rows of the
@@ -106,7 +107,7 @@ func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		v.foundDependentVars = true
 		return false, t
 
-	case tree.UnresolvedName:
+	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
 			v.err = err
@@ -163,9 +164,10 @@ func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 				// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
 				// Replace the function with COUNT_ROWS (which doesn't take any
 				// arguments).
+				cr := tree.Name("COUNT_ROWS")
 				e := &tree.FuncExpr{
 					Func: tree.ResolvableFunctionReference{
-						FunctionReference: tree.UnresolvedName{tree.Name("COUNT_ROWS")},
+						FunctionReference: &tree.UnresolvedName{&cr},
 					},
 				}
 				// We call TypeCheck to fill in FuncExpr internals. This is a fixed
@@ -223,7 +225,7 @@ func (p *planner) resolveNames(
 		err:                nil,
 		sources:            sources,
 		iVarHelper:         ivarHelper,
-		searchPath:         p.session.SearchPath,
+		searchPath:         p.SessionData().SearchPath,
 		foundDependentVars: false,
 	}
 	colOffset := 0

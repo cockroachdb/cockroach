@@ -30,15 +30,21 @@ import "sort"
 // that when we perform contains we can extract the scalars sorted, and then
 // also the arrays and objects in separate arrays, so that we can do the fast
 // thing for the subset of the arrays which are scalars.
-func Contains(a, b JSON) bool {
-	preA := a.preprocessForContains()
-	preB := b.preprocessForContains()
+func Contains(a, b JSON) (bool, error) {
+	preA, err := a.preprocessForContains()
+	if err != nil {
+		return false, err
+	}
+	preB, err := b.preprocessForContains()
+	if err != nil {
+		return false, err
+	}
 	return preA.contains(preB)
 }
 
 // containsable is an interface used internally for the implementation of @>.
 type containsable interface {
-	contains(other containsable) bool
+	contains(other containsable) (bool, error)
 }
 
 // containsableScalar is a preprocessed JSON scalar. The JSON it holds will
@@ -66,60 +72,108 @@ type containsableKeyValuePair struct {
 // pairs.
 type containsableObject []containsableKeyValuePair
 
-func (j jsonNull) preprocessForContains() containsable   { return containsableScalar{j} }
-func (j jsonFalse) preprocessForContains() containsable  { return containsableScalar{j} }
-func (j jsonTrue) preprocessForContains() containsable   { return containsableScalar{j} }
-func (j jsonNumber) preprocessForContains() containsable { return containsableScalar{j} }
-func (j jsonString) preprocessForContains() containsable { return containsableScalar{j} }
+func (j jsonNull) preprocessForContains() (containsable, error)   { return containsableScalar{j}, nil }
+func (j jsonFalse) preprocessForContains() (containsable, error)  { return containsableScalar{j}, nil }
+func (j jsonTrue) preprocessForContains() (containsable, error)   { return containsableScalar{j}, nil }
+func (j jsonNumber) preprocessForContains() (containsable, error) { return containsableScalar{j}, nil }
+func (j jsonString) preprocessForContains() (containsable, error) { return containsableScalar{j}, nil }
 
-func (j jsonArray) preprocessForContains() containsable {
+func (j jsonArray) preprocessForContains() (containsable, error) {
 	result := containsableArray{}
 	for _, e := range j {
-		switch v := e.(type) {
-		case jsonArray:
-			result.arrays = append(result.arrays, v.preprocessForContains())
-		case jsonObject:
-			result.objects = append(result.objects, v.preprocessForContains())
+		switch e.Type() {
+		case ArrayJSONType:
+			preprocessed, err := e.preprocessForContains()
+			if err != nil {
+				return nil, err
+			}
+			result.arrays = append(result.arrays, preprocessed)
+		case ObjectJSONType:
+			preprocessed, err := e.preprocessForContains()
+			if err != nil {
+				return nil, err
+			}
+			result.objects = append(result.objects, preprocessed)
 		default:
-			result.scalars = append(result.scalars, e.preprocessForContains().(containsableScalar))
+			preprocessed, err := e.preprocessForContains()
+			if err != nil {
+				return nil, err
+			}
+			result.scalars = append(result.scalars, preprocessed.(containsableScalar))
 		}
 	}
 
+	var err error
 	sort.Slice(result.scalars, func(i, j int) bool {
-		return result.scalars[i].JSON.Compare(result.scalars[j].JSON) == -1
+		if err != nil {
+			return false
+		}
+		var c int
+		c, err = result.scalars[i].JSON.Compare(result.scalars[j].JSON)
+		return c == -1
 	})
 
-	return result
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
-func (j jsonObject) preprocessForContains() containsable {
+func (j jsonObject) preprocessForContains() (containsable, error) {
 	preprocessed := make(containsableObject, len(j))
 
 	for i := range preprocessed {
 		preprocessed[i].k = j[i].k
-		preprocessed[i].v = j[i].v.preprocessForContains()
+		v, err := j[i].v.preprocessForContains()
+		if err != nil {
+			return nil, err
+		}
+		preprocessed[i].v = v
 	}
 
-	return preprocessed
+	return preprocessed, nil
 }
 
-func (j containsableScalar) contains(other containsable) bool {
+func (j containsableScalar) contains(other containsable) (bool, error) {
 	if o, ok := other.(containsableScalar); ok {
-		return j.JSON.Compare(o.JSON) == 0
+		result, err := j.JSON.Compare(o.JSON)
+		if err != nil {
+			return false, err
+		}
+		return result == 0, nil
 	}
-	return false
+	return false, nil
 }
 
-func (j containsableArray) contains(other containsable) bool {
+func (j containsableArray) contains(other containsable) (bool, error) {
 	// This is a unique case of contains (and is described as such in the
 	// Postgres docs) - an array contains a scalar which is an element of it.
 	// This contradicts the general rule of contains that the contained object
 	// must have the same "shape" as the containing object.
 	if o, ok := other.(containsableScalar); ok {
+		var err error
 		found := sort.Search(len(j.scalars), func(i int) bool {
-			return j.scalars[i].JSON.Compare(o.JSON) >= 0
+			if err != nil {
+				return false
+			}
+			var c int
+			c, err = j.scalars[i].JSON.Compare(o.JSON)
+			return c >= 0
 		})
-		return found < len(j.scalars) && j.scalars[found].JSON.Compare(o.JSON) == 0
+		if err != nil {
+			return false, err
+		}
+
+		if found >= len(j.scalars) {
+			return false, nil
+		}
+
+		c, err := j.scalars[found].JSON.Compare(o.JSON)
+		if err != nil {
+			return false, err
+		}
+		return c == 0, nil
 	}
 
 	if contained, ok := other.(containsableArray); ok {
@@ -127,46 +181,76 @@ func (j containsableArray) contains(other containsable) bool {
 		// step through them together via binary search.
 		remainingScalars := j.scalars[:]
 		for _, val := range contained.scalars {
+			var err error
 			found := sort.Search(len(remainingScalars), func(i int) bool {
-				return remainingScalars[i].JSON.Compare(val.JSON) >= 0
+				if err != nil {
+					return false
+				}
+				var result int
+				result, err = remainingScalars[i].JSON.Compare(val.JSON)
+				return result >= 0
 			})
-			if found == len(remainingScalars) || remainingScalars[found].JSON.Compare(val.JSON) != 0 {
-				return false
+
+			if found == len(remainingScalars) {
+				return false, nil
+			}
+			result, err := remainingScalars[found].JSON.Compare(val.JSON)
+			if err != nil {
+				return false, err
+			}
+			if result != 0 {
+				return false, nil
 			}
 			remainingScalars = remainingScalars[found:]
 		}
 
 		// TODO(justin): there's possibly(?) something fancier we can do with the
 		// objects and arrays, but for now just do the quadratic check.
-		if !quadraticJSONArrayContains(j.objects, contained.objects) ||
-			!quadraticJSONArrayContains(j.arrays, contained.arrays) {
-			return false
+		objectsMatch, err := quadraticJSONArrayContains(j.objects, contained.objects)
+		if err != nil {
+			return false, nil
 		}
-		return true
+		if !objectsMatch {
+			return false, nil
+		}
+
+		arraysMatch, err := quadraticJSONArrayContains(j.arrays, contained.arrays)
+		if err != nil {
+			return false, nil
+		}
+		if !arraysMatch {
+			return false, nil
+		}
+
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 // quadraticJSONArrayContains does an O(n^2) check to see if every value in
 // `other` is contained within a value in `container`. `container` and `other`
 // should not contain scalars.
-func quadraticJSONArrayContains(container, other []containsable) bool {
+func quadraticJSONArrayContains(container, other []containsable) (bool, error) {
 	for _, otherVal := range other {
 		found := false
 		for _, containerVal := range container {
-			if containerVal.contains(otherVal) {
+			c, err := containerVal.contains(otherVal)
+			if err != nil {
+				return false, err
+			}
+			if c {
 				found = true
 				break
 			}
 		}
 		if !found {
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
-func (j containsableObject) contains(other containsable) bool {
+func (j containsableObject) contains(other containsable) (bool, error) {
 	if contained, ok := other.(containsableObject); ok {
 		// We can iterate through the keys of `other` and scan through to find the
 		// corresponding keys in `j` since they're both sorted.
@@ -176,13 +260,19 @@ func (j containsableObject) contains(other containsable) bool {
 				objIdx++
 			}
 			if objIdx >= len(j) ||
-				j[objIdx].k != rightEntry.k ||
-				!j[objIdx].v.contains(rightEntry.v) {
-				return false
+				j[objIdx].k != rightEntry.k {
+				return false, nil
+			}
+			c, err := j[objIdx].v.contains(rightEntry.v)
+			if err != nil {
+				return false, err
+			}
+			if !c {
+				return false, nil
 			}
 			objIdx++
 		}
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }

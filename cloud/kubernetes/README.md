@@ -46,7 +46,7 @@ W0628 12:38:23.473106       1 controllermanager.go:434] Skipping "certificatesig
 # This shows that the certificate controller is not running, approved CSRs will not trigger a certificate.
 
 # On minikube:
-$ minikube logs|grep certificate
+$ minikube logs | grep certificate
 Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.224903    3440 controllermanager.go:437] Started "certificatesigningrequests"
 Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.231134    3440 certificate_controller.go:120] Starting certificate controller manager
 # This shows that the certificate controller is running, approved CSRs will get a certificate.
@@ -86,11 +86,27 @@ Set up your cluster following the
 You can either set up your cluster following the
 [instructions provided in the Kubernetes docs](https://kubernetes.io/docs/getting-started-guides/gce/)
 or by using the hosted
-[Container Engine](https://cloud.google.com/container-engine/docs) service:
+[Google Kubernetes Engine (GKE)](https://cloud.google.com/container-engine/docs) service:
 
 ```shell
 gcloud container clusters create NAME
 ```
+
+If you're using GKE and want to run a secure cluster, one extra step is
+required. A limitation in GKE's Role-Based Access Control (RBAC) integration
+necessitates running a special command in order to let you create the RBAC
+roles that CockroachDB needs to manage certificates.
+
+1. Get the email address associated with your Google Cloud account by running:
+   ```shell
+   `gcloud info | grep Account`
+   ```
+2. Run [the following command from the GKE
+   documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/role-based-access-control#prerequisites_for_using_role-based_access_control)
+   with that email address:
+   ```shell
+   kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=<your.google.cloud.email@example.org>
+   ```
 
 ### On Azure
 
@@ -116,14 +132,29 @@ kubectl create -f cluster-init.yaml
 
 ### Secure mode
 
+#### Prerequisites
+
 **REQUIRED**: the kubernetes cluster must run with the certificate controller enabled.
 This is done by passing the `--cluster-signing-cert-file` and `--cluster-signing-key-file` flags.
-On minikube, you can tell it to use the minikube-generated CA by specifying:
+If you are using minikube v0.23.0 or newer (run `minikube version` if you aren't sure), you can
+tell it to use the minikube-generated CA by specifying:
+```shell
+minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/certs/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/certs/ca.key"
+```
+
+If you're running on an older version of minikube, you can similarly run:
 ```shell
 minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/ca.key"
 ```
 
+#### Creating the cluster
+
 Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
+
+If you get an error saying "attempt to grant extra privileges", you don't have
+sufficient permissions in the cluster to manage certificates. If this happens
+and you're running on Google Kubernetes Engine, see [the note above](#on-gce).
+If not, talk to your cluster administrator.
 
 Each new node will request a certificate from the kubernetes CA during its initialization phase.
 Statefulsets create pods one at a time, waiting for each previous pod to be initialized.
@@ -308,7 +339,7 @@ Because all of the resources in this example have been tagged with the label `ap
 we can clean up everything that we created in one quick command using a selector on that label:
 
 ```shell
-kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services,poddisruptionbudget -l app=cockroachdb
+kubectl delete statefulsets,pods,persistentvolumes,persistentvolumeclaims,services,poddisruptionbudget,jobs,rolebinding,clusterrolebinding,role,clusterrole,serviceaccount -l app=cockroachdb
 ```
 
 If running in secure mode, you'll want to cleanup old certificate requests:

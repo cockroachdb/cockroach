@@ -15,9 +15,10 @@
 package storage
 
 import (
+	"context"
+
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -136,6 +137,11 @@ func (r *Replica) EvalKnobs() batcheval.TestingKnobs {
 // Tracer returns the Replica's Tracer.
 func (r *Replica) Tracer() opentracing.Tracer {
 	return r.store.Tracer()
+}
+
+// Clock returns the hlc clock shared by this replica.
+func (r *Replica) Clock() *hlc.Clock {
+	return r.store.Clock()
 }
 
 // DB returns the Replica's client DB.

@@ -15,13 +15,15 @@
 package pgwire
 
 import (
+	"bytes"
+	"context"
+	"reflect"
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/lib/pq/oid"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -83,10 +85,35 @@ func TestTimestampRoundtrip(t *testing.T) {
 	}
 }
 
+func TestWriteBinaryArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Regression test for #20372. Ensure that writing twice to the same
+	// writeBuffer is equivalent to writing to two different writeBuffers and
+	// then concatenating the result.
+	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(), "{1}", coltypes.Int)
+
+	writeBuf1 := newWriteBuffer()
+	writeBuf1.writeTextDatum(context.Background(), ary, time.UTC)
+	writeBuf1.writeBinaryDatum(context.Background(), ary, time.UTC)
+
+	writeBuf2 := newWriteBuffer()
+	writeBuf2.writeTextDatum(context.Background(), ary, time.UTC)
+
+	writeBuf3 := newWriteBuffer()
+	writeBuf3.writeBinaryDatum(context.Background(), ary, time.UTC)
+
+	concatted := bytes.Join([][]byte{writeBuf2.wrapped.Bytes(), writeBuf3.wrapped.Bytes()}, nil)
+
+	if !reflect.DeepEqual(writeBuf1.wrapped.Bytes(), concatted) {
+		t.Fatalf("expected %v, got %v", concatted, writeBuf1.wrapped.Bytes())
+	}
+}
+
 func TestIntArrayRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
+	buf := newWriteBuffer()
+	buf.bytecount = metric.NewCounter(metric.Metadata{})
 	d := tree.NewDArray(types.Int)
 	for i := 0; i < 10; i++ {
 		if err := d.Append(tree.NewDInt(tree.DInt(i))); err != nil {
@@ -112,7 +139,8 @@ func TestIntArrayRoundTrip(t *testing.T) {
 func benchmarkWriteType(b *testing.B, d tree.Datum, format formatCode) {
 	ctx := context.Background()
 
-	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
+	buf := newWriteBuffer()
+	buf.bytecount = metric.NewCounter(metric.Metadata{Name: ""})
 
 	writeMethod := buf.writeTextDatum
 	if format == formatBinary {
@@ -288,7 +316,8 @@ func BenchmarkWriteTextArray(b *testing.B) {
 }
 
 func BenchmarkDecodeBinaryDecimal(b *testing.B) {
-	wbuf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
+	wbuf := newWriteBuffer()
+	wbuf.bytecount = metric.NewCounter(metric.Metadata{})
 
 	expected := new(tree.DDecimal)
 	s := "-1728718718271827121233.1212121212"

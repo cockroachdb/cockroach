@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -77,7 +78,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			if err != nil {
 				return nil, err
 			}
-			fromVals[i], err = typedExpr.Eval(&p.evalCtx)
+			fromVals[i], err = typedExpr.Eval(p.EvalContext())
 			if err != nil {
 				return nil, err
 			}
@@ -90,7 +91,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			if err != nil {
 				return nil, err
 			}
-			toVals[i], err = typedExpr.Eval(&p.evalCtx)
+			toVals[i], err = typedExpr.Eval(p.EvalContext())
 			if err != nil {
 				return nil, err
 			}
@@ -126,10 +127,11 @@ type scatterRun struct {
 	ranges   []roachpb.AdminScatterResponse_Range
 }
 
-func (n *scatterNode) Start(params runParams) error {
+func (n *scatterNode) startExec(params runParams) error {
 	db := params.p.ExecCfg().DB
 	req := &roachpb.AdminScatterRequest{
-		Span: roachpb.Span{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
+		Span:            roachpb.Span{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
+		RandomizeLeases: true,
 	}
 	res, pErr := client.SendWrapped(params.ctx, db.GetSender(), req)
 	if pErr != nil {

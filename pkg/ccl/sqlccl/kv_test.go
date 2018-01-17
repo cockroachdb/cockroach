@@ -9,13 +9,12 @@
 package sqlccl
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -40,20 +39,13 @@ type kvWriteBatch struct {
 }
 
 func newKVWriteBatch(b *testing.B) kvInterface {
-	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	s, _, db := serverutils.StartServer(b, base.TestServerArgs{})
 
-	// TestServer.KVClient() returns the TxnCoordSender wrapped client. But that
-	// isn't a fair comparison with SQL as we want these client requests to be
-	// sent over the network.
-	rpcContext := s.RPCContext()
-
-	conn, err := rpcContext.GRPCDial(s.ServingAddr())
-	if err != nil {
-		b.Fatal(err)
-	}
-
+	// Note that using the local client.DB isn't a strictly fair
+	// comparison with SQL as we want these client requests to be sent
+	// over the network.
 	return &kvWriteBatch{
-		db: client.NewDB(client.NewSender(conn), rpcContext.LocalClock),
+		db: db,
 		doneFn: func() {
 			s.Stopper().Stop(context.TODO())
 		},

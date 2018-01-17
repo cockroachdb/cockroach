@@ -11,7 +11,7 @@
 <table><thead>
 <tr><td><code>#>></code></td><td>Return</td></tr>
 </thead><tbody>
-<tr><td>jsonb <code>#>></code> <a href="string.html">string[]</a></td><td>jsonb</td></tr>
+<tr><td>jsonb <code>#>></code> <a href="string.html">string[]</a></td><td><a href="string.html">string</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>%</code></td><td>Return</td></tr>
@@ -32,10 +32,13 @@
 </thead><tbody>
 <tr><td><a href="decimal.html">decimal</a> <code>*</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="decimal.html">decimal</a> <code>*</code> <a href="int.html">int</a></td><td><a href="decimal.html">decimal</a></td></tr>
+<tr><td><a href="decimal.html">decimal</a> <code>*</code> <a href="interval.html">interval</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="float.html">float</a> <code>*</code> <a href="float.html">float</a></td><td><a href="float.html">float</a></td></tr>
+<tr><td><a href="float.html">float</a> <code>*</code> <a href="interval.html">interval</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>*</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>*</code> <a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>*</code> <a href="interval.html">interval</a></td><td><a href="interval.html">interval</a></td></tr>
+<tr><td><a href="interval.html">interval</a> <code>*</code> <a href="decimal.html">decimal</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>*</code> <a href="float.html">float</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>*</code> <a href="int.html">int</a></td><td><a href="interval.html">interval</a></td></tr>
 </tbody></table>
@@ -349,6 +352,7 @@
 <tr><td><a href="interval.html">interval</a> <code>||</code> <a href="interval.html">interval[]</a></td><td><a href="interval.html">interval[]</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code>||</code> <a href="interval.html">interval</a></td><td><a href="interval.html">interval[]</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code>||</code> <a href="interval.html">interval[]</a></td><td><a href="interval.html">interval[]</a></td></tr>
+<tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
 <tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
 <tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
 <tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>

@@ -1,0 +1,10 @@
+# LogicTest: default
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+query III colnames
+SELECT node_id, store_id, replica_id FROM [SHOW EXPERIMENTAL_REPLICA TRACE FOR SELECT * FROM t]
+----
+node_id  store_id  replica_id
+1        1         1

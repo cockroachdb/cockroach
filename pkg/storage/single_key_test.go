@@ -15,11 +15,10 @@
 package storage_test
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 

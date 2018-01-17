@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 //go:generate stringer -type=Kind
@@ -55,6 +57,18 @@ func (k Kind) Mask() uint32 {
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
 	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE,
+}
+
+// ByName is a map of string -> kind value.
+var ByName = map[string]Kind{
+	"ALL":    ALL,
+	"CREATE": CREATE,
+	"DROP":   DROP,
+	"GRANT":  GRANT,
+	"SELECT": SELECT,
+	"INSERT": INSERT,
+	"DELETE": DELETE,
+	"UPDATE": UPDATE,
 }
 
 // List is a list of privileges.
@@ -136,6 +150,21 @@ func ListFromBitField(m uint32) List {
 		}
 	}
 	return ret
+}
+
+// ListFromStrings takes a list of strings and attempts to build a list of Kind.
+// We convert each string to uppercase and search for it in the ByName map.
+// If an entry is not found in ByName, an error is returned.
+func ListFromStrings(strs []string) (List, error) {
+	ret := make(List, len(strs))
+	for i, s := range strs {
+		k, ok := ByName[strings.ToUpper(s)]
+		if !ok {
+			return nil, errors.Errorf("not a valid privilege: %q", s)
+		}
+		ret[i] = k
+	}
+	return ret, nil
 }
 
 // Lists is a list of privilege lists

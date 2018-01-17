@@ -16,6 +16,7 @@ package tscache
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -24,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,7 +38,7 @@ import (
 
 var cacheImplConstrs = []func(clock *hlc.Clock) Cache{
 	func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
-	func(clock *hlc.Clock) Cache { return newSklImpl(clock, MakeMetrics()) },
+	func(clock *hlc.Clock) Cache { return newSklImpl(clock, TestSklPageSize, MakeMetrics()) },
 }
 
 func forEachCacheImpl(
@@ -456,6 +456,27 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	})
 }
 
+// TestTimestampCacheLargeKeys verifies that the timestamp cache implementations
+// can support arbitrarily large keys lengths. This is important because we don't
+// place a hard limit on this anywhere else.
+func TestTimestampCacheLargeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
+		keyStart := roachpb.Key(make([]byte, 5*TestSklPageSize))
+		keyEnd := keyStart.Next()
+		ts1 := clock.Now()
+		txn1 := uuid.MakeV4()
+
+		tc.Add(keyStart, keyEnd, ts1, txn1, true)
+		if ts, txn := tc.GetMaxRead(keyStart, keyEnd); ts != ts1 {
+			t.Errorf("expected key range to have timestamp %s, but found %s", ts1, ts)
+		} else if txn != txn1 {
+			t.Errorf("expected key range to have txn id %s, but found %s", txn1, txn)
+		}
+	})
+}
+
 // TestTimestampCacheImplsIdentical verifies that all timestamp cache
 // implementations return the same results for the same inputs, even under
 // concurrent load.
@@ -534,8 +555,12 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 				txnID := uuid.MakeV4()
 				maxVal := cacheValue{}
 
-				const n = 1000
-				for j := 0; j < n; j++ {
+				rounds := 1000
+				if util.RaceEnabled {
+					// Reduce the number of rounds for race builds.
+					rounds /= 2
+				}
+				for j := 0; j < rounds; j++ {
 					t.Logf("goroutine %d at iter %d", i, j)
 
 					// Wait for all goroutines to synchronize.
@@ -658,7 +683,7 @@ func identicalAndRatcheted(
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := New(clock, MakeMetrics())
+	tc := New(clock, 0, MakeMetrics())
 
 	for i := 0; i < b.N; i++ {
 		cdTS := clock.Now()

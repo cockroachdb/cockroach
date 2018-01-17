@@ -22,3 +22,5 @@ build/builder.sh env \
 	2>&1 \
 	| tee artifacts/test.log \
 	| go-test-teamcity
+
+build/builder.sh make check-libroach

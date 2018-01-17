@@ -15,10 +15,9 @@
 package acceptance
 
 import (
+	"context"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/gossip"

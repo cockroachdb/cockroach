@@ -159,7 +159,7 @@ func TestLint(t *testing.T) {
 					":!testutils/lint",
 					":!util/envutil/env.go",
 					":!util/log/clog.go",
-					":!util/log/color.go",
+					":!util/color/color.go",
 					":!util/sdnotify/sdnotify_unix.go",
 				},
 			},
@@ -244,6 +244,30 @@ func TestLint(t *testing.T) {
 
 		if err := stream.ForEach(filter, func(s string) {
 			t.Errorf(`%s <- use 'TODO(...): ' instead`, s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestNonZeroOffsetInTests", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `hlc\.NewClock\([^)]+, 0\)`, "--", "*_test.go")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf(`%s <- use non-zero clock offset`, s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -575,6 +599,7 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`.*\.lock`),
+			stream.GrepNot(`^storage\/engine\/rocksdb_error_dict\.go$`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkg.Dir, s)
 			}),
@@ -618,7 +643,8 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestCrlfmt", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "crlfmt", "-ignore", `\.pb(\.gw)?\.go`, "-tab", "2", ".")
+		ignore := `\.(pb(\.gw)?)|(.og)\.go`
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "crlfmt", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -742,9 +768,9 @@ func TestLint(t *testing.T) {
 
 		// forbiddenImportPkg -> permittedReplacementPkg
 		forbiddenImports := map[string]string{
-			"context": "golang.org/x/net/context",
-			"log":     "util/log",
-			"path":    "path/filepath",
+			"golang.org/x/net/context": "context",
+			"log":  "util/log",
+			"path": "path/filepath",
 			"github.com/golang/protobuf/proto": "github.com/gogo/protobuf/proto",
 			"github.com/satori/go.uuid":        "util/uuid",
 			"golang.org/x/sync/singleflight":   "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",

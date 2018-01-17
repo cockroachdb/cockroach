@@ -15,10 +15,9 @@
 package acceptance
 
 import (
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	gosql "database/sql"
 

@@ -15,12 +15,11 @@
 package pgwire
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"

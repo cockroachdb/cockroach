@@ -53,7 +53,11 @@ message Expression {
 // Ordering defines an order - specifically a list of column indices and
 // directions. See sqlbase.ColumnOrdering.
 message Ordering {
+  option (gogoproto.equal) = true;
+
   message Column {
+    option (gogoproto.equal) = true;
+
     // The direction of the desired ordering for a column.
     enum Direction {
       ASC = 0;
@@ -153,10 +157,12 @@ message OutputRouterSpec {
     message Span {
       optional bytes start = 1;
       optional bytes end = 2;
+      // stream is the index of the destination stream.
+      optional int32 stream = 3 [(gogoproto.nullable) = false];
     }
 
-    // spans is a slice of Span. Input matching the Nth span will be routed to the
-    // Nth stream (and thus the number of spans must match the number of streams).
+    // spans is a slice of Span. Input matching a span will be routed to its
+    // specified stream.
     repeated Span spans = 1 [(gogoproto.nullable) = false];
     // default_dest, if not nil, is the index of the stream to send rows that do
     // not match any span. If nil, a row that does not match a span will produce
@@ -168,6 +174,11 @@ message OutputRouterSpec {
     repeated ColumnEncoding encodings = 3 [(gogoproto.nullable) = false];
   }
   optional RangeRouterSpec range_router_spec = 4 [(gogoproto.nullable) = false];
+
+  // disable_buffering disables output buffering. Generally buffering should be
+  // enabled to prevent deadlocks. However some plans are known not to deadlock,
+  // and so can set this flag to prevent unbounded buffering causing OOMs.
+  optional bool disable_buffering = 5 [(gogoproto.nullable) = false];
 }
 
 message DatumInfo {

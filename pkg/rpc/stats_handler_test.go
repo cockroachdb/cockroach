@@ -15,22 +15,20 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc/stats"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestStatsHandlerBasic(t *testing.T) {
@@ -102,14 +100,15 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
-	s := newTestServer(t, serverCtx, true)
+	serverCtx := newTestContext(clock, stopper)
+	s := newTestServer(t, serverCtx)
 
 	heartbeat := &ManualHeartbeatService{
 		ready:              make(chan error),
 		stopper:            stopper,
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
+		version:            serverCtx.version,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -119,15 +118,15 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	}
 	remoteAddr := ln.Addr().String()
 
-	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	clientCtx := newTestContext(clock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
-	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+	go func() { heartbeat.ready <- nil }()
+	if _, err := clientCtx.GRPCDial(remoteAddr).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
 	// Wait for the connection & successful heartbeat.
-	heartbeat.ready <- nil
 	testutils.SucceedsSoon(t, func() error {
 		err := clientCtx.ConnHealth(remoteAddr)
 		if err != nil && err != ErrNotHeartbeated {

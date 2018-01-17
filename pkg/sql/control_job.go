@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -89,8 +88,8 @@ func (p *planner) CancelJob(ctx context.Context, n *tree.CancelJob) (planNode, e
 	}, nil
 }
 
-func (n *controlJobNode) Start(params runParams) error {
-	jobIDDatum, err := n.jobID.Eval(params.evalCtx)
+func (n *controlJobNode) startExec(params runParams) error {
+	jobIDDatum, err := n.jobID.Eval(params.EvalContext())
 	if err != nil {
 		return err
 	}

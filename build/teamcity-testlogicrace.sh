@@ -10,7 +10,7 @@ mkdir -p artifacts
 
 build/builder.sh env \
 	make testrace \
-  PKG=./pkg/sql/logictest
+	PKG=./pkg/sql/logictest \
 	TESTFLAGS='-v' \
 	2>&1 \
 	| tee artifacts/testlogicrace.log \

@@ -15,14 +15,15 @@
 package sql
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
-	"golang.org/x/net/context"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -97,6 +98,7 @@ func (p *planner) Select(
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
+	with := n.With
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		wrapped = s.Select.Select
@@ -118,13 +120,15 @@ func (p *planner) Select(
 	case *tree.SelectClause:
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
-		return p.SelectClause(ctx, s, orderBy, limit, desiredTypes, publicColumns)
+		return p.SelectClause(ctx, s, orderBy, limit, with, desiredTypes, publicColumns)
 
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
 	// through. Instead of continuing this special casing, it may be worth
 	// investigating a general mechanism for passing some context down during
 	// plan node construction.
+	// TODO(jordan): this limitation also applies to CTEs, which do not yet
+	// propagate into VALUES and UNION clauses
 	default:
 		plan, err := p.newPlan(ctx, s, desiredTypes)
 		if err != nil {
@@ -169,10 +173,19 @@ func (p *planner) SelectClause(
 	parsed *tree.SelectClause,
 	orderBy tree.OrderBy,
 	limit *tree.Limit,
+	with *tree.With,
 	desiredTypes []types.T,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
 	r := &renderNode{}
+
+	resetter, err := p.initWith(ctx, with)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
+	}
 
 	if err := p.initFrom(ctx, r, parsed, scanVisibility); err != nil {
 		return nil, err
@@ -193,12 +206,61 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	// NB: orderBy, window, and groupBy are passed and can modify the renderNode,
-	// but must do so in that order.
+	// NB: orderBy, window, and groupBy are passed and can modify the
+	// renderNode, but must do so in that order.
+	// Note that this order is exactly the reverse of the order of how the
+	// plan is constructed i.e. a logical plan tree might look like
+	// (renderNodes omitted)
+	//  distinctNode
+	//       |
+	//       |
+	//       v
+	//    sortNode
+	//       |
+	//       |
+	//       v
+	//   windowNode
+	//       |
+	//       |
+	//       v
+	//   groupNode
+	//       |
+	//       |
+	//       v
+	distinctComplex, distinct, err := p.distinct(ctx, parsed, r)
+	if err != nil {
+		return nil, err
+	}
 	sort, err := p.orderBy(ctx, orderBy, r)
 	if err != nil {
 		return nil, err
 	}
+
+	// For DISTINCT ON expressions either one of the following must be
+	// satisfied:
+	//    - DISTINCT ON expressions is a subset of a prefix of the ORDER BY
+	//	expressions.
+	//	    e.g.  SELECT DISTINCT ON (b, a) ... ORDER BY a, b, c
+	//    - DISTINCT ON expressions includes all ORDER BY expressions.
+	//	    e.g.  SELECT DISTINCT ON (b, a) ... ORDER BY a
+	if distinct != nil && sort != nil && !distinct.distinctOnColIdxs.Empty() {
+		numDistinctExprs := distinct.distinctOnColIdxs.Len()
+		for i, order := range sort.ordering {
+			// DISTINCT ON contains all ORDER BY expressions.
+			// Continue.
+			if i >= numDistinctExprs {
+				break
+			}
+
+			if !distinct.distinctOnColIdxs.Contains(order.ColIdx) {
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeSyntaxError,
+					"SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions",
+				)
+			}
+		}
+	}
+
 	window, err := p.window(ctx, parsed, r)
 	if err != nil {
 		return nil, err
@@ -208,7 +270,7 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	if group != nil && group.requiresIsNotNullFilter() {
+	if group != nil && group.requiresIsDistinctFromNullFilter() {
 		if where == nil {
 			var err error
 			where, err = p.initWhere(ctx, r, nil)
@@ -216,14 +278,13 @@ func (p *planner) SelectClause(
 				return nil, err
 			}
 		}
-		group.addIsNotNullFilter(where, r)
+		group.addIsDistinctFromNullFilter(where, r)
 	}
 
 	limitPlan, err := p.Limit(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
-	distinctPlan := p.Distinct(parsed)
 
 	result := planNode(r)
 	if groupComplex != nil {
@@ -238,9 +299,9 @@ func (p *planner) SelectClause(
 		sort.plan = result
 		result = sort
 	}
-	if distinctPlan != nil {
-		distinctPlan.plan = result
-		result = distinctPlan
+	if distinctComplex != nil && distinct != nil {
+		distinct.plan = result
+		result = distinctComplex
 	}
 	if limitPlan != nil {
 		limitPlan.plan = result
@@ -275,8 +336,6 @@ type renderRun struct {
 	row tree.Datums
 }
 
-func (r *renderNode) Start(params runParams) error { return r.source.plan.Start(params) }
-
 func (r *renderNode) Next(params runParams) (bool, error) {
 	if next, err := r.source.plan.Next(params); !next {
 		return false, err
@@ -284,7 +343,7 @@ func (r *renderNode) Next(params runParams) (bool, error) {
 
 	r.run.curSourceRow = r.source.plan.Values()
 
-	err := r.renderRow(params.evalCtx)
+	err := r.renderRow(params.EvalContext())
 	return err == nil, err
 }
 
@@ -295,34 +354,9 @@ func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
 func (p *planner) initFrom(
 	ctx context.Context, r *renderNode, parsed *tree.SelectClause, scanVisibility scanVisibility,
 ) error {
-	if parsed.From.AsOf.Expr != nil {
-		// If AS OF SYSTEM TIME is specified in any part of the query,
-		// then it must be consistent with what is known to the
-		// Executor.
-
-		// At this point, the executor only knows how to recognize AS OF
-		// SYSTEM TIME at the top level. When it finds it there,
-		// p.asOfSystemTime is set. If AS OF SYSTEM TIME wasn't found
-		// there, we cannot accept it anywhere else either.
-		// TODO(anyone): this restriction might be lifted if we support
-		// table readers at arbitrary timestamps, and each FROM clause
-		// can have its own timestamp. In that case, the timestamp
-		// would not be set globally for the entire txn.
-		if !p.asOfSystemTime {
-			return fmt.Errorf("AS OF SYSTEM TIME must be provided on a top level SELECT statement")
-		}
-
-		// The Executor found an AS OF SYSTEM TIME clause at the top
-		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
-		// subqueries or view queries) but they must all point to the same
-		// timestamp.
-		ts, err := EvalAsOfTimestamp(&p.evalCtx, parsed.From.AsOf, hlc.MaxTimestamp)
-		if err != nil {
-			return err
-		}
-		if ts != p.txn.OrigTimestamp() {
-			return fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
-		}
+	_, _, err := p.getTimestamp(parsed.From.AsOf)
+	if err != nil {
+		return err
 	}
 
 	src, err := p.getSources(ctx, parsed.From.Tables, scanVisibility)
@@ -348,7 +382,7 @@ func (p *planner) initTargets(
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we rewrite SRFs below.
-		outputName, err := getRenderColName(p.session.SearchPath, target, &r.ivarHelper)
+		outputName, err := getRenderColName(p.SessionData().SearchPath, target, &r.ivarHelper)
 		if err != nil {
 			return err
 		}
@@ -367,7 +401,7 @@ func (p *planner) initTargets(
 			return err
 		}
 
-		p.hasStar = p.hasStar || hasStar
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 		_ = r.addOrReuseRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we
@@ -426,6 +460,43 @@ func (p *planner) makeTupleRender(
 	return r, nil
 }
 
+// getTimestamp will get the timestamp for an AS OF clause. It will also
+// verify the timestamp against the transaction. If AS OF SYSTEM TIME is
+// specified in any part of the query, then it must be consistent with
+// what is known to the Executor. If the AsOfClause contains a
+// timestamp, then true will be returned.
+func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error) {
+	if asOf.Expr != nil {
+		// At this point, the executor only knows how to recognize AS OF
+		// SYSTEM TIME at the top level. When it finds it there,
+		// p.asOfSystemTime is set. If AS OF SYSTEM TIME wasn't found
+		// there, we cannot accept it anywhere else either.
+		// TODO(anyone): this restriction might be lifted if we support
+		// table readers at arbitrary timestamps, and each FROM clause
+		// can have its own timestamp. In that case, the timestamp
+		// would not be set globally for the entire txn.
+		if !p.asOfSystemTime {
+			return hlc.MaxTimestamp, false,
+				fmt.Errorf("AS OF SYSTEM TIME must be provided on a top-level statement")
+		}
+
+		// The Executor found an AS OF SYSTEM TIME clause at the top
+		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
+		// subqueries or view queries) but they must all point to the same
+		// timestamp.
+		ts, err := EvalAsOfTimestamp(p.EvalContext(), asOf, hlc.MaxTimestamp)
+		if err != nil {
+			return hlc.MaxTimestamp, false, err
+		}
+		if ts != p.txn.OrigTimestamp() {
+			return hlc.MaxTimestamp, false,
+				fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
+		}
+		return ts, true, nil
+	}
+	return hlc.MaxTimestamp, false, nil
+}
+
 // srfExtractionVisitor replaces the innermost set-returning function in an
 // expression with an IndexedVar that points at a new index at the end of the
 // ivarHelper. The extracted SRF is retained in the srf field.
@@ -436,7 +507,7 @@ type srfExtractionVisitor struct {
 	err        error
 	srf        *tree.FuncExpr
 	ivarHelper *tree.IndexedVarHelper
-	searchPath tree.SearchPath
+	searchPath sessiondata.SearchPath
 }
 
 var _ tree.Visitor = &srfExtractionVisitor{}
@@ -486,7 +557,7 @@ func (p *planner) rewriteSRFs(
 		err:        nil,
 		srf:        nil,
 		ivarHelper: &r.ivarHelper,
-		searchPath: p.session.SearchPath,
+		searchPath: p.SessionData().SearchPath,
 	}
 	expr, _ := tree.WalkExpr(v, target.Expr)
 	if v.err != nil {
@@ -544,7 +615,7 @@ func (p *planner) initWhere(
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
 		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			f.filter, "WHERE", p.session.SearchPath,
+			f.filter, "WHERE", p.SessionData().SearchPath,
 		); err != nil {
 			return nil, err
 		}
@@ -560,7 +631,7 @@ func (p *planner) initWhere(
 
 // getRenderColName returns the output column name for a render expression.
 func getRenderColName(
-	searchPath tree.SearchPath, target tree.SelectExpr, helper *tree.IndexedVarHelper,
+	searchPath sessiondata.SearchPath, target tree.SelectExpr, helper *tree.IndexedVarHelper,
 ) (string, error) {
 	if target.As != "" {
 		return string(target.As), nil
@@ -572,13 +643,6 @@ func getRenderColName(
 		return "", err
 	}
 
-	// If target.Expr is a funcExpr, resolving the function within will normalize
-	// target.Expr's string representation. We want the output column name to be
-	// unnormalized, so we compute target.Expr's string representation now, even
-	// though we may choose to return something other than exprStr in the switch
-	// below.
-	exprStr := target.Expr.String()
-
 	switch t := target.Expr.(type) {
 	case *tree.ColumnItem:
 		// We only shorten the name of the result column to become the
@@ -588,19 +652,17 @@ func getRenderColName(
 			return t.Column(), nil
 		}
 
-	// For compatibility with Postgres, a render expression rooted by a
-	// set-returning function is named after that SRF.
 	case *tree.FuncExpr:
+		// Special case for rendering builtin functions: the column name for an
+		// otherwise un-named builtin output column is just the name of the builtin.
 		fd, err := t.Func.Resolve(searchPath)
 		if err != nil {
 			return "", err
 		}
-		if _, ok := builtins.Generators[fd.Name]; ok {
-			return fd.Name, nil
-		}
+		return fd.Name, nil
 	}
 
-	return exprStr, nil
+	return target.Expr.String(), nil
 }
 
 // appendRenderColumn adds a new render expression at the end of the current list.
@@ -695,4 +757,57 @@ func (p *planner) computePhysicalPropsForRender(r *renderNode, fromOrder physica
 			r.props.addConstantColumn(col)
 		}
 	}
+}
+
+// colIdxByRenderAlias returns the corresponding index in columns of an expression
+// that may refer to a column alias.
+// If there are no aliases in columns that expr refers to, then -1 is returned.
+// This method is pertinent to ORDER BY and DISTINCT ON clauses that may refer
+// to a column alias.
+func (r *renderNode) colIdxByRenderAlias(
+	expr tree.Expr, columns sqlbase.ResultColumns, op string,
+) (int, error) {
+	index := -1
+
+	if vBase, ok := expr.(tree.VarName); ok {
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return 0, err
+		}
+
+		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Table() == "" {
+			// Look for an output column that matches the name. This
+			// handles cases like:
+			//
+			//   SELECT a AS b FROM t ORDER BY b
+			//   SELECT DISTINCT ON (b) a AS b FROM t
+			target := string(c.ColumnName)
+			for j, col := range columns {
+				if col.Name == target {
+					if index != -1 {
+						// There is more than one render alias that matches the clause. Here,
+						// SQL92 is specific as to what should be done: if the underlying
+						// expression is known (we're on a renderNode) and it is equivalent,
+						// then just accept that and ignore the ambiguity.
+						// This plays nice with `SELECT b, * FROM t ORDER BY b`. Otherwise,
+						// reject with an ambiguity error.
+						if r == nil || !r.equivalentRenders(j, index) {
+							return 0, pgerror.NewErrorf(
+								pgerror.CodeAmbiguousAliasError,
+								"%s \"%s\" is ambiguous", op, target,
+							)
+						}
+						// Note that in this case we want to use the index of the first matching
+						// column. This is because renderNode.computePhysicalProps also prefers
+						// the first column, and we want the orderings to match as much as
+						// possible.
+						continue
+					}
+					index = j
+				}
+			}
+		}
+	}
+
+	return index, nil
 }

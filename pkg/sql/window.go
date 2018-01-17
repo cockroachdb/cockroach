@@ -15,13 +15,12 @@
 package sql
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"sort"
 	"unsafe"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -120,7 +119,7 @@ func (p *planner) window(
 
 	window.replaceIndexVarsAndAggFuncs(s)
 
-	acc := p.session.TxnState.makeBoundAccount()
+	acc := p.EvalContext().Mon.MakeBoundAccount()
 	window.run.wrappedRenderVals = sqlbase.NewRowContainer(
 		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
 	)
@@ -158,10 +157,9 @@ type windowRun struct {
 	windowsAcc mon.BoundAccount
 }
 
-func (n *windowNode) Start(params runParams) error {
-	n.run.windowsAcc = params.p.session.TxnState.makeBoundAccount()
-
-	return n.plan.Start(params)
+func (n *windowNode) startExec(params runParams) error {
+	n.run.windowsAcc = params.EvalContext().Mon.MakeBoundAccount()
+	return nil
 }
 
 func (n *windowNode) Next(params runParams) (bool, error) {
@@ -176,15 +174,15 @@ func (n *windowNode) Next(params runParams) (bool, error) {
 		}
 		if !next {
 			n.run.populated = true
-			if err := n.computeWindows(params.ctx, params.evalCtx); err != nil {
+			if err := n.computeWindows(params.ctx, params.EvalContext()); err != nil {
 				return false, err
 			}
 			n.run.values.rows = sqlbase.NewRowContainer(
-				params.p.session.TxnState.makeBoundAccount(),
+				params.EvalContext().Mon.MakeBoundAccount(),
 				sqlbase.ColTypeInfoFromResCols(n.run.values.columns),
 				n.run.wrappedRenderVals.Len(),
 			)
-			if err := n.populateValues(params.ctx, params.evalCtx); err != nil {
+			if err := n.populateValues(params.ctx, params.EvalContext()); err != nil {
 				return false, err
 			}
 			break
@@ -836,14 +834,14 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			// Check if a parent node above this window function is an aggregate.
 			if len(v.aggregatesSeen) > 0 {
 				v.err = errors.Errorf("aggregate function calls cannot contain window function "+
-					"call %s()", t.Func)
+					"call %s()", &t.Func)
 				return false, expr
 			}
 
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = fmt.Errorf("window function calls cannot be nested under %s()", t.Func)
+					v.err = fmt.Errorf("window function calls cannot be nested under %s()", &t.Func)
 					return false, expr
 				}
 			}
@@ -919,9 +917,9 @@ type windowFuncHolder struct {
 
 func (*windowFuncHolder) Variable() {}
 
-func (w *windowFuncHolder) Format(buf *bytes.Buffer, f tree.FmtFlags) {
+func (w *windowFuncHolder) Format(ctx *tree.FmtCtx) {
 	// Avoid duplicating the type annotation by calling .Format directly.
-	w.expr.Format(buf, f)
+	w.expr.Format(ctx)
 }
 
 func (w *windowFuncHolder) String() string { return tree.AsString(w) }

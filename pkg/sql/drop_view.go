@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -43,7 +42,7 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+		if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
 			return nil, err
 		}
 
@@ -87,7 +86,7 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 	return &dropViewNode{n: n, td: td}, nil
 }
 
-func (n *dropViewNode) Start(params runParams) error {
+func (n *dropViewNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
@@ -105,13 +104,13 @@ func (n *dropViewNode) Start(params runParams) error {
 			params.p.txn,
 			EventLogDropView,
 			int32(droppedDesc.ID),
-			int32(params.evalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID),
 			struct {
 				ViewName            string
 				Statement           string
 				User                string
 				CascadeDroppedViews []string
-			}{droppedDesc.Name, n.n.String(), params.p.session.User, cascadeDroppedViews},
+			}{droppedDesc.Name, n.n.String(), params.SessionData().User, cascadeDroppedViews},
 		); err != nil {
 			return err
 		}
@@ -226,9 +225,10 @@ func (p *planner) dropViewImpl(
 		return cascadeDroppedViews, err
 	}
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		return verifyDropTableMetadata(systemConfig, viewDesc.ID, "view")
-	})
+	p.testingVerifyMetadata().setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			return verifyDropTableMetadata(systemConfig, viewDesc.ID, "view")
+		})
 	return cascadeDroppedViews, nil
 }
 

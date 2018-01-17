@@ -1,9 +1,9 @@
 - Feature Name: init command
-- Status: draft
+- Status: completed
 - Start Date: 2017-03-13
 - Authors: @bdarnell
-- RFC PR: #14251
-- Cockroach Issue: #5974
+- RFC PR: [#14251](https://github.com/cockroachdb/cockroach/pull/14251)
+- Cockroach Issue: [#5974](https://github.com/cockroachdb/cockroach/issues/5974)
 
 # Summary
 

@@ -16,10 +16,9 @@ package log
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"

@@ -1,0 +1,2 @@
+savepoint_stmt ::=
+	'SAVEPOINT' name

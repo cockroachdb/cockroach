@@ -16,6 +16,7 @@ package tests_test
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
@@ -24,11 +25,10 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,14 +82,16 @@ func TestMonotonicInserts(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	for _, distSQLMode := range []sql.DistSQLExecMode{sql.DistSQLOff, sql.DistSQLOn} {
+	for _, distSQLMode := range []sessiondata.DistSQLExecMode{
+		sessiondata.DistSQLOff, sessiondata.DistSQLOn,
+	} {
 		t.Run(fmt.Sprintf("distsql=%s", distSQLMode), func(t *testing.T) {
 			testMonotonicInserts(t, distSQLMode)
 		})
 	}
 }
 
-func testMonotonicInserts(t *testing.T, distSQLMode sql.DistSQLExecMode) {
+func testMonotonicInserts(t *testing.T, distSQLMode sessiondata.DistSQLExecMode) {
 	defer leaktest.AfterTest(t)()
 
 	if testing.Short() {

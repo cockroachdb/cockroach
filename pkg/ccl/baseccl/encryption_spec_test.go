@@ -48,6 +48,8 @@ func TestNewStoreEncryptionSpec(t *testing.T) {
 		// Good values.
 		{"path=/data,key=/new.key,old-key=/old.key", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "/old.key", RotationPeriod: DefaultRotationPeriod}},
 		{"path=/data,key=/new.key,old-key=/old.key,rotation-period=1h", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "/old.key", RotationPeriod: time.Hour}},
+		{"path=/data,key=plain,old-key=/old.key,rotation-period=1h", "", StoreEncryptionSpec{Path: "/data", KeyPath: "plain", OldKeyPath: "/old.key", RotationPeriod: time.Hour}},
+		{"path=/data,key=/new.key,old-key=plain,rotation-period=1h", "", StoreEncryptionSpec{Path: "/data", KeyPath: "/new.key", OldKeyPath: "plain", RotationPeriod: time.Hour}},
 	}
 
 	for i, testCase := range testCases {

@@ -493,15 +493,21 @@ func (*WriteTooOldError) canRestartTransaction() TransactionRestart {
 }
 
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
-// The read and existing timestamps are purely informational and used for
-// formatting the error message.
+// The read and existing timestamps as well as the txn are purely informational
+// and used for formatting the error message.
 func NewReadWithinUncertaintyIntervalError(
-	readTS, existingTS hlc.Timestamp,
+	readTS, existingTS hlc.Timestamp, txn *Transaction,
 ) *ReadWithinUncertaintyIntervalError {
-	return &ReadWithinUncertaintyIntervalError{
+	rwue := &ReadWithinUncertaintyIntervalError{
 		ReadTimestamp:     readTS,
 		ExistingTimestamp: existingTS,
 	}
+	if txn != nil {
+		maxTS := txn.MaxTimestamp
+		rwue.MaxTimestamp = &maxTS
+		rwue.ObservedTimestamps = append([]ObservedTimestamp(nil), txn.ObservedTimestamps...)
+	}
+	return rwue
 }
 
 func (e *ReadWithinUncertaintyIntervalError) Error() string {
@@ -510,8 +516,9 @@ func (e *ReadWithinUncertaintyIntervalError) Error() string {
 
 func (e *ReadWithinUncertaintyIntervalError) message(_ *Error) string {
 	return fmt.Sprintf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
-		"previous write with future timestamp %s within uncertainty interval",
-		e.ReadTimestamp, e.ExistingTimestamp)
+		"previous write with future timestamp %s within uncertainty interval `t <= %v`; "+
+		"observed timestamps: %v",
+		e.ReadTimestamp, e.ExistingTimestamp, e.MaxTimestamp, observedTimestampSlice(e.ObservedTimestamps))
 }
 
 var _ ErrorDetailInterface = &ReadWithinUncertaintyIntervalError{}
@@ -618,3 +625,25 @@ func (*TxnPrevAttemptError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &TxnPrevAttemptError{}
+
+func (e *IntegerOverflowError) Error() string {
+	return e.message(nil)
+}
+
+func (e *IntegerOverflowError) message(_ *Error) string {
+	return fmt.Sprintf(
+		"key %s with value %d incremented by %d results in overflow",
+		e.Key, e.CurrentValue, e.IncrementValue)
+}
+
+var _ ErrorDetailInterface = &IntegerOverflowError{}
+
+func (e *UnsupportedRequestError) Error() string {
+	return e.message(nil)
+}
+
+func (e *UnsupportedRequestError) message(_ *Error) string {
+	return "unsupported request"
+}
+
+var _ ErrorDetailInterface = &UnsupportedRequestError{}

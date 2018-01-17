@@ -19,12 +19,11 @@ package distsqlrun
 
 import (
 	"bytes"
+	"context"
 	"hash/crc32"
 	"sort"
 	"sync"
 	"sync/atomic"
-
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 
@@ -49,15 +48,18 @@ func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (router, error) {
 		return nil, errors.Errorf("no streams in router")
 	}
 
+	var rb routerBase
+	rb.setupStreams(streams, spec.DisableBuffering)
+
 	switch spec.Type {
 	case OutputRouterSpec_BY_HASH:
-		return makeHashRouter(spec.HashColumns, streams)
+		return makeHashRouter(rb, spec.HashColumns)
 
 	case OutputRouterSpec_MIRROR:
-		return makeMirrorRouter(streams)
+		return makeMirrorRouter(rb)
 
 	case OutputRouterSpec_BY_RANGE:
-		return makeRangeRouter(streams, spec.RangeRouterSpec)
+		return makeRangeRouter(rb, spec.RangeRouterSpec)
 
 	default:
 		return nil, errors.Errorf("router type %s not supported", spec.Type)
@@ -76,7 +78,7 @@ type routerOutput struct {
 		cond         *sync.Cond
 		streamStatus ConsumerStatus
 
-		metadataBuf []ProducerMetadata
+		metadataBuf []*ProducerMetadata
 		// The "level 1" row buffer is used first, to avoid going through the row
 		// container if we don't need to buffer many rows. The buffer is a circular
 		// FIFO queue, with rowBufLen elements and the left-most (oldest) element at
@@ -95,7 +97,7 @@ type routerOutput struct {
 	// false-sharing?
 }
 
-func (ro *routerOutput) addMetadataLocked(meta ProducerMetadata) {
+func (ro *routerOutput) addMetadataLocked(meta *ProducerMetadata) {
 	// We don't need any fancy buffering because normally there is not a lot of
 	// metadata being passed around.
 	ro.mu.metadataBuf = append(ro.mu.metadataBuf, meta)
@@ -175,9 +177,17 @@ func (rb *routerBase) aggStatus() ConsumerStatus {
 	return ConsumerStatus(atomic.LoadUint32(&rb.aggregatedStatus))
 }
 
-func (rb *routerBase) setupStreams(streams []RowReceiver) {
+func (rb *routerBase) setupStreams(streams []RowReceiver, disableBuffering bool) {
 	rb.numNonDrainingStreams = int32(len(streams))
-	rb.semaphore = make(chan struct{}, len(streams))
+	n := len(streams)
+	if disableBuffering {
+		// By starting the semaphore at 1, the producer is blocked whenever one of
+		// the streams are blocked.
+		n = 1
+		// TODO(radu): instead of disabling buffering this way, we should short-circuit
+		// the entire router implementation and push directly to the output stream
+	}
+	rb.semaphore = make(chan struct{}, n)
 	rb.outputs = make([]routerOutput, len(streams))
 	for i := range rb.outputs {
 		ro := &rb.outputs[i]
@@ -217,7 +227,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					m := ro.mu.metadataBuf[0]
 					// Reset the value so any objects it refers to can be garbage
 					// collected.
-					ro.mu.metadataBuf[0] = ProducerMetadata{}
+					ro.mu.metadataBuf[0] = nil
 					ro.mu.metadataBuf = ro.mu.metadataBuf[1:]
 
 					ro.mu.Unlock()
@@ -238,7 +248,7 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					ro.mu.Unlock()
 					rb.semaphore <- struct{}{}
 					for _, row := range rows {
-						status := ro.stream.Push(row, ProducerMetadata{})
+						status := ro.stream.Push(row, nil)
 						rb.updateStreamState(&streamStatus, status)
 					}
 					<-rb.semaphore
@@ -296,8 +306,8 @@ func (rb *routerBase) updateStreamState(streamStatus *ConsumerStatus, newState C
 
 // fwdMetadata forwards a metadata record to the first stream that's still
 // accepting data.
-func (rb *routerBase) fwdMetadata(meta ProducerMetadata) {
-	if meta.Empty() {
+func (rb *routerBase) fwdMetadata(meta *ProducerMetadata) {
+	if meta == nil {
 		log.Fatalf(context.TODO(), "asked to fwd empty metadata")
 	}
 
@@ -366,19 +376,17 @@ var _ RowReceiver = &mirrorRouter{}
 var _ RowReceiver = &hashRouter{}
 var _ RowReceiver = &rangeRouter{}
 
-func makeMirrorRouter(streams []RowReceiver) (router, error) {
-	if len(streams) < 2 {
+func makeMirrorRouter(rb routerBase) (router, error) {
+	if len(rb.outputs) < 2 {
 		return nil, errors.Errorf("need at least two streams for mirror router")
 	}
-	mr := &mirrorRouter{}
-	mr.routerBase.setupStreams(streams)
-	return mr, nil
+	return &mirrorRouter{routerBase: rb}, nil
 }
 
 // Push is part of the RowReceiver interface.
-func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	aggStatus := mr.aggStatus()
-	if !meta.Empty() {
+	if meta != nil {
 		mr.fwdMetadata(meta)
 		return aggStatus
 	}
@@ -400,7 +408,7 @@ func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Con
 			if useSema {
 				<-mr.semaphore
 			}
-			mr.fwdMetadata(ProducerMetadata{Err: err})
+			mr.fwdMetadata(&ProducerMetadata{Err: err})
 			atomic.StoreUint32(&mr.aggregatedStatus, uint32(ConsumerClosed))
 			return ConsumerClosed
 		}
@@ -414,25 +422,23 @@ func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Con
 
 var crc32Table = crc32.MakeTable(crc32.Castagnoli)
 
-func makeHashRouter(hashCols []uint32, streams []RowReceiver) (router, error) {
-	if len(streams) < 2 {
+func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
+	if len(rb.outputs) < 2 {
 		return nil, errors.Errorf("need at least two streams for hash router")
 	}
 	if len(hashCols) == 0 {
 		return nil, errors.Errorf("no hash columns for BY_HASH router")
 	}
-	hr := &hashRouter{hashCols: hashCols}
-	hr.routerBase.setupStreams(streams)
-	return hr, nil
+	return &hashRouter{hashCols: hashCols, routerBase: rb}, nil
 }
 
 // Push is part of the RowReceiver interface.
 //
 // If, according to the hash, the row needs to go to a consumer that's draining
 // or closed, the row is silently dropped.
-func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	aggStatus := hr.aggStatus()
-	if !meta.Empty() {
+	if meta != nil {
 		hr.fwdMetadata(meta)
 		// fwdMetadata can change the status, re-read it.
 		return hr.aggStatus()
@@ -458,7 +464,7 @@ func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Consu
 		<-hr.semaphore
 	}
 	if err != nil {
-		hr.fwdMetadata(ProducerMetadata{Err: err})
+		hr.fwdMetadata(&ProducerMetadata{Err: err})
 		atomic.StoreUint32(&hr.aggregatedStatus, uint32(ConsumerClosed))
 		return ConsumerClosed
 	}
@@ -491,12 +497,7 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 	return int(crc32.Update(0, crc32Table, hr.buffer) % uint32(len(hr.outputs))), nil
 }
 
-func makeRangeRouter(
-	streams []RowReceiver, spec OutputRouterSpec_RangeRouterSpec,
-) (*rangeRouter, error) {
-	if len(streams) != len(spec.Spans) {
-		return nil, errors.Errorf("number of streams (%d) must match spans (%d)", len(streams), len(spec.Spans))
-	}
+func makeRangeRouter(rb routerBase, spec OutputRouterSpec_RangeRouterSpec) (*rangeRouter, error) {
 	if len(spec.Encodings) == 0 {
 		return nil, errors.New("missing encodings")
 	}
@@ -513,18 +514,17 @@ func makeRangeRouter(
 		}
 		prevKey = span.End
 	}
-	rr := rangeRouter{
+	return &rangeRouter{
+		routerBase:  rb,
 		spans:       spec.Spans,
 		defaultDest: defaultDest,
 		encodings:   spec.Encodings,
-	}
-	rr.routerBase.setupStreams(streams)
-	return &rr, nil
+	}, nil
 }
 
-func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	aggStatus := rr.aggStatus()
-	if !meta.Empty() {
+	if meta != nil {
 		rr.fwdMetadata(meta)
 		// fwdMetadata can change the status, re-read it.
 		return rr.aggStatus()
@@ -547,7 +547,7 @@ func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Cons
 		<-rr.semaphore
 	}
 	if err != nil {
-		rr.fwdMetadata(ProducerMetadata{Err: err})
+		rr.fwdMetadata(&ProducerMetadata{Err: err})
 		atomic.StoreUint32(&rr.aggregatedStatus, uint32(ConsumerClosed))
 		return ConsumerClosed
 	}
@@ -589,5 +589,5 @@ func (rr *rangeRouter) spanForData(data []byte) int {
 	if bytes.Compare(rr.spans[i].Start, data) > 0 {
 		return -1
 	}
-	return i
+	return int(rr.spans[i].Stream)
 }

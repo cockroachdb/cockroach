@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -73,7 +72,7 @@ func (p *planner) CreateDatabase(n *tree.CreateDatabase) (planNode, error) {
 	return &createDatabaseNode{n: n}, nil
 }
 
-func (n *createDatabaseNode) Start(params runParams) error {
+func (n *createDatabaseNode) startExec(params runParams) error {
 	desc := makeDatabaseDesc(n.n)
 
 	created, err := params.p.createDatabase(params.ctx, &desc, n.n.IfNotExists)
@@ -88,16 +87,16 @@ func (n *createDatabaseNode) Start(params runParams) error {
 			params.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
-			int32(params.evalCtx.NodeID),
+			int32(params.extendedEvalCtx.NodeID),
 			struct {
 				DatabaseName string
 				Statement    string
 				User         string
-			}{n.n.Name.String(), n.n.String(), params.p.session.User},
+			}{n.n.Name.String(), n.n.String(), params.SessionData().User},
 		); err != nil {
 			return err
 		}
-		params.p.session.tables.addUncommittedDatabase(
+		params.extendedEvalCtx.Tables.addUncommittedDatabase(
 			desc.Name, desc.ID, false /* dropped */)
 	}
 	return nil

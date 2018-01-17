@@ -1,12 +1,10 @@
-// tslint:disable-next-line:no-var-requires
-const spinner = require<string>("assets/spinner.gif");
-
 import React from "react";
 import classNames from "classnames";
 
-import "./visualizations.styl";
-
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+
+import "./visualizations.styl";
+import spinner from "assets/spinner.gif";
 
 interface VisualizationProps {
   title: string;
@@ -46,7 +44,7 @@ export default class extends React.Component<VisualizationProps, {}> {
         <div className="visualization__tooltip">
           <ToolTipWrapper text={tooltip}>
             <div className="visualization__tooltip-hover-area">
-              <div className="visualization__info-icon">!</div>
+              <div className="visualization__info-icon">i</div>
             </div>
           </ToolTipWrapper>
         </div>

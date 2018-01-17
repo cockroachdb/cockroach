@@ -15,6 +15,7 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net"
@@ -26,14 +27,13 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/rubyist/circuitbreaker"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -119,22 +119,13 @@ func NewServerWithInterceptor(
 		// server value so that we have no fixed limit on the number of concurrent
 		// streams/requests on either the client or server.
 		grpc.MaxConcurrentStreams(math.MaxInt32),
-		grpc.RPCDecompressor(snappyDecompressor{}),
-		// By default, gRPC disconnects clients that send "too many" pings,
-		// but we don't really care about that, so configure the server to be
-		// as permissive as possible.
-		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             time.Nanosecond,
-			PermitWithoutStream: true,
-		}),
+		grpc.KeepaliveParams(serverKeepalive),
+		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
 		// A stats handler to measure server network stats.
 		grpc.StatsHandler(&ctx.stats),
 	}
 	// Compression is enabled separately from decompression to allow staged
 	// rollout.
-	if ctx.rpcCompression {
-		opts = append(opts, grpc.RPCCompressor(snappyCompressor{}))
-	}
 	if !ctx.Insecure {
 		tlsConfig, err := ctx.GetServerTLSConfig()
 		if err != nil {
@@ -204,21 +195,67 @@ func NewServerWithInterceptor(
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              ctx.LocalClock,
 		remoteClockMonitor: ctx.RemoteClocks,
+		clusterID:          &ctx.ClusterID,
+		version:            ctx.version,
 	})
 	return s
 }
 
-// errValue is used to allow storing an error in an atomic.Value which does not
-// support storing a nil interface.
-type errValue struct {
-	error
+type heartbeatResult struct {
+	everSucceeded bool  // true if the heartbeat has ever succeeded
+	err           error // heartbeat error. should not be nil if everSucceeded is false
 }
 
-type connMeta struct {
-	sync.Once
-	conn         *grpc.ClientConn
-	dialErr      error
-	heartbeatErr atomic.Value
+// Connection is a wrapper around grpc.ClientConn. It prevents the underlying
+// connection from being used until it has been validated via heartbeat.
+type Connection struct {
+	grpcConn             *grpc.ClientConn
+	dialErr              error         // error while dialing; if set, connection is unusable
+	heartbeatResult      atomic.Value  // result of latest heartbeat
+	initialHeartbeatDone chan struct{} // closed after first heartbeat
+	stopper              *stop.Stopper
+
+	initOnce      sync.Once
+	validatedOnce sync.Once
+}
+
+func newConnection(stopper *stop.Stopper) *Connection {
+	c := &Connection{
+		initialHeartbeatDone: make(chan struct{}),
+		stopper:              stopper,
+	}
+	c.heartbeatResult.Store(heartbeatResult{err: ErrNotHeartbeated})
+	return c
+}
+
+// Connect returns the underlying grpc.ClientConn after it has been validated,
+// or an error if dialing or validation fails.
+func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
+	if c.dialErr != nil {
+		return nil, c.dialErr
+	}
+
+	// Wait for initial heartbeat.
+	select {
+	case <-c.initialHeartbeatDone:
+	case <-c.stopper.ShouldStop():
+		return nil, errors.Errorf("stopped")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	// If connection is invalid, return latest heartbeat error.
+	h := c.heartbeatResult.Load().(heartbeatResult)
+	if !h.everSucceeded {
+		return nil, errors.Wrap(h.err, "initial connection heartbeat failed")
+	}
+	return c.grpcConn, nil
+}
+
+func (c *Connection) setInitialHeartbeatDone() {
+	c.validatedOnce.Do(func() {
+		close(c.initialHeartbeatDone)
+	})
 }
 
 // Context contains the fields required by the rpc framework.
@@ -244,13 +281,21 @@ type Context struct {
 
 	stats StatsHandler
 
+	ClusterID base.ClusterIDContainer
+	version   *cluster.ExposedClusterVersion
+
 	// For unittesting.
-	BreakerFactory func() *circuit.Breaker
+	BreakerFactory  func() *circuit.Breaker
+	testingDialOpts []grpc.DialOption
 }
 
 // NewContext creates an rpc Context with the supplied values.
 func NewContext(
-	ambient log.AmbientContext, baseCtx *base.Config, hlcClock *hlc.Clock, stopper *stop.Stopper,
+	ambient log.AmbientContext,
+	baseCtx *base.Config,
+	hlcClock *hlc.Clock,
+	stopper *stop.Stopper,
+	version *cluster.ExposedClusterVersion,
 ) *Context {
 	if hlcClock == nil {
 		panic("nil clock is forbidden")
@@ -263,6 +308,7 @@ func NewContext(
 			clock: hlcClock,
 		},
 		rpcCompression: enableRPCCompression,
+		version:        version,
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
@@ -277,16 +323,16 @@ func NewContext(
 
 		cancel()
 		ctx.conns.Range(func(k, v interface{}) bool {
-			meta := v.(*connMeta)
-			meta.Do(func() {
+			conn := v.(*Connection)
+			conn.initOnce.Do(func() {
 				// Make sure initialization is not in progress when we're removing the
 				// conn. We need to set the error in case we win the race against the
 				// real initialization code.
-				if meta.dialErr == nil {
-					meta.dialErr = &roachpb.NodeUnavailableError{}
+				if conn.dialErr == nil {
+					conn.dialErr = &roachpb.NodeUnavailableError{}
 				}
 			})
-			ctx.removeConn(k.(string), meta)
+			ctx.removeConn(k.(string), conn)
 			return true
 		})
 	})
@@ -315,13 +361,13 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 	ctx.localInternalServer = internalServer
 }
 
-func (ctx *Context) removeConn(key string, meta *connMeta) {
+func (ctx *Context) removeConn(key string, conn *Connection) {
 	ctx.conns.Delete(key)
 	if log.V(1) {
 		log.Infof(ctx.masterCtx, "closing %s", key)
 	}
-	if conn := meta.conn; conn != nil {
-		if err := conn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
+	if grpcConn := conn.grpcConn; grpcConn != nil {
+		if err := grpcConn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
 			if log.V(1) {
 				log.Errorf(ctx.masterCtx, "failed to close client connection: %s", err)
 			}
@@ -359,11 +405,10 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 		grpc.MaxCallSendMsgSize(math.MaxInt32),
 	))
 
-	dialOpts = append(dialOpts, grpc.WithDecompressor(snappyDecompressor{}))
 	// Compression is enabled separately from decompression to allow staged
 	// rollout.
 	if ctx.rpcCompression {
-		dialOpts = append(dialOpts, grpc.WithCompressor(snappyCompressor{}))
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	}
 
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
@@ -380,77 +425,76 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 	return dialOpts, nil
 }
 
-// GRPCDial calls grpc.Dial with the options appropriate for the context.
-func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	value, ok := ctx.conns.Load(target)
-	if !ok {
-		meta := &connMeta{}
-		meta.heartbeatErr.Store(errValue{ErrNotHeartbeated})
-		value, _ = ctx.conns.LoadOrStore(target, meta)
+// GRPCDialRaw calls grpc.Dial with options appropriate for the context.
+// Unlike GRPCDial, it does not start an RPC heartbeat to validate the
+// connection.
+func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, error) {
+	dialOpts, err := ctx.GRPCDialOptions()
+	if err != nil {
+		return nil, err
 	}
 
-	meta := value.(*connMeta)
-	meta.Do(func() {
-		dialOpts, err := ctx.GRPCDialOptions()
-		if err != nil {
-			meta.dialErr = err
+	// Add a stats handler to measure client network stats.
+	dialOpts = append(dialOpts, grpc.WithStatsHandler(ctx.stats.newClient(target)))
+
+	dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
+	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(clientKeepalive))
+	dialOpts = append(dialOpts,
+		grpc.WithInitialWindowSize(initialWindowSize),
+		grpc.WithInitialConnWindowSize(initialConnWindowSize))
+	dialOpts = append(dialOpts, ctx.testingDialOpts...)
+
+	if sourceAddr != nil {
+		dialOpts = append(dialOpts, grpc.WithDialer(
+			func(addr string, timeout time.Duration) (net.Conn, error) {
+				dialer := net.Dialer{
+					Timeout:   timeout,
+					LocalAddr: sourceAddr,
+				}
+				return dialer.Dial("tcp", addr)
+			},
+		))
+	}
+
+	if log.V(1) {
+		log.Infof(ctx.masterCtx, "dialing %s", target)
+	}
+	return grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+}
+
+// GRPCDial calls grpc.Dial with options appropriate for the context.
+func (ctx *Context) GRPCDial(target string) *Connection {
+	value, ok := ctx.conns.Load(target)
+	if !ok {
+		value, _ = ctx.conns.LoadOrStore(target, newConnection(ctx.Stopper))
+	}
+
+	conn := value.(*Connection)
+	conn.initOnce.Do(func() {
+		conn.grpcConn, conn.dialErr = ctx.GRPCDialRaw(target)
+		if ctx.GetLocalInternalServerForAddr(target) != nil {
+			conn.heartbeatResult.Store(heartbeatResult{err: nil, everSucceeded: true})
+			conn.setInitialHeartbeatDone()
 			return
 		}
-
-		// Add a stats handler to measure client network stats.
-		dialOpts = append(dialOpts, grpc.WithStatsHandler(ctx.stats.newClient(target)))
-
-		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
-		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			// Send periodic pings on the connection.
-			Time: base.NetworkTimeout,
-			// If the pings don't get a response within the timeout, we might be
-			// experiencing a network partition. gRPC will close the transport-level
-			// connection and all the pending RPCs (which may not have timeouts) will
-			// fail eagerly. gRPC will then reconnect the transport transparently.
-			Timeout: base.NetworkTimeout,
-			// Do the pings even when there are no ongoing RPCs.
-			PermitWithoutStream: true,
-		}))
-		dialOpts = append(dialOpts,
-			grpc.WithInitialWindowSize(initialWindowSize),
-			grpc.WithInitialConnWindowSize(initialConnWindowSize))
-		dialOpts = append(dialOpts, opts...)
-
-		if sourceAddr != nil {
-			dialOpts = append(dialOpts, grpc.WithDialer(
-				func(addr string, timeout time.Duration) (net.Conn, error) {
-					dialer := net.Dialer{
-						Timeout:   timeout,
-						LocalAddr: sourceAddr,
-					}
-					return dialer.Dial("tcp", addr)
-				},
-			))
-		}
-
-		if log.V(1) {
-			log.Infof(ctx.masterCtx, "dialing %s", target)
-		}
-		meta.conn, meta.dialErr = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
-		if ctx.GetLocalInternalServerForAddr(target) == nil && meta.dialErr == nil {
+		if conn.dialErr == nil {
 			if err := ctx.Stopper.RunTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					ctx.Stopper.RunWorker(masterCtx, func(masterCtx context.Context) {
-						err := ctx.runHeartbeat(meta, target)
+						err := ctx.runHeartbeat(conn, target)
 						if err != nil && !grpcutil.IsClosedConnection(err) {
 							log.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 						}
-						ctx.removeConn(target, meta)
+						ctx.removeConn(target, conn)
 					})
 				}); err != nil {
-				meta.dialErr = err
-				ctx.removeConn(target, meta)
+				conn.dialErr = err
+				ctx.removeConn(target, conn)
 			}
 		}
 	})
 
-	return meta.conn, meta.dialErr
+	return conn
 }
 
 // NewBreaker creates a new circuit breaker properly configured for RPC
@@ -479,25 +523,29 @@ func (ctx *Context) ConnHealth(target string) error {
 		return nil
 	}
 	if value, ok := ctx.conns.Load(target); ok {
-		return value.(*connMeta).heartbeatErr.Load().(errValue).error
+		return value.(*Connection).heartbeatResult.Load().(heartbeatResult).err
 	}
 	return ErrNotConnected
 }
 
-func (ctx *Context) runHeartbeat(meta *connMeta, target string) error {
+func (ctx *Context) runHeartbeat(conn *Connection, target string) error {
 	maxOffset := ctx.LocalClock.MaxOffset()
+	clusterID := ctx.ClusterID.Get()
 
 	request := PingRequest{
 		Addr:           ctx.Addr,
 		MaxOffsetNanos: maxOffset.Nanoseconds(),
+		ClusterID:      &clusterID,
+		ServerVersion:  ctx.version.ServerVersion,
 	}
-	heartbeatClient := NewHeartbeatClient(meta.conn)
+	heartbeatClient := NewHeartbeatClient(conn.grpcConn)
 
 	var heartbeatTimer timeutil.Timer
 	defer heartbeatTimer.Stop()
 
 	// Give the first iteration a wait-free heartbeat attempt.
 	heartbeatTimer.Reset(0)
+	everSucceeded := false
 	for {
 		select {
 		case <-ctx.Stopper.ShouldStop():
@@ -518,9 +566,15 @@ func (ctx *Context) runHeartbeat(meta *connMeta, target string) error {
 		if cancel != nil {
 			cancel()
 		}
-		meta.heartbeatErr.Store(errValue{err})
 
 		if err == nil {
+			err = errors.Wrap(
+				checkVersion(ctx.version, response.ServerVersion),
+				"version compatibility check failed on ping response")
+		}
+
+		if err == nil {
+			everSucceeded = true
 			receiveTime := ctx.LocalClock.PhysicalTime()
 
 			// Only update the clock offset measurement if we actually got a
@@ -548,6 +602,11 @@ func (ctx *Context) runHeartbeat(meta *connMeta, target string) error {
 				cb()
 			}
 		}
+		conn.heartbeatResult.Store(heartbeatResult{
+			everSucceeded: everSucceeded,
+			err:           err,
+		})
+		conn.setInitialHeartbeatDone()
 
 		heartbeatTimer.Reset(ctx.heartbeatInterval)
 	}

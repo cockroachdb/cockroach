@@ -1,0 +1,1146 @@
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+false
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+true
+----
+[ - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1
+----
+[ - ]
+Remaining filter: @1
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 > 2
+----
+[/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+NOT (@1 <= 2)
+----
+[/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
+@1 > 2
+----
+[ - /3]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 >= 2
+----
+[/2 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
+@1 >= 2
+----
+[ - /2]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+@1 != 2
+----
+[ - /1]
+[/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+NOT (@1 = 2)
+----
+[ - /1]
+[/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc not null)
+@1 != 2
+----
+[ - /3]
+[/1 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+@1 < 2
+----
+[ - /1]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc not null)
+@1 < 2
+----
+[/1 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+@1 = 2
+----
+[/2 - /2]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc not null)
+@1 = 2
+----
+[/2 - /2]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 != 2
+----
+(/NULL - /1]
+[/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
+@1 != 2
+----
+[ - /3]
+[/1 - /NULL)
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 < 2
+----
+(/NULL - /1]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
+@1 < 2
+----
+[/1 - /NULL)
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 = 2
+----
+[/2 - /2]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
+@1 = 2
+----
+[/2 - /2]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 > NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 < NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 >= NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 >= NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 = NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 != NULL
+----
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1
+----
+[/true - /true]
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+NOT @1
+----
+[/false - /false]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1)
+@1 = 1 AND @2 = 2
+----
+[/1 - /1]
+Remaining filter: @2 = 2
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@2)
+@1 = 1 AND @2 = 2
+----
+[/2 - /2]
+Remaining filter: @1 = 1
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 > NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@2 = 1 AND @1 > NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 > 2 AND @1 < 4
+----
+[/3 - /3]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 >= 2 AND @1 <= 4
+----
+[/2 - /4]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 > 2 AND @2 > 5
+----
+[/3/6 - ]
+Remaining filter: @2 > 5
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
+@1 > 2 AND @2 < 5
+----
+[/3/4 - ]
+Remaining filter: @2 < 5
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 != 1 AND @2 > 5
+----
+(/NULL - /0]
+[/2/6 - ]
+Remaining filter: @2 > 5
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 != 1 AND @2 < 5
+----
+(/NULL - /0/4]
+(/2/NULL - ]
+Remaining filter: @2 < 5
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 >= 1 AND @1 <= 5 AND @1 != 3
+----
+[/1 - /2]
+[/4 - /5]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
+----
+[/1/8 - /2/9]
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2)
+@1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
+----
+[/2/8 - /1/9]
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
+@1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
+----
+[/1/9 - /2/8]
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 > 1 AND @1 < 4 AND @2 > 5 AND @2 < 8
+----
+[/2/6 - /3/7]
+Remaining filter: (@2 > 5) AND (@2 < 8)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 > 1 AND @1 < 4 AND @2 = 5
+----
+[/2/5 - /3/5]
+Remaining filter: @2 = 5
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 > 3 AND @2 < 5
+----
+[/1/4 - /1/4]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 > 3 AND @2 < 8
+----
+[/1/4 - /1/7]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 > 2 AND @1 < 1
+----
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 != 2
+----
+(/1/NULL - /1/1]
+[/1/3 - /1]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND @1 <= 5 AND @2 != 2
+----
+(/1/NULL - /5]
+Remaining filter: @2 != 2
+
+# Tests with a type that doesn't support Prev.
+build-scalar,normalize,index-constraints vars=(string) index=(@1)
+@1 > 'a' AND @1 < 'z'
+----
+[/e'a\x00' - /'z')
+
+build-scalar,normalize,index-constraints vars=(string, int) index=(@1, @2)
+@1 > 'a' AND @1 < 'z' AND @2 = 5
+----
+[/e'a\x00'/5 - /'z')
+Remaining filter: @2 = 5
+
+build-scalar,normalize,index-constraints vars=(string) index=(@1 desc)
+@1 > 'a' AND @1 < 'z'
+----
+(/'z' - /e'a\x00']
+
+build-scalar,normalize,index-constraints vars=(string, int) index=(@1 desc, @2)
+@1 > 'a' AND @1 < 'z' AND @2 = 5
+----
+(/'z' - /e'a\x00'/5]
+Remaining filter: @2 = 5
+
+# Tests with a type that doesn't support Next or Prev.
+build-scalar,normalize,index-constraints vars=(decimal) index=(@1)
+@1 > 1.5
+----
+(/1.5 - ]
+
+build-scalar,normalize,index-constraints vars=(decimal) index=(@1)
+@1 > 1.5 AND @1 < 2
+----
+(/1.5 - /2)
+
+# Tests with a type that supports Next/Prev but we have a maximal/minimal value.
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1 > true
+----
+(/true - ]
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1 < false
+----
+(/NULL - /false)
+
+# Note the difference here between decimal and int: we
+# can't extend the exclusive start key.
+build-scalar,normalize,index-constraints vars=(decimal, decimal) index=(@1, @2)
+@1 > 1.5 AND @2 > 2
+----
+(/1.5 - ]
+Remaining filter: @2 > 2
+
+# Tests with variable IN tuple.
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IN (1, 2, 3)
+----
+[/1 - /1]
+[/2 - /2]
+[/3 - /3]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
+@1 IN (1, 2, 3)
+----
+[/3 - /3]
+[/2 - /2]
+[/1 - /1]
+
+semtree-normalize,build-scalar,index-constraints vars=(int) index=(@1)
+@1 IN (1, 5, 1, 4)
+----
+[/1 - /1]
+[/4 - /4]
+[/5 - /5]
+
+semtree-normalize,build-scalar,index-constraints vars=(int) index=(@1 desc)
+@1 IN (1, 5, 1, 4)
+----
+[/5 - /5]
+[/4 - /4]
+[/1 - /1]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 IN (1, 2, 3)
+----
+[/1/1 - /1/1]
+[/1/2 - /1/2]
+[/1/3 - /1/3]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
+@1 = 1 AND @2 IN (1, 2, 3)
+----
+[/1/3 - /1/3]
+[/1/2 - /1/2]
+[/1/1 - /1/1]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 IN (1, 2) AND @2 IN (1, 2, 3)
+----
+[/1/1 - /1/1]
+[/1/2 - /1/2]
+[/1/3 - /1/3]
+[/2/1 - /2/1]
+[/2/2 - /2/2]
+[/2/3 - /2/3]
+Remaining filter: @2 IN (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc)
+@1 IN (1, 2) AND @2 IN (1, 2, 3)
+----
+[/2/3 - /2/3]
+[/2/2 - /2/2]
+[/2/1 - /2/1]
+[/1/3 - /1/3]
+[/1/2 - /1/2]
+[/1/1 - /1/1]
+Remaining filter: @2 IN (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
+----
+[/2/1 - /4/3]
+Remaining filter: @2 IN (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc)
+@1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
+----
+[/4/3 - /2/1]
+Remaining filter: @2 IN (1, 2, 3)
+
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 IN (1, 2, 3) AND @2 = 4
+----
+[/1/4 - /1/4]
+[/2/4 - /2/4]
+[/3/4 - /3/4]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2)
+@1 IN (1, 2, 3) AND @2 = 4
+----
+[/3/4 - /3/4]
+[/2/4 - /2/4]
+[/1/4 - /1/4]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
+@1 IN (1, 2, 3) AND @2 = 4
+----
+[/1/4 - /1/4]
+[/2/4 - /2/4]
+[/3/4 - /3/4]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 IN (1, 2, 3) AND @2 >= 2 AND @2 <= 4
+----
+[/1/2 - /1/4]
+[/2/2 - /2/4]
+[/3/2 - /3/4]
+
+# Tests with tuple equality.
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) = (1, 2, 3)
+----
+[/1/2/3 - /1/2/3]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @3)
+(@1, @2, @3) = (1, 2, 3)
+----
+[/1/3 - /1/3]
+Remaining filter: @2 = 2
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@3, @2)
+(@1, @2, @3) = (1, 2, 3)
+----
+[/3/2 - /3/2]
+Remaining filter: @1 = 1
+
+build-scalar,normalize,index-constraints vars=(int, int, int, int, int) index=(@1, @2, @3, @4, @5)
+(@1, @2, 3, (4, @5)) = (1, 2, @3, (@4, 5))
+----
+[/1/2/3/4/5 - /1/2/3/4/5]
+
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
+(@1, @2, @3) = (1, 2, 3) AND @4 > 4
+----
+[/1/2/3/5 - /1/2/3]
+
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
+@1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
+----
+[/6/2/3/4 - /9/2/3/4]
+Remaining filter: ((@2 = 2) AND (@3 = 3)) AND (@4 = 4)
+
+build-scalar,normalize,index-constraints \
+  vars=(int, int, int, int) \
+  index=(@1 desc, @2 desc, @3 desc, @4 desc)
+@1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
+----
+[/9/2/3/4 - /6/2/3/4]
+Remaining filter: ((@2 = 2) AND (@3 = 3)) AND (@4 = 4)
+
+# Tests with tuple inequalities.
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) >= (1, 2, 3)
+----
+[/1/2/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) >= (1, 2, @1)
+----
+[/1/2 - ]
+Remaining filter: (@1, @2, @3) >= (1, 2, @1)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2/4 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2 - ]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2)
+(@1, @2, @3) < (1, 2, 3)
+----
+(/NULL - /1/2]
+Remaining filter: (@1, @2, @3) < (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) <= (1, 2, @1)
+----
+(/NULL - /1/2]
+Remaining filter: (@1, @2, @3) <= (1, 2, @1)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) < (1, 2, 3)
+----
+(/NULL - /1/2/2]
+Remaining filter: (@1, @2, @3) < (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) < (1, 2, @1)
+----
+(/NULL - /1/2]
+Remaining filter: (@1, @2, @3) < (1, 2, @1)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/4]
+[/1/2/2 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2, @3)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2, @3)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2 not null, @3 not null)
+(@1, @2, @3) != (1, 2, 3)
+----
+[ - /1/2/2]
+[/1/2/4 - ]
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) != (1, 2, @1)
+----
+[ - ]
+Remaining filter: (@1, @2, @3) != (1, 2, @1)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc)
+(@1, @2, @3) >= (1, 2, 3)
+----
+[ - /1/2/3]
+Remaining filter: (@1, @2, @3) >= (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3)
+(@1, @2, @3) > (1, 2, 3)
+----
+[ - /1/2]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 desc)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2 - ]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 desc)
+(@2, @3) > (1, 2)
+----
+[ - ]
+Remaining filter: (@2, @3) > (1, 2)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) >= (1, 2) AND (@1, @2) <= (3, 4)
+----
+[/1/2 - /3/4]
+Remaining filter: (@1, @2) <= (3, 4)
+
+semtree-normalize,build-scalar,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) BETWEEN (1, 2) AND (3, 4)
+----
+[/1/2 - /3/4]
+Remaining filter: (@1, @2) <= (3, 4)
+
+semtree-normalize,build-scalar,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
+(@1, @2, @4) BETWEEN (1, 2, 3) AND (4, 5, 6)
+----
+[/1/2 - /4/5]
+Remaining filter: ((@1, @2, @4) >= (1, 2, 3)) AND ((@1, @2, @4) <= (4, 5, 6))
+
+build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
+(@1, @2) > (1, true)
+----
+(/1/true - ]
+
+build-scalar,normalize,index-constraints vars=(int, bool) index=(@1, @2)
+(@1, @2) < (1, false)
+----
+(/NULL - /1/false)
+Remaining filter: (@1, @2) < (1, false)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) <= (1, 2, 3)
+----
+[ - /1/2/3]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) >= (1, 2, 3)
+----
+[/1/2/3 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) < (1, 2, 3)
+----
+[ - /1/2/2]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2/4 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2 not null, @3 not null)
+(@1, @2, @3) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2 not null, @3)
+(@1, @2, @3) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3 not null)
+(@1, @2, @3) <= (1, 2, 3)
+----
+(/NULL - /1/2/3]
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
+
+build-scalar,normalize,index-constraints \
+  vars=(int, int, int) \
+  index=(@1 desc not null, @2 desc not null, @3 desc not null)
+(@1, @2, @3) > (1, 2, 3)
+----
+[ - /1/2/4]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc not null, @3 desc)
+(@1, @2, @3) > (1, 2, 3)
+----
+[ - /1/2/4]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc not null)
+(@1, @2, @3) > (1, 2, 3)
+----
+[ - /1/2/4]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @3, @2) != (1, NULL, 2)
+----
+[ - ]
+Remaining filter: (@1, @3, @2) != (1, NULL, 2)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null)
+(@1, @2, @3) > (1, 2, 3)
+----
+[/1/2 - ]
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1 not null, @2 not null)
+(@1, @2, @3) <= (1, 2, 3)
+----
+[ - /1/2]
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
+
+# Cases with NULLs in tuple inequalities. These conditions are true only when
+# they don't depend on the NULL value, i.e. when the inequality holds true for
+# the prefix up to the first NULL.
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) > (1, NULL)
+----
+[/2 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) >= (1, NULL)
+----
+[/2 - ]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) < (1, NULL)
+----
+(/NULL - /0]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 not null, @2)
+(@1, @2) < (1, NULL)
+----
+[ - /0]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) <= (1, NULL)
+----
+(/NULL - /0]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) < (1, NULL, 1)
+----
+(/NULL - /0]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) >= (1, NULL, 1)
+----
+[/2 - ]
+
+# TODO(radu): here we could be smarter - the condition below is equivalent to
+# (@1, @3) != (1, 3).
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) != (1, NULL, 3)
+----
+[ - ]
+Remaining filter: (@1, @2, @3) != (1, NULL, 3)
+
+# Tests with tuple IN tuple.
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) IN ((1, 2, 3), (4, 5, 6))
+----
+[/1/2/3 - /1/2/3]
+[/4/5/6 - /4/5/6]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) IN ((4, 5, 6), (1, 2, 3))
+----
+[/1/2/3 - /1/2/3]
+[/4/5/6 - /4/5/6]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) IN ((1, 2, 3), (1, 2, 3))
+----
+[/1/2/3 - /1/2/3]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) IN ((1, 2, 3), (4, 5, 6), (1, 2, 3))
+----
+[/1/2/3 - /1/2/3]
+[/4/5/6 - /4/5/6]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1+5, @1, @1+@2, @2) IN ((1, 5, 1, 6), (2, 7, 2, 8), (3, 9, 3, 10))
+----
+[/5/6 - /5/6]
+[/7/8 - /7/8]
+[/9/10 - /9/10]
+Remaining filter: (@1 + 5, @1, @1 + @2, @2) IN ((1, 5, 1, 6), (2, 7, 2, 8), (3, 9, 3, 10))
+
+# Verify that we sort and de-duplicate if we "project" the tuples;
+# in this case the expression becomes:
+#   (@1, @2) IN ((5, 5), (4, 4), (5, 5))
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@2, @4)
+(@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+----
+[/4/4 - /4/4]
+[/5/5 - /5/5]
+Remaining filter: (@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+
+build-scalar,normalize,index-constraints vars=(int, int, int, int) index=(@2)
+(@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+----
+[/4 - /4]
+[/5 - /5]
+Remaining filter: (@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
+----
+[/1/2 - /1/2]
+[/1/4 - /1/4]
+[/4/3 - /4/3]
+[/5/1 - /5/1]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2)
+(@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
+----
+[/5/1 - /5/1]
+[/4/3 - /4/3]
+[/1/2 - /1/2]
+[/1/4 - /1/4]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2 desc)
+(@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
+----
+[/1/4 - /1/4]
+[/1/2 - /1/2]
+[/4/3 - /4/3]
+[/5/1 - /5/1]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 desc, @2 desc)
+(@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
+----
+[/5/1 - /5/1]
+[/4/3 - /4/3]
+[/1/4 - /1/4]
+[/1/2 - /1/2]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND (@2, @3) IN ((2, 3), (4, 5), (6, 7))
+----
+[/1/2/3 - /1/2/3]
+[/1/4/5 - /1/4/5]
+[/1/6/7 - /1/6/7]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@3 = 1 AND (@1, @2) IN ((2, 3), (4, 5), (6, 7))
+----
+[/2/3/1 - /2/3/1]
+[/4/5/1 - /4/5/1]
+[/6/7/1 - /6/7/1]
+
+# Here the best we can do is to effectively break up the IN constraint into
+# constraints on @1 and on @3, which results in more spans than we need.
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@2 = 1 AND (@1, @3) IN ((2, 3), (4, 5), (6, 7))
+----
+[/2/1/3 - /2/1/3]
+[/2/1/5 - /2/1/5]
+[/2/1/7 - /2/1/7]
+[/4/1/3 - /4/1/3]
+[/4/1/5 - /4/1/5]
+[/4/1/7 - /4/1/7]
+[/6/1/3 - /6/1/3]
+[/6/1/5 - /6/1/5]
+[/6/1/7 - /6/1/7]
+Remaining filter: (@1, @3) IN ((2, 3), (4, 5), (6, 7))
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 > 1 AND (@2, @3) IN ((2, 3), (4, 5), (6, 7))
+----
+[/2/2/3 - ]
+Remaining filter: (@2, @3) IN ((2, 3), (4, 5), (6, 7))
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IS NULL
+----
+[/NULL - /NULL]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 IS NULL AND @2 = 2
+----
+[/NULL/2 - /NULL/2]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 IS NULL AND @2 > 2
+----
+[/NULL/3 - /NULL]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 IS NULL
+----
+[/1/NULL - /1/NULL]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND @2 IS NULL
+----
+[/1/NULL - ]
+Remaining filter: @2 IS NULL
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IS NOT DISTINCT FROM NULL
+----
+[/NULL - /NULL]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IS NOT NULL
+----
+(/NULL - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IS DISTINCT FROM NULL
+----
+(/NULL - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc)
+@1 IS NOT NULL
+----
+[ - /NULL)
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+@1 IS NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+@1 IS NOT DISTINCT FROM NULL
+----
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+@1 IS NOT NULL
+----
+[ - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+@1 IS DISTINCT FROM NULL
+----
+[ - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 desc not null)
+@1 IS NOT NULL
+----
+[ - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1 not null)
+@1 IS NOT DISTINCT FROM 1
+----
+[/1 - /1]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@2 = @1
+----
+(/NULL - ]
+Remaining filter: @2 = @1
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@2 < @1
+----
+(/NULL - ]
+Remaining filter: @2 < @1
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1 not null, @2)
+@1 = @2
+----
+[ - ]
+Remaining filter: @1 = @2
+
+# Tests with top-level OR.
+# TODO(radu): expression simplification is limited when dealing with ORs; some
+# of the remaining filters below are not necessary (or could be simplified
+# further).
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 = 1 OR @1 = 2
+----
+[/1 - /1]
+[/2 - /2]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IS NULL OR @1 = 1
+----
+[/NULL - /NULL]
+[/1 - /1]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+(@1 >= 1 AND @1 <= 5) OR (@1 >= 2 AND @1 <= 8)
+----
+[/1 - /8]
+Remaining filter: (@1 <= 5) OR (@1 >= 2)
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+(@1 >= 1 AND @1 <= 3) OR (@1 >= 5 AND @1 <= 8)
+----
+[/1 - /3]
+[/5 - /8]
+Remaining filter: (@1 <= 3) OR (@1 >= 5)
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1)
+(@1 = 1 AND @2 = 5) OR (@1 = 2 and @2 = 6)
+----
+[/1 - /1]
+[/2 - /2]
+Remaining filter: ((@1 = 1) AND (@2 = 5)) OR ((@1 = 2) AND (@2 = 6))
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@2)
+(@1 = 1 AND @2 = 5) OR (@1 = 2 and @2 = 6)
+----
+[/5 - /5]
+[/6 - /6]
+Remaining filter: ((@1 = 1) AND (@2 = 5)) OR ((@1 = 2) AND (@2 = 6))
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@2)
+@1 = 1 OR @2 = 2
+----
+[ - ]
+Remaining filter: (@1 = 1) OR (@2 = 2)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 OR (@1, @2, @3) IN ((4, 5, 6), (7, 8, 9))
+----
+[/1 - /1]
+[/4/5/6 - /4/5/6]
+[/7/8/9 - /7/8/9]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 OR (@1 = 2 AND (@2, @3) IN ((4, 5), (6, 7))) OR (@1 = 3)
+----
+[/1 - /1]
+[/2/4/5 - /2/4/5]
+[/2/6/7 - /2/6/7]
+[/3 - /3]
+Remaining filter: ((@1 = 1) OR ((@1 = 2) AND ((@2, @3) IN ((4, 5), (6, 7))))) OR (@1 = 3)
+
+# Tests with inner OR.
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND (@2 = 2 OR @2 = 3)
+----
+[/1/2 - /1/2]
+[/1/3 - /1/3]
+Remaining filter: (@2 = 2) OR (@2 = 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND (@2 = 2 OR (@2 = 3 AND @3 = 4))
+----
+[/1/2 - /1/2]
+[/1/3/4 - /1/3/4]
+Remaining filter: (@2 = 2) OR ((@2 = 3) AND (@3 = 4))
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND (@2 = 2 OR @2 = 3)
+----
+[/1/2 - ]
+Remaining filter: (@2 = 2) OR (@2 = 3)
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND (@2 = 2 OR @2 = 3) AND (@3 >= 4)
+----
+[/1/2/4 - /1/2]
+[/1/3/4 - /1/3]
+Remaining filter: (@2 = 2) OR (@2 = 3)
+
+build-scalar,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
+----
+[/1 - /1]
+Remaining filter: @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
+
+# This testcase exposed an issue around extending spans. We don't normalize the
+# expression so we have a hierarchy of ANDs (which requires a more complex path
+# for calculating spans).
+build-scalar,index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
+@1 = 1 AND @2 = 2 AND @3 = 3 AND @4 IN (4,5,6)
+----
+[/1/2/3/4 - /1/2/3/4]
+[/1/2/3/5 - /1/2/3/5]
+[/1/2/3/6 - /1/2/3/6]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1 = 1) AND (@2 > 5) AND (@2 < 1)
+----
+
+# Verify that we ignore mixed-type comparisons (they would result in incorrect
+# encodings, see #4313). We don't have testcases for IN because those error
+# out early (during type-checking).
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 = 1.5
+----
+[ - ]
+Remaining filter: @1 = 1.5
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 > 1.5
+----
+[ - ]
+Remaining filter: @1 > 1.5
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) = (1, 2.5)
+----
+[/1 - /1]
+Remaining filter: @2 = 2.5
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) >= (1, 2.5)
+----
+[/1 - ]
+Remaining filter: (@1, @2) >= (1, 2.5)
+
+# Verify that we ignore spans that become invalid after extension.
+build-scalar,index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND (@1, @2) < (1, 2) AND @2 = 5
+----
+
+build-scalar,index-constraints vars=(int, int) index=(@1, @2)
+(@1 >= 1 AND (@1, @2) < (1, 2) OR @1 > 3) AND @2 = 5
+----
+[/4/5 - ]
+Remaining filter: @2 = 5
+
+# Regression test for #3472.
+build-scalar,index-constraints vars=(int, int) index=(@1, @2)
+(@1,@2) IN ((1, 2)) AND @1 = 1
+----
+[/1/2 - /1/2]
+
+build-scalar,normalize,index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a":1}'
+----
+[/'{"a":1}' - /'{"a":1}']
+
+build-scalar,normalize,index-constraints vars=(jsonb) inverted-index=@1
+'{"a":1}' <@ @1
+----
+[/'{"a":1}' - /'{"a":1}']
+
+# Currently we only generate spans from one of the @> expressions.
+build-scalar,normalize,index-constraints vars=(jsonb) inverted-index=@1
+@1 @> '{"a":1}' AND @1 @> '{"b":1}'
+----
+[/'{"a":1}' - /'{"a":1}']
+Remaining filter: @1 @> '{"b":1}'
+
+build-scalar,normalize,index-constraints vars=(jsonb) inverted-index=@1
+'{"a":1}' <@ @1 AND '{"b":1}' <@ @1
+----
+[/'{"a":1}' - /'{"a":1}']
+Remaining filter: @1 @> '{"b":1}'
+
+build-scalar,normalize,index-constraints vars=(jsonb, int) inverted-index=@1
+@2 = 1 AND @1 @> '{"a":1}' AND @1 @> '{"b":1}'
+----
+[/'{"a":1}' - /'{"a":1}']
+Remaining filter: (@2 = 1) AND (@1 @> '{"b":1}')

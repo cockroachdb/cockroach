@@ -15,11 +15,10 @@
 package distsqlplan
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -86,7 +85,7 @@ func runTestFlow(
 	var res sqlbase.EncDatumRows
 	for {
 		row, meta := rowBuf.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			t.Fatalf("unexpected metadata: %v", meta)
 		}
 		if row == nil {
@@ -284,7 +283,7 @@ func checkDistAggregationInfo(
 	}
 
 	if info.FinalRendering != nil {
-		h := MakeTypeIndexedVarHelper(finalOutputTypes)
+		h := tree.MakeTypesOnlyIndexedVarHelper(sqlbase.ColumnTypesToDatumTypes(finalOutputTypes))
 		expr, err := info.FinalRendering(&h, varIdxs)
 		if err != nil {
 			t.Fatal(err)

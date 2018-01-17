@@ -16,13 +16,14 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -85,15 +86,15 @@ func (p *planner) selectIndex(
 ) (planNode, error) {
 	if s.desc.IsEmpty() {
 		// No table.
-		s.initOrdering(0, &p.evalCtx)
+		s.initOrdering(0 /* exactPrefix */, p.EvalContext())
 		return s, nil
 	}
 
 	if s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil {
 		// No where-clause, no ordering, and no specified index.
-		s.initOrdering(0, &p.evalCtx)
+		s.initOrdering(0 /* exactPrefix */, p.EvalContext())
 		var err error
-		s.spans, err = makeSpans(&p.evalCtx, nil /* constraints */, s.desc, s.index)
+		s.spans, err = makeSpans(p.EvalContext(), nil /* constraints */, s.desc, s.index)
 		if err != nil {
 			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
 		}
@@ -125,10 +126,33 @@ func (p *planner) selectIndex(
 		c.init(s)
 	}
 
-	if s.filter != nil {
+	if useExperimentalIndexConstraints {
+		if s.filter != nil {
+			filterExpr, err := opt.BuildScalarExpr(s.filter, p.EvalContext())
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range candidates {
+				if err := c.makeIndexConstraintsExperimental(
+					filterExpr, p.EvalContext(),
+				); err != nil {
+					return nil, err
+				}
+				if spans, ok := c.ic.Spans(); ok && len(spans) == 0 {
+					// No spans (i.e. the filter is always false). Note that if a filter
+					// results in no constraints, ok would be false.
+					return &zeroNode{}, nil
+				}
+			}
+		}
+	} else if s.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
-		exprs, equivalent := decomposeExpr(&p.evalCtx, s.filter)
+
+		// Removes any unnecessary IS NOT NULL filters on non-nullable columns.
+		s.filter = trimUselessIsDistinctFromNullFilter(s, p)
+
+		exprs, equivalent := decomposeExpr(p.EvalContext(), s.filter)
 		if log.V(2) {
 			log.Infof(ctx, "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
@@ -164,7 +188,7 @@ func (p *planner) selectIndex(
 		// use.
 
 		for _, c := range candidates {
-			c.analyzeExprs(&p.evalCtx, exprs)
+			c.analyzeExprs(p.EvalContext(), exprs)
 		}
 	}
 
@@ -191,11 +215,13 @@ func (p *planner) selectIndex(
 	}
 
 	for _, c := range candidates {
-		// Compute the prefix of the index for which we have exact constraints. This
-		// prefix is inconsequential for ordering because the values are identical.
-		c.exactPrefix = c.constraints.exactPrefix(&p.evalCtx)
+		if !useExperimentalIndexConstraints {
+			// Compute the prefix of the index for which we have exact constraints. This
+			// prefix is inconsequential for ordering because the values are identical.
+			c.exactPrefix = c.constraints.exactPrefix(p.EvalContext())
+		}
 		if analyzeOrdering != nil {
-			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching, &p.evalCtx)
+			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching, p.EvalContext())
 		}
 	}
 
@@ -214,32 +240,50 @@ func (p *planner) selectIndex(
 	s.index = c.index
 	s.specifiedIndex = nil
 	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
-	var err error
-	s.spans, err = makeSpans(&p.evalCtx, c.constraints, c.desc, c.index)
-	if err != nil {
-		return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
-			c.constraints, s.desc.ID, s.index.ID)
+
+	if useExperimentalIndexConstraints {
+		var err error
+		s.spans, err = c.spansFromLogicalSpansExperimental(s.desc, c.index)
+		if err != nil {
+			return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
+				c.constraints, s.desc.ID, s.index.ID)
+		}
+	} else {
+		var err error
+		s.spans, err = makeSpans(p.EvalContext(), c.constraints, c.desc, c.index)
+		if err != nil {
+			return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
+				c.constraints, s.desc.ID, s.index.ID)
+		}
 	}
+
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
 		return &zeroNode{}, nil
 	}
 
 	s.origFilter = s.filter
-	s.filter = applyIndexConstraints(&p.evalCtx, s.filter, c.constraints)
 	if s.filter != nil {
+		if useExperimentalIndexConstraints {
+			s.filter = c.ic.RemainingFilter(&s.filterVars)
+		} else {
+			s.filter = applyIndexConstraints(p.EvalContext(), s.filter, c.constraints)
+		}
+
 		// Constraint propagation may have produced new constant sub-expressions.
 		// Propagate them and check if s.filter can be applied prematurely.
-		var err error
-		s.filter, err = p.evalCtx.NormalizeExpr(s.filter)
-		if err != nil {
-			return nil, err
-		}
-		if s.filter == tree.DBoolFalse {
-			return &zeroNode{}, nil
-		}
-		if s.filter == tree.DBoolTrue {
-			s.filter = nil
+		if s.filter != nil {
+			var err error
+			s.filter, err = p.extendedEvalCtx.NormalizeExpr(s.filter)
+			if err != nil {
+				return nil, err
+			}
+			switch s.filter {
+			case tree.DBoolFalse, tree.DNull:
+				return &zeroNode{}, nil
+			case tree.DBoolTrue:
+				s.filter = nil
+			}
 		}
 	}
 	s.filterVars.Rebind(s.filter, true, false)
@@ -248,7 +292,7 @@ func (p *planner) selectIndex(
 
 	var plan planNode
 	if c.covering {
-		s.initOrdering(c.exactPrefix, &p.evalCtx)
+		s.initOrdering(c.exactPrefix, p.EvalContext())
 		plan = s
 	} else {
 		// Note: makeIndexJoin destroys s and returns a new index scan
@@ -265,6 +309,27 @@ func (p *planner) selectIndex(
 	}
 
 	return plan, nil
+}
+
+// Removes any unnecessary IS DISTINCT FROM NULL filters on non-nullable columns.
+func trimUselessIsDistinctFromNullFilter(sn *scanNode, p *planner) tree.TypedExpr {
+	var newFilter tree.TypedExpr = tree.DBoolTrue
+	andExprs := splitAndExpr(p.EvalContext(), sn.filter, nil /* exprs */)
+	for _, e := range andExprs {
+		if c, cok := e.(*tree.ComparisonExpr); cok &&
+			c.Operator == tree.IsDistinctFrom && c.Right == tree.DNull {
+			if ok, idx := getColVarIdx(c.Left); ok {
+				// TODO(radu): we don't use props.notNullCols because those
+				// get initialized later.We should compute them earlier and
+				// generalize this optimization to work on any filterNode.
+				if !sn.desc.Columns[idx].Nullable {
+					e = tree.DBoolTrue
+				}
+			}
+		}
+		newFilter = mergeConj(newFilter, e)
+	}
+	return newFilter
 }
 
 type indexConstraint struct {
@@ -346,6 +411,9 @@ type indexInfo struct {
 	covering    bool // Does the index cover the required IndexedVars?
 	reverse     bool
 	exactPrefix int
+
+	// Used for the new (experimental) index constraints code.
+	ic opt.IndexConstraints
 }
 
 func (v *indexInfo) init(s *scanNode) {
@@ -488,6 +556,11 @@ func (v *indexInfo) makeOrConstraints(evalCtx *tree.EvalContext, orExprs []tree.
 	return nil
 }
 
+// TODO(radu): we will change makeIndexConstraints to use
+// opt.IndexConstraints. For now, just make sure the linter doesn't complain
+// about unused packages.
+var _ = (*opt.IndexConstraints).Init
+
 // makeIndexConstraints generates constraints for a set of conjunctions (AND
 // expressions). These expressions can be the entire filter, or they can be one
 // of multiple top-level disjunctions (ORs).
@@ -580,6 +653,7 @@ func (v *indexInfo) makeIndexConstraints(
 					continue
 				}
 
+				leftTuple := false
 				if t, ok := c.Left.(*tree.Tuple); ok {
 					// If we have a tuple comparison we need to rearrange the comparison
 					// so that the order of the columns in the tuple matches the order in
@@ -588,6 +662,7 @@ func (v *indexInfo) makeIndexConstraints(
 					// 1)". Note that we don't actually need to rewrite the comparison,
 					// but simply provide a mapping from the order in the tuple to the
 					// order in the index.
+					leftTuple = true
 					for _, colID := range v.index.ColumnIDs[i:] {
 						idx := -1
 						for i, val := range t.Exprs {
@@ -647,15 +722,18 @@ func (v *indexInfo) makeIndexConstraints(
 						*endExpr = c
 					}
 				case tree.NE:
-					// We rewrite "a != x" to "a IS NOT NULL", since this is all that
+					// We rewrite "a != x" to "a IS DISTINCT FROM NULL", since this is all that
 					// makeSpans() cares about.
-					// We don't simplify "a != x" to "a IS NOT NULL" in
-					// simplifyExpr because doing so affects other simplifications.
-					if *startDone || *startExpr != nil {
+					// We don't simplify "a != x" to "a IS DISTINCT FROM NULL" in
+					// SimplifyExpr because doing so affects other simplifications.
+					// Note that we can't use a non-NULL constraint if we have a tuple
+					// comparison. For example (a, b, c) != (1, 2, 3) passes on tuples
+					// like (NULL, 1, 1).
+					if *startDone || *startExpr != nil || leftTuple {
 						continue
 					}
 					*startExpr = tree.NewTypedComparisonExpr(
-						tree.IsNot,
+						tree.IsDistinctFrom,
 						c.TypedLeft(),
 						tree.DNull,
 					)
@@ -726,11 +804,16 @@ func (v *indexInfo) makeIndexConstraints(
 					if !*endDone && *endExpr == nil {
 						*endExpr = c
 					}
-				case tree.Is:
-					if c.Right == tree.DNull && !*endDone {
-						*endExpr = c
+				case tree.IsNotDistinctFrom:
+					if c.Right == tree.DNull {
+						if !*startDone {
+							*startExpr = c
+						}
+						if !*endDone {
+							*endExpr = c
+						}
 					}
-				case tree.IsNot:
+				case tree.IsDistinctFrom:
 					if c.Right == tree.DNull && !*startDone && (*startExpr == nil) {
 						*startExpr = c
 					}
@@ -757,11 +840,11 @@ func (v *indexInfo) makeIndexConstraints(
 		}
 
 		if !*startDone && *startExpr == nil {
-			// Add an IS NOT NULL constraint if there's an end constraint.
+			// Add an IS DISTINCT FROM NULL constraint if there's an end constraint.
 			if (*endExpr != nil) &&
-				!((*endExpr).Operator == tree.Is && (*endExpr).Right == tree.DNull) {
+				!((*endExpr).Operator == tree.IsNotDistinctFrom && (*endExpr).Right == tree.DNull) {
 				*startExpr = tree.NewTypedComparisonExpr(
-					tree.IsNot,
+					tree.IsDistinctFrom,
 					(*endExpr).TypedLeft(),
 					tree.DNull,
 				)
@@ -769,7 +852,7 @@ func (v *indexInfo) makeIndexConstraints(
 		}
 
 		if (*startExpr == nil) ||
-			(((*startExpr).Operator == tree.IsNot) && ((*startExpr).Right == tree.DNull)) {
+			(((*startExpr).Operator == tree.IsDistinctFrom) && ((*startExpr).Right == tree.DNull)) {
 			// There's no point in allowing future start constraints after an IS NOT NULL
 			// one; since NOT NULL is not actually a value present in an index,
 			// values encoded after an NOT NULL don't matter.
@@ -836,8 +919,19 @@ func (v indexInfoByCost) Sort() {
 
 func encodeStartConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case tree.IsNot:
-		// A IS NOT NULL expression allows us to constrain the start of
+	case tree.IsNotDistinctFrom:
+		// An IS Not DistinctFrom NULL expression allows us to constrain the start of the range
+		// to begin at NULL.
+		if c.Right != tree.DNull {
+			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
+		}
+		return logicalKeyPart{
+			val:       tree.DNull,
+			dir:       encoding.Ascending,
+			inclusive: true,
+		}
+	case tree.IsDistinctFrom:
+		// A IS DISTINCT FROM NULL expression allows us to constrain the start of
 		// the range to not include NULL.
 		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
@@ -862,8 +956,8 @@ func encodeStartConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 
 func encodeStartConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case tree.Is:
-		// An IS NULL expressions allows us to constrain the start of the range
+	case tree.IsNotDistinctFrom:
+		// An IS NOT DISTINCT FROM NULL expressions allows us to constrain the start of the range
 		// to begin at NULL.
 		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
@@ -888,8 +982,8 @@ func encodeStartConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 
 func encodeEndConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case tree.Is:
-		// An IS NULL expressions allows us to constrain the end of the range
+	case tree.IsNotDistinctFrom:
+		// An IS NOT DISTINCT FROM NULL expressions allows us to constrain the end of the range
 		// to stop at NULL.
 		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
@@ -899,14 +993,16 @@ func encodeEndConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 			dir:       encoding.Ascending,
 			inclusive: true,
 		}
-	case tree.NE:
-		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
+
 	case tree.LE, tree.EQ, tree.LT:
 		return logicalKeyPart{
 			val:       c.Right.(tree.Datum),
 			dir:       encoding.Ascending,
 			inclusive: c.Operator != tree.LT,
 		}
+
+	case tree.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
@@ -914,8 +1010,20 @@ func encodeEndConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 
 func encodeEndConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case tree.IsNot:
-		// An IS NOT NULL expressions allows us to constrain the end of the range
+	case tree.IsNotDistinctFrom:
+		// An IS NULL expressions allows us to constrain the end of the range
+		// to stop after NULL.
+		if c.Right != tree.DNull {
+			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
+		}
+		return logicalKeyPart{
+			val:       tree.DNull,
+			dir:       encoding.Descending,
+			inclusive: true,
+		}
+
+	case tree.IsDistinctFrom:
+		// An IS DISTINCT FROM NULL expressions allows us to constrain the end of the range
 		// to stop at NULL.
 		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
@@ -925,14 +1033,16 @@ func encodeEndConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 			dir:       encoding.Descending,
 			inclusive: false,
 		}
-	case tree.NE:
-		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
+
 	case tree.GE, tree.EQ, tree.GT:
 		return logicalKeyPart{
 			val:       c.Right.(tree.Datum),
 			dir:       encoding.Descending,
 			inclusive: c.Operator != tree.GT,
 		}
+
+	case tree.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
@@ -1147,9 +1257,9 @@ func spanFromLogicalSpan(
 		}
 	}
 
-	// TightenStartKey is not needed here (unlike TightenEndKey) since
-	// start keys at this point cannot be generated with interleaved
-	// keys.
+	// AdjustStartKeyForInterleave is not needed here (unlike
+	// AdjustEndKeyForInterleave) since start keys at this point cannot be
+	// generated with interleaved keys.
 
 	lastPartInclusive := true
 	// Encode each logical part of the end key as span.EndKey.
@@ -1173,9 +1283,10 @@ func spanFromLogicalSpan(
 			lastPartInclusive = false
 		}
 	}
-	// We tighten the end key to prevent reading interleaved children
-	// after the last parent key.
-	s.EndKey, err = sqlbase.TightenEndKey(tableDesc, index, s.EndKey, lastPartInclusive)
+	// We tighten the end key to prevent reading interleaved children after the
+	// last parent key. If lastPartInclusive is true, we also advance the key as
+	// necessary.
+	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc, index, s.EndKey, lastPartInclusive)
 
 	return s, err
 }
@@ -1304,7 +1415,7 @@ func (ic indexConstraints) exactPrefix() int {
 			return prefix
 		}
 		switch c.start.Operator {
-		case tree.EQ:
+		case tree.EQ, tree.IsNotDistinctFrom:
 			prefix++
 		case tree.In:
 			if tuple, ok := c.start.Right.(*tree.DTuple); !ok || len(tuple.D) != 1 {
@@ -1355,6 +1466,12 @@ func (ic indexConstraints) exactPrefixDatums(num int) []tree.Datum {
 				// We have something like `a IN (1)`.
 				datums = append(datums, right)
 			}
+		case tree.IsNotDistinctFrom:
+			if c.start.Right != tree.DNull {
+				panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.start.Right))
+			}
+			datums = append(datums, tree.DNull)
+
 		default:
 			panic("asking for too many datums")
 		}
@@ -1452,7 +1569,7 @@ func applyIndexConstraints(
 		if c.start == c.end {
 			// The first is that both the start and end constraints are
 			// equality.
-			if c.start.Operator == tree.EQ {
+			if c.start.Operator == tree.EQ || c.start.Operator == tree.IsNotDistinctFrom {
 				continue
 			}
 			// The second case is that both the start and end constraint are an IN
@@ -1486,8 +1603,8 @@ func expandConstraint(
 		return a
 	}
 	if vars, ok := c.Left.(*tree.Tuple); ok {
-		if c.Operator == tree.Is || c.Operator == tree.IsNot {
-			// The syntax <tuple> IS <val> or <tuple> IS NOT <val> is
+		if c.Operator == tree.IsNotDistinctFrom || c.Operator == tree.IsDistinctFrom {
+			// The syntax <tuple> IS DISTINCT FROM <val> or <tuple> IS NOT DISTINCT FROM <val> is
 			// always false.
 			return a
 		}
@@ -1588,7 +1705,7 @@ func applyConstraint(
 ) tree.Expr {
 	// Check that both expressions have the same variable on the left.
 	// It is always true for the constraint, and
-	// simplifyExpr() has ensured this is true in most sub-expressions of t.
+	// SimplifyExpr() has ensured this is true in most sub-expressions of t.
 	varLeft := c.Left.(*tree.IndexedVar)
 	if varRight, ok := t.Left.(*tree.IndexedVar); !ok || varLeft.Idx != varRight.Idx {
 		return t
@@ -1603,23 +1720,23 @@ func applyConstraint(
 	cdatum := c.Right.(tree.Datum)
 
 	switch c.Operator {
-	case tree.IsNot:
+	case tree.IsDistinctFrom:
 		if cdatum == tree.DNull {
 			switch t.Operator {
-			case tree.Is:
+			case tree.IsNotDistinctFrom:
 				return tree.MakeDBool(datum != tree.DNull)
-			case tree.IsNot:
+			case tree.IsDistinctFrom:
 				return tree.MakeDBool(datum == tree.DNull)
 			}
 		} else {
 			return applyConstraintFlat(evalCtx, t, datum, tree.NE, cdatum)
 		}
-	case tree.Is:
+	case tree.IsNotDistinctFrom:
 		if cdatum == tree.DNull {
 			switch t.Operator {
-			case tree.Is:
+			case tree.IsNotDistinctFrom:
 				return tree.MakeDBool(datum == tree.DNull)
-			case tree.IsNot:
+			case tree.IsDistinctFrom:
 				return tree.MakeDBool(datum != tree.DNull)
 			default:
 				// A NULL var compared to anything is always false.
@@ -1645,8 +1762,8 @@ func applyConstraintFlat(
 	cOp tree.ComparisonOperator,
 	cdatum tree.Datum,
 ) tree.Expr {
-	// Special casing: expression queries IS NULL or IS NOT NULL.
-	if (t.Operator == tree.Is || t.Operator == tree.IsNot) && datum == tree.DNull {
+	// Special casing: expression queries IS NOT DISTINCT FROM NULL or IS DISTINCT FROM NULL.
+	if (t.Operator == tree.IsNotDistinctFrom || t.Operator == tree.IsDistinctFrom) && datum == tree.DNull {
 		switch cOp {
 		case tree.EQ, tree.GE, tree.GT, parser.IN:
 			// If the constraint says the value is equal to something, it
@@ -1660,7 +1777,7 @@ func applyConstraintFlat(
 			// above.
 			// This may need to be revisited once NULL
 			// ordering becomes configurable.
-			return tree.MakeDBool(t.Operator == tree.IsNot)
+			return tree.MakeDBool(t.Operator == tree.IsDistinctFrom)
 		}
 		return t
 	}
@@ -1668,7 +1785,7 @@ func applyConstraintFlat(
 	// Additional special casing.
 	switch t.Operator {
 	case tree.LE, tree.LT, tree.GE,
-		tree.GT, tree.NE, tree.IsNot:
+		tree.GT, tree.NE, tree.IsDistinctFrom:
 		if cOp == tree.In {
 			// The general case only handles range constraints.
 			// Stop here.
@@ -1681,8 +1798,8 @@ func applyConstraintFlat(
 		// Otherwise, the general case below knows about all these
 		// cases. Go forward.
 
-	case tree.Is, tree.EQ:
-		// (Expr IS ...) / (Expr = ...)
+	case tree.IsNotDistinctFrom, tree.EQ:
+		// (Expr IS NOT DISTINCT FROM ...) / (Expr = ...)
 
 		if cOp == tree.In {
 			// constraint says "a IN (x, y, z...)"
@@ -1822,10 +1939,10 @@ func applyConstraintFlat(
 	}
 	// BOOM: just handled 5*5 combinations of operators!
 	//
-	// If the constraint is an interval and the expression is NE/IsNot,
+	// If the constraint is an interval and the expression is NE/IsDistinctFrom,
 	// we can till use the intervals (hence the NE case in
 	// makeInterval).
-	if cOk && (t.Operator == tree.NE || t.Operator == tree.IsNot) && disjoint {
+	if cOk && (t.Operator == tree.NE || t.Operator == tree.IsDistinctFrom) && disjoint {
 		return tree.DBoolTrue
 	}
 	return t
@@ -1842,7 +1959,7 @@ func makeComparisonInterval(op tree.ComparisonOperator, largerDatum bool) (int, 
 	}
 
 	switch op {
-	case tree.EQ, tree.Is:
+	case tree.EQ, tree.IsNotDistinctFrom:
 		return x, x, true
 	case tree.LE:
 		return -100, x, true
@@ -1852,9 +1969,201 @@ func makeComparisonInterval(op tree.ComparisonOperator, largerDatum bool) (int, 
 		return x, 100, true
 	case tree.GT:
 		return x + 1, 100, true
-	case tree.NE, tree.IsNot:
+	case tree.NE, tree.IsDistinctFrom:
 		return x, x, false
 	default:
 		return 0, 0, false
 	}
+}
+
+const useExperimentalIndexConstraints = true
+
+// makeIndexConstraintsExperimental uses the opt code to generate index
+// constraints. Initializes v.ic, as well as v.exactPrefix and v.cost (with a
+// baseline cost for the index).
+func (v *indexInfo) makeIndexConstraintsExperimental(
+	filter *opt.Expr, evalCtx *tree.EvalContext,
+) error {
+	numIndexCols := len(v.index.ColumnIDs)
+	numExtraCols := len(v.index.ExtraColumnIDs)
+
+	colIdxMap := make(map[sqlbase.ColumnID]int, len(v.desc.Columns))
+	for i := range v.desc.Columns {
+		colIdxMap[v.desc.Columns[i].ID] = i
+	}
+
+	// Set up the IndexColumnInfo structures.
+	colInfos := make([]opt.IndexColumnInfo, 0, numIndexCols+numExtraCols)
+	for i := 0; i < numIndexCols+numExtraCols; i++ {
+		var colID sqlbase.ColumnID
+		var dir encoding.Direction
+
+		if i < numIndexCols {
+			colID = v.index.ColumnIDs[i]
+			var err error
+			dir, err = v.index.ColumnDirections[i].ToEncodingDirection()
+			if err != nil {
+				return err
+			}
+		} else {
+			colID = v.index.ExtraColumnIDs[i-numIndexCols]
+			// Extra columns are always ascending.
+			dir = encoding.Ascending
+		}
+
+		idx, ok := colIdxMap[colID]
+		if !ok {
+			// Inactive column.
+			break
+		}
+
+		colDesc := &v.desc.Columns[idx]
+		colInfos = append(colInfos, opt.IndexColumnInfo{
+			VarIdx:    idx,
+			Typ:       colDesc.Type.ToDatumType(),
+			Direction: dir,
+			Nullable:  colDesc.Nullable,
+		})
+	}
+	var spans opt.LogicalSpans
+	var ok bool
+	if filter != nil {
+		v.ic.Init(filter, colInfos, false /* isInverted */, evalCtx)
+		spans, ok = v.ic.Spans()
+	}
+	if !ok {
+		// The index isn't being restricted at all, bump the cost significantly to
+		// make any index which does restrict the keys more desirable.
+		v.cost *= 1000
+	} else {
+		v.exactPrefix = opt.ExactPrefix(spans, evalCtx)
+		// Find the number of columns that are restricted in all spans.
+		numCols := len(colInfos)
+		for _, sp := range spans {
+			// Take the max between the length of the start values and the end
+			// values.
+			n := len(sp.Start.Vals)
+			if n < len(sp.End.Vals) {
+				n = len(sp.End.Vals)
+			}
+			// Take the minimum n across all spans.
+			if numCols > n {
+				numCols = n
+			}
+		}
+		// Boost the cost by what fraction of columns have constraints. The higher
+		// the fraction, the smaller the cost.
+		v.cost *= float64((numIndexCols + numExtraCols)) / float64(numCols)
+	}
+	return nil
+}
+
+// spansFromLogicalSpansExperimental converts op.LogicalSpans to roachpb.Spans.
+// interstices are pieces of the key that need to be inserted after each column
+// (for interleavings).
+func (v *indexInfo) spansFromLogicalSpansExperimental(
+	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+) (roachpb.Spans, error) {
+	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
+	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
+	if len(index.Interleave.Ancestors) > 0 {
+		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
+		sharedPrefixLen := 0
+		for i, ancestor := range index.Interleave.Ancestors {
+			// The first ancestor is already encoded in interstices[0].
+			if i != 0 {
+				interstices[sharedPrefixLen] =
+					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.TableID))
+				interstices[sharedPrefixLen] =
+					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.IndexID))
+			}
+			sharedPrefixLen += int(ancestor.SharedPrefixLen)
+			interstices[sharedPrefixLen] = encoding.EncodeInterleavedSentinel(interstices[sharedPrefixLen])
+		}
+		interstices[sharedPrefixLen] =
+			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(tableDesc.ID))
+		interstices[sharedPrefixLen] =
+			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(index.ID))
+	}
+
+	logicalSpans, ok := v.ic.Spans()
+	if !ok {
+		sp, err := spanFromLogicalSpanExperimental(tableDesc, index, opt.MakeFullSpan(), interstices)
+		if err != nil {
+			return nil, err
+		}
+		return roachpb.Spans{sp}, nil
+	}
+
+	spans := make(roachpb.Spans, len(logicalSpans))
+	for i, ls := range logicalSpans {
+		s, err := spanFromLogicalSpanExperimental(tableDesc, index, ls, interstices)
+		if err != nil {
+			return nil, err
+		}
+		spans[i] = s
+	}
+	return spans, nil
+}
+
+// spanFromLogicalSpanExperimental converts an opt.LogicalSpan to a
+// roachpb.Span.
+func spanFromLogicalSpanExperimental(
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	ls opt.LogicalSpan,
+	interstices [][]byte,
+) (roachpb.Span, error) {
+	var s roachpb.Span
+	var err error
+	// Encode each logical part of the start key for span.(start)Key.
+	for i, val := range ls.Start.Vals {
+		s.Key = append(s.Key, interstices[i]...)
+		// For extra columns (like implicit columns), the direction
+		// is ascending.
+		dir := encoding.Ascending
+		if i < len(index.ColumnDirections) {
+			dir, err = index.ColumnDirections[i].ToEncodingDirection()
+			if err != nil {
+				return roachpb.Span{}, err
+			}
+		}
+		s.Key, err = sqlbase.EncodeTableKey(s.Key, val, dir)
+		if err != nil {
+			return roachpb.Span{}, err
+		}
+	}
+	if ls.Start.Inclusive {
+		s.Key = append(s.Key, interstices[len(ls.Start.Vals)]...)
+	} else {
+		// We need to exclude the value this logical part refers to.
+		s.Key = s.Key.PrefixEnd()
+	}
+
+	// Encode each logical part of the end key as span.EndKey.
+	for i, val := range ls.End.Vals {
+		s.EndKey = append(s.EndKey, interstices[i]...)
+		dir := encoding.Ascending
+		if i < len(index.ColumnDirections) {
+			dir, err = index.ColumnDirections[i].ToEncodingDirection()
+			if err != nil {
+				return roachpb.Span{}, err
+			}
+		}
+		s.EndKey, err = sqlbase.EncodeTableKey(s.EndKey, val, dir)
+		if err != nil {
+			return roachpb.Span{}, err
+		}
+	}
+	s.EndKey = append(s.EndKey, interstices[len(ls.End.Vals)]...)
+
+	// We tighten the end key to prevent reading interleaved children after the
+	// last parent key. If ls.End.Inclusive is true, we also advance the key as
+	// necessary.
+	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc, index, s.EndKey, ls.End.Inclusive)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+
+	return s, nil
 }

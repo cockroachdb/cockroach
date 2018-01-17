@@ -15,11 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -81,8 +80,6 @@ type hashJoiner struct {
 
 	leftSource, rightSource RowSource
 
-	flowCtx *FlowCtx
-
 	// initialBufferSize is the maximum amount of data we buffer from each stream
 	// as part of the initial buffering phase. Normally
 	// hashJoinerInitialBufferSize, can be tweaked for tests.
@@ -121,7 +118,6 @@ func newHashJoiner(
 	output RowReceiver,
 ) (*hashJoiner, error) {
 	h := &hashJoiner{
-		flowCtx:           flowCtx,
 		initialBufferSize: hashJoinerInitialBufferSize,
 		leftSource:        leftSource,
 		rightSource:       rightSource,
@@ -133,8 +129,8 @@ func newHashJoiner(
 	}
 	if err := h.joinerBase.init(
 		flowCtx,
-		leftSource.Types(),
-		rightSource.Types(),
+		leftSource.OutputTypes(),
+		rightSource.OutputTypes(),
 		spec.Type,
 		spec.OnExpr,
 		spec.LeftEqColumns,
@@ -149,12 +145,12 @@ func newHashJoiner(
 }
 
 // Run is part of the processor interface.
-func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTag(ctx, "HashJoiner", nil)
+	ctx := log.WithLogTag(h.flowCtx.Ctx, "HashJoiner", nil)
 	ctx, span := processorSpan(ctx, "hash joiner")
 	defer tracing.FinishSpan(span)
 
@@ -190,8 +186,10 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	evalCtx := h.flowCtx.NewEvalCtx()
-	h.rows[leftSide].initWithMon(nil /* ordering */, h.leftSource.Types(), evalCtx, rowContainerMon)
-	h.rows[rightSide].initWithMon(nil /* ordering */, h.rightSource.Types(), evalCtx, rowContainerMon)
+	h.rows[leftSide].initWithMon(
+		nil /* ordering */, h.leftSource.OutputTypes(), evalCtx, rowContainerMon)
+	h.rows[rightSide].initWithMon(
+		nil /* ordering */, h.rightSource.OutputTypes(), evalCtx, rowContainerMon)
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 
@@ -277,7 +275,7 @@ func (h *hashJoiner) receiveRow(
 	for {
 		row, meta := src.Next()
 		if row == nil {
-			if meta.Empty() {
+			if meta == nil {
 				// Done.
 				return nil, false, nil
 			}

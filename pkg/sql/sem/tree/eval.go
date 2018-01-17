@@ -16,6 +16,7 @@ package tree
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"math/big"
@@ -26,15 +27,17 @@ import (
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -345,18 +348,21 @@ func AddWithOverflow(a, b int64) (r int64, ok bool) {
 }
 
 // getJSONPath is used for the #> and #>> operators.
-func getJSONPath(j DJSON, ary DArray) Datum {
+func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 	// TODO(justin): this is slightly annoying because we have to allocate
 	// a new array since the JSON package isn't aware of DArray.
 	path := make([]string, len(ary.Array))
 	for i, v := range ary.Array {
 		path[i] = string(MustBeDString(v))
 	}
-	result := json.FetchPath(j.JSON, path)
-	if result == nil {
-		return DNull
+	result, err := json.FetchPath(j.JSON, path)
+	if err != nil {
+		return nil, err
 	}
-	return &DJSON{result}
+	if result == nil {
+		return DNull, nil
+	}
+	return &DJSON{result}, nil
 }
 
 // BinOps contains the binary operations indexed by operation type.
@@ -872,6 +878,41 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(r)}, nil
 			},
 		},
+		BinOp{
+			LeftType:   types.Float,
+			RightType:  types.Interval,
+			ReturnType: types.Interval,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := float64(*left.(*DFloat))
+				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(l)}, nil
+			},
+		},
+		BinOp{
+			LeftType:   types.Decimal,
+			RightType:  types.Interval,
+			ReturnType: types.Interval,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				l := &left.(*DDecimal).Decimal
+				t, err := l.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return &DInterval{Duration: right.(*DInterval).Duration.MulFloat(t)}, nil
+			},
+		},
+		BinOp{
+			LeftType:   types.Interval,
+			RightType:  types.Decimal,
+			ReturnType: types.Interval,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				r := &right.(*DDecimal).Decimal
+				t, err := r.Float64()
+				if err != nil {
+					return nil, err
+				}
+				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(t)}, nil
+			},
+		},
 	},
 
 	Div: {
@@ -1107,6 +1148,18 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return NewDBytes(*left.(*DBytes) + *right.(*DBytes)), nil
 			},
 		},
+		BinOp{
+			LeftType:   types.JSON,
+			RightType:  types.JSON,
+			ReturnType: types.JSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				j, err := MustBeDJSON(left).JSON.Concat(MustBeDJSON(right).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return &DJSON{j}, nil
+			},
+		},
 	},
 
 	// TODO(pmattis): Check that the shift is valid.
@@ -1196,7 +1249,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.String,
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				j := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
+				j, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
+				if err != nil {
+					return nil, err
+				}
 				if j == nil {
 					return DNull, nil
 				}
@@ -1208,7 +1264,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				j := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
+				j, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
+				if err != nil {
+					return nil, err
+				}
 				if j == nil {
 					return DNull, nil
 				}
@@ -1223,7 +1282,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.TArray{Typ: types.String},
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return getJSONPath(*left.(*DJSON), *MustBeDArray(right)), nil
+				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 			},
 		},
 	},
@@ -1234,11 +1293,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.String,
 			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
+				res, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
+				if err != nil {
+					return nil, err
+				}
 				if res == nil {
 					return DNull, nil
 				}
-				text := res.AsText()
+				text, err := res.AsText()
+				if err != nil {
+					return nil, err
+				}
 				if text == nil {
 					return DNull, nil
 				}
@@ -1250,11 +1315,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
+				res, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
+				if err != nil {
+					return nil, err
+				}
 				if res == nil {
 					return DNull, nil
 				}
-				text := res.AsText()
+				text, err := res.AsText()
+				if err != nil {
+					return nil, err
+				}
 				if text == nil {
 					return DNull, nil
 				}
@@ -1267,13 +1338,19 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		BinOp{
 			LeftType:   types.JSON,
 			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
+			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				if err != nil {
+					return nil, err
+				}
 				if res == DNull {
 					return DNull, nil
 				}
-				text := res.(*DJSON).JSON.AsText()
+				text, err := res.(*DJSON).JSON.AsText()
+				if err != nil {
+					return nil, err
+				}
 				if text == nil {
 					return DNull, nil
 				}
@@ -1588,7 +1665,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				if left.(*DJSON).JSON.Exists(string(MustBeDString(right))) {
+				e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(right)))
+				if err != nil {
+					return nil, err
+				}
+				if e {
 					return DBoolTrue, nil
 				}
 				return DBoolFalse, nil
@@ -1601,8 +1682,13 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.TArray{Typ: types.String},
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
-					if left.(*DJSON).JSON.Exists(string(MustBeDString(k))) {
+					e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(k)))
+					if err != nil {
+						return nil, err
+					}
+					if e {
 						return DBoolTrue, nil
 					}
 				}
@@ -1616,8 +1702,13 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.TArray{Typ: types.String},
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
-					if !left.(*DJSON).JSON.Exists(string(MustBeDString(k))) {
+					e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(k)))
+					if err != nil {
+						return nil, err
+					}
+					if !e {
 						return DBoolFalse, nil
 					}
 				}
@@ -1631,7 +1722,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.JSON,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return MakeDBool(DBool(json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON))), nil
+				c, err := json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDBool(DBool(c)), nil
 			},
 		},
 	},
@@ -1641,7 +1736,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.JSON,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return MakeDBool(DBool(json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON))), nil
+				c, err := json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDBool(DBool(c)), nil
 			},
 		},
 	},
@@ -1684,20 +1783,42 @@ func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
 
 func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
 	cmp := 0
+	sawNull := false
 	for i, leftElem := range left.D {
 		rightElem := right.D[i]
 		// Like with cmpOpScalarFn, check for values that need to be handled
 		// differently than when ordering Datums.
 		if leftElem == DNull || rightElem == DNull {
-			// If either Datum is NULL, the result of the comparison is NULL.
-			return DNull
+			if op == EQ {
+				// If either Datum is NULL and the op is EQ, we continue the
+				// comparison and the result is only NULL if the other (non-NULL)
+				// elements are equal. This is because NULL is thought of as "unknown",
+				// so a NULL equality comparison does not prevent the equality from
+				// being proven false, but does prevent it from being proven true.
+				sawNull = true
+				continue
+			} else {
+				// If either Datum is NULL and the op is not EQ, we short-circuit
+				// the evaluation and the result of the comparison is NULL. This is
+				// because NULL is thought of as "unknown" and tuple inequality is
+				// defined lexicographically, so once a NULL comparison is seen,
+				// the result of the entire tuple comparison is unknown.
+				return DNull
+			}
 		}
 		cmp = leftElem.Compare(ctx, rightElem)
 		if cmp != 0 {
 			break
 		}
 	}
-	return boolFromCmp(cmp, op)
+	b := boolFromCmp(cmp, op)
+	if b == DBoolTrue && sawNull {
+		// The op is EQ and all non-NULL elements are equal, but we saw at least
+		// one NULL element. Since NULL comparisons are treated as unknown, the
+		// result of the comparison becomes unknown (NULL).
+		return DNull
+	}
+	return b
 }
 
 func makeEvalTupleIn(typ types.T) CmpOp {
@@ -1805,7 +1926,12 @@ func evalDatumsCmp(
 
 func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
 	pattern := string(MustBeDString(right))
-	like := optimizedLikeFunc(pattern, caseInsensitive)
+	like, err := optimizedLikeFunc(pattern, caseInsensitive)
+	if err != nil {
+		return DBoolFalse, pgerror.NewErrorf(
+			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+	}
+
 	if like == nil {
 		key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
 		re, err := ctx.ReCache.GetRegexp(key)
@@ -1848,9 +1974,9 @@ type EvalPlanner interface {
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] table_name [ @ index_name ]`.
-	// If the table name is not given, it uses the search path to find it, and sets it
-	// on the returned TableName.
-	// It returns an error if the table deson't exist.
+	// If the database name is not given, it uses the search path to find it, and
+	// sets it on the returned TableName.
+	// It returns an error if the table doesn't exist.
 	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
 
 	// ParseType parses a column type.
@@ -1865,12 +1991,11 @@ type EvalPlanner interface {
 	// nextval() for the given sequence in this session.
 	GetLatestValueInSessionForSequence(ctx context.Context, seqName *TableName) (int64, error)
 
-	// GetLastSequenceValue returns the last sequence value obtained with nextval()
-	// in the current session.
-	GetLastSequenceValue(ctx context.Context) (int64, error)
-
 	// SetSequenceValue sets the sequence's value.
 	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64) error
+
+	// EvalSubquery returns the Datum for the given subquery node.
+	EvalSubquery(expr *Subquery) (Datum, error)
 }
 
 // CtxProvider is anything that can return a Context.
@@ -1889,13 +2014,55 @@ func (s backgroundCtxProvider) Ctx() context.Context {
 
 var _ CtxProvider = backgroundCtxProvider{}
 
+// EvalContextTestingKnobs contains test knobs.
+type EvalContextTestingKnobs struct {
+	// AssertFuncExprReturnTypes indicates whether FuncExpr evaluations
+	// should assert that the returned Datum matches the expected
+	// ReturnType of the function.
+	AssertFuncExprReturnTypes bool
+	// AssertUnaryExprReturnTypes indicates whether UnaryExpr evaluations
+	// should assert that the returned Datum matches the expected
+	// ReturnType of the function.
+	AssertUnaryExprReturnTypes bool
+	// AssertBinaryExprReturnTypes indicates whether BinaryExpr
+	// evaluations should assert that the returned Datum matches the
+	// expected ReturnType of the function.
+	AssertBinaryExprReturnTypes bool
+}
+
+var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
-// ATTENTION: Fields from this struct are also represented in
-// distsqlrun.EvalContext. Make sure to keep the two in sync.
+// ATTENTION: Some fields from this struct (particularly, but not exclusively,
+// from SessionData) are also represented in distsqlrun.EvalContext. Whenever
+// something that affects DistSQL execution is added, it needs to be marshaled
+// through that proto too.
 // TODO(andrei): remove or limit the duplication.
+//
+// NOTE(andrei): EvalContext is dusty; it started as a collection of fields
+// needed by expression evaluation, but it has grown quite large; some of the
+// things in it don't seem to belong in this low-level package (e.g. Planner).
+// In the sql package it is embedded by extendedEvalContext, which adds some
+// more fields from the sql package. Through that extendedEvalContext, this
+// struct now generally used by planNodes.
 type EvalContext struct {
+	// Session variables. This is a read-only copy of the values owned by the
+	// Session.
+	SessionData sessiondata.SessionData
+	// ApplicationName is a session variable, but it is not part of SessionData.
+	// See its definition in Session for details.
+	ApplicationName string
+	// TxnState is a string representation of the current transactional state.
+	TxnState string
+	// TxnReadOnly specifies if the current transaction is read-only.
+	TxnReadOnly bool
+
+	Settings  *cluster.Settings
 	ClusterID uuid.UUID
 	NodeID    roachpb.NodeID
 	// The statement timestamp. May be different for every statement.
@@ -1907,17 +2074,7 @@ type EvalContext struct {
 	TxnTimestamp time.Time
 	// The cluster timestamp. Needs to be stable for the lifetime of the
 	// transaction. Used for cluster_logical_timestamp().
-	clusterTimestamp hlc.Timestamp
-	// Location references the *Location on the current Session.
-	Location **time.Location
-	// Database is the database in the current Session.
-	Database string
-	// User is the user in the current Session.
-	User string
-	// SearchPath is the search path for databases used when encountering an
-	// unqualified table name. Names in the search path are normalized already.
-	// This must not be modified (this is shared from the session).
-	SearchPath SearchPath
+	ClusterTimestamp hlc.Timestamp
 
 	// Placeholders relates placeholder names to their type and, later, value.
 	// This pointer should always be set to the location of the PlaceholderInfo
@@ -1956,6 +2113,8 @@ type EvalContext struct {
 
 	collationEnv CollationEnvironment
 
+	TestingKnobs EvalContextTestingKnobs
+
 	Mon *mon.BytesMonitor
 
 	// ActiveMemAcc is the account to which values are allocated during
@@ -1975,7 +2134,7 @@ func MakeTestingEvalContext() EvalContext {
 		-1,            /* increment */
 		math.MaxInt64, /* noteworthy */
 	)
-	monitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
+	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = &monitor
 	ctx.CtxProvider = backgroundCtxProvider{}
 	acc := monitor.MakeBoundAccount()
@@ -2015,20 +2174,20 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.clusterTimestamp == (hlc.Timestamp{}) {
+	if !ctx.PrepareOnly && ctx.ClusterTimestamp == (hlc.Timestamp{}) {
 		panic("zero cluster timestamp in EvalContext")
 	}
 
-	return TimestampToDecimal(ctx.clusterTimestamp)
+	return TimestampToDecimal(ctx.ClusterTimestamp)
 }
 
-// GetClusterTimestampRaw exposes the clusterTimestamp field. Also see
+// GetClusterTimestampRaw exposes the ClusterTimestamp field. Also see
 // GetClusterTimestamp().
 func (ctx *EvalContext) GetClusterTimestampRaw() hlc.Timestamp {
-	if !ctx.PrepareOnly && ctx.clusterTimestamp == (hlc.Timestamp{}) {
+	if !ctx.PrepareOnly && ctx.ClusterTimestamp == (hlc.Timestamp{}) {
 		panic("zero cluster timestamp in EvalContext")
 	}
-	return ctx.clusterTimestamp
+	return ctx.ClusterTimestamp
 }
 
 // HasPlaceholders returns true if this EvalContext's placeholders have been
@@ -2099,15 +2258,15 @@ func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 
 // SetClusterTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetClusterTimestamp(ts hlc.Timestamp) {
-	ctx.clusterTimestamp = ts
+	ctx.ClusterTimestamp = ts
 }
 
 // GetLocation returns the session timezone.
 func (ctx *EvalContext) GetLocation() *time.Location {
-	if ctx.Location == nil || *ctx.Location == nil {
+	if ctx.SessionData.Location == nil {
 		return time.UTC
 	}
-	return *ctx.Location
+	return ctx.SessionData.Location
 }
 
 // Ctx returns the session's context.
@@ -2163,7 +2322,16 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if right == DNull && !expr.fn.nullableArgs {
 		return DNull, nil
 	}
-	return expr.fn.fn(ctx, left, right)
+	res, err := expr.fn.fn(ctx, left, right)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.TestingKnobs.AssertBinaryExprReturnTypes {
+		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
+			return nil, errors.Wrapf(err, "binary op %q", expr.String())
+		}
+	}
+	return res, err
 }
 
 // Eval implements the TypedExpr interface.
@@ -2639,8 +2807,13 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return v, nil
 		}
 	case *coltypes.TArray:
-		if s, ok := d.(*DString); ok {
-			return ParseDArrayFromString(ctx, string(*s), typ.ParamType)
+		switch v := d.(type) {
+		case *DString:
+			return ParseDArrayFromString(ctx, string(*v), typ.ParamType)
+		case *DArray:
+			if (*v).ParamTyp == coltypes.CastTargetToDatumType((*typ).ParamType) {
+				return d, nil
+			}
 		}
 	case *coltypes.TOid:
 		switch v := d.(type) {
@@ -2674,9 +2847,8 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			// Trim whitespace and unwrap outer quotes if necessary.
 			// This is required to mimic postgres.
 			s = strings.TrimSpace(s)
-			var hadQuotes bool
+			origS := s
 			if len(s) > 1 && s[0] == '"' && s[len(s)-1] == '"' {
-				hadQuotes = true
 				s = s[1 : len(s)-1]
 			}
 
@@ -2697,10 +2869,10 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				// Resolve function name.
 				substrs := strings.Split(s, ".")
 				name := UnresolvedName{}
-				for _, substr := range substrs {
-					name = append(name, Name(substr))
+				for i := range substrs {
+					name = append(name, (*Name)(&substrs[i]))
 				}
-				funcDef, err := name.ResolveFunction(ctx.SearchPath)
+				funcDef, err := name.ResolveFunction(ctx.SessionData.SearchPath)
 				if err != nil {
 					return nil, err
 				}
@@ -2718,19 +2890,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				return queryOid(ctx, typ, NewDString(s))
 
 			case coltypes.RegClass:
-				// Resolving a table name requires looking at the search path to
-				// determine the database that owns it.
-				// If the table wasn't quoted, normalize it. This matches the behavior
-				// when creating tables - table names are normalized (downcased) unless
-				// they're double quoted.
-				if !hadQuotes {
-					s = Name(s).Normalize()
-				}
-				t := &NormalizableTableName{
-					TableNameReference: UnresolvedName{
-						Name(s),
-					}}
-				tn, err := ctx.Planner.QualifyWithDatabase(ctx.Ctx(), t)
+				tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), origS)
 				if err != nil {
 					return nil, err
 				}
@@ -2799,13 +2959,17 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return DNull, err
 	}
-	switch d := UnwrapDatum(ctx, d).(type) {
+	unwrapped := UnwrapDatum(ctx, d)
+	if unwrapped == DNull {
+		return DNull, nil
+	}
+	switch d := unwrapped.(type) {
 	case *DString:
 		return NewDCollatedString(string(*d), expr.Locale, &ctx.collationEnv), nil
 	case *DCollatedString:
 		return NewDCollatedString(d.Contents, expr.Locale, &ctx.collationEnv), nil
 	default:
-		panic(fmt.Sprintf("invalid argument to COLLATE: %s", d))
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", d)
 	}
 }
 
@@ -2840,11 +3004,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return MakeDBool(!DBool(left == DNull && right == DNull)), nil
 		case IsNotDistinctFrom:
 			return MakeDBool(left == DNull && right == DNull), nil
-		case Is:
-			// IS and IS NOT can compare against NULL.
-			return MakeDBool(left == right), nil
-		case IsNot:
-			return MakeDBool(left != right), nil
 		default:
 			return DNull, nil
 		}
@@ -2876,12 +3035,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
-	// Exists expressions are handled during subquery expansion.
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", t)
-}
-
-// Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 	args := NewDTupleWithCap(len(expr.Exprs))
 	for _, e := range expr.Exprs {
@@ -2910,7 +3063,23 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 		return nil, errors.Wrapf(err, "%s()", fName)
 	}
+	if ctx.TestingKnobs.AssertFuncExprReturnTypes {
+		if err := ensureExpectedType(expr.fn.FixedReturnType(), res); err != nil {
+			return nil, errors.Wrapf(err, "function %q", expr.String())
+		}
+	}
 	return res, nil
+}
+
+// ensureExpectedType will return an error if a datum does not match the
+// provided type. If the expected type is Any or if the datum is a Null
+// type, then no error will be returned.
+func ensureExpectedType(exp types.T, d Datum) error {
+	if !(exp.FamilyEqual(types.Any) || d.ResolvedType().Equivalent(types.Null) ||
+		d.ResolvedType().Equivalent(exp)) {
+		return errors.Errorf("expected return type %q, got: %q", exp, d.ResolvedType())
+	}
+	return nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -3028,7 +3197,16 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if d == DNull {
 		return DNull, nil
 	}
-	return expr.fn.fn(ctx, d)
+	res, err := expr.fn.fn(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.TestingKnobs.AssertUnaryExprReturnTypes {
+		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
+			return nil, errors.Wrapf(err, "unary op %q", expr.String())
+		}
+	}
+	return res, err
 }
 
 // Eval implements the TypedExpr interface.
@@ -3042,7 +3220,7 @@ func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (expr UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
+func (expr *UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 
@@ -3099,6 +3277,11 @@ func (t *Array) Eval(ctx *EvalContext) (Datum, error) {
 		}
 	}
 	return array, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *Subquery) Eval(ctx *EvalContext) (Datum, error) {
+	return ctx.Planner.EvalSubquery(expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -3321,18 +3504,6 @@ func foldComparisonExpr(
 		// Note the special handling of NULLs and IS NOT DISTINCT FROM is needed
 		// before this expression fold.
 		return EQ, left, right, false, false
-	case Is:
-		// Is(left, right) is implemented as EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS is needed before this
-		// expression fold.
-		return EQ, left, right, false, false
-	case IsNot:
-		// IsNot(left, right) is implemented as !EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS NOT is needed before this
-		// expression fold.
-		return EQ, left, right, false, true
 	}
 	return op, left, right, false, false
 }
@@ -3340,28 +3511,42 @@ func foldComparisonExpr(
 // Simplifies LIKE/ILIKE expressions that do not need full regular expressions to
 // evaluate the condition. For example, when the expression is just checking to see
 // if a string starts with a given pattern.
-func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
+func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool, error) {
 	switch len(pattern) {
 	case 0:
 		return func(s string) bool {
 			return s == ""
-		}
+		}, nil
 	case 1:
 		switch pattern[0] {
 		case '%':
 			return func(s string) bool {
 				return true
-			}
+			}, nil
 		case '_':
 			return func(s string) bool {
 				return len(s) == 1
-			}
+			}, nil
 		}
 	default:
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
 			// Cases like "something\%" are not optimized, but this does not affect correctness.
 			anyEnd := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
 			anyStart := pattern[0] == '%'
+
+			// singleAnyEnd and anyEnd are mutually exclusive
+			// (similarly with Start).
+			singleAnyEnd := pattern[len(pattern)-1] == '_' && pattern[len(pattern)-2] != '\\'
+			singleAnyStart := pattern[0] == '_'
+
+			// Since we've already checked for escaped characters
+			// at the end, we can un-escape every character.
+			// This is required since we do direct string
+			// comparison.
+			var err error
+			if pattern, err = unescapePattern(pattern, `\`); err != nil {
+				return nil, err
+			}
 			switch {
 			case anyEnd && anyStart:
 				return func(s string) bool {
@@ -3370,27 +3555,75 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) func(string) bool {
 						s, substr = strings.ToUpper(s), strings.ToUpper(substr)
 					}
 					return strings.Contains(s, substr)
-				}
+				}, nil
+
 			case anyEnd:
 				return func(s string) bool {
 					prefix := pattern[:len(pattern)-1]
+					if singleAnyStart {
+						if len(s) == 0 {
+							return false
+						}
+
+						prefix = prefix[1:]
+						s = s[1:]
+					}
 					if caseInsensitive {
 						s, prefix = strings.ToUpper(s), strings.ToUpper(prefix)
 					}
 					return strings.HasPrefix(s, prefix)
-				}
+				}, nil
+
 			case anyStart:
 				return func(s string) bool {
 					suffix := pattern[1:]
+					if singleAnyEnd {
+						if len(s) == 0 {
+							return false
+						}
+
+						suffix = suffix[:len(suffix)-1]
+						s = s[:len(s)-1]
+					}
 					if caseInsensitive {
 						s, suffix = strings.ToUpper(s), strings.ToUpper(suffix)
 					}
 					return strings.HasSuffix(s, suffix)
-				}
+				}, nil
+
+			case singleAnyStart || singleAnyEnd:
+				return func(s string) bool {
+					if len(s) < 1 || (singleAnyStart && singleAnyEnd && len(s) < 2) {
+						return false
+					}
+
+					if singleAnyStart {
+						pattern = pattern[1:]
+						s = s[1:]
+					}
+
+					if singleAnyEnd {
+						pattern = pattern[:len(pattern)-1]
+						s = s[:len(s)-1]
+					}
+
+					if caseInsensitive {
+						s, pattern = strings.ToUpper(s), strings.ToUpper(pattern)
+					}
+
+					// We don't have to check for
+					// prefixes/suffixes since we do not
+					// have '%':
+					//  - singleAnyEnd && anyStart handled
+					//    in case anyStart
+					//  - singleAnyStart && anyEnd handled
+					//    in case anyEnd
+					return s == pattern
+				}, nil
 			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 type likeKey struct {
@@ -3398,12 +3631,156 @@ type likeKey struct {
 	caseInsensitive bool
 }
 
+// unescapePattern unescapes a pattern for a given escape token.
+// It handles escaped escape tokens properly by maintaining them as the escape
+// token in the return string.
+// For example, suppose we have escape token `\` (e.g. `B` is escaped in
+// `A\BC` and `\` is escaped in `A\\C`).
+// We need to convert
+//    `\` --> ``
+//    `\\` --> `\`
+// We cannot simply use strings.Replace for each conversion since the first
+// conversion will incorrectly replace our escaped escape token `\\` with ``.
+// Another example is if our escape token is `\\` (e.g. after
+// regexp.QuoteMeta).
+// We need to convert
+//    `\\` --> ``
+//    `\\\\` --> `\\`
+func unescapePattern(pattern, escapeToken string) (string, error) {
+	escapedEscapeToken := escapeToken + escapeToken
+
+	// We need to subtract the escaped escape tokens to avoid double
+	// counting.
+	nEscapes := strings.Count(pattern, escapeToken) - strings.Count(pattern, escapedEscapeToken)
+	if nEscapes == 0 {
+		return pattern, nil
+	}
+
+	// Allocate buffer for final un-escaped pattern.
+	ret := make([]byte, len(pattern)-nEscapes*len(escapeToken))
+	retWidth := 0
+	for i := 0; i < nEscapes; i++ {
+		nextIdx := strings.Index(pattern, escapeToken)
+		if nextIdx == len(pattern)-len(escapeToken) {
+			return "", errors.Errorf(`pattern ends with escape character`)
+		}
+
+		retWidth += copy(ret[retWidth:], pattern[:nextIdx])
+
+		if nextIdx < len(pattern)-len(escapedEscapeToken) && pattern[nextIdx:nextIdx+len(escapedEscapeToken)] == escapedEscapeToken {
+			// We have an escaped escape token.
+			// We want to keep it as the original escape token in
+			// the return string.
+			retWidth += copy(ret[retWidth:], escapeToken)
+			pattern = pattern[nextIdx+len(escapedEscapeToken):]
+			continue
+		}
+
+		// Skip over the escape character we removed.
+		pattern = pattern[nextIdx+len(escapeToken):]
+	}
+
+	retWidth += copy(ret[retWidth:], pattern)
+	return string(ret[0:retWidth]), nil
+}
+
+// replaceUnescaped replaces all instances of oldStr that are not escaped (read:
+// preceded) with the specified unescape token with newStr.
+// For example, with an escape token of `\\`
+//    replaceUnescaped("TE\\__ST", "_", ".", `\\`) --> "TE\\_.ST"
+//    replaceUnescaped("TE\\%%ST", "%", ".*", `\\`) --> "TE\\%.*ST"
+// If the preceding escape token is escaped, then oldStr will be replaced.
+// For example
+//    replaceUnescaped("TE\\\\_ST", "_", ".", `\\`) --> "TE\\\\.ST"
+func replaceUnescaped(s, oldStr, newStr string, escapeToken string) string {
+	// We count the number of occurrences of 'oldStr'.
+	// This however can be an overestimate since the oldStr token could be
+	// escaped.  e.g. `\\_`.
+	nOld := strings.Count(s, oldStr)
+	if nOld == 0 {
+		return s
+	}
+
+	// Allocate buffer for final string.
+	// This can be an overestimate since some of the oldStr tokens may
+	// be escaped.
+	// This is fine since we keep track of the running number of bytes
+	// actually copied.
+	// It's rather difficult to count the exact number of unescaped
+	// tokens without manually iterating through the entire string and
+	// keeping track of escaped escape tokens.
+	retLen := len(s)
+	// If len(newStr) - len(oldStr) < 0, then this can under-allocate which
+	// will not behave correctly with copy.
+	if addnBytes := nOld * (len(newStr) - len(oldStr)); addnBytes > 0 {
+		retLen += addnBytes
+	}
+	ret := make([]byte, retLen)
+	retWidth := 0
+	start := 0
+OldLoop:
+	for i := 0; i < nOld; i++ {
+		nextIdx := start + strings.Index(s[start:], oldStr)
+
+		escaped := false
+		for {
+			// We need to look behind to check if the escape token
+			// is really an escape token.
+			// E.g. if our specified escape token is `\\` and oldStr
+			// is `_`, then
+			//    `\\_` --> escaped
+			//    `\\\\_` --> not escaped
+			//    `\\\\\\_` --> escaped
+			curIdx := nextIdx
+			lookbehindIdx := curIdx - len(escapeToken)
+			for lookbehindIdx >= 0 && s[lookbehindIdx:curIdx] == escapeToken {
+				escaped = !escaped
+				curIdx = lookbehindIdx
+				lookbehindIdx = curIdx - len(escapeToken)
+			}
+
+			// The token was not be escaped. Proceed.
+			if !escaped {
+				break
+			}
+
+			// Token was escaped. Copy eveything over and continue.
+			retWidth += copy(ret[retWidth:], s[start:nextIdx+len(oldStr)])
+			start = nextIdx + len(oldStr)
+
+			// Continue with next oldStr token.
+			continue OldLoop
+		}
+
+		// Token was not escaped so we replace it with newStr.
+		// Two copies is more efficient than concatenating the slices.
+		retWidth += copy(ret[retWidth:], s[start:nextIdx])
+		retWidth += copy(ret[retWidth:], newStr)
+		start = nextIdx + len(oldStr)
+	}
+
+	retWidth += copy(ret[retWidth:], s[start:])
+	return string(ret[0:retWidth])
+}
+
 // Pattern implements the RegexpCacheKey interface.
 func (k likeKey) Pattern() (string, error) {
+	// QuoteMeta escapes `\` to `\\`.
 	pattern := regexp.QuoteMeta(k.s)
+
 	// Replace LIKE/ILIKE specific wildcards with standard wildcards
-	pattern = strings.Replace(pattern, "%", ".*", -1)
-	pattern = strings.Replace(pattern, "_", ".", -1)
+	pattern = replaceUnescaped(pattern, `%`, `.*`, `\\`)
+	pattern = replaceUnescaped(pattern, `_`, `.`, `\\`)
+
+	// After QuoteMeta, our original escape character `\` has become
+	// `\\`.
+	// We need to unescape escaped escape tokens `\\` (now `\\\\`) and
+	// other escaped characters `\A` (now `\\A`).
+	var err error
+	if pattern, err = unescapePattern(pattern, `\\`); err != nil {
+		return "", err
+	}
+
 	return anchorPattern(pattern, k.caseInsensitive), nil
 }
 

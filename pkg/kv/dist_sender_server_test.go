@@ -15,6 +15,7 @@
 package kv_test
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync/atomic"
@@ -22,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -48,6 +48,17 @@ import (
 // Addendum: I don't think the rationale above applies ever since
 // TestServerInterface was introduced and all packages became able to create
 // TestServers.
+
+func startNoSplitServer(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				DisableSplitQueue: true,
+			},
+		},
+	})
+	return s, db
+}
 
 // TestRangeLookupWithOpenTransaction verifies that range lookups are
 // done in such a way (e.g. using inconsistent reads) that they
@@ -1287,7 +1298,7 @@ func TestStopAtRangeBoundary(t *testing.T) {
 					},
 					satisfied: []int{0, 2},
 				},
-				// scanning [<where we left of>,inf)
+				// scanning [<where we left off>,inf)
 				{
 					expResults: map[int][]string{
 						1: {"b1"},
@@ -1660,7 +1671,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 			_, ok := fArgs.Req.(*roachpb.ConditionalPutRequest)
 			if ok && fArgs.Req.Header().Key.Equal(targetKey) {
 				if atomic.AddInt32(&numGets, 1) == 1 {
-					pErr := roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{})
+					pErr := roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil)
 					return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
 				}
 			}

@@ -15,51 +15,68 @@
 package sql
 
 import (
+	"context"
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"golang.org/x/net/context"
 )
 
-// IncrementSequence implements the tree.SequenceAccessor interface.
+// IncrementSequence implements the tree.EvalPlanner interface.
 func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
+	if p.session.TxnState.readOnly {
+		return 0, readOnlyError("nextval()")
+	}
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
 	if err != nil {
 		return 0, err
 	}
+
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 	val, err := client.IncrementValRetryable(
 		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
 	if err != nil {
-		return 0, err
+		switch err.(type) {
+		case *roachpb.IntegerOverflowError:
+			return 0, boundsExceededError(descriptor)
+		default:
+			return 0, err
+		}
 	}
 
-	p.session.mu.Lock()
-	defer p.session.mu.Unlock()
-	p.session.mu.SequenceState.lastSequenceIncremented = descriptor.ID
-	p.session.mu.SequenceState.latestValues[descriptor.ID] = val
+	seqOpts := descriptor.SequenceOpts
+	if val > seqOpts.MaxValue || val < seqOpts.MinValue {
+		return 0, boundsExceededError(descriptor)
+	}
+
+	p.session.dataMutator.RecordLatestSequenceVal(uint32(descriptor.ID), val)
 
 	return val, nil
 }
 
-// GetLastSequenceValue implements the tree.SequenceAccessor interface.
-func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
-	p.session.mu.RLock()
-	defer p.session.mu.RUnlock()
+func boundsExceededError(descriptor *sqlbase.TableDescriptor) error {
+	seqOpts := descriptor.SequenceOpts
+	isAscending := seqOpts.Increment > 0
 
-	seqState := p.session.mu.SequenceState
-
-	if !seqState.nextvalEverCalled() {
-		return 0, pgerror.NewError(
-			pgerror.CodeObjectNotInPrerequisiteStateError, "lastval is not yet defined in this session")
+	var word string
+	var value int64
+	if isAscending {
+		word = "maximum"
+		value = seqOpts.MaxValue
+	} else {
+		word = "minimum"
+		value = seqOpts.MinValue
 	}
-
-	return seqState.latestValues[seqState.lastSequenceIncremented], nil
+	return pgerror.NewErrorf(
+		pgerror.CodeSequenceGeneratorLimitExceeded,
+		`reached %s value of sequence "%s" (%d)`, word, descriptor.Name, value)
 }
 
-// GetLatestValueInSessionForSequence implements the tree.SequenceAccessor interface.
+// GetLatestValueInSessionForSequence implements the tree.EvalPlanner interface.
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
@@ -68,10 +85,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 		return 0, err
 	}
 
-	p.session.mu.RLock()
-	defer p.session.mu.RUnlock()
-
-	val, ok := p.session.mu.SequenceState.latestValues[descriptor.ID]
+	val, ok := p.SessionData().SequenceState.GetLastValueByID(uint32(descriptor.ID))
 	if !ok {
 		return 0, pgerror.NewErrorf(
 			pgerror.CodeObjectNotInPrerequisiteStateError,
@@ -81,34 +95,116 @@ func (p *planner) GetLatestValueInSessionForSequence(
 	return val, nil
 }
 
-// SetSequenceValue implements the tree.SequenceAccessor interface.
+// SetSequenceValue implements the tree.EvalPlanner interface.
 func (p *planner) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64,
 ) error {
+	if p.session.TxnState.readOnly {
+		return readOnlyError("setval()")
+	}
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
 	if err != nil {
 		return err
 	}
+	opts := descriptor.SequenceOpts
+	if newVal > opts.MaxValue || newVal < opts.MinValue {
+		return pgerror.NewErrorf(
+			pgerror.CodeNumericValueOutOfRangeError,
+			`value %d is out of bounds for sequence "%s" (%d..%d)`,
+			newVal, descriptor.Name, opts.MinValue, opts.MaxValue,
+		)
+	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
+	// according to comments on Inc operation. Switch to Inc if `desired-current`
+	// overflows correctly.
 	return p.txn.Put(ctx, seqValueKey, newVal)
 }
 
-// sequenceState stores session-scoped state used by sequence builtins.
-type sequenceState struct {
-	// latestValues stores the last value obtained by nextval() in this session by descriptor id.
-	latestValues map[sqlbase.ID]int64
-
-	// lastSequenceIncremented records the descriptor id of the last sequence nextval() was
-	// called on in this session.
-	lastSequenceIncremented sqlbase.ID
+func readOnlyError(s string) error {
+	return pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+		"cannot execute %s in a read-only transaction", s)
 }
 
-func newSequenceState() sequenceState {
-	return sequenceState{
-		latestValues: make(map[sqlbase.ID]int64),
+// assignSequenceOptions moves options from the AST node to the sequence options descriptor,
+// starting with defaults and overriding them with user-provided options.
+func assignSequenceOptions(
+	opts *sqlbase.TableDescriptor_SequenceOpts, optsNode tree.SequenceOptions, setDefaults bool,
+) error {
+	// All other defaults are dependent on the value of increment,
+	// i.e. whether the sequence is ascending or descending.
+	for _, option := range optsNode {
+		if option.Name == tree.SeqOptIncrement {
+			opts.Increment = *option.IntVal
+		}
 	}
-}
+	if opts.Increment == 0 {
+		return pgerror.NewError(
+			pgerror.CodeInvalidParameterValueError, "INCREMENT must not be zero")
+	}
+	isAscending := opts.Increment > 0
 
-func (ss *sequenceState) nextvalEverCalled() bool {
-	return len(ss.latestValues) > 0
+	// Set increment-dependent defaults.
+	if setDefaults {
+		if isAscending {
+			opts.MinValue = 1
+			opts.MaxValue = math.MaxInt64
+			opts.Start = opts.MinValue
+		} else {
+			opts.MinValue = math.MinInt64
+			opts.MaxValue = -1
+			opts.Start = opts.MaxValue
+		}
+	}
+
+	// Fill in all other options.
+	optionsSeen := map[string]bool{}
+	for _, option := range optsNode {
+		// Error on duplicate options.
+		_, seenBefore := optionsSeen[option.Name]
+		if seenBefore {
+			return pgerror.NewError(pgerror.CodeSyntaxError, "conflicting or redundant options")
+		}
+		optionsSeen[option.Name] = true
+
+		switch option.Name {
+		case tree.SeqOptIncrement:
+			// Do nothing; this has already been set.
+		case tree.SeqOptMinValue:
+			// A value of nil represents the user explicitly saying `NO MINVALUE`.
+			if option.IntVal != nil {
+				opts.MinValue = *option.IntVal
+			}
+		case tree.SeqOptMaxValue:
+			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
+			if option.IntVal != nil {
+				opts.MaxValue = *option.IntVal
+			}
+		case tree.SeqOptStart:
+			opts.Start = *option.IntVal
+		}
+	}
+
+	// If start option not specified, set it to MinValue (for ascending sequences)
+	// or MaxValue (for descending sequences).
+	if _, startSeen := optionsSeen[tree.SeqOptStart]; !startSeen {
+		if opts.Increment > 0 {
+			opts.Start = opts.MinValue
+		} else {
+			opts.Start = opts.MaxValue
+		}
+	}
+
+	if opts.Start > opts.MaxValue {
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError,
+			"START value (%d) cannot be greater than MAXVALUE (%d)", opts.Start, opts.MaxValue)
+	}
+	if opts.Start < opts.MinValue {
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError,
+			"START value (%d) cannot be less than MINVALUE (%d)", opts.Start, opts.MinValue)
+	}
+
+	return nil
 }

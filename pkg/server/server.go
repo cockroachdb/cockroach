@@ -16,6 +16,7 @@ package server
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -32,7 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 	"github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -56,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	migrations "github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -93,6 +96,13 @@ var (
 	) error {
 		return errors.New("OSS build does not include Enterprise features")
 	}
+
+	// LicenseTypeFn returns what type of license the cluster is running with, or
+	// "OSS" if it is an OSS build. This function is overridden by an init hook in
+	// CCL builds.
+	LicenseTypeFn = func(st *cluster.Settings) (string, error) {
+		return "OSS", nil
+	}
 )
 
 // Server is the cockroach server node.
@@ -111,7 +121,6 @@ type Server struct {
 	txnCoordSender     *kv.TxnCoordSender
 	distSender         *kv.DistSender
 	db                 *client.DB
-	kvDB               *kv.DBServer
 	pgServer           *pgwire.Server
 	distSQLServer      *distsqlrun.ServerImpl
 	node               *Node
@@ -136,7 +145,7 @@ type Server struct {
 	serveMode
 }
 
-// NewServer creates a Server from a server.Context.
+// NewServer creates a Server from a server.Config.
 func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if _, err := net.ResolveTCPAddr("tcp", cfg.AdvertiseAddr); err != nil {
 		return nil, errors.Errorf("unable to resolve RPC address %q: %v", cfg.AdvertiseAddr, err)
@@ -187,7 +196,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := s.AnnotateCtx(context.Background())
 
-	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper)
+	s.rpcContext = rpc.NewContext(s.cfg.AmbientCtx, s.cfg.Config, s.clock, s.stopper,
+		&cfg.Settings.Version)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
 			log.Fatal(ctx, err)
@@ -198,6 +208,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.gossip = gossip.New(
 		s.cfg.AmbientCtx,
+		&s.rpcContext.ClusterID,
 		&s.nodeIDContainer,
 		s.rpcContext,
 		s.grpc,
@@ -250,7 +261,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
 	s.nodeLiveness = storage.NewNodeLiveness(
-		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, nlActive, nlRenewal,
+		s.cfg.AmbientCtx,
+		s.clock,
+		s.db,
+		s.gossip,
+		nlActive,
+		nlRenewal,
+		s.cfg.HistogramWindowInterval(),
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
@@ -266,9 +283,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.raftTransport = storage.NewRaftTransport(
 		s.cfg.AmbientCtx, st, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
 	)
-
-	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
-	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	s.internalMemMetrics = sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
@@ -324,7 +338,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// also remove the record after the temp directory is
 			// removed.
 			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
-			err = util.CleanupTempDirs(recordPath)
+			err = engine.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
@@ -353,7 +367,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:              s.rpcContext,
 		ScanInterval:            s.cfg.ScanInterval,
 		ScanMaxIdleTime:         s.cfg.ScanMaxIdleTime,
-		MetricsSampleInterval:   s.cfg.MetricsSampleInterval,
+		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		StorePool:               s.storePool,
 		SQLExecutor:             sqlExecutor,
@@ -372,7 +386,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)
 	s.registry.AddMetricStruct(s.runtime)
 
-	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
+	s.node = NewNode(
+		storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr),
+		&s.rpcContext.ClusterID)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 
@@ -472,6 +488,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	} else {
 		execCfg.SchemaChangerTestingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
+	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
+		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
+	}
 	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
 	s.registry.AddMetricStruct(s.sqlExecutor)
 
@@ -507,7 +526,7 @@ func (s *Server) AnnotateCtxWithSpan(
 
 // ClusterID returns the ID of the cluster this server is a part of.
 func (s *Server) ClusterID() uuid.UUID {
-	return s.node.ClusterID
+	return s.rpcContext.ClusterID.Get()
 }
 
 // NodeID returns the ID of this node within its cluster.
@@ -541,7 +560,11 @@ type ListenError struct {
 }
 
 func inspectEngines(
-	ctx context.Context, engines []engine.Engine, minVersion, serverVersion roachpb.Version,
+	ctx context.Context,
+	engines []engine.Engine,
+	minVersion,
+	serverVersion roachpb.Version,
+	clusterIDContainer *base.ClusterIDContainer,
 ) (
 	bootstrappedEngines []engine.Engine,
 	emptyEngines []engine.Engine,
@@ -549,12 +572,21 @@ func inspectEngines(
 	_ error,
 ) {
 	for _, engine := range engines {
-		_, err := storage.ReadStoreIdent(ctx, engine)
+		storeIdent, err := storage.ReadStoreIdent(ctx, engine)
 		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
 			emptyEngines = append(emptyEngines, engine)
 			continue
 		} else if err != nil {
 			return nil, nil, cluster.ClusterVersion{}, err
+		}
+		clusterID := clusterIDContainer.Get()
+		if storeIdent.ClusterID != uuid.Nil {
+			if clusterID == uuid.Nil {
+				clusterIDContainer.Set(ctx, storeIdent.ClusterID)
+			} else if storeIdent.ClusterID != clusterID {
+				return nil, nil, cluster.ClusterVersion{},
+					errors.Errorf("conflicting store cluster IDs: %s, %s", storeIdent.ClusterID, clusterID)
+			}
 		}
 		bootstrappedEngines = append(bootstrappedEngines, engine)
 	}
@@ -815,7 +847,8 @@ func (s *Server) Start(ctx context.Context) error {
 	//
 	// TODO(marc): when cookie-based authentication exists, apply it to all web
 	// endpoints.
-	s.mux.Handle(debugEndpoint, authorizedHandler(http.HandlerFunc(handleDebug)))
+	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
+
 	// Also throw the landing page in there. It won't work well, but it's better than a 404.
 	// The remaining endpoints will be opened late, when we're sure that the subsystems they
 	// talk to are functional.
@@ -824,12 +857,6 @@ func (s *Server) Start(ctx context.Context) error {
 		AssetDir:  ui.AssetDir,
 		AssetInfo: ui.AssetInfo,
 	}))
-
-	// Filter the gossip bootstrap resolvers based on the listen and
-	// advertise addresses.
-	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
-	s.gossip.Start(unresolvedAdvertAddr, filtered)
-	log.Event(ctx, "started gossip")
 
 	s.engines, err = s.cfg.CreateEngines(ctx)
 	if err != nil {
@@ -856,9 +883,20 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion); err != nil {
+	bootstrappedEngines, _, _, err := inspectEngines(
+		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion,
+		s.cfg.Settings.Version.ServerVersion, &s.rpcContext.ClusterID)
+	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
-	} else if len(bootstrappedEngines) > 0 {
+	}
+
+	// Filter the gossip bootstrap resolvers based on the listen and
+	// advertise addresses.
+	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
+	s.gossip.Start(unresolvedAdvertAddr, filtered)
+	log.Event(ctx, "started gossip")
+
+	if len(bootstrappedEngines) > 0 {
 		// We might have to sleep a bit to protect against this node producing non-
 		// monotonic timestamps. Before restarting, its clock might have been driven
 		// by other nodes' fast clocks, but when we restarted, we lost all this
@@ -933,7 +971,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
-	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
+	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(
+		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion,
+		s.cfg.Settings.Version.ServerVersion, &s.rpcContext.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
@@ -1036,6 +1076,11 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	}
 	log.Event(ctx, "started node")
 
+	// Cluster ID should have been determined by this point.
+	if s.rpcContext.ClusterID.Get() == uuid.Nil {
+		log.Fatal(ctx, "Cluster ID failed to be determined during node startup.")
+	}
+
 	s.refreshSettings()
 
 	raven.SetTagsContext(map[string]string{
@@ -1048,15 +1093,15 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
 
 	// Begin recording runtime statistics.
-	s.startSampleEnvironment(s.cfg.MetricsSampleInterval)
+	s.startSampleEnvironment(DefaultMetricsSampleInterval)
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
 	// Begin recording status summaries.
-	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
+	s.node.startWriteSummaries(DefaultMetricsSampleInterval)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
@@ -1086,7 +1131,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	)
 
 	sql.NewSchemaChangeManager(
-		s.st,
+		s.cfg.AmbientCtx,
 		testingKnobs,
 		*s.db,
 		s.node.Descriptor,
@@ -1098,6 +1143,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.clock,
 		s.jobRegistry,
 		distSQLPlanner,
+		s.st,
 		s.distSender.RangeDescriptorCache(),
 		s.distSender.LeaseHolderCache(),
 	).Start(s.stopper)
@@ -1164,8 +1210,19 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// in an acceptable form for this version of the software.
 	// We have to do this after actually starting up the server to be able to
 	// seamlessly use the kv client against other nodes in the cluster.
+	var mmKnobs sqlmigrations.MigrationManagerTestingKnobs
+	if migrationManagerTestingKnobs := s.cfg.TestingKnobs.SQLMigrationManager; migrationManagerTestingKnobs != nil {
+		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
+	}
 	migMgr := migrations.NewManager(
-		s.stopper, s.db, s.sqlExecutor, s.clock, &s.internalMemMetrics, s.NodeID().String())
+		s.stopper,
+		s.db,
+		s.sqlExecutor,
+		s.clock,
+		mmKnobs,
+		&s.internalMemMetrics,
+		s.NodeID().String(),
+	)
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
 		select {
 		case <-s.stopper.ShouldQuiesce():

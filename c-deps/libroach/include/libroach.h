@@ -12,8 +12,7 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#ifndef LIBROACH_H
-#define LIBROACH_H
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -65,13 +64,15 @@ typedef struct DBIterator DBIterator;
 
 // DBOptions contains local database options.
 typedef struct {
-  DBCache *cache;
+  DBCache* cache;
   uint64_t block_size;
   uint64_t wal_ttl_seconds;
   bool logging_enabled;
   int num_cpu;
   int max_open_files;
   bool use_switching_env;
+  bool must_exist;
+  DBSlice extra_options;
 } DBOptions;
 
 // Create a new cache with the specified size.
@@ -79,16 +80,16 @@ DBCache* DBNewCache(uint64_t size);
 
 // Add a reference to an existing cache. Note that the underlying
 // RocksDB cache is shared between the original and new reference.
-DBCache* DBRefCache(DBCache *cache);
+DBCache* DBRefCache(DBCache* cache);
 
 // Release a cache, decrementing the reference count on the underlying
 // RocksDB cache. Note that the RocksDB cache will not be freed until
 // all of the references have been released.
-void DBReleaseCache(DBCache *cache);
+void DBReleaseCache(DBCache* cache);
 
 // Opens the database located in "dir", creating it if it doesn't
 // exist.
-DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions options);
+DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions options);
 
 // Destroys the database located in "dir". As the name implies, this
 // operation is destructive. Use with caution.
@@ -107,6 +108,15 @@ DBStatus DBSyncWAL(DBEngine* db);
 
 // Forces an immediate compaction over all keys.
 DBStatus DBCompact(DBEngine* db);
+
+// Forces an immediate compaction over keys in the specified range.
+// Note that if start is empty, it indicates the start of the database.
+// If end is empty, it indicates the end of the database.
+DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end);
+
+// Stores the approximate on-disk size of the given key range into the
+// supplied uint64.
+DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size);
 
 // Sets the database entry for "key" to "value".
 DBStatus DBPut(DBEngine* db, DBKey key, DBSlice value);
@@ -127,7 +137,7 @@ DBStatus DBDeleteRange(DBEngine* db, DBKey start, DBKey end);
 // (exclusive). Unlike DBDeleteRange, this function finds the keys to
 // delete by iterating over the supplied iterator and creating
 // tombstones for the individual keys.
-DBStatus DBDeleteIterRange(DBEngine* db, DBIterator *iter, DBKey start, DBKey end);
+DBStatus DBDeleteIterRange(DBEngine* db, DBIterator* iter, DBKey start, DBKey end);
 
 // Applies a batch of operations (puts, merges and deletes) to the
 // database atomically and closes the batch. It is only valid to call
@@ -146,7 +156,7 @@ DBStatus DBApplyBatchRepr(DBEngine* db, DBSlice repr, bool sync);
 // only valid until the next call to a method using the DBEngine and
 // should thus be copied immediately. It is only valid to call this
 // function on an engine created by DBNewBatch.
-DBSlice DBBatchRepr(DBEngine *db);
+DBSlice DBBatchRepr(DBEngine* db);
 
 // Creates a new snapshot of the database for use in DBGet() and
 // DBNewIter(). It is the caller's responsibility to call DBClose().
@@ -226,12 +236,41 @@ bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
 DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
                           int64_t target_size, bool allow_meta2_splits, DBString* split_key);
 
+// DBTxn contains the fields from a roachpb.Transaction that are
+// necessary for MVCC Get and Scan operations. Note that passing a
+// serialized roachpb.Transaction appears to be a non-starter as an
+// alternative due to the performance overhead.
+//
+// TODO(peter): We could investigate using
+// https://github.com/petermattis/cppgo to generate C++ code that can
+// read the Go roachpb.Transaction structure.
+typedef struct {
+  DBSlice id;
+  uint32_t epoch;
+  DBTimestamp max_timestamp;
+} DBTxn;
+
+// DBScanResults contains the key/value pairs and intents encoded
+// using the RocksDB batch repr format.
+typedef struct {
+  DBStatus status;
+  DBSlice data;
+  DBSlice intents;
+  DBTimestamp uncertainty_timestamp;
+} DBScanResults;
+
+DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp,
+                      DBTxn txn, bool consistent);
+DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end,
+                       DBTimestamp timestamp, int64_t max_keys,
+                       DBTxn txn, bool consistent, bool reverse);
+
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
   int64_t block_cache_hits;
   int64_t block_cache_misses;
-  size_t  block_cache_usage;
-  size_t  block_cache_pinned_usage;
+  size_t block_cache_usage;
+  size_t block_cache_pinned_usage;
   int64_t bloom_filter_prefix_checked;
   int64_t bloom_filter_prefix_useful;
   int64_t memtable_total_size;
@@ -293,8 +332,16 @@ void DBRunLDB(int argc, char** argv);
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 
+// DBFileLock contains various parameters set during DBLockFile and required for DBUnlockFile.
+typedef void* DBFileLock;
+
+// DBLockFile sets a lock on the specified file using RocksDB's file locking interface.
+DBStatus DBLockFile(DBSlice filename, DBFileLock* lock);
+
+// DBUnlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for
+// the lock.
+DBStatus DBUnlockFile(DBFileLock lock);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
-
-#endif // LIBROACH_H

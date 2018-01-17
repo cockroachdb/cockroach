@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // SemaContext defines the context in which to perform semantic analysis on an
@@ -41,7 +42,7 @@ type SemaContext struct {
 	// SearchPath indicates where to search for unqualified function
 	// names. The path elements must be normalized via Name.Normalize()
 	// already.
-	SearchPath SearchPath
+	SearchPath sessiondata.SearchPath
 
 	// privileged, if true, enables "unsafe" builtins, e.g. those
 	// from the crdb_internal namespace. Must be set only for
@@ -365,7 +366,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) {
+	if types.IsStringType(t) || t == types.Null {
 		expr.Expr = subExpr
 		expr.typ = types.TCollatedString{Locale: expr.Locale}
 		return expr, nil
@@ -411,7 +412,7 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedE
 	}
 
 	switch expr.Operator {
-	case Is, IsNot, IsDistinctFrom, IsNotDistinctFrom:
+	case IsDistinctFrom, IsNotDistinctFrom:
 		// These operators handle NULL arguments, so they do not result in an
 		// evaluation directly to NULL in the presence of any NULL arguments.
 		//
@@ -431,28 +432,18 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedE
 	return expr, err
 }
 
-// TypeCheck implements the Expr interface.
-func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	subqueryTyped, err := expr.Subquery.TypeCheck(ctx, types.Any)
-	if err != nil {
-		return nil, err
-	}
-	expr.Subquery = subqueryTyped
-	expr.typ = types.Bool
-	return expr, nil
-}
-
 var (
 	errOrderByIndexInWindow = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "ORDER BY INDEX in window definition is not supported")
 	errFilterWithinWindow   = pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "FILTER within a window function call is not yet supported")
 	errStarNotAllowed       = pgerror.NewError(pgerror.CodeSyntaxError, "cannot use \"*\" in this context")
 	errInvalidDefaultUsage  = pgerror.NewError(pgerror.CodeSyntaxError, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
 	errInvalidMaxUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MAXVALUE can only appear within a range partition expression")
+	errInvalidMinUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MINVALUE can only appear within a range partition expression")
 )
 
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	var searchPath SearchPath
+	var searchPath sessiondata.SearchPath
 	if ctx != nil {
 		searchPath = ctx.SearchPath
 	}
@@ -499,7 +490,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		if desired != types.Any {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
-		sig := fmt.Sprintf("%s(%s)%s", expr.Func, strings.Join(typeNames, ", "), desStr)
+		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
 		if len(fns) == 0 {
 			return nil, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, "unknown signature: %s", sig)
 		}
@@ -543,8 +534,9 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		case AggregateClass:
 		case WindowClass:
 		default:
-			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "OVER specified, but %s() is neither a window function nor an "+
-				"aggregate function", expr.Func)
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"OVER specified, but %s() is neither a window function nor an aggregate function",
+				&expr.Func)
 		}
 
 		if expr.Filter != nil {
@@ -554,14 +546,16 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		// Make sure the window function builtins are used as window function applications.
 		switch builtin.Class {
 		case WindowClass:
-			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "window function %s() requires an OVER clause", expr.Func)
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"window function %s() requires an OVER clause", &expr.Func)
 		}
 	}
 
 	if expr.Filter != nil {
 		if builtin.Class != AggregateClass {
 			// Same error message as Postgres.
-			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "FILTER specified but %s() is not an aggregate function", expr.Func)
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"FILTER specified but %s() is not an aggregate function", &expr.Func)
 		}
 
 	}
@@ -677,7 +671,7 @@ func (expr UnqualifiedStar) TypeCheck(_ *SemaContext, desired types.T) (TypedExp
 }
 
 // TypeCheck implements the Expr interface.
-func (expr UnresolvedName) TypeCheck(s *SemaContext, desired types.T) (TypedExpr, error) {
+func (expr *UnresolvedName) TypeCheck(s *SemaContext, desired types.T) (TypedExpr, error) {
 	v, err := expr.NormalizeVarName()
 	if err != nil {
 		return nil, err
@@ -707,8 +701,9 @@ func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *Subquery) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
-	panic("subquery nodes must be replaced before type checking")
+func (expr *Subquery) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) {
+	expr.assertTyped()
+	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -757,6 +752,11 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 // TypeCheck implements the Expr interface.
 func (expr DefaultVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return nil, errInvalidDefaultUsage
+}
+
+// TypeCheck implements the Expr interface.
+func (expr MinVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
+	return nil, errInvalidMinUsage
 }
 
 // TypeCheck implements the Expr interface.
@@ -1131,21 +1131,15 @@ func subOpCompError(leftType, rightType types.T, subOp, op ComparisonOperator) *
 // expression is a subquery.
 func typeCheckSubqueryWithIn(left, right types.T) error {
 	if rTuple, ok := right.(types.TTuple); ok {
-		if lTuple, ok := left.(types.TTuple); ok {
-			if len(lTuple) != len(rTuple) {
-				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
-			}
-			for i := range rTuple {
-				if rTuple[i] != lTuple[i] {
-					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
-				}
-			}
-		} else {
-			// Subqueries returning a single column come through as a tuple{T}, so
-			// T IN tuple{T} should be accepted.
-			if len(rTuple) != 1 || rTuple[0] != left {
-				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
-			}
+		// Subqueries come through as a tuple{T}, so T IN tuple{T} should be
+		// accepted.
+		if len(rTuple) != 1 {
+			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
+		}
+		if !left.Equivalent(rTuple[0]) {
+			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
 	}
 	return nil
@@ -1490,8 +1484,9 @@ func typeCheckTupleComparison(
 		rightSubExpr := right.Exprs[elemIdx]
 		leftSubExprTyped, rightSubExprTyped, _, err := typeCheckComparisonOp(ctx, op, leftSubExpr, rightSubExpr)
 		if err != nil {
+			exps := Exprs([]Expr{left, right})
 			return nil, nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "tuples %s are not comparable at index %d: %s",
-				Exprs([]Expr{left, right}), elemIdx+1, err)
+				&exps, elemIdx+1, err)
 		}
 		left.Exprs[elemIdx] = leftSubExprTyped
 		left.types[elemIdx] = leftSubExprTyped.ResolvedType()

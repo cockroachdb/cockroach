@@ -1,5 +1,5 @@
 - Feature Name: drain_modes
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-04-25
 - Authors: Tobias Schottdorf (tobias.schottdorf@gmail.com), Alfonso Subiotto Marqués
 - RFC PRs: [#6283](https://github.com/cockroachdb/cockroach/pull/6283), [#10765](https://github.com/cockroachdb/cockroach/pull/10765)

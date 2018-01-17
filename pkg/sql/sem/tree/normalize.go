@@ -445,32 +445,40 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			expr = &exprCopy
 			expr.Right = &tupleCopy
 		}
-	case Is:
+	case IsNotDistinctFrom:
 		if expr.TypedRight() != DNull {
+			if expr.TypedLeft() == DNull {
+				// Switch two sides of the ComparisonExp if left side is NULL.
+				return NewTypedComparisonExpr(IsNotDistinctFrom, expr.TypedRight(), expr.TypedLeft())
+			}
 			// IS exprs handle NULL and return a bool while EQ exprs propagate
 			// it (e.g. NULL IS b -> false, NULL = b -> NULL). To provide the
 			// same semantics, we catch NULL values with an AND expr. Now the
 			// three cases are:
-			//  a := b:    (a = b) AND (a IS NOT NULL) -> true  AND true  -> true
-			//  a := !b:   (a = b) AND (a IS NOT NULL) -> false AND true  -> false
-			//  a := NULL: (a = b) AND (a IS NOT NULL) -> NULL  AND false -> false
+			//  a := b:    (a = b) AND (a IS DISTINCT FROM NULL) -> true  AND true  -> true
+			//  a := !b:   (a = b) AND (a IS DISTINCT FROM NULL) -> false AND true  -> false
+			//  a := NULL: (a = b) AND (a IS DISTINCT FROM NULL) -> NULL  AND false -> false
 			return NewTypedAndExpr(
 				NewTypedComparisonExpr(EQ, expr.TypedLeft(), expr.TypedRight()),
-				NewTypedComparisonExpr(IsNot, expr.TypedLeft(), DNull),
+				NewTypedComparisonExpr(IsDistinctFrom, expr.TypedLeft(), DNull),
 			)
 		}
-	case IsNot:
-		// IS NOT exprs handle NULL and return a bool while NE exprs propagate
-		// it (e.g. NULL IS NOT b -> false, NULL != b -> NULL). To provide the
-		// same semantics, we catch NULL values with an OR expr. Now the three
-		// cases are:
-		//  a := b:    (a != b) OR (a IS NULL) -> false OR false -> false
-		//  a := !b:   (a != b) OR (a IS NULL) -> true  OR false -> true
-		//  a := NULL: (a != b) OR (a IS NULL) -> NULL  OR true  -> true
+	case IsDistinctFrom:
 		if expr.TypedRight() != DNull {
+			if expr.TypedLeft() == DNull {
+				// Switch two sides of the ComparisonExp if left side is NULL.
+				return NewTypedComparisonExpr(IsDistinctFrom, expr.TypedRight(), expr.TypedLeft())
+			}
+			// IS NOT exprs handle NULL and return a bool while NE exprs propagate
+			// it (e.g. NULL IS NOT b -> false, NULL != b -> NULL). To provide the
+			// same semantics, we catch NULL values with an OR expr. Now the three
+			// cases are:
+			//  a := b:    (a != b) OR (a IS NOT DISTINCT FROM NULL) -> false OR false -> false
+			//  a := !b:   (a != b) OR (a IS NOT DISTINCT FROM NULL) -> true  OR false -> true
+			//  a := NULL: (a != b) OR (a IS NOT DISTINCT FROM NULL) -> NULL  OR true  -> true
 			return NewTypedOrExpr(
 				NewTypedComparisonExpr(NE, expr.TypedLeft(), expr.TypedRight()),
-				NewTypedComparisonExpr(Is, expr.TypedLeft(), DNull),
+				NewTypedComparisonExpr(IsNotDistinctFrom, expr.TypedLeft(), DNull),
 			)
 		}
 	case NE,
@@ -564,35 +572,50 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		return DNull
 	}
 
-	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
 	leftCmp := GE
 	rightCmp := LE
-	makeOpExpr := func(left, right TypedExpr) normalizableExpr { return NewTypedAndExpr(left, right) }
 	if expr.Not {
-		// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
 		leftCmp = LT
 		rightCmp = GT
-		makeOpExpr = func(left, right TypedExpr) normalizableExpr { return NewTypedOrExpr(left, right) }
 	}
 
-	var newLeft, newRight TypedExpr
-	if from == DNull {
-		newLeft = DNull
-	} else {
-		newLeft = NewTypedComparisonExpr(leftCmp, left, from).normalize(v)
-		if v.err != nil {
-			return expr
+	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
+	// "a NOT BETWEEN b AND c" -> "a < b OR a > c"
+	transform := func(from, to TypedExpr) TypedExpr {
+		var newLeft, newRight TypedExpr
+		if from == DNull {
+			newLeft = DNull
+		} else {
+			newLeft = NewTypedComparisonExpr(leftCmp, left, from).normalize(v)
+			if v.err != nil {
+				return expr
+			}
+		}
+		if to == DNull {
+			newRight = DNull
+		} else {
+			newRight = NewTypedComparisonExpr(rightCmp, left, to).normalize(v)
+			if v.err != nil {
+				return expr
+			}
+		}
+		if expr.Not {
+			return NewTypedOrExpr(newLeft, newRight).normalize(v)
+		}
+		return NewTypedAndExpr(newLeft, newRight).normalize(v)
+	}
+
+	out := transform(from, to)
+	if expr.Symmetric {
+		if expr.Not {
+			// "a NOT BETWEEN SYMMETRIC b AND c" -> "(a < b OR a > c) AND (a < c OR a > b)"
+			out = NewTypedAndExpr(out, transform(to, from)).normalize(v)
+		} else {
+			// "a BETWEEN SYMMETRIC b AND c" -> "(a >= b AND a <= c) OR (a >= c OR a <= b)"
+			out = NewTypedOrExpr(out, transform(to, from)).normalize(v)
 		}
 	}
-	if to == DNull {
-		newRight = DNull
-	} else {
-		newRight = NewTypedComparisonExpr(rightCmp, left, to).normalize(v)
-		if v.err != nil {
-			return expr
-		}
-	}
-	return makeOpExpr(newLeft, newRight).normalize(v)
+	return out
 }
 
 func (expr *Tuple) normalize(v *NormalizeVisitor) TypedExpr {
@@ -785,6 +808,13 @@ func (v *isConstVisitor) run(expr Expr) bool {
 	v.isConst = true
 	WalkExprConst(v, expr)
 	return v.isConst
+}
+
+// IsConst returns whether the expression is constant. A constant expression
+// does not contain variables, as defined by ContainsVars, nor impure functions.
+func IsConst(evalCtx *EvalContext, expr Expr) bool {
+	v := isConstVisitor{ctx: evalCtx}
+	return v.run(expr)
 }
 
 // isVar returns true if the expression's value can vary during plan

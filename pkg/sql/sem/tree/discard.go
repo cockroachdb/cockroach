@@ -14,8 +14,6 @@
 
 package tree
 
-import "bytes"
-
 // Discard represents a DISCARD statement.
 type Discard struct {
 	Mode DiscardMode
@@ -32,10 +30,10 @@ const (
 )
 
 // Format implements the NodeFormatter interface.
-func (node *Discard) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *Discard) Format(ctx *FmtCtx) {
 	switch node.Mode {
 	case DiscardModeAll:
-		buf.WriteString("DISCARD ALL")
+		ctx.WriteString("DISCARD ALL")
 	}
 }
 

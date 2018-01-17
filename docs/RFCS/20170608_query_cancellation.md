@@ -1,5 +1,5 @@
 - Feature Name: Query and session cancellation
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-06-05
 - Authors: Bilal Akhtar
 - RFC PR: [#16417](https://github.com/cockroachdb/cockroach/pull/16417)

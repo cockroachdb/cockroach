@@ -1,5 +1,5 @@
 - Feature Name: Expressive ZoneConfig
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-07-06
 - Authors: @d4l3k
 - RFC PR: [#7660](https://github.com/cockroachdb/cockroach/pull/7660)

@@ -16,12 +16,12 @@ package kv
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -769,5 +769,80 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	const expCount = 2
 	if count != expCount {
 		t.Fatalf("expected %d restarts, but got %d", expCount, count)
+	}
+}
+
+// TestTxnResolveIntentsFromMultipleEpochs verifies that that intents
+// from earlier epochs are cleaned up on transaction commit.
+func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _ := createTestDB(t)
+	defer s.Stop()
+
+	keys := []string{"a", "b", "c"}
+	ch := make(chan struct{})
+	errChan := make(chan error)
+	// Launch goroutine to write the three keys on three successive epochs.
+	go func() {
+		var count int
+		errChan <- s.DB.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+			// Signal that the transaction has (re)started.
+			ch <- struct{}{}
+			// Wait for concurrent writer to write key.
+			<-ch
+			// Now write our version over the top (will get write too old
+			// error for first two attempts).
+			if err := txn.Put(ctx, keys[count], "txn"); err != nil {
+				return err
+			}
+			count++
+			return nil
+		})
+	}()
+
+	// Wait for transaction to start.
+	<-ch
+	// Write first key.
+	if err := s.DB.Put(context.Background(), keys[0], "db"); err != nil {
+		t.Fatal(err)
+	}
+	// Signal first key has been written.
+	ch <- struct{}{}
+
+	// Wait for transaction to restart.
+	<-ch
+	// Write second key.
+	if err := s.DB.Put(context.Background(), keys[1], "db"); err != nil {
+		t.Fatal(err)
+	}
+	// Signal second key has been written.
+	ch <- struct{}{}
+
+	// Wait for transaction to restart final time.
+	<-ch
+	// Signal txn to continue.
+	ch <- struct{}{}
+
+	// Wait for txn to finish.
+	if err := <-errChan; err != nil {
+		t.Fatal(err)
+	}
+
+	// Read values for three keys. The first two should be "db", "last should be "txn".
+	for i, k := range keys {
+		v, err := s.DB.Get(context.TODO(), k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		str := string(v.ValueBytes())
+		if i < len(keys)-1 {
+			if str != "db" {
+				t.Errorf("key %s expected \"db\"; got %s", k, str)
+			}
+		} else {
+			if str != "txn" {
+				t.Errorf("key %s expected \"txn\"; got %s", k, str)
+			}
+		}
 	}
 }

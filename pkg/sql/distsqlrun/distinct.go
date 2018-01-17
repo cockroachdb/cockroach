@@ -17,48 +17,47 @@ package distsqlrun
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"golang.org/x/net/context"
+	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 )
 
 type distinct struct {
 	processorBase
 
-	flowCtx      *FlowCtx
+	evalCtx      *tree.EvalContext
 	input        RowSource
 	types        []sqlbase.ColumnType
 	lastGroupKey sqlbase.EncDatumRow
+	arena        stringarena.Arena
 	seen         map[string]struct{}
-	orderedCols  map[uint32]struct{}
-	distinctCols map[uint32]struct{}
+	orderedCols  []uint32
+	distinctCols util.FastIntSet
 	memAcc       mon.BoundAccount
 	datumAlloc   sqlbase.DatumAlloc
+	scratch      []byte
 }
 
 var _ Processor = &distinct{}
+var _ RowSource = &distinct{}
 
 func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*distinct, error) {
 	d := &distinct{
-		flowCtx:      flowCtx,
-		input:        input,
-		orderedCols:  make(map[uint32]struct{}),
-		distinctCols: make(map[uint32]struct{}),
-		memAcc:       flowCtx.EvalCtx.Mon.MakeBoundAccount(),
-	}
-	for _, col := range spec.OrderedColumns {
-		d.orderedCols[col] = struct{}{}
-	}
-	for _, col := range spec.DistinctColumns {
-		d.distinctCols[col] = struct{}{}
+		input:       input,
+		orderedCols: spec.OrderedColumns,
+		memAcc:      flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
 
-	d.types = input.Types()
-	if err := d.init(post, d.types, flowCtx, output); err != nil {
+	for _, col := range spec.DistinctColumns {
+		d.distinctCols.Add(int(col))
+	}
+
+	d.types = input.OutputTypes()
+	if err := d.init(post, d.types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 
@@ -66,85 +65,13 @@ func newDistinct(
 }
 
 // Run is part of the processor interface.
-func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (d *distinct) Run(wg *sync.WaitGroup) {
+	if d.out.output == nil {
+		panic("distinct output not initialized for emitting rows")
+	}
+	Run(d.flowCtx.Ctx, d, d.out.output)
 	if wg != nil {
-		defer wg.Done()
-	}
-	defer d.memAcc.Close(ctx)
-
-	ctx = log.WithLogTag(ctx, "Evaluator", nil)
-	ctx, span := processorSpan(ctx, "distinct")
-	defer tracing.FinishSpan(span)
-
-	if log.V(2) {
-		log.Infof(ctx, "starting distinct process")
-		defer log.Infof(ctx, "exiting distinct")
-	}
-
-	earlyExit, err := d.mainLoop(ctx)
-	if err != nil {
-		DrainAndClose(ctx, d.out.output, err, d.input)
-	} else if !earlyExit {
-		sendTraceData(ctx, d.out.output)
-		d.input.ConsumerClosed()
-		d.out.Close()
-	}
-}
-
-func (d *distinct) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
-	var scratch []byte
-	for {
-		row, meta := d.input.Next()
-		if !meta.Empty() {
-			if meta.Err != nil {
-				return false, meta.Err
-			}
-			if !emitHelper(ctx, &d.out, nil /* row */, meta, d.input) {
-				// No cleanup required; emitHelper() took care of it.
-				return true, nil
-			}
-			continue
-		}
-		if row == nil {
-			return false, nil
-		}
-
-		encoding := scratch
-		// If we are processing DISTINCT(x, y) and the input stream is ordered
-		// by x, we define x to be our group key. Our seen set at any given time
-		// is only the set of all rows with the same group key. The encoding of
-		// the row is the key we use in our 'seen' set.
-		var err error
-		encoding, err = d.encode(scratch, row)
-		if err != nil {
-			return false, err
-		}
-		// The 'seen' set is reset whenever we find consecutive rows differing on the
-		// group key thus avoiding the need to store encodings of all rows.
-		matched, err := d.matchLastGroupKey(row)
-		if err != nil {
-			return false, err
-		}
-
-		if !matched {
-			d.lastGroupKey = row
-			d.seen = make(map[string]struct{})
-			d.memAcc.Clear(ctx)
-		}
-
-		if _, ok := d.seen[string(encoding)]; !ok {
-			if len(encoding) > 0 {
-				if err := d.memAcc.Grow(ctx, int64(len(encoding))); err != nil {
-					return false, err
-				}
-				d.seen[string(encoding)] = struct{}{}
-			}
-			if !emitHelper(ctx, &d.out, row, ProducerMetadata{}, d.input) {
-				// No cleanup required; emitHelper() took care of it.
-				return true, nil
-			}
-			scratch = encoding[:0]
-		}
+		wg.Done()
 	}
 }
 
@@ -152,10 +79,9 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 	if d.lastGroupKey == nil {
 		return false, nil
 	}
-	evalCtx := d.flowCtx.NewEvalCtx()
-	for colIdx := range d.orderedCols {
+	for _, colIdx := range d.orderedCols {
 		res, err := d.lastGroupKey[colIdx].Compare(
-			&d.types[colIdx], &d.datumAlloc, evalCtx, &row[colIdx],
+			&d.types[colIdx], &d.datumAlloc, d.evalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err
@@ -173,7 +99,7 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 		// post-processing to strip out column Y, we cannot include it as
 		// (X1, Y1) and (X1, Y2) will appear as distinct rows, but if we are
 		// stripping out Y, we do not want (X1) and (X1) to be in the results.
-		if _, distinct := d.distinctCols[uint32(i)]; !distinct {
+		if !d.distinctCols.Contains(i) {
 			continue
 		}
 
@@ -189,4 +115,112 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 		}
 	}
 	return appendTo, nil
+}
+
+func (d *distinct) close() {
+	if !d.closed {
+		// Need to close the mem accounting while the context is still valid.
+		d.memAcc.Close(d.ctx)
+	}
+	if d.internalClose() {
+		d.input.ConsumerClosed()
+	}
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
+func (d *distinct) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
+	if !d.closed {
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(d.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
+		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		d.close()
+	}
+	return meta
+}
+
+// Next is part of the RowSource interface.
+func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	if d.maybeStart("distinct", "Distinct") {
+		d.evalCtx = d.flowCtx.NewEvalCtx()
+	}
+
+	for {
+		row, meta := d.input.Next()
+		if d.closed || meta != nil {
+			return nil, meta
+		}
+		if row == nil {
+			return nil, d.producerMeta(nil /* err */)
+		}
+
+		// If we are processing DISTINCT(x, y) and the input stream is ordered
+		// by x, we define x to be our group key. Our seen set at any given time
+		// is only the set of all rows with the same group key. The encoding of
+		// the row is the key we use in our 'seen' set.
+		encoding, err := d.encode(d.scratch, row)
+		if err != nil {
+			return nil, d.producerMeta(err)
+		}
+		d.scratch = encoding[:0]
+
+		// The 'seen' set is reset whenever we find consecutive rows differing on the
+		// group key thus avoiding the need to store encodings of all rows.
+		matched, err := d.matchLastGroupKey(row)
+		if err != nil {
+			return nil, d.producerMeta(err)
+		}
+
+		if !matched {
+			d.lastGroupKey = row
+			d.memAcc.Clear(d.ctx)
+			d.arena = stringarena.Make(&d.memAcc)
+			d.seen = make(map[string]struct{})
+		}
+
+		if len(encoding) > 0 {
+			if _, ok := d.seen[string(encoding)]; ok {
+				continue
+			}
+			s, err := d.arena.AllocBytes(d.ctx, encoding)
+			if err != nil {
+				return nil, d.producerMeta(err)
+			}
+			d.seen[s] = struct{}{}
+		}
+
+		outRow, status, err := d.out.ProcessRow(d.ctx, row)
+		if err != nil {
+			return nil, d.producerMeta(err)
+		}
+		switch status {
+		case NeedMoreRows:
+			if outRow == nil && err == nil {
+				continue
+			}
+		case DrainRequested:
+			d.input.ConsumerDone()
+			continue
+		}
+
+		return outRow, nil
+	}
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (d *distinct) ConsumerDone() {
+	d.input.ConsumerDone()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (d *distinct) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	d.close()
 }

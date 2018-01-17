@@ -57,6 +57,12 @@ message NodeUnavailableError {
   option (gogoproto.equal) = true;
 }
 
+// An UnsupportedRequestError indicates that the recipient node
+// does not know how to handle the type of request received.
+message UnsupportedRequestError {
+  option (gogoproto.equal) = true;
+}
+
 // A RangeNotFoundError indicates that a command was sent to a range
 // which is not hosted on this store.
 message RangeNotFoundError {
@@ -92,8 +98,14 @@ message RangeKeyMismatchError {
 message ReadWithinUncertaintyIntervalError {
   option (gogoproto.equal) = true;
 
+  // This data below is purely informational and used to tailor the
+  // error message.
   optional util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp existing_timestamp = 2 [(gogoproto.nullable) = false];
+  // The remaining fields may be missing when running in clusters that have
+  // members at below CockroachDB v2.0.
+  optional util.hlc.Timestamp max_timestamp = 3;
+  repeated ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
 }
 
 // A TransactionAbortedError indicates that the transaction was aborted by
@@ -334,6 +346,16 @@ message TxnPrevAttemptError {
   option (gogoproto.equal) = true;
 }
 
+// An IntegerOverflowError indicates that an operation was aborted because
+// it would have caused an integeter overflow.
+message IntegerOverflowError {
+  option (gogoproto.equal) = true;
+
+  optional bytes key = 1 [(gogoproto.casttype) = "Key"];
+  optional int64 current_value = 2 [(gogoproto.nullable) = false];
+  optional int64 increment_value = 3 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -369,6 +391,8 @@ message ErrorDetail {
   optional HandledRetryableTxnError handled_retryable_txn_error = 28;
   optional UntrackedTxnError untracked_txn_error = 29;
   optional TxnPrevAttemptError txn_aborted_async_err = 30;
+  optional IntegerOverflowError integer_overflow = 31;
+  optional UnsupportedRequestError unsupported_request = 32;
 }
 
 // TransactionRestart indicates how an error should be handled in a

@@ -1,0 +1,7 @@
+truncate_stmt ::=
+	'TRUNCATE' 'TABLE' table_name ( ( ',' table_name ) )* 'CASCADE'
+	| 'TRUNCATE' 'TABLE' table_name ( ( ',' table_name ) )* 'RESTRICT'
+	| 'TRUNCATE' 'TABLE' table_name ( ( ',' table_name ) )* 
+	| 'TRUNCATE'  table_name ( ( ',' table_name ) )* 'CASCADE'
+	| 'TRUNCATE'  table_name ( ( ',' table_name ) )* 'RESTRICT'
+	| 'TRUNCATE'  table_name ( ( ',' table_name ) )* 

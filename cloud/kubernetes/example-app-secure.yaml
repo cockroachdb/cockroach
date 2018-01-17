@@ -9,6 +9,7 @@ spec:
       labels:
         app: loadgen
     spec:
+      serviceAccountName: cockroachdb
       volumes:
       - name: client-certs
         emptyDir: {}

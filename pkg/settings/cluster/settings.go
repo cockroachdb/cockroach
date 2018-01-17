@@ -15,10 +15,10 @@
 package cluster
 
 import (
+	"context"
 	"math"
 	"sync/atomic"
 
-	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -122,6 +122,12 @@ type ExposedClusterVersion struct {
 	ServerVersion       roachpb.Version
 	baseVersion         atomic.Value // stores *ClusterVersion
 	cb                  func(ClusterVersion)
+}
+
+// IsInitialized returns true if the cluster version has been initialized and is
+// ready for use.
+func (ecv *ExposedClusterVersion) IsInitialized() bool {
+	return *ecv.baseVersion.Load().(*ClusterVersion) != ClusterVersion{}
 }
 
 // OnChange registers (a single) callback that will be invoked whenever the

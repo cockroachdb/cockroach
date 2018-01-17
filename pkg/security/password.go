@@ -26,10 +26,13 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-// BCrypt cost should increase along with computation power.
+// BcryptCost is the cost to use when hashing passwords. It is exposed for
+// testing.
+//
+// BcryptCost should increase along with computation power.
 // For estimates, see: http://security.stackexchange.com/questions/17207/recommended-of-rounds-for-bcrypt
 // For now, we use the library's default cost.
-const bcryptCost = bcrypt.DefaultCost
+var BcryptCost = bcrypt.DefaultCost
 
 // ErrEmptyPassword indicates that an empty password was attempted to be set.
 var ErrEmptyPassword = errors.New("empty passwords are not permitted")
@@ -45,7 +48,7 @@ func CompareHashAndPassword(hashedPassword []byte, password string) error {
 // HashPassword takes a raw password and returns a bcrypt hashed password.
 func HashPassword(password string) ([]byte, error) {
 	h := sha256.New()
-	return bcrypt.GenerateFromPassword(h.Sum([]byte(password)), bcryptCost)
+	return bcrypt.GenerateFromPassword(h.Sum([]byte(password)), BcryptCost)
 }
 
 // PromptForPassword prompts for a password.

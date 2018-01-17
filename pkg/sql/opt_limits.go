@@ -150,6 +150,8 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.setUnlimited(n.plan)
 	case *showTraceNode:
 		p.setUnlimited(n.plan)
+	case *showTraceReplicaNode:
+		p.setUnlimited(n.plan)
 	case *explainPlanNode:
 		if n.expanded {
 			p.setUnlimited(n.plan)
@@ -162,6 +164,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.setUnlimited(n.rows)
 
 	case *valuesNode:
+	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
@@ -171,7 +174,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
-	case *createUserNode:
+	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
 	case *createStatsNode:
@@ -180,7 +183,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *dropTableNode:
 	case *dropViewNode:
 	case *dropSequenceNode:
-	case *dropUserNode:
+	case *DropUserNode:
 	case *zeroNode:
 	case *unaryNode:
 	case *hookFnNode:

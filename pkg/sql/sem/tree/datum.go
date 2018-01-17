@@ -151,15 +151,36 @@ func (d Datums) Reverse() {
 }
 
 // Format implements the NodeFormatter interface.
-func (d Datums) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteByte('(')
-	for i, v := range d {
+func (d *Datums) Format(ctx *FmtCtx) {
+	ctx.WriteByte('(')
+	for i, v := range *d {
 		if i > 0 {
-			buf.WriteString(", ")
+			ctx.WriteString(", ")
 		}
-		FormatNode(buf, f, v)
+		ctx.FormatNode(v)
 	}
-	buf.WriteByte(')')
+	ctx.WriteByte(')')
+}
+
+// IsDistinctFrom checks to see if two datums are distinct from each other. Any
+// change in value is considered distinct, however, a NULL value is NOT
+// considered disctinct from another NULL value.
+func (d Datums) IsDistinctFrom(evalCtx *EvalContext, other Datums) bool {
+	if len(d) != len(other) {
+		return true
+	}
+	for i, val := range d {
+		if val == DNull {
+			if other[i] != DNull {
+				return true
+			}
+		} else {
+			if val.Compare(evalCtx, other[i]) != 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // CompositeDatum is a Datum that may require composite encoding in
@@ -200,16 +221,57 @@ func makeUnsupportedComparisonMessage(d1, d2 Datum) string {
 	return fmt.Sprintf("unsupported comparison: %s to %s", d1.ResolvedType(), d2.ResolvedType())
 }
 
+func isCaseInsensitivePrefix(prefix, s string) bool {
+	if len(prefix) > len(s) {
+		return false
+	}
+	return strings.EqualFold(prefix, s[:len(prefix)])
+}
+
 // ParseDBool parses and returns the *DBool Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
+// See https://github.com/postgres/postgres/blob/90627cf98a8e7d0531789391fd798c9bfcc3bc1a/src/backend/utils/adt/bool.c#L36
 func ParseDBool(s string) (*DBool, error) {
-	// TODO(pmattis): strconv.ParseBool is more permissive than the SQL
-	// spec. Is that ok?
-	b, err := strconv.ParseBool(s)
-	if err != nil {
-		return nil, makeParseError(s, types.Bool, err)
+	s = strings.TrimSpace(s)
+	if len(s) >= 1 {
+		switch s[0] {
+		case 't', 'T':
+			if isCaseInsensitivePrefix(s, "true") {
+				return DBoolTrue, nil
+			}
+		case 'f', 'F':
+			if isCaseInsensitivePrefix(s, "false") {
+				return DBoolFalse, nil
+			}
+		case 'y', 'Y':
+			if isCaseInsensitivePrefix(s, "yes") {
+				return DBoolTrue, nil
+			}
+		case 'n', 'N':
+			if isCaseInsensitivePrefix(s, "no") {
+				return DBoolFalse, nil
+			}
+		case '1':
+			if s == "1" {
+				return DBoolTrue, nil
+			}
+		case '0':
+			if s == "0" {
+				return DBoolFalse, nil
+			}
+		case 'o', 'O':
+			// Just 'o' is ambiguous between 'on' and 'off'.
+			if len(s) > 1 {
+				if isCaseInsensitivePrefix(s, "on") {
+					return DBoolTrue, nil
+				}
+				if isCaseInsensitivePrefix(s, "off") {
+					return DBoolFalse, nil
+				}
+			}
+		}
 	}
-	return MakeDBool(DBool(b)), nil
+	return nil, makeParseError(s, types.Bool, pgerror.NewError(pgerror.CodeInvalidTextRepresentationError, "invalid bool value"))
 }
 
 // ParseDByte parses a string representation of hex encoded binary data.
@@ -326,8 +388,8 @@ func (d *DBool) Max(_ *EvalContext) (Datum, bool) {
 func (*DBool) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (d *DBool) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString(strconv.FormatBool(bool(*d)))
+func (d *DBool) Format(ctx *FmtCtx) {
+	ctx.WriteString(strconv.FormatBool(bool(*d)))
 }
 
 // Size implements the Datum interface.
@@ -443,16 +505,16 @@ func (d *DInt) Min(_ *EvalContext) (Datum, bool) {
 func (*DInt) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DInt) Format(buf *bytes.Buffer, f FmtFlags) {
+func (d *DInt) Format(ctx *FmtCtx) {
 	// If the number is negative, we need to use parens or the `:::INT` type hint
 	// will take precedence over the negation sign.
-	quote := f.disambiguateDatumTypes && *d < 0
+	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && *d < 0
 	if quote {
-		buf.WriteByte('(')
+		ctx.WriteByte('(')
 	}
-	buf.WriteString(strconv.FormatInt(int64(*d), 10))
+	ctx.WriteString(strconv.FormatInt(int64(*d), 10))
 	if quote {
-		buf.WriteByte(')')
+		ctx.WriteByte(')')
 	}
 }
 
@@ -573,20 +635,20 @@ func (d *DFloat) Min(_ *EvalContext) (Datum, bool) {
 func (*DFloat) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
+func (d *DFloat) Format(ctx *FmtCtx) {
 	fl := float64(*d)
-	quote := f.disambiguateDatumTypes && (math.IsNaN(fl) || math.IsInf(fl, 0))
+	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && (math.IsNaN(fl) || math.IsInf(fl, 0))
 	if quote {
-		buf.WriteByte('\'')
+		ctx.WriteByte('\'')
 	}
 	if _, frac := math.Modf(fl); frac == 0 && -1000000 < *d && *d < 1000000 {
 		// d is a small whole number. Ensure it is printed using a decimal point.
-		fmt.Fprintf(buf, "%.1f", fl)
+		ctx.Printf("%.1f", fl)
 	} else {
-		fmt.Fprintf(buf, "%g", fl)
+		ctx.Printf("%g", fl)
 	}
 	if quote {
-		buf.WriteByte('\'')
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -705,14 +767,14 @@ func (d *DDecimal) Min(_ *EvalContext) (Datum, bool) {
 func (*DDecimal) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
-	quote := f.disambiguateDatumTypes && d.Decimal.Form != apd.Finite
+func (d *DDecimal) Format(ctx *FmtCtx) {
+	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && d.Decimal.Form != apd.Finite
 	if quote {
-		buf.WriteByte('\'')
+		ctx.WriteByte('\'')
 	}
-	buf.WriteString(d.Decimal.String())
+	ctx.WriteString(d.Decimal.String())
 	if quote {
-		buf.WriteByte('\'')
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -834,11 +896,12 @@ func (d *DString) Max(_ *EvalContext) (Datum, bool) {
 func (*DString) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
-	if f.withinArray {
+func (d *DString) Format(ctx *FmtCtx) {
+	buf, f := ctx.Buffer, ctx.flags
+	if f.HasFlags(fmtWithinArray) {
 		lex.EncodeSQLStringInsideArray(buf, string(*d))
 	} else {
-		lex.EncodeSQLStringWithFlags(buf, string(*d), f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
 	}
 }
 
@@ -902,13 +965,14 @@ func NewDCollatedString(
 func (*DCollatedString) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
-	if f.withinArray {
+func (d *DCollatedString) Format(ctx *FmtCtx) {
+	buf, f := ctx.Buffer, ctx.flags
+	if f.HasFlags(fmtWithinArray) {
 		lex.EncodeSQLStringInsideArray(buf, d.Contents)
 	} else {
 		lex.EncodeSQLString(buf, d.Contents)
-		buf.WriteString(" COLLATE ")
-		lex.EncodeUnrestrictedSQLIdent(buf, d.Locale, lex.EncodeFlags{})
+		ctx.WriteString(" COLLATE ")
+		lex.EncodeUnrestrictedSQLIdent(buf, d.Locale, lex.EncNoFlags)
 	}
 }
 
@@ -1040,13 +1104,20 @@ func (d *DBytes) Max(_ *EvalContext) (Datum, bool) {
 func (*DBytes) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("'\\x")
+func (d *DBytes) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	withQuotes := f.HasFlags(fmtWithinArray) || !f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if withQuotes {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString("\\x")
 	b := string(*d)
 	for i := 0; i < len(b); i++ {
-		buf.Write(stringencoding.RawHexMap[b[i]])
+		ctx.Write(stringencoding.RawHexMap[b[i]])
 	}
-	buf.WriteByte('\'')
+	if withQuotes {
+		ctx.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
@@ -1129,13 +1200,15 @@ func (*DUuid) Max(_ *EvalContext) (Datum, bool) {
 func (*DUuid) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (d *DUuid) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+func (d *DUuid) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
-	buf.WriteString(d.UUID.String())
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+	ctx.WriteString(d.UUID.String())
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -1287,13 +1360,15 @@ func (*DIPAddr) AmbiguousFormat() bool {
 }
 
 // Format implements the NodeFormatter interface.
-func (d *DIPAddr) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+func (d *DIPAddr) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
-	buf.WriteString(d.IPAddr.String())
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+	ctx.WriteString(d.IPAddr.String())
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -1396,13 +1471,15 @@ func (d *DDate) Min(_ *EvalContext) (Datum, bool) {
 func (*DDate) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+func (d *DDate) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
-	buf.WriteString(timeutil.Unix(int64(*d)*SecondsInDay, 0).Format(dateFormat))
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+	ctx.WriteString(timeutil.Unix(int64(*d)*SecondsInDay, 0).Format(dateFormat))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -1494,13 +1571,15 @@ func (d *DTime) Min(_ *EvalContext) (Datum, bool) {
 func (*DTime) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (d *DTime) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+func (d *DTime) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
-	buf.WriteString(timeofday.TimeOfDay(*d).String())
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+	ctx.WriteString(timeofday.TimeOfDay(*d).String())
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -1727,13 +1806,15 @@ func (d *DTimestamp) Max(_ *EvalContext) (Datum, bool) {
 func (*DTimestamp) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+func (d *DTimestamp) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
-	buf.WriteString(d.UTC().Format(TimestampOutputFormat))
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+	ctx.WriteString(d.UTC().Format(TimestampOutputFormat))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -1824,13 +1905,15 @@ func (d *DTimestampTZ) Max(_ *EvalContext) (Datum, bool) {
 func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+func (d *DTimestampTZ) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
-	buf.WriteString(d.Time.Format(TimestampOutputFormat))
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+	ctx.WriteString(d.Time.Format(TimestampOutputFormat))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -2031,13 +2114,15 @@ func (d *DInterval) ValueAsString() string {
 func (*DInterval) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+func (d *DInterval) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
-	d.Duration.Format(buf)
-	if !f.encodeFlags.BareStrings {
-		buf.WriteByte('\'')
+	d.Duration.Format(ctx.Buffer)
+	if !bareStrings {
+		ctx.WriteByte('\'')
 	}
 }
 
@@ -2049,13 +2134,18 @@ func (d *DInterval) Size() uintptr {
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
+// NewDJSON is a helper routine to create a DJSON initialized from its argument.
+func NewDJSON(j json.JSON) *DJSON {
+	return &DJSON{j}
+}
+
 // ParseDJSON takes a string of JSON and returns a DJSON value.
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not parse JSON")
 	}
-	return &DJSON{j}, nil
+	return NewDJSON(j), nil
 }
 
 // MakeDJSON returns a JSON value given a Go-style representation of JSON.
@@ -2113,7 +2203,14 @@ func (d *DJSON) Compare(ctx *EvalContext, other Datum) int {
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return d.JSON.Compare(v.JSON)
+	// No avenue for us to pass up this error here at the moment, but Compare
+	// only errors for invalid encoded data.
+	// TODO(justin): modify Compare to allow passing up errors.
+	c, err := d.JSON.Compare(v.JSON)
+	if err != nil {
+		panic(err)
+	}
+	return c
 }
 
 // Prev implements the Datum interface.
@@ -2150,11 +2247,11 @@ func (d *DJSON) Min(_ *EvalContext) (Datum, bool) {
 func (*DJSON) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DJSON) Format(buf *bytes.Buffer, f FmtFlags) {
+func (d *DJSON) Format(ctx *FmtCtx) {
 	// TODO(justin): ideally the JSON string encoder should know it needs to
 	// escape things to be inside SQL strings in order to avoid this allocation.
 	s := d.JSON.String()
-	lex.EncodeSQLStringWithFlags(buf, s, f.encodeFlags)
+	lex.EncodeSQLStringWithFlags(ctx.Buffer, s, ctx.flags.EncodeFlags())
 }
 
 // Size implements the Datum interface.
@@ -2348,8 +2445,8 @@ func (d *DTuple) IsMin(ctx *EvalContext) bool {
 func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (d *DTuple) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, d.D)
+func (d *DTuple) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&d.D)
 }
 
 // SetSorted sets the sorted flag on the DTuple. This should be used when a
@@ -2487,8 +2584,8 @@ func (dNull) Min(_ *EvalContext) (Datum, bool) {
 func (dNull) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (dNull) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("NULL")
+func (dNull) Format(ctx *FmtCtx) {
+	ctx.WriteString("NULL")
 }
 
 // Size implements the Datum interface.
@@ -2606,15 +2703,15 @@ func (d *DArray) IsMin(_ *EvalContext) bool {
 func (*DArray) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ARRAY[")
+func (d *DArray) Format(ctx *FmtCtx) {
+	ctx.WriteString("ARRAY[")
 	for i, v := range d.Array {
 		if i > 0 {
-			buf.WriteString(",")
+			ctx.WriteString(",")
 		}
-		FormatNode(buf, f, v)
+		ctx.FormatNode(v)
 	}
-	buf.WriteByte(']')
+	ctx.WriteByte(']')
 }
 
 const maxArrayLength = math.MaxInt32
@@ -2692,8 +2789,8 @@ type DTable struct {
 func (*DTable) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-func (t *DTable) Format(buf *bytes.Buffer, _ FmtFlags) {
-	buf.WriteString("<generated>")
+func (t *DTable) Format(ctx *FmtCtx) {
+	ctx.WriteString("<generated>")
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2786,11 +2883,16 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 }
 
 // Format implements the Datum interface.
-func (d *DOid) Format(buf *bytes.Buffer, f FmtFlags) {
+func (d *DOid) Format(ctx *FmtCtx) {
 	if d.semanticType == coltypes.Oid || d.name == "" {
-		FormatNode(buf, f, &d.DInt)
+		// If we call FormatNode directly when the disambiguateDatumTypes flag
+		// is set, then we get something like 123:::INT:::OID. This is the
+		// important flag set by FmtParsable which is supposed to be
+		// roundtrippable. Since in this branch, a DOid is a thin wrapper around
+		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
+		d.DInt.Format(ctx)
 	} else {
-		lex.EncodeSQLStringWithFlags(buf, d.name, lex.EncodeFlags{BareStrings: true})
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncBareStrings)
 	}
 }
 
@@ -2958,9 +3060,9 @@ func (d *DOidWrapper) AmbiguousFormat() bool {
 }
 
 // Format implements the NodeFormatter interface.
-func (d *DOidWrapper) Format(buf *bytes.Buffer, f FmtFlags) {
+func (d *DOidWrapper) Format(ctx *FmtCtx) {
 	// Custom formatting based on d.OID could go here.
-	FormatNode(buf, f, d.Wrapped)
+	ctx.FormatNode(d.Wrapped)
 }
 
 // Size implements the Datum interface.

@@ -15,12 +15,11 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -171,14 +170,14 @@ func makeConstraints(
 	sel *renderNode,
 ) (orIndexConstraints, tree.TypedExpr) {
 	expr := parseAndNormalizeExpr(t, p, sql, sel)
-	exprs, equiv := decomposeExpr(&p.evalCtx, expr)
+	exprs, equiv := decomposeExpr(p.EvalContext(), expr)
 
 	c := &indexInfo{
 		desc:     desc,
 		index:    index,
 		covering: true,
 	}
-	c.analyzeExprs(&p.evalCtx, exprs)
+	c.analyzeExprs(p.EvalContext(), exprs)
 	if equiv && len(exprs) == 1 {
 		expr = joinAndExprs(exprs[0])
 	}
@@ -203,6 +202,10 @@ func TestMakeConstraints(t *testing.T) {
 		{`c IS NOT TRUE`, `c`, `[c IS NOT NULL, c <= false] OR [c IS NULL]`},
 		{`c IS FALSE`, `c`, `[c = false]`},
 		{`c IS NOT FALSE`, `c`, `[c >= true] OR [c IS NULL]`},
+		{`c IS NOT DISTINCT FROM TRUE`, `c`, `[c = true]`},
+		{`c IS DISTINCT FROM TRUE`, `c`, `[c IS NOT NULL, c <= false] OR [c IS NULL]`},
+		{`c IS NOT DISTINCT FROM FALSE`, `c`, `[c = false]`},
+		{`c IS DISTINCT FROM FALSE`, `c`, `[c >= true] OR [c IS NULL]`},
 
 		{`a = 1`, `b`, ``},
 		{`a = 1`, `a`, `[a = 1]`},
@@ -280,10 +283,14 @@ func TestMakeConstraints(t *testing.T) {
 		{`(b, a) = (1, 2)`, `a,b`, `[(b, a) IN ((1, 2))]`},
 		{`(b, a) = (1, 2)`, `a`, `[(b, a) IN ((1, 2))]`},
 
+		{`(a, b) != (1, 2)`, `a,b`, ``},
+
 		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, `a,b`, `[(a, b) IN ((1, 2))]`},
 
 		{`a IS NULL`, `a`, `[a IS NULL]`},
 		{`a IS NOT NULL`, `a`, `[a IS NOT NULL]`},
+		{`a IS NOT DISTINCT FROM NULL`, `a`, `[a IS NULL]`},
+		{`a IS DISTINCT FROM NULL`, `a`, `[a IS NOT NULL]`},
 
 		{`a = 1 OR a = 3`, `a`, `[a IN (1, 3)]`},
 		{`a <= 1 OR a >= 8`, `a`, `[a IS NOT NULL, a <= 1] OR [a >= 8]`},
@@ -324,8 +331,8 @@ func TestMakeConstraints(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
@@ -352,9 +359,13 @@ func TestMakeSpans(t *testing.T) {
 		{`c != false`, `c`, `/1-`, `-/0`},
 		{`NOT c`, `c`, `/!NULL-/1`, `/0-/NULL`},
 		{`c IS TRUE`, `c`, `/1-/2`, `/1-/0`},
-		{`c IS NOT TRUE`, `c`, `-/1`, `/0-`},
+		{`c IS NOT TRUE`, `c`, `/NULL-/1`, `/0-`},
 		{`c IS FALSE`, `c`, `/0-/1`, `/0-/-1`},
-		{`c IS NOT FALSE`, `c`, `-/!NULL /1-`, `-/0 /NULL-`},
+		{`c IS NOT FALSE`, `c`, `/NULL-/!NULL /1-`, `-/0 /NULL-`},
+		{`c IS NOT DISTINCT FROM TRUE`, `c`, `/1-/2`, `/1-/0`},
+		{`c IS DISTINCT FROM TRUE`, `c`, `/NULL-/1`, `/0-`},
+		{`c IS NOT DISTINCT FROM FALSE`, `c`, `/0-/1`, `/0-/-1`},
+		{`c IS DISTINCT FROM FALSE`, `c`, `/NULL-/!NULL /1-`, `-/0 /NULL-`},
 
 		{`a = 1`, `a`, `/1-/2`, `/1-/0`},
 		{`a != 1`, `a`, `/!NULL-`, `-/NULL`},
@@ -362,8 +373,10 @@ func TestMakeSpans(t *testing.T) {
 		{`a >= 1`, `a`, `/1-`, `-/0`},
 		{`a < 1`, `a`, `/!NULL-/1`, `/0-/NULL`},
 		{`a <= 1`, `a`, `/!NULL-/2`, `/1-/NULL`},
-		{`a IS NULL`, `a`, `-/!NULL`, `/NULL-`},
+		{`a IS NULL`, `a`, `/NULL-/!NULL`, `/NULL-`},
 		{`a IS NOT NULL`, `a`, `/!NULL-`, `-/NULL`},
+		{`a IS NOT DISTINCT FROM NULL`, `a`, `/NULL-/!NULL`, `/NULL-`},
+		{`a IS DISTINCT FROM NULL`, `a`, `/!NULL-`, `-/NULL`},
 
 		{`a IN (1,2,3)`, `a`, `/1-/4`, `/3-/0`},
 		{`a IN (1,3,5)`, `a`, `/1-/2 /3-/4 /5-/6`, `/5-/4 /3-/2 /1-/0`},
@@ -387,8 +400,10 @@ func TestMakeSpans(t *testing.T) {
 		{`a = 1 AND b >= 1`, `a,b`, `/1/1-/2`, `/1-/1/0`},
 		{`a = 1 AND b < 1`, `a,b`, `/1/!NULL-/1/1`, `/1/0-/1/NULL`},
 		{`a = 1 AND b <= 1`, `a,b`, `/1/!NULL-/1/2`, `/1/1-/1/NULL`},
-		{`a = 1 AND b IS NULL`, `a,b`, `/1-/1/!NULL`, `/1/NULL-/0`},
+		{`a = 1 AND b IS NULL`, `a,b`, `/1/NULL-/1/!NULL`, `/1/NULL-/0`},
 		{`a = 1 AND b IS NOT NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
+		{`a = 1 AND b IS NOT DISTINCT FROM NULL`, `a,b`, `/1/NULL-/1/!NULL`, `/1/NULL-/0`},
+		{`a = 1 AND b IS DISTINCT FROM NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
 
 		{`a != 1 AND b = 1`, `a,b`, `/!NULL-`, `-/NULL`},
 		{`a != 1 AND b != 1`, `a,b`, `/!NULL-`, `-/NULL`},
@@ -398,6 +413,8 @@ func TestMakeSpans(t *testing.T) {
 		{`a != 1 AND b <= 1`, `a,b`, `/!NULL-`, `-/NULL`},
 		{`a != 1 AND b IS NULL`, `a,b`, `/!NULL-`, `-/NULL`},
 		{`a != 1 AND b IS NOT NULL`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b IS NOT DISTINCT FROM NULL`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b IS DISTINCT FROM NULL`, `a,b`, `/!NULL-`, `-/NULL`},
 
 		{`a > 1 AND b = 1`, `a,b`, `/2/1-`, `-/2/0`},
 		{`a > 1 AND b != 1`, `a,b`, `/2/!NULL-`, `-/2/NULL`},
@@ -405,8 +422,10 @@ func TestMakeSpans(t *testing.T) {
 		{`a > 1 AND b >= 1`, `a,b`, `/2/1-`, `-/2/0`},
 		{`a > 1 AND b < 1`, `a,b`, `/2-`, `-/1`},
 		{`a > 1 AND b <= 1`, `a,b`, `/2-`, `-/1`},
-		{`a > 1 AND b IS NULL`, `a,b`, `/2-`, `-/1`},
+		{`a > 1 AND b IS NULL`, `a,b`, `/2/NULL-`, `-/1`},
 		{`a > 1 AND b IS NOT NULL`, `a,b`, `/2/!NULL-`, `-/2/NULL`},
+		{`a > 1 AND b IS NOT DISTINCT FROM NULL`, `a,b`, `/2/NULL-`, `-/1`},
+		{`a > 1 AND b IS DISTINCT FROM NULL`, `a,b`, `/2/!NULL-`, `-/2/NULL`},
 
 		{`a >= 1 AND b = 1`, `a,b`, `/1/1-`, `-/1/0`},
 		{`a >= 1 AND b != 1`, `a,b`, `/1/!NULL-`, `-/1/NULL`},
@@ -414,8 +433,10 @@ func TestMakeSpans(t *testing.T) {
 		{`a >= 1 AND b >= 1`, `a,b`, `/1/1-`, `-/1/0`},
 		{`a >= 1 AND b < 1`, `a,b`, `/1-`, `-/0`},
 		{`a >= 1 AND b <= 1`, `a,b`, `/1-`, `-/0`},
-		{`a >= 1 AND b IS NULL`, `a,b`, `/1-`, `-/0`},
+		{`a >= 1 AND b IS NULL`, `a,b`, `/1/NULL-`, `-/0`},
 		{`a >= 1 AND b IS NOT NULL`, `a,b`, `/1/!NULL-`, `-/1/NULL`},
+		{`a >= 1 AND b IS NOT DISTINCT FROM NULL`, `a,b`, `/1/NULL-`, `-/0`},
+		{`a >= 1 AND b IS DISTINCT FROM NULL`, `a,b`, `/1/!NULL-`, `-/1/NULL`},
 
 		{`a < 1 AND b = 1`, `a,b`, `/!NULL-/0/2`, `/0/1-/NULL`},
 		{`a < 1 AND b != 1`, `a,b`, `/!NULL-/1`, `/0-/NULL`},
@@ -425,6 +446,8 @@ func TestMakeSpans(t *testing.T) {
 		{`a < 1 AND b <= 1`, `a,b`, `/!NULL-/0/2`, `/0/1-/NULL`},
 		{`a < 1 AND b IS NULL`, `a,b`, `/!NULL-/0/!NULL`, `/0/NULL-/NULL`},
 		{`a < 1 AND b IS NOT NULL`, `a,b`, `/!NULL-/1`, `/0-/NULL`},
+		{`a < 1 AND b IS NOT DISTINCT FROM NULL`, `a,b`, `/!NULL-/0/!NULL`, `/0/NULL-/NULL`},
+		{`a < 1 AND b IS DISTINCT FROM NULL`, `a,b`, `/!NULL-/1`, `/0-/NULL`},
 
 		{`a <= 1 AND b = 1`, `a,b`, `/!NULL-/1/2`, `/1/1-/NULL`},
 		{`a <= 1 AND b != 1`, `a,b`, `/!NULL-/2`, `/1-/NULL`},
@@ -434,6 +457,8 @@ func TestMakeSpans(t *testing.T) {
 		{`a <= 1 AND b <= 1`, `a,b`, `/!NULL-/1/2`, `/1/1-/NULL`},
 		{`a <= 1 AND b IS NULL`, `a,b`, `/!NULL-/1/!NULL`, `/1/NULL-/NULL`},
 		{`a <= 1 AND b IS NOT NULL`, `a,b`, `/!NULL-/2`, `/1-/NULL`},
+		{`a <= 1 AND b IS NOT DISTINCT FROM NULL`, `a,b`, `/!NULL-/1/!NULL`, `/1/NULL-/NULL`},
+		{`a <= 1 AND b IS DISTINCT FROM NULL`, `a,b`, `/!NULL-/2`, `/1-/NULL`},
 
 		{`a IN (1) AND b = 1`, `a,b`, `/1/1-/1/2`, `/1/1-/1/0`},
 		{`a IN (1) AND b != 1`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
@@ -441,8 +466,10 @@ func TestMakeSpans(t *testing.T) {
 		{`a IN (1) AND b >= 1`, `a,b`, `/1/1-/2`, `/1-/1/0`},
 		{`a IN (1) AND b < 1`, `a,b`, `/1/!NULL-/1/1`, `/1/0-/1/NULL`},
 		{`a IN (1) AND b <= 1`, `a,b`, `/1/!NULL-/1/2`, `/1/1-/1/NULL`},
-		{`a IN (1) AND b IS NULL`, `a,b`, `/1-/1/!NULL`, `/1/NULL-/0`},
+		{`a IN (1) AND b IS NULL`, `a,b`, `/1/NULL-/1/!NULL`, `/1/NULL-/0`},
 		{`a IN (1) AND b IS NOT NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
+		{`a IN (1) AND b IS NOT DISTINCT FROM NULL`, `a,b`, `/1/NULL-/1/!NULL`, `/1/NULL-/0`},
+		{`a IN (1) AND b IS DISTINCT FROM NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
 
 		{`(a, b) = (1, 2)`, `a`, `/1-/2`, `/1-/0`},
 		{`(a, b) = (1, 2)`, `a,b`, `/1/2-/1/3`, `/1/2-/1/1`},
@@ -506,7 +533,7 @@ func TestMakeSpans(t *testing.T) {
 		{`(a, b) < (1, 4)`, `a,b`, `/!NULL-/1/4`, `/1/3-/NULL`},
 		{`(a, b) <= (1, 4)`, `a,b`, `/!NULL-/1/5`, `/1/4-/NULL`},
 		{`(a, b) = (1, 4)`, `a,b`, `/1/4-/1/5`, `/1/4-/1/3`},
-		{`(a, b) != (1, 4)`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`(a, b) != (1, 4)`, `a,b`, `-`, `-`},
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
@@ -518,8 +545,8 @@ func TestMakeSpans(t *testing.T) {
 				} else {
 					expected = d.expectedDesc
 				}
-				p.evalCtx = tree.MakeTestingEvalContext()
-				defer p.evalCtx.Stop(context.Background())
+				p.extendedEvalCtx = makeTestingExtendedEvalContext()
+				defer p.extendedEvalCtx.Stop(context.Background())
 				sel := makeSelectNode(t, p)
 				columns := strings.Split(d.columns, ",")
 				dirs := make([]encoding.Direction, 0, len(columns))
@@ -528,7 +555,7 @@ func TestMakeSpans(t *testing.T) {
 				}
 				desc, index := makeTestIndex(t, columns, dirs)
 				constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
-				spans, err := makeSpans(&p.evalCtx, constraints, desc, index)
+				spans, err := makeSpans(p.EvalContext(), constraints, desc, index)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -570,12 +597,12 @@ func TestMakeSpans(t *testing.T) {
 
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
-			spans, err := makeSpans(&p.evalCtx, constraints, desc, index)
+			spans, err := makeSpans(p.EvalContext(), constraints, desc, index)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -621,6 +648,10 @@ func TestExactPrefix(t *testing.T) {
 		{`c IS NOT TRUE`, `c`, 0},
 		{`c IS FALSE`, `c`, 1},
 		{`c IS NOT FALSE`, `c`, 0},
+		{`c IS NOT DISTINCT FROM TRUE`, `c`, 1},
+		{`c IS DISTINCT FROM TRUE`, `c`, 0},
+		{`c IS NOT DISTINCT FROM FALSE`, `c`, 1},
+		{`c IS DISTINCT FROM FALSE`, `c`, 0},
 
 		{`a = 1`, `a`, 1},
 		{`a != 1`, `a`, 0},
@@ -661,12 +692,12 @@ func TestExactPrefix(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
-			prefix := constraints.exactPrefix(&p.evalCtx)
+			prefix := constraints.exactPrefix(p.EvalContext())
 			if d.expected != prefix {
 				t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
 			}
@@ -695,14 +726,18 @@ func TestApplyConstraints(t *testing.T) {
 		{`NOT (a != 1)`, `a`, `<nil>`},
 		{`a != 1`, `a`, `a != 1`},
 		{`a IS NOT NULL`, `a`, `<nil>`},
+		{`a IS DISTINCT FROM NULL`, `a`, `<nil>`},
 		{`a = 1 AND b IS NOT NULL`, `a,b`, `<nil>`},
+		{`a = 1 AND b IS DISTINCT FROM NULL`, `a,b`, `<nil>`},
 		{`a >= 1 AND b = 2`, `a,b`, `b = 2`},
 		{`a >= 1 AND a <= 3 AND b = 2`, `a,b`, `b = 2`},
 		{`(a, b) = (1, 2) AND c IS NOT NULL`, `a,b,c`, `<nil>`},
+		{`(a, b) = (1, 2) AND c IS DISTINCT FROM NULL`, `a,b,c`, `<nil>`},
 		{`a IN (1, 2) AND b = 3`, `a,b`, `b = 3`},
 		{`a <= 5 AND b >= 6 AND (a, b) IN ((1, 2))`, `a,b`, `false`},
 		{`a IN (1) AND a = 1`, `a`, `<nil>`},
 		{`(a, b) = (1, 2)`, `a`, `b = 2`},
+		{`(a, b) != (1, 2)`, `a,b`, `(a, b) != (1, 2)`},
 		{`a > 1`, `a`, `<nil>`},
 		{`a < 1`, `a`, `<nil>`},
 		// The constraint (l, m) < (123, 456) must be treated as implying
@@ -739,12 +774,12 @@ func TestApplyConstraints(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, expr := makeConstraints(t, p, d.expr, desc, index, sel)
-			expr2 := applyIndexConstraints(&p.evalCtx, expr, constraints)
+			expr2 := applyIndexConstraints(p.EvalContext(), expr, constraints)
 			if s := fmt.Sprint(expr2); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s (constraints %s)", d.expr, d.expected, s, constraints)
 			}

@@ -17,6 +17,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -31,7 +32,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -138,6 +138,18 @@ func newCLITest(params cliTestParams) cliTest {
 	stderr = os.Stdout
 
 	return c
+}
+
+// setCLIDefaultsForTests invokes initCLIDefaults but pretends the
+// output is not a terminal, even if it happens to be. This ensures
+// e.g. that tests ran with -v have the same output as those without.
+func setCLIDefaultsForTests() {
+	initCLIDefaults()
+	cliCtx.terminalOutput = false
+	cliCtx.showTimes = false
+	// Even though we pretend there is no terminal, most tests want
+	// pretty tables.
+	cliCtx.tableDisplayFormat = tableDisplayPretty
 }
 
 // stopServer stops the test server.
@@ -341,7 +353,8 @@ communicate with a secure cluster\).
 		// up the stack as a roachpb.NewError(roachpb.NewSendError(.)).
 		// Error returned directly from GRPC.
 		{`quit`, styled(
-			`Failed to connect to the node: error sending drain request: rpc error: code = Unavailable desc = grpc: the connection is unavailable`),
+			`Failed to connect to the node: initial connection heartbeat failed: rpc error: ` +
+				`code = Unavailable desc = all SubConns are in TransientFailure`),
 		},
 		// Going through the SQL client libraries gives a *net.OpError which
 		// we also handle.
@@ -371,56 +384,6 @@ communicate with a secure cluster\).
 			}
 		})
 	}
-}
-
-func Example_ranges() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
-
-	c.Run("debug range split ranges3")
-	c.Run("debug range ls")
-
-	// Output:
-	//debug range split ranges3
-	//debug range ls
-	///Min-/System/"" [1]
-	//	0: node-id=1 store-id=1
-	///System/""-/System/NodeLiveness [2]
-	//	0: node-id=1 store-id=1
-	///System/NodeLiveness-/System/NodeLivenessMax [3]
-	//	0: node-id=1 store-id=1
-	///System/NodeLivenessMax-/System/tsd [4]
-	//	0: node-id=1 store-id=1
-	///System/tsd-/System/"tse" [5]
-	//	0: node-id=1 store-id=1
-	///System/"tse"-"ranges3" [6]
-	//	0: node-id=1 store-id=1
-	//"ranges3"-/Table/SystemConfigSpan/Start [18]
-	//	0: node-id=1 store-id=1
-	///Table/SystemConfigSpan/Start-/Table/11 [7]
-	//	0: node-id=1 store-id=1
-	///Table/11-/Table/12 [8]
-	//	0: node-id=1 store-id=1
-	///Table/12-/Table/13 [9]
-	//	0: node-id=1 store-id=1
-	///Table/13-/Table/14 [10]
-	//	0: node-id=1 store-id=1
-	///Table/14-/Table/15 [11]
-	//	0: node-id=1 store-id=1
-	///Table/15-/Table/16 [12]
-	//	0: node-id=1 store-id=1
-	///Table/16-/Table/17 [13]
-	//	0: node-id=1 store-id=1
-	///Table/17-/Table/18 [14]
-	//	0: node-id=1 store-id=1
-	///Table/18-/Table/19 [15]
-	//	0: node-id=1 store-id=1
-	///Table/19-/Table/20 [16]
-	//	0: node-id=1 store-id=1
-	///Table/20-/Max [17]
-	//	0: node-id=1 store-id=1
-	//18 result(s)
-
 }
 
 func Example_logging() {
@@ -461,31 +424,6 @@ func Example_logging() {
 	// # 1 row
 }
 
-func Example_max_results() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
-
-	c.Run("debug range split max_results3")
-	c.Run("debug range split max_results4")
-	c.Run("debug range ls --max-results=5")
-
-	// Output:
-	//debug range split max_results3
-	//debug range split max_results4
-	//debug range ls --max-results=5
-	///Min-/System/"" [1]
-	//	0: node-id=1 store-id=1
-	///System/""-/System/NodeLiveness [2]
-	//	0: node-id=1 store-id=1
-	///System/NodeLiveness-/System/NodeLivenessMax [3]
-	//	0: node-id=1 store-id=1
-	///System/NodeLivenessMax-/System/tsd [4]
-	//	0: node-id=1 store-id=1
-	///System/tsd-/System/"tse" [5]
-	//	0: node-id=1 store-id=1
-	//5 result(s)
-}
-
 func Example_zone() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
@@ -493,6 +431,7 @@ func Example_zone() {
 	c.Run("zone ls")
 	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
 	c.Run("zone ls")
+	c.Run("zone get .liveness")
 	c.Run("zone get .meta")
 	c.Run("zone get system.nonexistent")
 	c.Run("zone get system.descriptor")
@@ -504,6 +443,7 @@ func Example_zone() {
 	c.Run("zone rm system")
 	c.Run("zone ls")
 	c.Run("zone rm .default")
+	c.Run("zone set .liveness --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone set .meta --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone set .system --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml")
@@ -513,11 +453,13 @@ func Example_zone() {
 	c.Run("zone get system")
 	c.Run("zone set .default --disable-replication")
 	c.Run("zone get system")
+	c.Run("zone rm .liveness")
 	c.Run("zone rm .meta")
 	c.Run("zone rm .system")
 	c.Run("zone ls")
 	c.Run("zone rm .timeseries")
 	c.Run("zone ls")
+	c.Run("zone rm .liveness")
 	c.Run("zone rm .meta")
 	c.Run("zone rm .system")
 	c.Run("zone rm .timeseries")
@@ -526,6 +468,8 @@ func Example_zone() {
 	// Output:
 	// zone ls
 	// .default
+	// .liveness
+	// .meta
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
@@ -535,13 +479,23 @@ func Example_zone() {
 	// constraints: [us-east-1a, ssd]
 	// zone ls
 	// .default
+	// .liveness
+	// .meta
 	// system
-	// zone get .meta
-	// .default
+	// zone get .liveness
+	// .liveness
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
-	//   ttlseconds: 90000
+	//   ttlseconds: 600
+	// num_replicas: 1
+	// constraints: []
+	// zone get .meta
+	// .meta
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 3600
 	// num_replicas: 1
 	// constraints: []
 	// zone get system.nonexistent
@@ -579,13 +533,22 @@ func Example_zone() {
 	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
+	// .liveness
+	// .meta
 	// zone rm .default
 	// pq: cannot remove default zone
+	// zone set .liveness --file=./testdata/zone_range_max_bytes.yaml
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 600
+	// num_replicas: 3
+	// constraints: []
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 90000
+	//   ttlseconds: 3600
 	// num_replicas: 3
 	// constraints: []
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
@@ -612,6 +575,7 @@ func Example_zone() {
 	// constraints: []
 	// zone ls
 	// .default
+	// .liveness
 	// .meta
 	// .system
 	// .timeseries
@@ -645,6 +609,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// zone rm .liveness
+	// CONFIGURE ZONE 1
 	// zone rm .meta
 	// CONFIGURE ZONE 1
 	// zone rm .system
@@ -656,6 +622,8 @@ func Example_zone() {
 	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
+	// zone rm .liveness
+	// CONFIGURE ZONE 0
 	// zone rm .meta
 	// CONFIGURE ZONE 0
 	// zone rm .system
@@ -672,7 +640,6 @@ func Example_sql() {
 
 	c.RunWithArgs([]string{"sql", "-e", "show application_name"})
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
-	c.RunWithArgs([]string{"sql", "-e", "delete from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "begin", "-e", "select 3", "-e", "commit"})
 	c.RunWithArgs([]string{"sql", "-e", "select * from t.f"})
@@ -700,8 +667,6 @@ func Example_sql() {
 	// # 1 row
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
-	// sql -e delete from t.f
-	// pq: rejected: DELETE without WHERE clause (sql_safe_updates = true)
 	// sql -e select 3 -e select * from t.f
 	// 3
 	// 3
@@ -745,7 +710,7 @@ func Example_sql() {
 	// sql -e create table t.g2 as select * from generate_series(1,10)
 	// SELECT 10
 	// sql -d nonexistent -e select count(*) from pg_class limit 0
-	// count(*)
+	// count
 	// # 0 rows
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// x
@@ -1001,7 +966,7 @@ func Example_sql_table() {
 	c.RunWithArgs([]string{"sql", "--format=raw", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
-	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain select s from t.t union all select s from t.t"})
 
 	// Output:
 	// sql -e create database t; create table t.t (s string, d string);
@@ -1206,20 +1171,20 @@ func Example_sql_table() {
 	// |   hai |
 	// +-------+
 	// (1 row)
-	// sql --format=pretty -e explain(indent) select s from t.t union all select s from t.t
-	// +-------+--------+-------+--------------------+
-	// | Level |  Type  | Field |    Description     |
-	// +-------+--------+-------+--------------------+
-	// |     0 | append |       |  -> append         |
-	// |     1 | render |       |    -> render       |
-	// |     2 | scan   |       |       -> scan      |
-	// |     2 |        | table |          t@primary |
-	// |     2 |        | spans |          ALL       |
-	// |     1 | render |       |    -> render       |
-	// |     2 | scan   |       |       -> scan      |
-	// |     2 |        | table |          t@primary |
-	// |     2 |        | spans |          ALL       |
-	// +-------+--------+-------+--------------------+
+	// sql --format=pretty -e explain select s from t.t union all select s from t.t
+	// +----------------+-------+-------------+
+	// |      Tree      | Field | Description |
+	// +----------------+-------+-------------+
+	// | append         |       |             |
+	// |  ├── render    |       |             |
+	// |  │    └── scan |       |             |
+	// |  │             | table | t@primary   |
+	// |  │             | spans | ALL         |
+	// |  └── render    |       |             |
+	// |       └── scan |       |             |
+	// |                | table | t@primary   |
+	// |                | spans | ALL         |
+	// +----------------+-------+-------------+
 	// (9 rows)
 }
 
@@ -1508,7 +1473,7 @@ func TestCLITimeout(t *testing.T) {
 		const exp = `node status 1 --timeout 1ns
 operation timed out.
 
-rpc error: code = DeadlineExceeded desc = context deadline exceeded
+context deadline exceeded
 `
 		if out != exp {
 			err := errors.Errorf("unexpected output:\n%q\nwanted:\n%q", out, exp)
@@ -1861,13 +1826,18 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/15
   debug/nodes/1/ranges/16
   debug/nodes/1/ranges/17
+  debug/nodes/1/ranges/18
+  debug/nodes/1/ranges/19
+  debug/nodes/1/ranges/20
   debug/schema/system@details
   debug/schema/system/descriptor
   debug/schema/system/eventlog
   debug/schema/system/jobs
   debug/schema/system/lease
+  debug/schema/system/locations
   debug/schema/system/namespace
   debug/schema/system/rangelog
+  debug/schema/system/role_members
   debug/schema/system/settings
   debug/schema/system/table_statistics
   debug/schema/system/ui

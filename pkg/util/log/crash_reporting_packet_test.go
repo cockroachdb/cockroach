@@ -15,10 +15,9 @@
 package log_test
 
 import (
+	"context"
 	"regexp"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -96,8 +95,8 @@ func TestCrashReportingPacket(t *testing.T) {
 		tagCount int
 		message  string
 	}{
-		{regexp.MustCompile(`^$`), 6, "crash_reporting_packet_test.go:83: " + panicPre},
-		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 9, "crash_reporting_packet_test.go:91: " + panicPost},
+		{regexp.MustCompile(`^$`), 6, "crash_reporting_packet_test.go:82: " + panicPre},
+		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 9, "crash_reporting_packet_test.go:90: " + panicPost},
 	}
 
 	if e, a := len(expectations), len(packets); e != a {

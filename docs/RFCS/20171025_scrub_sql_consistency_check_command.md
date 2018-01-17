@@ -119,8 +119,8 @@ checks are run.
 The syntax for the statements is as follows:
 
 ```sql
-SCRUB TABLE <table>... [WITH OPTIONS <option>...]
-SCRUB DATABASE <database>... [WITH OPTIONS <option>...]
+SCRUB TABLE <table>... [AS OF SYSTEM TIME <expr>] [WITH OPTIONS <option>...]
+SCRUB DATABASE <database>... [AS OF SYSTEM TIME <expr>] [WITH OPTIONS <option>...]
 ```
 
 Note that the options `INDEX` and `CONSTRAINT` are not permitted with
@@ -161,6 +161,19 @@ To run a physical check and an index check on only the indexes
 SCRUB DATABASE current_db WITH OPTIONS PHYSICAL, INDEX (name_idx, other_idx)
 ```
 
+To run all checks on a database with data as of a system time:
+
+```sql
+SCRUB DATABASE current_db AS OF SYSTEM TIME '2017-11-13'
+```
+
+## As of system time
+
+Scrub also supports the `AS OF SYSTEM TIME <expr>` clause in order to
+run all checks on historical values. For example, this is useful for
+checking indexes backfilled by schema changes if schema changes do
+backfill historical values in order to verify the integrity (they
+currently do _not_ backfill historical values).
 
 ## Repair process
 

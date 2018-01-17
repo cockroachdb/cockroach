@@ -1,0 +1,5 @@
+#!/bin/sh
+
+if ! grep -qE '^Release note( \([^)]+\))?: ' "$1" ; then
+    echo '\033[1;31mWarning: no release note specified!\033[0m' >&2
+fi

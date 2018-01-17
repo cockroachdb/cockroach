@@ -62,10 +62,11 @@ WHERE "eventType" = 'create_table'
 # Alter the table. Expect "alter_table" and "finish_schema_change" events.
 ##################
 
-query II
+query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
+4  1
 12 1
 
 statement ok
@@ -75,13 +76,15 @@ query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
+4  1
 12 1
 51 1
 
-query II
+query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
+4  1
 51 1
 
 query II
@@ -113,6 +116,7 @@ query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
+4  1
 12 1
 51 1
 51 1
@@ -121,6 +125,7 @@ query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
+4  1
 51 1
 
 query II rowsort
@@ -153,6 +158,7 @@ query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
+4  1
 51 1
 51 1
 
@@ -173,6 +179,7 @@ query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
+4  1
 51 1
 51 1
 51 1

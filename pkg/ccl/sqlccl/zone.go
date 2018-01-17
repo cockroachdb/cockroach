@@ -171,18 +171,18 @@ func indexCoveringsForPartitioning(
 		listCoverings := make([]intervalccl.Covering, int(partDesc.NumColumns)+1)
 		for _, p := range partDesc.List {
 			for _, valueEncBuf := range p.Values {
-				datums, keyPrefix, err := sqlbase.TranslateValueEncodingToSpan(
+				t, keyPrefix, err := sqlbase.DecodePartitionTuple(
 					a, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return nil, err
 				}
 				if _, ok := relevantPartitions[p.Name]; ok {
-					listCoverings[len(datums)] = append(listCoverings[len(datums)], intervalccl.Range{
+					listCoverings[len(t.Datums)] = append(listCoverings[len(t.Datums)], intervalccl.Range{
 						Start: keyPrefix, End: roachpb.Key(keyPrefix).PrefixEnd(),
 						Payload: config.Subzone{PartitionName: p.Name},
 					})
 				}
-				newPrefixDatums := append(prefixDatums, datums...)
+				newPrefixDatums := append(prefixDatums, t.Datums...)
 				subpartitionCoverings, err := indexCoveringsForPartitioning(
 					a, tableDesc, idxDesc, &p.Subpartitioning, relevantPartitions, newPrefixDatums)
 				if err != nil {
@@ -199,36 +199,25 @@ func indexCoveringsForPartitioning(
 	}
 
 	if len(partDesc.Range) > 0 {
-		lastEndKey := sqlbase.MakeIndexKeyPrefix(tableDesc, idxDesc.ID)
-		if len(prefixDatums) > 0 {
-			colMap := make(map[sqlbase.ColumnID]int, len(prefixDatums))
-			for i := range prefixDatums {
-				colMap[idxDesc.ColumnIDs[i]] = i
-			}
-
-			var err error
-			lastEndKey, _, err = sqlbase.EncodePartialIndexKey(
-				tableDesc, idxDesc, len(prefixDatums), colMap, prefixDatums, lastEndKey)
-			if err != nil {
-				return nil, err
-			}
-		}
-
 		for _, p := range partDesc.Range {
 			if _, ok := relevantPartitions[p.Name]; !ok {
 				continue
 			}
-			_, endKey, err := sqlbase.TranslateValueEncodingToSpan(
-				a, tableDesc, idxDesc, partDesc, p.UpperBound, prefixDatums)
+			_, fromKey, err := sqlbase.DecodePartitionTuple(
+				a, tableDesc, idxDesc, partDesc, p.FromInclusive, prefixDatums)
+			if err != nil {
+				return nil, err
+			}
+			_, toKey, err := sqlbase.DecodePartitionTuple(
+				a, tableDesc, idxDesc, partDesc, p.ToExclusive, prefixDatums)
 			if err != nil {
 				return nil, err
 			}
 			if _, ok := relevantPartitions[p.Name]; ok {
 				coverings = append(coverings, intervalccl.Covering{{
-					Start: lastEndKey, End: endKey,
+					Start: fromKey, End: toKey,
 					Payload: config.Subzone{PartitionName: p.Name},
 				}})
-				lastEndKey = endKey
 			}
 		}
 	}

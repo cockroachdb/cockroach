@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -34,11 +33,11 @@ import (
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
-	oldTn, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	oldTn, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
-	newTn, err := n.NewName.NormalizeWithDatabaseName(p.session.Database)
+	newTn, err := n.NewName.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +139,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// old name to the id, so that the name is not reused until the schema changer
 	// has made sure it's not in use any more.
 	b := &client.Batch{}
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
@@ -155,12 +154,13 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
-			return err
-		}
-		return expectDescriptor(systemConfig, descKey, descDesc)
-	})
+	p.testingVerifyMetadata().setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
+				return err
+			}
+			return expectDescriptor(systemConfig, descKey, descDesc)
+		})
 
 	return &zeroNode{}, nil
 }

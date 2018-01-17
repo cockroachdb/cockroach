@@ -131,9 +131,9 @@ func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 // coming from the upstream (through ProducerMetadata.Err).
 func (sd *StreamDecoder) GetRow(
 	rowBuf sqlbase.EncDatumRow,
-) (sqlbase.EncDatumRow, ProducerMetadata, error) {
+) (sqlbase.EncDatumRow, *ProducerMetadata, error) {
 	if len(sd.metadata) != 0 {
-		r := sd.metadata[0]
+		r := &sd.metadata[0]
 		sd.metadata = sd.metadata[1:]
 		return nil, r, nil
 	}
@@ -141,11 +141,11 @@ func (sd *StreamDecoder) GetRow(
 	if sd.numEmptyRows > 0 {
 		sd.numEmptyRows--
 		row := make(sqlbase.EncDatumRow, 0) // this doesn't actually allocate.
-		return row, ProducerMetadata{}, nil
+		return row, nil, nil
 	}
 
 	if len(sd.data) == 0 {
-		return nil, ProducerMetadata{}, nil
+		return nil, nil, nil
 	}
 	rowLen := len(sd.typing)
 	if cap(rowBuf) >= rowLen {
@@ -155,16 +155,14 @@ func (sd *StreamDecoder) GetRow(
 	}
 	for i := range rowBuf {
 		var err error
-		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(
-			&sd.typing[i].Type, sd.typing[i].Encoding, sd.data,
-		)
+		rowBuf[i], sd.data, err = sqlbase.EncDatumFromBuffer(sd.typing[i].Encoding, sd.data)
 		if err != nil {
 			// Reset sd because it is no longer usable.
 			*sd = StreamDecoder{}
-			return nil, ProducerMetadata{}, err
+			return nil, nil, err
 		}
 	}
-	return rowBuf, ProducerMetadata{}, nil
+	return rowBuf, nil, nil
 }
 
 // Types returns the types of the columns; can only be used after we received at

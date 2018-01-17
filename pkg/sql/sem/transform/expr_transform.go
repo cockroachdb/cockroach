@@ -17,6 +17,7 @@ package transform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // ExprTransformContext supports the methods that test expression
@@ -47,7 +48,9 @@ func (t *ExprTransformContext) NormalizeExpr(
 }
 
 // AggregateInExpr determines if an Expr contains an aggregate function.
-func (t *ExprTransformContext) AggregateInExpr(expr tree.Expr, searchPath tree.SearchPath) bool {
+func (t *ExprTransformContext) AggregateInExpr(
+	expr tree.Expr, searchPath sessiondata.SearchPath,
+) bool {
 	if expr == nil {
 		return false
 	}
@@ -60,15 +63,25 @@ func (t *ExprTransformContext) AggregateInExpr(expr tree.Expr, searchPath tree.S
 
 // IsAggregate determines if the given SelectClause contains an
 // aggregate function.
-func (t *ExprTransformContext) IsAggregate(n *tree.SelectClause, searchPath tree.SearchPath) bool {
+func (t *ExprTransformContext) IsAggregate(
+	n *tree.SelectClause, searchPath sessiondata.SearchPath,
+) bool {
 	if n.Having != nil || len(n.GroupBy) > 0 {
 		return true
 	}
 
 	t.isAggregateVisitor.searchPath = searchPath
 	defer t.isAggregateVisitor.Reset()
+	// Check SELECT expressions.
 	for _, target := range n.Exprs {
 		tree.WalkExprConst(&t.isAggregateVisitor, target.Expr)
+		if t.isAggregateVisitor.Aggregated {
+			return true
+		}
+	}
+	// Check DISTINCT ON expressions too.
+	for _, expr := range n.DistinctOn {
+		tree.WalkExprConst(&t.isAggregateVisitor, expr)
 		if t.isAggregateVisitor.Aggregated {
 			return true
 		}
@@ -79,7 +92,7 @@ func (t *ExprTransformContext) IsAggregate(n *tree.SelectClause, searchPath tree
 // AssertNoAggregationOrWindowing checks if the provided expression contains either
 // aggregate functions or window functions, returning an error in either case.
 func (t *ExprTransformContext) AssertNoAggregationOrWindowing(
-	expr tree.Expr, op string, searchPath tree.SearchPath,
+	expr tree.Expr, op string, searchPath sessiondata.SearchPath,
 ) error {
 	if t.AggregateInExpr(expr, searchPath) {
 		return pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op)

@@ -16,6 +16,7 @@
 package sql
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
@@ -24,8 +25,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -217,11 +216,8 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	rangeCache := kv.NewRangeDescriptorCache(st, nil /* db */, size)
 	leaseCache := kv.NewLeaseHolderCache(size)
-	r, err := makeDistSQLReceiver(
+	r := makeDistSQLReceiver(
 		context.TODO(), nil /* sink */, rangeCache, leaseCache, nil /* txn */, nil /* updateClock */)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	descs := []roachpb.RangeDescriptor{
 		{RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
@@ -230,7 +226,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	// Push some metadata and check that the caches are updated with it.
-	status := r.Push(nil /* row */, distsqlrun.ProducerMetadata{
+	status := r.Push(nil /* row */, &distsqlrun.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[0],
@@ -246,7 +242,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	if status != distsqlrun.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
-	status = r.Push(nil /* row */, distsqlrun.ProducerMetadata{
+	status = r.Push(nil /* row */, &distsqlrun.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[2],

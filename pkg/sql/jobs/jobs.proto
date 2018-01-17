@@ -66,6 +66,9 @@ message ImportDetails {
     repeated string uris = 2 [(gogoproto.customname) = "URIs"];
     roachpb.CSVOptions options = 3;
     string backup_path = 4;
+    repeated float sampling_progress = 5;
+    repeated float read_progress = 6;
+    repeated float write_progress = 7;
   }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
 }

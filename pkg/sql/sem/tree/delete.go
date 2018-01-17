@@ -23,10 +23,9 @@
 
 package tree
 
-import "bytes"
-
 // Delete represents a DELETE statement.
 type Delete struct {
+	With      *With
 	Table     TableExpr
 	Where     *Where
 	OrderBy   OrderBy
@@ -35,11 +34,12 @@ type Delete struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Delete) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DELETE FROM ")
-	FormatNode(buf, f, node.Table)
-	FormatNode(buf, f, node.Where)
-	FormatNode(buf, f, node.OrderBy)
-	FormatNode(buf, f, node.Limit)
-	FormatNode(buf, f, node.Returning)
+func (node *Delete) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.With)
+	ctx.WriteString("DELETE FROM ")
+	ctx.FormatNode(node.Table)
+	ctx.FormatNode(node.Where)
+	ctx.FormatNode(&node.OrderBy)
+	ctx.FormatNode(node.Limit)
+	ctx.FormatNode(node.Returning)
 }

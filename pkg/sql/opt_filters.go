@@ -15,10 +15,10 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"golang.org/x/net/context"
 )
 
 // This file contains the functions that perform filter propagation.
@@ -292,6 +292,11 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *showTraceReplicaNode:
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *delayedNode:
 		if n.plan != nil {
 			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
@@ -309,6 +314,7 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
@@ -318,7 +324,7 @@ func (p *planner) propagateFilters(
 	case *copyNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
-	case *createUserNode:
+	case *CreateUserNode:
 	case *createViewNode:
 	case *createSequenceNode:
 	case *createStatsNode:
@@ -327,7 +333,7 @@ func (p *planner) propagateFilters(
 	case *dropTableNode:
 	case *dropViewNode:
 	case *dropSequenceNode:
-	case *dropUserNode:
+	case *DropUserNode:
 	case *hookFnNode:
 	case *valueGenerator:
 	case *valuesNode:
@@ -355,7 +361,7 @@ func (p *planner) triggerFilterPropagation(ctx context.Context, plan planNode) (
 
 	if !isFilterTrue(remainingFilter) {
 		panic(fmt.Sprintf("propagateFilters on \n%s\n spilled a non-trivial remaining filter: %s",
-			planToString(ctx, plan), remainingFilter))
+			planToString(ctx, plan, nil), remainingFilter))
 	}
 
 	return newPlan, nil
@@ -639,6 +645,42 @@ func expandOnCond(n *joinNode, cond tree.TypedExpr, evalCtx *tree.EvalContext) t
 	return result
 }
 
+// remapLeftEqColConstraints takes an expression that applies to the left side
+// of the join and returns any constraints that refer to left equality columns,
+// remapped to refer to the corresponding columns on the right side.
+func remapLeftEqColConstraints(n *joinNode, cond tree.TypedExpr) tree.TypedExpr {
+	conv := func(expr tree.VariableExpr) (bool, tree.Expr) {
+		if iv, ok := expr.(*tree.IndexedVar); ok {
+			for i, c := range n.pred.leftEqualityIndices {
+				if c == iv.Idx {
+					return true, n.pred.iVarHelper.IndexedVar(n.pred.rightEqualityIndices[i])
+				}
+			}
+		}
+		return false, expr
+	}
+	result, _ := splitFilter(cond, conv)
+	return result
+}
+
+// remapRightEqColConstraints takes an expression that applies to the right side
+// of the join and returns any constraints that refer to right equality columns,
+// remapped to refer to the corresponding columns on the left side.
+func remapRightEqColConstraints(n *joinNode, cond tree.TypedExpr) tree.TypedExpr {
+	conv := func(expr tree.VariableExpr) (bool, tree.Expr) {
+		if iv, ok := expr.(*tree.IndexedVar); ok {
+			for i, c := range n.pred.rightEqualityIndices {
+				if c == iv.Idx {
+					return true, n.pred.iVarHelper.IndexedVar(n.pred.leftEqualityIndices[i])
+				}
+			}
+		}
+		return false, expr
+	}
+	result, _ := splitFilter(cond, conv)
+	return result
+}
+
 // splitJoinFilter splits a predicate over both sides of the join into
 // three predicates: the part that definitely refers only to the left,
 // the part that definitely refers only to the right, and the rest.
@@ -686,18 +728,21 @@ func (p *planner) addJoinFilter(
 
 	// There are four steps to the transformation below:
 	//  1. For inner joins, incorporate the extra filter into the ON condition.
-	//  2. Extract any join equality constraints from the ON condition.
+	//  2. Extract any join equality constraints from the ON condition and
+	//     append it to the equality indices of the join predicate.
 	//  3. "Expand" the remaining ON condition with new constraints inferred based
 	//     on the equality columns (see expandOnCond).
 	//  4. Propagate the filter and ON condition depending on the join type.
 	numLeft := len(n.left.info.sourceColumns)
-	extraFilter = n.pred.iVarHelper.Rebind(extraFilter, true, false)
+	extraFilter = n.pred.iVarHelper.Rebind(
+		extraFilter, true /* alsoReset */, false /* normalizeToNonNil */)
 
-	onAndExprs := splitAndExpr(&p.evalCtx, n.pred.onCond, nil)
+	onAndExprs := splitAndExpr(p.EvalContext(), n.pred.onCond, nil /* exprs */)
 
 	// Step 1: for inner joins, incorporate the filter into the ON condition.
 	if n.joinType == joinTypeInner {
-		onAndExprs = splitAndExpr(&p.evalCtx, extraFilter, onAndExprs)
+		// Split the filter into conjunctions and append them to onAndExprs.
+		onAndExprs = splitAndExpr(p.EvalContext(), extraFilter, onAndExprs)
 		extraFilter = nil
 	}
 
@@ -714,7 +759,7 @@ func (p *planner) addJoinFilter(
 	// constraints can be pushed down. This is not useful for FULL OUTER
 	// joins, where nothing can be pushed down.
 	if n.joinType != joinTypeFullOuter {
-		onCond = expandOnCond(n, onCond, &p.evalCtx)
+		onCond = expandOnCond(n, onCond, p.EvalContext())
 	}
 
 	// Step 4: propagate the filter and ON conditions as allowed by the join type.
@@ -749,9 +794,24 @@ func (p *planner) addJoinFilter(
 		// Extract filterLeft towards propagation on the left.
 		// filterRemainder = filterRight AND filterCombined.
 		propagateLeft, filterRemainder = splitJoinFilterLeft(n, numLeft, extraFilter)
+
 		// Extract onRight towards propagation on the right.
 		// onCond = onLeft AND onCombined.
 		propagateRight, onCond = splitJoinFilterRight(n, numLeft, onCond)
+
+		// For left joins, if we have any conditions on the left-hand equality
+		// columns, we can remap these to the right-hand equality columns and
+		// incorporate in the ON condition. For example:
+		//
+		//   SELECT * FROM l LEFT JOIN r USING (a) WHERE l.a = 1
+		//
+		// In this case, we can push down r.a = 1 to the right side.
+		//
+		// Note that this is what happens when a merged column name is used; for
+		// outer left joins, `a` is an alias for the left side equality column and
+		// the following query is equivalent to the one above:
+		//   SELECT * FROM l LEFT JOIN r USING (a) WHERE a = 1
+		propagateRight = mergeConj(propagateRight, remapLeftEqColConstraints(n, propagateLeft))
 
 	case joinTypeRightOuter:
 		// We transform:
@@ -772,6 +832,12 @@ func (p *planner) addJoinFilter(
 		// Extract onLeft towards propagation on the left.
 		// onCond = onRight AND onCombined.
 		propagateLeft, onCond = splitJoinFilterLeft(n, numLeft, onCond)
+
+		// Symmetric to the corresponding case above, for example:
+		//   SELECT * FROM l RIGHT JOIN r USING (a) WHERE r.a = 1
+		//
+		// In this case, we can push down l.a = 1 to the left side.
+		propagateLeft = mergeConj(propagateLeft, remapRightEqColConstraints(n, propagateRight))
 
 	case joinTypeFullOuter:
 		// Not much we can do for full outer joins.

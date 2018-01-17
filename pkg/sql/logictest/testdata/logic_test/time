@@ -255,27 +255,27 @@ SELECT * FROM arrays
 query T
 SELECT date_trunc('hour', time '12:01:02.345678')
 ----
-0000-01-01 12:00:00 +0000 UTC
+12h
 
 query T
 SELECT date_trunc('minute', time '12:01:02.345678')
 ----
-0000-01-01 12:01:00 +0000 UTC
+12h1m
 
 query T
 SELECT date_trunc('second', time '12:01:02.345678')
 ----
-0000-01-01 12:01:02 +0000 UTC
+12h1m2s
 
 query T
 SELECT date_trunc('millisecond', time '12:01:02.345678')
 ----
-0000-01-01 12:01:02.345 +0000 UTC
+12h1m2s345ms
 
 query T
 SELECT date_trunc('microsecond', time '12:01:02.345678')
 ----
-0000-01-01 12:01:02.345678 +0000 UTC
+12h1m2s345ms678µs
 
 query error pgcode 22023 date_trunc\(\): unsupported timespan: day
 SELECT date_trunc('day', time '12:01:02.345')

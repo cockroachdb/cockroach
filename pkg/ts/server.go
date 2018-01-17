@@ -15,10 +15,11 @@
 package ts
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -89,7 +90,7 @@ func (s *Server) Query(
 ) (*tspb.TimeSeriesQueryResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 	if len(request.Queries) == 0 {
-		return nil, grpc.Errorf(codes.InvalidArgument, "Queries cannot be empty")
+		return nil, status.Errorf(codes.InvalidArgument, "Queries cannot be empty")
 	}
 
 	// If not set, sampleNanos should default to ten second resolution.

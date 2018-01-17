@@ -1,9 +1,10 @@
 - Feature Name: Settings Table
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-03-17
 - Authors: David Taylor, knz, ben
-- RFC PR: #14230 #15253
-- Cockroach Issue: #15242
+- RFC PR: [#14230](https://github.com/cockroachdb/cockroach/pull/14230),
+          [#15253](https://github.com/cockroachdb/cockroach/pull/15253)
+- Cockroach Issue: [#15242](https://github.com/cockroachdb/cockroach/issues/15242)
 
 # Summary
 

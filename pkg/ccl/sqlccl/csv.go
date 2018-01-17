@@ -10,6 +10,7 @@ package sqlccl
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -21,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -105,7 +106,16 @@ func LoadCSV(
 	var parentID = defaultCSVParentID
 	walltime := timeutil.Now().UnixNano()
 
-	tableDesc, err := makeCSVTableDescriptor(ctx, createTable, parentID, defaultCSVTableID, walltime)
+	// Using test cluster settings means that we'll generate a backup using
+	// the latest cluster version available in this binary. This will be safe
+	// once we verify the cluster version during restore.
+	//
+	// TODO(benesch): ensure backups from too-old or too-new nodes are
+	// rejected during restore.
+	st := cluster.MakeTestingClusterSettings()
+
+	tableDesc, err := makeSimpleTableDescriptor(
+		ctx, st, createTable, parentID, defaultCSVTableID, walltime)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -204,10 +214,10 @@ func doLocalCSVTransform(
 		)
 		// Both read and write progress funcs register their progress as 50% of total progress.
 		readProgressFn = func(pct float32) error {
-			return job.Progressed(ctx, pct*readPct, jobs.Noop)
+			return job.Progressed(ctx, jobs.FractionUpdater(pct*readPct))
 		}
 		writeProgressFn = func(pct float32) error {
-			return job.Progressed(ctx, readPct+pct*writePct, jobs.Noop)
+			return job.Progressed(ctx, jobs.FractionUpdater(readPct+pct*writePct))
 		}
 	}
 
@@ -230,11 +240,6 @@ func doLocalCSVTransform(
 	group.Go(func() error {
 		var err error
 		kvCount, err = writeRocksDB(gCtx, kvCh, store.NewBatchWriter())
-		if job != nil {
-			if err := job.Progressed(ctx, 2.0/3.0, jobs.Noop); err != nil {
-				log.Warningf(ctx, "failed to update job progress: %s", err)
-			}
-		}
 		return err
 	})
 	if err := group.Wait(); err != nil {
@@ -298,8 +303,17 @@ func readCreateTableFromStore(
 	return create, nil
 }
 
-func makeCSVTableDescriptor(
-	ctx context.Context, create *tree.CreateTable, parentID, tableID sqlbase.ID, walltime int64,
+// makeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
+// node without the full machinery. Many parts of the syntax are unsupported
+// (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
+// but this is enough for our csv IMPORT and for some unit tests.
+func makeSimpleTableDescriptor(
+	ctx context.Context,
+	st *cluster.Settings,
+	create *tree.CreateTable,
+	parentID,
+	tableID sqlbase.ID,
+	walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
 	sql.HoistConstraints(create)
 	if create.IfNotExists {
@@ -334,6 +348,7 @@ func makeCSVTableDescriptor(
 		ctx,
 		nil, /* txn */
 		sql.NilVirtualTabler,
+		st,
 		create,
 		parentID,
 		tableID,
@@ -529,17 +544,6 @@ func convertRecord(
 	const kvBatchSize = 1000
 	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
 	visibleCols := tableDesc.VisibleColumns()
-	keyDatums := make(sqlbase.EncDatumRow, len(tableDesc.PrimaryIndex.ColumnIDs))
-	// keyDatumIdx maps ColumnIDs to indexes in keyDatums.
-	keyDatumIdx := make(map[sqlbase.ColumnID]int)
-	for _, id := range tableDesc.PrimaryIndex.ColumnIDs {
-		for _, col := range visibleCols {
-			if col.ID == id {
-				keyDatumIdx[id] = len(keyDatumIdx)
-				break
-			}
-		}
-	}
 
 	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
 		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
@@ -548,7 +552,7 @@ func convertRecord(
 	}
 
 	var txCtx transform.ExprTransformContext
-	evalCtx := tree.EvalContext{Location: &time.UTC}
+	evalCtx := tree.EvalContext{SessionData: sessiondata.SessionData{Location: time.UTC}}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
@@ -573,18 +577,24 @@ func convertRecord(
 						return errors.Wrapf(err, "%s: row %d: parse %q as %s", batch.file, rowNum, col.Name, col.Type.SQLString())
 					}
 				}
-				if idx, ok := keyDatumIdx[visibleCols[i].ID]; ok {
-					keyDatums[idx] = sqlbase.DatumToEncDatum(col.Type, datums[i])
-				}
 			}
 
 			row, err := sql.GenerateInsertRow(defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, datums)
 			if err != nil {
 				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
 			}
-			if err := ri.InsertRow(ctx, inserter(func(kv roachpb.KeyValue) {
-				kvBatch = append(kvBatch, kv)
-			}), row, true /* ignoreConflicts */, false /* traceKV */); err != nil {
+			// TODO(bram): Is the checking of FKs here required? If not, turning them
+			// off may provide a speed boost.
+			if err := ri.InsertRow(
+				ctx,
+				inserter(func(kv roachpb.KeyValue) {
+					kvBatch = append(kvBatch, kv)
+				}),
+				row,
+				true, /* ignoreConflicts */
+				sqlbase.CheckFKs,
+				false, /* traceKV */
+			); err != nil {
 				return errors.Wrapf(err, "insert row: %s: row %d", batch.file, rowNum)
 			}
 			if len(kvBatch) >= kvBatchSize {
@@ -850,7 +860,7 @@ func importJobDescription(
 		stmt.Options = append(stmt.Options, tree.KVOption{Key: importOptionTransformOnly})
 	}
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
-	return tree.AsStringWithFlags(&stmt, tree.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(&stmt, tree.FmtAlwaysQualifyTableNames), nil
 }
 
 const importCSVEnabledSetting = "experimental.importcsv.enabled"
@@ -929,7 +939,7 @@ func importPlanHook(
 		var targetDB string
 		if !transformOnly {
 			if override, ok := opts[restoreOptIntoDB]; !ok {
-				if session := p.EvalContext().Database; session != "" {
+				if session := p.SessionData().Database; session != "" {
 					targetDB = session
 				} else {
 					return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
@@ -986,9 +996,6 @@ func importPlanHook(
 			return err
 		}
 		defer tempStorage.Close()
-		if err := verifyUsableExportTarget(ctx, tempStorage, temp); err != nil {
-			return err
-		}
 
 		sstSize := config.DefaultZoneConfig().RangeMaxBytes / 2
 		if override, ok := opts[importOptionSSTSize]; ok {
@@ -1001,7 +1008,7 @@ func importPlanHook(
 
 		var create *tree.CreateTable
 		if importStmt.CreateDefs != nil {
-			normName := tree.NormalizableTableName{TableNameReference: importStmt.Table}
+			normName := tree.NormalizableTableName{TableNameReference: &importStmt.Table}
 			create = &tree.CreateTable{Table: normName, Defs: importStmt.CreateDefs}
 		} else {
 			filename, err := createFileFn()
@@ -1018,13 +1025,19 @@ func importPlanHook(
 		}
 
 		parentID := defaultCSVParentID
-		tableDesc, err := makeCSVTableDescriptor(ctx, create, parentID, defaultCSVTableID, walltime)
+		tableDesc, err := makeSimpleTableDescriptor(
+			ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
 		if err != nil {
 			return err
 		}
 
 		jobDesc, err := importJobDescription(importStmt, create.Defs, files, opts)
 		if err != nil {
+			return err
+		}
+
+		// Delay writing the BACKUP-CHECKPOINT file until as late as possible.
+		if err := verifyUsableExportTarget(ctx, tempStorage, temp); err != nil {
 			return err
 		}
 
@@ -1124,7 +1137,7 @@ func doDistributedCSVTransform(
 	walltime int64,
 	sstSize int64,
 ) (int64, error) {
-	evalCtx := p.EvalContext()
+	evalCtx := p.ExtendedEvalContext()
 
 	// TODO(dan): Filter out unhealthy nodes.
 	resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
@@ -1154,7 +1167,7 @@ func doDistributedCSVTransform(
 		ctx,
 		job,
 		p.ExecCfg().DB,
-		evalCtx,
+		&evalCtx,
 		p.ExecCfg().NodeID.Get(),
 		nodes,
 		sql.NewRowResultWriter(tree.Rows, rows),
@@ -1217,12 +1230,15 @@ func newReadCSVProcessor(
 	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readCSVProcessor{
+		flowCtx:    flowCtx,
 		csvOptions: spec.Options,
 		sampleSize: spec.SampleSize,
 		tableDesc:  spec.TableDesc,
 		uri:        spec.Uri,
 		output:     output,
 		settings:   flowCtx.Settings,
+		registry:   flowCtx.JobRegistry,
+		progress:   spec.Progress,
 	}
 	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -1231,13 +1247,16 @@ func newReadCSVProcessor(
 }
 
 type readCSVProcessor struct {
+	flowCtx    *distsqlrun.FlowCtx
 	csvOptions roachpb.CSVOptions
 	sampleSize int32
 	tableDesc  sqlbase.TableDescriptor
-	uri        string
+	uri        []string
 	out        distsqlrun.ProcOutputHelper
 	output     distsqlrun.RowReceiver
 	settings   *cluster.Settings
+	registry   *jobs.Registry
+	progress   distsqlrun.JobProgress
 }
 
 var _ distsqlrun.Processor = &readCSVProcessor{}
@@ -1246,8 +1265,8 @@ func (cp *readCSVProcessor) OutputTypes() []sqlbase.ColumnType {
 	return csvOutputTypes
 }
 
-func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(ctx, "readCSVProcessor")
+func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(cp.flowCtx.Ctx, "readCSVProcessor")
 	defer tracing.FinishSpan(span)
 
 	if wg != nil {
@@ -1265,8 +1284,27 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		sCtx, span := tracing.ChildSpan(gCtx, "readcsv")
 		defer tracing.FinishSpan(span)
 		defer close(recordCh)
-		_, err := readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
-			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh, nil, cp.settings)
+
+		job, err := cp.registry.LoadJob(gCtx, cp.progress.JobID)
+		if err != nil {
+			return err
+		}
+
+		progFn := func(pct float32) error {
+			return job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+				d := details.(*jobs.Payload_Import).Import
+				slotpct := pct * cp.progress.Contribution
+				if len(d.Tables[0].SamplingProgress) > 0 {
+					d.Tables[0].SamplingProgress[cp.progress.Slot] = slotpct
+				} else {
+					d.Tables[0].ReadProgress[cp.progress.Slot] = slotpct
+				}
+				return d.Tables[0].Completed()
+			})
+		}
+
+		_, err = readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
+			len(cp.tableDesc.VisibleColumns()), cp.uri, recordCh, progFn, cp.settings)
 		return err
 	})
 	// Convert CSV records to KVs
@@ -1371,13 +1409,14 @@ func newSSTWriterProcessor(
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	sp := &sstWriter{
-		uri:           spec.Destination,
-		name:          spec.Name,
-		walltimeNanos: spec.WalltimeNanos,
-		input:         input,
-		output:        output,
-		tempStorage:   flowCtx.TempStorage,
-		settings:      flowCtx.Settings,
+		flowCtx:     flowCtx,
+		spec:        spec,
+		input:       input,
+		output:      output,
+		tempStorage: flowCtx.TempStorage,
+		settings:    flowCtx.Settings,
+		registry:    flowCtx.JobRegistry,
+		progress:    spec.Progress,
 	}
 	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -1386,14 +1425,15 @@ func newSSTWriterProcessor(
 }
 
 type sstWriter struct {
-	uri           string
-	name          string
-	walltimeNanos int64
-	input         distsqlrun.RowSource
-	out           distsqlrun.ProcOutputHelper
-	output        distsqlrun.RowReceiver
-	tempStorage   engine.Engine
-	settings      *cluster.Settings
+	flowCtx     *distsqlrun.FlowCtx
+	spec        distsqlrun.SSTWriterSpec
+	input       distsqlrun.RowSource
+	out         distsqlrun.ProcOutputHelper
+	output      distsqlrun.RowReceiver
+	tempStorage engine.Engine
+	settings    *cluster.Settings
+	registry    *jobs.Registry
+	progress    distsqlrun.JobProgress
 }
 
 var _ distsqlrun.Processor = &sstWriter{}
@@ -1402,21 +1442,23 @@ func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
 	return sstOutputTypes
 }
 
-func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(ctx, "sstWriter")
+func (sp *sstWriter) Run(wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(sp.flowCtx.Ctx, "sstWriter")
 	defer tracing.FinishSpan(span)
 
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	defer distsqlrun.DrainAndForwardMetadata(ctx, sp.input, sp.output)
 	err := func() error {
-		// We need to produce a single SST file. engine.MakeRocksDBSstFileWriter is
-		// able to do this in memory, but requires that rows added to it be done
-		// in order. Thus, we first need to fetch all rows and sort them. We use
-		// NewRocksDBMap to write the rows, then fetch them in order using an iterator.
-		types := sp.input.Types()
+		job, err := sp.registry.LoadJob(ctx, sp.progress.JobID)
+		if err != nil {
+			return err
+		}
+
+		// Sort incoming KVs, which will be from multiple spans, into a single
+		// RocksDB instance.
+		types := sp.input.OutputTypes()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
 		store := engine.NewRocksDBMultiMap(sp.tempStorage)
@@ -1454,90 +1496,123 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if err := batch.Close(ctx); err != nil {
 			return err
 		}
-		iter := store.NewIterator()
-		var kv engine.MVCCKeyValue
-		kv.Key.Timestamp.WallTime = sp.walltimeNanos
-		var firstKey roachpb.Key
-		sst, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			return err
-		}
-		defer sst.Close()
-		var lastKey []byte
-		for iter.Rewind(); ; iter.Next() {
-			if ok, err := iter.Valid(); err != nil {
-				return err
-			} else if !ok {
-				break
-			}
-			kv.Key.Key = iter.UnsafeKey()
-			kv.Value = iter.UnsafeValue()
-			if firstKey == nil {
-				firstKey = iter.Key()
-			}
-			if err := sst.Add(kv); err != nil {
-				return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
-			}
-			lastKey = append(lastKey[:0], kv.Key.Key.Next()...)
-		}
-		data, err := sst.Finish()
-		if err != nil {
-			return err
-		}
-		checksum, err := storageccl.SHA512ChecksumData(data)
-		if err != nil {
-			return err
-		}
-		conf, err := storageccl.ExportStorageConfFromURI(sp.uri)
-		if err != nil {
-			return err
-		}
-		es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
-		if err != nil {
-			return err
-		}
-		defer es.Close()
-		if err := es.WriteFile(ctx, sp.name, bytes.NewReader(data)); err != nil {
-			return err
-		}
 
-		row := sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
-				tree.NewDString(sp.name),
-			),
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-				tree.NewDInt(tree.DInt(len(data))),
-			),
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				tree.NewDBytes(tree.DBytes(checksum)),
-			),
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				tree.NewDBytes(tree.DBytes(firstKey)),
-			),
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				tree.NewDBytes(tree.DBytes(lastKey)),
-			),
-		}
-		cs, err := sp.out.EmitRow(ctx, row)
-		if err != nil {
-			return err
-		}
-		if cs != distsqlrun.NeedMoreRows {
-			return errors.New("unexpected closure of consumer")
+		// Fetch all the keys in each span and write them to storage.
+		iter := store.NewIterator()
+		iter.Rewind()
+		for i, span := range sp.spec.Spans {
+			data, firstKey, lastKey, err := extractSSTSpan(iter, span.End, sp.spec.WalltimeNanos)
+			if err != nil {
+				return err
+			}
+			// Empty span.
+			if data == nil {
+				continue
+			}
+
+			checksum, err := storageccl.SHA512ChecksumData(data)
+			if err != nil {
+				return err
+			}
+			conf, err := storageccl.ExportStorageConfFromURI(sp.spec.Destination)
+			if err != nil {
+				return err
+			}
+			es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
+			if err != nil {
+				return err
+			}
+			defer es.Close()
+			if err := es.WriteFile(ctx, span.Name, bytes.NewReader(data)); err != nil {
+				return err
+			}
+
+			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+				d := details.(*jobs.Payload_Import).Import
+				d.Tables[0].WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
+				return d.Tables[0].Completed()
+			}); err != nil {
+				return err
+			}
+
+			row := sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+					tree.NewDString(span.Name),
+				),
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+					tree.NewDInt(tree.DInt(len(data))),
+				),
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+					tree.NewDBytes(tree.DBytes(checksum)),
+				),
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+					tree.NewDBytes(tree.DBytes(firstKey)),
+				),
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+					tree.NewDBytes(tree.DBytes(lastKey)),
+				),
+			}
+			cs, err := sp.out.EmitRow(ctx, row)
+			if err != nil {
+				return err
+			}
+			if cs != distsqlrun.NeedMoreRows {
+				return errors.New("unexpected closure of consumer")
+			}
 		}
 		return nil
 	}()
-	if err != nil {
-		distsqlrun.DrainAndClose(ctx, sp.output, err)
-		return
-	}
+	distsqlrun.DrainAndClose(ctx, sp.output, err, sp.input)
+}
 
-	sp.out.Close()
+// extractSSTSpan creates an SST from the iterator, excluding keys >= end.
+func extractSSTSpan(
+	iter engine.SortedDiskMapIterator, end []byte, walltimeNanos int64,
+) (data, firstKey, lastKey []byte, err error) {
+	sst, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer sst.Close()
+	var kv engine.MVCCKeyValue
+	kv.Key.Timestamp.WallTime = walltimeNanos
+	any := false
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, nil, nil, err
+		} else if !ok {
+			break
+		}
+		kv.Key.Key = iter.UnsafeKey()
+		if kv.Key.Key.Compare(end) >= 0 {
+			// If we are at the end, break the loop and return the data. There is no
+			// need to back up one key, because the iterator is pointing at the start
+			// of the next block already, and Next won't be called until after the key
+			// has been extracted again during the next call to this function.
+			break
+		}
+		kv.Value = iter.UnsafeValue()
+		if firstKey == nil {
+			firstKey = iter.Key()
+		}
+		any = true
+		if err := sst.Add(kv); err != nil {
+			return nil, nil, nil, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
+		}
+		lastKey = append(lastKey[:0], kv.Key.Key.Next()...)
+
+		iter.Next()
+	}
+	if !any {
+		return nil, nil, nil, nil
+	}
+	data, err = sst.Finish()
+	return data, firstKey, lastKey, err
 }
 
 func init() {

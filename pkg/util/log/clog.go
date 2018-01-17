@@ -20,6 +20,7 @@ package log
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -29,15 +30,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/color"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/petermattis/goid"
@@ -416,6 +417,9 @@ type flushSyncWriter interface {
 	io.Writer
 }
 
+// the --no-color flag.
+var noColor bool
+
 // formatHeader formats a log header using the provided file name and
 // line number. Log lines are colorized depending on severity.
 //
@@ -432,8 +436,12 @@ type flushSyncWriter interface {
 // 	line             The line number
 // 	msg              The user-supplied message
 func formatHeader(
-	s Severity, now time.Time, gid int, file string, line int, colors *colorProfile,
+	s Severity, now time.Time, gid int, file string, line int, cp color.Profile,
 ) *buffer {
+	if noColor {
+		cp = nil
+	}
+
 	buf := logging.getBuffer()
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
@@ -444,18 +452,16 @@ func formatHeader(
 
 	tmp := buf.tmp[:len(buf.tmp)]
 	var n int
-	if colors != nil {
-		var prefix []byte
-		switch s {
-		case Severity_INFO:
-			prefix = colors.infoPrefix
-		case Severity_WARNING:
-			prefix = colors.warnPrefix
-		case Severity_ERROR, Severity_FATAL:
-			prefix = colors.errorPrefix
-		}
-		n += copy(tmp, prefix)
+	var prefix []byte
+	switch s {
+	case Severity_INFO:
+		prefix = cp[color.Cyan]
+	case Severity_WARNING:
+		prefix = cp[color.Yellow]
+	case Severity_ERROR, Severity_FATAL:
+		prefix = cp[color.Red]
 	}
+	n += copy(tmp, prefix)
 	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
 	// It's worth about 3X. Fprintf is hard.
 	year, month, day := now.Date()
@@ -469,9 +475,7 @@ func formatHeader(
 	n += buf.twoDigits(n, year-2000)
 	n += buf.twoDigits(n, int(month))
 	n += buf.twoDigits(n, day)
-	if colors != nil {
-		n += copy(tmp[n:], colors.timePrefix) // gray for time, file & line
-	}
+	n += copy(tmp[n:], cp[color.Gray]) // gray for time, file & line
 	tmp[n] = ' '
 	n++
 	n += buf.twoDigits(n, hour)
@@ -499,9 +503,7 @@ func formatHeader(
 	// Extra space between the header and the actual message for scannability.
 	tmp[n] = ' '
 	n++
-	if colors != nil {
-		n += copy(tmp[n:], colorReset)
-	}
+	n += copy(tmp[n:], cp[color.Reset])
 	tmp[n] = ' '
 	n++
 	buf.Write(tmp[:n])
@@ -552,9 +554,9 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
+func formatLogEntry(entry Entry, stacks []byte, cp color.Profile) *buffer {
 	buf := formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
-		int(entry.Goroutine), entry.File, int(entry.Line), colors)
+		int(entry.Goroutine), entry.File, int(entry.Line), cp)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {
 		_ = buf.WriteByte('\n')
@@ -710,6 +712,26 @@ func (l *loggingT) putBuffer(b *buffer) {
 	l.freeListMu.Unlock()
 }
 
+// ensureFile ensures that l.file is set and valid.
+func (l *loggingT) ensureFile() error {
+	if l.file == nil {
+		return l.createFile()
+	}
+	return nil
+}
+
+// writeToFile writes to the file and applies the synchronization policy.
+func (l *loggingT) writeToFile(data []byte) error {
+	if _, err := l.file.Write(data); err != nil {
+		return err
+	}
+	if l.syncWrites {
+		_ = l.file.Flush()
+		_ = l.file.Sync()
+	}
+	return nil
+}
+
 // outputLogEntry marshals a log entry proto into bytes, and writes
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
@@ -726,7 +748,6 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	// TODO(tschottdorf): this is a pretty horrible critical section.
 	l.mu.Lock()
 
-	// On fatal log, set all stacks.
 	var stacks []byte
 	if s == Severity_FATAL {
 		switch traceback {
@@ -748,38 +769,57 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		l.outputToStderr(entry, stacks)
 	}
 	if logDir.isSet() && s >= l.fileThreshold.get() {
-		if l.file == nil {
-			if err := l.createFile(); err != nil {
-				// Make sure the message appears somewhere.
-				l.outputToStderr(entry, stacks)
-				l.exitLocked(err)
-				l.mu.Unlock()
-				return
-			}
+		if err := l.ensureFile(); err != nil {
+			// Make sure the message appears somewhere.
+			l.outputToStderr(entry, stacks)
+			l.exitLocked(err)
+			l.mu.Unlock()
+			return
 		}
 
 		buf := l.processForFile(entry, stacks)
 		data := buf.Bytes()
 
-		if _, err := l.file.Write(data); err != nil {
+		if err := l.writeToFile(data); err != nil {
 			l.exitLocked(err)
 			l.mu.Unlock()
 			return
 		}
-		if l.syncWrites {
-			_ = l.file.Flush()
-			_ = l.file.Sync()
-		}
 
 		l.putBuffer(buf)
 	}
-	exitFunc := l.exitFunc
+	exitFunc := l.exitFunc // restore the exitFunc
 	l.mu.Unlock()
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
 		// If we got here via Exit rather than Fatal, print no stacks.
 		timeoutFlush(10 * time.Second)
 		exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+	}
+}
+
+// printPanicToFile copies the panic details to the log file. This is
+// useful when the standard error is not redirected to the log file
+// (!stderrRedirected), as the go runtime will only print panics to
+// stderr.
+func (l *loggingT) printPanicToFile(r interface{}) {
+	if !logDir.isSet() {
+		// There's no log file. Nothing to do.
+		return
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if err := l.ensureFile(); err != nil {
+		fmt.Fprintf(OrigStderr, "log: %v", err)
+		return
+	}
+
+	panicBytes := []byte(fmt.Sprintf("%v\n\n%s\n", r, debug.Stack()))
+	if err := l.writeToFile(panicBytes); err != nil {
+		fmt.Fprintf(OrigStderr, "log: %v", err)
+		return
 	}
 }
 
@@ -793,7 +833,7 @@ func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
 
 // processForStderr formats a log entry for output to standard error.
 func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
-	return formatLogEntry(entry, stacks, stderrColorProfile)
+	return formatLogEntry(entry, stacks, color.StderrProfile)
 }
 
 // processForFile formats a log entry for output to a file.
