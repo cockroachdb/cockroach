@@ -233,9 +233,10 @@ Peeking into a running cluster can be done in several ways:
   what happens inside of `Node`/`Store`/`Replica` and the other inside
   of the coordinator (`TxnCoordSender`).
 - [pprof](https://golang.org/pkg/net/http/pprof/) gives us (among
-  other things) heap and cpu profiles; [this golang blog
-  post](http://blog.golang.org/profiling-go-programs) explains it
-  extremely well and [this one by Dmitry
+  other things) heap and cpu profiles; [this wiki page](https://github.com/cockroachdb/cockroach/wiki/pprof)
+  gives an overview and walks you through using it to profile Cockroach.
+  [This golang blog post](http://blog.golang.org/profiling-go-programs)
+  explains it extremely well and [this one by Dmitry
   Vuykov](https://software.intel.com/en-us/blogs/2014/05/10/debugging-performance-issues-in-go-programs)
   goes into even more detail.
 
