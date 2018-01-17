@@ -19,7 +19,6 @@ import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sorte
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import spinner from "assets/spinner.gif";
-import noResults from "assets/noresults.svg";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
@@ -220,6 +219,24 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
     this.props.setShow(selected.value);
   }
 
+  renderTable(jobs: Job[]) {
+    if (_.isEmpty(jobs)) {
+      return <div className="no-results"><h2>No Results</h2></div>;
+    }
+    return (
+      <section className="section">
+        <JobsSortedTable
+          data={jobs}
+          sortSetting={this.props.sort}
+          onChangeSortSetting={this.props.setSort}
+          className="jobs-table"
+          rowClass={job => "jobs-table__row--" + job.status}
+          columns={jobsTableColumns}
+        />
+      </section>
+    );
+  }
+
   render() {
     const data = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     return <div className="jobs-page">
@@ -252,18 +269,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
         </PageConfig>
       </div>
       <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
-        <Loading loading={_.isEmpty(data)} className="loading-image" image={noResults}>
-          <section className="section">
-            <JobsSortedTable
-              data={data}
-              sortSetting={this.props.sort}
-              onChangeSortSetting={this.props.setSort}
-              className="jobs-table"
-              rowClass={job => "jobs-table__row--" + job.status}
-              columns={jobsTableColumns}
-            />
-          </section>
-        </Loading>
+          { this.renderTable(data) }
       </Loading>
     </div>;
   }
