@@ -127,11 +127,20 @@ func (r *Retry) Next() bool {
 	}
 }
 
+// closedC is returned from Retry.NextCh whenever a retry
+// can begin immediately.
+var closedC = func() chan time.Time {
+	c := make(chan time.Time)
+	close(c)
+	return c
+}()
+
 // NextCh returns a channel which will receive when the next retry
 // interval has expired.
 func (r *Retry) NextCh() <-chan time.Time {
 	if r.isReset {
 		r.isReset = false
+		return closedC
 	}
 	r.currentAttempt++
 	if r.opts.MaxRetries > 0 && r.currentAttempt > r.opts.MaxRetries {
