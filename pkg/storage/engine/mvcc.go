@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -714,50 +713,9 @@ func MVCCGet(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
-	// TODO(peter): delete the old code.
-	if false {
-		iter := engine.NewIterator(true)
-		defer iter.Close()
-		return mvccGetUsingIter(ctx, iter, key, timestamp, consistent, txn)
-	}
-
 	iter := engine.NewIterator(true)
 	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent)
 	iter.Close()
-	return value, intents, err
-}
-
-func mvccGetUsingIter(
-	ctx context.Context,
-	iter Iterator,
-	key roachpb.Key,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
-) (*roachpb.Value, []roachpb.Intent, error) {
-	if len(key) == 0 {
-		return nil, nil, emptyKeyError()
-	}
-
-	buf := newGetBuffer()
-	defer buf.release()
-
-	metaKey := MakeMVCCMetadataKey(key)
-	ok, _, _, err := mvccGetMetadata(iter, metaKey, &buf.meta)
-	if !ok || err != nil {
-		return nil, nil, err
-	}
-
-	value, intents, _, err := mvccGetInternal(ctx, iter, metaKey,
-		timestamp, consistent, safeValue, txn, buf)
-	if !value.IsPresent() {
-		value = nil
-	}
-	if value == &buf.value {
-		value = &roachpb.Value{}
-		*value = buf.value
-		buf.value.Reset()
-	}
 	return value, intents, err
 }
 
@@ -849,6 +807,12 @@ const (
 // most recent non-intent value instead. In the event that an inconsistent read
 // does encounter an intent (currently there can only be one), it is returned
 // via the roachpb.Intent slice, in addition to the result.
+//
+// TODO(peter): mvccGetInternal is used by maybeGetValue and
+// mvccResolveWriteIntent. Removing those uses is a bit tricky to do in a
+// performant way as they are touching optimizations which result in the calls
+// usually not hitting RocksDB. This shows up on benchmarks such as
+// BenchmarkMVCCConditionalPut_RocksDB/Replace.
 func mvccGetInternal(
 	_ context.Context,
 	iter Iterator,
@@ -1633,42 +1597,6 @@ func MVCCDeleteRange(
 	txn *roachpb.Transaction,
 	returnKeys bool,
 ) ([]roachpb.Key, *roachpb.Span, int64, error) {
-	// TODO(peter): delete the old code.
-	if false {
-		if max == 0 {
-			return nil, &roachpb.Span{Key: key, EndKey: endKey}, 0, nil
-		}
-
-		var keys []roachpb.Key
-		var resumeSpan *roachpb.Span
-		var num int64
-		buf := newPutBuffer()
-		iter := engine.NewIterator(true)
-		f := func(kv roachpb.KeyValue) (bool, error) {
-			if num == max {
-				// Another key was found beyond the max limit.
-				resumeSpan = &roachpb.Span{Key: kv.Key, EndKey: endKey}
-				return true, nil
-			}
-			if err := mvccPutInternal(ctx, engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
-				return true, err
-			}
-			if returnKeys {
-				keys = append(keys, kv.Key)
-			}
-			num++
-			return false, nil
-		}
-
-		// In order to detect the potential write intent by another
-		// concurrent transaction with a newer timestamp, we need
-		// to use the max timestamp for scan.
-		_, err := MVCCIterate(ctx, engine, key, endKey, hlc.MaxTimestamp, true, txn, false, f)
-		iter.Close()
-		buf.release()
-		return keys, resumeSpan, num, err
-	}
-
 	// In order to detect the potential write intent by another concurrent
 	// transaction with a newer timestamp, we need to use the max timestamp for
 	// scan.
@@ -1703,79 +1631,6 @@ func MVCCDeleteRange(
 	return keys, resumeSpan, int64(len(kvs)), err
 }
 
-// getScanMeta returns the MVCCMetadata the iterator is currently pointed at
-// (reconstructing it if the metadata is implicit). Note that the returned
-// MVCCKey is unsafe and will be invalidated by the next call to
-// Iterator.{Next,Prev,Seek,SeekReverse,Close}.
-func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) (MVCCKey, error) {
-	metaKey := iter.UnsafeKey()
-	if !metaKey.Less(encEndKey) {
-		_, err := iter.Valid()
-		return NilKey, err
-	}
-	if metaKey.IsValue() {
-		meta.Reset()
-		meta.Timestamp = hlc.LegacyTimestamp(metaKey.Timestamp)
-		// For values, the size of keys is always account for as
-		// mvccVersionTimestampSize. The size of the metadata key is accounted for
-		// separately.
-		meta.KeyBytes = mvccVersionTimestampSize
-		meta.ValBytes = int64(len(iter.UnsafeValue()))
-		meta.Deleted = meta.ValBytes == 0
-		return metaKey, nil
-	}
-	if err := iter.ValueProto(meta); err != nil {
-		return NilKey, err
-	}
-	return metaKey, nil
-}
-
-// getReverseScanMeta returns the MVCCMetadata the iterator is currently
-// pointed at (reconstructing it if the metadata is implicit). Note that the
-// returned MVCCKey is unsafe and will be invalidated by the next call to
-// Iterator.{Next,Prev,Seek,SeekReverse,Close}.
-func getReverseScanMeta(
-	iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata,
-) (MVCCKey, error) {
-	metaKey := iter.UnsafeKey()
-	// The metaKey < encEndKey is exceeding the boundary.
-	if metaKey.Less(encEndKey) {
-		_, err := iter.Valid()
-		return NilKey, err
-	}
-
-	// If this isn't the meta key yet, scan again to get the meta key.
-	// TODO(tschottdorf): can we save any work here or leverage
-	// getScanMetaKey() above after doing the Seek() below?
-	if metaKey.IsValue() {
-		// Need a "safe" key because we're seeking the iterator.
-		metaKey = iter.Key()
-		// The row with oldest version will be got by seeking reversely. We use the
-		// key of this row to get the MVCC metadata key.
-		iter.Seek(MakeMVCCMetadataKey(metaKey.Key))
-		if ok, err := iter.Valid(); !ok {
-			return NilKey, err
-		}
-
-		meta.Reset()
-		metaKey = iter.UnsafeKey()
-		meta.Timestamp = hlc.LegacyTimestamp(metaKey.Timestamp)
-		if metaKey.IsValue() {
-			// For values, the size of keys is always account for as
-			// mvccVersionTimestampSize. The size of the metadata key is accounted
-			// for separately.
-			meta.KeyBytes = mvccVersionTimestampSize
-			meta.ValBytes = int64(len(iter.UnsafeValue()))
-			meta.Deleted = meta.ValBytes == 0
-			return metaKey, nil
-		}
-	}
-	if err := iter.ValueProto(meta); err != nil {
-		return NilKey, err
-	}
-	return metaKey, nil
-}
-
 // mvccScanInternal scans the key range [key,endKey) up to some maximum number
 // of results. Specify reverse=true to scan in descending instead of ascending
 // order.
@@ -1790,35 +1645,6 @@ func mvccScanInternal(
 	txn *roachpb.Transaction,
 	reverse bool,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	// TODO(peter): delete the old code.
-	if false {
-		var res []roachpb.KeyValue
-		if max == 0 {
-			return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
-		}
-
-		var resumeSpan *roachpb.Span
-		intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse,
-			func(kv roachpb.KeyValue) (bool, error) {
-				if int64(len(res)) == max {
-					// Another key was found beyond the max limit.
-					if reverse {
-						resumeSpan = &roachpb.Span{Key: key, EndKey: kv.Key.Next()}
-					} else {
-						resumeSpan = &roachpb.Span{Key: kv.Key, EndKey: endKey}
-					}
-					return true, nil
-				}
-				res = append(res, kv)
-				return false, nil
-			})
-
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		return res, resumeSpan, intents, nil
-	}
-
 	if max == 0 {
 		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
 	}
@@ -2005,186 +1831,6 @@ func MVCCReverseScan(
 		consistent, txn, true /* reverse */)
 }
 
-// TODO(peter): delete the old code.
-func mvccIterateOld(
-	ctx context.Context,
-	engine Reader,
-	startKey,
-	endKey roachpb.Key,
-	timestamp hlc.Timestamp,
-	consistent bool,
-	txn *roachpb.Transaction,
-	reverse bool,
-	f func(roachpb.KeyValue) (bool, error),
-) ([]roachpb.Intent, error) {
-	if !consistent && txn != nil {
-		return nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
-	}
-	if len(endKey) == 0 {
-		return nil, emptyKeyError()
-	}
-
-	buf := newGetBuffer()
-	defer buf.release()
-
-	// getMetaFunc is used to get the meta and the meta key of the current
-	// row. encEndKey is used to judge whether iterator exceeds the boundary or
-	// not.
-	type getMetaFunc func(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) (MVCCKey, error)
-	var getMeta getMetaFunc
-
-	// We store encEndKey and encKey in the same buffer to avoid memory
-	// allocations.
-	var encKey, encEndKey MVCCKey
-	if reverse {
-		encEndKey = MakeMVCCMetadataKey(startKey)
-		encKey = MakeMVCCMetadataKey(endKey)
-		getMeta = getReverseScanMeta
-	} else {
-		encEndKey = MakeMVCCMetadataKey(endKey)
-		encKey = MakeMVCCMetadataKey(startKey)
-		getMeta = getScanMeta
-	}
-
-	// Get a new iterator.
-	iter := engine.NewIterator(false)
-	defer iter.Close()
-
-	// Seeking for the first defined position.
-	if reverse {
-		iter.SeekReverse(encKey)
-		if ok, err := iter.Valid(); !ok {
-			return nil, err
-		}
-
-		// If the key doesn't exist, the iterator is at the next key that does
-		// exist in the database.
-		metaKey := iter.Key()
-		if !metaKey.Less(encKey) {
-			iter.Prev()
-		}
-	} else {
-		iter.Seek(encKey)
-	}
-
-	if ok, err := iter.Valid(); !ok {
-		return nil, err
-	}
-
-	// A slice to gather all encountered intents we skipped, in case of
-	// inconsistent iteration.
-	var intents []roachpb.Intent
-	// Gathers up all the intents from WriteIntentErrors. We only get those if
-	// the scan is consistent.
-	var wiErr error
-	var alloc bufalloc.ByteAllocator
-
-	for {
-		metaKey, err := getMeta(iter, encEndKey, &buf.meta)
-		if err != nil {
-			return nil, err
-		}
-		// Exceeding the boundary.
-		if metaKey.Key == nil {
-			break
-		}
-
-		alloc, metaKey.Key = alloc.Copy(metaKey.Key, 1)
-
-		// Indicate that we're fine with an unsafe Value.RawBytes being returned.
-		value, newIntents, valueSafety, err := mvccGetInternal(
-			ctx, iter, metaKey, timestamp, consistent, unsafeValue, txn, buf)
-		intents = append(intents, newIntents...)
-		if value.IsPresent() {
-			if valueSafety == unsafeValue {
-				// Copy the unsafe value into our allocation buffer.
-				alloc, value.RawBytes = alloc.Copy(value.RawBytes, 0)
-			}
-			done, err := f(roachpb.KeyValue{Key: metaKey.Key, Value: *value})
-			if err != nil {
-				return nil, err
-			}
-			if done {
-				break
-			}
-		}
-
-		if err != nil {
-			switch tErr := err.(type) {
-			case *roachpb.WriteIntentError:
-				// In the case of WriteIntentErrors, accumulate affected keys but continue scan.
-				if wiErr == nil {
-					wiErr = tErr
-				} else {
-					wiErr.(*roachpb.WriteIntentError).Intents = append(wiErr.(*roachpb.WriteIntentError).Intents, tErr.Intents...)
-				}
-			default:
-				return nil, err
-			}
-		}
-
-		if reverse {
-			valid, err := iter.Valid()
-			if err != nil {
-				return nil, err
-			}
-
-			if buf.meta.IsInline() {
-				if valid {
-					// The current entry is an inline value. We can reach the previous
-					// entry using Prev() which is slightly faster than PrevKey().
-					//
-					// As usual, the iterator must be valid because an inline key should
-					// never result in a version scan that brings us to an invalid key.
-					iter.Prev()
-				}
-			} else {
-				// This is subtle: mvccGetInternal might already have advanced
-				// us to the next key in which case we have to reset our
-				// position. We also Seek when iter.Valid says that the iterator
-				// is invalid, because mvccGetInternal might have advanced us
-				// out of the valid range and we may even have reached KeyMax.
-				// In this case, we still want to continue scanning backwards.
-				if !valid || !iter.UnsafeKey().Key.Equal(metaKey.Key) {
-					iter.Seek(metaKey)
-					if ok, err := iter.Valid(); err != nil {
-						return nil, err
-					} else if ok {
-						iter.Prev()
-					}
-				} else {
-					iter.PrevKey()
-				}
-			}
-		} else {
-			if ok, err := iter.Valid(); err != nil {
-				return nil, err
-			} else if ok {
-				if buf.meta.IsInline() {
-					// The current entry is an inline value. We can reach the next entry
-					// using Next() which is slightly faster than NextKey().
-					iter.Next()
-				} else {
-					// This is subtle: mvccGetInternal might already have advanced us to
-					// the next key in which case we don't have to do anything. Only call
-					// NextKey() if the current key pointed to by the iterator is the same
-					// as the one at the top of the loop.
-					if iter.UnsafeKey().Key.Equal(metaKey.Key) {
-						iter.NextKey()
-					}
-				}
-			}
-		}
-
-		if ok, err := iter.Valid(); err != nil {
-			return nil, err
-		} else if !ok {
-			break
-		}
-	}
-	return intents, wiErr
-}
-
 // MVCCIterate iterates over the key range [start,end). At each step of the
 // iteration, f() is invoked with the current key/value pair. If f returns
 // true (done) or an error, the iteration stops and the error is propagated.
@@ -2200,11 +1846,6 @@ func MVCCIterate(
 	reverse bool,
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
-	// TODO(peter): delete the old code.
-	if false {
-		return mvccIterateOld(ctx, engine, startKey, endKey, timestamp, consistent, txn, reverse, f)
-	}
-
 	var intents []roachpb.Intent
 	var wiErr error
 

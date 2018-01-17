@@ -1415,6 +1415,9 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		{Span: roachpb.Span{Key: testKey3}, Txn: txn2.TxnMeta},
 	}
 	kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 7}, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(intents, expIntents) {
 		t.Fatalf("expected %v, but found %v", expIntents, intents)
 	}
