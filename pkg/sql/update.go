@@ -274,8 +274,7 @@ func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
-	evalCtx := params.EvalContext()
-	return u.run.tw.init(params.p.txn, evalCtx.Mon, evalCtx)
+	return u.run.tw.init(params.p.txn, params.EvalContext())
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {

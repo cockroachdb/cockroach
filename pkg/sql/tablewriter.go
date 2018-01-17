@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -42,7 +41,7 @@ type expressionCarrier interface {
 // tableWriter handles writing kvs and forming table rows.
 //
 // Usage:
-//   err := tw.init(txn, mon, evalCtx)
+//   err := tw.init(txn, evalCtx)
 //   // Handle err.
 //   for {
 //      values := ...
@@ -56,7 +55,7 @@ type tableWriter interface {
 
 	// init provides the tableWriter with a Txn and optional monitor to write to
 	// and returns an error if it was misconfigured.
-	init(*client.Txn, *mon.BytesMonitor, *tree.EvalContext) error
+	init(*client.Txn, *tree.EvalContext) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -115,7 +114,7 @@ type tableInserter struct {
 
 func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
-func (ti *tableInserter) init(txn *client.Txn, _ *mon.BytesMonitor, _ *tree.EvalContext) error {
+func (ti *tableInserter) init(txn *client.Txn, _ *tree.EvalContext) error {
 	ti.txn = txn
 	ti.b = txn.NewBatch()
 	return nil
@@ -156,8 +155,7 @@ func (ti *tableInserter) fkSpanCollector() sqlbase.FkSpanCollector {
 
 // tableUpdater handles writing kvs and forming table rows for updates.
 type tableUpdater struct {
-	ru  sqlbase.RowUpdater
-	mon *mon.BytesMonitor
+	ru sqlbase.RowUpdater
 
 	// Set by init.
 	txn     *client.Txn
@@ -169,11 +167,8 @@ func (ti *tableInserter) close(_ context.Context) {}
 
 func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
-func (tu *tableUpdater) init(
-	txn *client.Txn, mon *mon.BytesMonitor, evalCtx *tree.EvalContext,
-) error {
+func (tu *tableUpdater) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.txn = txn
-	tu.mon = mon
 	tu.evalCtx = evalCtx
 	tu.b = txn.NewBatch()
 	return nil
@@ -184,7 +179,7 @@ func (tu *tableUpdater) row(
 ) (tree.Datums, error) {
 	oldValues := values[:len(tu.ru.FetchCols)]
 	updateValues := values[len(tu.ru.FetchCols):]
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, tu.mon, sqlbase.CheckFKs, traceKV)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, sqlbase.CheckFKs, traceKV)
 }
 
 func (tu *tableUpdater) finalize(
@@ -263,7 +258,6 @@ type tableUpserter struct {
 
 	// Set by init.
 	txn                   *client.Txn
-	mon                   *mon.BytesMonitor
 	evalCtx               *tree.EvalContext
 	fkTables              sqlbase.TableLookupsByID // for fk checks in update case
 	ru                    sqlbase.RowUpdater
@@ -292,18 +286,15 @@ func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr tree.T
 	}
 }
 
-func (tu *tableUpserter) init(
-	txn *client.Txn, mon *mon.BytesMonitor, evalCtx *tree.EvalContext,
-) error {
+func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tableDesc := tu.tableDesc()
 
 	tu.txn = txn
-	tu.mon = mon
 	tu.evalCtx = evalCtx
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 
 	tu.insertRows.Init(
-		tu.mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+		tu.evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
 	// TODO(dan): The fast path is currently only enabled when the UPSERT alias
@@ -363,7 +354,7 @@ func (tu *tableUpserter) init(
 	}
 
 	tu.insertRows.Init(
-		tu.mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+		tu.evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
 	var valNeededForCol util.FastIntSet
@@ -429,7 +420,7 @@ func (tu *tableUpserter) flush(
 	var rowTemplate tree.Datums
 	if tu.collectRows {
 		tu.rowsUpserted = sqlbase.NewRowContainer(
-			tu.mon.MakeBoundAccount(),
+			tu.evalCtx.Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
 			tu.insertRows.Len(),
 		)
@@ -494,7 +485,7 @@ func (tu *tableUpserter) flush(
 					return nil, err
 				}
 				updatedRow, err := tu.ru.UpdateRow(
-					ctx, b, existingValues, updateValues, tu.mon, sqlbase.CheckFKs, traceKV,
+					ctx, b, existingValues, updateValues, sqlbase.CheckFKs, traceKV,
 				)
 				if err != nil {
 					return nil, err
@@ -694,7 +685,6 @@ func (tu *tableUpserter) close(ctx context.Context) {
 type tableDeleter struct {
 	rd    sqlbase.RowDeleter
 	alloc *sqlbase.DatumAlloc
-	mon   *mon.BytesMonitor
 
 	// Set by init.
 	txn     *client.Txn
@@ -704,11 +694,8 @@ type tableDeleter struct {
 
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
-func (td *tableDeleter) init(
-	txn *client.Txn, mon *mon.BytesMonitor, evalCtx *tree.EvalContext,
-) error {
+func (td *tableDeleter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	td.txn = txn
-	td.mon = mon
 	td.evalCtx = evalCtx
 	td.b = txn.NewBatch()
 	return nil
@@ -717,7 +704,7 @@ func (td *tableDeleter) init(
 func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
-	return nil, td.rd.DeleteRow(ctx, td.b, values, td.mon, sqlbase.CheckFKs, traceKV)
+	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.CheckFKs, traceKV)
 }
 
 // finalize is part of the tableWriter interface.

@@ -320,8 +320,7 @@ func (n *insertNode) startExec(params runParams) error {
 		return err
 	}
 
-	evalCtx := params.EvalContext()
-	return n.run.tw.init(params.p.txn, evalCtx.Mon, evalCtx)
+	return n.run.tw.init(params.p.txn, params.EvalContext())
 }
 
 func (n *insertNode) Next(params runParams) (bool, error) {

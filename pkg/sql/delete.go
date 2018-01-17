@@ -149,8 +149,7 @@ func (d *deleteNode) startExec(params runParams) error {
 		return d.fastDelete(params, scan)
 	}
 
-	evalCtx := params.EvalContext()
-	return d.run.tw.init(d.p.txn, evalCtx.Mon, evalCtx)
+	return d.run.tw.init(d.p.txn, params.EvalContext())
 }
 
 func (d *deleteNode) Next(params runParams) (bool, error) {
@@ -238,8 +237,7 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
 		return err
 	}
 
-	evalCtx := params.EvalContext()
-	if err := d.tw.init(params.p.txn, evalCtx.Mon, evalCtx); err != nil {
+	if err := d.tw.init(params.p.txn, params.EvalContext()); err != nil {
 		return err
 	}
 	if err := params.p.cancelChecker.Check(); err != nil {

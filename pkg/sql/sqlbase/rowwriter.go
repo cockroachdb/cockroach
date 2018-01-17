@@ -20,14 +20,11 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
-
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -626,7 +623,6 @@ func (ru *RowUpdater) UpdateRow(
 	b *client.Batch,
 	oldValues []tree.Datum,
 	updateValues []tree.Datum,
-	mon *mon.BytesMonitor,
 	checkFKs checkFKConstraints,
 	traceKV bool,
 ) ([]tree.Datum, error) {
@@ -687,7 +683,7 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	if rowPrimaryKeyChanged {
-		if err := ru.rd.DeleteRow(ctx, batch, oldValues, mon, SkipFKs, traceKV); err != nil {
+		if err := ru.rd.DeleteRow(ctx, batch, oldValues, SkipFKs, traceKV); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
@@ -707,16 +703,12 @@ func (ru *RowUpdater) UpdateRow(
 			if err := ru.cascader.txn.Run(ctx, batch); err != nil {
 				return nil, err
 			}
-			if mon == nil {
-				return nil, errors.New("programming error: bytes monitor is nil")
-			}
 			if err := ru.cascader.cascadeAll(
 				ctx,
 				ru.Helper.TableDesc,
 				tree.Datums(oldValues),
 				tree.Datums(ru.newValues),
 				ru.FetchColIDtoRowIndex,
-				mon,
 				traceKV,
 			); err != nil {
 				return nil, err
@@ -854,9 +846,6 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	if ru.cascader != nil {
-		if mon == nil {
-			return nil, errors.New("programming error: bytes monitor is nil")
-		}
 		if err := ru.cascader.txn.Run(ctx, batch); err != nil {
 			return nil, err
 		}
@@ -866,7 +855,6 @@ func (ru *RowUpdater) UpdateRow(
 			tree.Datums(oldValues),
 			tree.Datums(ru.newValues),
 			ru.FetchColIDtoRowIndex,
-			mon,
 			traceKV,
 		); err != nil {
 			return nil, err
@@ -1010,7 +998,6 @@ func (rd *RowDeleter) DeleteRow(
 	ctx context.Context,
 	b *client.Batch,
 	values []tree.Datum,
-	mon *mon.BytesMonitor,
 	checkFKs checkFKConstraints,
 	traceKV bool,
 ) error {
@@ -1043,16 +1030,12 @@ func (rd *RowDeleter) DeleteRow(
 	rd.startKey, rd.endKey = nil, nil
 
 	if rd.cascader != nil {
-		if mon == nil {
-			return pgerror.NewError(pgerror.CodeInternalError, "programming error: bytes monitor is nil")
-		}
 		if err := rd.cascader.cascadeAll(
 			ctx,
 			rd.Helper.TableDesc,
 			tree.Datums(values),
 			nil, /* updatedValues */
 			rd.FetchColIDtoRowIndex,
-			mon,
 			traceKV,
 		); err != nil {
 			return err

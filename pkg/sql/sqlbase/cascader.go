@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // cascader is used to handle all referential integrity cascading actions.
@@ -57,6 +56,9 @@ func makeDeleteCascader(
 	evalCtx *tree.EvalContext,
 	alloc *DatumAlloc,
 ) (*cascader, error) {
+	if evalCtx == nil {
+		return nil, pgerror.NewError(pgerror.CodeInternalError, "programming error: evalContext is nil")
+	}
 	var required bool
 Outer:
 	for _, referencedIndex := range table.AllNonDropIndexes() {
@@ -113,6 +115,9 @@ func makeUpdateCascader(
 	evalCtx *tree.EvalContext,
 	alloc *DatumAlloc,
 ) (*cascader, error) {
+	if evalCtx == nil {
+		return nil, pgerror.NewError(pgerror.CodeInternalError, "programming error: evalContext is nil")
+	}
 	var required bool
 	colIDs := make(map[ColumnID]struct{})
 	for _, col := range updateCols {
@@ -461,7 +466,6 @@ func (c *cascader) deleteRows(
 	referencingTable *TableDescriptor,
 	referencingIndex *IndexDescriptor,
 	values cascadeQueueElement,
-	mon *mon.BytesMonitor,
 	traceKV bool,
 ) (*RowContainer, map[ColumnID]int, int, error) {
 	// Create the span to search for index values.
@@ -496,7 +500,7 @@ func (c *cascader) deleteRows(
 		return nil, nil, 0, err
 	}
 	primaryKeysToDelete := NewRowContainer(
-		mon.MakeBoundAccount(), pkColTypeInfo, values.originalValues.Len(),
+		c.evalCtx.Mon.MakeBoundAccount(), pkColTypeInfo, values.originalValues.Len(),
 	)
 	defer primaryKeysToDelete.Close(ctx)
 
@@ -554,7 +558,7 @@ func (c *cascader) deleteRows(
 			return nil, nil, 0, err
 		}
 		c.deletedRows[referencingTable.ID] = NewRowContainer(
-			mon.MakeBoundAccount(), colTypeInfo, primaryKeysToDelete.Len(),
+			c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, primaryKeysToDelete.Len(),
 		)
 	}
 	deletedRows := c.deletedRows[referencingTable.ID]
@@ -582,9 +586,7 @@ func (c *cascader) deleteRows(
 			}
 
 			// Delete the row.
-			if err := rowDeleter.DeleteRow(
-				ctx, deleteBatch, rowToDelete, nil /*mon.BytesMonitor */, SkipFKs, traceKV,
-			); err != nil {
+			if err := rowDeleter.DeleteRow(ctx, deleteBatch, rowToDelete, SkipFKs, traceKV); err != nil {
 				return nil, nil, 0, err
 			}
 		}
@@ -607,7 +609,6 @@ func (c *cascader) updateRows(
 	referencingTable *TableDescriptor,
 	referencingIndex *IndexDescriptor,
 	values cascadeQueueElement,
-	mon *mon.BytesMonitor,
 	traceKV bool,
 ) (*RowContainer, *RowContainer, map[ColumnID]int, int, error) {
 	// Create the span to search for index values.
@@ -634,10 +635,10 @@ func (c *cascader) updateRows(
 			return nil, nil, nil, 0, err
 		}
 		c.originalRows[referencingTable.ID] = NewRowContainer(
-			mon.MakeBoundAccount(), colTypeInfo, values.originalValues.Len(),
+			c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, values.originalValues.Len(),
 		)
 		c.updatedRows[referencingTable.ID] = NewRowContainer(
-			mon.MakeBoundAccount(), colTypeInfo, values.originalValues.Len(),
+			c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, values.originalValues.Len(),
 		)
 	}
 	originalRows := c.originalRows[referencingTable.ID]
@@ -683,7 +684,7 @@ func (c *cascader) updateRows(
 			return nil, nil, nil, 0, err
 		}
 		primaryKeysToUpdate := NewRowContainer(
-			mon.MakeBoundAccount(), pkColTypeInfo, values.originalValues.Len(),
+			c.evalCtx.Mon.MakeBoundAccount(), pkColTypeInfo, values.originalValues.Len(),
 		)
 		defer primaryKeysToUpdate.Close(ctx)
 
@@ -766,7 +767,6 @@ func (c *cascader) updateRows(
 					batch,
 					rowToUpdate,
 					updateRow,
-					mon,
 					SkipFKs,
 					traceKV,
 				)
@@ -846,7 +846,6 @@ func (c *cascader) cascadeAll(
 	originalValues tree.Datums,
 	updatedValues tree.Datums,
 	colIDtoRowIndex map[ColumnID]int,
-	mon *mon.BytesMonitor,
 	traceKV bool,
 ) error {
 	defer c.close(ctx)
@@ -857,14 +856,18 @@ func (c *cascader) cascadeAll(
 	if err != nil {
 		return err
 	}
-	originalRowContainer := NewRowContainer(mon.MakeBoundAccount(), colTypeInfo, len(originalValues))
+	originalRowContainer := NewRowContainer(
+		c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, len(originalValues),
+	)
 	defer originalRowContainer.Close(ctx)
 	if _, err := originalRowContainer.AddRow(ctx, originalValues); err != nil {
 		return err
 	}
 	var updatedRowContainer *RowContainer
 	if updatedValues != nil {
-		updatedRowContainer = NewRowContainer(mon.MakeBoundAccount(), colTypeInfo, len(updatedValues))
+		updatedRowContainer = NewRowContainer(
+			c.evalCtx.Mon.MakeBoundAccount(), colTypeInfo, len(updatedValues),
+		)
 		defer updatedRowContainer.Close(ctx)
 		if _, err := updatedRowContainer.AddRow(ctx, updatedValues); err != nil {
 			return err
@@ -912,7 +915,6 @@ func (c *cascader) cascadeAll(
 							referencingTable.Table,
 							referencingIndex,
 							elem,
-							mon,
 							traceKV,
 						)
 						if err != nil {
@@ -942,7 +944,6 @@ func (c *cascader) cascadeAll(
 							referencingTable.Table,
 							referencingIndex,
 							elem,
-							mon,
 							traceKV,
 						)
 						if err != nil {
