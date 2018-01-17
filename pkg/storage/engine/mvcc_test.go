@@ -1640,7 +1640,7 @@ func TestMVCCDeleteRangeReturnKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	if deleted != nil {
-		t.Fatal("the value should be empty")
+		t.Fatalf("the value should be empty: %s", deleted)
 	}
 	if num != 0 {
 		t.Fatalf("incorrect number of keys deleted: %d", num)
