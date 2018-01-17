@@ -879,18 +879,6 @@ func importPlanHook(
 		return nil, nil, nil
 	}
 
-	if !importCSVEnabled.Get(&p.ExecCfg().Settings.SV) {
-		return nil, nil, errors.Errorf(
-			`IMPORT is an experimental feature and is disabled by default; `+
-				`enable by executing: SET CLUSTER SETTING %s = true`,
-			importCSVEnabledSetting,
-		)
-	}
-
-	if err := p.RequireSuperUser("IMPORT"); err != nil {
-		return nil, nil, err
-	}
-
 	filesFn, err := p.TypeAsStringArray(importStmt.Files, "IMPORT")
 	if err != nil {
 		return nil, nil, err
@@ -918,11 +906,27 @@ func importPlanHook(
 	// Currently, it "uses" distsql to compute an int and this method returns
 	// it.
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
-		walltime := timeutil.Now().UnixNano()
-
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		walltime := timeutil.Now().UnixNano()
+
+		if !importCSVEnabled.Get(&p.ExecCfg().Settings.SV) {
+			return errors.Errorf(
+				`IMPORT is an experimental feature and is disabled by default; `+
+					`enable by executing: SET CLUSTER SETTING %s = true`,
+				importCSVEnabledSetting,
+			)
+		}
+
+		if err := p.RequireSuperUser("IMPORT"); err != nil {
+			return err
+		}
+
+		if !p.ExtendedEvalContext().TxnImplicit {
+			return errors.Errorf("IMPORT cannot be used inside a transaction")
+		}
 
 		opts, err := optsFn()
 		if err != nil {
