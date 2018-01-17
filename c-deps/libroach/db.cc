@@ -2577,6 +2577,7 @@ template <bool reverse> class mvccScanner {
         kvs_(new rocksdb::WriteBatch),
         intents_(new rocksdb::WriteBatch),
         peeked_(false),
+        is_get_(false),
         iters_before_seek_(kMaxItersBeforeSeek / 2) {
     memset(&results_, 0, sizeof(results_));
     results_.status = kSuccess;
@@ -2618,6 +2619,7 @@ template <bool reverse> class mvccScanner {
       return results_;
     }
     if (cur_key_ == start_key_) {
+      is_get_ = true;
       getAndAdvance();
     }
     return fillResults();
@@ -2743,6 +2745,16 @@ template <bool reverse> class mvccScanner {
       // historical timestamp < the intent timestamp. However, we
       // return the intent separately; the caller may want to resolve
       // it.
+      if (kvs_->Count() == max_keys_ && !is_get_) {
+        // We've already retrieved the desired number of keys and now
+        // we're adding the resume key. We don't want to add the
+        // intent here as the intents should only correspond to KVs
+        // that lie before the resume key. The "max_keys_ > 0" is
+        // necessary to handle MVCCGet which specifies max_keys_==0 in
+        // order to avoid iterating to the next key.
+        kvs_->Put(cur_raw_key_, rocksdb::Slice());
+        return false;
+      }
       intents_->Put(cur_raw_key_, cur_value_);
       return seekVersion(PrevTimestamp(ToDBTimestamp(meta_.timestamp())), false);
     }
@@ -3109,6 +3121,7 @@ template <bool reverse> class mvccScanner {
   std::string key_buf_;
   std::string saved_buf_;
   bool peeked_;
+  bool is_get_;
   cockroach::storage::engine::enginepb::MVCCMetadata meta_;
   // cur_raw_key_ holds either iter_rep_->key() or the saved value of
   // iter_rep_->key() if we've peeked at the previous key (and peeked_
