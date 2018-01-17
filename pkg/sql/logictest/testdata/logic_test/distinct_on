@@ -331,18 +331,21 @@ SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b, c
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
-distinct             0  distinct  ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
- │                   0  ·         distinct on  a            ·       ·
- │                   0  ·         order key    a            ·       ·
- └── sort            1  sort      ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
-      │              1  ·         order        +a,-c,+b     ·       ·
-      └── render     2  render    ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
-           │         2  ·         render 0     test.abc.a   ·       ·
-           │         2  ·         render 1     test.abc.c   ·       ·
-           │         2  ·         render 2     test.abc.b   ·       ·
-           └── scan  3  scan      ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
-·                    3  ·         table        abc@primary  ·       ·
-·                    3  ·         spans        ALL          ·       ·
+distinct                  0  distinct  ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
+ │                        0  ·         distinct on  a            ·       ·
+ │                        0  ·         order key    a            ·       ·
+ └── render               1  render    ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
+      │                   1  ·         render 0     a            ·       ·
+      │                   1  ·         render 1     c            ·       ·
+      └── sort            2  sort      ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
+           │              2  ·         order        +a,-c        ·       ·
+           └── render     3  render    ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
+                │         3  ·         render 0     test.abc.a   ·       ·
+                │         3  ·         render 1     test.abc.c   ·       ·
+                │         3  ·         render 2     NULL         ·       ·
+                └── scan  4  scan      ·            ·            (a, c)  a!=NULL; c!=NULL; key(a); +a
+·                         4  ·         table        abc@primary  ·       ·
+·                         4  ·         spans        ALL          ·       ·
 
 query TT
 SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b

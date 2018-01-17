@@ -141,6 +141,26 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns, needed)
 
 	case *sortNode:
+		orderingCols := util.MakeFastIntSet()
+		for _, o := range n.ordering {
+			orderingCols.Add(o.ColIdx)
+		}
+		containsNeeded := true
+		for colIdx := range n.needed {
+			if n.needed[colIdx] && !orderingCols.Contains(colIdx) {
+				containsNeeded = false
+				break
+			}
+		}
+		if containsNeeded {
+			for idx := len(n.ordering) - 1; idx != -1; idx-- {
+				colIdx := n.ordering[idx].ColIdx
+				if colIdx < len(n.needed) && n.needed[colIdx] {
+					break
+				}
+				n.ordering = n.ordering[:idx]
+			}
+		}
 		sourceNeeded := make([]bool, len(planColumns(n.plan)))
 		copy(sourceNeeded[:len(needed)], needed)
 
@@ -150,7 +170,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 
 		setNeededColumns(n.plan, sourceNeeded)
-		markOmitted(n.columns, sourceNeeded[:len(n.columns)])
 
 	case *groupNode:
 		// TODO(knz): This can be optimized by removing the aggregation

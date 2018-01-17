@@ -92,19 +92,6 @@ func sortPhysicalProps(n *sortNode) physicalProps {
 		}
 	}
 
-	if numPlanColumns := len(planColumns(n.plan)); len(n.columns) < numPlanColumns {
-		// The sortNode is projecting away columns, e.g:
-		//   SELECT k FROM kv ORDER BY v.
-		colMap := make([]int, numPlanColumns)
-		for i := range colMap {
-			if i < len(n.columns) {
-				colMap[i] = i
-			} else {
-				colMap[i] = -1
-			}
-		}
-		return props.project(colMap)
-	}
 	return props
 }
 

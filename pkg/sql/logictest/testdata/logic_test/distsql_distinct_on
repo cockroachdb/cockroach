@@ -199,8 +199,9 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 distinct        0  distinct  ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
  │              0  ·         distinct on  a, b         ·       ·
  │              0  ·         order key    a, b         ·       ·
- └── nosort     1  nosort    ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
-      │         1  ·         order        +a,+b,+c     ·       ·
+ └── render     1  render    ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
+      │         1  ·         render 0     a            ·       ·
+      │         1  ·         render 1     b            ·       ·
       └── scan  2  scan      ·            ·            (a, b)  a!=NULL; b!=NULL; key(a,b); +a,+b
 ·               2  ·         table        abc@primary  ·       ·
 ·               2  ·         spans        ALL          ·       ·
@@ -208,7 +209,7 @@ distinct        0  distinct  ·            ·            (a, b)  a!=NULL; b!=NUL
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzE1DFr6zAQB_D9fYrHf80Nsezk5Xny0CVLU0K34kGxjmBILCPJ0BL83YutQurQyIVgPFryX787JO6CSit-lme2SN8QgSBAiEFIQFghJ9RGF2ytNt0vPrBV70iXhLKqG9ct54RCG0Z6gSvdiZHiVR5OvGep2ICg2Mny1CO1Kc_SfGTyUICwa1z6N4soE5TFyFuCbtz1VOvkkZFGLf1efiqtK6vCDdne6ECj2LD6Qu-K4q54hbQ_6tZZUCYWlMUL5O1U5cWD8qLZrmJEnuAqxGy9jsgT9BrP1uuIPEGvyWy9jsgTj5MfxD3bWleWB-K9k5fdjGF1ZD-brG5MwS9GFz3jP3d9rl9QbJ3fjfzHtvJbXYHfw1EwLAbh6DYswvIIHQfTSTicPFL3Khheh-X1I_K_YHgTljePyP_Dd7UceSbhR3Zr5-2fzwAAAP__kaS7sw==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzE1D9r8zAQBvD9_RQvz5ob4j9JU08eumRpSuhWPCjWEQyJZSQZWoK_e7E1pA6NVAjGoyU_-t0hcRfUSvKrOLNB9oEIhBiEBIQUhBUKQqNVycYo3f_iAlv5iWxJqOqmtf1yQSiVZmQX2MqeGBnexeHEexaSNQiSrahOA9Lo6iz0Vy4OJQi71mb_84jyGEVHUK29HmmsODKyqKO_sy-VsVVd2rHpAMJOS9YsQ2J8V7xCyh116ywojxcouqlKS0alRfPcQYCd4A7ieRoNsBM0mszTaICdoNF0nkYD7MTj4xdxz6ZRteGReO_kZT9XWB7ZzSKjWl3ym1blwLjP3ZAbFiQb63Yj97Gt3VZf4M9w5A3Ho3B0G479coBOvOnUH04fqXvlDa_98voR-ckb3vjlzSPys_-uloFn4n9kt3bR_fsOAAD__4LWt84=
 
 query TT
 SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
