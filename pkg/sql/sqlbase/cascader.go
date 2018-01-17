@@ -610,6 +610,7 @@ func (c *cascader) updateRows(
 	referencingTable *TableDescriptor,
 	referencingIndex *IndexDescriptor,
 	values cascadeQueueElement,
+	action ForeignKeyReference_Action,
 	traceKV bool,
 ) (*RowContainer, *RowContainer, map[ColumnID]int, int, error) {
 	// Create the span to search for index values.
@@ -648,6 +649,16 @@ func (c *cascader) updateRows(
 
 	// Update all the rows in a new batch.
 	batch := c.txn.NewBatch()
+
+	// Populate a map of all columns that need to be set if the action is not
+	// cascade.
+	var referencingIndexValuesByColIDs map[ColumnID]tree.Datum
+	if action == ForeignKeyReference_SET_NULL {
+		referencingIndexValuesByColIDs = make(map[ColumnID]tree.Datum)
+		for _, columnID := range referencingIndex.ColumnIDs {
+			referencingIndexValuesByColIDs[columnID] = tree.DNull
+		}
+	}
 
 	// Sadly, this operation cannot be batched the same way as deletes, as the
 	// values being updated will change based on both the original and updated
@@ -740,23 +751,65 @@ func (c *cascader) updateRows(
 					return nil, nil, nil, 0, err
 				}
 
-				// Create the updateRow based on the passed in updated values and from
-				// the retrieved row as a fallback.
 				updateRow := make(tree.Datums, len(rowUpdater.updateColIDtoRowIndex))
-				currentUpdatedValue := values.updatedValues.At(i)
-				for colID, rowIndex := range rowUpdater.updateColIDtoRowIndex {
-					if valueRowIndex, exists := valueColIDtoRowIndex[colID]; exists {
-						updateRow[rowIndex] = currentUpdatedValue[valueRowIndex]
-						continue
+				switch action {
+				case ForeignKeyReference_CASCADE:
+					// Create the updateRow based on the passed in updated values and from
+					// the retrieved row as a fallback.
+					currentUpdatedValue := values.updatedValues.At(i)
+					for colID, rowIndex := range rowUpdater.updateColIDtoRowIndex {
+						if valueRowIndex, exists := valueColIDtoRowIndex[colID]; exists {
+							updateRow[rowIndex] = currentUpdatedValue[valueRowIndex]
+							if updateRow[rowIndex] == tree.DNull {
+								column, err := referencingTable.FindColumnByID(colID)
+								if err != nil {
+									return nil, nil, nil, 0, err
+								}
+								if !column.Nullable {
+									database, err := GetDatabaseDescFromID(ctx, c.txn, referencingTable.ParentID)
+									if err != nil {
+										return nil, nil, nil, 0, err
+									}
+									return nil, nil, nil, 0, pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError,
+										"cannot cascade a null value into %q as it violates a NOT NULL constraint",
+										tree.ErrString(&tree.ColumnItem{
+											TableName: tree.TableName{
+												DatabaseName: tree.Name(database.Name),
+												TableName:    tree.Name(referencingTable.Name),
+											},
+											ColumnName: tree.Name(column.Name),
+										}),
+									)
+								}
+							}
+							continue
+						}
+						if fetchRowIndex, exists := rowUpdater.FetchColIDtoRowIndex[colID]; exists {
+							updateRow[rowIndex] = rowToUpdate[fetchRowIndex]
+							continue
+						}
+						return nil, nil, nil, 0, pgerror.NewErrorf(pgerror.CodeInternalError,
+							"could find find colID %d in either updated columns or the fetched row",
+							colID,
+						)
 					}
-					if fetchRowIndex, exists := rowUpdater.FetchColIDtoRowIndex[colID]; exists {
-						updateRow[rowIndex] = rowToUpdate[fetchRowIndex]
-						continue
+				case ForeignKeyReference_SET_NULL:
+					// Create the updateRow based on the original values and nulls for
+					// all values in the index.
+					for colID, rowIndex := range rowUpdater.updateColIDtoRowIndex {
+						if value, exists := referencingIndexValuesByColIDs[colID]; exists {
+							updateRow[rowIndex] = value
+							continue
+						}
+						if fetchRowIndex, exists := rowUpdater.FetchColIDtoRowIndex[colID]; exists {
+							updateRow[rowIndex] = rowToUpdate[fetchRowIndex]
+							continue
+						}
+						return nil, nil, nil, 0, pgerror.NewErrorf(pgerror.CodeInternalError,
+							"could find find colID %d in either the index columns or the fetched row",
+							colID,
+						)
 					}
-					return nil, nil, nil, 0, pgerror.NewErrorf(pgerror.CodeInternalError,
-						"could find find colID %d in either updated columns or the fetched row",
-						colID,
-					)
 				}
 
 				// Is there something to update?  If not, skip it.
@@ -935,6 +988,32 @@ func (c *cascader) cascadeAll(
 								return err
 							}
 						}
+					case ForeignKeyReference_SET_NULL:
+						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
+							ctx,
+							&referencedIndex,
+							referencingTable.Table,
+							referencingIndex,
+							elem,
+							ForeignKeyReference_SET_NULL,
+							traceKV,
+						)
+						if err != nil {
+							return err
+						}
+						if originalAffectedRows != nil && originalAffectedRows.Len() > startIndex {
+							// A row was updated, so let's add it to the queue.
+							if err := cascadeQ.enqueue(
+								ctx,
+								referencingTable.Table,
+								originalAffectedRows,
+								updatedAffectedRows,
+								colIDtoRowIndex,
+								startIndex,
+							); err != nil {
+								return err
+							}
+						}
 					}
 				} else {
 					// Updating a row.
@@ -946,6 +1025,7 @@ func (c *cascader) cascadeAll(
 							referencingTable.Table,
 							referencingIndex,
 							elem,
+							ForeignKeyReference_CASCADE,
 							traceKV,
 						)
 						if err != nil {
