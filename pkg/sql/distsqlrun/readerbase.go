@@ -15,11 +15,11 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"golang.org/x/net/context"
 )
 
 // We ignore any limits that are higher than this value to avoid integer

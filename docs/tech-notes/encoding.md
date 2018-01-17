@@ -32,7 +32,7 @@ family as needed (see subsection NULL below). CRDB stores primary key
 data in KV keys and other data in KV values so that it can use the KV
 layer to prevent duplicate primary keys. For encoding, see
 [pkg/sql/rowwriter.go]. For decoding, see
-[pkg/sql/sqlbase/rowfetcher.go].
+[pkg/sql/sqlbase/multirowfetcher.go].
 
 ### Key encoding
 
@@ -553,7 +553,7 @@ Example dump:
   [interleaving RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160624_sql_interleaved_tables.md
   [pkg/sql/sqlbase/structured.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/structured.proto
   [pkg/sql/rowwriter.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowwriter.go
-  [pkg/sql/sqlbase/rowfetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowfetcher.go
+  [pkg/sql/sqlbase/multirowfetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/multirowfetcher.go
   [prefix-free]: https://en.wikipedia.org/wiki/Prefix_code
   [new `DECIMAL` encoding]: https://github.com/cockroachdb/cockroach/issues/13384#issuecomment-277120394
   [pkg/sql/sqlbase/table.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/table.go

@@ -15,12 +15,12 @@
 package jobs
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -152,37 +152,35 @@ func (j *Job) Started(ctx context.Context) error {
 	})
 }
 
-// ProgressedFn is a callback that allows arbitrary modifications to a job's
-// details when updating its progress.
-type ProgressedFn func(ctx context.Context, details interface{})
+// ProgressedFn is a callback that computes a job's completion fraction
+// given its details. It is safe to modify details in the callback; those
+// modifications will be automatically persisted to the database record.
+type ProgressedFn func(ctx context.Context, details Details) float32
 
-// Noop is a nil ProgressedFn.
-var Noop ProgressedFn
-
-// Progressed updates the progress of the tracked job to fractionCompleted. A
-// fractionCompleted that is less than the currently-recorded fractionCompleted
-// will be silently ignored. If progressedFn is non-nil, it will be invoked with
-// a pointer to the job's details to allow for modifications to the details
-// before the job is saved. If no such modifications are required, pass Noop
-// instead of nil for readability.
-func (j *Job) Progressed(
-	ctx context.Context, fractionCompleted float32, progressedFn ProgressedFn,
-) error {
-	if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
-		return errors.Errorf(
-			"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-			fractionCompleted, j.id,
-		)
+// FractionUpdater returns a ProgressedFn that returns its argument.
+func FractionUpdater(f float32) ProgressedFn {
+	return func(ctx context.Context, details Details) float32 {
+		return f
 	}
+}
+
+// Progressed updates the progress of the tracked job. It sets the job's
+// FractionCompleted field to the value returned by progressedFn and persists
+// progressedFn's modifications to the job's details, if any.
+//
+// Jobs for which progress computations do not depend on their details can
+// use the FractionUpdater helper to construct a ProgressedFn.
+func (j *Job) Progressed(ctx context.Context, progressedFn ProgressedFn) error {
 	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if *status != StatusRunning {
 			return false, &InvalidStatusError{*j.id, *status, "update progress on"}
 		}
-		if fractionCompleted > payload.FractionCompleted {
-			payload.FractionCompleted = fractionCompleted
-		}
-		if progressedFn != nil {
-			progressedFn(ctx, payload.Details)
+		payload.FractionCompleted = progressedFn(ctx, payload.Details)
+		if payload.FractionCompleted < 0.0 || payload.FractionCompleted > 1.0 {
+			return false, errors.Errorf(
+				"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
+				payload.FractionCompleted, j.id,
+			)
 		}
 		return true, nil
 	})
@@ -655,4 +653,40 @@ func RunAndWaitForTerminalState(
 		}
 		return jobID, status, nil
 	}
+}
+
+// Completed returns the total complete percent of processing this table. There
+// are two phases: sampling, SST writing. The SST phase is divided into two
+// stages: read CSV, write SST. Thus, the entire progress can be measured
+// by (sampling + read csv + write sst) progress. Since there are multiple
+// distSQL processors running these stages, we assign slots to each one, and
+// they are in charge of updating their portion of the progress. Since we read
+// over CSV files twice (once for sampling, once for SST writing), we must
+// indicate which phase we are in. This is done using the SamplingProgress
+// slice, which is empty if we are in the second stage (and can thus be
+// implied as complete).
+func (d ImportDetails_Table) Completed() float32 {
+	const (
+		// These ratios are approximate after running simple benchmarks.
+		samplingPhaseContribution = 0.1
+		readStageContribution     = 0.65
+		writeStageContribution    = 0.25
+	)
+
+	sum := func(fs []float32) float32 {
+		var total float32
+		for _, f := range fs {
+			total += f
+		}
+		return total
+	}
+	sampling := sum(d.SamplingProgress) * samplingPhaseContribution
+	if len(d.SamplingProgress) == 0 {
+		// SamplingProgress in empty iff we are in the second phase. If so, the
+		// first phase is implied as fully complete.
+		sampling = samplingPhaseContribution
+	}
+	read := sum(d.ReadProgress) * readStageContribution
+	write := sum(d.WriteProgress) * writeStageContribution
+	return sampling + read + write
 }

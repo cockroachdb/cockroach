@@ -15,11 +15,10 @@
 package sql
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -70,11 +69,13 @@ CREATE TABLE d.t (a STRING)
 func TestAggregatesMonitorMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// By selecting the LENGTH we prevent anything besides the aggregate itself
-	// from being able to catch the large memory usage.
+	// By avoiding printing the aggregate results we prevent anything
+	// besides the aggregate itself from being able to catch the
+	// large memory usage.
 	statements := []string{
 		`SELECT LENGTH(CONCAT_AGG(a)) FROM d.t`,
 		`SELECT ARRAY_LENGTH(ARRAY_AGG(a), 1) FROM d.t`,
+		`SELECT JSON_TYPEOF(JSON_AGG(A)) FROM d.t`,
 	}
 
 	for _, statement := range statements {
@@ -133,12 +134,12 @@ func TestBuiltinsAccountForMemory(t *testing.T) {
 			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			defer evalCtx.ActiveMemAcc.Close(context.Background())
-			previouslyAllocated := evalCtx.Mon.GetCurrentAllocationForTesting()
+			previouslyAllocated := evalCtx.ActiveMemAcc.Used()
 			_, err := test.builtin.Fn(evalCtx, test.args)
 			if err != nil {
 				t.Fatal(err)
 			}
-			deltaAllocated := evalCtx.Mon.GetCurrentAllocationForTesting() - previouslyAllocated
+			deltaAllocated := evalCtx.ActiveMemAcc.Used() - previouslyAllocated
 			if deltaAllocated != test.expectedAllocation {
 				t.Errorf("Expected to allocate %d, actually allocated %d", test.expectedAllocation, deltaAllocated)
 			}

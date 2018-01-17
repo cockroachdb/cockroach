@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -49,11 +48,10 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 	optimized := true
 	expanded := true
 	normalizeExprs := true
-	explainer := explainer{
+	flags := explainFlags{
 		showMetadata: false,
 		showExprs:    false,
 		showTypes:    false,
-		doIndent:     false,
 	}
 
 	for _, opt := range n.Options {
@@ -70,33 +68,30 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 			switch optLower {
 			case "types":
 				newMode = explainPlan
-				explainer.showExprs = true
-				explainer.showTypes = true
+				flags.showExprs = true
+				flags.showTypes = true
 				// TYPES implies METADATA.
-				explainer.showMetadata = true
-
-			case "indent":
-				explainer.doIndent = true
+				flags.showMetadata = true
 
 			case "symvars":
-				explainer.symbolicVars = true
+				flags.symbolicVars = true
 
 			case "metadata":
-				explainer.showMetadata = true
+				flags.showMetadata = true
 
 			case "qualify":
-				explainer.qualifyNames = true
+				flags.qualifyNames = true
 
 			case "verbose":
 				// VERBOSE implies EXPRS.
-				explainer.showExprs = true
+				flags.showExprs = true
 				// VERBOSE implies QUALIFY.
-				explainer.qualifyNames = true
+				flags.qualifyNames = true
 				// VERBOSE implies METADATA.
-				explainer.showMetadata = true
+				flags.showMetadata = true
 
 			case "exprs":
-				explainer.showExprs = true
+				flags.showExprs = true
 
 			case "noexpand":
 				expanded = false
@@ -122,23 +117,23 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 		mode = explainPlan
 	}
 
-	p.evalCtx.SkipNormalize = !normalizeExprs
+	defer func(save bool) { p.extendedEvalCtx.SkipNormalize = save }(p.extendedEvalCtx.SkipNormalize)
+	p.extendedEvalCtx.SkipNormalize = !normalizeExprs
 
-	plan, err := p.newPlan(ctx, n.Statement, nil)
-	if err != nil {
-		return nil, err
-	}
 	switch mode {
 	case explainDistSQL:
+		plan, err := p.newPlan(ctx, n.Statement, nil)
+		if err != nil {
+			return nil, err
+		}
 		return &explainDistSQLNode{
 			plan: plan,
 		}, nil
 
 	case explainPlan:
-		// We may want to show placeholder types, so ensure no values
-		// are missing.
+		// We may want to show placeholder types, so allow missing values.
 		p.semaCtx.Placeholders.PermitUnassigned()
-		return p.makeExplainPlanNode(explainer, expanded, optimized, n.Statement, plan), nil
+		return p.makeExplainPlanNode(ctx, flags, expanded, optimized, n.Statement)
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)

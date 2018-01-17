@@ -15,6 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
+
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -23,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // columnBackfiller is a processor for backfilling columns.
@@ -127,7 +129,7 @@ func (cb *columnBackfiller) init() error {
 		ValNeededForCol: valNeededForCol,
 	}
 	return cb.fetcher.Init(
-		false /* reverse */, false /* returnRangeInfo */, &cb.alloc, tableArgs,
+		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &cb.alloc, tableArgs,
 	)
 }
 
@@ -150,7 +152,9 @@ func (cb *columnBackfiller) runChunk(
 			defer cb.flowCtx.testingKnobs.RunAfterBackfillChunk()
 		}
 
-		fkTables := sqlbase.TablesNeededForFKs(tableDesc, sqlbase.CheckUpdates)
+		fkTables, _ := sqlbase.TablesNeededForFKs(
+			ctx, tableDesc, sqlbase.CheckUpdates, sqlbase.NoLookup, sqlbase.NoCheckPrivilege,
+		)
 		for _, fkTableDesc := range cb.spec.OtherTables {
 			found, ok := fkTables[fkTableDesc.ID]
 			if !ok {
@@ -172,8 +176,14 @@ func (cb *columnBackfiller) runChunk(
 		requestedCols = append(requestedCols, tableDesc.Columns...)
 		requestedCols = append(requestedCols, cb.added...)
 		ru, err := sqlbase.MakeRowUpdater(
-			txn, &tableDesc, fkTables, cb.updateCols, requestedCols,
-			sqlbase.RowUpdaterOnlyColumns, &cb.alloc,
+			txn,
+			&tableDesc,
+			fkTables,
+			cb.updateCols,
+			requestedCols,
+			sqlbase.RowUpdaterOnlyColumns,
+			&cb.flowCtx.EvalCtx,
+			&cb.alloc,
 		)
 		if err != nil {
 			return err
@@ -234,7 +244,9 @@ func (cb *columnBackfiller) runChunk(
 					oldValues[j] = tree.DNull
 				}
 			}
-			if _, err := ru.UpdateRow(ctx, b, oldValues, updateValues, false /* traceKV */); err != nil {
+			if _, err := ru.UpdateRow(
+				ctx, b, oldValues, updateValues, sqlbase.CheckFKs, false, /* traceKV */
+			); err != nil {
 				return err
 			}
 		}

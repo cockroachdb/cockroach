@@ -15,10 +15,9 @@
 package acceptance
 
 import (
+	"context"
 	"fmt"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -75,7 +74,7 @@ $bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (t
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff -u new.everything old.everything
 
-$bin debug range ls
+$bin node status
 
 echo "Add a row with the new binary and render the updated data before shutting down."
 $bin sql -d old -e "INSERT INTO testing_old values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"

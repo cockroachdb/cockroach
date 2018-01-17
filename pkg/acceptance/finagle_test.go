@@ -15,11 +15,10 @@
 package acceptance
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-
-	"golang.org/x/net/context"
 )
 
 // This runs the `finagle-postgres` tests from the upstream project.

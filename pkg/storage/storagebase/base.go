@@ -15,8 +15,9 @@
 package storagebase
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"golang.org/x/net/context"
 )
 
 // CmdIDKey is a Raft command id.

@@ -35,12 +35,17 @@ const (
 	// Increment will continue to be a valid command. The value must be
 	// deleted before it can be reset using Put.
 	Increment
-	// Delete removes the value for the specified key.
+	// Delete creates a tombstone value for the specified key, indicating
+	// the value has been deleted.
 	Delete
-	// DeleteRange removes all values for keys which fall between
-	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
-	// the latter endpoint excluded.
+	// DeleteRange creates tombstone values for keys which fall between
+	// args.RequestHeader.Key and args.RequestHeader.EndKey, with the
+	// latter endpoint excluded.
 	DeleteRange
+	// ClearRange removes all values (including all of their versions)
+	// for keys which fall between args.RequestHeader.Key and
+	// args.RequestHeader.EndKey, with the latter endpoint excluded.
+	ClearRange
 	// Scan fetches the values for all keys which fall between
 	// args.RequestHeader.Key and args.RequestHeader.EndKey, with
 	// the latter endpoint excluded.

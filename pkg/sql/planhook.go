@@ -15,9 +15,11 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -49,21 +51,41 @@ type planHookFn func(
 
 var planHooks []planHookFn
 
+// wrappedPlanHookFn is similar to planHookFn but returns an existing plan type.
+// Additionally, it takes a context.
+type wrappedPlanHookFn func(
+	context.Context, tree.Statement, PlanHookState,
+) (planNode, error)
+
+var wrappedPlanHooks []wrappedPlanHookFn
+
 // PlanHookState exposes the subset of planner needed by plan hooks.
 // We pass this as one interface, rather than individually passing each field or
 // interface as we find we need them, to avoid churn in the planHookFn sig and
 // the hooks that implement it.
 type PlanHookState interface {
-	EvalContext() tree.EvalContext
+	ExtendedEvalContext() extendedEvalContext
+	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
 	DistLoader() *DistLoader
+	LeaseMgr() *LeaseManager
 	TypeAsString(e tree.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(
 		opts tree.KVOptions, valuelessOpts map[string]bool,
 	) (func() (map[string]string, error), error)
+	Txn() *client.Txn
 	User() string
 	AuthorizationAccessor
+	// The role create/drop call into OSS code to reuse plan nodes.
+	// TODO(mberhault): it would be easier to just pass a planner to plan hooks.
+	CreateUserNode(
+		ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
+	) (*CreateUserNode, error)
+	DropUserNode(
+		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
+	) (*DropUserNode, error)
+	GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
@@ -71,6 +93,12 @@ type PlanHookState interface {
 // construct a planNode that runs that func in a goroutine during Start.
 func AddPlanHook(f planHookFn) {
 	planHooks = append(planHooks, f)
+}
+
+// AddWrappedPlanHook adds a hook used to short-circuit creating a planNode from a
+// tree.Statement. If the returned plan is non-nil, it is used directly by the planner.
+func AddWrappedPlanHook(f wrappedPlanHookFn) {
+	wrappedPlanHooks = append(wrappedPlanHooks, f)
 }
 
 // hookFnRun contains the run-time state of hookFnNode during local execution.
@@ -81,7 +109,7 @@ type hookFnRun struct {
 	row tree.Datums
 }
 
-func (f *hookFnNode) Start(params runParams) error {
+func (f *hookFnNode) startExec(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)

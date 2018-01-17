@@ -12,7 +12,8 @@ test
 query TTT
 SHOW GRANTS ON DATABASE test
 ----
-test        root      ALL
+test  admin  ALL
+test  root   ALL
 
 statement ok
 CREATE TABLE kv (
@@ -36,7 +37,6 @@ ALTER DATABASE test RENAME TO u
 
 statement error relation "kv" does not exist
 SELECT * FROM kv
-----
 
 statement error database "test" does not exist
 SHOW GRANTS ON DATABASE test
@@ -54,7 +54,8 @@ u
 query TTT
 SHOW GRANTS ON DATABASE u
 ----
-u        root      ALL
+u  admin  ALL
+u  root   ALL
 
 statement ok
 SET DATABASE = u

@@ -18,14 +18,13 @@ package acceptance
 // acceptance.sh. See instructions therein.
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math"
 	"net/http"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/montanaflynn/stats"
 	"github.com/pkg/errors"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -119,7 +119,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		go func(nodeNum int) {
 			errors <- at.f.Exec(nodeNum,
 				fmt.Sprintf("find %[1]s -type f -delete && curl -sfSL %s/store%d.tgz | tar -C %[1]s -zx",
-					"/mnt/data0", storeURL, nodeNum+1,
+					"/mnt/data0/cockroach-data", storeURL, nodeNum+1,
 				),
 			)
 		}(i)
@@ -187,6 +187,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				t.Fatal(err)
 			}
 
+			if err := at.runScrubChecks(ctx, t, "tpch", "customer"); err != nil {
+				t.Error(err)
+			}
+
 			// All these return the same result.
 			validationQueries := []string{
 				"SELECT COUNT(*) FROM tpch.customer AS OF SYSTEM TIME %s",
@@ -211,6 +215,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 			}
 			if err := at.runSchemaChanges(ctx, t, schemaChanges); err != nil {
 				t.Fatal(err)
+			}
+
+			if err := at.runScrubChecks(ctx, t, "datablocks", "blocks"); err != nil {
+				t.Error(err)
 			}
 
 			// All these return the same result.
@@ -326,6 +334,19 @@ func (at *allocatorTest) runValidationQueries(
 		}
 	}
 	return nil
+}
+
+func (at *allocatorTest) runScrubChecks(
+	ctx context.Context, t *testing.T, database, table string,
+) error {
+	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
+	if err != nil {
+		t.Error(err)
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+	return sqlutils.RunScrub(t, db, database, table)
 }
 
 type timeSpan struct {

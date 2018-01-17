@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,7 +30,7 @@ type createSequenceNode struct {
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
-	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	name, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 	}, nil
 }
 
-func (n *createSequenceNode) Start(params runParams) error {
+func (n *createSequenceNode) startExec(params runParams) error {
 	seqName := n.n.Name.TableName().Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: seqName}
 	key := tKey.Key()
@@ -64,9 +64,9 @@ func (n *createSequenceNode) Start(params runParams) error {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(params.ctx, params.p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// Inherit permissions from the database descriptor.
@@ -107,12 +107,12 @@ func (n *createSequenceNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateSequence,
 		int32(desc.ID),
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.n.Name.String(), n.n.String(), params.p.session.User},
+		}{n.n.Name.String(), n.n.String(), params.SessionData().User},
 	)
 }
 
@@ -132,7 +132,6 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	// Fill in options, starting with defaults then overriding.
 
 	opts := &sqlbase.TableDescriptor_SequenceOpts{
-		Cycle:     false,
 		Increment: 1,
 	}
 	err := assignSequenceOptions(opts, n.n.Options, true /* setDefaults */)

@@ -25,7 +25,7 @@ UPSERT INTO kv VALUES (7, 7), (3, 8), (9, 9)
 statement ok
 INSERT INTO kv VALUES (1, 10) ON CONFLICT (k) DO UPDATE SET v = (SELECT CAST(SUM(k) AS INT) FROM kv)
 
-statement error column reference "v" is ambiguous
+statement error column reference "v" is ambiguous \(candidates: excluded.v, kv.v\)
 INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = v + 1
 
 statement ok

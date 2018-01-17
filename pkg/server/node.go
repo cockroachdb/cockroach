@@ -15,6 +15,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net"
@@ -25,7 +26,6 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -112,14 +112,14 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // them by directing the commands contained within RPCs to local
 // stores, which in turn direct the commands to specific ranges. Each
 // node has access to the global, monolithic Key-Value abstraction via
-// its kv.DB reference. Nodes use this to allocate node and store
+// its client.DB reference. Nodes use this to allocate node and store
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
 	stopper     *stop.Stopper
-	ClusterID   uuid.UUID              // UUID for Cockroach cluster
-	Descriptor  roachpb.NodeDescriptor // Node ID, network/physical topology
-	storeCfg    storage.StoreConfig    // Config to use and pass to stores
+	clusterID   *base.ClusterIDContainer // UUID for Cockroach cluster
+	Descriptor  roachpb.NodeDescriptor   // Node ID, network/physical topology
+	storeCfg    storage.StoreConfig      // Config to use and pass to stores
 	eventLogger sql.EventLogger
 	stores      *storage.Stores // Access to node-local stores
 	metrics     nodeMetrics
@@ -184,7 +184,6 @@ func bootstrapCluster(
 	cfg.Gossip = nil
 	cfg.TestingKnobs = storage.StoreTestingKnobs{}
 	cfg.ScanInterval = 10 * time.Minute
-	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
 	cfg.HistogramWindowInterval = time.Duration(math.MaxInt64)
 	tr := cfg.Settings.Tracer
 	defer tr.Close()
@@ -262,6 +261,7 @@ func NewNode(
 	stopper *stop.Stopper,
 	txnMetrics kv.TxnMetrics,
 	eventLogger sql.EventLogger,
+	clusterID *base.ClusterIDContainer,
 ) *Node {
 	n := &Node{
 		storeCfg:    cfg,
@@ -271,6 +271,7 @@ func NewNode(
 		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
+		clusterID:   clusterID,
 	}
 	n.storesServer = storage.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -347,14 +348,15 @@ func (n *Node) initNodeID(ctx context.Context, id roachpb.NodeID) {
 func (n *Node) bootstrap(
 	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
 ) error {
-	if n.initialBoot || n.ClusterID != (uuid.UUID{}) {
-		return &duplicateBootstrapError{ClusterID: n.ClusterID}
+	if n.initialBoot || n.clusterID.Get() != uuid.Nil {
+		return &duplicateBootstrapError{ClusterID: n.clusterID.Get()}
 	}
 	n.initialBoot = true
 	clusterID, err := bootstrapCluster(ctx, n.storeCfg, engines, bootstrapVersion, n.txnMetrics)
 	if err != nil {
 		return err
 	}
+	n.clusterID.Set(ctx, clusterID)
 
 	log.Infof(ctx, "**** cluster %s has been created", clusterID)
 	return nil
@@ -374,8 +376,8 @@ func (n *Node) start(
 	n.initDescriptor(addr, attrs, locality)
 
 	n.storeCfg.Settings.Version.OnChange(func(cv cluster.ClusterVersion) {
-		if err := n.stores.WriteClusterVersion(ctx, cv); err != nil {
-			log.Fatalf(ctx, "error updating persisted cluster version: %s", err)
+		if err := n.stores.OnClusterVersionChange(ctx, cv); err != nil {
+			log.Fatal(ctx, errors.Wrapf(err, "updating cluster version to %s", cv))
 		}
 	})
 
@@ -420,7 +422,12 @@ func (n *Node) start(
 
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 
-	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
+	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
+	// Be careful about moving this line above `startStores`; store migrations rely
+	// on the fact that the cluster version has not been updated via Gossip (we
+	// have migrations that want to run only if the server starts with a given
+	// cluster version, but not if the server starts with a lower one and gets
+	// bumped immediately, which would be possible if gossip got started earlier).
 	n.startGossip(ctx, n.stopper)
 
 	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, bootstrappedEngines, attrs.Attrs)
@@ -547,17 +554,13 @@ func (n *Node) addStore(store *storage.Store) {
 	n.recorder.AddStore(store)
 }
 
-// validateStores iterates over all stores, verifying they agree on
-// cluster ID and node ID. The node's ident is initialized based on
-// the agreed-upon cluster and node IDs.
+// validateStores iterates over all stores, verifying they agree on node ID.
+// The node's ident is initialized based on the agreed-upon node ID. Note that
+// cluster ID consistency is checked elsewhere in inspectEngines.
 func (n *Node) validateStores(ctx context.Context) error {
 	return n.stores.VisitStores(func(s *storage.Store) error {
-		if n.ClusterID == (uuid.UUID{}) {
-			n.ClusterID = s.Ident.ClusterID
+		if n.Descriptor.NodeID == 0 {
 			n.initNodeID(ctx, s.Ident.NodeID)
-			n.storeCfg.Gossip.SetClusterID(s.Ident.ClusterID)
-		} else if n.ClusterID != s.Ident.ClusterID {
-			return errors.Errorf("store %s cluster ID doesn't match node cluster %q", s, n.ClusterID)
 		} else if n.Descriptor.NodeID != s.Ident.NodeID {
 			return errors.Errorf("store %s node ID doesn't match node ID: %d", s, n.Descriptor.NodeID)
 		}
@@ -572,7 +575,7 @@ func (n *Node) validateStores(ctx context.Context) error {
 func (n *Node) bootstrapStores(
 	ctx context.Context, bootstraps []*storage.Store, stopper *stop.Stopper,
 ) {
-	if n.ClusterID == (uuid.UUID{}) {
+	if n.clusterID.Get() == uuid.Nil {
 		panic("ClusterID missing during store bootstrap of auxiliary store")
 	}
 
@@ -584,7 +587,7 @@ func (n *Node) bootstrapStores(
 		log.Fatalf(ctx, "error allocating store ids: %+v", err)
 	}
 	sIdent := roachpb.StoreIdent{
-		ClusterID: n.ClusterID,
+		ClusterID: n.clusterID.Get(),
 		NodeID:    n.Descriptor.NodeID,
 		StoreID:   firstID,
 	}
@@ -644,12 +647,12 @@ func (n *Node) connectGossip(ctx context.Context) error {
 		return errors.Wrap(err, "unable to parse cluster ID from gossip network")
 	}
 
-	if n.ClusterID == (uuid.UUID{}) {
-		n.ClusterID = gossipClusterID
-		n.storeCfg.Gossip.SetClusterID(gossipClusterID)
-	} else if n.ClusterID != gossipClusterID {
+	clusterID := n.clusterID.Get()
+	if clusterID == uuid.Nil {
+		n.clusterID.Set(ctx, gossipClusterID)
+	} else if clusterID != gossipClusterID {
 		return errors.Errorf("node %d belongs to cluster %q but is attempting to connect to a gossip network for cluster %q",
-			n.Descriptor.NodeID, n.ClusterID, gossipClusterID)
+			n.Descriptor.NodeID, clusterID, gossipClusterID)
 	}
 	log.Infof(ctx, "node connected via gossip and verified as part of cluster %q", gossipClusterID)
 	return nil
@@ -811,7 +814,7 @@ func (n *Node) recordJoinEvent() {
 						ClusterID  uuid.UUID
 						StartedAt  int64
 						LastUp     int64
-					}{n.Descriptor, n.ClusterID, n.startedAt, lastUp},
+					}{n.Descriptor, n.clusterID.Get(), n.startedAt, lastUp},
 				)
 			}); err != nil {
 				log.Warningf(ctx, "%s: unable to log %s event: %s", n, logEventType, err)
@@ -822,9 +825,28 @@ func (n *Node) recordJoinEvent() {
 	})
 }
 
+// If we receive a (proto-marshaled) roachpb.BatchRequest whose Requests contain
+// a message type unknown to this node, we will end up with a zero entry in the
+// slice. If we don't error out early, this breaks all sorts of assumptions and
+// usually ends in a panic.
+func checkNoUnknownRequest(reqs []roachpb.RequestUnion) *roachpb.UnsupportedRequestError {
+	for _, req := range reqs {
+		if req.GetValue() == nil {
+			return &roachpb.UnsupportedRequestError{}
+		}
+	}
+	return nil
+}
+
 func (n *Node) batchInternal(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
+	if detail := checkNoUnknownRequest(args.Requests); detail != nil {
+		var br roachpb.BatchResponse
+		br.Error = roachpb.NewError(detail)
+		return &br, nil
+	}
+
 	isLocalRequest := grpcutil.IsLocalRequestContext(ctx)
 	// TODO(marc): grpc's authentication model (which gives credential access in
 	// the request handler) doesn't really fit with the current design of the

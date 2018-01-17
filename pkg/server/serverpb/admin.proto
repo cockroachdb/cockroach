@@ -192,6 +192,9 @@ message TableStatsResponse {
   // stats is the summation of MVCCStats for all replicas of this table
   // across the cluster.
   cockroach.storage.engine.enginepb.MVCCStats stats = 4 [(gogoproto.nullable) = false];
+  // approximate_disk_bytes is an approximation of the disk space (in bytes)
+  // used for all replicas of this table across the cluster.
+  uint64 approximate_disk_bytes = 6;
   // MissingNode represents information on a node which should contain data
   // for this table, but could not be contacted during this request.
   message MissingNode {
@@ -433,6 +436,22 @@ message JobsResponse {
   repeated Job jobs = 1 [(gogoproto.nullable) = false];
 }
 
+// LocationsRequest requests system locality location information.
+message LocationsRequest {
+}
+
+// JobsResponse contains the job record for each matching job.
+message LocationsResponse {
+  message Location {
+    string locality_key = 1;
+    string locality_value = 2;
+    double latitude = 3;
+    double longitude = 4;
+  }
+
+  repeated Location locations = 1 [(gogoproto.nullable) = false];
+}
+
 // RangeLogRequest request the history of a range from the range log.
 message RangeLogRequest {
   // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
@@ -598,6 +617,13 @@ service Admin {
   rpc Jobs(JobsRequest) returns (JobsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/jobs"
+    };
+  }
+
+  // Locations returns the locality location records.
+  rpc Locations(LocationsRequest) returns (LocationsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/locations"
     };
   }
 

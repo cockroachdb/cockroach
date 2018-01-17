@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -120,10 +121,6 @@ type testingRelocateRun struct {
 	storeMap map[roachpb.StoreID]roachpb.NodeID
 }
 
-func (n *testingRelocateNode) Start(params runParams) error {
-	return n.rows.Start(params)
-}
-
 func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	// Each Next call relocates one range (corresponding to one row from n.rows).
 	// TODO(radu): perform multiple relocations in parallel.
@@ -156,7 +153,9 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 			// Lookup the store in gossip.
 			var storeDesc roachpb.StoreDescriptor
 			gossipStoreKey := gossip.MakeStoreKey(storeID)
-			if err := params.p.session.execCfg.Gossip.GetInfoProto(gossipStoreKey, &storeDesc); err != nil {
+			if err := params.extendedEvalCtx.ExecCfg.Gossip.GetInfoProto(
+				gossipStoreKey, &storeDesc,
+			); err != nil {
 				return false, errors.Wrapf(err, "error looking up store %d", storeID)
 			}
 			nodeID = storeDesc.Node.NodeID
@@ -174,7 +173,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	}
 	rowKey = keys.MakeFamilyKey(rowKey, 0)
 
-	rangeDesc, err := lookupRangeDescriptor(params.ctx, params.p.session.execCfg.DB, rowKey)
+	rangeDesc, err := lookupRangeDescriptor(params.ctx, params.extendedEvalCtx.ExecCfg.DB, rowKey)
 	if err != nil {
 		return false, errors.Wrap(err, "error looking up range descriptor")
 	}

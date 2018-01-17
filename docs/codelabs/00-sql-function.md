@@ -67,7 +67,7 @@ let’s add it right at the top of the definition for simplicity:
 var Builtins = map[string][]tree.Builtin{
   "whois": {
     tree.Builtin{
-      Types:      tree.VariadicType{Typ: types.String},
+      Types:      tree.VariadicType{VarType: types.String},
       ReturnType: tree.FixedReturnType(types.String),
       Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
         return tree.DNull, fmt.Errorf("nothing to see here")
@@ -339,7 +339,7 @@ check your solution against ours.
   ```diff
     "whois": {
       tree.Builtin{
-        Types:      tree.VariadicType{Typ: types.String},
+        Types:      tree.VariadicType{VarType: types.String},
         ReturnType: tree.FixedReturnType(types.TypeString),
         Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
           users := map[string]string{

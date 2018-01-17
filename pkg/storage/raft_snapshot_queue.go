@@ -15,11 +15,11 @@
 package storage
 
 import (
+	"context"
 	"time"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -116,7 +116,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	err := repl.sendSnapshot(ctx, repDesc, snapTypeRaft, SnapshotRequest_RECOVERY)
 	// Report the snapshot status to Raft, which expects us to do this once
 	// we finish sending the snapshot.
-	repl.reportSnapshotStatus(uint64(id), err)
+	repl.reportSnapshotStatus(ctx, id, err)
 	return err
 }
 

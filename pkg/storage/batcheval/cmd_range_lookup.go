@@ -16,9 +16,8 @@ package batcheval
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -312,5 +311,5 @@ func RangeLookup(
 		reply.PrefetchedRanges = reply.PrefetchedRanges[:rangeCount-1]
 	}
 
-	return result.FromIntents(intents, args, true /* alwaysReturn */), nil
+	return result.FromIntents(intents, args), nil
 }

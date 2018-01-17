@@ -15,16 +15,24 @@
 package tscache
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// sklPageSize is the size of each page in the sklImpl's read and write
-// intervalSkl.
-// TODO(nvanbenschoten): Bump back up to 32 MB when not testing.
-const sklPageSize = 8 << 20 // 8 MB
+const (
+	// defaultSklPageSize is the default size of each page in the sklImpl's
+	// read and write intervalSkl.
+	defaultSklPageSize = 32 << 20 // 32 MB
+	// TestSklPageSize is passed to tests as the size of each page in the
+	// sklImpl to limit its memory footprint. Reducing this size can hurt
+	// performance but it decreases the risk of OOM failures when many tests
+	// are running concurrently.
+	TestSklPageSize = 128 << 10 // 128 KB
+)
 
 // sklImpl implements the Cache interface. It maintains a pair of skiplists
 // containing keys or key ranges and the timestamps at which they were most
@@ -34,30 +42,26 @@ const sklPageSize = 8 << 20 // 8 MB
 type sklImpl struct {
 	rCache, wCache *intervalSkl
 	clock          *hlc.Clock
+	pageSize       uint32
 	metrics        Metrics
 }
 
 var _ Cache = &sklImpl{}
 
 // newSklImpl returns a new treeImpl with the supplied hybrid clock.
-func newSklImpl(clock *hlc.Clock, metrics Metrics) *sklImpl {
-	tc := sklImpl{clock: clock, metrics: metrics}
+func newSklImpl(clock *hlc.Clock, pageSize uint32, metrics Metrics) *sklImpl {
+	if pageSize == 0 {
+		pageSize = defaultSklPageSize
+	}
+	tc := sklImpl{clock: clock, pageSize: pageSize, metrics: metrics}
 	tc.clear(clock.Now())
 	return &tc
 }
 
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
-	pageSize := uint32(sklPageSize)
-	if util.RaceEnabled {
-		// Race testing consumes significantly more memory that normal testing.
-		// In addition, while running a group of tests in parallel, each will
-		// create a timestamp cache for every Store needed. Reduce the page size
-		// during race testing to accommodate these two factors.
-		pageSize /= 4
-	}
-	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize, tc.metrics.Skl.Read)
-	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize, tc.metrics.Skl.Write)
+	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.pageSize, tc.metrics.Skl.Read)
+	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.pageSize, tc.metrics.Skl.Write)
 	tc.rCache.floorTS = lowWater
 	tc.wCache.floorTS = lowWater
 }
@@ -72,8 +76,9 @@ func (tc *sklImpl) getSkl(readCache bool) *intervalSkl {
 
 // Add implements the Cache interface.
 func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
-	skl := tc.getSkl(readCache)
+	start, end = tc.boundKeyLengths(start, end)
 
+	skl := tc.getSkl(readCache)
 	val := cacheValue{ts: ts, txnID: txnID}
 	if len(end) == 0 {
 		skl.Add(nonNil(start), val)
@@ -113,6 +118,33 @@ func (tc *sklImpl) getMax(start, end roachpb.Key, readCache bool) (hlc.Timestamp
 		val = skl.LookupTimestampRange(nonNil(start), end, excludeTo)
 	}
 	return val.ts, val.txnID
+}
+
+// boundKeyLengths makes sure that the key lengths provided are well below the
+// size of each sklPage, otherwise we'll never be successful in adding it to
+// an intervalSkl.
+func (tc *sklImpl) boundKeyLengths(start, end roachpb.Key) (roachpb.Key, roachpb.Key) {
+	// We bound keys to 1/32 of the page size. These could be slightly larger
+	// and still not trigger the "key range too large" panic in intervalSkl,
+	// but anything larger could require multiple page rotations before it's
+	// able to fit in if other ranges are being added concurrently.
+	maxKeySize := int(tc.pageSize / 32)
+
+	// If either key is too long, truncate its length, making sure to always
+	// grow the [start,end) range instead of shrinking it. This will reduce the
+	// precision of the entry in the cache, which could allow independent
+	// requests to interfere, but will never permit consistency anomalies.
+	if l := len(start); l > maxKeySize {
+		start = start[:maxKeySize]
+		log.Warningf(context.TODO(), "start key with length %d exceeds maximum key length of %d; "+
+			"losing precision in timestamp cache", l, maxKeySize)
+	}
+	if l := len(end); l > maxKeySize {
+		end = end[:maxKeySize].PrefixEnd() // PrefixEnd to grow range
+		log.Warningf(context.TODO(), "end key with length %d exceeds maximum key length of %d; "+
+			"losing precision in timestamp cache", l, maxKeySize)
+	}
+	return start, end
 }
 
 // intervalSkl doesn't handle nil keys the same way as empty keys. Cockroach's

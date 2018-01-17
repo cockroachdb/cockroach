@@ -16,11 +16,11 @@ package ts
 
 import (
 	"container/heap"
+	"context"
 	"fmt"
+	"math"
 	"sort"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -398,13 +398,18 @@ func (dsi *downsamplingIterator) computeEnd() {
 // Values for missing offsets are computed using linear interpolation from the
 // nearest real samples preceding and following the missing offset.
 //
+// If the maxDistance option is set to a value greater than zero, values will
+// not be interpolated between real data points which have a difference in
+// offset greater than maxDistance.
+//
 // If the derivative option is set, value() will return the derivative of the
 // series at the current offset in units per offset.
 type interpolatingIterator struct {
-	offset     int32                // Current offset within dataSpan
-	nextReal   downsamplingIterator // Next sample with an offset >= iterator's offset
-	prevReal   downsamplingIterator // Prev sample with offset < iterator's offset
-	derivative tspb.TimeSeriesQueryDerivative
+	offset      int32                // Current offset within dataSpan
+	maxDistance int32                // Maximum distance between real values for interpolation.
+	nextReal    downsamplingIterator // Next sample with an offset >= iterator's offset
+	prevReal    downsamplingIterator // Prev sample with offset < iterator's offset
+	derivative  tspb.TimeSeriesQueryDerivative
 }
 
 // newInterpolatingIterator returns an interpolating iterator for the given
@@ -415,6 +420,7 @@ func newInterpolatingIterator(
 	ds dataSpan,
 	startOffset int32,
 	sampleNanos int64,
+	maxDistance int32,
 	extractFn extractFn,
 	downsampleFn downsampleFn,
 	derivative tspb.TimeSeriesQueryDerivative,
@@ -425,9 +431,10 @@ func newInterpolatingIterator(
 
 	nextReal := newDownsamplingIterator(ds, startOffset, sampleNanos, extractFn, downsampleFn)
 	iterator := interpolatingIterator{
-		offset:     startOffset,
-		nextReal:   nextReal,
-		derivative: derivative,
+		offset:      startOffset,
+		maxDistance: maxDistance,
+		nextReal:    nextReal,
+		derivative:  derivative,
 	}
 
 	prevReal := nextReal
@@ -468,18 +475,25 @@ func (ii *interpolatingIterator) midTimestamp() int64 {
 }
 
 // value returns the value at the current offset of this iterator, or the
-// derivative at the current offset.
-func (ii *interpolatingIterator) value() float64 {
+// derivative at the current offset. The boolean parameter indicates if the
+// returned value represents a valid value; if false, the iterator is unable
+// to return a value at the current offset.
+func (ii *interpolatingIterator) value() (float64, bool) {
 	if !ii.isValid() {
-		return 0
+		return 0, false
 	}
 	isDerivative := ii.derivative != tspb.TimeSeriesQueryDerivative_NONE
 	if !isDerivative && ii.nextReal.offset() == ii.offset {
-		return ii.nextReal.value()
+		return ii.nextReal.value(), true
 	}
 	// Cannot interpolate or compute derivative if previous value is invalid.
 	if !ii.prevReal.isValid() {
-		return 0
+		return 0, false
+	}
+
+	// Do not interpolate if hole is greater than maxDistance.
+	if ii.maxDistance > 0 && (ii.nextReal.offset()-ii.prevReal.offset()) > ii.maxDistance {
+		return 0, false
 	}
 
 	// Linear interpolation of derivative or value at the current offset.
@@ -494,14 +508,14 @@ func (ii *interpolatingIterator) value() float64 {
 	// incidence of floating point artifacts in the non-derivative case due to
 	// the order of operations.
 	if !isDerivative {
-		return prevVal + (nextVal-prevVal)*(off-prevOff)/(nextOff-prevOff)
+		return prevVal + (nextVal-prevVal)*(off-prevOff)/(nextOff-prevOff), true
 	}
 	deriv := (nextVal - prevVal) / (nextOff - prevOff)
 	if ii.derivative == tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE &&
 		deriv < 0 {
-		return 0
+		return 0, true
 	}
-	return deriv
+	return deriv, true
 }
 
 // An aggregatingIterator jointly advances multiple interpolatingIterators,
@@ -628,46 +642,75 @@ func (ai aggregatingIterator) timestamp() int64 {
 	return ai[0].midTimestamp()
 }
 
-// sum returns the sum of the current values of the interpolatingIterators being
-// aggregated.
-func (ai aggregatingIterator) sum() float64 {
+// validSumAndCount returns the sum value and count of all component
+// interpolatingIterators that currently have valid values.
+func (ai aggregatingIterator) validSumAndCount() (float64, int) {
 	var sum float64
+	var count int
 	for i := range ai {
-		sum = sum + ai[i].value()
+		value, valid := ai[i].value()
+		if valid {
+			sum += value
+			count++
+		}
 	}
-	return sum
+	return sum, count
+}
+
+// sum returns the sum of the current values of the interpolatingIterators being
+// aggregated. The boolean parameter indicates if the returned value is valid;
+// it will be invalid if all component iterators are invalid.
+func (ai aggregatingIterator) sum() (float64, bool) {
+	sum, count := ai.validSumAndCount()
+	if count == 0 {
+		return 0.0, false
+	}
+	return sum, true
 }
 
 // avg returns the average of the current values of the interpolatingIterators
-// being aggregated.
-func (ai aggregatingIterator) avg() float64 {
-	return ai.sum() / float64(len(ai))
+// being aggregated. The boolean parameter indicates if the returned value is
+// valid; it will be invalid if all component iterators are invalid.
+func (ai aggregatingIterator) avg() (float64, bool) {
+	sum, count := ai.validSumAndCount()
+	if count == 0 {
+		return 0.0, false
+	}
+	return sum / float64(count), true
 }
 
 // max return the maximum value of the current values of the
-// interpolatingIterators being aggregated.
-func (ai aggregatingIterator) max() float64 {
-	max := ai[0].value()
-	for i := range ai[1:] {
-		val := ai[i+1].value()
-		if val > max {
-			max = val
+// interpolatingIterators being aggregated. The boolean parameter indicates if
+// the returned value is valid; it will be invalid if all component iterators
+// are invalid.
+func (ai aggregatingIterator) max() (float64, bool) {
+	max := math.Inf(-1)
+	anyValid := false
+	for i := range ai {
+		value, valid := ai[i].value()
+		anyValid = anyValid || valid
+		if valid && value > max {
+			max = value
 		}
 	}
-	return max
+	return max, anyValid
 }
 
 // min return the minimum value of the current values of the
-// interpolatingIterators being aggregated.
-func (ai aggregatingIterator) min() float64 {
-	min := ai[0].value()
-	for i := range ai[1:] {
-		val := ai[i+1].value()
-		if val < min {
-			min = val
+// interpolatingIterators being aggregated. The boolean parameter indicates if
+// the returned value is valid; it will be invalid if all component iterators
+// are invalid.
+func (ai aggregatingIterator) min() (float64, bool) {
+	min := math.Inf(1)
+	anyValid := false
+	for i := range ai {
+		value, valid := ai[i].value()
+		anyValid = anyValid || valid
+		if valid && value < min {
+			min = value
 		}
 	}
-	return min
+	return min, anyValid
 }
 
 // Query returns datapoints for the named time series during the supplied time
@@ -798,13 +841,13 @@ func (db *DB) Query(
 	for name, span := range sourceSpans {
 		sources = append(sources, name)
 		iters = append(iters, newInterpolatingIterator(
-			*span, 0, sampleDuration, extractor, downsampler, query.GetDerivative(),
+			*span, 0, sampleDuration, 0, extractor, downsampler, query.GetDerivative(),
 		))
 	}
 
 	// Choose an aggregation function to use when taking values from the
 	// aggregatingIterator.
-	var valueFn func() float64
+	var valueFn func() (float64, bool)
 	switch query.GetSourceAggregator() {
 	case tspb.TimeSeriesQueryAggregator_SUM:
 		valueFn = iters.sum
@@ -829,14 +872,16 @@ func (db *DB) Query(
 	var responseData []tspb.TimeSeriesDatapoint
 
 	for iters.isValid() && iters.timestamp() <= endNanos {
-		response := tspb.TimeSeriesDatapoint{
-			TimestampNanos: iters.timestamp(),
-			Value:          valueFn(),
+		if value, valid := valueFn(); valid {
+			response := tspb.TimeSeriesDatapoint{
+				TimestampNanos: iters.timestamp(),
+				Value:          value,
+			}
+			if query.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE {
+				response.Value = response.Value / float64(sampleDuration) * float64(time.Second.Nanoseconds())
+			}
+			responseData = append(responseData, response)
 		}
-		if query.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE {
-			response.Value = response.Value / float64(sampleDuration) * float64(time.Second.Nanoseconds())
-		}
-		responseData = append(responseData, response)
 		iters.advance()
 	}
 

@@ -22,9 +22,8 @@
 package sql
 
 import (
+	"context"
 	"sort"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -33,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
@@ -43,11 +41,6 @@ type showRangesNode struct {
 	span roachpb.Span
 
 	run showRangesRun
-
-	index *sqlbase.IndexDescriptor
-	// valDirs is computed during Start and is necessary to correctly
-	// pretty-print out the range keys.
-	valDirs []encoding.Direction
 }
 
 func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode, error) {
@@ -63,7 +56,6 @@ func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode,
 		run: showRangesRun{
 			values: make([]tree.Datum, len(showRangesColumns)),
 		},
-		index: index,
 	}, nil
 }
 
@@ -104,9 +96,8 @@ type showRangesRun struct {
 	values []tree.Datum
 }
 
-func (n *showRangesNode) Start(params runParams) error {
+func (n *showRangesNode) startExec(params runParams) error {
 	var err error
-	n.valDirs = sqlbase.IndexKeyValDirs(n.index)
 	n.run.descriptorKVs, err = scanMetaKVs(params.ctx, params.p.txn, n.span)
 	return err
 }
@@ -124,12 +115,32 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 		n.run.values[i] = tree.DNull
 	}
 
+	// We do not attempt to identify the encoding directions for pretty
+	// printing a split key since it's possible for a key from an arbitrary
+	// table in the same interleaved hierarchy to appear in SHOW
+	// TESTING_RANGE. Consider the interleaved hierarchy
+	//    parent1		      (pid1)
+	//	  child1	      (pid1, cid1)
+	//	      grandchild1     (pid1, cid1, gcid1)
+	//	  child2	      (pid1, cid2, cid3)
+	//	      grandchild2     (pid1, cid2, cid3, gcid2)
+	// and the result of
+	//    SHOW TESTING_RANGES FROM TABLE grandchild1
+	// It is possible for a split key for grandchild2 to show up.
+	// Traversing up the InterleaveDescriptor is futile since we do not
+	// know the SharedPrefixLen in between each interleaved sentinel of a
+	// grandchild2 key.
+	// We thus default the directions (such that '#' pretty prints for
+	// interleaved sentinels).
+	// TODO(richardwu): The one edge case we cannot deal with effectively
+	// are split keys belonging to secondary indexes with descending
+	// column(s).
 	if n.run.rowIdx > 0 {
-		n.run.values[0] = tree.NewDString(sqlbase.PrettyKey(n.valDirs, desc.StartKey.AsRawKey(), 2))
+		n.run.values[0] = tree.NewDString(sqlbase.PrettyKey(nil /* valDirs */, desc.StartKey.AsRawKey(), 2))
 	}
 
 	if n.run.rowIdx < len(n.run.descriptorKVs)-1 {
-		n.run.values[1] = tree.NewDString(sqlbase.PrettyKey(n.valDirs, desc.EndKey.AsRawKey(), 2))
+		n.run.values[1] = tree.NewDString(sqlbase.PrettyKey(nil /* valDirs */, desc.EndKey.AsRawKey(), 2))
 	}
 
 	n.run.values[2] = tree.NewDInt(tree.DInt(desc.RangeID))

@@ -16,6 +16,7 @@ package gossip
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -24,8 +25,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -349,7 +348,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, local.GetNodeAddr(), makeMetrics())
 
 		testutils.SucceedsSoon(t, func() error {
-			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock())
+			conn, err := peer.rpcContext.GRPCDial(c.addr.String()).Connect(ctx)
 			if err != nil {
 				return err
 			}
@@ -563,7 +562,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		g = append(g, gnode)
 		gnode.SetStallInterval(interval)
 		gnode.SetBootstrapInterval(interval)
-		gnode.SetClusterID(clusterIDs[i])
+		gnode.clusterID.Set(context.TODO(), clusterIDs[i])
 
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 		if err != nil {

@@ -97,6 +97,7 @@ const (
 	CodeNullValueNotAllowedError                   = "22004"
 	CodeNullValueNoIndicatorParameterError         = "22002"
 	CodeNumericValueOutOfRangeError                = "22003"
+	CodeSequenceGeneratorLimitExceeded             = "2200H"
 	CodeStringDataLengthMismatchError              = "22026"
 	CodeStringDataRightTruncationError             = "22001"
 	CodeSubstringError                             = "22011"

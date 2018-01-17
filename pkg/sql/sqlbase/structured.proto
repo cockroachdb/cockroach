@@ -67,7 +67,7 @@ message ColumnType {
     BIGINT = 3;
     BIT = 4;
     REAL = 5;
-    DOUBLE_PRECISON = 6;
+    DOUBLE_PRECISION = 6;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
@@ -146,9 +146,9 @@ message ColumnFamilyDescriptor {
 
   // If nonzero, the column involved in the single column optimization.
   //
-  // Families store colums in a ValueType_TUPLE as repeated <colid><data>
+  // Families store columns in a ValueType_TUPLE as repeated <columnID><data>
   // entries. As a space optimization and for backward compatibility, a single
-  // column is written without the columnid prefix. Because more columns could
+  // column is written without the column id prefix. Because more columns could
   // be added, it would be ambiguous which column was stored when read back in,
   // so this field supplies it.
   optional uint32 default_column_id = 5 [(gogoproto.nullable) = false,
@@ -200,7 +200,8 @@ message PartitioningDescriptor {
     optional string name = 1 [(gogoproto.nullable) = false];
     // Values is an unordered set of the tuples included in this partition. Each
     // tuple is encoded with the EncDatum value encoding. DEFAULT is encoded as
-    // NOT NULL.
+    // NOT NULL followed by PartitionDefaultVal encoded as a non-sorting
+    // uvarint.
     repeated bytes values = 2;
     // Subpartitioning represents a further partitioning of this list partition.
     optional PartitioningDescriptor subpartitioning = 3 [(gogoproto.nullable) = false];
@@ -212,13 +213,18 @@ message PartitioningDescriptor {
   message Range {
     // Name is the partition name.
     optional string name = 1 [(gogoproto.nullable) = false];
-    // UpperBound is the exclusive upper bound of this range partition. It is
-    // encoded with the EncDatum value encoding. MAXVALUE is encoded as NOT NULL.
-    optional bytes upper_bound = 2;
+    // FromInclusive is the inclusive lower bound of this range partition. It is
+    // encoded with the EncDatum value encoding. MINVALUE and MAXVALUE are
+    // encoded as NOT NULL followed by a PartitionSpecialValCode encoded as a
+    // non-sorting uvarint.
+    optional bytes from_inclusive = 3;
+    // ToExclusive is the exclusive upper bound of this range partition. It is
+    // encoded in the same way as From.
+    optional bytes to_exclusive = 2;
   }
 
   // NumColumns is how large of a prefix of the columns in an index are used in
-  // the function mapping column values to partitiong. If this is a
+  // the function mapping column values to partitions. If this is a
   // subpartition, this is offset to start from the end of the parent
   // partition's columns. If NumColumns is 0, then there is no partitioning.
   optional uint32 num_columns = 1 [(gogoproto.nullable) = false];
@@ -316,7 +322,9 @@ message IndexDescriptor {
   //
   // Only used for secondary indexes.
   // For non-unique indexes, these columns are appended to the key.
-  // For unique indexes, these columns are stored in the value.
+  // For unique indexes, these columns are stored in the value (unless the key
+  // contains a NULL value: then the extra columns are appended to the key to
+  // unique-ify it).
   // This distinction exists because we want to be able to insert an entry using
   // a single conditional put on the key.
   repeated uint32 extra_column_ids = 7 [(gogoproto.customname) = "ExtraColumnIDs",
@@ -434,7 +442,7 @@ message TableDescriptor {
   // Invariants:
   // 1. not more than two subsequent versions of the table
   // descriptor can be leased. This is to make the system
-  // easy to reason about, by permiting mutation state
+  // easy to reason about, by permitting mutation state
   // changes (reflected in the next version), only when the existing
   // state (reflected in the current version) is present on all
   // outstanding unexpired leases.
@@ -535,6 +543,7 @@ message TableDescriptor {
     optional string expr = 1 [(gogoproto.nullable) = false];
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
+    reserved 4;
   }
 
   repeated CheckConstraint checks = 20;
@@ -548,7 +557,7 @@ message TableDescriptor {
   }
 
   // This array is populated if the descriptor was renamed. If the descriptor is
-  // renamed multiple times before the schema chage is processed, there will be
+  // renamed multiple times before the schema change is processed, there will be
   // one element for each rename.
   // When this is detected in a schema change, the records for the old names are
   // deleted and this field is cleared.
@@ -577,7 +586,7 @@ message TableDescriptor {
     // The ID of the relation that depends on this one.
     optional uint32 id = 1 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
-    // If applicable, the ID of this table's index that is refenced by the
+    // If applicable, the ID of this table's index that is referenced by the
     // dependent relation.
     optional uint32 index_id = 2 [(gogoproto.nullable) = false,
              (gogoproto.customname) = "IndexID", (gogoproto.casttype) = "IndexID"];
@@ -617,12 +626,17 @@ message TableDescriptor {
     optional int64 max_value = 3 [(gogoproto.nullable) = false];
     // Start value of the sequence.
     optional int64 start = 4 [(gogoproto.nullable) = false];
-    // Whether to wrap around when the min or max value is hit.
-    optional bool cycle = 5 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
   optional SequenceOpts sequence_opts = 28;
+
+  // The GC deadline is set when a table is truncated or dropped,
+  // based on the current time and the GC TTL for the table. It's
+  // the timestamp after which the table's contents will be cleared
+  // from the cluster. In nanoseconds since the epoch.
+  optional int64 gc_deadline = 29 [(gogoproto.nullable) = false,
+           (gogoproto.customname) = "GCDeadline"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

@@ -15,11 +15,10 @@
 package kv
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"unsafe"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -532,6 +531,9 @@ func (ds *DistSender) initAndVerifyBatch(
 					return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
 				}
 
+			case *roachpb.ResolveIntentRangeRequest:
+				continue
+
 			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
 				continue
 
@@ -605,6 +607,8 @@ func (ds *DistSender) Send(
 		// Such a batch should never need splitting.
 		panic("batch with MaxSpanRequestKeys needs splitting")
 	}
+
+	errIdxOffset := 0
 	for len(parts) > 0 {
 		part := parts[0]
 		ba.Requests = part
@@ -616,6 +620,7 @@ func (ds *DistSender) Send(
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
+
 		rpl, pErr := ds.divideAndSendBatchToRanges(ctx, ba, rs, 0 /* batchIdx */)
 
 		if pErr == errNo1PCTxn {
@@ -629,11 +634,20 @@ func (ds *DistSender) Send(
 			if len(parts) != 2 {
 				panic("split of final EndTransaction chunk resulted in != 2 parts")
 			}
+			// Restart transaction of the last chunk as two parts
+			// with EndTransaction in the second part.
 			continue
 		}
 		if pErr != nil {
+			if pErr.Index != nil && pErr.Index.Index != -1 {
+				pErr.Index.Index += int32(errIdxOffset)
+			}
+
 			return nil, pErr
 		}
+
+		errIdxOffset += len(ba.Requests)
+
 		// Propagate transaction from last reply to next request. The final
 		// update is taken and put into the response's main header.
 		ba.UpdateTxn(rpl.Txn)
@@ -1017,6 +1031,12 @@ func (ds *DistSender) sendPartialBatch(
 			return response{reply: reply, positions: positions}
 		}
 
+		// Re-map the error index within this partial batch back
+		// to its position in the encompassing batch.
+		if pErr.Index != nil && pErr.Index.Index != -1 && positions != nil {
+			pErr.Index.Index = int32(positions[pErr.Index.Index])
+		}
+
 		log.ErrEventf(ctx, "reply error %s: %s", ba, pErr)
 
 		// Error handling: If the error indicates that our range
@@ -1238,8 +1258,9 @@ func (ds *DistSender) sendToReplicas(
 		select {
 		case <-slowTimer.C:
 			slowTimer.Read = true
-			log.Warningf(ctx, "have been waiting %s sending RPC to r%d for batch: %s",
-				base.SlowRequestThreshold, rangeID, args)
+			log.Warningf(ctx,
+				"have been waiting %s sending RPC to r%d (currently pending: %s) for batch: %s",
+				base.SlowRequestThreshold, rangeID, transport.GetPending(), args)
 			ds.metrics.SlowRequestsCount.Inc(1)
 			defer ds.metrics.SlowRequestsCount.Dec(1)
 

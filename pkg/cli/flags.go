@@ -20,36 +20,45 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
 
-var maxResults int64
-
-var sqlConnURL, sqlConnUser, sqlConnDBName string
-var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort string
+// special global variables used by flag variable definitions below.
+// These do not correspond directly to the configuration parameters
+// used as input by the CLI commands (these are defined in context
+// structs in context.go). Instead, they are used at the *end* of
+// command-line parsing to override the defaults in the context
+// structs.
+//
+// Corollaries:
+// - it would be a programming error to access these variables directly
+//   outside of this file (flags.go)
+// - the underlying context parameters must receive defaults in
+//   initCLIDefaults() even when they are otherwise overridden by the
+//   flags logic, because some tests to not use the flag logic at all.
+var serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
-var tempDir string
-var externalIODir string
 
-const defaultCmdTimeout = 0 // no timeout
-var cmdTimeout time.Duration
+// initPreFlagsDefaults initializes the values of the global variables
+// defined above.
+func initPreFlagsDefaults() {
+	serverConnPort = base.DefaultPort
+	serverAdvertiseHost = ""
+	serverAdvertisePort = ""
 
-func cmdTimeoutContext(ctx context.Context) (context.Context, func()) {
-	if cmdTimeout != 0 {
-		return context.WithTimeout(ctx, cmdTimeout)
-	}
-	return context.WithCancel(ctx)
+	serverHTTPHost = ""
+	serverHTTPPort = base.DefaultHTTPPort
+
+	clientConnHost = ""
+	clientConnPort = base.DefaultPort
 }
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
@@ -98,13 +107,6 @@ func IntFlag(f *pflag.FlagSet, valPtr *int, flagInfo cliflags.FlagInfo, defaultV
 	setFlagFromEnv(f, flagInfo)
 }
 
-// Int64Flag creates an int64 flag and registers it with the FlagSet.
-func Int64Flag(f *pflag.FlagSet, valPtr *int64, flagInfo cliflags.FlagInfo, defaultVal int64) {
-	f.Int64VarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
-
-	setFlagFromEnv(f, flagInfo)
-}
-
 // BoolFlag creates a bool flag and registers it with the FlagSet.
 func BoolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo, defaultVal bool) {
 	f.BoolVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
@@ -138,6 +140,8 @@ func VarFlag(f *pflag.FlagSet, value pflag.Value, flagInfo cliflags.FlagInfo) {
 }
 
 func init() {
+	initCLIDefaults()
+
 	// Change the logging defaults for the main cockroach binary.
 	// The value is overridden after command-line parsing.
 	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("false"); err != nil {
@@ -194,14 +198,14 @@ func init() {
 		f := StartCmd.Flags()
 
 		// Server flags.
-		StringFlag(f, &serverConnHost, cliflags.ServerHost, "")
-		StringFlag(f, &serverConnPort, cliflags.ServerPort, base.DefaultPort)
-		StringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, "")
-		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, "")
+		StringFlag(f, &startCtx.serverConnHost, cliflags.ServerHost, startCtx.serverConnHost)
+		StringFlag(f, &serverConnPort, cliflags.ServerPort, serverConnPort)
+		StringFlag(f, &serverAdvertiseHost, cliflags.AdvertiseHost, serverAdvertiseHost)
+		StringFlag(f, &serverAdvertisePort, cliflags.AdvertisePort, serverAdvertisePort)
 		// The advertise port flag is used for testing purposes only and is kept hidden.
 		_ = f.MarkHidden(cliflags.AdvertisePort.Name)
-		StringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, "")
-		StringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
+		StringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, serverHTTPHost)
+		StringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, serverHTTPPort)
 		StringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
 		VarFlag(f, &serverCfg.Locality, cliflags.Locality)
 
@@ -212,20 +216,20 @@ func init() {
 		// postgresql and clients consider it a directory and build a filename
 		// inside it using the port.
 		// Thus, we keep it hidden and use it for testing only.
-		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, "")
+		StringFlag(f, &serverCfg.SocketFile, cliflags.Socket, serverCfg.SocketFile)
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
-		StringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, "")
+		StringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, serverCfg.ListeningURLFile)
 
-		StringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
+		StringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, serverCfg.PIDFile)
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
-		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, baseCfg.Insecure)
+		BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, startCtx.serverInsecure)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
-		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, base.DefaultCertsDirectory)
+		StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, startCtx.serverSSLCertsDir)
 
 		// Cluster joining flags.
 		VarFlag(f, &serverCfg.JoinList, cliflags.Join)
@@ -237,14 +241,14 @@ func init() {
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
 		VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
-		StringFlag(f, &tempDir, cliflags.TempDir, "")
-		StringFlag(f, &externalIODir, cliflags.ExternalIODir, "")
+		StringFlag(f, &startCtx.tempDir, cliflags.TempDir, startCtx.tempDir)
+		StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir, startCtx.externalIODir)
 	}
 
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// All certs commands need the certificate directory.
-		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
+		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
 	}
 
 	for _, cmd := range []*cobra.Command{createCACertCmd} {
@@ -279,20 +283,19 @@ func init() {
 		sqlShellCmd,
 		/* StartCmd is covered above */
 	}
-	clientCmds = append(clientCmds, rangeCmds...)
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
 	clientCmds = append(clientCmds, initCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		StringFlag(f, &clientConnHost, cliflags.ClientHost, "")
-		StringFlag(f, &clientConnPort, cliflags.ClientPort, base.DefaultPort)
+		StringFlag(f, &clientConnHost, cliflags.ClientHost, clientConnHost)
+		StringFlag(f, &clientConnPort, cliflags.ClientPort, clientConnPort)
 
 		BoolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure, baseCfg.Insecure)
 
 		// Certificate flags.
-		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
+		StringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, baseCfg.SSLCertsDir)
 	}
 
 	timeoutCmds := []*cobra.Command{
@@ -304,33 +307,33 @@ func init() {
 	}
 
 	for _, cmd := range timeoutCmds {
-		DurationFlag(cmd.Flags(), &cmdTimeout, cliflags.Timeout, defaultCmdTimeout)
+		DurationFlag(cmd.Flags(), &cliCtx.cmdTimeout, cliflags.Timeout, cliCtx.cmdTimeout)
 	}
 
 	// Node Status command.
 	{
 		f := statusNodeCmd.Flags()
-		BoolFlag(f, &nodeCtx.statusShowRanges, cliflags.NodeRanges, false)
-		BoolFlag(f, &nodeCtx.statusShowStats, cliflags.NodeStats, false)
-		BoolFlag(f, &nodeCtx.statusShowAll, cliflags.NodeAll, false)
-		BoolFlag(f, &nodeCtx.statusShowDecommission, cliflags.NodeDecommission, false)
+		BoolFlag(f, &nodeCtx.statusShowRanges, cliflags.NodeRanges, nodeCtx.statusShowRanges)
+		BoolFlag(f, &nodeCtx.statusShowStats, cliflags.NodeStats, nodeCtx.statusShowStats)
+		BoolFlag(f, &nodeCtx.statusShowAll, cliflags.NodeAll, nodeCtx.statusShowAll)
+		BoolFlag(f, &nodeCtx.statusShowDecommission, cliflags.NodeDecommission, nodeCtx.statusShowDecommission)
 	}
 
 	// Decommission command.
 	VarFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionWait, cliflags.Wait)
 
 	// Quit command.
-	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, false)
+	BoolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, quitCtx.serverDecommission)
 
 	zf := setZoneCmd.Flags()
-	StringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, "")
-	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, false)
+	StringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, zoneCtx.zoneConfig)
+	BoolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, zoneCtx.zoneDisableReplication)
 
 	VarFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
-	BoolFlag(sqlShellCmd.Flags(), &sqlCtx.unsafeUpdates, cliflags.UnsafeUpdates, false)
+	BoolFlag(sqlShellCmd.Flags(), &sqlCtx.safeUpdates, cliflags.SafeUpdates, sqlCtx.safeUpdates)
 
 	VarFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
-	StringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, "")
+	StringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, dumpCtx.asOf)
 
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd}
@@ -338,12 +341,12 @@ func init() {
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
-		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, false)
-		StringFlag(f, &sqlConnURL, cliflags.URL, "")
-		StringFlag(f, &sqlConnUser, cliflags.User, security.RootUser)
+		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, sqlCtx.echo)
+		StringFlag(f, &cliCtx.sqlConnURL, cliflags.URL, cliCtx.sqlConnURL)
+		StringFlag(f, &cliCtx.sqlConnUser, cliflags.User, cliCtx.sqlConnUser)
 
 		if cmd == sqlShellCmd {
-			StringFlag(f, &sqlConnDBName, cliflags.Database, "")
+			StringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database, cliCtx.sqlConnDBName)
 		}
 	}
 
@@ -357,49 +360,41 @@ func init() {
 	// can override with --format.
 	// By default, query times are not displayed. The default is overridden
 	// in the CLI shell.
-	cliCtx.tableDisplayFormat = tableDisplayTSV
-	cliCtx.showTimes = false
-	if isInteractive {
-		cliCtx.tableDisplayFormat = tableDisplayPretty
-	}
 	for _, cmd := range tableOutputCommands {
 		f := cmd.Flags()
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
-
-	// Max results flag for range list.
-	Int64Flag(lsRangesCmd.Flags(), &maxResults, cliflags.MaxResults, 1000)
 
 	// Debug commands.
 	{
 		f := debugKeysCmd.Flags()
 		VarFlag(f, (*mvccKey)(&debugCtx.startKey), cliflags.From)
 		VarFlag(f, (*mvccKey)(&debugCtx.endKey), cliflags.To)
-		BoolFlag(f, &debugCtx.values, cliflags.Values, false)
-		BoolFlag(f, &debugCtx.sizes, cliflags.Sizes, false)
+		BoolFlag(f, &debugCtx.values, cliflags.Values, debugCtx.values)
+		BoolFlag(f, &debugCtx.sizes, cliflags.Sizes, debugCtx.sizes)
 	}
 	{
 		f := debugRangeDataCmd.Flags()
-		BoolFlag(f, &debugCtx.replicated, cliflags.Replicated, false)
+		BoolFlag(f, &debugCtx.replicated, cliflags.Replicated, debugCtx.replicated)
 	}
 	{
 		f := debugGossipValuesCmd.Flags()
-		StringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, "")
-		BoolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, false)
+		StringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, debugCtx.inputFile)
+		BoolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, debugCtx.printSystemConfig)
 	}
 }
 
 func extraServerFlagInit() {
-	serverCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
+	serverCfg.Addr = net.JoinHostPort(startCtx.serverConnHost, serverConnPort)
 	if serverAdvertiseHost == "" {
-		serverAdvertiseHost = serverConnHost
+		serverAdvertiseHost = startCtx.serverConnHost
 	}
 	if serverAdvertisePort == "" {
 		serverAdvertisePort = serverConnPort
 	}
 	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverAdvertisePort)
 	if serverHTTPHost == "" {
-		serverHTTPHost = serverConnHost
+		serverHTTPHost = startCtx.serverConnHost
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }
@@ -408,7 +403,7 @@ func extraClientFlagInit() {
 	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
 	if serverHTTPHost == "" {
-		serverHTTPHost = serverConnHost
+		serverHTTPHost = startCtx.serverConnHost
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }

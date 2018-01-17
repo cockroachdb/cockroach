@@ -46,7 +46,7 @@ import (
 func decomposeExpr(
 	evalCtx *tree.EvalContext, e tree.TypedExpr,
 ) (exprs []tree.TypedExprs, equivalent bool) {
-	e, equivalent = simplifyExpr(evalCtx, e)
+	e, equivalent = SimplifyExpr(evalCtx, e)
 	orExprs := splitOrExpr(evalCtx, e, nil)
 	results := make([]tree.TypedExprs, len(orExprs))
 	for i := range orExprs {
@@ -70,9 +70,9 @@ func splitOrExpr(
 	return append(exprs, e)
 }
 
-// splitAndExpr flattens a tree of AND expressions returning all of the child
-// expressions as a list. Any non-AND expression is returned as a single
-// element in the list.
+// splitAndExpr flattens a tree of AND expressions, appending all of the child
+// expressions as a list. Any non-AND expression is appended as a single element
+// in the list.
 //
 //   a AND b AND c AND d -> [a, b, c, d]
 func splitAndExpr(
@@ -118,7 +118,7 @@ func joinExprs(
 	}
 }
 
-// simplifyExpr transforms an expression such that it contains only expressions
+// SimplifyExpr transforms an expression such that it contains only expressions
 // involving IndexedVars that can be used for index selection. If an expression is
 // encountered that cannot be used for index selection (e.g. "func(val)") that
 // part of the expression tree is considered to evaluate to true, possibly
@@ -140,7 +140,7 @@ func joinExprs(
 // Returns false for equivalent if the resulting expression is not equivalent
 // to the original. This occurs for expressions which are currently not handled
 // by simplification.
-func simplifyExpr(
+func SimplifyExpr(
 	evalCtx *tree.EvalContext, e tree.TypedExpr,
 ) (simplified tree.TypedExpr, equivalent bool) {
 	if e == tree.DNull {
@@ -162,7 +162,7 @@ func simplifyExpr(
 	}
 	// We don't know how to simplify expressions that fall through to here, so
 	// consider this part of the expression true.
-	return tree.MakeDBool(true), false
+	return tree.DBoolTrue, false
 }
 
 func simplifyNotExpr(evalCtx *tree.EvalContext, n *tree.NotExpr) (tree.TypedExpr, bool) {
@@ -171,7 +171,7 @@ func simplifyNotExpr(evalCtx *tree.EvalContext, n *tree.NotExpr) (tree.TypedExpr
 	}
 	switch t := n.Expr.(type) {
 	case *tree.NotExpr:
-		return simplifyExpr(evalCtx, t.TypedInnerExpr())
+		return SimplifyExpr(evalCtx, t.TypedInnerExpr())
 	case *tree.ComparisonExpr:
 		op := t.Operator
 		switch op {
@@ -215,14 +215,10 @@ func simplifyNotExpr(evalCtx *tree.EvalContext, n *tree.NotExpr) (tree.TypedExpr
 			op = tree.IsNotDistinctFrom
 		case tree.IsNotDistinctFrom:
 			op = tree.IsDistinctFrom
-		case tree.Is:
-			op = tree.IsNot
-		case tree.IsNot:
-			op = tree.Is
 		default:
-			return tree.MakeDBool(true), false
+			return tree.DBoolTrue, false
 		}
-		return simplifyExpr(evalCtx, tree.NewTypedComparisonExpr(
+		return SimplifyExpr(evalCtx, tree.NewTypedComparisonExpr(
 			op,
 			t.TypedLeft(),
 			t.TypedRight(),
@@ -230,23 +226,23 @@ func simplifyNotExpr(evalCtx *tree.EvalContext, n *tree.NotExpr) (tree.TypedExpr
 
 	case *tree.AndExpr:
 		// De Morgan's Law: NOT (a AND b) -> (NOT a) OR (NOT b)
-		return simplifyExpr(evalCtx, tree.NewTypedOrExpr(
+		return SimplifyExpr(evalCtx, tree.NewTypedOrExpr(
 			tree.NewTypedNotExpr(t.TypedLeft()),
 			tree.NewTypedNotExpr(t.TypedRight()),
 		))
 
 	case *tree.OrExpr:
 		// De Morgan's Law: NOT (a OR b) -> (NOT a) AND (NOT b)
-		return simplifyExpr(evalCtx, tree.NewTypedAndExpr(
+		return SimplifyExpr(evalCtx, tree.NewTypedAndExpr(
 			tree.NewTypedNotExpr(t.TypedLeft()),
 			tree.NewTypedNotExpr(t.TypedRight()),
 		))
 	case *tree.IndexedVar:
-		return simplifyExpr(evalCtx, tree.NewTypedNotExpr(
+		return SimplifyExpr(evalCtx, tree.NewTypedNotExpr(
 			boolVarToComparison(t),
 		))
 	}
-	return tree.MakeDBool(true), false
+	return tree.DBoolTrue, false
 }
 
 func isKnownTrue(e tree.TypedExpr) bool {
@@ -275,12 +271,12 @@ func simplifyAndExpr(evalCtx *tree.EvalContext, n *tree.AndExpr) (tree.TypedExpr
 	exprs := splitAndExpr(evalCtx, n, nil)
 	for i := range exprs {
 		var equiv bool
-		exprs[i], equiv = simplifyExpr(evalCtx, exprs[i])
+		exprs[i], equiv = SimplifyExpr(evalCtx, exprs[i])
 		if !equiv {
 			equivalent = false
 		}
 		if isKnownFalseOrNull(exprs[i]) {
-			return tree.MakeDBool(false), equivalent
+			return tree.DBoolFalse, equivalent
 		}
 	}
 	// Simplifying exprs might have transformed one of the elements into an AND
@@ -337,38 +333,38 @@ func simplifyOneAndExpr(
 	lcmpLeft, lcmpRight := lcmp.TypedLeft(), lcmp.TypedRight()
 	rcmpLeft, rcmpRight := rcmp.TypedLeft(), rcmp.TypedRight()
 	if !isDatum(lcmpRight) || !isDatum(rcmpRight) {
-		return tree.MakeDBool(true), nil, false
+		return tree.DBoolTrue, nil, false
 	}
 	if !varEqual(lcmpLeft, rcmpLeft) {
 		return left, right, true
 	}
 
-	if lcmp.Operator == tree.IsNot || rcmp.Operator == tree.IsNot {
+	if lcmp.Operator == tree.IsDistinctFrom || rcmp.Operator == tree.IsDistinctFrom {
 		switch lcmp.Operator {
 		case tree.EQ, tree.GT, tree.GE, tree.LT, tree.LE, tree.In:
 			if rcmpRight == tree.DNull {
-				// a <cmp> x AND a IS NOT NULL
+				// a <cmp> x AND a IS DISTINCT FROM NULL
 				return left, nil, true
 			}
-		case tree.Is:
+		case tree.IsNotDistinctFrom:
 			if lcmpRight == tree.DNull && rcmpRight == tree.DNull {
-				// a IS NULL AND a IS NOT NULL
-				return tree.MakeDBool(false), nil, true
+				// a IS NOT DISTINCT FROM NULL AND a IS DISTINCT FROM NULL
+				return tree.DBoolFalse, nil, true
 			}
-		case tree.IsNot:
+		case tree.IsDistinctFrom:
 			if lcmpRight == tree.DNull {
 				switch rcmp.Operator {
 				case tree.EQ, tree.GT, tree.GE, tree.LT, tree.LE, tree.In:
-					// a IS NOT NULL AND a <cmp> x
+					// a IS DISTINCT FROM NULL AND a <cmp> x
 					return right, nil, true
-				case tree.Is:
+				case tree.IsNotDistinctFrom:
 					if rcmpRight == tree.DNull {
-						// a IS NOT NULL AND a IS NULL
-						return tree.MakeDBool(false), nil, true
+						// a IS DISTINCT FROM NULL AND a IS NOT DISTINCT FROM NULL
+						return tree.DBoolFalse, nil, true
 					}
-				case tree.IsNot:
+				case tree.IsDistinctFrom:
 					if rcmpRight == tree.DNull {
-						// a IS NOT NULL AND a IS NOT NULL
+						// a IS DISTINCT FROM NULL AND a IS DISTINCT FROM NULL
 						return left, nil, true
 					}
 				}
@@ -393,15 +389,15 @@ func simplifyOneAndExpr(
 			}
 		}
 		if !allowCmp {
-			if lcmp.Operator == tree.Is && lcmpRight == tree.DNull {
-				// a IS NULL AND a <cmp> x
-				return tree.MakeDBool(false), nil, true
+			if lcmp.Operator == tree.IsNotDistinctFrom && lcmpRight == tree.DNull {
+				// a IS NOT DISTINCT FROM NULL AND a <cmp> x
+				return tree.DBoolFalse, nil, true
 			}
-			if rcmp.Operator == tree.Is && rcmpRight == tree.DNull {
-				// a <cmp> x AND a IS NULL
-				return tree.MakeDBool(false), nil, true
+			if rcmp.Operator == tree.IsNotDistinctFrom && rcmpRight == tree.DNull {
+				// a <cmp> x AND a IS NOT DISTINCT FROM NULL
+				return tree.DBoolFalse, nil, true
 			}
-			// Note that "a IS NULL and a IS NULL" cannot happen here because
+			// Note that "a IS NOT DISTINCT FROM NULL and a IS NOT DISTINCT FROM NULL" cannot happen here because
 			// "reflect.TypeOf(NULL) == reflect.TypeOf(NULL)".
 			return left, right, true
 		}
@@ -435,26 +431,26 @@ func simplifyOneAndExpr(
 				// x = y
 				return either, nil, true
 			}
-			return tree.MakeDBool(false), nil, true
+			return tree.DBoolFalse, nil, true
 		case tree.NE:
 			// a = x AND a != y
 			if cmp == 0 {
 				// x = y
-				return tree.MakeDBool(false), nil, true
+				return tree.DBoolFalse, nil, true
 			}
 			return left, nil, true
 		case tree.GT, tree.GE:
 			// a = x AND (a > y OR a >= y)
 			if cmp == -1 || (cmp == 0 && rcmp.Operator == tree.GT) {
 				// x < y OR x = y
-				return tree.MakeDBool(false), nil, true
+				return tree.DBoolFalse, nil, true
 			}
 			return left, nil, true
 		case tree.LT, tree.LE:
 			// a = x AND (a < y OR a <= y)
 			if cmp == 1 || (cmp == 0 && rcmp.Operator == tree.LT) {
 				// x > y OR x = y
-				return tree.MakeDBool(false), nil, true
+				return tree.DBoolFalse, nil, true
 			}
 			return left, nil, true
 		}
@@ -465,7 +461,7 @@ func simplifyOneAndExpr(
 			// a != x AND a = y
 			if cmp == 0 {
 				// x = y
-				return tree.MakeDBool(false), nil, true
+				return tree.DBoolFalse, nil, true
 			}
 			return right, nil, true
 		case tree.NE:
@@ -513,7 +509,7 @@ func simplifyOneAndExpr(
 			// a > x AND a = y
 			if cmp != -1 {
 				// x >= y
-				return tree.MakeDBool(false), nil, true
+				return tree.DBoolFalse, nil, true
 			}
 			// x < y
 			return right, nil, true
@@ -535,7 +531,7 @@ func simplifyOneAndExpr(
 				return left, right, true
 			}
 			// x >= y
-			return tree.MakeDBool(false), nil, true
+			return tree.DBoolFalse, nil, true
 		}
 
 	case tree.GE:
@@ -544,7 +540,7 @@ func simplifyOneAndExpr(
 			// a >= x AND a = y
 			if cmp == 1 {
 				// x > y
-				return tree.MakeDBool(false), nil, true
+				return tree.DBoolFalse, nil, true
 			}
 			// x <= y
 			return right, nil, true
@@ -575,7 +571,7 @@ func simplifyOneAndExpr(
 				return left, right, true
 			}
 			// x >= y
-			return tree.MakeDBool(false), nil, true
+			return tree.DBoolFalse, nil, true
 		case tree.LE:
 			// a >= x AND a <= y
 			if cmp == -1 {
@@ -590,7 +586,7 @@ func simplifyOneAndExpr(
 				), nil, true
 			}
 			// x > y
-			return tree.MakeDBool(false), nil, true
+			return tree.DBoolFalse, nil, true
 		}
 
 	case tree.LT:
@@ -599,7 +595,7 @@ func simplifyOneAndExpr(
 			// a < x AND a = y
 			if cmp != 1 {
 				// x <= y
-				return tree.MakeDBool(false), nil, true
+				return tree.DBoolFalse, nil, true
 			}
 			// x > y
 			return right, nil, true
@@ -613,7 +609,7 @@ func simplifyOneAndExpr(
 				return left, right, true
 			}
 			// x <= y
-			return tree.MakeDBool(false), nil, true
+			return tree.DBoolFalse, nil, true
 		case tree.LT, tree.LE:
 			// a < x AND (a < y OR a <= y)
 			if cmp != 1 {
@@ -630,7 +626,7 @@ func simplifyOneAndExpr(
 			// a <= x AND a = y
 			if cmp == -1 {
 				// x < y
-				return tree.MakeDBool(false), nil, true
+				return tree.DBoolFalse, nil, true
 			}
 			// x >= y
 			return right, nil, true
@@ -652,7 +648,7 @@ func simplifyOneAndExpr(
 				// x > y
 				return left, right, true
 			}
-			return tree.MakeDBool(false), nil, true
+			return tree.DBoolFalse, nil, true
 		case tree.GE:
 			// a <= x AND a >= y
 			if cmp == +1 {
@@ -667,7 +663,7 @@ func simplifyOneAndExpr(
 				), nil, true
 			}
 			// x < y
-			return tree.MakeDBool(false), nil, true
+			return tree.DBoolFalse, nil, true
 		case tree.LT, tree.LE:
 			// a <= x AND (a > y OR a >= y)
 			if cmp == 1 || (cmp == 0 && rcmp.Operator == tree.LT) {
@@ -678,17 +674,17 @@ func simplifyOneAndExpr(
 			return left, nil, true
 		}
 
-	case tree.Is:
+	case tree.IsNotDistinctFrom:
 		switch rcmp.Operator {
-		case tree.Is:
+		case tree.IsNotDistinctFrom:
 			if lcmpRight == tree.DNull && rcmpRight == tree.DNull {
-				// a IS NULL AND a IS NULL
+				// a IS NOT DISTINCT FROM NULL AND a IS NOT DISTINCT FROM NULL
 				return left, nil, true
 			}
 		}
 	}
 
-	return tree.MakeDBool(true), nil, false
+	return tree.DBoolTrue, nil, false
 }
 
 func simplifyOneAndInExpr(
@@ -701,7 +697,7 @@ func simplifyOneAndInExpr(
 	origLeft, origRight := left, right
 
 	switch left.Operator {
-	case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE, tree.Is:
+	case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE, tree.IsNotDistinctFrom:
 		switch right.Operator {
 		case tree.In:
 			left, right = right, left
@@ -715,9 +711,9 @@ func simplifyOneAndInExpr(
 		values := ltuple.D
 
 		switch right.Operator {
-		case tree.Is:
+		case tree.IsNotDistinctFrom:
 			if right.Right == tree.DNull {
-				return tree.MakeDBool(false), nil
+				return tree.DBoolFalse, nil
 			}
 
 		case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
@@ -731,12 +727,12 @@ func simplifyOneAndInExpr(
 				if found {
 					return right, nil
 				}
-				return tree.MakeDBool(false), nil
+				return tree.DBoolFalse, nil
 
 			case tree.NE:
 				if found {
 					if len(values) < 2 {
-						return tree.MakeDBool(false), nil
+						return tree.DBoolFalse, nil
 					}
 					values = remove(values, i)
 				}
@@ -761,7 +757,7 @@ func simplifyOneAndInExpr(
 						), nil
 					}
 				}
-				return tree.MakeDBool(false), nil
+				return tree.DBoolFalse, nil
 
 			case tree.GE:
 				if i < len(values) {
@@ -774,12 +770,12 @@ func simplifyOneAndInExpr(
 						), nil
 					}
 				}
-				return tree.MakeDBool(false), nil
+				return tree.DBoolFalse, nil
 
 			case tree.LT:
 				if i < len(values) {
 					if i == 0 {
-						return tree.MakeDBool(false), nil
+						return tree.DBoolFalse, nil
 					}
 					values = values[:i]
 					return tree.NewTypedComparisonExpr(
@@ -796,7 +792,7 @@ func simplifyOneAndInExpr(
 						i++
 					}
 					if i == 0 {
-						return tree.MakeDBool(false), nil
+						return tree.DBoolFalse, nil
 					}
 					values = values[:i]
 					return tree.NewTypedComparisonExpr(
@@ -813,7 +809,7 @@ func simplifyOneAndInExpr(
 			rtuple := right.Right.(*tree.DTuple)
 			intersection := intersectSorted(evalCtx, values, rtuple.D)
 			if len(intersection) == 0 {
-				return tree.MakeDBool(false), nil
+				return tree.DBoolFalse, nil
 			}
 			return tree.NewTypedComparisonExpr(
 				tree.In,
@@ -832,7 +828,7 @@ func simplifyOrExpr(evalCtx *tree.EvalContext, n *tree.OrExpr) (tree.TypedExpr, 
 	exprs := splitOrExpr(evalCtx, n, nil)
 	for i := range exprs {
 		var equiv bool
-		exprs[i], equiv = simplifyExpr(evalCtx, exprs[i])
+		exprs[i], equiv = SimplifyExpr(evalCtx, exprs[i])
 		if !equiv {
 			equivalent = false
 		}
@@ -894,30 +890,30 @@ func simplifyOneOrExpr(
 	lcmpLeft, lcmpRight := lcmp.TypedLeft(), lcmp.TypedRight()
 	rcmpLeft, rcmpRight := rcmp.TypedLeft(), rcmp.TypedRight()
 	if !isDatum(lcmpRight) || !isDatum(rcmpRight) {
-		return tree.MakeDBool(true), nil, false
+		return tree.DBoolTrue, nil, false
 	}
 	if !varEqual(lcmpLeft, rcmpLeft) {
 		return left, right, true
 	}
 
-	if lcmp.Operator == tree.IsNot || rcmp.Operator == tree.IsNot {
+	if lcmp.Operator == tree.IsDistinctFrom || rcmp.Operator == tree.IsDistinctFrom {
 		switch lcmp.Operator {
-		case tree.Is:
+		case tree.IsNotDistinctFrom:
 			if lcmpRight == tree.DNull && rcmpRight == tree.DNull {
-				// a IS NULL OR a IS NOT NULL
-				return tree.MakeDBool(true), nil, true
+				// a IS NOT DISTINCT FROM NULL OR a IS DISTINCT FROM NULL
+				return tree.DBoolTrue, nil, true
 			}
-		case tree.IsNot:
+		case tree.IsDistinctFrom:
 			if lcmpRight == tree.DNull {
 				switch rcmp.Operator {
-				case tree.Is:
+				case tree.IsNotDistinctFrom:
 					if rcmpRight == tree.DNull {
-						// a IS NOT NULL OR a IS NULL
-						return tree.MakeDBool(true), nil, true
+						// a IS DISTINCT FROM NULL OR a IS NOT DISTINCT FROM NULL
+						return tree.DBoolTrue, nil, true
 					}
-				case tree.IsNot:
+				case tree.IsDistinctFrom:
 					if rcmpRight == tree.DNull {
-						// a IS NOT NULL OR a IS NOT NULL
+						// a IS DISTINCT FROM NULL OR a IS DISTINCT FROM NULL
 						return left, nil, true
 					}
 				}
@@ -988,7 +984,7 @@ func simplifyOneOrExpr(
 			// a = x OR a != y
 			if cmp == 0 {
 				// x = y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			return right, nil, true
 		case tree.GT:
@@ -1039,7 +1035,7 @@ func simplifyOneOrExpr(
 			// a != x OR a = y
 			if cmp == 0 {
 				// x = y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x != y
 			return left, nil, true
@@ -1050,12 +1046,12 @@ func simplifyOneOrExpr(
 				return either, nil, true
 			}
 			// x != y
-			return makeIsNotNull(lcmpLeft), nil, true
+			return makeIsDistinctFromNull(lcmpLeft), nil, true
 		case tree.GT:
 			// a != x OR a > y
 			if cmp == 1 {
 				// x > y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x <= y
 			return left, nil, true
@@ -1063,7 +1059,7 @@ func simplifyOneOrExpr(
 			// a != x OR a >= y
 			if cmp != -1 {
 				// x >= y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x < y
 			return left, nil, true
@@ -1071,7 +1067,7 @@ func simplifyOneOrExpr(
 			// a != x OR a < y
 			if cmp == -1 {
 				// x < y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x >= y
 			return left, nil, true
@@ -1079,7 +1075,7 @@ func simplifyOneOrExpr(
 			// a != x OR a <= y
 			if cmp != 1 {
 				// x <= y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x > y
 			return left, nil, true
@@ -1105,7 +1101,7 @@ func simplifyOneOrExpr(
 			// a > x OR a != y
 			if cmp == -1 {
 				// x < y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x >= y
 			return right, nil, true
@@ -1125,7 +1121,7 @@ func simplifyOneOrExpr(
 					either.TypedRight(),
 				), nil, true
 			} else if cmp == -1 {
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x != y
 			return left, right, true
@@ -1133,7 +1129,7 @@ func simplifyOneOrExpr(
 			// a > x OR a <= y
 			if cmp != 1 {
 				// x = y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x != y
 			return left, right, true
@@ -1153,7 +1149,7 @@ func simplifyOneOrExpr(
 			// a >= x OR a != y
 			if cmp != 1 {
 				// x <= y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x > y
 			return right, nil, true
@@ -1177,7 +1173,7 @@ func simplifyOneOrExpr(
 			// a >= x OR a < y
 			if cmp != 1 {
 				// x <= y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x > y
 			return left, right, true
@@ -1203,7 +1199,7 @@ func simplifyOneOrExpr(
 		case tree.NE:
 			// a < x OR a != y
 			if cmp == 1 {
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			return right, nil, true
 		case tree.GT:
@@ -1217,7 +1213,7 @@ func simplifyOneOrExpr(
 				), nil, true
 			} else if cmp == 1 {
 				// x > y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			return left, right, true
 		case tree.GE:
@@ -1227,7 +1223,7 @@ func simplifyOneOrExpr(
 				return left, right, true
 			}
 			// x >= y
-			return makeIsNotNull(lcmpLeft), nil, true
+			return makeIsDistinctFromNull(lcmpLeft), nil, true
 		case tree.LT, tree.LE:
 			// a < x OR (a < y OR a <= y)
 			if cmp == 1 {
@@ -1252,7 +1248,7 @@ func simplifyOneOrExpr(
 			// a <= x OR a != y
 			if cmp != -1 {
 				// x >= y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x < y
 			return right, nil, true
@@ -1260,7 +1256,7 @@ func simplifyOneOrExpr(
 			// a <= x OR (a > y OR a >= y)
 			if cmp != -1 {
 				// x >= y
-				return makeIsNotNull(lcmpLeft), nil, true
+				return makeIsDistinctFromNull(lcmpLeft), nil, true
 			}
 			// x < y
 			return left, right, true
@@ -1274,17 +1270,17 @@ func simplifyOneOrExpr(
 			return left, nil, true
 		}
 
-	case tree.Is:
+	case tree.IsNotDistinctFrom:
 		switch rcmp.Operator {
-		case tree.Is:
+		case tree.IsNotDistinctFrom:
 			if lcmpRight == tree.DNull && rcmpRight == tree.DNull {
-				// a IS NULL OR a IS NULL
+				// a IS NOT DISTINCT FROM NULL OR a IS NOT DISTINCT FROM NULL
 				return left, nil, true
 			}
 		}
 	}
 
-	return tree.MakeDBool(true), nil, false
+	return tree.DBoolTrue, nil, false
 }
 
 func simplifyOneOrInExpr(
@@ -1327,7 +1323,7 @@ func simplifyOneOrInExpr(
 			switch right.Operator {
 			case tree.NE:
 				if found {
-					return makeIsNotNull(right.TypedLeft()), nil
+					return makeIsDistinctFromNull(right.TypedLeft()), nil
 				}
 				return right, nil
 
@@ -1392,35 +1388,15 @@ func simplifyComparisonExpr(
 ) (tree.TypedExpr, bool) {
 	// NormalizeExpr will have left comparisons in the form "<var> <op>
 	// <datum>" unless they could not be simplified further in which case
-	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
+	// SimplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
 	left, right := n.TypedLeft(), n.TypedRight()
 	if isVar(left) && isDatum(right) {
 		if right == tree.DNull {
 			switch n.Operator {
-			case tree.IsNotDistinctFrom:
+			case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
 				switch left.(type) {
 				case *tree.IndexedVar:
-					// Transform "a IS NOT DISTINCT FROM NULL" into "a IS NULL".
-					return tree.NewTypedComparisonExpr(
-						tree.Is,
-						left,
-						right,
-					), true
-				}
-			case tree.IsDistinctFrom:
-				switch left.(type) {
-				case *tree.IndexedVar:
-					// Transform "a IS DISTINCT FROM NULL" into "a IS NOT NULL".
-					return tree.NewTypedComparisonExpr(
-						tree.IsNot,
-						left,
-						right,
-					), true
-				}
-			case tree.Is, tree.IsNot:
-				switch left.(type) {
-				case *tree.IndexedVar:
-					// "a IS {,NOT} NULL" can be used during index selection to restrict
+					// "a IS {,NOT} DISTINCT FROM NULL" can be used during index selection to restrict
 					// the range of scanned keys.
 					return n, true
 				}
@@ -1429,7 +1405,7 @@ func simplifyComparisonExpr(
 				// comparing to NULL they evaluate to NULL (see evalComparisonOp). NULL is
 				// not the same as false, but in the context of a WHERE clause, NULL is
 				// considered not-true which is the same as false.
-				return tree.MakeDBool(false), true
+				return tree.DBoolFalse, true
 			}
 		}
 
@@ -1475,20 +1451,20 @@ func simplifyComparisonExpr(
 			// comparison would evaluate to NULL which is equivalent to false for a
 			// boolean expression.
 			if right.(tree.Datum).IsMax(evalCtx) {
-				return tree.MakeDBool(false), true
+				return tree.DBoolFalse, true
 			}
 			return n, true
 		case tree.LT:
 			// Note that if the variable is NULL, this would evaluate to NULL which
 			// would equivalent to false for a boolean expression.
 			if right.(tree.Datum).IsMin(evalCtx) {
-				return tree.MakeDBool(false), true
+				return tree.DBoolFalse, true
 			}
 			return n, true
 		case tree.In, tree.NotIn:
 			tuple := right.(*tree.DTuple).D
 			if len(tuple) == 0 {
-				return tree.MakeDBool(false), true
+				return tree.DBoolFalse, true
 			}
 			return n, true
 		case tree.Like:
@@ -1512,21 +1488,21 @@ func simplifyComparisonExpr(
 			// TODO(pmattis): Support tree.DBytes?
 		}
 	}
-	return tree.MakeDBool(true), false
+	return tree.DBoolTrue, false
 }
 
 // simplifyBoolVar transforms a boolean IndexedVar into a ComparisonExpr
 // (e.g. WHERE b -> WHERE b = true) This is so index selection only needs
 // to work on ComparisonExprs.
 func simplifyBoolVar(evalCtx *tree.EvalContext, n *tree.IndexedVar) (tree.TypedExpr, bool) {
-	return simplifyExpr(evalCtx, boolVarToComparison(n))
+	return SimplifyExpr(evalCtx, boolVarToComparison(n))
 }
 
 func boolVarToComparison(n *tree.IndexedVar) tree.TypedExpr {
 	return tree.NewTypedComparisonExpr(
 		tree.EQ,
 		n,
-		tree.MakeDBool(true),
+		tree.DBoolTrue,
 	)
 }
 
@@ -1539,7 +1515,7 @@ func makePrefixRange(prefix tree.DString, datum tree.TypedExpr, complete bool) t
 		)
 	}
 	if len(prefix) == 0 {
-		return tree.MakeDBool(true)
+		return tree.DBoolTrue
 	}
 	return tree.NewTypedAndExpr(
 		tree.NewTypedComparisonExpr(
@@ -1662,9 +1638,9 @@ func varEqual(a, b tree.TypedExpr) bool {
 	return false
 }
 
-func makeIsNotNull(left tree.TypedExpr) tree.TypedExpr {
+func makeIsDistinctFromNull(left tree.TypedExpr) tree.TypedExpr {
 	return tree.NewTypedComparisonExpr(
-		tree.IsNot,
+		tree.IsDistinctFrom,
 		left,
 		tree.DNull,
 	)

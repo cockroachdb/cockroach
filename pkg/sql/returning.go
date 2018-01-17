@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -71,7 +71,7 @@ func (p *planner) newReturningHelper(
 
 	for _, e := range rExprs {
 		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			e.Expr, "RETURNING", p.session.SearchPath,
+			e.Expr, "RETURNING", p.SessionData().SearchPath,
 		); err != nil {
 			return nil, err
 		}
@@ -107,8 +107,8 @@ func (rh *returningHelper) cookResultRow(rowVals tree.Datums) (tree.Datums, erro
 	rh.curSourceRow = rowVals
 	resRow := make(tree.Datums, len(rh.exprs))
 	for i, e := range rh.exprs {
-		rh.p.evalCtx.IVarHelper = &rh.ivarHelper
-		d, err := e.Eval(&rh.p.evalCtx)
+		rh.p.extendedEvalCtx.IVarHelper = &rh.ivarHelper
+		d, err := e.Eval(rh.p.EvalContext())
 		if err != nil {
 			return nil, err
 		}

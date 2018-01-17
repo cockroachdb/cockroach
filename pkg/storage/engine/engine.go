@@ -15,7 +15,7 @@
 package engine
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -101,6 +101,20 @@ type Iterator interface {
 	//
 	// TODO: remove allowMeta2Splits in version 1.3.
 	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool) (MVCCKey, error)
+	// MVCCGet retrieves the value for the key at the specified timestamp. The
+	// value is returned in batch repr format with the key being present as the
+	// empty string. If an intent exists at the specified key, it will be
+	// returned in batch repr format in the separate intent return value.
+	MVCCGet(key roachpb.Key, timestamp hlc.Timestamp,
+		txn *roachpb.Transaction, consistent bool,
+	) (*roachpb.Value, []roachpb.Intent, error)
+	// MVCCScan scans the underlying engine from start to end keys and returns
+	// key/value pairs which have a timestamp less than or equal to the supplied
+	// timestamp, up to a max rows. The key/value pairs are returned in the batch
+	// repr format and can be iterated over using RocksDBBatchReader.
+	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
+		txn *roachpb.Transaction, consistent, reverse bool,
+	) (kvs []byte, intents []byte, err error)
 }
 
 // Reader is the read interface to an engine's data.
@@ -231,6 +245,19 @@ type Engine interface {
 	// IngestExternalFile links a file into the RocksDB log-structured
 	// merge-tree.
 	IngestExternalFile(ctx context.Context, path string, move bool) error
+	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
+	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
+	// CompactRange ensures that the specified range of key value pairs is
+	// optimized for space efficiency.
+	CompactRange(start, end roachpb.Key) error
+}
+
+// WithSSTables extends the Engine interface with a method to get info
+// on all SSTables in use.
+type WithSSTables interface {
+	Engine
+	// GetSSTables retrieves metadata about this engine's live sstables.
+	GetSSTables() SSTableInfos
 }
 
 // Batch is the interface for batch specific operations.

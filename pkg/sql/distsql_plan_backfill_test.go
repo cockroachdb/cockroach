@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -40,7 +40,11 @@ func TestDistBackfill(t *testing.T) {
 	//    squares
 	//  - a NumToStr table of size N^2 that maps integers to their string
 	//    representations. This table is split and distributed to all the nodes.
-	const n = 100
+	n := 100
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		n = 10
+	}
 	const numNodes = 5
 
 	tc := serverutils.StartTestCluster(t, numNodes,

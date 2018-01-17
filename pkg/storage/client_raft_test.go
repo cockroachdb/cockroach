@@ -16,6 +16,7 @@ package storage_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -28,7 +29,6 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -1860,7 +1860,7 @@ func TestQuotaPool(t *testing.T) {
 			t.Fatalf("didn't observe the expected quota acquisition, available: %d", curQuota)
 		}
 
-		testutils.SucceedsSoonDepth(1, t, func() error {
+		testutils.SucceedsSoon(t, func() error {
 			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 1 {
 				return errors.Errorf("expected 1 queued quota release, found: %d", qLen)
 			}
@@ -1876,7 +1876,7 @@ func TestQuotaPool(t *testing.T) {
 		}()
 	}()
 
-	testutils.SucceedsSoonDepth(1, t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if curQuota := leaderRepl.QuotaAvailable(); curQuota != quota {
 			return errors.Errorf("expected available quota %d, got %d", quota, curQuota)
 		}
@@ -1946,7 +1946,8 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// not past it.
 	mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() - 1)
 
-	// Send a request to the leader replica to update the quota pool status.
+	// Send a request to the leader replica. followerRepl is locked so it will
+	// not respond.
 	ctx := context.Background()
 	key := roachpb.Key("k")
 	value := []byte("value")
@@ -1961,18 +1962,26 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		t.Fatalf("expected follower to still be considered active")
 	}
 
-	// Increment leader's clock past MaxQuotaReplicaLivenessDuration
-	mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() + 1)
+	// It is possible that there are in-flight heartbeat responses from
+	// followerRepl from before it was locked. The receipt of one of these
+	// would bump the last active timestamp on the leader. Because of this,
+	// we check whether the follower is eventually considered inactive.
+	testutils.SucceedsSoon(t, func() error {
+		// Increment leader's clock past MaxQuotaReplicaLivenessDuration
+		mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() + 1)
 
-	// Send another request to the leader replica to update the quota pool status.
-	if _, pErr := client.SendWrapped(ctx, leaderRepl, req); pErr != nil {
-		t.Fatal(pErr)
-	}
+		// Send another request to the leader replica. followerRepl is locked
+		// so it will not respond.
+		if _, pErr := client.SendWrapped(ctx, leaderRepl, req); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	// The follower should no longer be considered active.
-	if leaderRepl.IsFollowerActive(ctx, followerID) {
-		t.Fatalf("expected follower to be considered inactive")
-	}
+		// The follower should no longer be considered active.
+		if leaderRepl.IsFollowerActive(ctx, followerID) {
+			return errors.New("expected follower to be considered inactive")
+		}
+		return nil
+	})
 }
 
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly
@@ -3348,9 +3357,10 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	}, &checkArgs); err != nil {
 		t.Fatal(err)
 	}
+
 }
 
-func TestCheckInconsistent(t *testing.T) {
+func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := storage.TestStoreConfig(nil)
@@ -3847,4 +3857,62 @@ func TestFailedConfChange(t *testing.T) {
 	if err := checkLeaderStore(1); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestStoreRangeRemovalCompactionSuggestion verifies that if a replica
+// is removed from a store, a compaction suggestion is made to the
+// compactor queue.
+func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+
+	const rangeID = roachpb.RangeID(1)
+	mtc.replicateRange(rangeID, 1, 2)
+
+	repl, err := mtc.stores[0].GetReplica(rangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := repl.AnnotateCtx(context.Background())
+
+	deleteStore := mtc.stores[2]
+	if err := repl.ChangeReplicas(
+		ctx,
+		roachpb.REMOVE_REPLICA,
+		roachpb.ReplicationTarget{
+			NodeID:  deleteStore.Ident.NodeID,
+			StoreID: deleteStore.Ident.StoreID,
+		},
+		repl.Desc(),
+		storage.ReasonRebalance,
+		"",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Function to check compaction metrics indicating a suggestion
+		// was queued or a compaction was processed or skipped.
+		haveCompaction := func(s *storage.Store, exp bool) error {
+			queued := s.Compactor().Metrics.BytesQueued.Value()
+			comps := s.Compactor().Metrics.BytesCompacted.Count()
+			skipped := s.Compactor().Metrics.BytesSkipped.Count()
+			if exp != (queued > 0 || comps > 0 || skipped > 0) {
+				return errors.Errorf("%s: expected non-zero compaction metrics? %t; got queued=%d, compactions=%d, skipped=%d",
+					s, exp, queued, comps, skipped)
+			}
+			return nil
+		}
+		// Verify that no compaction metrics are showing non-zero bytes in the
+		// other stores.
+		for _, s := range mtc.stores {
+			if err := haveCompaction(s, s == deleteStore); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

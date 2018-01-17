@@ -15,9 +15,8 @@
 package batcheval
 
 import (
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	opentracing "github.com/opentracing/opentracing-go"
 
@@ -42,6 +41,7 @@ type EvalContext interface {
 	Tracer() opentracing.Tracer
 
 	Engine() engine.Engine
+	Clock() *hlc.Clock
 	DB() *client.DB
 	AbortSpan() *abortspan.AbortSpan
 	GetTxnWaitQueue() *txnwait.Queue

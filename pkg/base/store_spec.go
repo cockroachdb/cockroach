@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
-// This file implements method receivers for members of server.Context struct
+// This file implements method receivers for members of server.Config struct
 // -- 'Stores' and 'JoinList', which satisfies pflag's value interface
 
 // MinimumStoreSize is the smallest size in bytes that a store can have. This
@@ -70,6 +70,9 @@ type StoreSpec struct {
 	// UseSwitchingEnv is true if the "switching env" store version is desired.
 	// This is set by CCL code when encryption-at-rest is in use.
 	UseSwitchingEnv bool
+	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
+	// to C CCL code.
+	ExtraOptions []byte
 }
 
 // String returns a fully parsable version of the store spec.

@@ -15,13 +15,13 @@
 package sql
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -34,12 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var (
@@ -50,6 +52,23 @@ var (
 	// remaining upon acquisition. Exported for testing purposes only.
 	MinSchemaChangeLeaseDuration = time.Minute
 )
+
+// This is a delay [0.1 * asyncSchemaChangeDelay, 1.1 * asyncSchemaChangeDelay)
+// added to an attempt to run a schema change via the asynchronous path.
+// This delay allows the synchronous path to execute the schema change
+// in all likelihood. We'd like the synchronous path to execute
+// the schema change so that it doesn't have to poll and wait for
+// another node to execute the schema change. Polling can add a polling
+// delay to the normal execution of a schema change. This interval is also
+// used to reattempt execution of a schema change. We don't want this to
+// be too low because once a node has started executing a schema change
+// the other nodes should not cause a storm by rapidly try to grab the
+// schema change lease.
+//
+// TODO(mjibson): Refine the job coordinator to elect a new job coordinator
+// on coordinator failure without causing a storm of polling requests
+// attempting to become the job coordinator.
+const asyncSchemaChangeDelay = 30 * time.Second
 
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
@@ -70,6 +89,7 @@ type SchemaChanger struct {
 	rangeDescriptorCache *kv.RangeDescriptorCache
 	leaseHolderCache     *kv.LeaseHolderCache
 	clock                *hlc.Clock
+	settings             *cluster.Settings
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -88,6 +108,7 @@ func NewSchemaChangerForTesting(
 		db:          db,
 		leaseMgr:    leaseMgr,
 		jobRegistry: jobRegistry,
+		settings:    cluster.MakeTestingClusterSettings(),
 	}
 }
 
@@ -287,6 +308,12 @@ func (sc *SchemaChanger) maybeAddDropRename(
 			return false, nil
 		}
 
+		// This can happen if a change other than the drop originally
+		// scheduled the changer for this table. If that's the case,
+		// we still need to wait for the deadline to expire.
+		if d := table.GCDeadline; d != 0 && timeutil.Since(timeutil.Unix(0, d)) < 0 {
+			return false, nil
+		}
 		// Do all the hard work of deleting the table data and the table ID.
 		if err := truncateTableInChunks(ctx, table, &sc.db, false /* traceKV */); err != nil {
 			return false, err
@@ -360,7 +387,9 @@ func (sc *SchemaChanger) maybeAddDropRename(
 // Execute the entire schema change in steps.
 // inSession is set to false when this is called from the asynchronous
 // schema change execution path.
-func (sc *SchemaChanger) exec(ctx context.Context, inSession bool, evalCtx tree.EvalContext) error {
+func (sc *SchemaChanger) exec(
+	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
+) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
@@ -462,7 +491,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 	ctx context.Context,
 	err error,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 ) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
 	if err := sc.job.Failed(ctx, err, jobs.NoopFn); err != nil {
@@ -480,7 +509,9 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 
 	// After this point the schema change has been reversed and any retry
 	// of the schema change will act upon the reversed schema change.
-	if errPurge := sc.runStateMachineAndBackfill(ctx, lease, evalCtx, true /* isRollback */); errPurge != nil {
+	if errPurge := sc.runStateMachineAndBackfill(
+		ctx, lease, evalCtx, true, /* isRollback */
+	); errPurge != nil {
 		// Don't return this error because we do want the caller to know
 		// that an integrity constraint was violated with the original
 		// schema change. The reversed schema change will be
@@ -665,7 +696,7 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
 func (sc *SchemaChanger) runStateMachineAndBackfill(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx tree.EvalContext,
+	evalCtx *extendedEvalContext,
 	isRollback bool,
 ) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
@@ -676,7 +707,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 		return err
 	}
 
-	if err := sc.job.Progressed(ctx, .1, jobs.Noop); err != nil {
+	if err := sc.job.Progressed(ctx, jobs.FractionUpdater(.1)); err != nil {
 		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
 			*sc.job.ID(), err)
 	}
@@ -911,6 +942,7 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 // processing the schema change this manager acts as a backup
 // execution mechanism.
 type SchemaChangeManager struct {
+	ambientCtx   log.AmbientContext
 	db           client.DB
 	gossip       *gossip.Gossip
 	leaseMgr     *LeaseManager
@@ -920,6 +952,7 @@ type SchemaChangeManager struct {
 	distSQLPlanner *DistSQLPlanner
 	clock          *hlc.Clock
 	jobRegistry    *jobs.Registry
+	settings       *cluster.Settings
 	// Caches updated by DistSQL.
 	rangeDescriptorCache *kv.RangeDescriptorCache
 	leaseHolderCache     *kv.LeaseHolderCache
@@ -927,7 +960,7 @@ type SchemaChangeManager struct {
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
-	st *cluster.Settings,
+	ambientCtx log.AmbientContext,
 	testingKnobs *SchemaChangerTestingKnobs,
 	db client.DB,
 	nodeDesc roachpb.NodeDescriptor,
@@ -939,10 +972,12 @@ func NewSchemaChangeManager(
 	clock *hlc.Clock,
 	jobRegistry *jobs.Registry,
 	dsp *DistSQLPlanner,
+	settings *cluster.Settings,
 	rangeDescriptorCache *kv.RangeDescriptorCache,
 	leaseHolderCache *kv.LeaseHolderCache,
 ) *SchemaChangeManager {
 	return &SchemaChangeManager{
+		ambientCtx:           ambientCtx,
 		db:                   db,
 		gossip:               gossip,
 		leaseMgr:             leaseMgr,
@@ -951,6 +986,7 @@ func NewSchemaChangeManager(
 		distSQLPlanner:       dsp,
 		jobRegistry:          jobRegistry,
 		clock:                clock,
+		settings:             settings,
 		rangeDescriptorCache: rangeDescriptorCache,
 		leaseHolderCache:     leaseHolderCache,
 	}
@@ -977,15 +1013,18 @@ func (s *SchemaChangeManager) newTimer() *time.Timer {
 // Start starts a goroutine that runs outstanding schema changes
 // for tables received in the latest system configuration via gossip.
 func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(context.TODO(), func(ctx context.Context) {
+	stopper.RunWorker(s.ambientCtx.AnnotateCtx(context.Background()), func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
+		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
-		delay := 360 * time.Second
-		if s.testingKnobs.AsyncExecQuickly {
-			delay = 20 * time.Millisecond
-		}
 		for {
+			// A jitter is added to reduce contention between nodes
+			// attempting to run the schema change.
+			delay := time.Duration(float64(asyncSchemaChangeDelay) * (0.1 + rand.Float64()))
+			if s.testingKnobs.AsyncExecQuickly {
+				delay = 20 * time.Millisecond
+			}
 			select {
 			case <-gossipUpdateC:
 				cfg, _ := s.gossip.GetSystemConfig()
@@ -1003,31 +1042,24 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					leaseHolderCache:     s.leaseHolderCache,
 					rangeDescriptorCache: s.rangeDescriptorCache,
 					clock:                s.clock,
+					settings:             s.settings,
 				}
-				// Keep track of existing schema changers.
-				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))
-				for k := range s.schemaChangers {
-					oldSchemaChangers[k] = struct{}{}
-				}
+
 				execAfter := timeutil.Now().Add(delay)
-				// Loop through the configuration to find all the tables.
-				for _, kv := range cfg.Values {
-					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
-						continue
-					}
+				cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 					// Attempt to unmarshal config into a table/database descriptor.
 					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
 						log.Warningf(ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
-						continue
+						return
 					}
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
 						if err := table.ValidateTable(); err != nil {
-							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
-							continue
+							log.Errorf(ctx, "%s: received invalid table descriptor: %v: %s", kv.Key, table, err)
+							return
 						}
 
 						// Keep track of outstanding schema changes.
@@ -1053,13 +1085,16 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
 							schemaChanger.execAfter = execAfter
+							// If the table is dropped and there's a GCDeadline set, use that
+							// instead of the standard delay.
+							if table.Dropped() && table.GCDeadline != 0 {
+								schemaChanger.execAfter = timeutil.Unix(0, table.GCDeadline)
+							}
 							// Keep track of this schema change.
-							// Remove from oldSchemaChangers map.
-							delete(oldSchemaChangers, table.ID)
 							if sc, ok := s.schemaChangers[table.ID]; ok {
 								if sc.mutationID == schemaChanger.mutationID {
 									// Ignore duplicate.
-									continue
+									return
 								}
 							}
 							s.schemaChangers[table.ID] = schemaChanger
@@ -1068,11 +1103,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					case *sqlbase.Descriptor_Database:
 						// Ignore.
 					}
-				}
-				// Delete old schema changers.
-				for k := range oldSchemaChangers {
-					delete(s.schemaChangers, k)
-				}
+				})
 				timer = s.newTimer()
 
 			case <-timer.C:
@@ -1084,8 +1115,17 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
 						evalCtx := createSchemaChangeEvalCtx(s.clock.Now())
-						// TODO(andrei): create a proper ctx for executing schema changes.
-						if err := sc.exec(ctx, false /* inSession */, evalCtx); err != nil {
+
+						execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
+						err := sc.exec(execCtx, false /* inSession */, &evalCtx)
+						cleanup()
+
+						// Advance the execAfter time so that this schema
+						// changer doesn't get called again for a while.
+						sc.execAfter = timeutil.Now().Add(delay)
+						s.schemaChangers[tableID] = sc
+
+						if err != nil {
 							if shouldLogSchemaChangeError(err) {
 								log.Warningf(ctx, "Error executing schema change: %s", err)
 							}
@@ -1099,12 +1139,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							// We successfully executed the schema change. Delete it.
 							delete(s.schemaChangers, tableID)
 						}
-						// Advance the execAfter time so that this schema
-						// changer doesn't get called again for a while.
-						sc.execAfter = timeutil.Now().Add(delay)
+
+						// Only attempt to run one schema changer.
+						break
 					}
-					// Only attempt to run one schema changer.
-					break
 				}
 				timer = s.newTimer()
 
@@ -1115,24 +1153,28 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 	})
 }
 
-// createSchemaChangeEvalCtx creates an EvalContext to be used for backfills.
+// createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
 //
-// TODO(andrei): This EvalContext will be broken for backfills trying to use
+// TODO(andrei): This EvalContext() will be broken for backfills trying to use
 // functions marked with distsqlBlacklist.
-func createSchemaChangeEvalCtx(ts hlc.Timestamp) tree.EvalContext {
+func createSchemaChangeEvalCtx(ts hlc.Timestamp) extendedEvalContext {
 	dummyLocation := time.UTC
-	evalCtx := tree.EvalContext{
-		SearchPath: sqlbase.DefaultSearchPath,
-		Location:   &dummyLocation,
-		// The database is not supposed to be needed in schema changes, as there
-		// shouldn't be unqualified identifiers in backfills, and the pure functions
-		// that need it should have already been evaluated.
-		//
-		// TODO(andrei): find a way to assert that this field is indeed not used.
-		// And in fact it is used by `current_schemas()`, which, although is a pure
-		// function, takes arguments which might be impure (so it can't always be
-		// pre-evaluated).
-		Database: "",
+	evalCtx := extendedEvalContext{
+		EvalContext: tree.EvalContext{
+			SessionData: sessiondata.SessionData{
+				SearchPath: sqlbase.DefaultSearchPath,
+				Location:   dummyLocation,
+				// The database is not supposed to be needed in schema changes, as there
+				// shouldn't be unqualified identifiers in backfills, and the pure functions
+				// that need it should have already been evaluated.
+				//
+				// TODO(andrei): find a way to assert that this field is indeed not used.
+				// And in fact it is used by `current_schemas()`, which, although is a pure
+				// function, takes arguments which might be impure (so it can't always be
+				// pre-evaluated).
+				Database: "",
+			},
+		},
 	}
 	// The backfill is going to use the current timestamp for the various
 	// functions, like now(), that need it.  It's possible that the backfill has

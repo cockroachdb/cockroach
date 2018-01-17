@@ -39,6 +39,22 @@ func MakeStoreKey(suffix, detail roachpb.RKey) roachpb.Key {
 	return key
 }
 
+// DecodeStoreKey returns the suffix and detail portions of a local
+// store key.
+func DecodeStoreKey(key roachpb.Key) (suffix, detail roachpb.RKey, err error) {
+	if !bytes.HasPrefix(key, localStorePrefix) {
+		return nil, nil, errors.Errorf("key %s does not have %s prefix", key, localStorePrefix)
+	}
+	// Cut the prefix, the Range ID, and the infix specifier.
+	key = key[len(localStorePrefix):]
+	if len(key) < localSuffixLength {
+		return nil, nil, errors.Errorf("malformed key does not contain local store suffix")
+	}
+	suffix = roachpb.RKey(key[:localSuffixLength])
+	detail = roachpb.RKey(key[localSuffixLength:])
+	return suffix, detail, nil
+}
+
 // StoreIdentKey returns a store-local key for the store metadata.
 func StoreIdentKey() roachpb.Key {
 	return MakeStoreKey(localStoreIdentSuffix, nil)
@@ -57,6 +73,40 @@ func StoreClusterVersionKey() roachpb.Key {
 // StoreLastUpKey returns the key for the store's "last up" timestamp.
 func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
+}
+
+// StoreSuggestedCompactionKey returns a store-local key for a
+// suggested compaction. It combines the specified start and end keys.
+func StoreSuggestedCompactionKey(start, end roachpb.Key) roachpb.Key {
+	var detail roachpb.RKey
+	detail = encoding.EncodeBytesAscending(detail, start)
+	detail = encoding.EncodeBytesAscending(detail, end)
+	return MakeStoreKey(localStoreSuggestedCompactionSuffix, detail)
+}
+
+// DecodeStoreSuggestedCompactionKey returns the start and end keys of
+// the suggested compaction's span.
+func DecodeStoreSuggestedCompactionKey(key roachpb.Key) (start, end roachpb.Key, err error) {
+	var suffix, detail roachpb.RKey
+	suffix, detail, err = DecodeStoreKey(key)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !suffix.Equal(localStoreSuggestedCompactionSuffix) {
+		return nil, nil, errors.Errorf("key with suffix %q != %q", suffix, localStoreSuggestedCompactionSuffix)
+	}
+	detail, start, err = encoding.DecodeBytesAscending(detail, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	detail, end, err = encoding.DecodeBytesAscending(detail, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(detail) != 0 {
+		return nil, nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	return start, end, nil
 }
 
 // NodeLivenessKey returns the key for the node liveness record.
@@ -165,9 +215,13 @@ func DecodeAbortSpanKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
 	return txnID, err
 }
 
-// RaftTombstoneKey returns a system-local key for a raft tombstone.
-func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RaftTombstoneKey()
+// RaftTombstoneIncorrectLegacyKey returns a system-local key for a raft tombstone.
+// This key was accidentally made replicated though it is not, requiring awkward
+// workarounds. This method and all users can be removed in any binary version > 2.1.
+//
+// See https://github.com/cockroachdb/cockroach/issues/12154.
+func RaftTombstoneIncorrectLegacyKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RaftTombstoneIncorrectLegacyKey()
 }
 
 // RaftAppliedIndexKey returns a system-local key for a raft applied index.
@@ -234,6 +288,11 @@ func makeRangeIDUnreplicatedKey(
 	key = append(key, suffix...)
 	key = append(key, detail...)
 	return key
+}
+
+// RaftTombstoneKey returns a system-local key for a raft tombstone.
+func RaftTombstoneKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RaftTombstoneKey()
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.
@@ -752,8 +811,8 @@ func (b RangeIDPrefixBuf) AbortSpanKey(txnID uuid.UUID) roachpb.Key {
 	return encoding.EncodeBytesAscending(key, txnID.GetBytes())
 }
 
-// RaftTombstoneKey returns a system-local key for a raft tombstone.
-func (b RangeIDPrefixBuf) RaftTombstoneKey() roachpb.Key {
+// RaftTombstoneIncorrectLegacyKey returns a system-local key for a raft tombstone.
+func (b RangeIDPrefixBuf) RaftTombstoneIncorrectLegacyKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRaftTombstoneSuffix...)
 }
 
@@ -797,6 +856,11 @@ func (b RangeIDPrefixBuf) RangeLastGCKey() roachpb.Key {
 // threshold on the txn span.
 func (b RangeIDPrefixBuf) RangeTxnSpanGCThresholdKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalTxnSpanGCThresholdSuffix...)
+}
+
+// RaftTombstoneKey returns a system-local key for a raft tombstone.
+func (b RangeIDPrefixBuf) RaftTombstoneKey() roachpb.Key {
+	return append(b.unreplicatedPrefix(), LocalRaftTombstoneSuffix...)
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.

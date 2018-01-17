@@ -16,10 +16,10 @@
 package sql
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,7 +29,7 @@ import (
 type EventLogType string
 
 // NOTE: When you add a new event type here. Please manually add it to
-// ui/app/util/eventTypes.ts so that it will be recognized in the UI.
+// pkg/ui/src/util/eventTypes.ts so that it will be recognized in the UI.
 const (
 	// EventLogCreateDatabase is recorded when a database is created.
 	EventLogCreateDatabase EventLogType = "create_database"
@@ -47,6 +47,8 @@ const (
 	EventLogCreateIndex EventLogType = "create_index"
 	// EventLogDropIndex is recorded when an index is dropped.
 	EventLogDropIndex EventLogType = "drop_index"
+	// EventLogAlterIndex is recorded when an index is altered.
+	EventLogAlterIndex EventLogType = "alter_index"
 
 	// EventLogCreateView is recorded when a view is created.
 	EventLogCreateView EventLogType = "create_view"

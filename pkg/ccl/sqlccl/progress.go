@@ -9,9 +9,8 @@
 package sqlccl
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -34,7 +33,7 @@ type jobProgressLogger struct {
 	job           *jobs.Job
 	startFraction float32
 	totalChunks   int
-	progressedFn  jobs.ProgressedFn
+	progressedFn  func(context.Context, jobs.Details)
 
 	// The remaining fields are for internal use only.
 	completedChunks      int
@@ -64,7 +63,12 @@ func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 	}
 	jpl.lastReportedAt = timeutil.Now()
 	jpl.lastReportedFraction = fraction
-	return jpl.job.Progressed(ctx, fraction, jpl.progressedFn)
+	return jpl.job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+		if jpl.progressedFn != nil {
+			jpl.progressedFn(ctx, details)
+		}
+		return fraction
+	})
 }
 
 // loop calls chunkFinished for every message received over chunkCh. It exits

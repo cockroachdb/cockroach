@@ -15,12 +15,12 @@
 package sql
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"golang.org/x/net/context"
 )
 
 // LeaseRemovalTracker can be used to wait for leases to be removed from the

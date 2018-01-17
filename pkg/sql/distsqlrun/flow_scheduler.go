@@ -16,8 +16,7 @@ package distsqlrun
 
 import (
 	"container/list"
-
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"

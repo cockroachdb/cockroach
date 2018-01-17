@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -50,11 +50,6 @@ func (f *filterNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return f.source.info.NodeFormatter(idx)
 }
 
-// Start implements the planNode interface.
-func (f *filterNode) Start(params runParams) error {
-	return f.source.plan.Start(params)
-}
-
 // Next implements the planNode interface.
 func (f *filterNode) Next(params runParams) (bool, error) {
 	for {
@@ -62,9 +57,9 @@ func (f *filterNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 
-		params.evalCtx.IVarHelper = &f.ivarHelper
-		passesFilter, err := sqlbase.RunFilter(f.filter, params.evalCtx)
-		params.evalCtx.IVarHelper = nil
+		params.extendedEvalCtx.IVarHelper = &f.ivarHelper
+		passesFilter, err := sqlbase.RunFilter(f.filter, params.EvalContext())
+		params.extendedEvalCtx.IVarHelper = nil
 		if err != nil {
 			return false, err
 		}

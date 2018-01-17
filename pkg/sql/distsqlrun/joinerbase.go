@@ -15,7 +15,7 @@
 package distsqlrun
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -68,7 +68,7 @@ func (jb *joinerBase) init(
 	jb.eqCols[rightSide] = columns(rightEqColumns)
 	jb.numMergedEqualityColumns = int(numMergedColumns)
 
-	jb.combinedRow = make(sqlbase.EncDatumRow, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
+	jb.combinedRow = make(sqlbase.EncDatumRow, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
 
 	types := make([]sqlbase.ColumnType, 0, len(leftTypes)+len(rightTypes)+jb.numMergedEqualityColumns)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
@@ -89,7 +89,7 @@ func (jb *joinerBase) init(
 	if err := jb.onCond.init(onExpr, types, evalCtx); err != nil {
 		return err
 	}
-	return jb.out.Init(post, types, evalCtx, output)
+	return jb.processorBase.init(post, types, flowCtx, evalCtx, output)
 }
 
 type joinSide uint8
@@ -141,6 +141,7 @@ func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 		if side == rightSide {
 			return false
 		}
+	case fullOuter:
 	}
 	return true
 }
@@ -171,17 +172,20 @@ func (jb *joinerBase) maybeEmitUnmatchedRow(
 
 // render constructs a row with columns from both sides. The ON condition is
 // evaluated; if it fails, returns nil.
+// Note the left and right merged equality columns (i.e. from a USING clause
+// or after simplifying ON left.x = right.x) are NOT checked for equality.
+// See CompareEncDatumRowForMerge.
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
-	jb.combinedRow = jb.combinedRow[:0]
-	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
-		// this function is called only when lrow and rrow match on the equality
+	n := jb.numMergedEqualityColumns
+	for i := 0; i < n; i++ {
+		// This function is called only when lrow and rrow match on the equality
 		// columns which can never happen if there are any NULLs in these
 		// columns. So we know for sure the lrow value is not null
-		value := lrow[jb.eqCols[leftSide][idx]]
-		jb.combinedRow = append(jb.combinedRow, value)
+		jb.combinedRow[i] = lrow[jb.eqCols[leftSide][i]]
 	}
-	jb.combinedRow = append(jb.combinedRow, lrow...)
-	jb.combinedRow = append(jb.combinedRow, rrow...)
+	copy(jb.combinedRow[n:], lrow)
+	copy(jb.combinedRow[n+len(lrow):], rrow)
+
 	if jb.onCond.expr != nil {
 		res, err := jb.onCond.evalFilter(jb.combinedRow)
 		if !res || err != nil {

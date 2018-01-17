@@ -15,13 +15,13 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sync"
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -69,7 +69,7 @@ func TestOutbox(t *testing.T) {
 			row := sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(0))),
 			}
-			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != NeedMoreRows {
+			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != NeedMoreRows {
 				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
 			}
 
@@ -78,7 +78,7 @@ func TestOutbox(t *testing.T) {
 				row = sqlbase.EncDatumRow{
 					sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(-1))),
 				}
-				consumerStatus := outbox.Push(row, ProducerMetadata{})
+				consumerStatus := outbox.Push(row, nil /* meta */)
 				if consumerStatus == DrainRequested {
 					break
 				}
@@ -89,13 +89,13 @@ func TestOutbox(t *testing.T) {
 
 			// Now send another row that the outbox will discard.
 			row = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(2)))}
-			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != DrainRequested {
+			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != DrainRequested {
 				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
 			}
 
 			// Send some metadata.
-			outbox.Push(nil /* row */, ProducerMetadata{Err: errors.Errorf("meta 0")})
-			outbox.Push(nil /* row */, ProducerMetadata{Err: errors.Errorf("meta 1")})
+			outbox.Push(nil /* row */, &ProducerMetadata{Err: errors.Errorf("meta 0")})
+			outbox.Push(nil /* row */, &ProducerMetadata{Err: errors.Errorf("meta 1")})
 			// Send the termination signal.
 			outbox.ProducerDone()
 
@@ -302,7 +302,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			} else {
 				// We're going to perform a RunSyncFlow call and then have the client
 				// cancel the call's context.
-				conn, err := flowCtx.rpcCtx.GRPCDial(addr.String())
+				conn, err := flowCtx.rpcCtx.GRPCDial(addr.String()).Connect(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}

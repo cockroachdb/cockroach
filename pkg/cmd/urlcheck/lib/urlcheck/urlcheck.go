@@ -59,6 +59,8 @@ var ignored = []string{
 	"https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha}",
 	"https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha}",
 	"https://edge-binaries.cockroachdb.com/examples-go/photos.${var.photos_sha}",
+	"https://binaries.cockroachdb.com/cockroach-${FORWARD_REFERENCE_VERSION}.linux-amd64.tgz",
+	"https://binaries.cockroachdb.com/cockroach-${BIDIRECTIONAL_REFERENCE_VERSION}.linux-amd64.tgz",
 	"https://github.com/cockroachdb/cockroach/commits/%s",
 	"https://github.com/cockroachdb/cockroach/issues/%d",
 	"https://ignored:ignored@ignored/ignored",
@@ -87,6 +89,7 @@ var ignored = []string{
 	// These require authentication.
 	"https://console.aws.amazon.com/",
 	"https://github.com/cockroachlabs/registration/",
+	"https://api.github.com/repos/cockroachdb/cockroach/issues",
 	"https://index.docker.io/v1/",
 }
 

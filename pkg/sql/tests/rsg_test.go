@@ -15,6 +15,7 @@
 package tests_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"flag"
 	"fmt"
@@ -27,7 +28,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -57,12 +57,12 @@ func verifyFormat(sql string) error {
 		// Cannot serialize a statement list without parsing it.
 		return nil
 	}
-	formattedSQL := tree.AsStringWithFlags(stmts, tree.FmtSimpleWithPasswords)
+	formattedSQL := tree.AsStringWithFlags(&stmts, tree.FmtShowPasswords)
 	formattedStmts, err := parseStatementList(formattedSQL)
 	if err != nil {
 		return errors.Wrapf(err, "cannot parse output of Format: sql=%q, formattedSQL=%q", sql, formattedSQL)
 	}
-	formattedFormattedSQL := tree.AsStringWithFlags(formattedStmts, tree.FmtSimpleWithPasswords)
+	formattedFormattedSQL := tree.AsStringWithFlags(&formattedStmts, tree.FmtShowPasswords)
 	if formattedSQL != formattedFormattedSQL {
 		return errors.Errorf("Parse followed by Format is not idempotent: %q -> %q != %q", sql, formattedSQL, formattedFormattedSQL)
 	}
@@ -102,6 +102,12 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		}
 		if strings.HasPrefix(s, "REVOKE") || strings.HasPrefix(s, "GRANT") {
 			return errors.New("TODO(mjibson): figure out why these run slowly, may be a bug")
+		}
+		if strings.HasPrefix(s, "SET SESSION CHARACTERISTICS AS TRANSACTION") {
+			return errors.New("setting session characteristics is unsupported")
+		}
+		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
+			return errors.New("READ ONLY settings are unsupported")
 		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
@@ -187,8 +193,11 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				args = append(args, r.GenerateRandomArg(typ))
 			}
 		case tree.VariadicType:
+			for _, t := range ft.FixedTypes {
+				args = append(args, r.GenerateRandomArg(t))
+			}
 			for i := r.Intn(5); i > 0; i-- {
-				args = append(args, r.GenerateRandomArg(ft.Typ))
+				args = append(args, r.GenerateRandomArg(ft.VarType))
 			}
 		default:
 			panic(fmt.Sprintf("unknown fn.Types: %T", ft))

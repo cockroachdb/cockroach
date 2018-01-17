@@ -98,8 +98,7 @@ select '''
 		},
 	}
 
-	// Some other tests (TestDumpRow) mess with this, so make sure it's set.
-	cliCtx.tableDisplayFormat = tableDisplayPretty
+	setCLIDefaultsForTests()
 
 	// We need a temporary file with a name guaranteed to be available.
 	// So open a dummy file.

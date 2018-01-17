@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -47,7 +48,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+		if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
 			return nil, err
 		}
 
@@ -109,9 +110,9 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	}
 
 	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
-	traceKV := p.session.Tracing.KVTracingEnabled()
+	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id := range toTruncate {
-		if err := p.truncateTable(p.session.Ctx(), id, traceKV); err != nil {
+		if err := p.truncateTable(p.EvalContext().Ctx(), id, traceKV); err != nil {
 			return nil, err
 		}
 	}
@@ -121,7 +122,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 
 // truncateTable truncates the data of a table in a single transaction. It
 // drops the table and recreates it with a new ID. The dropped table is
-// GC-ed later through an asynchrnous schema change.
+// GC-ed later through an asynchronous schema change.
 func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
@@ -151,7 +152,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		return err
 	}
 
-	newID, err := GenerateUniqueDescID(ctx, p.session.execCfg.DB)
+	newID, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 	if err != nil {
 		return err
 	}
@@ -347,15 +348,17 @@ func truncateTableInChunks(
 			log.VEventf(ctx, 2, "table %s truncate at row: %d, span: %s", tableDesc.Name, row, resume)
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			rd, err := sqlbase.MakeRowDeleter(txn, tableDesc, nil, nil, false, alloc)
+			rd, err := sqlbase.MakeRowDeleter(
+				txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
+			)
 			if err != nil {
 				return err
 			}
 			td := tableDeleter{rd: rd, alloc: alloc}
-			if err := td.init(txn); err != nil {
+			if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
 				return err
 			}
-			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, traceKV)
+			resume, err = td.deleteAllRows(ctx, resumeAt, chunkSize, noAutoCommit, traceKV)
 			return err
 		}); err != nil {
 			return err

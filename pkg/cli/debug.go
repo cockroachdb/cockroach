@@ -17,13 +17,12 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -34,10 +33,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -69,7 +71,7 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 	return roachpb.RangeID(rangeIDInt), nil
 }
 
-func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.RocksDB, error) {
+func openExistingStore(dir string, stopper *stop.Stopper) (*engine.RocksDB, error) {
 	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
@@ -81,6 +83,7 @@ func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.R
 			Settings:     serverCfg.Settings,
 			Dir:          dir,
 			MaxOpenFiles: maxOpenFiles,
+			MustExist:    true,
 		},
 		cache,
 	)
@@ -92,7 +95,7 @@ func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.R
 }
 
 func printKey(kv engine.MVCCKeyValue) (bool, error) {
-	fmt.Printf("%s", kv.Key)
+	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
 	if debugCtx.sizes {
 		fmt.Printf(" %d %d", len(kv.Key.Key), len(kv.Value))
 	}
@@ -101,11 +104,8 @@ func printKey(kv engine.MVCCKeyValue) (bool, error) {
 }
 
 func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
-	if kv.Key.Timestamp != (hlc.Timestamp{}) {
-		fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
-	} else {
-		fmt.Printf("%s: ", kv.Key.Key)
-	}
+	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
+
 	if debugCtx.sizes {
 		fmt.Printf("%d %d: ", len(kv.Key.Key), len(kv.Value))
 	}
@@ -115,6 +115,7 @@ func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
 		tryMeta,
 		tryTxn,
 		tryRangeIDKey,
+		tryIntent,
 	}
 	for _, decoder := range decoders {
 		out, err := decoder(kv)
@@ -137,7 +138,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		return errors.New("one argument required: dir")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -169,7 +170,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return errors.New("two arguments required: dir range_id")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -184,7 +185,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	iter := storage.NewReplicaDataIterator(&desc, db, debugCtx.replicated)
+	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated)
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return err
@@ -358,6 +359,21 @@ func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
 	return false, nil
 }
 
+func tryIntent(kv engine.MVCCKeyValue) (string, error) {
+	if len(kv.Value) == 0 {
+		return "", errors.New("empty")
+	}
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+		return "", err
+	}
+	s := fmt.Sprintf("%+v", meta)
+	if meta.Txn != nil {
+		s = meta.Txn.Timestamp.String() + " " + s
+	}
+	return s, nil
+}
+
 func getProtoValue(data []byte, msg protoutil.Message) error {
 	value := roachpb.Value{
 		RawBytes: data,
@@ -407,7 +423,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 		return errors.New("one argument required: dir")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -440,7 +456,14 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 				return "", err
 			}
 			ent.Data = nil
-			return fmt.Sprintf("%s by %s\n%s\n", &ent, cmd.ProposerLease, &cmd), nil
+			var leaseStr string
+			if l := cmd.DeprecatedProposerLease; l != nil {
+				// Use the full lease, if available.
+				leaseStr = l.String()
+			} else {
+				leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
+			}
+			return fmt.Sprintf("%s by %s\n%s\n", &ent, leaseStr, &cmd), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
@@ -479,7 +502,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		return errors.New("two arguments required: dir range_id")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -529,7 +552,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("arguments: dir [range_id]")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -568,9 +591,16 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
-		_, info, err := storage.RunGC(context.Background(), &desc, snap, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ hlc.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {
-			}, func(_ []roachpb.Intent, _ storage.ResolveOptions) error { return nil })
+		info, err := storage.RunGC(
+			context.Background(),
+			&desc,
+			snap,
+			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */},
+			func(_ context.Context, _ [][]roachpb.GCRequest_GCKey, _ *storage.GCInfo) error { return nil },
+			func(_ context.Context, _ []roachpb.Intent) error { return nil },
+			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
+		)
 		if err != nil {
 			return err
 		}
@@ -588,6 +618,7 @@ Perform local consistency checks of a single store.
 
 Capable of detecting the following errors:
 * Raft logs that are inconsistent with their metadata
+* MVCC stats that are inconsistent with the data within the range
 `,
 	RunE: MaybeDecorateGRPCError(runDebugCheckStoreCmd),
 }
@@ -603,15 +634,60 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
+	ctx := context.Background()
+
 	if len(args) != 1 {
 		return errors.New("one required argument: dir")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
+	if err := runDebugCheckStoreRaft(ctx, db); err != nil {
+		return err
+	}
+	return runDebugCheckStoreDescriptors(ctx, db)
+}
 
+func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) error {
+	fmt.Println("checking MVCC stats")
+	defer fmt.Println()
+
+	var failed bool
+	if err := storage.IterateRangeDescriptors(ctx, db,
+		func(desc roachpb.RangeDescriptor) (bool, error) {
+			claimedMS, err := stateloader.Make(serverCfg.Settings, desc.RangeID).LoadMVCCStats(ctx, db)
+			if err != nil {
+				return false, err
+			}
+			ms, err := storage.ComputeStatsForRange(&desc, db, claimedMS.LastUpdateNanos)
+			if err != nil {
+				return false, err
+			}
+
+			if !ms.Equal(*claimedMS) {
+				var prefix string
+				if !claimedMS.ContainsEstimates {
+					failed = true
+				} else {
+					prefix = "(ignored) "
+				}
+				fmt.Printf("\n%s%+v: diff(actual, claimed): %s\n", prefix, desc, strings.Join(pretty.Diff(ms, *claimedMS), "\n"))
+			} else {
+				fmt.Print(".")
+			}
+			return false, nil
+		}); err != nil {
+		return err
+	}
+	if failed {
+		return errors.New("check failed")
+	}
+	return nil
+}
+
+func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 	// Iterate over the entire range-id-local space.
 	start := roachpb.Key(keys.LocalRangeIDPrefix)
 	end := start.PrefixEnd()
@@ -625,7 +701,7 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 		return replicaInfo[rangeID]
 	}
 
-	if _, err := engine.MVCCIterate(context.Background(), db, start, end, hlc.MaxTimestamp,
+	if _, err := engine.MVCCIterate(ctx, db, start, end, hlc.MaxTimestamp,
 		false /* consistent */, nil, /* txn */
 		false /* reverse */, func(kv roachpb.KeyValue) (bool, error) {
 			rangeID, _, suffix, detail, err := keys.DecodeRangeIDKey(kv.Key)
@@ -729,12 +805,31 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 		return errors.New("one argument is required")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
 
-	return db.Compact()
+	{
+		approxBytesBefore, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		if err != nil {
+			return errors.Wrap(err, "while computing approximate size before compaction")
+		}
+		fmt.Printf("approximate reported database size before compaction: %s\n", humanizeutil.IBytes(int64(approxBytesBefore)))
+	}
+
+	if err := db.Compact(); err != nil {
+		return errors.Wrap(err, "while compacting")
+	}
+
+	{
+		approxBytesAfter, err := db.ApproximateDiskBytes(roachpb.KeyMin, roachpb.KeyMax)
+		if err != nil {
+			return errors.Wrap(err, "while computing approximate size after compaction")
+		}
+		fmt.Printf("approximate reported database size after compaction: %s\n", humanizeutil.IBytes(int64(approxBytesAfter)))
+	}
+	return nil
 }
 
 var debugSSTablesCmd = &cobra.Command{
@@ -772,7 +867,7 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 		return errors.New("one argument is required")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -905,7 +1000,6 @@ var debugCmds = []*cobra.Command{
 	debugCompactCmd,
 	debugSSTablesCmd,
 	debugGossipValuesCmd,
-	rangeCmd,
 	debugEnvCmd,
 	debugZipCmd,
 }

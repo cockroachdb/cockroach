@@ -16,12 +16,11 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

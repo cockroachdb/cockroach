@@ -77,11 +77,17 @@ ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE NO AC
 statement ok
 ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
-statement error pq: unsupported: ON DELETE CASCADE
+statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE CASCADE
 
-statement error pq: unsupported: ON UPDATE CASCADE
+statement ok
+ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
+
+statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE CASCADE
+
+statement ok
+ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
 statement error pq: unsupported: ON DELETE SET NULL
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE SET NULL
@@ -393,7 +399,7 @@ statement ok
 ALTER TABLE delivery DROP COLUMN "item"
 
 statement ok
-DROP INDEX products@products_upc_key
+DROP INDEX products@products_upc_key CASCADE
 
 statement error index "orders_product_idx" is in use as a foreign key constraint
 DROP INDEX orders@orders_product_idx
@@ -872,6 +878,8 @@ pkref_b  CREATE TABLE pkref_b (
         FAMILY "primary" (b)
 )
 
+subtest 20042
+
 statement ok
 CREATE TABLE test20042 (
   x STRING PRIMARY KEY
@@ -890,6 +898,8 @@ DELETE FROM test20042 WHERE x = 'pk2';
 
 statement ok
 DELETE FROM test20042 WHERE x = 'pk1';
+
+subtest 20045
 
 statement ok
 CREATE TABLE test20045 (
@@ -915,3 +925,62 @@ DELETE FROM test20045 WHERE x = 'pk2';
 
 statement ok
 DELETE FROM test20045 WHERE x = 'pk1';
+
+## Delete cascade without privileges
+
+statement ok
+CREATE DATABASE d;
+
+statement ok
+CREATE TABLE d.a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE d.b (
+  id STRING PRIMARY KEY
+ ,a_id STRING REFERENCES d.a ON DELETE CASCADE
+);
+
+statement ok
+INSERT INTO d.a VALUES ('a1');
+
+statement ok
+INSERT INTO d.b VALUES ('b1', 'a1');
+
+statement ok
+GRANT ALL ON DATABASE d TO testuser;
+
+statement ok
+GRANT ALL ON d.a TO testuser;
+
+user testuser
+
+statement error user testuser does not have SELECT privilege on relation b
+DELETE FROM d.a WHERE id = 'a1';
+
+user root
+
+statement ok
+GRANT SELECT ON d.b TO testuser;
+
+user testuser
+
+statement error user testuser does not have DELETE privilege on relation b
+DELETE FROM d.a WHERE id = 'a1';
+
+user root
+
+statement ok
+GRANT DELETE ON d.b TO testuser;
+
+user testuser
+
+statement ok
+DELETE FROM d.a WHERE id = 'a1';
+
+user root
+
+# Clean up after the test.
+statement ok
+DROP DATABASE d CASCADE;

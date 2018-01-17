@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -74,11 +75,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		case tree.DropRestrict:
 			return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
 				"database %q is not empty and RESTRICT was specified",
-				tree.ErrString(tree.Name(dbDesc.Name)))
+				tree.ErrNameString(&dbDesc.Name))
 		case tree.DropDefault:
 			// The default is CASCADE, however be cautious if CASCADE was
 			// not specified explicitly.
-			if p.session.SafeUpdates {
+			if p.SessionData().SafeUpdates {
 				return nil, pgerror.NewDangerousStatementErrorf(
 					"DROP DATABASE on non-empty database without explicit CASCADE")
 			}
@@ -114,7 +115,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td}, nil
 }
 
-func (n *dropDatabaseNode) Start(params runParams) error {
+func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	tbNameStrings := make([]string, 0, len(n.td))
@@ -139,7 +140,7 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 
 	b := &client.Batch{}
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
 		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
@@ -149,16 +150,17 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 	// Delete the zone config entry for this database.
 	b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
-			if err := expectDeleted(systemConfig, key); err != nil {
-				return err
+	params.extendedEvalCtx.TestingVerifyMetadata.setTestingVerifyMetadata(
+		func(systemConfig config.SystemConfig) error {
+			for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
+				if err := expectDeleted(systemConfig, key); err != nil {
+					return err
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 
-	p.session.tables.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
+	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
@@ -171,13 +173,13 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 		p.txn,
 		EventLogDropDatabase,
 		int32(n.dbDesc.ID),
-		int32(p.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			DatabaseName          string
 			Statement             string
 			User                  string
 			DroppedTablesAndViews []string
-		}{n.n.Name.String(), n.n.String(), p.session.User, tbNameStrings},
+		}{n.n.Name.String(), n.n.String(), p.SessionData().User, tbNameStrings},
 	)
 }
 

@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 	"go/constant"
 	"go/token"
@@ -125,12 +124,12 @@ type NumVal struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (expr *NumVal) Format(buf *bytes.Buffer, f FmtFlags) {
+func (expr *NumVal) Format(ctx *FmtCtx) {
 	s := expr.OrigString
 	if s == "" {
 		s = expr.Value.String()
 	}
-	buf.WriteString(s)
+	ctx.WriteString(s)
 }
 
 // canBeInt64 checks if it's possible for the value to become an int64:
@@ -368,11 +367,12 @@ func (expr *StrVal) RawString() string {
 }
 
 // Format implements the NodeFormatter interface.
-func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
+func (expr *StrVal) Format(ctx *FmtCtx) {
+	buf, f := ctx.Buffer, ctx.flags
 	if expr.bytesEsc {
 		lex.EncodeSQLBytes(buf, expr.s)
 	} else {
-		lex.EncodeSQLStringWithFlags(buf, expr.s, f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(buf, expr.s, f.EncodeFlags())
 	}
 }
 

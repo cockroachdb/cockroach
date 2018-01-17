@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 // HelpMessage describes a contextual help message.
@@ -88,7 +89,7 @@ func helpWith(sqllex sqlLexer, helpText string) int {
 // "in error", with the error set to a contextual help message about
 // the current built-in function.
 func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
-	d, err := f.Resolve(tree.SearchPath{})
+	d, err := f.Resolve(sessiondata.SearchPath{})
 	if err != nil {
 		return 1
 	}
@@ -131,6 +132,12 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 
 	sqllex.(*Scanner).SetHelp(msg)
 	return 1
+}
+
+func helpWithFunctionByName(sqllex sqlLexer, s string) int {
+	n := tree.Name(s)
+	un := tree.UnresolvedName{&n}
+	return helpWithFunction(sqllex, tree.ResolvableFunctionReference{FunctionReference: &un})
 }
 
 const (

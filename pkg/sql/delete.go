@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"context"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -39,8 +38,12 @@ type deleteNode struct {
 
 	tw tableDeleter
 
-	run deleteRun
+	run        deleteRun
+	autoCommit autoCommitOpt
 }
+
+// deleteNode implements the autoCommitNode interface.
+var _ autoCommitNode = &deleteNode{}
 
 // Delete removes rows from a table.
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
@@ -49,11 +52,19 @@ type deleteNode struct {
 func (p *planner) Delete(
 	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
 ) (planNode, error) {
-	if n.Where == nil && p.session.SafeUpdates {
+	resetter, err := p.initWith(ctx, n.With)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter(p)
+	}
+
+	if n.Where == nil && p.SessionData().SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
 	}
 
-	tn, err := p.getAliasedTableName(n.Table)
+	tn, alias, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -70,16 +81,19 @@ func (p *planner) Delete(
 		requestedCols = en.tableDesc.Columns
 	}
 
-	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckDeletes)
-	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
-		return nil, err
-	}
-	rd, err := sqlbase.MakeRowDeleter(p.txn, en.tableDesc, fkTables, requestedCols,
-		sqlbase.CheckFKs, &p.alloc)
+	fkTables, err := sqlbase.TablesNeededForFKs(
+		ctx, *en.tableDesc, sqlbase.CheckDeletes, p.lookupFKTable, p.CheckPrivilege,
+	)
 	if err != nil {
 		return nil, err
 	}
-	tw := tableDeleter{rd: rd, autoCommit: p.autoCommit, alloc: &p.alloc}
+	rd, err := sqlbase.MakeRowDeleter(
+		p.txn, en.tableDesc, fkTables, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
+	)
+	if err != nil {
+		return nil, err
+	}
+	tw := tableDeleter{rd: rd, alloc: &p.alloc}
 
 	// TODO(knz): Until we split the creation of the node from Start()
 	// for the SelectClause too, we cannot cache this. This is because
@@ -87,10 +101,10 @@ func (p *planner) Delete(
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols),
+		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols, true /* forUpdateOrDelete */),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, n.OrderBy, n.Limit, nil, publicAndNonPublicColumns)
+	}, n.OrderBy, n.Limit, nil, nil, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +117,7 @@ func (p *planner) Delete(
 	}
 
 	if err := dn.run.initEditNode(
-		ctx, &dn.editNodeBase, rows, &dn.tw, tn, n.Returning, desiredTypes); err != nil {
+		ctx, &dn.editNodeBase, rows, &dn.tw, alias, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 
@@ -118,11 +132,10 @@ type deleteRun struct {
 	fastPath bool
 }
 
-func (d *deleteNode) Start(params runParams) error {
+func (d *deleteNode) startExec(params runParams) error {
 	if err := d.run.startEditNode(params, &d.editNodeBase); err != nil {
 		return err
 	}
-
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
 	// TODO(dt): We could probably be smarter when presented with an index-join,
@@ -136,7 +149,7 @@ func (d *deleteNode) Start(params runParams) error {
 		return d.fastDelete(params, scan)
 	}
 
-	return d.run.tw.init(d.p.txn)
+	return d.run.tw.init(d.p.txn, params.EvalContext())
 }
 
 func (d *deleteNode) Next(params runParams) (bool, error) {
@@ -144,7 +157,7 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 
-	traceKV := d.p.session.Tracing.KVTracingEnabled()
+	traceKV := d.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
 	next, err := d.run.rows.Next(params)
 	if !next {
@@ -153,7 +166,7 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			_, err = d.tw.finalize(params.ctx, traceKV)
+			_, err = d.tw.finalize(params.ctx, d.autoCommit, traceKV)
 		}
 		return false, err
 	}
@@ -224,16 +237,22 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
 		return err
 	}
 
-	if err := d.tw.init(params.p.txn); err != nil {
+	if err := d.tw.init(params.p.txn, params.EvalContext()); err != nil {
 		return err
 	}
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return err
 	}
-	rowCount, err := d.tw.fastDelete(params.ctx, scan, params.p.session.Tracing.KVTracingEnabled())
+	rowCount, err := d.tw.fastDelete(
+		params.ctx, scan, d.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 	if err != nil {
 		return err
 	}
 	d.rh.rowCount += rowCount
 	return nil
+}
+
+// enableAutoCommit is part of the autoCommitNode interface.
+func (d *deleteNode) enableAutoCommit() {
+	d.autoCommit = autoCommitEnabled
 }

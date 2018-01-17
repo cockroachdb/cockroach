@@ -16,9 +16,12 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,7 +30,6 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -48,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -119,7 +122,9 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 
-	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: cfg.Settings.Tracer}, &base.Config{Insecure: true}, cfg.Clock, stopper)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: cfg.Settings.Tracer}, &base.Config{Insecure: true}, cfg.Clock,
+		stopper, &cfg.Settings.Version)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	cfg.StorePool = NewTestStorePool(*cfg)
@@ -176,9 +181,140 @@ func createTestStoreWithConfig(t testing.TB, stopper *stop.Stopper, cfg *StoreCo
 	return store
 }
 
+// TestIterateIDPrefixKeys lays down a number of tombstones (at keys.RaftTombstoneKey) interspersed
+// with other irrelevant keys (both chosen randomly). It then verifies that IterateIDPrefixKeys
+// correctly returns only the relevant keys and values.
+func TestIterateIDPrefixKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
+
+	seed := randutil.NewPseudoSeed()
+	//const seed = -1666367124291055473
+	t.Logf("seed is %d", seed)
+	rng := rand.New(rand.NewSource(seed))
+
+	ops := []func(rangeID roachpb.RangeID) roachpb.Key{
+		keys.RaftAppliedIndexKey, // replicated; sorts before tombstone
+		keys.RaftHardStateKey,    // unreplicated; sorts after tombstone
+		// Replicated key-anchored local key (i.e. not one we should care about).
+		// Will be written at zero timestamp, but that's ok.
+		func(rangeID roachpb.RangeID) roachpb.Key {
+			return keys.RangeDescriptorKey([]byte(fmt.Sprintf("fakerange%d", rangeID)))
+		},
+		func(rangeID roachpb.RangeID) roachpb.Key {
+			return roachpb.Key(fmt.Sprintf("fakeuserkey%d", rangeID))
+		},
+	}
+
+	const rangeCount = 10
+	rangeIDFn := func() roachpb.RangeID {
+		return 1 + roachpb.RangeID(rng.Intn(10*rangeCount)) // spread rangeIDs out
+	}
+
+	// Write a number of keys that should be irrelevant to the iteration in this test.
+	for i := 0; i < rangeCount; i++ {
+		rangeID := rangeIDFn()
+
+		// Grab between one and all ops, randomly.
+		for _, opIdx := range rng.Perm(len(ops))[:rng.Intn(1+len(ops))] {
+			key := ops[opIdx](rangeID)
+			t.Logf("writing op=%d rangeID=%d", opIdx, rangeID)
+			if err := engine.MVCCPut(
+				ctx,
+				eng,
+				nil, /* ms */
+				key,
+				hlc.Timestamp{},
+				roachpb.MakeValueFromString("fake value for "+key.String()),
+				nil, /* txn */
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	type seenT struct {
+		rangeID   roachpb.RangeID
+		tombstone roachpb.RaftTombstone
+	}
+
+	// Next, write the keys we're planning to see again.
+	var wanted []seenT
+	{
+		used := make(map[roachpb.RangeID]struct{})
+		for {
+			rangeID := rangeIDFn()
+			if _, ok := used[rangeID]; ok {
+				// We already wrote this key, so roll the dice again.
+				continue
+			}
+
+			tombstone := roachpb.RaftTombstone{
+				NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
+			}
+
+			used[rangeID] = struct{}{}
+			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
+
+			t.Logf("writing tombstone at rangeID=%d", rangeID)
+			if err := engine.MVCCPutProto(
+				ctx, eng, nil /* ms */, keys.RaftTombstoneKey(rangeID), hlc.Timestamp{}, nil /* txn */, &tombstone,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			if len(wanted) >= rangeCount {
+				break
+			}
+		}
+	}
+
+	sort.Slice(wanted, func(i, j int) bool {
+		return wanted[i].rangeID < wanted[j].rangeID
+	})
+
+	var seen []seenT
+	var tombstone roachpb.RaftTombstone
+
+	handleTombstone := func(rangeID roachpb.RangeID) (more bool, _ error) {
+		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
+		return true, nil
+	}
+
+	if err := IterateIDPrefixKeys(ctx, eng, keys.RaftTombstoneKey, &tombstone, handleTombstone); err != nil {
+		t.Fatal(err)
+	}
+	placeholder := seenT{
+		rangeID: roachpb.RangeID(9999),
+	}
+
+	if len(wanted) != len(seen) {
+		t.Errorf("wanted %d results, got %d", len(wanted), len(seen))
+	}
+
+	for len(wanted) < len(seen) {
+		wanted = append(wanted, placeholder)
+	}
+	for len(seen) < len(wanted) {
+		seen = append(seen, placeholder)
+	}
+
+	if diff := pretty.Diff(wanted, seen); len(diff) > 0 {
+		pretty.Ldiff(t, wanted, seen)
+		t.Fatal("diff(wanted, seen) is nonempty")
+	}
+}
+
 // TestStoreInitAndBootstrap verifies store initialization and bootstrap.
 func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	// We need a fixed clock to avoid LastUpdateNanos drifting on us.
 	cfg := TestStoreConfig(hlc.NewClock(func() int64 { return 123 }, time.Nanosecond))
 	stopper := stop.NewStopper()
@@ -219,12 +355,79 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		}
 	}
 
+	// Put down a few fake legacy tombstones (#12154) to jog `migrateLegacyTombstones`, including
+	// one for the existing range, but also some for non-existing ones. We'll check that these get
+	// migrated properly.
+	//
+	// Range 1 actually exists (since we will bootstrap it). The rest don't.
+	legacyTombstones := []struct {
+		rangeID         roachpb.RangeID
+		legacyTombstone roachpb.ReplicaID // legacy tombstone's NextReplicaID
+		newTombstone    roachpb.ReplicaID // new-style tombstone's NextReplicaID (if nonzero)
+		exNewTombstone  roachpb.ReplicaID // resulting new-style tombstone
+	}{
+		{rangeID: 1, legacyTombstone: 1, exNewTombstone: 1},
+		{rangeID: 200, legacyTombstone: 123, newTombstone: 122, exNewTombstone: 123},
+		{rangeID: 300, legacyTombstone: 333, newTombstone: 335, exNewTombstone: 335},
+	}
+
+	for _, stone := range legacyTombstones {
+		legacyTombstoneKey := keys.RaftTombstoneIncorrectLegacyKey(stone.rangeID)
+
+		if err := engine.MVCCPutProto(
+			ctx, eng, nil /* ms */, legacyTombstoneKey, hlc.Timestamp{}, nil, /* txn */
+			&roachpb.RaftTombstone{NextReplicaID: stone.legacyTombstone},
+		); err != nil {
+			t.Fatal(err)
+		}
+		if stone.newTombstone == 0 {
+			// No new-style tombstone for this key is present.
+			continue
+		}
+
+		tombstoneKey := keys.RaftTombstoneKey(stone.rangeID)
+		if err := engine.MVCCPutProto(
+			ctx, eng, nil /* ms */, tombstoneKey, hlc.Timestamp{},
+			nil /* txn */, &roachpb.RaftTombstone{NextReplicaID: stone.newTombstone},
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Now, attempt to initialize a store with a now-bootstrapped range.
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := store.Start(ctx, stopper); err != nil {
 			t.Fatalf("failure initializing bootstrapped store: %s", err)
 		}
+
+		// Check that `migrateLegacyTombstone` did what it was supposed to.
+		for _, stone := range legacyTombstones {
+			legacyTombstoneKey := keys.RaftTombstoneIncorrectLegacyKey(stone.rangeID)
+			if ok, err := engine.MVCCGetProto(
+				ctx, store.engine, legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, nil, /* msg */
+			); err != nil {
+				t.Fatal(err)
+			} else if ok {
+				t.Fatalf("unexpectedly found legacy tombstone key at %s", legacyTombstoneKey)
+			}
+
+			tombstoneKey := keys.RaftTombstoneKey(stone.rangeID)
+			var tombstone roachpb.RaftTombstone
+			ok, err := engine.MVCCGetProto(
+				ctx, store.engine, tombstoneKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &tombstone, /* msg */
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatalf("unexpectedly did not find migrated tombstone key at %s", legacyTombstoneKey)
+			}
+			if tombstone.NextReplicaID != stone.exNewTombstone {
+				t.Fatalf("tombstone at %d is %d, but wanted %d", stone.rangeID, tombstone.NextReplicaID, stone.exNewTombstone)
+			}
+		}
+
 		// 1st range should be available.
 		r, err := store.GetReplica(1)
 		if err != nil {
@@ -1002,7 +1205,8 @@ func splitTestRange(store *Store, key, splitKey roachpb.RKey, t *testing.T) *Rep
 	if repl == nil {
 		t.Fatalf("couldn't lookup range for key %q", key)
 	}
-	desc, err := store.NewRangeDescriptor(splitKey, repl.Desc().EndKey, repl.Desc().Replicas)
+	desc, err := store.NewRangeDescriptor(
+		context.Background(), splitKey, repl.Desc().EndKey, repl.Desc().Replicas)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1063,7 +1267,8 @@ func TestStoreRangeIDAllocation(t *testing.T) {
 	// to rangeIDAllocCount * 3 + 1.
 	for i := 0; i < rangeIDAllocCount*3; i++ {
 		replicas := []roachpb.ReplicaDescriptor{{StoreID: store.StoreID()}}
-		desc, err := store.NewRangeDescriptor(roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)), replicas)
+		desc, err := store.NewRangeDescriptor(context.Background(),
+			roachpb.RKey(fmt.Sprintf("%03d", i)), roachpb.RKey(fmt.Sprintf("%03d", i+1)), replicas)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1718,6 +1923,87 @@ func TestStoreReadInconsistent(t *testing.T) {
 		} else if !bytes.Equal(val2, []byte("value2")) {
 			t.Errorf("expected value %q, got %q", []byte("value2"), val2)
 		}
+	}
+}
+
+// TestStoreScanResumeTSCache verifies that the timestamp cache is
+// properly updated when scans and reverse scans return partial
+// results and a resume span.
+func TestStoreScanResumeTSCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store, manualClock := createTestStore(t, stopper)
+
+	// Write three keys at time t0.
+	t0 := 1 * time.Second
+	manualClock.Set(t0.Nanoseconds())
+	h := roachpb.Header{Timestamp: makeTS(t0.Nanoseconds(), 0)}
+	for _, keyStr := range []string{"a", "b", "c"} {
+		key := roachpb.Key(keyStr)
+		putArgs := putArgs(key, []byte("value"))
+		if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &putArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Scan the span at t1 with max keys and verify the expected resume span.
+	span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}
+	sArgs := scanArgs(span.Key, span.EndKey)
+	t1 := 2 * time.Second
+	manualClock.Set(t1.Nanoseconds())
+	h.Timestamp = makeTS(t1.Nanoseconds(), 0)
+	h.MaxSpanRequestKeys = 2
+	reply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &sArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	sReply := reply.(*roachpb.ScanResponse)
+	if a, e := len(sReply.Rows), 2; a != e {
+		t.Errorf("expected %d rows; got %d", e, a)
+	}
+	expResumeSpan := &roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}
+	if a, e := sReply.ResumeSpan, expResumeSpan; !reflect.DeepEqual(a, e) {
+		t.Errorf("expected resume span %s; got %s", e, a)
+	}
+
+	// Verify the timestamp cache has been set for "b".Next(), but not for "c".
+	rTS, _ := store.tsCache.GetMaxRead(roachpb.Key("b").Next(), nil)
+	if a, e := rTS, makeTS(t1.Nanoseconds(), 0); a != e {
+		t.Errorf("expected timestamp cache for \"b\".Next() set to %s; got %s", e, a)
+	}
+	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("c"), nil)
+	if a, lt := rTS, makeTS(t1.Nanoseconds(), 0); !a.Less(lt) {
+		t.Errorf("expected timestamp cache for \"c\" set less than %s; got %s", lt, a)
+	}
+
+	// Reverse scan the span at t1 with max keys and verify the expected resume span.
+	t2 := 3 * time.Second
+	manualClock.Set(t2.Nanoseconds())
+	h.Timestamp = makeTS(t2.Nanoseconds(), 0)
+	rsArgs := reverseScanArgs(span.Key, span.EndKey)
+	reply, pErr = client.SendWrappedWith(context.Background(), store.testSender(), h, &rsArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	rsReply := reply.(*roachpb.ReverseScanResponse)
+	if a, e := len(rsReply.Rows), 2; a != e {
+		t.Errorf("expected %d rows; got %d", e, a)
+	}
+	expResumeSpan = &roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("a").Next()}
+	if a, e := rsReply.ResumeSpan, expResumeSpan; !reflect.DeepEqual(a, e) {
+		t.Errorf("expected resume span %s; got %s", e, a)
+	}
+
+	// Verify the timestamp cache has been set for "a".Next(), but not for "a".
+	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("a").Next(), nil)
+	if a, e := rTS, makeTS(t2.Nanoseconds(), 0); a != e {
+		t.Errorf("expected timestamp cache for \"a\".Next() set to %s; got %s", e, a)
+	}
+	rTS, _ = store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+	if a, lt := rTS, makeTS(t2.Nanoseconds(), 0); !a.Less(lt) {
+		t.Errorf("expected timestamp cache for \"a\" set less than %s; got %s", lt, a)
 	}
 }
 

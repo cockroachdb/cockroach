@@ -15,10 +15,9 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"unsafe"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -447,8 +446,8 @@ func SynthesizeClusterVersionFromEngines(
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
 		for _, v := range []roachpb.Version{cv.MinimumVersion, cv.UseVersion} {
 			if serverVersion.Less(v) {
-				return cluster.ClusterVersion{}, errors.Errorf("engine %s requires at least v%s, but running version is %s",
-					eng, v, serverVersion)
+				return cluster.ClusterVersion{}, errors.Errorf("cockroach version v%s is incompatible with data in store %s; use version v%s or later",
+					serverVersion, eng, v)
 			}
 		}
 
@@ -484,9 +483,9 @@ func SynthesizeClusterVersionFromEngines(
 		// may not yet have picked up the final versions we're actually planning
 		// to use.
 		if v.Version.Less(minSupportedVersion) {
-			return cluster.ClusterVersion{}, errors.Errorf("engine %s at v%s too old for running version %s "+
-				"(requires at least v%s)", v.origin, v.Version, serverVersion,
-				minSupportedVersion)
+			return cluster.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
+				"is too old for running version v%s (which requires data from v%s or later)",
+				v.origin, v.Version, serverVersion, minSupportedVersion)
 		}
 	}
 	// Write the "actual" version back to all stores. This is almost always a
@@ -526,10 +525,29 @@ func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (cluster.Cluster
 // WriteClusterVersion makes no attempt to validate the supplied version.
 func (ls *Stores) WriteClusterVersion(ctx context.Context, cv cluster.ClusterVersion) error {
 	// Update all stores.
-	var engines []engine.Engine
+	engines := ls.engines()
 	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
 		engines = append(engines, (*Store)(v).Engine())
 		return true // want more
 	})
 	return WriteClusterVersionToEngines(ctx, engines, cv)
+}
+
+func (ls *Stores) engines() []engine.Engine {
+	var engines []engine.Engine
+	ls.storeMap.Range(func(_ int64, v unsafe.Pointer) bool {
+		engines = append(engines, (*Store)(v).Engine())
+		return true // want more
+	})
+	return engines
+}
+
+// OnClusterVersionChange is invoked when the running node receives a notification
+// indicating that the cluster version has changed.
+func (ls *Stores) OnClusterVersionChange(ctx context.Context, cv cluster.ClusterVersion) error {
+	if err := ls.WriteClusterVersion(ctx, cv); err != nil {
+		return errors.Wrap(err, "writing cluster version")
+	}
+
+	return nil
 }

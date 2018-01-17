@@ -15,9 +15,13 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"golang.org/x/net/context"
 )
+
+// ZeroNode is the exported alias for zeroNode. Used by CCL.
+type ZeroNode = zeroNode
 
 // zeroNode is a planNode with no columns and no rows and is used for nodes that
 // have no results. (e.g. a table for which the filtering condition has a
@@ -31,7 +35,6 @@ type zeroNode struct {
 	_ interface{}
 }
 
-func (*zeroNode) Start(runParams) error          { return nil }
 func (z *zeroNode) Next(runParams) (bool, error) { return false, nil }
 func (*zeroNode) Values() tree.Datums            { return nil }
 func (*zeroNode) Close(context.Context)          {}

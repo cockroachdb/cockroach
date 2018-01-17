@@ -24,7 +24,6 @@
 package tree
 
 import (
-	"bytes"
 	"fmt"
 )
 
@@ -101,6 +100,22 @@ func CanModifySchema(stmt Statement) bool {
 	return ok && scm.modifiesSchema()
 }
 
+// CanWriteData returns true if the statement can modify data.
+func CanWriteData(stmt Statement) bool {
+	switch stmt.(type) {
+	// Normal write operations.
+	case *Insert, *Delete, *Update, *Truncate:
+		return true
+	// Import operations.
+	case *CopyFrom, *Import, *Restore:
+		return true
+	// CockroachDB extensions.
+	case *Split, *TestingRelocate, *Scatter:
+		return true
+	}
+	return false
+}
+
 // HiddenFromStats is a pseudo-interface to be implemented
 // by statements that should not show up in per-app statistics.
 type HiddenFromStats interface {
@@ -126,14 +141,31 @@ type IndependentFromParallelizedPriors interface {
 type StatementList []Statement
 
 // Format implements the NodeFormatter interface.
-func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, s := range l {
+func (l *StatementList) Format(ctx *FmtCtx) {
+	for i, s := range *l {
 		if i > 0 {
-			buf.WriteString("; ")
+			ctx.WriteString("; ")
 		}
-		FormatNode(buf, f, s)
+		ctx.FormatNode(s)
 	}
 }
+
+// ObserverStatement is a marker interface to be implemented by
+// statements which are always valid and do not modify neither the
+// session state, the txn state or the database. They are to be
+// allowed at any point, including when a current transaction is in a
+// transient state like retry_wait.
+type ObserverStatement interface {
+	observerStatement()
+}
+
+// StatementType implements the Statement interface.
+func (*AlterIndex) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterIndex) StatementTag() string { return "ALTER INDEX" }
+
+func (*AlterIndex) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*AlterTable) StatementType() StatementType { return DDL }
@@ -239,6 +271,14 @@ func (*CreateUser) StatementTag() string { return "CREATE USER" }
 func (*CreateUser) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*CreateRole) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
+
+func (*CreateRole) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*CreateView) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -319,6 +359,12 @@ func (*DropUser) StatementType() StatementType { return RowsAffected }
 func (*DropUser) StatementTag() string { return "DROP USER" }
 
 // StatementType implements the Statement interface.
+func (*DropRole) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropRole) StatementTag() string { return "DROP ROLE" }
+
+// StatementType implements the Statement interface.
 func (*Execute) StatementType() StatementType { return Unknown }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -339,6 +385,14 @@ func (*Grant) StatementType() StatementType { return DDL }
 func (*Grant) StatementTag() string { return "GRANT" }
 
 func (*Grant) hiddenFromStats() {}
+
+// StatementType implements the Statement interface.
+func (*GrantRole) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*GrantRole) StatementTag() string { return "GRANT" }
+
+func (*GrantRole) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
 func (n *Insert) StatementType() StatementType { return n.Returning.statementType() }
@@ -440,6 +494,14 @@ func (*Revoke) StatementTag() string { return "REVOKE" }
 func (*Revoke) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*RevokeRole) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*RevokeRole) StatementTag() string { return "REVOKE" }
+
+func (*RevokeRole) hiddenFromStats() {}
+
+// StatementType implements the Statement interface.
 func (*RollbackToSavepoint) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -514,12 +576,12 @@ func (*SetZoneConfig) StatementType() StatementType { return RowsAffected }
 func (*SetZoneConfig) StatementTag() string { return "CONFIGURE ZONE" }
 
 // StatementType implements the Statement interface.
-func (*SetDefaultIsolation) StatementType() StatementType { return Ack }
+func (*SetSessionCharacteristics) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*SetDefaultIsolation) StatementTag() string { return "SET" }
+func (*SetSessionCharacteristics) StatementTag() string { return "SET" }
 
-func (*SetDefaultIsolation) hiddenFromStats() {}
+func (*SetSessionCharacteristics) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
 func (*ShowVar) StatementType() StatementType { return Rows }
@@ -565,6 +627,15 @@ func (*ShowCreateView) StatementTag() string { return "SHOW CREATE VIEW" }
 
 func (*ShowCreateView) hiddenFromStats()                   {}
 func (*ShowCreateView) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
+func (*ShowCreateSequence) StatementType() StatementType { return Rows }
+
+// StatementTag implements the Statement interface.
+func (*ShowCreateSequence) StatementTag() string { return "SHOW CREATE SEQUENCE" }
+
+func (*ShowCreateSequence) hiddenFromStats()                   {}
+func (*ShowCreateSequence) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*ShowBackup) StatementType() StatementType { return Rows }
@@ -647,11 +718,31 @@ func (*ShowTableStats) hiddenFromStats()                   {}
 func (*ShowTableStats) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
+func (*ShowHistogram) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowHistogram) StatementTag() string { return "SHOW HISTOGRAM" }
+
+func (*ShowHistogram) hiddenFromStats()                   {}
+func (*ShowHistogram) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
+func (*ShowSyntax) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowSyntax) StatementTag() string { return "SHOW SYNTAX" }
+
+func (*ShowSyntax) observerStatement()                 {}
+func (*ShowSyntax) hiddenFromStats()                   {}
+func (*ShowSyntax) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
 func (*ShowTransactionStatus) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTransactionStatus) StatementTag() string { return "SHOW TRANSACTION STATUS" }
 
+func (*ShowTransactionStatus) observerStatement()                 {}
 func (*ShowTransactionStatus) hiddenFromStats()                   {}
 func (*ShowTransactionStatus) independentFromParallelizedPriors() {}
 
@@ -663,6 +754,15 @@ func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
 
 func (*ShowUsers) hiddenFromStats()                   {}
 func (*ShowUsers) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
+func (*ShowRoles) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowRoles) StatementTag() string { return "SHOW ROLES" }
+
+func (*ShowRoles) hiddenFromStats()                   {}
+func (*ShowRoles) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*ShowZoneConfig) StatementType() StatementType { return Rows }
@@ -729,95 +829,104 @@ func (*UnionClause) StatementType() StatementType { return Rows }
 func (*UnionClause) StatementTag() string { return "UNION" }
 
 // StatementType implements the Statement interface.
-func (ValuesClause) StatementType() StatementType { return Rows }
+func (*ValuesClause) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (ValuesClause) StatementTag() string { return "VALUES" }
+func (*ValuesClause) StatementTag() string { return "VALUES" }
 
-func (n *AlterTable) String() string               { return AsString(n) }
-func (n AlterTableCmds) String() string            { return AsString(n) }
-func (n *AlterTableAddColumn) String() string      { return AsString(n) }
-func (n *AlterTableAddConstraint) String() string  { return AsString(n) }
-func (n *AlterTableDropColumn) String() string     { return AsString(n) }
-func (n *AlterTableDropConstraint) String() string { return AsString(n) }
-func (n *AlterTableDropNotNull) String() string    { return AsString(n) }
-func (n *AlterTableSetDefault) String() string     { return AsString(n) }
-func (n *AlterUserSetPassword) String() string     { return AsString(n) }
-func (n *AlterSequence) String() string            { return AsString(n) }
-func (n *Backup) String() string                   { return AsString(n) }
-func (n *BeginTransaction) String() string         { return AsString(n) }
-func (n *CancelJob) String() string                { return AsString(n) }
-func (n *CancelQuery) String() string              { return AsString(n) }
-func (n *CommitTransaction) String() string        { return AsString(n) }
-func (n *CopyFrom) String() string                 { return AsString(n) }
-func (n *CreateDatabase) String() string           { return AsString(n) }
-func (n *CreateIndex) String() string              { return AsString(n) }
-func (n *CreateTable) String() string              { return AsString(n) }
-func (n *CreateSequence) String() string           { return AsString(n) }
-func (n *CreateStats) String() string              { return AsString(n) }
-func (n *CreateUser) String() string               { return AsString(n) }
-func (n *CreateView) String() string               { return AsString(n) }
-func (n *Deallocate) String() string               { return AsString(n) }
-func (n *Delete) String() string                   { return AsString(n) }
-func (n *DropDatabase) String() string             { return AsString(n) }
-func (n *DropIndex) String() string                { return AsString(n) }
-func (n *DropTable) String() string                { return AsString(n) }
-func (n *DropView) String() string                 { return AsString(n) }
-func (n *DropSequence) String() string             { return AsString(n) }
-func (n *DropUser) String() string                 { return AsString(n) }
-func (n *Execute) String() string                  { return AsString(n) }
-func (n *Explain) String() string                  { return AsString(n) }
-func (n *Grant) String() string                    { return AsString(n) }
-func (n *Insert) String() string                   { return AsString(n) }
-func (n *Import) String() string                   { return AsString(n) }
-func (n *ParenSelect) String() string              { return AsString(n) }
-func (n *PauseJob) String() string                 { return AsString(n) }
-func (n *Prepare) String() string                  { return AsString(n) }
-func (n *ReleaseSavepoint) String() string         { return AsString(n) }
-func (n *TestingRelocate) String() string          { return AsString(n) }
-func (n *RenameColumn) String() string             { return AsString(n) }
-func (n *RenameDatabase) String() string           { return AsString(n) }
-func (n *RenameIndex) String() string              { return AsString(n) }
-func (n *RenameTable) String() string              { return AsString(n) }
-func (n *Restore) String() string                  { return AsString(n) }
-func (n *ResumeJob) String() string                { return AsString(n) }
-func (n *Revoke) String() string                   { return AsString(n) }
-func (n *RollbackToSavepoint) String() string      { return AsString(n) }
-func (n *RollbackTransaction) String() string      { return AsString(n) }
-func (n *Savepoint) String() string                { return AsString(n) }
-func (n *Scatter) String() string                  { return AsString(n) }
-func (n *Scrub) String() string                    { return AsString(n) }
-func (n *Select) String() string                   { return AsString(n) }
-func (n *SelectClause) String() string             { return AsString(n) }
-func (n *SetClusterSetting) String() string        { return AsString(n) }
-func (n *SetZoneConfig) String() string            { return AsString(n) }
-func (n *SetDefaultIsolation) String() string      { return AsString(n) }
-func (n *SetTransaction) String() string           { return AsString(n) }
-func (n *SetVar) String() string                   { return AsString(n) }
-func (n *ShowBackup) String() string               { return AsString(n) }
-func (n *ShowClusterSetting) String() string       { return AsString(n) }
-func (n *ShowColumns) String() string              { return AsString(n) }
-func (n *ShowConstraints) String() string          { return AsString(n) }
-func (n *ShowCreateTable) String() string          { return AsString(n) }
-func (n *ShowCreateView) String() string           { return AsString(n) }
-func (n *ShowDatabases) String() string            { return AsString(n) }
-func (n *ShowGrants) String() string               { return AsString(n) }
-func (n *ShowIndex) String() string                { return AsString(n) }
-func (n *ShowJobs) String() string                 { return AsString(n) }
-func (n *ShowQueries) String() string              { return AsString(n) }
-func (n *ShowRanges) String() string               { return AsString(n) }
-func (n *ShowSessions) String() string             { return AsString(n) }
-func (n *ShowTableStats) String() string           { return AsString(n) }
-func (n *ShowTables) String() string               { return AsString(n) }
-func (n *ShowTrace) String() string                { return AsString(n) }
-func (n *ShowTransactionStatus) String() string    { return AsString(n) }
-func (n *ShowUsers) String() string                { return AsString(n) }
-func (n *ShowVar) String() string                  { return AsString(n) }
-func (n *ShowZoneConfig) String() string           { return AsString(n) }
-func (n *ShowFingerprints) String() string         { return AsString(n) }
-func (n *Split) String() string                    { return AsString(n) }
-func (l StatementList) String() string             { return AsString(l) }
-func (n *Truncate) String() string                 { return AsString(n) }
-func (n *UnionClause) String() string              { return AsString(n) }
-func (n *Update) String() string                   { return AsString(n) }
-func (n *ValuesClause) String() string             { return AsString(n) }
+func (n *AlterIndex) String() string                { return AsString(n) }
+func (n *AlterTable) String() string                { return AsString(n) }
+func (n *AlterTableCmds) String() string            { return AsString(n) }
+func (n *AlterTableAddColumn) String() string       { return AsString(n) }
+func (n *AlterTableAddConstraint) String() string   { return AsString(n) }
+func (n *AlterTableDropColumn) String() string      { return AsString(n) }
+func (n *AlterTableDropConstraint) String() string  { return AsString(n) }
+func (n *AlterTableDropNotNull) String() string     { return AsString(n) }
+func (n *AlterTableSetDefault) String() string      { return AsString(n) }
+func (n *AlterUserSetPassword) String() string      { return AsString(n) }
+func (n *AlterSequence) String() string             { return AsString(n) }
+func (n *Backup) String() string                    { return AsString(n) }
+func (n *BeginTransaction) String() string          { return AsString(n) }
+func (n *CancelJob) String() string                 { return AsString(n) }
+func (n *CancelQuery) String() string               { return AsString(n) }
+func (n *CommitTransaction) String() string         { return AsString(n) }
+func (n *CopyFrom) String() string                  { return AsString(n) }
+func (n *CreateDatabase) String() string            { return AsString(n) }
+func (n *CreateIndex) String() string               { return AsString(n) }
+func (n *CreateRole) String() string                { return AsString(n) }
+func (n *CreateTable) String() string               { return AsString(n) }
+func (n *CreateSequence) String() string            { return AsString(n) }
+func (n *CreateStats) String() string               { return AsString(n) }
+func (n *CreateUser) String() string                { return AsString(n) }
+func (n *CreateView) String() string                { return AsString(n) }
+func (n *Deallocate) String() string                { return AsString(n) }
+func (n *Delete) String() string                    { return AsString(n) }
+func (n *DropDatabase) String() string              { return AsString(n) }
+func (n *DropIndex) String() string                 { return AsString(n) }
+func (n *DropRole) String() string                  { return AsString(n) }
+func (n *DropTable) String() string                 { return AsString(n) }
+func (n *DropView) String() string                  { return AsString(n) }
+func (n *DropSequence) String() string              { return AsString(n) }
+func (n *DropUser) String() string                  { return AsString(n) }
+func (n *Execute) String() string                   { return AsString(n) }
+func (n *Explain) String() string                   { return AsString(n) }
+func (n *Grant) String() string                     { return AsString(n) }
+func (n *GrantRole) String() string                 { return AsString(n) }
+func (n *Insert) String() string                    { return AsString(n) }
+func (n *Import) String() string                    { return AsString(n) }
+func (n *ParenSelect) String() string               { return AsString(n) }
+func (n *PauseJob) String() string                  { return AsString(n) }
+func (n *Prepare) String() string                   { return AsString(n) }
+func (n *ReleaseSavepoint) String() string          { return AsString(n) }
+func (n *TestingRelocate) String() string           { return AsString(n) }
+func (n *RenameColumn) String() string              { return AsString(n) }
+func (n *RenameDatabase) String() string            { return AsString(n) }
+func (n *RenameIndex) String() string               { return AsString(n) }
+func (n *RenameTable) String() string               { return AsString(n) }
+func (n *Restore) String() string                   { return AsString(n) }
+func (n *ResumeJob) String() string                 { return AsString(n) }
+func (n *Revoke) String() string                    { return AsString(n) }
+func (n *RevokeRole) String() string                { return AsString(n) }
+func (n *RollbackToSavepoint) String() string       { return AsString(n) }
+func (n *RollbackTransaction) String() string       { return AsString(n) }
+func (n *Savepoint) String() string                 { return AsString(n) }
+func (n *Scatter) String() string                   { return AsString(n) }
+func (n *Scrub) String() string                     { return AsString(n) }
+func (n *Select) String() string                    { return AsString(n) }
+func (n *SelectClause) String() string              { return AsString(n) }
+func (n *SetClusterSetting) String() string         { return AsString(n) }
+func (n *SetZoneConfig) String() string             { return AsString(n) }
+func (n *SetSessionCharacteristics) String() string { return AsString(n) }
+func (n *SetTransaction) String() string            { return AsString(n) }
+func (n *SetVar) String() string                    { return AsString(n) }
+func (n *ShowBackup) String() string                { return AsString(n) }
+func (n *ShowClusterSetting) String() string        { return AsString(n) }
+func (n *ShowColumns) String() string               { return AsString(n) }
+func (n *ShowConstraints) String() string           { return AsString(n) }
+func (n *ShowCreateTable) String() string           { return AsString(n) }
+func (n *ShowCreateView) String() string            { return AsString(n) }
+func (n *ShowCreateSequence) String() string        { return AsString(n) }
+func (n *ShowDatabases) String() string             { return AsString(n) }
+func (n *ShowGrants) String() string                { return AsString(n) }
+func (n *ShowHistogram) String() string             { return AsString(n) }
+func (n *ShowIndex) String() string                 { return AsString(n) }
+func (n *ShowJobs) String() string                  { return AsString(n) }
+func (n *ShowQueries) String() string               { return AsString(n) }
+func (n *ShowRanges) String() string                { return AsString(n) }
+func (n *ShowRoles) String() string                 { return AsString(n) }
+func (n *ShowSessions) String() string              { return AsString(n) }
+func (n *ShowSyntax) String() string                { return AsString(n) }
+func (n *ShowTableStats) String() string            { return AsString(n) }
+func (n *ShowTables) String() string                { return AsString(n) }
+func (n *ShowTrace) String() string                 { return AsString(n) }
+func (n *ShowTransactionStatus) String() string     { return AsString(n) }
+func (n *ShowUsers) String() string                 { return AsString(n) }
+func (n *ShowVar) String() string                   { return AsString(n) }
+func (n *ShowZoneConfig) String() string            { return AsString(n) }
+func (n *ShowFingerprints) String() string          { return AsString(n) }
+func (n *Split) String() string                     { return AsString(n) }
+func (l *StatementList) String() string             { return AsString(l) }
+func (n *Truncate) String() string                  { return AsString(n) }
+func (n *UnionClause) String() string               { return AsString(n) }
+func (n *Update) String() string                    { return AsString(n) }
+func (n *ValuesClause) String() string              { return AsString(n) }

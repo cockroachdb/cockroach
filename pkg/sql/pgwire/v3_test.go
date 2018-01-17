@@ -16,12 +16,11 @@ package pgwire
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"net"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"

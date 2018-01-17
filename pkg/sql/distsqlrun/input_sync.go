@@ -19,8 +19,7 @@ package distsqlrun
 
 import (
 	"container/heap"
-
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -94,8 +93,8 @@ type orderedSynchronizer struct {
 
 var _ RowSource = &orderedSynchronizer{}
 
-// Types is part of the RowSource interface.
-func (s *orderedSynchronizer) Types() []sqlbase.ColumnType {
+// OutputTypes is part of the RowSource interface.
+func (s *orderedSynchronizer) OutputTypes() []sqlbase.ColumnType {
 	return s.types
 }
 
@@ -131,17 +130,31 @@ func (s *orderedSynchronizer) Pop() interface{} {
 	return nil
 }
 
-// initHeap grabs a row from each source and initializes the heap.
+// initHeap grabs a row from each source and initializes the heap. Any given
+// source will be on the heap (even if an error was encountered while reading
+// from it) unless there are no more rows to read from it.
+// If an error is returned, heap.Init() has not been called, so s.heap is not
+// an actual heap. In this case, all members of the heap need to be drained.
 func (s *orderedSynchronizer) initHeap() error {
+	// consumeErr is the last error encountered while consuming metadata.
+	var consumeErr error
 	for i := range s.sources {
 		src := &s.sources[i]
-		if err := s.consumeMetadata(src, stopOnRowOrError); err != nil {
-			return err
+		err := s.consumeMetadata(src, stopOnRowOrError)
+		if err != nil {
+			consumeErr = err
 		}
-		if src.row != nil {
+		// We add the source to the heap either if we have received a row from
+		// it or there was an error reading from this source. We still add to
+		// the heap in case of error so that these sources can be drained in
+		// `drainSources`.
+		if src.row != nil || err != nil {
 			// Add to the heap array (it won't be a heap until we call heap.Init).
 			s.heap = append(s.heap, srcIdx(i))
 		}
+	}
+	if consumeErr != nil {
+		return consumeErr
 	}
 	heap.Init(s)
 	// heap operations might set s.err (see Less)
@@ -176,18 +189,18 @@ const (
 func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadataOption) error {
 	for {
 		row, meta := src.src.Next()
-		if meta.Err != nil && mode == stopOnRowOrError {
-			return meta.Err
-		}
-		if !meta.Empty() {
-			s.metadata = append(s.metadata, &meta)
+		if meta != nil {
+			if meta.Err != nil && mode == stopOnRowOrError {
+				return meta.Err
+			}
+			s.metadata = append(s.metadata, meta)
 			continue
 		}
 		if mode == stopOnRowOrError {
 			src.row = row
 			return nil
 		}
-		if row == nil && meta.Empty() {
+		if row == nil && meta == nil {
 			return nil
 		}
 	}
@@ -247,11 +260,11 @@ func (s *orderedSynchronizer) drainSources() {
 }
 
 // Next is part of the RowSource interface.
-func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
+func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.state == notInitialized {
 		if err := s.initHeap(); err != nil {
 			s.ConsumerDone()
-			return nil, ProducerMetadata{Err: err}
+			return nil, &ProducerMetadata{Err: err}
 		}
 		s.state = returningRows
 	} else if s.state == returningRows && s.needsAdvance {
@@ -259,7 +272,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		// the next row for that source.
 		if err := s.advanceRoot(); err != nil {
 			s.ConsumerDone()
-			return nil, ProducerMetadata{Err: err}
+			return nil, &ProducerMetadata{Err: err}
 		}
 	}
 
@@ -277,50 +290,51 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		var meta *ProducerMetadata
 		meta, s.metadata = s.metadata[0], s.metadata[1:]
 		s.needsAdvance = false
-		return nil, *meta
+		return nil, meta
 	}
 
 	if len(s.heap) == 0 {
-		return nil, ProducerMetadata{}
+		return nil, nil
 	}
 
 	s.needsAdvance = true
-	return s.sources[s.heap[0]].row, ProducerMetadata{}
+	return s.sources[s.heap[0]].row, nil
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (s *orderedSynchronizer) ConsumerDone() {
 	// We're entering draining mode. Only metadata will be forwarded from now on.
 	if s.state != draining {
-		s.state = draining
-		s.consumerStatusChanged(RowSource.ConsumerDone)
+		s.consumerStatusChanged(draining, RowSource.ConsumerDone)
 	}
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (s *orderedSynchronizer) ConsumerClosed() {
-	// The state should matter, as no further methods should be called, but we'll
-	// set it to something other than the default.
-	s.state = drainBuffered
-	s.consumerStatusChanged(RowSource.ConsumerClosed)
+	// The state shouldn't matter, as no further methods should be called, but
+	// we'll set it to something other than the default.
+	s.consumerStatusChanged(drainBuffered, RowSource.ConsumerClosed)
 }
 
 // consumerStatusChanged calls a RowSource method on all the non-exhausted
 // sources.
-func (s *orderedSynchronizer) consumerStatusChanged(f func(RowSource)) {
+func (s *orderedSynchronizer) consumerStatusChanged(
+	newState orderedSynchronizerState, f func(RowSource),
+) {
 	if s.state == notInitialized {
 		for i := range s.sources {
 			f(s.sources[i].src)
 		}
 	} else {
-		// The sources that are not in the heap have been consumed already. It would
-		// be ok to call ConsumerDone()/ConsumerClosed() on them too, but avoiding
-		// the call may be a bit faster (in most cases there should be no sources
-		// left).
+		// The sources that are not in the heap have been consumed already. It
+		// would be ok to call ConsumerDone()/ConsumerClosed() on them too, but
+		// avoiding the call may be a bit faster (in most cases there should be
+		// no sources left).
 		for _, sIdx := range s.heap {
 			f(s.sources[sIdx].src)
 		}
 	}
+	s.state = newState
 }
 
 func makeOrderedSync(
@@ -332,7 +346,7 @@ func makeOrderedSync(
 	s := &orderedSynchronizer{
 		state:    notInitialized,
 		sources:  make([]srcInfo, len(sources)),
-		types:    sources[0].Types(),
+		types:    sources[0].OutputTypes(),
 		heap:     make([]srcIdx, 0, len(sources)),
 		ordering: ordering,
 		evalCtx:  evalCtx,

@@ -57,20 +57,26 @@ pg_depend
 pg_description
 pg_enum
 pg_extension
+pg_foreign_data_wrapper
 pg_foreign_server
 pg_foreign_table
 pg_index
 pg_indexes
 pg_inherits
 pg_namespace
+pg_operator
 pg_proc
 pg_range
+pg_rewrite
 pg_roles
 pg_sequence
 pg_settings
 pg_tables
 pg_tablespace
+pg_trigger
 pg_type
+pg_user
+pg_user_mapping
 pg_views
 
 query TT colnames
@@ -81,17 +87,17 @@ pg_catalog.pg_namespace  CREATE TABLE pg_namespace (
                              oid OID NULL,
                              nspname NAME NOT NULL,
                              nspowner OID NULL,
-                             nspacl STRING NULL
+                             nspacl STRING[] NULL
 )
 
 query TTBTT colnames
 SHOW COLUMNS FROM pg_catalog.pg_namespace
 ----
-Field     Type    Null   Default Indices
-oid       OID     true   NULL    {}
-nspname   NAME    false  NULL    {}
-nspowner  OID     true   NULL    {}
-nspacl    STRING  true   NULL    {}
+Field     Type      Null   Default Indices
+oid       OID       true   NULL    {}
+nspname   NAME      false  NULL    {}
+nspowner  OID       true   NULL    {}
+nspacl    STRING[]  true   NULL    {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM pg_catalog.pg_namespace
@@ -500,8 +506,10 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
 624432001   3211628798  2         false        false         false
 724530982   908875140   2         true         true          false
 2557995824  780323485   2         false        false         false
+2751284469  3570422629  2         true         true          false
 3505585425  2199392917  2         true         true          false
 3491800018  3270885600  2         true         true          false
+1784645715  4240908941  2         true         true          false
 3501101122  3640657984  2         true         true          false
 
 query OBBBBB colnames
@@ -514,8 +522,10 @@ indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 624432001   false         false           true        false         false
 724530982   true          false           true        false         false
 2557995824  false         false           true        false         false
+2751284469  true          false           true        false         false
 3505585425  true          false           true        false         false
 3491800018  true          false           true        false         false
+1784645715  true          false           true        false         false
 3501101122  true          false           true        false         false
 
 query OOBBTIIITT colnames
@@ -528,8 +538,10 @@ indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclas
 624432001   3211628798  true       false           1 2     0             0         0          NULL      NULL
 724530982   908875140   true       false           1 6     0             0         0          NULL      NULL
 2557995824  780323485   true       false           2 3     0             0         0          NULL      NULL
+2751284469  3570422629  true       false           1 2     0             0         0          NULL      NULL
 3505585425  2199392917  true       false           1 2     0             0         0          NULL      NULL
 3491800018  3270885600  true       false           1 7     0             0         0          NULL      NULL
+1784645715  4240908941  true       false           1 2     0             0         0          NULL      NULL
 3501101122  3640657984  true       false           1 2     0             0         0          NULL      NULL
 
 ## pg_catalog.pg_collation
@@ -1030,7 +1042,15 @@ FROM pg_catalog.pg_proc
 WHERE proname='least'
 ----
 proname  provariadic  pronargs  prorettype  proargtypes  proargmodes
-least    2283         1         2283        2283         v
+least    2283         1         2283        2283         {"v"}
+
+query TOIOTT colnames
+SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
+FROM pg_catalog.pg_proc
+WHERE proname='json_extract_path'
+----
+proname              provariadic  pronargs  prorettype  proargtypes  proargmodes
+json_extract_path    25           2         3802        3802, 25     {"i","v"}
 
 ## pg_catalog.pg_range
 query IIIIII colnames
@@ -1040,23 +1060,36 @@ rngtypid  rngsubtype  rngcollation  rngsubopc  rngcanonical  rngsubdiff
 
 ## pg_catalog.pg_roles
 
-query OTBBBBBBI colnames
-SELECT oid, rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcatupdate, rolcanlogin, rolconnlimit
+query OTBBBBBBB colnames
+SELECT oid, rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcatupdate, rolcanlogin, rolreplication
 FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
-oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolconnlimit
-2901009604  root      true      false       true           true         false         true         -1
-2499926009  testuser  false     false       false          false        false         true         -1
+oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
+823966177   admin     true      true        true           true         false         false        false
+2901009604  root      true      false       true           true         false         true         false
+2499926009  testuser  false     false       false          false        false         true         false
 
-query OTTTT colnames
-SELECT oid, rolname, rolpassword, rolvaliduntil, rolconfig
+query OTITTBT colnames
+SELECT oid, rolname, rolconnlimit, rolpassword, rolvaliduntil, rolbypassrls, rolconfig
 FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
-oid         rolname   rolpassword  rolvaliduntil  rolconfig
-2901009604  root      ********     NULL           {}
-2499926009  testuser  ********     NULL           {}
+oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  rolconfig
+823966177   admin     -1            ********     NULL           false         NULL
+2901009604  root      -1            ********     NULL           false         NULL
+2499926009  testuser  -1            ********     NULL           false         NULL
+
+## pg_catalog.pg_user
+
+query TOBBBBTTA colnames
+SELECT usename, usesysid, usecreatedb, usesuper, userepl, usebypassrls, passwd, valuntil, useconfig
+FROM pg_catalog.pg_user
+ORDER BY usename
+----
+usename   usesysid    usecreatedb  usesuper  userepl  usebypassrls  passwd    valuntil  useconfig
+root      2901009604  true         true      false    false         ********  NULL      NULL
+testuser  2499926009  false        false     false    false         ********  NULL      NULL
 
 ## pg_catalog.pg_description
 
@@ -1093,6 +1126,7 @@ client_min_messages            ·             NULL      NULL        NULL        
 database                       test          NULL      NULL        NULL        string
 datestyle                      ISO           NULL      NULL        NULL        string
 default_transaction_isolation  serializable  NULL      NULL        NULL        string
+default_transaction_read_only  off           NULL      NULL        NULL        string
 distsql                        off           NULL      NULL        NULL        string
 extra_float_digits             ·             NULL      NULL        NULL        string
 intervalstyle                  postgres      NULL      NULL        NULL        string
@@ -1121,6 +1155,7 @@ client_min_messages            ·             NULL  user     NULL      ·       
 database                       test          NULL  user     NULL      test          test
 datestyle                      ISO           NULL  user     NULL      ISO           ISO
 default_transaction_isolation  serializable  NULL  user     NULL      serializable  serializable
+default_transaction_read_only  off           NULL  user     NULL      off           off
 distsql                        off           NULL  user     NULL      off           off
 extra_float_digits             ·             NULL  user     NULL      ·             ·
 intervalstyle                  postgres      NULL  user     NULL      postgres      postgres
@@ -1149,6 +1184,7 @@ client_min_messages            NULL    NULL     NULL     NULL        NULL
 database                       NULL    NULL     NULL     NULL        NULL
 datestyle                      NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation  NULL    NULL     NULL     NULL        NULL
+default_transaction_read_only  NULL    NULL     NULL     NULL        NULL
 distsql                        NULL    NULL     NULL     NULL        NULL
 extra_float_digits             NULL    NULL     NULL     NULL        NULL
 intervalstyle                  NULL    NULL     NULL     NULL        NULL
@@ -1180,13 +1216,13 @@ statement ok
 CREATE SEQUENCE foo
 
 statement ok
-CREATE SEQUENCE bar MAXVALUE 10 MINVALUE 5 START 6 INCREMENT 2 CYCLE
+CREATE SEQUENCE bar MAXVALUE 10 MINVALUE 5 START 6 INCREMENT 2
 
 query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid    seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-1671363588  20        6         2             10                   5       1         true
+1671363588  20        6         2             10                   5       1         false
 3781872120  20        1         1             9223372036854775807  1       1         false
 
 statement ok

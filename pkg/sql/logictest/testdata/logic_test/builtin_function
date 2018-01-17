@@ -9,8 +9,8 @@ SELECT defaults()
 query II colnames
 SELECT LENGTH('roach7'), LENGTH(b'roach77')
 ----
-length('roach7')  length(b'roach77')
-6                 7
+length length
+6      7
 
 query II
 SELECT LENGTH('Hello, 世界'), LENGTH(b'Hello, 世界')
@@ -28,7 +28,7 @@ SELECT octet_length('Hello'), octet_length(b'世界')
 query T colnames
 SELECT UPPER('roacH7')
 ----
-upper('roacH7')
+upper
 ROACH7
 
 statement error unknown signature: upper\(decimal\)
@@ -37,7 +37,7 @@ SELECT UPPER(2.2)
 query T colnames
 SELECT LOWER('RoacH7')
 ----
-lower('RoacH7')
+lower
 roach7
 
 statement error unknown signature: lower\(int\)
@@ -62,7 +62,6 @@ RoacH
 
 statement error unknown signature: concat\(string, bool, decimal, bool\)
 SELECT CONCAT('RoacH', false, 64.532, TRUE)
-----
 
 query T
 SELECT SUBSTR('RoacH', 2, 3)
@@ -178,7 +177,6 @@ abcde,2
 
 statement error unknown signature: concat_ws\(string, string, int, NULL, int\)
 SELECT CONCAT_WS(',', 'abcde', 2, NULL, 22)
-----
 
 query T
 SELECT split_part('abc~@~def~@~ghi', '~@~', 2)
@@ -1159,7 +1157,7 @@ SELECT OVERLAY(foo.* PLACING 'string' FROM 'string') FROM (VALUES (1)) AS foo(x)
 query error cannot use "nonexistent.\*" without a FROM clause
 SELECT nonexistent.* IS NOT TRUE
 
-query error unsupported comparison operator: <tuple{int}> IS NOT <bool>
+query error unsupported comparison operator: <tuple{int}> IS DISTINCT FROM <bool>
 SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 
 query T
@@ -1527,12 +1525,12 @@ query error unknown index \(OID=0\)
 SELECT pg_catalog.pg_get_indexdef(0)
 
 statement ok
-CREATE TABLE test.pg_indexdef_test (a INT, INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
+CREATE TABLE test.pg_indexdef_test (a INT, UNIQUE INDEX pg_indexdef_idx (a ASC), INDEX other (a DESC))
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
 ----
-CREATE INDEX pg_indexdef_idx ON test.pg_indexdef_test (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON test.pg_indexdef_test (a ASC)
 
 query error pq: unknown signature: pg_get_indexdef\(int, int, bool\)
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -1572,6 +1570,23 @@ query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, false)
 ----
 SELECT a, b FROM test.pg_viewdef_test
+
+statement ok
+CREATE TABLE test.pg_constraintdef_test (
+  a int,
+  b int unique,
+  c int check (c > a),
+  FOREIGN KEY(a) REFERENCES test.pg_indexdef_test(a) ON DELETE CASCADE
+)
+
+query T rowsort
+SELECT pg_catalog.pg_get_constraintdef(oid)
+FROM pg_catalog.pg_constraint
+WHERE conrelid='pg_constraintdef_test'::regclass
+----
+FOREIGN KEY (a) REFERENCES pg_indexdef_test (a) ON DELETE CASCADE
+CHECK (c > a)
+UNIQUE (b ASC)
 
 # These functions always return NULL since we don't support comments.
 query TTTT
@@ -1649,3 +1664,8 @@ query TT
 SELECT pg_catalog.pg_encoding_to_char(6), pg_catalog.pg_encoding_to_char(7)
 ----
 UTF8  NULL
+
+query TITI
+SELECT pg_catalog.inet_client_addr(), pg_catalog.inet_client_port(), pg_catalog.inet_server_addr(), pg_catalog.inet_server_port()
+----
+::/0  0  ::/0  0

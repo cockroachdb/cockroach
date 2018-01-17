@@ -26,7 +26,7 @@ import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
-import context "golang.org/x/net/context"
+import context "context"
 import grpc "google.golang.org/grpc"
 
 import sortkeys "github.com/gogo/protobuf/sortkeys"

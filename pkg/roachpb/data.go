@@ -16,6 +16,7 @@ package roachpb
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -30,7 +31,6 @@ import (
 	"unicode"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -562,28 +562,33 @@ var crc32Pool = sync.Pool{
 	},
 }
 
-// computeChecksum computes a checksum based on the provided key and
-// the contents of the value.
-func (v Value) computeChecksum(key []byte) uint32 {
-	if len(v.RawBytes) < headerSize {
+func computeChecksum(key, rawBytes []byte, crc hash.Hash32) uint32 {
+	if len(rawBytes) < headerSize {
 		return 0
 	}
-	crc := crc32Pool.Get().(hash.Hash32)
 	if _, err := crc.Write(key); err != nil {
 		panic(err)
 	}
-	if _, err := crc.Write(v.RawBytes[checksumSize:]); err != nil {
+	if _, err := crc.Write(rawBytes[checksumSize:]); err != nil {
 		panic(err)
 	}
 	sum := crc.Sum32()
 	crc.Reset()
-	crc32Pool.Put(crc)
 	// We reserved the value 0 (checksumUninitialized) to indicate that a checksum
 	// has not been initialized. This reservation is accomplished by folding a
 	// computed checksum of 0 to the value 1.
 	if sum == checksumUninitialized {
 		return 1
 	}
+	return sum
+}
+
+// computeChecksum computes a checksum based on the provided key and
+// the contents of the value.
+func (v Value) computeChecksum(key []byte) uint32 {
+	crc := crc32Pool.Get().(hash.Hash32)
+	sum := computeChecksum(key, v.RawBytes, crc)
+	crc32Pool.Put(crc)
 	return sum
 }
 
@@ -858,7 +863,24 @@ func (t *Transaction) Restart(
 // restart. This invalidates all write intents previously written at lower
 // epochs.
 func (t *Transaction) BumpEpoch() {
+	if t.Epoch == 0 {
+		t.EpochZeroTimestamp = t.OrigTimestamp
+	}
 	t.Epoch++
+}
+
+// TimeBounds returns the start and end timestamps which inclusively
+// cover all intents which were written as part of this transaction.
+func (t *Transaction) TimeBounds() (hlc.Timestamp, hlc.Timestamp) {
+	min := t.OrigTimestamp
+	max := t.Timestamp
+	if t.Epoch != 0 {
+		if min.Less(t.EpochZeroTimestamp) {
+			panic(fmt.Sprintf("orig timestamp %s less than epoch zero %s", min, t.EpochZeroTimestamp))
+		}
+		min = t.EpochZeroTimestamp
+	}
+	return min, max.Next() // Next() makes the end of the interval closed
 }
 
 // Update ratchets priority, timestamp and original timestamp values (among
@@ -908,6 +930,12 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	if len(o.Intents) > 0 {
 		t.Intents = o.Intents
+	}
+	// On update, set epoch zero timestamp to the minimum seen by either txn.
+	if o.EpochZeroTimestamp != (hlc.Timestamp{}) {
+		if t.EpochZeroTimestamp == (hlc.Timestamp{}) || o.EpochZeroTimestamp.Less(t.EpochZeroTimestamp) {
+			t.EpochZeroTimestamp = o.EpochZeroTimestamp
+		}
 	}
 }
 
@@ -1068,6 +1096,14 @@ func (crt ChangeReplicasTrigger) String() string {
 	return fmt.Sprintf("%s(%s): updated=%s next=%d", crt.ChangeType, crt.Replica, crt.UpdatedReplicas, crt.NextReplicaID)
 }
 
+// LeaseSequence is a custom type for a lease sequence number.
+type LeaseSequence int64
+
+// String implements the fmt.Stringer interface.
+func (s LeaseSequence) String() string {
+	return strconv.FormatInt(int64(s), 10)
+}
+
 var _ fmt.Stringer = &Lease{}
 
 func (l Lease) String() string {
@@ -1076,9 +1112,9 @@ func (l Lease) String() string {
 		proposedSuffix = fmt.Sprintf(" pro=%s", l.ProposedTS)
 	}
 	if l.Type() == LeaseExpiration {
-		return fmt.Sprintf("repl=%s start=%s exp=%s%s", l.Replica, l.Start, l.Expiration, proposedSuffix)
+		return fmt.Sprintf("repl=%s seq=%s start=%s exp=%s%s", l.Replica, l.Sequence, l.Start, l.Expiration, proposedSuffix)
 	}
-	return fmt.Sprintf("repl=%s start=%s epo=%d%s", l.Replica, l.Start, l.Epoch, proposedSuffix)
+	return fmt.Sprintf("repl=%s seq=%s start=%s epo=%d%s", l.Replica, l.Sequence, l.Start, l.Epoch, proposedSuffix)
 }
 
 // BootstrapLease returns the lease to persist for the range of a freshly bootstrapped store. The
@@ -1125,10 +1161,17 @@ func (l Lease) Type() LeaseType {
 // Ignore proposed timestamps for lease verification; for epoch-
 // based leases, the start time of the lease is sufficient to
 // avoid using an older lease with same epoch.
-func (l Lease) Equivalent(ol Lease) bool {
+//
+// NB: Lease.Equivalent is NOT symmetric. For expiration-based
+// leases, a lease is equivalent to another with an equal or
+// later expiration, but not an earlier expiration.
+func (l Lease) Equivalent(newL Lease) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
-	l.ProposedTS, ol.ProposedTS = nil, nil
-	l.DeprecatedStartStasis, ol.DeprecatedStartStasis = nil, nil
+	l.ProposedTS, newL.ProposedTS = nil, nil
+	l.DeprecatedStartStasis, newL.DeprecatedStartStasis = nil, nil
+	// Ignore sequence numbers, they are simply a reflection of
+	// the equivalency of other fields.
+	l.Sequence, newL.Sequence = 0, 0
 	// If both leases are epoch-based, we must dereference the epochs
 	// and then set to nil.
 	switch l.Type() {
@@ -1136,22 +1179,24 @@ func (l Lease) Equivalent(ol Lease) bool {
 		// Ignore expirations. This seems benign but since we changed the
 		// nullability of this field in the 1.2 cycle, it's crucial and
 		// tested in TestLeaseEquivalence.
-		l.Expiration, ol.Expiration = nil, nil
+		l.Expiration, newL.Expiration = nil, nil
 
-		if l.Epoch == ol.Epoch {
-			l.Epoch, ol.Epoch = 0, 0
+		if l.Epoch == newL.Epoch {
+			l.Epoch, newL.Epoch = 0, 0
 		}
 	case LeaseExpiration:
 		// See the comment above, though this field's nullability wasn't
 		// changed. We nil it out for completeness only.
-		l.Epoch, ol.Epoch = 0, 0
+		l.Epoch, newL.Epoch = 0, 0
 
 		// For expiration-based leases, extensions are considered equivalent.
-		if !ol.GetExpiration().Less(l.GetExpiration()) {
-			l.Expiration, ol.Expiration = nil, nil
+		// This is the one case where Equivalent is not commutative and, as
+		// such, requires special handling beneath Raft (see checkForcedErrLocked).
+		if !newL.GetExpiration().Less(l.GetExpiration()) {
+			l.Expiration, newL.Expiration = nil, nil
 		}
 	}
-	return l == ol
+	return l == newL
 }
 
 // GetExpiration returns the lease expiration or the zero timestamp if the
@@ -1223,6 +1268,9 @@ func (l *Lease) Equal(that interface{}) bool {
 	if l.Epoch != that1.Epoch {
 		return false
 	}
+	if l.Sequence != that1.Sequence {
+		return false
+	}
 	return true
 }
 
@@ -1245,8 +1293,17 @@ func (s Span) EqualValue(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
 }
 
-// Overlaps returns whether the two spans overlap.
+// Overlaps returns true WLOG for span A and B iff:
+// 1. Both spans contain one key (just the start key) and they are equal; or
+// 2. The span with only one key is contained inside the other span; or
+// 3. The end key of span A is strictly greater than the start key of span B
+//    and the end key of span B is strictly greater than the start key of span
+//    A.
 func (s Span) Overlaps(o Span) bool {
+	if !s.Valid() || !o.Valid() {
+		return false
+	}
+
 	if len(s.EndKey) == 0 && len(o.EndKey) == 0 {
 		return s.Key.Equal(o.Key)
 	} else if len(s.EndKey) == 0 {
@@ -1257,8 +1314,44 @@ func (s Span) Overlaps(o Span) bool {
 	return bytes.Compare(s.EndKey, o.Key) > 0 && bytes.Compare(s.Key, o.EndKey) < 0
 }
 
+// Combine creates a new span containing the full union of the key
+// space covered by the two spans. This includes any key space not
+// covered by either span, but between them if the spans are disjoint.
+// Warning: using this method to combine local and non-local spans is
+// not recommended and will result in potentially database-wide
+// spans being returned. Use with caution.
+func (s Span) Combine(o Span) Span {
+	if !s.Valid() || !o.Valid() {
+		return Span{}
+	}
+
+	min := s.Key
+	max := s.Key
+	if len(s.EndKey) > 0 {
+		max = s.EndKey
+	}
+	if o.Key.Compare(min) < 0 {
+		min = o.Key
+	} else if o.Key.Compare(max) > 0 {
+		max = o.Key
+	}
+	if len(o.EndKey) > 0 && o.EndKey.Compare(max) > 0 {
+		max = o.EndKey
+	}
+	if min.Equal(max) {
+		return Span{Key: min}
+	} else if s.Key.Equal(max) || o.Key.Equal(max) {
+		return Span{Key: min, EndKey: max.Next()}
+	}
+	return Span{Key: min, EndKey: max}
+}
+
 // Contains returns whether the receiver contains the given span.
 func (s Span) Contains(o Span) bool {
+	if !s.Valid() || !o.Valid() {
+		return false
+	}
+
 	if len(s.EndKey) == 0 && len(o.EndKey) == 0 {
 		return s.Key.Equal(o.Key)
 	} else if len(s.EndKey) == 0 {
@@ -1291,6 +1384,41 @@ func (s Span) AsRange() interval.Range {
 func (s Span) String() string {
 	const maxChars = math.MaxInt32
 	return PrettyPrintRange(s.Key, s.EndKey, maxChars)
+}
+
+// SplitOnKey returns two spans where the left span has EndKey and right span
+// has start Key of the split key, respectively.
+// If the split key lies outside the span, the original span is returned on the
+// left (and right is an invalid span with empty keys).
+func (s Span) SplitOnKey(key Key) (left Span, right Span) {
+	// Cannot split on or before start key or on or after end key.
+	if bytes.Compare(key, s.Key) <= 0 || bytes.Compare(key, s.EndKey) >= 0 {
+		return s, Span{}
+	}
+
+	return Span{Key: s.Key, EndKey: key}, Span{Key: key, EndKey: s.EndKey}
+}
+
+// Valid returns whether or not the span is a "valid span".
+// A valid span cannot have an empty start and end key and must satisfy either:
+// 1. The end key is empty.
+// 2. The start key is lexicographically-ordered before the end key.
+func (s Span) Valid() bool {
+	// s.Key can be empty if it is KeyMin.
+	// Can't have both KeyMin start and end keys.
+	if len(s.Key) == 0 && len(s.EndKey) == 0 {
+		return false
+	}
+
+	if len(s.EndKey) == 0 {
+		return true
+	}
+
+	if bytes.Compare(s.Key, s.EndKey) >= 0 {
+		return false
+	}
+
+	return true
 }
 
 // Spans is a slice of spans.

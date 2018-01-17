@@ -15,10 +15,9 @@
 package ts
 
 import (
+	"context"
 	"fmt"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,6 +33,14 @@ var (
 	resolution10sDefaultPruneThreshold = 30 * 24 * time.Hour
 )
 
+// TimeseriesStorageEnabled controls whether to store timeseries data to disk.
+var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
+	"timeseries.storage.enabled",
+	"if set, periodic timeseries data is stored within the cluster; disabling is not recommended "+
+		"unless you are storing the data elsewhere",
+	true,
+)
+
 // Resolution10StoreDuration defines the amount of time to store internal metrics
 var Resolution10StoreDuration = settings.RegisterDurationSetting(
 	"timeseries.resolution_10s.storage_duration",
@@ -44,6 +51,7 @@ var Resolution10StoreDuration = settings.RegisterDurationSetting(
 // DB provides Cockroach's Time Series API.
 type DB struct {
 	db *client.DB
+	st *cluster.Settings
 
 	// pruneAgeByResolution maintains a suggested maximum age per resolution; data
 	// which is older than the given threshold for a resolution is considered
@@ -59,6 +67,7 @@ func NewDB(db *client.DB, settings *cluster.Settings) *DB {
 	}
 	return &DB{
 		db: db,
+		st: settings,
 		pruneThresholdByResolution: pruneThresholdByResolution,
 	}
 }
@@ -123,6 +132,10 @@ func (p *poller) start() {
 // poll retrieves data from the underlying DataSource a single time, storing any
 // returned time series data on the server.
 func (p *poller) poll() {
+	if !TimeseriesStorageEnabled.Get(&p.db.st.SV) {
+		return
+	}
+
 	bgCtx := p.AnnotateCtx(context.Background())
 	if err := p.stopper.RunTask(bgCtx, "ts.poller: poll", func(bgCtx context.Context) {
 		data := p.source.GetTimeSeriesData()
@@ -144,6 +157,10 @@ func (p *poller) poll() {
 // StoreData writes the supplied time series data to the cockroach server.
 // Stored data will be sampled at the supplied resolution.
 func (db *DB) StoreData(ctx context.Context, r Resolution, data []tspb.TimeSeriesData) error {
+	if !TimeseriesStorageEnabled.Get(&db.st.SV) {
+		return nil
+	}
+
 	var kvs []roachpb.KeyValue
 
 	// Process data collection: data is converted to internal format, and a key

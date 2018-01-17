@@ -15,6 +15,8 @@
 package pgwire_test
 
 import (
+	"bytes"
+	"context"
 	gosql "database/sql"
 	"database/sql/driver"
 	"encoding/json"
@@ -31,7 +33,6 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -173,6 +175,33 @@ func TestPGWire(t *testing.T) {
 	}
 }
 
+func TestPGWireNonexistentUser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
+		params := base.TestServerArgs{Insecure: insecure}
+		s, _, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(context.TODO())
+
+		var pgURL url.URL
+		if insecure {
+			pgURL = url.URL{
+				Scheme:   "postgres",
+				User:     url.User(server.TestUser),
+				Host:     s.ServingAddr(),
+				RawQuery: "sslmode=disable",
+			}
+		} else {
+			pgURL, _ = sqlutils.PGUrl(t, s.ServingAddr(), "StartServer", url.User(server.TestUser))
+		}
+
+		err := trivialQuery(pgURL)
+		if !testutils.IsError(err, fmt.Sprintf("pq: user %s does not exist", server.TestUser)) {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
 // TestPGWireDrainClient makes sure that in draining mode, the server refuses
 // new connections and allows sessions with ongoing transactions to finish.
 func TestPGWireDrainClient(t *testing.T) {
@@ -189,6 +218,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
+		User:     url.User(security.RootUser),
 		RawQuery: "sslmode=disable",
 	}
 
@@ -260,6 +290,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 	pgBaseURL := url.URL{
 		Scheme:   "postgres",
 		Host:     net.JoinHostPort(host, port),
+		User:     url.User(security.RootUser),
 		RawQuery: "sslmode=disable",
 	}
 
@@ -668,18 +699,24 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results(""),
 		},
 		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1": {
-			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12\x16\n\x06system\x10\x01\x1a\n\n\b\n\x04root\x100")),
+			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12!\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100")),
 		},
 		"SHOW COLUMNS FROM system.users": {
 			baseTest.
 				Results("username", "STRING", false, gosql.NullBool{}, "{\"primary\"}").
-				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "{}"),
+				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "{}").
+				Results("isRole", "BOOL", false, false, "{}"),
 		},
 		"SHOW DATABASES": {
 			baseTest.Results("crdb_internal").Results("d").Results("information_schema").Results("pg_catalog").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
-			baseTest.Results("system", "users", security.RootUser, "DELETE").
+			baseTest.Results("system", "users", sqlbase.AdminRole, "DELETE").
+				Results("system", "users", sqlbase.AdminRole, "GRANT").
+				Results("system", "users", sqlbase.AdminRole, "INSERT").
+				Results("system", "users", sqlbase.AdminRole, "SELECT").
+				Results("system", "users", sqlbase.AdminRole, "UPDATE").
+				Results("system", "users", security.RootUser, "DELETE").
 				Results("system", "users", security.RootUser, "GRANT").
 				Results("system", "users", security.RootUser, "INSERT").
 				Results("system", "users", security.RootUser, "SELECT").
@@ -689,7 +726,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("users", "primary", true, 1, "username", "ASC", false, false),
 		},
 		"SHOW TABLES FROM system": {
-			baseTest.Results("descriptor").Others(11),
+			baseTest.Results("descriptor").Others(13),
 		},
 		"SHOW CONSTRAINTS FROM system.users": {
 			baseTest.Results("users", "primary", "PRIMARY KEY", "username", gosql.NullString{}),
@@ -840,7 +877,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		// #14238
 		"EXPLAIN SELECT 1": {
-			baseTest.SetArgs().Results(0, "render", "", "").Results(1, "emptyrow", "", ""),
+			baseTest.SetArgs().Results("render", "", "").Results(" └── emptyrow", "", ""),
 		},
 		// #14245
 		"SELECT 1::oid = $1": {
@@ -878,10 +915,9 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(`"hello"`).Results(`"hello"`),
 		},
 
-		// TODO(jordan): blocked on #13651
-		//"SELECT $1::INT[]": {
-		//	baseTest.SetArgs(pq.Array([]int{10})).Results(pq.Array([]int{10})),
-		//},
+		"SELECT $1::INT[]": {
+			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
+		},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
@@ -1773,7 +1809,8 @@ func TestPGWireTooManyArguments(t *testing.T) {
 	}
 	defer db.Close()
 
-	query := "SELECT"
+	var b bytes.Buffer
+	b.WriteString("SELECT")
 
 	args := make([]interface{}, 1<<16)
 	for i := 1; i <= 1<<16; i++ {
@@ -1781,11 +1818,11 @@ func TestPGWireTooManyArguments(t *testing.T) {
 		if i == 1 {
 			comma = ""
 		}
-		query += fmt.Sprintf("%s $%d::int", comma, i)
+		b.WriteString(fmt.Sprintf("%s $%d::int", comma, i))
 		args[i-1] = i
 	}
-	query += ";"
-
+	b.WriteString(";")
+	query := b.String()
 	if _, err := db.Prepare(query); !testutils.IsError(err, "more than 65535 arguments") {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -15,11 +15,10 @@
 package sql_test
 
 import (
+	"context"
 	gosql "database/sql"
 	"math/rand"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -640,6 +640,22 @@ CREATE INDEX allidx ON t.test (k, v);
 					}
 				}
 
+				// Using the mutation column as an index expression is disallowed.
+				_, err := sqlDB.Exec(`UPDATE t.test SET v = 'u' WHERE i < 'a'`)
+				if !testutils.IsError(err, `column "i" is being backfilled`) {
+					t.Error(err)
+				}
+				// TODO(vivek): Fix this error to return the same is being
+				// backfilled error.
+				_, err = sqlDB.Exec(`UPDATE t.test SET i = 'u' WHERE k = 'a'`)
+				if !testutils.IsError(err, `column "i" does not exist`) {
+					t.Error(err)
+				}
+				_, err = sqlDB.Exec(`DELETE FROM t.test WHERE i < 'a'`)
+				if !testutils.IsError(err, `column "i" is being backfilled`) {
+					t.Error(err)
+				}
+
 				// Update a row without specifying  mutation column "i".
 				if useUpsert {
 					mTest.Exec(t, `UPSERT INTO t.test VALUES ('a', 'u')`)
@@ -701,9 +717,14 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
-		AsyncExecNotification: asyncSchemaChangerDisabled,
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableMigrations: true,
+		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
@@ -911,6 +932,9 @@ func TestTableMutationQueue(t *testing.T) {
 				tscc.ClearSchemaChangers()
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableMigrations: true,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)

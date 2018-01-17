@@ -16,12 +16,11 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"strconv"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -161,9 +160,7 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 }
 
 func (a *appStats) getStrForStmt(stmt Statement) string {
-	var buf bytes.Buffer
-	tree.FormatNode(&buf, tree.FmtHideConstants, stmt.AST)
-	return buf.String()
+	return tree.AsStringWithFlags(stmt.AST, tree.FmtHideConstants)
 }
 
 // sqlStats carries per-application statistics for all applications on
@@ -175,18 +172,6 @@ type sqlStats struct {
 	// apps is the container for all the per-application statistics
 	// objects.
 	apps map[string]*appStats
-}
-
-// resetApplicationName initializes both Session.mu.ApplicationName and
-// the cached pointer to per-application statistics. It is meant to be
-// used upon session initialization and upon SET APPLICATION_NAME.
-func (s *Session) resetApplicationName(appName string) {
-	s.mu.Lock()
-	s.mu.ApplicationName = appName
-	s.mu.Unlock()
-	if s.sqlStats != nil {
-		s.appStats = s.sqlStats.getStatsForApplication(appName)
-	}
 }
 
 func (s *sqlStats) getStatsForApplication(appName string) *appStats {
@@ -259,7 +244,7 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 	log.Info(ctx, buf.String())
 }
 
-func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
+func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	// Re-parse the statement to obtain its AST.
 	stmt, err := parser.ParseOne(key)
 	if err != nil {
@@ -267,22 +252,25 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	}
 
 	// Re-format to remove most names.
-	formatter := tree.FmtReformatTableNames(tree.FmtAnonymize,
-		func(t *tree.NormalizableTableName, buf *bytes.Buffer, f tree.FmtFlags) {
+	f := tree.NewFmtCtxWithBuf(tree.FmtAnonymize)
+	f.WithReformatTableNames(
+		func(ctx *tree.FmtCtx, t *tree.NormalizableTableName) {
 			tn, err := t.Normalize()
 			if err != nil {
-				buf.WriteByte('_')
+				ctx.WriteByte('_')
 				return
 			}
 			virtual, err := vt.getVirtualTableEntry(tn)
 			if err != nil || virtual.desc == nil {
-				buf.WriteByte('_')
+				ctx.WriteByte('_')
 				return
 			}
 			// Virtual table: we want to keep the name.
-			tn.Format(buf, tree.FmtParsable)
+			keepNameCtx := ctx.CopyWithFlags(tree.FmtParsable)
+			keepNameCtx.FormatNode(tn)
 		})
-	return tree.AsStringWithFlags(stmt, formatter), true
+	f.FormatNode(stmt)
+	return f.CloseAndGetString(), true
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the
@@ -300,7 +288,7 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 		hashedApp := HashAppName(appName)
 		a.Lock()
 		for q, stats := range a.stmts {
-			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
+			scrubbed, ok := scrubStmtStatKey(&vt, q.stmt)
 			if ok {
 				k := roachpb.StatementStatisticsKey{
 					Query:   scrubbed,

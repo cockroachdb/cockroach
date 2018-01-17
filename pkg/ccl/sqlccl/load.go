@@ -11,13 +11,13 @@ package sqlccl
 import (
 	"bufio"
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"io"
 	"math/rand"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -147,12 +147,21 @@ func Load(
 				return BackupDescriptor{}, errors.Errorf("duplicate CREATE TABLE for %s", tableName)
 			}
 
+			// Using test cluster settings means that we'll generate a backup using
+			// the latest cluster version available in this binary. This will be safe
+			// once we verify the cluster version during restore.
+			//
+			// TODO(benesch): ensure backups from too-old or too-new nodes are
+			// rejected during restore.
+			st := cluster.MakeTestingClusterSettings()
+
 			affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 			// A nil txn is safe because it is only used by sql.MakeTableDesc, which
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here.
 			var txn *client.Txn
-			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, s, dbDesc.ID, 0 /* table ID */, ts, privs, affected, dbDesc.Name, nil, &evalCtx)
+			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, st, s, dbDesc.ID,
+				0 /* table ID */, ts, privs, affected, dbDesc.Name, nil, &evalCtx)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}
@@ -293,7 +302,9 @@ func insertStmtToKVs(
 		if err != nil {
 			return errors.Wrapf(err, "process insert %q", row)
 		}
-		if err := ri.InsertRow(ctx, b, row, true, false /* traceKV */); err != nil {
+		// TODO(bram): Is the checking of FKs here required? If not, turning them
+		// off may provide a speed boost.
+		if err := ri.InsertRow(ctx, b, row, true, sqlbase.CheckFKs, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert %q", row)
 		}
 	}

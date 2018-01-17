@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"math"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -58,7 +57,7 @@ func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) 
 	for _, datum := range data {
 		if datum.src != nil {
 			if err := p.txCtx.AssertNoAggregationOrWindowing(
-				datum.src, datum.name, p.session.SearchPath,
+				datum.src, datum.name, p.SessionData().SearchPath,
 			); err != nil {
 				return nil, err
 			}
@@ -78,12 +77,8 @@ type limitRun struct {
 	rowIndex int64
 }
 
-func (n *limitNode) Start(params runParams) error {
-	if err := n.plan.Start(params); err != nil {
-		return err
-	}
-
-	return n.evalLimit(params.evalCtx)
+func (n *limitNode) startExec(params runParams) error {
+	return n.evalLimit(params.EvalContext())
 }
 
 func (n *limitNode) Next(params runParams) (bool, error) {

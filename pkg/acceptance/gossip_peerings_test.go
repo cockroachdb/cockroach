@@ -15,19 +15,18 @@
 package acceptance
 
 import (
+	"context"
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -163,24 +162,36 @@ func testClusterConnectedAndFunctional(ctx context.Context, t *testing.T, c clus
 	}
 
 	for i := 0; i < num; i++ {
-		db, err := c.NewClient(ctx, i)
+		db, err := c.NewDB(ctx, i)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if i == 0 {
-			if err := db.Del(ctx, "count"); err != nil {
+			if _, err := db.Exec("CREATE DATABASE test"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec("CREATE TABLE test.kv (k INT PRIMARY KEY, v INT)"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`INSERT INTO test.kv (k, v) VALUES (1, 0)`); err != nil {
 				t.Fatal(err)
 			}
 		}
-		var kv client.KeyValue
-		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			var err error
-			kv, err = txn.Inc(ctx, "count", 1)
-			return err
-		}); err != nil {
+		rows, err := db.Query(`UPDATE test.kv SET v=v+1 WHERE k=1 RETURNING v`)
+		if err != nil {
 			t.Fatal(err)
-		} else if v := kv.ValueInt(); v != int64(i+1) {
-			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
+		}
+		defer rows.Close()
+		var count int
+		if rows.Next() {
+			if err := rows.Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != (i + 1) {
+				t.Fatalf("unexpected value %d for write #%d (expected %d)", count, i, i+1)
+			}
+		} else {
+			t.Fatalf("no results found from update")
 		}
 	}
 }
@@ -230,14 +241,17 @@ func testGossipRestartFirstNodeNeedsIncomingInner(
 		t.Fatal(err)
 	}
 
-	if _, _, err := c.ExecCLI(ctx, 0, []string{"zone", "set", ".default", "-f", zoneFile}); err != nil {
-		t.Fatal(err)
+	for _, zone := range []string{".default", ".meta", ".liveness"} {
+		if _, _, err := c.ExecCLI(ctx, 0, []string{"zone", "set", zone, "-f", zoneFile}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	db := makePGClient(t, c.PGUrl(ctx, 0))
 	defer db.Close()
 
-	testutils.SucceedsSoon(t, func() error {
+	// NB: This was flaky with `SucceedsSoon`.
+	if err := retry.ForDuration(2*time.Minute, func() error {
 		const query = "SELECT COUNT(replicas) FROM crdb_internal.ranges WHERE ARRAY_POSITION(replicas, 1) IS NOT NULL"
 		var count int
 		if err := db.QueryRow(query).Scan(&count); err != nil {
@@ -249,7 +263,9 @@ func testGossipRestartFirstNodeNeedsIncomingInner(
 			return err
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	log.Infof(ctx, "killing all nodes")
 	for i := 0; i < num; i++ {

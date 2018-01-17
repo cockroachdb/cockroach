@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -25,12 +26,13 @@ import (
 
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"encoding/json"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -63,7 +65,7 @@ const (
 )
 
 // apiServerMessage is the standard body for all HTTP 500 responses.
-var errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error "+
+var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "+
 	"has occurred. Please check your CockroachDB logs for more details.")
 
 // A adminServer provides a RESTful HTTP API to administration of
@@ -196,7 +198,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
-	escDBName := tree.Name(req.Database).String()
+	escDBName := tree.NameStringP(&req.Database)
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
@@ -208,7 +210,7 @@ func (s *adminServer) DatabaseDetails(
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 2)
 	if s.isNotFoundError(err) {
-		return nil, grpc.Errorf(codes.NotFound, "%s", err)
+		return nil, status.Errorf(codes.NotFound, "%s", err)
 	}
 	if err != nil {
 		return nil, s.serverError(err)
@@ -295,20 +297,20 @@ func (s *adminServer) TableDetails(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
-	escDBName := tree.Name(req.Database).String()
+	escDBName := tree.NameStringP(&req.Database)
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
-	escTableName := tree.Name(req.Table).String()
+	escTableName := tree.NameStringP(&req.Table)
 	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %[1]s; SHOW INDEX FROM %[1]s; SHOW GRANTS ON TABLE %[1]s; SHOW CREATE TABLE %[1]s;",
 		escQualTable)
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 4)
 	if s.isNotFoundError(err) {
-		return nil, grpc.Errorf(codes.NotFound, "%s", err)
+		return nil, status.Errorf(codes.NotFound, "%s", err)
 	}
 	if err != nil {
 		return nil, s.serverError(err)
@@ -504,7 +506,7 @@ func (s *adminServer) TableDetails(
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
-	escDBName := tree.Name(req.Database).String()
+	escDBName := tree.NameStringP(&req.Database)
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
@@ -573,18 +575,19 @@ func (s *adminServer) TableStats(
 		err    error
 	}
 
-	// Send a SpanStats query to each node. Set a timeout on the context for
-	// these queries.
-	responses := make(chan nodeResponse)
-	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
-	defer cancel()
+	// Send a SpanStats query to each node.
+	responses := make(chan nodeResponse, len(nodeIDs))
 	for nodeID := range nodeIDs {
-		nodeID := nodeID
+		nodeID := nodeID // avoid data race
 		if err := s.server.stopper.RunAsyncTask(
-			nodeCtx, "server.adminServer: requesting remote stats",
+			ctx, "server.adminServer: requesting remote stats",
 			func(ctx context.Context) {
+				// Set a generous timeout on the context for each individual query.
+				ctx, cancel := context.WithTimeout(ctx, 5*base.NetworkTimeout)
+				defer cancel()
+
 				var spanResponse *serverpb.SpanStatsResponse
-				client, err := s.server.status.dialNode(nodeID)
+				client, err := s.server.status.dialNode(ctx, nodeID)
 				if err == nil {
 					req := serverpb.SpanStatsRequest{
 						StartKey: startKey,
@@ -594,16 +597,11 @@ func (s *adminServer) TableStats(
 					spanResponse, err = client.SpanStats(ctx, &req)
 				}
 
-				response := nodeResponse{
+				// Channel is buffered, can always write.
+				responses <- nodeResponse{
 					nodeID: nodeID,
 					resp:   spanResponse,
 					err:    err,
-				}
-				select {
-				case responses <- response:
-					// Response processed.
-				case <-ctx.Done():
-					// Context completed, response no longer needed.
 				}
 			}); err != nil {
 			return nil, err
@@ -625,8 +623,10 @@ func (s *adminServer) TableStats(
 			} else {
 				tableStatResponse.Stats.Add(resp.resp.TotalStats)
 				tableStatResponse.ReplicaCount += int64(resp.resp.RangeCount)
+				tableStatResponse.ApproximateDiskBytes += resp.resp.ApproximateDiskBytes
 			}
 		case <-ctx.Done():
+			// Caller gave up, stop doing work.
 			return nil, ctx.Err()
 		}
 	}
@@ -641,7 +641,7 @@ func (s *adminServer) Users(
 	args := sql.SessionArgs{User: s.getUser(req)}
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
-	query := "SELECT username FROM system.users"
+	query := `SELECT username FROM system.users WHERE "isRole" = false`
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -903,7 +903,7 @@ func (s *adminServer) SetUIData(
 	ctx context.Context, req *serverpb.SetUIDataRequest,
 ) (*serverpb.SetUIDataResponse, error) {
 	if len(req.KeyValues) == 0 {
-		return nil, grpc.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
+		return nil, status.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
 	}
 
 	args := sql.SessionArgs{User: s.getUser(req)}
@@ -944,7 +944,7 @@ func (s *adminServer) GetUIData(
 	defer session.Finish(s.server.sqlExecutor)
 
 	if len(req.Keys) == 0 {
-		return nil, grpc.Errorf(codes.InvalidArgument, "keys cannot be empty")
+		return nil, status.Errorf(codes.InvalidArgument, "keys cannot be empty")
 	}
 
 	resp, err := s.getUIData(ctx, session, s.getUser(req), req.Keys)
@@ -984,9 +984,9 @@ func (s *adminServer) Settings(
 func (s *adminServer) Cluster(
 	_ context.Context, req *serverpb.ClusterRequest,
 ) (*serverpb.ClusterResponse, error) {
-	clusterID := s.server.node.ClusterID
+	clusterID := s.server.ClusterID()
 	if clusterID == (uuid.UUID{}) {
-		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
+		return nil, status.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 
 	// Check if enterprise features are enabled.  We currently test for the
@@ -1013,10 +1013,10 @@ func (s *adminServer) Health(
 ) (*serverpb.HealthResponse, error) {
 	isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
 	if err != nil {
-		return nil, grpc.Errorf(codes.Internal, err.Error())
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	if !isLive {
-		return nil, grpc.Errorf(codes.Unavailable, "node is not live")
+		return nil, status.Errorf(codes.Unavailable, "node is not live")
 	}
 	return &serverpb.HealthResponse{}, nil
 }
@@ -1081,6 +1081,43 @@ func (s *adminServer) Jobs(
 			&job.FractionCompleted,
 			&job.Error,
 		); err != nil {
+			return nil, s.serverError(err)
+		}
+	}
+
+	return &resp, nil
+}
+
+func (s *adminServer) Locations(
+	ctx context.Context, req *serverpb.LocationsRequest,
+) (*serverpb.LocationsResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	q := makeSQLQuery()
+	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), nil, 1)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	defer r.Close(ctx)
+
+	scanner := makeResultScanner(r.ResultList[0].Columns)
+	resp := serverpb.LocationsResponse{
+		Locations: make([]serverpb.LocationsResponse_Location, r.ResultList[0].Rows.Len()),
+	}
+	for i := 0; i < len(resp.Locations); i++ {
+		loc := &resp.Locations[i]
+		lat, lon := new(apd.Decimal), new(apd.Decimal)
+		if err := scanner.ScanAll(
+			r.ResultList[0].Rows.At(i), &loc.LocalityKey, &loc.LocalityValue, lat, lon); err != nil {
+			return nil, s.serverError(err)
+		}
+		if loc.Latitude, err = lat.Float64(); err != nil {
+			return nil, s.serverError(err)
+		}
+		if loc.Longitude, err = lon.Float64(); err != nil {
 			return nil, s.serverError(err)
 		}
 	}
@@ -1440,6 +1477,13 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		// Yes, this copies, but this probably isn't in the critical path.
 		*d = []byte(*s)
 
+	case *apd.Decimal:
+		s, ok := src.(*tree.DDecimal)
+		if !ok {
+			return errors.Errorf("source type assertion failed")
+		}
+		*d = s.Decimal
+
 	default:
 		return errors.Errorf("unimplemented type for scanCol: %T", dst)
 	}
@@ -1580,7 +1624,7 @@ func (s *adminServer) queryDescriptorIDPath(
 // virtual schema, and if so, returns an error.
 func (s *adminServer) assertNotVirtualSchema(dbName string) error {
 	if s.server.sqlExecutor.IsVirtualDatabase(dbName) {
-		return grpc.Errorf(codes.InvalidArgument, "%q is a virtual schema", dbName)
+		return status.Errorf(codes.InvalidArgument, "%q is a virtual schema", dbName)
 	}
 	return nil
 }

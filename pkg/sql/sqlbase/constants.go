@@ -14,7 +14,10 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import "github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 
 // DefaultSearchPath is the search path used by virgin sessions.
-var DefaultSearchPath = tree.SearchPath{}
+var DefaultSearchPath = sessiondata.SearchPath{}
+
+// AdminRole is the default (and non-droppable) role with superuser privileges.
+var AdminRole = "admin"

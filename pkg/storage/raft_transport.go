@@ -17,6 +17,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"sort"
@@ -25,8 +26,8 @@ import (
 	"unsafe"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/pkg/errors"
 	"github.com/rubyist/circuitbreaker"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -165,7 +166,10 @@ type RaftTransport struct {
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
 func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
-	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st, nil, nil, nil)
+	resolver := func(roachpb.NodeID) (net.Addr, error) {
+		return nil, errors.New("dummy resolver")
+	}
+	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st, resolver, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport.
@@ -440,7 +444,7 @@ func (t *RaftTransport) connectAndProcess(
 		if err != nil {
 			return err
 		}
-		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		conn, err := t.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 		if err != nil {
 			return err
 		}
@@ -624,7 +628,7 @@ func (t *RaftTransport) SendSnapshot(
 		if err != nil {
 			return err
 		}
-		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		conn, err := t.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 		if err != nil {
 			return err
 		}

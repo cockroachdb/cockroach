@@ -16,6 +16,7 @@ package sql_test
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
@@ -29,7 +30,6 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -129,7 +129,7 @@ func injectErrors(
 		// injection for some additional randomness.
 		injections := injectionApproaches{
 			{counts: magicVals.restartCounts, errFn: func() error {
-				return roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{})
+				return roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil)
 			}},
 			{counts: magicVals.abortCounts, errFn: func() error {
 				return roachpb.NewTransactionAbortedError()
@@ -447,8 +447,6 @@ func TestTxnAutoRetry(t *testing.T) {
 	defer aborter.Close(t)
 	params, cmdFilters := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
-	// Disable one phase commits because they cannot be restarted.
-	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	{
@@ -611,8 +609,6 @@ func TestTxnAutoRetryParallelStmts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	params, cmdFilters := tests.CreateTestServerParams()
-	// Disable one phase commits because they cannot be restarted.
-	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	sqlDB.SetMaxOpenConns(1)
@@ -753,8 +749,6 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	defer aborter.Close(t)
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
-	// Disable one phase commits because they cannot be restarted.
-	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	{
@@ -1317,7 +1311,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 					txn.ResetObservedTimestamps()
 					now := s.Clock().Now()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), txn)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now, txn), txn)
 				}
 			}
 			return nil
@@ -1385,7 +1379,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 					txn.ResetObservedTimestamps()
 					now := s.Clock().Now()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), txn)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now, txn), txn)
 				}
 			}
 			return nil
@@ -1477,7 +1471,8 @@ func TestDistSQLRetryableError(t *testing.T) {
 									restarted = true
 									err := roachpb.NewReadWithinUncertaintyIntervalError(
 										fArgs.Hdr.Timestamp, /* readTS */
-										hlc.Timestamp{})
+										hlc.Timestamp{},
+										nil)
 									errTxn := fArgs.Hdr.Txn.Clone()
 									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.Timestamp{})
 									pErr := roachpb.NewErrorWithTxn(err, &errTxn)

@@ -9,6 +9,9 @@
 package storageccl
 
 import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"hash/fnv"
@@ -31,7 +34,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -62,12 +64,17 @@ const (
 	authParamImplicit = "implicit"
 	authParamDefault  = "default"
 
-	cloudstoragePrefix       = "cloudstorage"
-	cloudstorageGS           = cloudstoragePrefix + ".gs"
-	cloudstorageDefault      = ".default"
-	cloudstorageKey          = ".key"
+	cloudstoragePrefix = "cloudstorage"
+	cloudstorageGS     = cloudstoragePrefix + ".gs"
+	cloudstorageHTTP   = cloudstoragePrefix + ".http"
+
+	cloudstorageDefault = ".default"
+	cloudstorageKey     = ".key"
+
 	cloudstorageGSDefault    = cloudstorageGS + cloudstorageDefault
 	cloudstorageGSDefaultKey = cloudstorageGSDefault + cloudstorageKey
+
+	cloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
 )
 
 // ExportStorageConfFromURI generates an ExportStorage config from a URI string.
@@ -154,9 +161,9 @@ func MakeExportStorage(
 	case roachpb.ExportStorageProvider_LocalFile:
 		return makeLocalStorage(dest.LocalFile.Path, settings)
 	case roachpb.ExportStorageProvider_Http:
-		return makeHTTPStorage(dest.HttpPath.BaseUri)
+		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
 	case roachpb.ExportStorageProvider_S3:
-		return makeS3Storage(ctx, dest.S3Config)
+		return makeS3Storage(ctx, dest.S3Config, settings)
 	case roachpb.ExportStorageProvider_GoogleCloud:
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)
 	case roachpb.ExportStorageProvider_Azure:
@@ -200,6 +207,11 @@ var (
 	gcsDefault = settings.RegisterStringSetting(
 		cloudstorageGSDefaultKey,
 		"if set, JSON key to use during Google Cloud Storage operations",
+		"",
+	)
+	httpCustomCA = settings.RegisterStringSetting(
+		cloudstorageHTTPCASetting,
+		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 		"",
 	)
 )
@@ -298,11 +310,30 @@ type httpStorage struct {
 
 var _ ExportStorage = &httpStorage{}
 
-func makeHTTPStorage(base string) (ExportStorage, error) {
+func makeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
+	var tlsConf *tls.Config
+	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not load system root CA pool")
+		}
+		if !roots.AppendCertsFromPEM([]byte(pem)) {
+			return nil, errors.Errorf("failed to parse root CA certificate from %q", pem)
+		}
+		tlsConf = &tls.Config{RootCAs: roots}
+	}
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConf}}, nil
+}
+
+func makeHTTPStorage(base string, settings *cluster.Settings) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but base path not provided")
 	}
-	client := &http.Client{Transport: &http.Transport{}}
+
+	client, err := makeHTTPClient(settings)
+	if err != nil {
+		return nil, err
+	}
 	uri, err := url.Parse(base)
 	if err != nil {
 		return nil, err
@@ -422,7 +453,9 @@ func s3Retry(ctx context.Context, fn func() error) error {
 
 var _ ExportStorage = &s3Storage{}
 
-func makeS3Storage(ctx context.Context, conf *roachpb.ExportStorage_S3) (ExportStorage, error) {
+func makeS3Storage(
+	ctx context.Context, conf *roachpb.ExportStorage_S3, settings *cluster.Settings,
+) (ExportStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
@@ -433,6 +466,11 @@ func makeS3Storage(ctx context.Context, conf *roachpb.ExportStorage_S3) (ExportS
 		if conf.Region == "" {
 			return nil, errors.New("s3 region must be specified when using custom endpoints")
 		}
+		client, err := makeHTTPClient(settings)
+		if err != nil {
+			return nil, err
+		}
+		config.HTTPClient = client
 	}
 	sess, err := session.NewSession(config)
 	if err != nil {

@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"errors"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -46,6 +45,10 @@ type showTraceNode struct {
 // ShowTrace shows the current stored session trace.
 // Privileges: None.
 func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
+	if n.TraceType == tree.ShowTraceReplica {
+		return p.ShowTraceReplica(ctx, n)
+	}
+
 	const fullSelection = `
        timestamp,
        timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
@@ -74,12 +77,13 @@ SELECT %s
 	}
 
 	whereClause := ""
-	if n.OnlyKVTrace {
+	if n.TraceType == tree.ShowTraceKV {
 		whereClause = `
 WHERE message LIKE 'fetched: %'
    OR message LIKE 'CPut %'
    OR message LIKE 'Put %'
    OR message LIKE 'DelRange %'
+   OR message LIKE 'ClearRange %'
    OR message LIKE 'Del %'
    OR message LIKE 'Get %'
    OR message LIKE 'Scan %'
@@ -90,6 +94,7 @@ WHERE message LIKE 'fetched: %'
    OR message LIKE 'output row: %'
    OR message LIKE 'execution failed: %'
    OR message LIKE 'r%: sending batch %'
+   OR message LIKE 'cascading %'
 `
 	}
 
@@ -110,7 +115,8 @@ WHERE message LIKE 'fetched: %'
 		plan.Close(ctx)
 		return nil, err
 	}
-	tracePlan, err := p.makeShowTraceNode(stmtPlan, n.OnlyKVTrace /* kvTracingEnabled */)
+	tracePlan, err := p.makeShowTraceNode(
+		stmtPlan, n.TraceType == tree.ShowTraceKV /* kvTracingEnabled */)
 	if err != nil {
 		plan.Close(ctx)
 		stmtPlan.Close(ctx)
@@ -155,9 +161,9 @@ WHERE message LIKE 'fetched: %'
 
 	// We failed to substitute; this is an internal error.
 	err = pgerror.NewErrorf(pgerror.CodeInternalError,
-		"invalid logical plan structure:\n%s", planToString(ctx, plan),
+		"invalid logical plan structure:\n%s", planToString(ctx, plan, nil),
 	).SetDetailf(
-		"while inserting:\n%s", planToString(ctx, tracePlan))
+		"while inserting:\n%s", planToString(ctx, tracePlan, nil))
 	plan.Close(ctx)
 	stmtPlan.Close(ctx)
 	tracePlan.Close(ctx)
@@ -195,22 +201,21 @@ type traceRun struct {
 	stopTracing func() error
 }
 
-func (n *showTraceNode) Start(params runParams) error {
-	if params.p.session.Tracing.Enabled() {
+func (n *showTraceNode) startExec(params runParams) error {
+	if params.extendedEvalCtx.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
-	if err := params.p.session.Tracing.StartTracing(
+	if err := params.extendedEvalCtx.SessionMutator.StartSessionTracing(
 		tracing.SnowballRecording, n.kvTracingEnabled,
 	); err != nil {
 		return err
 	}
-	session := params.p.session
-	n.run.stopTracing = func() error { return stopTracing(session) }
+	n.run.stopTracing = func() error { return stopTracing(params.extendedEvalCtx.SessionMutator) }
 
 	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
 	params.ctx = startCtx
-	return n.plan.Start(params)
+	return startExec(params, n.plan)
 }
 
 func (n *showTraceNode) Next(params runParams) (bool, error) {
@@ -255,13 +260,13 @@ func (n *showTraceNode) Next(params runParams) (bool, error) {
 			log.VEventf(consumeCtx, 2, "resources released, stopping trace")
 		}()
 
-		if err := stopTracing(params.p.session); err != nil {
+		if err := stopTracing(params.extendedEvalCtx.SessionMutator); err != nil {
 			return false, err
 		}
 		n.run.stopTracing = nil
 
 		var err error
-		n.run.traceRows, err = params.p.session.Tracing.generateSessionTraceVTable()
+		n.run.traceRows, err = params.extendedEvalCtx.Tracing.generateSessionTraceVTable()
 		if err != nil {
 			return false, err
 		}

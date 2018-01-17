@@ -15,10 +15,9 @@
 package storage
 
 import (
+	"context"
 	"runtime/debug"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -260,4 +259,25 @@ func maybeInlineSideloadedRaftCommand(
 		ent.Data = encodeRaftCommandV2(cmdID, data)
 	}
 	return &ent, nil
+}
+
+// assertSideloadedRaftCommandInlined asserts that if the provided entry is a
+// sideloaded entry, then its payload has already been inlined. Doing so
+// requires unmarshalling the raft command, so this assertion should be kept out
+// of performance critical paths.
+func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
+	if !sniffSideloadedRaftCommand(ent.Data) {
+		return
+	}
+
+	var command storagebase.RaftCommand
+	_, data := DecodeRaftCommand(ent.Data)
+	if err := protoutil.Unmarshal(data, &command); err != nil {
+		log.Fatal(ctx, err)
+	}
+
+	if len(command.ReplicatedEvalResult.AddSSTable.Data) == 0 {
+		// The entry is "thin", which is what this assertion is checking for.
+		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", command)
+	}
 }

@@ -15,6 +15,7 @@
 package acceptance
 
 import (
+	"context"
 	"flag"
 	"net/http"
 	"regexp"
@@ -22,7 +23,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/server/status"

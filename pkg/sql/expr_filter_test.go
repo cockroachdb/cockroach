@@ -15,11 +15,10 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -116,13 +115,76 @@ func TestSplitFilter(t *testing.T) {
 		{`a IN (1, b) AND c`, []string{"a"}, `<nil>`, `(a IN (1, b)) AND c`},
 		{`a IN (1, b) AND c`, []string{"a", "b"}, `a IN (1, b)`, `c`},
 		{`a IN (1, b) AND c`, []string{"c"}, `c`, `a IN (1, b)`},
+
+		{`(a, b, j) = (1, 2, 3)`, []string{"b"}, `b = 2`, `(a, b, j) = (1, 2, 3)`},
+		{`(a, b, j) = (1, 2, 3)`, []string{"a", "j"}, `(a, j) = (1, 3)`, `(a, b, j) = (1, 2, 3)`},
+
+		{`(a, b, j) != (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) != (1, 2, 3)`},
+		{`(a, b, j) != (1, 2, 3)`, []string{"a", "j"}, `<nil>`, `(a, b, j) != (1, 2, 3)`},
+
+		{`(a, b, j) < (1, 2, 3)`, []string{"a"}, `a <= 1`, `(a, b, j) < (1, 2, 3)`},
+		{`(a, b, j) < (1, 2, 3)`, []string{"a", "b"}, `(a, b) <= (1, 2)`, `(a, b, j) < (1, 2, 3)`},
+		{`(a, b, j) < (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) < (1, 2, 3)`},
+
+		{`(a, b, j) <= (1, 2, 3)`, []string{"a"}, `a <= 1`, `(a, b, j) <= (1, 2, 3)`},
+		{`(a, b, j) <= (1, 2, 3)`, []string{"a", "b"}, `(a, b) <= (1, 2)`, `(a, b, j) <= (1, 2, 3)`},
+		{`(a, b, j) <= (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) <= (1, 2, 3)`},
+
+		{`(a, b, j) > (1, 2, 3)`, []string{"a"}, `a >= 1`, `(a, b, j) > (1, 2, 3)`},
+		{`(a, b, j) > (1, 2, 3)`, []string{"a", "b"}, `(a, b) >= (1, 2)`, `(a, b, j) > (1, 2, 3)`},
+		{`(a, b, j) > (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) > (1, 2, 3)`},
+
+		{`(a, b, j) >= (1, 2, 3)`, []string{"a"}, `a >= 1`, `(a, b, j) >= (1, 2, 3)`},
+		{`(a, b, j) >= (1, 2, 3)`, []string{"a", "b"}, `(a, b) >= (1, 2)`, `(a, b, j) >= (1, 2, 3)`},
+		{`(a, b, j) >= (1, 2, 3)`, []string{"b"}, `<nil>`, `(a, b, j) >= (1, 2, 3)`},
+
+		{`NOT ((a, b, j) = (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) = (1, 2, 3))`},
+		{`NOT ((a, b, j) = (1, 2, 3))`, []string{"a", "j"}, `<nil>`, `NOT ((a, b, j) = (1, 2, 3))`},
+
+		{`NOT ((a, b, j) != (1, 2, 3))`, []string{"b"}, `NOT (b != 2)`, `NOT ((a, b, j) != (1, 2, 3))`},
+		{`NOT ((a, b, j) != (1, 2, 3))`, []string{"a", "j"}, `NOT ((a, j) != (1, 3))`, `NOT ((a, b, j) != (1, 2, 3))`},
+
+		{`NOT ((a, b, j) < (1, 2, 3))`, []string{"a"}, `NOT (a < 1)`, `NOT ((a, b, j) < (1, 2, 3))`},
+		{`NOT ((a, b, j) < (1, 2, 3))`, []string{"a", "b"}, `NOT ((a, b) < (1, 2))`, `NOT ((a, b, j) < (1, 2, 3))`},
+		{`NOT ((a, b, j) < (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) < (1, 2, 3))`},
+
+		{`NOT ((a, b, j) <= (1, 2, 3))`, []string{"a"}, `NOT (a < 1)`, `NOT ((a, b, j) <= (1, 2, 3))`},
+		{`NOT ((a, b, j) <= (1, 2, 3))`, []string{"a", "b"}, `NOT ((a, b) < (1, 2))`, `NOT ((a, b, j) <= (1, 2, 3))`},
+		{`NOT ((a, b, j) <= (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) <= (1, 2, 3))`},
+
+		{`NOT ((a, b, j) > (1, 2, 3))`, []string{"a"}, `NOT (a > 1)`, `NOT ((a, b, j) > (1, 2, 3))`},
+		{`NOT ((a, b, j) > (1, 2, 3))`, []string{"a", "b"}, `NOT ((a, b) > (1, 2))`, `NOT ((a, b, j) > (1, 2, 3))`},
+		{`NOT ((a, b, j) > (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) > (1, 2, 3))`},
+
+		{`NOT ((a, b, j) >= (1, 2, 3))`, []string{"a"}, `NOT (a > 1)`, `NOT ((a, b, j) >= (1, 2, 3))`},
+		{`NOT ((a, b, j) >= (1, 2, 3))`, []string{"a", "b"}, `NOT ((a, b) > (1, 2))`, `NOT ((a, b, j) >= (1, 2, 3))`},
+		{`NOT ((a, b, j) >= (1, 2, 3))`, []string{"b"}, `<nil>`, `NOT ((a, b, j) >= (1, 2, 3))`},
+
+		{`(a, b, j, h) < (1, 2, 3, 4.0)`, []string{"a"}, `a <= 1`, `(a, b, j, h) < (1, 2, 3, 4.0)`},
+		{`(a, b, j, h) < (1, 2, 3, 4.0)`, []string{"a", "j"}, `a <= 1`, `(a, b, j, h) < (1, 2, 3, 4.0)`},
+		{`(a, b, j, h) < (1, 2, 3, 4.0)`, []string{"a", "b", "j"}, `(a, b, j) <= (1, 2, 3)`, `(a, b, j, h) < (1, 2, 3, 4.0)`},
+		{`(a, b, j, h) < (1, 2, 3, 4.0)`, []string{"a", "b", "h"}, `(a, b) <= (1, 2)`, `(a, b, j, h) < (1, 2, 3, 4.0)`},
+
+		// Regression tests for #21243.
+		{
+			`((a, b, j) = (1, 2, 6)) AND (h > 8.0)`,
+			[]string{"a", "b"},
+			`(a, b) = (1, 2)`,
+			`((a, b, j) = (1, 2, 6)) AND (h > 8.0)`,
+		},
+		{
+			`(((a, b) > (1, 2)) OR (((a, b) = (1, 2)) AND (j < 6))) OR (((a, b, j) = (1, 2, 6)) AND (h > 8.0))`,
+			[]string{"a", "b"},
+			`(((a, b) > (1, 2)) OR ((a, b) = (1, 2))) OR ((a, b) = (1, 2))`,
+			`(((a, b) > (1, 2)) OR (((a, b) = (1, 2)) AND (j < 6))) OR (((a, b, j) = (1, 2, 6)) AND (h > 8.0))`,
+		},
 	}
 
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			// A function that "converts" only vars in the list.
 			conv := func(expr tree.VariableExpr) (bool, tree.Expr) {
@@ -132,7 +194,8 @@ func TestSplitFilter(t *testing.T) {
 					if colName == col {
 						// Convert to a VarName (to check that conversion happens correctly). It
 						// will print the same.
-						return true, tree.UnresolvedName{tree.Name(colName)}
+						cn := tree.Name(colName)
+						return true, &tree.UnresolvedName{&cn}
 					}
 				}
 				return false, nil
@@ -193,7 +256,7 @@ func TestExtractNotNullConstraints(t *testing.T) {
 		{`a = 1 OR b = 2`, []int{}},
 		{`(a = 1 AND b = 2) OR (b = 3 AND j = 4)`, []int{1}},
 		{`(a, b) = (1, 2)`, []int{0, 1}},
-		{`(a, b) > (1, 2)`, []int{0, 1}},
+		{`(a, b) > (1, 2)`, []int{}},
 		{`a IN (b,j)`, []int{0}},
 		{`(a, b) IN ((1,j))`, []int{0, 1}},
 		{`a NOT IN (b,j)`, []int{0}},
@@ -204,8 +267,8 @@ func TestExtractNotNullConstraints(t *testing.T) {
 	p := makeTestPlanner()
 	for _, tc := range testCases {
 		t.Run(tc.expr, func(t *testing.T) {
-			p.evalCtx = tree.MakeTestingEvalContext()
-			defer p.evalCtx.Stop(context.Background())
+			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			defer p.extendedEvalCtx.Stop(context.Background())
 
 			sel := makeSelectNode(t, p)
 			expr := parseAndNormalizeExpr(t, p, tc.expr, sel)

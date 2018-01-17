@@ -16,9 +16,9 @@ package storage
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -64,12 +64,21 @@ func (is Server) CollectChecksum(
 			if err != nil {
 				return err
 			}
-			resp.Checksum = c.checksum
-			if !bytes.Equal(req.Checksum, c.checksum) {
-				log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
-					req.RangeID, req.Checksum, c.checksum)
-				resp.Snapshot = c.snapshot
+			ccr := c.CollectChecksumResponse
+			if !bytes.Equal(req.Checksum, ccr.Checksum) {
+				// If this check is false, then this request is the replica carrying out
+				// the consistency check. The message is spurious, but we want to leave the
+				// snapshot (if present) intact.
+				if len(req.Checksum) > 0 {
+					log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
+						req.RangeID, req.Checksum, ccr.Checksum)
+					// Leave resp.Snapshot alone so that the caller will receive what's
+					// in it (if anything).
+				}
+			} else {
+				ccr.Snapshot = nil
 			}
+			resp = &ccr
 			return nil
 		})
 	return resp, err

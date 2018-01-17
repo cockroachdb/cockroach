@@ -15,14 +15,14 @@
 package storage
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -104,7 +104,12 @@ func (q *consistencyQueue) process(
 	}
 	req := roachpb.CheckConsistencyRequest{}
 	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
-		log.Error(ctx, pErr.GoError())
+		_, shouldQuiesce := <-repl.store.Stopper().ShouldQuiesce()
+		if !shouldQuiesce || !grpcutil.IsClosedConnection(pErr.GoError()) {
+			// Suppress noisy errors about closed GRPC connections when the
+			// server is quiescing.
+			log.Error(ctx, pErr.GoError())
+		}
 	}
 	// Update the last processed time for this queue.
 	if err := repl.setQueueLastProcessed(ctx, q.name, repl.store.Clock().Now()); err != nil {

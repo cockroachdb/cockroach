@@ -15,6 +15,7 @@
 package security
 
 import (
+	"context"
 	"crypto/tls"
 	"os"
 	"os/signal"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 )

@@ -1,0 +1,44 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.storage.engine.enginepb;
+option go_package = "enginepb";
+
+import "gogoproto/gogo.proto";
+
+enum RegistryVersion {
+  // The only version so far.
+  Base = 0;
+}
+
+// Registry describes how a files are handled. This includes the
+// rockdb::Env responsible for each file as well as opaque env details.
+// TODO(mberhault): this is still in flux.
+message Registry {
+  // version is currently always Base.
+  RegistryVersion version = 1;
+  repeated FileEntry files = 2;
+}
+
+message FileEntry {
+  // File path relative to the DB directory.
+  // TODO(mberhault): figure out if we need anything special for Windows.
+  string Filename = 1;
+  // Env level identifies which rocksdb::Env is responsible for this file.
+  int32 env_level = 2;
+
+  // Env-specific fields for non-0 env. These are known by CCL code only.
+  // TODO(mberhault): determine format. Maybe google.protobuf.Any
+}

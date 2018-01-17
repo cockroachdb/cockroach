@@ -15,13 +15,13 @@
 package base
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"golang.org/x/net/context"
 )
 
 // TestServerArgs contains the parameters one can set when creating a test
@@ -75,7 +75,6 @@ type TestServerArgs struct {
 	// Fields copied to the server.Config.
 	Insecure                 bool
 	RetryOptions             retry.Options
-	MetricsSampleInterval    time.Duration
 	SocketFile               string
 	ScanInterval             time.Duration
 	ScanMaxIdleTime          time.Duration

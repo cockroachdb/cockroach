@@ -15,11 +15,10 @@
 package retry
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 func TestRetryExceedsMaxBackoff(t *testing.T) {

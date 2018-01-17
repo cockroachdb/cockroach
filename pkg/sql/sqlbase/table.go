@@ -15,13 +15,13 @@
 package sqlbase
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -38,27 +38,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var nameToVisibleTypeMap = map[string]ColumnType_VisibleType{
-	"INTEGER":         ColumnType_INTEGER,
-	"INT4":            ColumnType_INTEGER,
-	"INT8":            ColumnType_BIGINT,
-	"INT64":           ColumnType_BIGINT,
-	"BIT":             ColumnType_BIT,
-	"INT2":            ColumnType_SMALLINT,
-	"SMALLINT":        ColumnType_SMALLINT,
-	"FLOAT4":          ColumnType_REAL,
-	"REAL":            ColumnType_REAL,
-	"FLOAT8":          ColumnType_DOUBLE_PRECISON,
-	"DOUBLE PRECISON": ColumnType_DOUBLE_PRECISON,
-}
+// aliasToVisibleTypeMap maps type aliases to ColumnType_VisibleType variants
+// so that the alias is persisted. When adding new column type aliases or new
+// VisibleType variants, consider adding to this mapping as well.
+var aliasToVisibleTypeMap = map[string]ColumnType_VisibleType{
+	coltypes.Bit.Name:      ColumnType_BIT,
+	coltypes.Int2.Name:     ColumnType_SMALLINT,
+	coltypes.Int4.Name:     ColumnType_INTEGER,
+	coltypes.Int8.Name:     ColumnType_BIGINT,
+	coltypes.Int64.Name:    ColumnType_BIGINT,
+	coltypes.Integer.Name:  ColumnType_INTEGER,
+	coltypes.SmallInt.Name: ColumnType_SMALLINT,
+	coltypes.BigInt.Name:   ColumnType_BIGINT,
 
-func exprContainsVarsError(context string, Expr tree.Expr) error {
-	return fmt.Errorf("%s expression '%s' may not contain variable sub-expressions", context, Expr)
-}
-
-func incompatibleExprTypeError(context string, expectedType types.T, actualType types.T) error {
-	return fmt.Errorf("incompatible type for %s expression: %s vs %s",
-		context, expectedType, actualType)
+	coltypes.Real.Name:   ColumnType_REAL,
+	coltypes.Float4.Name: ColumnType_REAL,
+	coltypes.Float8.Name: ColumnType_DOUBLE_PRECISION,
+	coltypes.Double.Name: ColumnType_DOUBLE_PRECISION,
 }
 
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
@@ -72,17 +68,19 @@ func SanitizeVarFreeExpr(
 	evalCtx *tree.EvalContext,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(evalCtx, expr) {
-		return nil, exprContainsVarsError(context, expr)
+		return nil, fmt.Errorf("%s expression '%s' may not contain variable sub-expressions",
+			context, expr)
 	}
 	typedExpr, err := tree.TypeCheck(expr, semaCtx, expectedType)
 	if err != nil {
 		return nil, err
 	}
-	defaultType := typedExpr.ResolvedType()
-	if !expectedType.Equivalent(defaultType) && typedExpr != tree.DNull {
-		// The DEFAULT expression must match the column type exactly unless it is a
-		// constant NULL value.
-		return nil, incompatibleExprTypeError(context, expectedType, defaultType)
+	actualType := typedExpr.ResolvedType()
+	if !expectedType.Equivalent(actualType) && typedExpr != tree.DNull {
+		// The expression must match the column type exactly unless it is a constant
+		// NULL value.
+		return nil, fmt.Errorf("expected %s expression to have type %s, but '%s' has type %s",
+			context, expectedType, expr, actualType)
 	}
 	return typedExpr, nil
 }
@@ -95,7 +93,7 @@ func populateTypeAttrs(
 	case *coltypes.TBool:
 	case *coltypes.TInt:
 		base.Width = int32(t.Width)
-		if val, present := nameToVisibleTypeMap[t.Name]; present {
+		if val, present := aliasToVisibleTypeMap[t.Name]; present {
 			base.VisibleType = val
 		}
 	case *coltypes.TFloat:
@@ -104,7 +102,7 @@ func populateTypeAttrs(
 			return ColumnType{}, errors.New("precision for type float must be at least 1 bit")
 		}
 		base.Precision = int32(t.Prec)
-		if val, present := nameToVisibleTypeMap[t.Name]; present {
+		if val, present := aliasToVisibleTypeMap[t.Name]; present {
 			base.VisibleType = val
 		}
 	case *coltypes.TDecimal:
@@ -787,7 +785,7 @@ func DecodeIndexKey(
 			}
 
 			length := int(ancestor.SharedPrefixLen)
-			key, err = DecodeKeyVals(types[:length], vals[:length], colDirs[:length], key)
+			key, err = DecodeKeyVals(vals[:length], colDirs[:length], key)
 			if err != nil {
 				return nil, false, err
 			}
@@ -810,7 +808,7 @@ func DecodeIndexKey(
 		return nil, false, nil
 	}
 
-	key, err = DecodeKeyVals(types, vals, colDirs, key)
+	key, err = DecodeKeyVals(vals, colDirs, key)
 	if err != nil {
 		return nil, false, err
 	}
@@ -828,9 +826,7 @@ func DecodeIndexKey(
 // DecodeKeyVals decodes the values that are part of the key. The decoded
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.
-func DecodeKeyVals(
-	types []ColumnType, vals []EncDatum, directions []encoding.Direction, key []byte,
-) ([]byte, error) {
+func DecodeKeyVals(vals []EncDatum, directions []encoding.Direction, key []byte) ([]byte, error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
 			len(directions), len(vals))
@@ -841,7 +837,7 @@ func DecodeKeyVals(
 			enc = DatumEncoding_DESCENDING_KEY
 		}
 		var err error
-		vals[j], key, err = EncDatumFromBuffer(&types[j], enc, key)
+		vals[j], key, err = EncDatumFromBuffer(enc, key)
 		if err != nil {
 			return nil, err
 		}
@@ -895,7 +891,7 @@ func ExtractIndexKey(
 			return nil, errors.Errorf("descriptor did not match key")
 		}
 	} else {
-		key, err = DecodeKeyVals(indexTypes, values, dirs, key)
+		key, err = DecodeKeyVals(values, dirs, key)
 		if err != nil {
 			return nil, err
 		}
@@ -919,7 +915,7 @@ func ExtractIndexKey(
 			return nil, err
 		}
 	}
-	_, err = DecodeKeyVals(extraTypes, extraValues, dirs, extraKey)
+	_, err = DecodeKeyVals(extraValues, dirs, extraKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1315,15 +1311,15 @@ func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []b
 	if err != nil {
 		return nil, b, err
 	}
-	// NULL, true, and false are special, because their values are fully encoded by their value tag.
+	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
 		return tree.DNull, b[dataOffset:], nil
-	} else if typ == encoding.True {
-		return tree.MakeDBool(tree.DBool(true)), b[dataOffset:], nil
-	} else if typ == encoding.False {
-		return tree.MakeDBool(tree.DBool(false)), b[dataOffset:], nil
 	}
-	return decodeUntaggedDatum(a, valType, b[dataOffset:])
+	// Bool is special because the value is stored in the value tag.
+	if valType != types.Bool {
+		b = b[dataOffset:]
+	}
+	return decodeUntaggedDatum(a, valType, b)
 }
 
 type arrayHeader struct {
@@ -1407,6 +1403,9 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []by
 // decodeUntaggedDatum is used to decode a Datum whose type is known, and which
 // doesn't have a value tag (either due to it having been consumed already or
 // not having one in the first place).
+//
+// If t is types.Bool, the value tag must be present, as its value is encoded in
+// the tag directly.
 func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []byte, error) {
 	switch t {
 	case types.Int:
@@ -1422,14 +1421,13 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		}
 		return a.NewDString(tree.DString(data)), b, nil
 	case types.Bool:
-		// The value of booleans are encoded in their tag, so we don't have an
+		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
 		b, data, err := encoding.DecodeBoolValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		d := tree.DBool(data)
-		return &d, b, nil
+		return tree.MakeDBool(tree.DBool(data)), b, nil
 	case types.Float:
 		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
 		if err != nil {
@@ -1486,8 +1484,11 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		if err != nil {
 			return nil, b, err
 		}
-		_, j, err := json.DecodeJSON(data)
-		return a.NewDJSON(tree.DJSON{JSON: j}), b, err
+		j, err := json.FromEncoding(data)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDJSON(tree.DJSON{JSON: j}), b, nil
 	case types.Oid:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
@@ -1539,8 +1540,8 @@ func EncodeSecondaryIndex(
 		return IndexEntry{}, err
 	}
 
-	// Add the extra columns - they are encoded ascendingly which is done by
-	// passing nil for the encoding directions.
+	// Add the extra columns - they are encoded in ascending order which is done
+	// by passing nil for the encoding directions.
 	extraKey, _, err := EncodeColumns(secondaryIndex.ExtraColumnIDs, nil,
 		colMap, values, nil)
 	if err != nil {
@@ -1866,9 +1867,12 @@ func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Decimal, nil
 	case types.Bytes, types.String, types.Name:
 		return encoding.Bytes, nil
-	case types.Timestamp, types.TimestampTZ, types.Date:
+	case types.Timestamp, types.TimestampTZ:
 		return encoding.Time, nil
-	case types.Time:
+	// Note: types.Date was incorrectly mapped to encoding.Time when arrays were
+	// first introduced. If any 1.1 users used date arrays, they would have been
+	// persisted with incorrect elementType values.
+	case types.Date, types.Time:
 		return encoding.Int, nil
 	case types.Interval:
 		return encoding.Duration, nil
@@ -2453,7 +2457,10 @@ func TableEquivSignatures(
 }
 
 // maxKeyTokens returns the maximum number of key tokens in an index's key,
-// including the table ID, index ID, and index column values.
+// including the table ID, index ID, and index column values (ncluding extra
+// columns that may be stored in the key).
+// It requires knowledge of whether the key will or might contain a NULL value:
+// if uncertain, pass in true to 'overestimate' the maxKeyTokens.
 //
 // In general, a key belonging to an interleaved index grandchild is encoded as:
 //
@@ -2470,9 +2477,17 @@ func TableEquivSignatures(
 //    /table/index/<parent-pk1>/.../<parent-pkX>
 //
 // We return the maximum number of <tokens> in this prefix.
-func maxKeyTokens(index *IndexDescriptor) int {
+func maxKeyTokens(index *IndexDescriptor, containsNull bool) int {
 	nTables := len(index.Interleave.Ancestors) + 1
-	nKeys := len(index.ColumnIDs)
+	nKeyCols := len(index.ColumnIDs)
+
+	// Non-unique secondary indexes or unique secondary indexes with a NULL
+	// value have additional columns in the key that may appear in a span
+	// (e.g. primary key columns not part of the index).
+	// See EncodeSecondaryIndex.
+	if !index.Unique || containsNull {
+		nKeyCols += len(index.ExtraColumnIDs)
+	}
 
 	// To illustrate how we compute max # of key tokens, take the
 	// key in the example above and let the respective index be child.
@@ -2487,13 +2502,12 @@ func maxKeyTokens(index *IndexDescriptor) int {
 	// Each <parent-pkX> must be a part of the index's columns (nKeys).
 	// Finally, we do not want to include the interleave sentinel for the
 	// current index (-1).
-	return 3*nTables + nKeys - 1
+	return 3*nTables + nKeyCols - 1
 }
 
-// TightenStartKey pushes forward the start key to the first key belonging to
-// the index (whether it exists or not) in the span.
-// This is relevant for parent spans that have an interleaved child's index key
-// as a start key.
+// AdjustStartKeyForInterleave adjusts the start key to skip unnecessary
+// interleaved sections.
+//
 // For example, if child is interleaved into parent, a typical parent
 // span might look like
 //    /1 - /3
@@ -2507,12 +2521,12 @@ func maxKeyTokens(index *IndexDescriptor) int {
 // We can thus push forward the start key from /1/#/2 to /2. If the start key
 // was /1, we cannot push this forwards since that is the first key we want
 // to read.
-func TightenStartKey(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, error) {
-	nIndexTokens := maxKeyTokens(index)
-	keyTokens, err := encoding.DecomposeKeyTokens(start)
+func AdjustStartKeyForInterleave(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, error) {
+	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(start)
 	if err != nil {
 		return roachpb.Key{}, err
 	}
+	nIndexTokens := maxKeyTokens(index, containsNull)
 
 	// This is either the index's own key or one of its ancestor's key.
 	// Nothing to do.
@@ -2522,20 +2536,28 @@ func TightenStartKey(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, er
 
 	// len(keyTokens) > nIndexTokens, so this must be a child key.
 	// Transform /1/#/2 --> /2.
-	return start[:nIndexTokens].PrefixEnd(), nil
+	firstNTokenLen := 0
+	for _, token := range keyTokens[:nIndexTokens] {
+		firstNTokenLen += len(token)
+	}
+
+	return start[:firstNTokenLen].PrefixEnd(), nil
 }
 
-// TightenEndKey pushes back the end key to the last key of the last row
-// belonging to the index (whether it exists or not) in the span.
-// This is relevant for parent spans that have interleaved children.
+// AdjustEndKeyForInterleave returns an exclusive end key. It does two things:
+//    - determines the end key based on the prior: inclusive vs exclusive
+//    - adjusts the end key to skip unnecessary interleaved sections
+//
 // For example, the parent span composed from the filter PK >= 1 and PK < 3 is
 //    /1 - /3
 // This reads all keys up to the first parent key for PK = 3. If parent had
-// interleaved tables and keys, it would unncessarily scan over interleaved
+// interleaved tables and keys, it would unnecessarily scan over interleaved
 // rows under PK2 (e.g. /2/#/5).
-// We can instead "tighten" the end key from /3 to /2/#.
-// TightenEndKey is idempotent upon successive invocation(s).
-func TightenEndKey(
+// We can instead "tighten" or adjust the end key from /3 to /2/#.
+// DO NOT pass in any keys that have been invoked with PrefixEnd: this may
+// cause issues when trying to decode the key tokens.
+// AdjustEndKeyForInterleave is idempotent upon successive invocation(s).
+func AdjustEndKeyForInterleave(
 	table *TableDescriptor, index *IndexDescriptor, end roachpb.Key, inclusive bool,
 ) (roachpb.Key, error) {
 	// To illustrate, suppose we have the interleaved hierarchy
@@ -2543,16 +2565,28 @@ func TightenEndKey(
 	//	child
 	//	  grandchild
 	// Suppose our target index is child.
-	nIndexTokens := maxKeyTokens(index)
-	keyTokens, err := encoding.DecomposeKeyTokens(end)
+	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(end)
 	if err != nil {
 		return roachpb.Key{}, err
 	}
+	nIndexTokens := maxKeyTokens(index, containsNull)
+
+	// Sibling/nibling keys: it is possible for this key to be part
+	// of a sibling tree in the interleaved hierarchy, especially after
+	// partitioning on range split keys.
+	// As such, a sibling may be interpretted as an ancestor (if the sibling
+	// has fewer key-encoded columns) or a descendant (if the sibling has
+	// more key-encoded columns). Similarly for niblings.
+	// This is fine because if the sibling is sorted before or after the
+	// current index (child in our example), it is not possible for us to
+	// adjust the sibling key such that we add or remove child (the current
+	// index's) rows from our span.
 
 	if index.ID != table.PrimaryIndex.ID || len(keyTokens) < nIndexTokens {
 		// Case 1: secondary index, parent key or partial child key:
 		// Secondary indexes cannot have interleaved rows.
-		// We cannot tighten parent keys with respect to a child index.
+		// We cannot adjust or tighten parent keys with respect to a
+		// child index.
 		// Partial child keys e.g. /1/#/1 vs /1/#/1/2 cannot have
 		// interleaved rows.
 		// Nothing to do besides making the end key exclusive if it was
@@ -2608,32 +2642,30 @@ func TightenEndKey(
 	}
 
 	// len(keyTokens) > nIndexTokens
-	// Case 3: tightened child key or grandchild key
-
-	// Since there are more key tokens than the index token, we should
-	// expected an interleaved sentinel next, or else this index key
-	// cannot possibly be generated.
-	if _, isSentinel := encoding.DecodeIfInterleavedSentinel(keyTokens[nIndexTokens]); !isSentinel {
-		panic("expected interleaved sentinel as the next key token")
-	}
+	// Case 3: tightened child, sibling/nibling, or grandchild key
 
 	// Case 3a: tightened child key
-	// This could from a previous invocation of TightenEndKey. For
-	// example, if during index selection the key for child was
+	// This could from a previous invocation of AdjustEndKeyForInterleave.
+	// For example, if during index selection the key for child was
 	// tightened
 	//	/1/#/2 --> /1/#/1/#
 	// We don't really want to tighten on '#' again.
-	if len(keyTokens) == nIndexTokens+1 {
+	if _, isSentinel := encoding.DecodeIfInterleavedSentinel(keyTokens[nIndexTokens]); isSentinel && len(keyTokens)-1 == nIndexTokens {
 		if inclusive {
 			end = end.PrefixEnd()
 		}
 		return end, nil
 	}
 
-	// Case 3b: grandchild key
+	// Case 3b/c: sibling/nibling or grandchild key
 	// Ideally, we want to form
 	//    /1/#/2/#/3 --> /1/#/2/#
-	// We truncate up to the interleave sentinel after the last index
-	// key token.
-	return end[:nIndexTokens+1], nil
+	// We truncate up to and including the interleave sentinel (or next
+	// sibling/nibling column value) after the last index key token.
+	firstNTokenLen := 0
+	for _, token := range keyTokens[:nIndexTokens] {
+		firstNTokenLen += len(token)
+	}
+
+	return end[:firstNTokenLen+1], nil
 }

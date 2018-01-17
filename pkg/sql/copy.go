@@ -16,11 +16,10 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"unsafe"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -60,7 +59,7 @@ func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) 
 		columns: n.Columns,
 	}
 
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +79,7 @@ func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) 
 	return cn, nil
 }
 
-// Start implements the planNode interface.
-func (n *copyNode) Start(params runParams) error {
+func (n *copyNode) startExec(params runParams) error {
 	// Should never happen because the executor prevents non-COPY messages during
 	// a COPY.
 	if params.p.session.copyFrom != nil {
@@ -129,7 +127,8 @@ func (s *Session) ProcessCopyData(
 	cf := s.copyFrom
 	buf := cf.buf
 
-	evalCtx := s.evalCtx()
+	evalCtx := s.extendedEvalCtx(
+		s.TxnState.mu.txn, s.TxnState.sqlTimestamp, s.execCfg.Clock.PhysicalTime())
 
 	switch msg {
 	case copyMsgData:
@@ -138,9 +137,9 @@ func (s *Session) ProcessCopyData(
 		var err error
 		// If there's a line in the buffer without \n at EOL, add it here.
 		if buf.Len() > 0 {
-			err = cf.addRow(ctx, buf.Bytes(), &evalCtx)
+			err = cf.addRow(ctx, buf.Bytes(), &evalCtx.EvalContext)
 		}
-		return StatementList{{AST: CopyDataBlock{Done: true}}}, err
+		return StatementList{{AST: &CopyDataBlock{Done: true}}}, err
 	default:
 		return nil, fmt.Errorf("expected copy command")
 	}
@@ -163,11 +162,11 @@ func (s *Session) ProcessCopyData(
 		if buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
 			break
 		}
-		if err := cf.addRow(ctx, line, &evalCtx); err != nil {
+		if err := cf.addRow(ctx, line, &evalCtx.EvalContext); err != nil {
 			return nil, err
 		}
 	}
-	return StatementList{{AST: CopyDataBlock{}}}, nil
+	return StatementList{{AST: &CopyDataBlock{}}}, nil
 }
 
 func (n *copyNode) addRow(ctx context.Context, line []byte, evalCtx *tree.EvalContext) error {
@@ -314,7 +313,7 @@ var decodeMap = map[byte]byte{
 // CopyData is the statement type after a block of COPY data has been
 // received. There may be additional rows ready to insert. If so, return an
 // insertNode, otherwise emptyNode.
-func (p *planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, error) {
+func (p *planner) CopyData(ctx context.Context, n *CopyDataBlock) (planNode, error) {
 	// When this many rows are in the copy buffer, they are inserted.
 	const copyRowSize = 100
 
@@ -342,11 +341,11 @@ func (p *planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, erro
 }
 
 // Format implements the NodeFormatter interface.
-func (CopyDataBlock) Format(buf *bytes.Buffer, f tree.FmtFlags) {}
+func (*CopyDataBlock) Format(_ *tree.FmtCtx) {}
 
 // StatementType implements the Statement interface.
-func (CopyDataBlock) StatementType() tree.StatementType { return tree.RowsAffected }
+func (*CopyDataBlock) StatementType() tree.StatementType { return tree.RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (CopyDataBlock) StatementTag() string { return "" }
-func (CopyDataBlock) String() string       { return "CopyDataBlock" }
+func (*CopyDataBlock) StatementTag() string { return "" }
+func (*CopyDataBlock) String() string       { return "CopyDataBlock" }

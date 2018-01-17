@@ -16,6 +16,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"net"
@@ -25,7 +26,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -64,7 +64,9 @@ func createTestNode(
 	st := cfg.Settings
 
 	stopper := stop.NewStopper()
-	nodeRPCContext := rpc.NewContext(log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper)
+	nodeRPCContext := rpc.NewContext(
+		log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper,
+		&cfg.Settings.Version)
 	cfg.ScanInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	cfg.Gossip = gossip.NewTest(
@@ -94,9 +96,8 @@ func createTestNode(
 	)
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(st)
-	cfg.MetricsSampleInterval = metric.TestSampleInterval
-	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
+	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	cfg.NodeLiveness = storage.NewNodeLiveness(
 		cfg.AmbientCtx,
 		cfg.Clock,
@@ -104,6 +105,7 @@ func createTestNode(
 		cfg.Gossip,
 		active,
 		renewal,
+		cfg.HistogramWindowInterval,
 	)
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
 	cfg.StorePool = storage.NewStorePool(
@@ -116,7 +118,8 @@ func createTestNode(
 	)
 	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness, nodeRPCContext, cfg.Gossip, st)
 	node := NewNode(cfg, metricsRecorder, metric.NewRegistry(), stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil))
+		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil),
+		&nodeRPCContext.ClusterID)
 	roachpb.RegisterInternalServer(grpcServer, node)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
@@ -150,7 +153,9 @@ func createAndStartTestNode(
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	bootstrappedEngines, newEngines, cv, err := inspectEngines(
+		context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion,
+		cfg.Settings.Version.ServerVersion, node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,8 +392,10 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	engines := []engine.Engine{e}
 	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
-	stopper.Stop(context.TODO())
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	defer stopper.Stop(context.TODO())
+	bootstrappedEngines, newEngines, cv, err := inspectEngines(
+		context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion,
+		cfg.Settings.Version.ServerVersion, node.clusterID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -759,5 +766,24 @@ func TestStartNodeWithLocality(t *testing.T) {
 
 	for _, testCase := range testCases {
 		testLocalityWithNewNode(testCase)
+	}
+}
+
+func TestNodeSendUnknownBatchRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ba := roachpb.BatchRequest{
+		Requests: make([]roachpb.RequestUnion, 1),
+	}
+	n := &Node{}
+	br, err := n.batchInternal(context.Background(), &ba)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if br.Error == nil {
+		t.Fatal("no batch error returned")
+	}
+	if _, ok := br.Error.GetDetail().(*roachpb.UnsupportedRequestError); !ok {
+		t.Fatalf("expected unsupported request, not %v", br.Error)
 	}
 }

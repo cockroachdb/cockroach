@@ -15,10 +15,10 @@
 package rpc
 
 import (
+	"context"
 	"net"
 	"sync/atomic"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc/stats"
 

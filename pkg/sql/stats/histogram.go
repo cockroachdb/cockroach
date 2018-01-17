@@ -79,7 +79,7 @@ func EquiDepthHistogram(
 		}
 		encoded, err := sqlbase.EncodeTableKey(nil, upper, encoding.Ascending)
 		if err != nil {
-			return HistogramData{}, nil
+			return HistogramData{}, err
 		}
 		i += num
 		h.Buckets = append(h.Buckets, HistogramData_Bucket{

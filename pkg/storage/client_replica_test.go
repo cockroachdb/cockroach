@@ -16,6 +16,7 @@ package storage_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -25,7 +26,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -654,6 +654,12 @@ func TestRangeTransferLease(t *testing.T) {
 	// that. Test that the transfer still happens (it'll wait until the extension
 	// is done).
 	t.Run("TransferWithExtension", func(t *testing.T) {
+		// Ensure that replica1 has the lease.
+		if err := replica0.AdminTransferLease(context.Background(), replica1Desc.StoreID); err != nil {
+			t.Fatal(err)
+		}
+		checkHasLease(t, mtc.senders[1])
+
 		extensionSem := make(chan struct{})
 		setFilter(true, extensionSem)
 
@@ -749,6 +755,12 @@ func TestRangeTransferLease(t *testing.T) {
 	// in-progress lease requests to complete before transferring away the new
 	// lease.
 	t.Run("DrainTransferWithExtension", func(t *testing.T) {
+		// Ensure that replica1 has the lease.
+		if err := replica0.AdminTransferLease(context.Background(), replica1Desc.StoreID); err != nil {
+			t.Fatal(err)
+		}
+		checkHasLease(t, mtc.senders[1])
+
 		extensionSem := make(chan struct{})
 		setFilter(true, extensionSem)
 
@@ -1600,6 +1612,6 @@ func TestSystemZoneConfigs(t *testing.T) {
 	zoneConfig = config.DefaultZoneConfig()
 	zoneConfig.NumReplicas += 2
 	config.TestingSetZoneConfig(keys.SystemRangesID, zoneConfig)
-	expectedReplicas += 8
+	expectedReplicas += 6
 	testutils.SucceedsSoon(t, waitForReplicas)
 }

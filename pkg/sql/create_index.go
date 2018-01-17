@@ -15,10 +15,10 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
-	"golang.org/x/net/context"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,7 +34,7 @@ type createIndexNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	return &createIndexNode{tableDesc: tableDesc, n: n}, nil
 }
 
-func (n *createIndexNode) Start(params runParams) error {
+func (n *createIndexNode) startExec(params runParams) error {
 	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if dropped {
@@ -71,12 +71,12 @@ func (n *createIndexNode) Start(params runParams) error {
 		return err
 	}
 	if n.n.PartitionBy != nil {
-		if err := addPartitionedBy(
-			params.ctx, params.evalCtx, n.tableDesc, &indexDesc, &indexDesc.Partitioning,
-			n.n.PartitionBy, 0, /* colOffset */
-		); err != nil {
+		partitioning, err := CreatePartitioning(params.ctx, params.p.ExecCfg().Settings,
+			params.EvalContext(), n.tableDesc, &indexDesc, n.n.PartitionBy)
+		if err != nil {
 			return err
 		}
+		indexDesc.Partitioning = partitioning
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
@@ -97,8 +97,27 @@ func (n *createIndexNode) Start(params runParams) error {
 		}
 	}
 
+	if n.n.Inverted {
+		if n.n.Interleave != nil {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved columns")
+		}
+
+		if n.n.PartitionBy != nil {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
+		}
+
+		if len(indexDesc.StoreColumnNames) > 0 {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns.")
+		}
+
+		if n.n.Unique {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
+		}
+		return pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "inverted indexes are not supported yet")
+	}
+
 	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
-		tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
+		tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 	if err != nil {
 		return err
 	}
@@ -114,14 +133,17 @@ func (n *createIndexNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateIndex,
 		int32(n.tableDesc.ID),
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			TableName  string
 			IndexName  string
 			Statement  string
 			User       string
 			MutationID uint32
-		}{n.tableDesc.Name, n.n.Name.String(), n.n.String(), params.p.session.User, uint32(mutationID)},
+		}{
+			n.tableDesc.Name, n.n.Name.String(), n.n.String(),
+			params.SessionData().User, uint32(mutationID),
+		},
 	); err != nil {
 		return err
 	}

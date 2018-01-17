@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -92,8 +92,6 @@ type ordinalityRun struct {
 	row    tree.Datums
 	curCnt int64
 }
-
-func (o *ordinalityNode) Start(params runParams) error { return o.source.Start(params) }
 
 func (o *ordinalityNode) Next(params runParams) (bool, error) {
 	hasNext, err := o.source.Next(params)

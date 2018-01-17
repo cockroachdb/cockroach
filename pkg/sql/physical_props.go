@@ -256,11 +256,12 @@ func (pp *physicalProps) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 //   a=b=c; d=e=f; g=CONST; h=CONST; b+,d-
 func (pp *physicalProps) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns) {
 	pp.check()
+	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
 	printCol := func(buf *bytes.Buffer, columns sqlbase.ResultColumns, colIdx int) {
 		if columns == nil || colIdx >= len(columns) {
 			fmt.Fprintf(buf, "@%d", colIdx+1)
 		} else {
-			tree.FormatNode(buf, tree.FmtSimple, tree.Name(columns[colIdx].Name))
+			fmtCtx.FormatNameP(&columns[colIdx].Name)
 		}
 	}
 
@@ -405,6 +406,11 @@ func (pp *physicalProps) addEquivalency(colA, colB int) {
 	pp.ordering = pp.reduce(pp.ordering)
 }
 
+// addWeakKey adds the set columns specified by cols as a weak key.
+// If it is a subset of another existing weak key, it will remove the
+// existing weak key.
+// addWeakKey also reduces ordering if necessary.
+// cols is not mutated and safe for re-use.
 func (pp *physicalProps) addWeakKey(cols util.FastIntSet) {
 	// Remap column indices to equivalency group representatives.
 	var k util.FastIntSet
@@ -433,6 +439,8 @@ func (pp *physicalProps) addWeakKey(cols util.FastIntSet) {
 		}
 	}
 	pp.weakKeys = append(pp.weakKeys, cols)
+
+	pp.ordering = pp.reduce(pp.ordering)
 }
 
 func (pp *physicalProps) addOrderColumn(colIdx int, dir encoding.Direction) {

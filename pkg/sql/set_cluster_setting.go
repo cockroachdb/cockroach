@@ -15,11 +15,11 @@
 package sql
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -47,7 +47,7 @@ func (p *planner) SetClusterSetting(
 	}
 
 	name := strings.ToLower(tree.AsStringWithFlags(n.Name, tree.FmtBareIdentifiers))
-	st := p.session.execCfg.Settings
+	st := p.EvalContext().Settings
 	setting, ok := settings.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
@@ -58,7 +58,7 @@ func (p *planner) SetClusterSetting(
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.
 		if _, ok := n.Value.(tree.DefaultVal); !ok {
 			expr := n.Value
-			if s, ok := expr.(tree.UnresolvedName); ok {
+			if s, ok := expr.(*tree.UnresolvedName); ok {
 				// Special rule for SET: because SET doesn't apply in the context
 				// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
 				expr = tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
@@ -96,7 +96,7 @@ func (p *planner) SetClusterSetting(
 	return &setClusterSettingNode{name: name, st: st, setting: setting, value: value}, nil
 }
 
-func (n *setClusterSettingNode) Start(params runParams) error {
+func (n *setClusterSettingNode) startExec(params runParams) error {
 	ie := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
 
 	var reportedValue string
@@ -129,12 +129,12 @@ func (n *setClusterSettingNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogSetClusterSetting,
 		0, /* no target */
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			SettingName string
 			Value       string
 			User        string
-		}{n.name, reportedValue, params.p.session.User},
+		}{n.name, reportedValue, params.SessionData().User},
 	)
 }
 
@@ -150,7 +150,7 @@ func (p *planner) toSettingString(
 	setting settings.Setting,
 	val tree.TypedExpr,
 ) (string, error) {
-	d, err := val.Eval(&p.evalCtx)
+	d, err := val.Eval(p.EvalContext())
 	if err != nil {
 		return "", err
 	}

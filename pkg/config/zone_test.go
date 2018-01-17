@@ -132,6 +132,30 @@ func TestZoneConfigSubzones(t *testing.T) {
 	if subzone := zone.GetSubzone(1, "a"); !subzoneA.Equal(subzone) {
 		t.Errorf("expected non-deleted subzone to equal %+v, but got %+v", &subzoneA, subzone)
 	}
+
+	zone.SetSubzone(config.Subzone{IndexID: 2, Config: config.DefaultZoneConfig()})
+	zone.SetSubzone(config.Subzone{IndexID: 2, PartitionName: "a", Config: config.DefaultZoneConfig()})
+	zone.SetSubzone(subzoneB) // interleave a subzone from a different index
+	zone.SetSubzone(config.Subzone{IndexID: 2, PartitionName: "b", Config: config.DefaultZoneConfig()})
+	if e, a := 5, len(zone.Subzones); e != a {
+		t.Fatalf("expected %d subzones, but found %d", e, a)
+	}
+	if err := zone.Validate(); err != nil {
+		t.Errorf("expected zone validation to succeed, but got %s", err)
+	}
+
+	zone.DeleteIndexSubzones(2)
+	if e, a := 2, len(zone.Subzones); e != a {
+		t.Fatalf("expected %d subzones, but found %d", e, a)
+	}
+	for _, subzone := range zone.Subzones {
+		if subzone.IndexID == 2 {
+			t.Fatalf("expected no subzones to refer to index 2, but found %+v", subzone)
+		}
+	}
+	if err := zone.Validate(); err != nil {
+		t.Errorf("expected zone validation to succeed, but got %s", err)
+	}
 }
 
 // TestZoneConfigMarshalYAML makes sure that ZoneConfig is correctly marshaled
@@ -279,14 +303,15 @@ func TestZoneSpecifiers(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				id, err := config.ResolveZoneSpecifier(&zs, resolveName)
+				sessionDB := "" // the zone CLI never sets a session DB
+				id, err := config.ResolveZoneSpecifier(&zs, sessionDB, resolveName)
 				if err != nil {
 					return err
 				}
 				if e, a := tc.id, int(id); a != e {
 					t.Errorf("path %d did not match expected path %d", a, e)
 				}
-				if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(zs); e != a {
+				if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(&zs); e != a {
 					t.Errorf("expected %q to roundtrip, but got %q", e, a)
 				}
 				return nil
@@ -323,7 +348,7 @@ func TestZoneSpecifiers(t *testing.T) {
 			if tc.err != "" {
 				return
 			}
-			if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(zs); e != a {
+			if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(&zs); e != a {
 				t.Errorf("expected %q specifier for ID %d, but got %q", e, tc.id, a)
 			}
 		})

@@ -23,10 +23,9 @@
 
 package tree
 
-import "bytes"
-
 // Insert represents an INSERT statement.
 type Insert struct {
+	With       *With
 	Table      TableExpr
 	Columns    UnresolvedNames
 	Rows       *Select
@@ -35,43 +34,44 @@ type Insert struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Insert) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *Insert) Format(ctx *FmtCtx) {
+	ctx.FormatNode(node.With)
 	if node.OnConflict.IsUpsertAlias() {
-		buf.WriteString("UPSERT")
+		ctx.WriteString("UPSERT")
 	} else {
-		buf.WriteString("INSERT")
+		ctx.WriteString("INSERT")
 	}
-	buf.WriteString(" INTO ")
-	FormatNode(buf, f, node.Table)
+	ctx.WriteString(" INTO ")
+	ctx.FormatNode(node.Table)
 	if node.Columns != nil {
-		buf.WriteByte('(')
-		FormatNode(buf, f, node.Columns)
-		buf.WriteByte(')')
+		ctx.WriteByte('(')
+		ctx.FormatNode(&node.Columns)
+		ctx.WriteByte(')')
 	}
 	if node.DefaultValues() {
-		buf.WriteString(" DEFAULT VALUES")
+		ctx.WriteString(" DEFAULT VALUES")
 	} else {
-		buf.WriteByte(' ')
-		FormatNode(buf, f, node.Rows)
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Rows)
 	}
 	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
-		buf.WriteString(" ON CONFLICT")
+		ctx.WriteString(" ON CONFLICT")
 		if len(node.OnConflict.Columns) > 0 {
-			buf.WriteString(" (")
-			FormatNode(buf, f, node.OnConflict.Columns)
-			buf.WriteString(")")
+			ctx.WriteString(" (")
+			ctx.FormatNode(&node.OnConflict.Columns)
+			ctx.WriteString(")")
 		}
 		if node.OnConflict.DoNothing {
-			buf.WriteString(" DO NOTHING")
+			ctx.WriteString(" DO NOTHING")
 		} else {
-			buf.WriteString(" DO UPDATE SET ")
-			FormatNode(buf, f, node.OnConflict.Exprs)
+			ctx.WriteString(" DO UPDATE SET ")
+			ctx.FormatNode(&node.OnConflict.Exprs)
 			if node.OnConflict.Where != nil {
-				FormatNode(buf, f, node.OnConflict.Where)
+				ctx.FormatNode(node.OnConflict.Where)
 			}
 		}
 	}
-	FormatNode(buf, f, node.Returning)
+	ctx.FormatNode(node.Returning)
 }
 
 // DefaultValues returns true iff only default values are being inserted.

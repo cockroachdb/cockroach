@@ -86,7 +86,7 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 	defer conn.Close()
 
 	vals, err := conn.QueryRow(fmt.Sprintf(
-		`SELECT cli_specifier, config_yaml FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`, zs), nil)
+		`SELECT cli_specifier, config_yaml FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`, &zs), nil)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 	defer conn.Close()
 
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL`, zs)))
+		makeQuery(fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL`, &zs)))
 }
 
 // A setZoneCmd command creates a new or updates an existing zone config.
@@ -242,12 +242,12 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 	}
 
 	err = conn.ExecTxn(func(conn *sqlConn) error {
-		if err := conn.Exec(fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE %s`, zs,
+		if err := conn.Exec(fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE %s`, &zs,
 			lex.EscapeSQLString(string(configYAML))), nil); err != nil {
 			return err
 		}
 		vals, err := conn.QueryRow(fmt.Sprintf(
-			`SELECT config_yaml FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`, zs), nil)
+			`SELECT config_yaml FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`, &zs), nil)
 		if err != nil {
 			return err
 		}

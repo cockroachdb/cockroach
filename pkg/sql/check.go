@@ -16,11 +16,11 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -143,7 +143,7 @@ func (p *planner) validateCheckExpr(
 		return err
 	}
 	sel := &tree.SelectClause{
-		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns),
+		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns, false /* forUpdateOrDelete */),
 		From:  &tree.From{Tables: tree.TableExprs{tableName}},
 		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
 	}
@@ -152,7 +152,7 @@ func (p *planner) validateCheckExpr(
 	// use the tableDesc we have, but this is a rare operation and be benefit
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
-	rows, err := p.SelectClause(ctx, sel, nil, lim, nil, publicColumns)
+	rows, err := p.SelectClause(ctx, sel, nil, lim, nil, nil, publicColumns)
 	if err != nil {
 		return err
 	}
@@ -160,14 +160,15 @@ func (p *planner) validateCheckExpr(
 	if err != nil {
 		return err
 	}
-	if err := p.startPlan(ctx, rows); err != nil {
+	params := runParams{
+		ctx:             ctx,
+		extendedEvalCtx: &p.extendedEvalCtx,
+		p:               p,
+	}
+	if err := startPlan(params, rows); err != nil {
 		return err
 	}
-	next, err := rows.Next(runParams{
-		ctx:     ctx,
-		evalCtx: &p.evalCtx,
-		p:       p,
-	})
+	next, err := rows.Next(params)
 	if err != nil {
 		return err
 	}
@@ -200,10 +201,6 @@ func (p *planner) validateForeignKey(
 		return err
 	}
 
-	escape := func(s string) string {
-		return tree.Name(s).String()
-	}
-
 	prefix := len(srcIdx.ColumnNames)
 	if p := len(targetIdx.ColumnNames); p < prefix {
 		prefix = p
@@ -213,8 +210,8 @@ func (p *planner) validateForeignKey(
 	join, where := make([]string, prefix), make([]string, prefix)
 
 	for i := 0; i < prefix; i++ {
-		srcCols[i] = fmt.Sprintf("s.%s", escape(srcIdx.ColumnNames[i]))
-		targetCols[i] = fmt.Sprintf("t.%s", escape(targetIdx.ColumnNames[i]))
+		srcCols[i] = fmt.Sprintf("s.%s", tree.NameString(srcIdx.ColumnNames[i]))
+		targetCols[i] = fmt.Sprintf("t.%s", tree.NameString(targetIdx.ColumnNames[i]))
 		join[i] = fmt.Sprintf("(%s = %s OR (%s IS NULL AND %s IS NULL))",
 			srcCols[i], targetCols[i], srcCols[i], targetCols[i])
 		where[i] = fmt.Sprintf("(%s IS NOT NULL AND %s IS NULL)", srcCols[i], targetCols[i])
@@ -223,7 +220,7 @@ func (p *planner) validateForeignKey(
 	query := fmt.Sprintf(
 		`SELECT %s FROM %s@%s AS s LEFT OUTER JOIN %s@%s AS t ON %s WHERE %s LIMIT 1`,
 		strings.Join(srcCols, ", "),
-		srcName, escape(srcIdx.Name), targetName, escape(targetIdx.Name),
+		srcName, tree.NameString(srcIdx.Name), targetName, tree.NameString(targetIdx.Name),
 		strings.Join(join, " AND "),
 		strings.Join(where, " OR "),
 	)

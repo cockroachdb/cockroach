@@ -16,12 +16,12 @@ package storage_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"testing"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

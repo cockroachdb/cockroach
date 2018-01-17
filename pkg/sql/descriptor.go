@@ -15,10 +15,10 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -101,7 +101,7 @@ func (p *planner) createDescriptor(
 		return false, err
 	}
 
-	id, err := GenerateUniqueDescID(ctx, p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 	if err != nil {
 		return false, err
 	}
@@ -136,14 +136,14 @@ func (p *planner) createDescriptorWithID(
 	b := &client.Batch{}
 	descID := descriptor.GetID()
 	descDesc := sqlbase.WrapDescriptor(descriptor)
-	if p.session.Tracing.KVTracingEnabled() {
+	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, descDesc)
 	}
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
 
-	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.testingVerifyMetadata().setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		if err := expectDescriptorID(systemConfig, idKey, descID); err != nil {
 			return err
 		}
@@ -151,7 +151,7 @@ func (p *planner) createDescriptorWithID(
 	})
 
 	if desc, ok := descriptor.(*sqlbase.TableDescriptor); ok {
-		p.session.tables.addUncommittedTable(*desc)
+		p.Tables().addUncommittedTable(*desc)
 	}
 
 	return p.txn.Run(ctx, b)
@@ -177,7 +177,10 @@ func getDescriptor(
 		return false, nil
 	}
 
-	return getDescriptorByID(ctx, txn, sqlbase.ID(gr.ValueInt()), descriptor)
+	if err := getDescriptorByID(ctx, txn, sqlbase.ID(gr.ValueInt()), descriptor); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // getDescriptorByID looks up the descriptor for `id`, validates it,
@@ -187,18 +190,18 @@ func getDescriptor(
 // `getTableDescByID`.
 func getDescriptorByID(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
-) (bool, error) {
+) error {
 	descKey := sqlbase.MakeDescMetadataKey(id)
 	desc := &sqlbase.Descriptor{}
 	if err := txn.GetProto(ctx, descKey, desc); err != nil {
-		return false, err
+		return err
 	}
 
 	switch t := descriptor.(type) {
 	case *sqlbase.TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
-			return false, errors.Errorf("%q is not a table", desc.String())
+			return errors.Errorf("%q is not a table", desc.String())
 		}
 		table.MaybeUpgradeFormatVersion()
 		// TODO(dan): Write the upgraded TableDescriptor back to kv. This will break
@@ -207,24 +210,24 @@ func getDescriptorByID(
 		// descriptor is fetched. Our current test for this enforces compatibility
 		// backward and forward, so that'll have to be extended before this is done.
 		if err := table.Validate(ctx, txn); err != nil {
-			return false, err
+			return err
 		}
 		*t = *table
 	case *sqlbase.DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
-			return false, errors.Errorf("%q is not a database", desc.String())
+			return errors.Errorf("%q is not a database", desc.String())
 		}
 		if err := database.Validate(); err != nil {
-			return false, err
+			return err
 		}
 		*t = *database
 	}
-	return true, nil
+	return nil
 }
 
-// getAllDescriptors looks up and returns all available descriptors.
-func getAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.DescriptorProto, error) {
+// GetAllDescriptors looks up and returns all available descriptors.
+func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.DescriptorProto, error) {
 	descsKey := sqlbase.MakeAllDescsMetadataKey()
 	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
 	if err != nil {

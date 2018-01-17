@@ -47,7 +47,7 @@ func NewIterator(iter engine.Iterator, spans *SpanSet) *Iterator {
 	}
 }
 
-// Close implements engine.Iterator.
+// Close is part of the engine.Iterator interface.
 func (s *Iterator) Close() {
 	s.i.Close()
 }
@@ -57,7 +57,7 @@ func (s *Iterator) Iterator() engine.Iterator {
 	return s.i
 }
 
-// Seek implements engine.Iterator.
+// Seek is part of the engine.Iterator interface.
 func (s *Iterator) Seek(key engine.MVCCKey) {
 	s.err = s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	if s.err == nil {
@@ -66,7 +66,7 @@ func (s *Iterator) Seek(key engine.MVCCKey) {
 	s.i.Seek(key)
 }
 
-// SeekReverse implements engine.Iterator.
+// SeekReverse is part of the engine.Iterator interface.
 func (s *Iterator) SeekReverse(key engine.MVCCKey) {
 	s.err = s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key})
 	if s.err == nil {
@@ -75,7 +75,7 @@ func (s *Iterator) SeekReverse(key engine.MVCCKey) {
 	s.i.SeekReverse(key)
 }
 
-// Valid implements engine.Iterator.
+// Valid is part of the engine.Iterator interface.
 func (s *Iterator) Valid() (bool, error) {
 	if s.err != nil {
 		return false, s.err
@@ -87,7 +87,7 @@ func (s *Iterator) Valid() (bool, error) {
 	return ok && !s.invalid, nil
 }
 
-// Next implements engine.Iterator.
+// Next is part of the engine.Iterator interface.
 func (s *Iterator) Next() {
 	s.i.Next()
 	if s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
@@ -95,7 +95,7 @@ func (s *Iterator) Next() {
 	}
 }
 
-// Prev implements engine.Iterator.
+// Prev is part of the engine.Iterator interface.
 func (s *Iterator) Prev() {
 	s.i.Prev()
 	if s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
@@ -103,7 +103,7 @@ func (s *Iterator) Prev() {
 	}
 }
 
-// NextKey implements engine.Iterator.
+// NextKey is part of the engine.Iterator interface.
 func (s *Iterator) NextKey() {
 	s.i.NextKey()
 	if s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
@@ -111,7 +111,7 @@ func (s *Iterator) NextKey() {
 	}
 }
 
-// PrevKey implements engine.Iterator.
+// PrevKey is part of the engine.Iterator interface.
 func (s *Iterator) PrevKey() {
 	s.i.PrevKey()
 	if s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: s.UnsafeKey().Key}) != nil {
@@ -119,37 +119,37 @@ func (s *Iterator) PrevKey() {
 	}
 }
 
-// Key implements engine.Iterator.
+// Key is part of the engine.Iterator interface.
 func (s *Iterator) Key() engine.MVCCKey {
 	return s.i.Key()
 }
 
-// Value implements engine.Iterator.
+// Value is part of the engine.Iterator interface.
 func (s *Iterator) Value() []byte {
 	return s.i.Value()
 }
 
-// ValueProto implements engine.Iterator.
+// ValueProto is part of the engine.Iterator interface.
 func (s *Iterator) ValueProto(msg protoutil.Message) error {
 	return s.i.ValueProto(msg)
 }
 
-// UnsafeKey implements engine.Iterator.
+// UnsafeKey is part of the engine.Iterator interface.
 func (s *Iterator) UnsafeKey() engine.MVCCKey {
 	return s.i.UnsafeKey()
 }
 
-// UnsafeValue implements engine.Iterator.
+// UnsafeValue is part of the engine.Iterator interface.
 func (s *Iterator) UnsafeValue() []byte {
 	return s.i.UnsafeValue()
 }
 
-// Less implements engine.Iterator.
+// Less is part of the engine.Iterator interface.
 func (s *Iterator) Less(key engine.MVCCKey) bool {
 	return s.i.Less(key)
 }
 
-// ComputeStats implements engine.Iterator.
+// ComputeStats is part of the engine.Iterator interface.
 func (s *Iterator) ComputeStats(
 	start, end engine.MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
@@ -159,7 +159,7 @@ func (s *Iterator) ComputeStats(
 	return s.i.ComputeStats(start, end, nowNanos)
 }
 
-// FindSplitKey implements engine.Iterator.
+// FindSplitKey is part of the engine.Iterator interface.
 func (s *Iterator) FindSplitKey(
 	start, end, minSplitKey engine.MVCCKey, targetSize int64, allowMeta2Splits bool,
 ) (engine.MVCCKey, error) {
@@ -167,6 +167,30 @@ func (s *Iterator) FindSplitKey(
 		return engine.MVCCKey{}, err
 	}
 	return s.i.FindSplitKey(start, end, minSplitKey, targetSize, allowMeta2Splits)
+}
+
+// MVCCGet is part of the engine.Iterator interface.
+func (s *Iterator) MVCCGet(
+	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent bool,
+) (*roachpb.Value, []roachpb.Intent, error) {
+	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key}); err != nil {
+		return nil, nil, err
+	}
+	return s.i.MVCCGet(key, timestamp, txn, consistent)
+}
+
+// MVCCScan is part of the engine.Iterator interface.
+func (s *Iterator) MVCCScan(
+	start, end roachpb.Key,
+	max int64,
+	timestamp hlc.Timestamp,
+	txn *roachpb.Transaction,
+	consistent, reverse bool,
+) (kvs []byte, intents []byte, err error) {
+	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
+		return nil, nil, err
+	}
+	return s.i.MVCCScan(start, end, max, timestamp, txn, consistent, reverse)
 }
 
 type spanSetReader struct {
@@ -214,7 +238,7 @@ func (s spanSetReader) NewIterator(prefix bool) engine.Iterator {
 }
 
 func (s spanSetReader) NewTimeBoundIterator(start, end hlc.Timestamp) engine.Iterator {
-	panic("not implemented")
+	return &Iterator{s.r.NewTimeBoundIterator(start, end), s.spans, nil, false}
 }
 
 type spanSetWriter struct {

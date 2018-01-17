@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -318,6 +319,39 @@ func TestSetGetChecked(t *testing.T) {
 	}
 }
 
+func TestTransactionBumpEpoch(t *testing.T) {
+	origNow := makeTS(10, 1)
+	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	// Advance the txn timestamp.
+	txn.Timestamp.Add(10, 2)
+	txn.BumpEpoch()
+	if a, e := txn.Epoch, uint32(1); a != e {
+		t.Errorf("expected epoch %d; got %d", e, a)
+	}
+	if txn.EpochZeroTimestamp == (hlc.Timestamp{}) {
+		t.Errorf("expected non-nil epoch zero timestamp")
+	} else if txn.EpochZeroTimestamp != origNow {
+		t.Errorf("expected zero timestamp == origNow; %s != %s", txn.EpochZeroTimestamp, origNow)
+	}
+}
+
+func TestTransactionTimeBounds(t *testing.T) {
+	verify := func(txn Transaction, expMin, expMax hlc.Timestamp) {
+		if min, max := txn.TimeBounds(); min != expMin || max != expMax {
+			t.Errorf("expected (%s-%s); got (%s-%s)", expMin, expMax, min, max)
+		}
+	}
+	origNow := makeTS(1, 1)
+	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
+	verify(txn, origNow, origNow.Next())
+	txn.Timestamp.Forward(makeTS(1, 2))
+	verify(txn, origNow, makeTS(1, 3))
+	txn.Restart(1, 1, makeTS(2, 1))
+	verify(txn, origNow, makeTS(2, 2))
+	txn.Timestamp.Forward(makeTS(3, 1))
+	verify(txn, origNow, makeTS(3, 2))
+}
+
 // TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as
 // advertised.
 func TestTransactionObservedTimestamp(t *testing.T) {
@@ -395,6 +429,7 @@ var nonZeroTxn = Transaction{
 	WriteTooOld:        true,
 	RetryOnPush:        true,
 	Intents:            []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	EpochZeroTimestamp: makeTS(1, 1),
 }
 
 func TestTransactionUpdate(t *testing.T) {
@@ -418,6 +453,24 @@ func TestTransactionUpdate(t *testing.T) {
 
 	if err := zerofields.NoZeroField(txn3); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTransactionUpdateEpochZero(t *testing.T) {
+	txn := nonZeroTxn
+	var txn2 Transaction
+	txn2.Update(&txn)
+
+	if a, e := txn2.EpochZeroTimestamp, txn.EpochZeroTimestamp; a != e {
+		t.Errorf("expected epoch zero %s; got %s", e, a)
+	}
+
+	txn3 := nonZeroTxn
+	txn3.EpochZeroTimestamp = nonZeroTxn.EpochZeroTimestamp.Prev()
+	txn.Update(&txn3)
+
+	if a, e := txn.EpochZeroTimestamp, txn3.EpochZeroTimestamp; a != e {
+		t.Errorf("expected epoch zero %s; got %s", e, a)
 	}
 }
 
@@ -640,6 +693,7 @@ func TestLeaseEqual(t *testing.T) {
 		DeprecatedStartStasis *hlc.Timestamp
 		ProposedTS            *hlc.Timestamp
 		Epoch                 int64
+		Sequence              LeaseSequence
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
@@ -684,6 +738,7 @@ func TestLeaseEqual(t *testing.T) {
 		{DeprecatedStartStasis: &ts},
 		{ProposedTS: &ts},
 		{Epoch: 1},
+		{Sequence: 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -707,6 +762,9 @@ func TestSpanOverlaps(t *testing.T) {
 	sD := Span{Key: []byte("d")}
 	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
 	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+	// Invalid spans.
+	sCtoA := Span{Key: []byte("c"), EndKey: []byte("a")}
+	sDtoB := Span{Key: []byte("d"), EndKey: []byte("b")}
 
 	testData := []struct {
 		s1, s2   Span
@@ -723,10 +781,55 @@ func TestSpanOverlaps(t *testing.T) {
 		{sAtoC, sAtoC, true},
 		{sAtoC, sBtoD, true},
 		{sBtoD, sAtoC, true},
+		// Invalid spans.
+		{sAtoC, sDtoB, false},
+		{sDtoB, sAtoC, false},
+		{sBtoD, sCtoA, false},
+		{sCtoA, sBtoD, false},
 	}
 	for i, test := range testData {
 		if o := test.s1.Overlaps(test.s2); o != test.overlaps {
 			t.Errorf("%d: expected overlap %t; got %t between %s vs. %s", i, test.overlaps, o, test.s1, test.s2)
+		}
+	}
+}
+
+func TestSpanCombine(t *testing.T) {
+	sA := Span{Key: []byte("a")}
+	sD := Span{Key: []byte("d")}
+	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
+	sAtoD := Span{Key: []byte("a"), EndKey: []byte("d")}
+	sAtoDNext := Span{Key: []byte("a"), EndKey: Key([]byte("d")).Next()}
+	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+	sBtoDNext := Span{Key: []byte("b"), EndKey: Key([]byte("d")).Next()}
+	// Invalid spans.
+	sCtoA := Span{Key: []byte("c"), EndKey: []byte("a")}
+	sDtoB := Span{Key: []byte("d"), EndKey: []byte("b")}
+
+	testData := []struct {
+		s1, s2   Span
+		combined Span
+	}{
+		{sA, sA, sA},
+		{sA, sD, sAtoDNext},
+		{sA, sBtoD, sAtoD},
+		{sBtoD, sA, sAtoD},
+		{sD, sBtoD, sBtoDNext},
+		{sBtoD, sD, sBtoDNext},
+		{sA, sAtoC, sAtoC},
+		{sAtoC, sA, sAtoC},
+		{sAtoC, sAtoC, sAtoC},
+		{sAtoC, sBtoD, sAtoD},
+		{sBtoD, sAtoC, sAtoD},
+		// Invalid spans.
+		{sAtoC, sDtoB, Span{}},
+		{sDtoB, sAtoC, Span{}},
+		{sBtoD, sCtoA, Span{}},
+		{sCtoA, sBtoD, Span{}},
+	}
+	for i, test := range testData {
+		if combined := test.s1.Combine(test.s2); !combined.Equal(test.combined) {
+			t.Errorf("%d: expected combined %s; got %s between %s vs. %s", i, test.combined, combined, test.s1, test.s2)
 		}
 	}
 }
@@ -755,13 +858,87 @@ func TestSpanContains(t *testing.T) {
 		{[]byte("b"), []byte("bb"), false},
 		{[]byte("0"), []byte("bb"), false},
 		{[]byte("aa"), []byte("bb"), false},
-		// TODO(bdarnell): check for invalid ranges in Span.Contains?
-		//{[]byte("b"), []byte("a"), false},
+		{[]byte("b"), []byte("a"), false},
 	}
 	for i, test := range testData {
 		if s.Contains(Span{test.start, test.end}) != test.contains {
 			t.Errorf("%d: expected span %q-%q within range to be %v",
 				i, test.start, test.end, test.contains)
+		}
+	}
+}
+
+func TestSpanSplitOnKey(t *testing.T) {
+	s := Span{Key: []byte("b"), EndKey: []byte("c")}
+
+	testData := []struct {
+		split []byte
+		left  Span
+		right Span
+	}{
+		// Split on start/end key should fail.
+		{
+			[]byte("b"),
+			s,
+			Span{},
+		},
+		{
+			[]byte("c"),
+			s,
+			Span{},
+		},
+
+		// Before start key.
+		{
+			[]byte("a"),
+			s,
+			Span{},
+		},
+		// After end key.
+		{
+			[]byte("d"),
+			s,
+			Span{},
+		},
+
+		// Simple split.
+		{
+			[]byte("bb"),
+			Span{[]byte("b"), []byte("bb")},
+			Span{[]byte("bb"), []byte("c")},
+		},
+	}
+	for testIdx, test := range testData {
+		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
+			actualL, actualR := s.SplitOnKey(test.split)
+			if !test.left.EqualValue(actualL) {
+				t.Fatalf("expected left span after split to be %v, got %v", test.left, actualL)
+			}
+
+			if !test.right.EqualValue(actualR) {
+				t.Fatalf("expected right span after split to be %v, got %v", test.right, actualL)
+			}
+		})
+	}
+}
+
+func TestSpanValid(t *testing.T) {
+	testData := []struct {
+		start, end []byte
+		valid      bool
+	}{
+		{[]byte("a"), nil, true},
+		{[]byte("a"), []byte("b"), true},
+		{[]byte(""), []byte(""), false},
+		{[]byte(""), []byte("a"), true},
+		{[]byte("a"), []byte("a"), false},
+		{[]byte("b"), []byte("aa"), false},
+	}
+	for i, test := range testData {
+		s := Span{test.start, test.end}
+		if test.valid != s.Valid() {
+			t.Errorf("%d: expected span %q-%q to return %t for Valid, instead got %t",
+				i, test.start, test.end, test.valid, s.Valid())
 		}
 	}
 }

@@ -16,16 +16,16 @@ package builtins
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -73,19 +73,20 @@ func initAggregateBuiltins() {
 // execution.
 // Exported for use in documentation.
 var Aggregates = map[string][]tree.Builtin{
-	"array_agg": {
-		makeAggBuiltinWithReturnType(
-			[]types.T{types.Any},
+	"array_agg": arrayBuiltin(func(t types.T) tree.Builtin {
+		return makeAggBuiltinWithReturnType(
+			[]types.T{t},
 			func(args []tree.TypedExpr) types.T {
 				if len(args) == 0 {
-					return tree.UnknownReturnType
+					return types.TArray{Typ: t}
 				}
+				// Whenever possible, use the expression's type, so we can properly
+				// handle aliased types that don't explicitly have overloads.
 				return types.TArray{Typ: args[0].ResolvedType()}
 			},
 			newArrayAggregate,
-			"Aggregates the selected values into an array.",
-		),
-	},
+			"Aggregates the selected values into an array.")
+	}),
 
 	"avg": {
 		makeAggBuiltin([]types.T{types.Int}, types.Decimal, newIntAvgAggregate,
@@ -214,6 +215,16 @@ var Aggregates = map[string][]tree.Builtin{
 			"Calculates the bitwise XOR of the selected values."),
 		makeAggBuiltin([]types.T{types.Int}, types.Int, newIntXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
+	},
+
+	"json_agg": {
+		makeAggBuiltin([]types.T{types.Any}, types.JSON, newJSONAggregate,
+			"aggregates values as a JSON or JSONB array"),
+	},
+
+	"jsonb_agg": {
+		makeAggBuiltin([]types.T{types.Any}, types.JSON, newJSONAggregate,
+			"aggregates values as a JSON or JSONB array"),
 	},
 }
 
@@ -1410,3 +1421,42 @@ func (a *intXorAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *intXorAggregate) Close(context.Context) {}
+
+type jsonAggregate struct {
+	jsons []json.JSON
+	acc   mon.BoundAccount
+}
+
+func newJSONAggregate(params []types.T, evalCtx *tree.EvalContext) tree.AggregateFunc {
+	return &jsonAggregate{
+		jsons: []json.JSON{},
+		acc:   evalCtx.Mon.MakeBoundAccount(),
+	}
+}
+
+// Add accumulates the transformed json into the JSON array.
+func (a *jsonAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	j, err := asJSON(datum)
+	if err != nil {
+		return err
+	}
+	if err = a.acc.Grow(ctx, int64(j.Size())); err != nil {
+		return err
+	}
+	a.jsons = append(a.jsons, j)
+	return err
+}
+
+// Result returns an DJSON from the array of JSON.
+func (a *jsonAggregate) Result() (tree.Datum, error) {
+	if len(a.jsons) > 0 {
+		return tree.NewDJSON(json.FromArrayOfJSON(a.jsons)), nil
+	}
+	return tree.DNull, nil
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *jsonAggregate) Close(ctx context.Context) {
+	a.acc.Close(ctx)
+}

@@ -15,11 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -257,7 +256,7 @@ func TestPostProcess(t *testing.T) {
 			var out ProcOutputHelper
 			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			if err := out.Init(&tc.post, inBuf.Types(), evalCtx, outBuf); err != nil {
+			if err := out.Init(&tc.post, inBuf.OutputTypes(), evalCtx, outBuf); err != nil {
 				t.Fatal(err)
 			}
 

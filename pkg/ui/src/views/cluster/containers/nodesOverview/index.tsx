@@ -210,6 +210,10 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
               title: `${statusName} Since`,
               cell: (ns) => {
                 const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+                if (!liveness) {
+                  return "no information";
+                }
+
                 const deadTime = liveness.expiration.wall_time;
                 const deadMoment = LongToMoment(deadTime);
                 return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;

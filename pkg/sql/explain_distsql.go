@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,24 +42,24 @@ type explainDistSQLRun struct {
 	done bool
 }
 
-func (n *explainDistSQLNode) Start(params runParams) error {
+func (n *explainDistSQLNode) startExec(params runParams) error {
 	// Trigger limit propagation.
 	params.p.setUnlimited(n.plan)
 
-	distSQLPlanner := params.p.session.distSQLPlanner
+	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 
 	auto, err := distSQLPlanner.CheckSupport(n.plan)
 	if err != nil {
 		return err
 	}
 
-	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, &params.p.evalCtx, params.p.txn)
+	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
 	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
 	}
 	distSQLPlanner.FinalizePlan(&planCtx, &plan)
-	flows := plan.GenerateFlowSpecs(params.evalCtx.NodeID)
+	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
 	if err != nil {
 		return err

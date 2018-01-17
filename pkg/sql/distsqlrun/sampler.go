@@ -15,9 +15,8 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
-
-	"golang.org/x/net/context"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/pkg/errors"
@@ -92,7 +91,7 @@ func newSamplerProcessor(
 
 	s.sr.Init(int(spec.SampleSize))
 
-	inTypes := input.Types()
+	inTypes := input.OutputTypes()
 	outTypes := make([]sqlbase.ColumnType, 0, len(inTypes)+5)
 
 	// First columns are the same as the input.
@@ -120,18 +119,18 @@ func newSamplerProcessor(
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
 	s.outTypes = outTypes
 
-	if err := s.init(post, outTypes, flowCtx, output); err != nil {
+	if err := s.init(post, outTypes, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
 // Run is part of the Processor interface.
-func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (s *samplerProcessor) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := processorSpan(ctx, "sampler")
+	ctx, span := processorSpan(s.flowCtx.Ctx, "sampler")
 	defer tracing.FinishSpan(span)
 
 	earlyExit, err := s.mainLoop(ctx)
@@ -150,7 +149,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	var buf []byte
 	for {
 		row, meta := s.input.Next()
-		if !meta.Empty() {
+		if meta != nil {
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
@@ -194,7 +193,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
-		if !emitHelper(ctx, &s.out, outRow, ProducerMetadata{}, s.input) {
+		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.input) {
 			return true, nil
 		}
 	}
@@ -215,7 +214,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 			return false, err
 		}
 		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
-		if !emitHelper(ctx, &s.out, outRow, ProducerMetadata{}, s.input) {
+		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.input) {
 			return true, nil
 		}
 	}

@@ -15,6 +15,7 @@
 package security
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -24,8 +25,6 @@ import (
 	"io/ioutil"
 	"os"
 	"time"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"

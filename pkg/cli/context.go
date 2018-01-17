@@ -15,49 +15,22 @@
 package cli
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
+	"context"
+	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
+	isatty "github.com/mattn/go-isatty"
 )
 
-// statementsValue is an implementation of pflag.Value that appends any
-// argument to a slice.
-type statementsValue []string
-
-func (s *statementsValue) String() string {
-	return strings.Join(*s, ";")
-}
-
-func (s *statementsValue) Type() string {
-	return "statementsValue"
-}
-
-func (s *statementsValue) Set(value string) error {
-	*s = append(*s, value)
-	return nil
-}
-
-type cliContext struct {
-	// Embed the base context.
-	*base.Config
-
-	// tableDisplayFormat indicates how to format result tables.
-	tableDisplayFormat tableDisplayFormat
-
-	// showTimes indicates whether to display query times after each result line.
-	showTimes bool
-}
-
+// serverCfg is used as the client-side copy of default server
+// parameters for CLI utilities (other than `cockroach start`, which
+// constructs a proper server.Config for the newly created server).
 var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	settings.SetCanonicalValuesContainer(&st.SV)
@@ -74,78 +47,124 @@ func GetServerCfgStores() base.StoreSpecList {
 }
 
 var baseCfg = serverCfg.Config
-var cliCtx = cliContext{Config: baseCfg}
 
-type tableDisplayFormat int
+// initCLIDefaults serves as the single point of truth for
+// configuration defaults. It is suitable for calling between tests of
+// the CLI utilities inside a single testing process.
+func initCLIDefaults() {
+	// We don't reset the pointers (because they are tied into the
+	// flags), but instead overwrite the existing structs' values.
+	baseCfg.InitDefaults()
 
-const (
-	tableDisplayTSV tableDisplayFormat = iota
-	tableDisplayCSV
-	tableDisplayPretty
-	tableDisplayRecords
-	tableDisplaySQL
-	tableDisplayHTML
-	tableDisplayRaw
-)
-
-// Type implements the pflag.Value interface.
-func (f *tableDisplayFormat) Type() string { return "string" }
-
-// String implements the pflag.Value interface.
-func (f *tableDisplayFormat) String() string {
-	switch *f {
-	case tableDisplayTSV:
-		return "tsv"
-	case tableDisplayCSV:
-		return "csv"
-	case tableDisplayPretty:
-		return "pretty"
-	case tableDisplayRecords:
-		return "records"
-	case tableDisplaySQL:
-		return "sql"
-	case tableDisplayHTML:
-		return "html"
-	case tableDisplayRaw:
-		return "raw"
+	// isInteractive is only set to `true` by `cockroach sql` -- all
+	// other client commands are non-interactive, regardless of whether
+	// the standard input is a terminal.
+	cliCtx.isInteractive = false
+	// See also setCLIDefaultForTests() in cli_test.go.
+	cliCtx.terminalOutput = isatty.IsTerminal(os.Stdout.Fd())
+	cliCtx.tableDisplayFormat = tableDisplayTSV
+	if cliCtx.terminalOutput {
+		// See also setCLIDefaultForTests() in cli_test.go.
+		cliCtx.tableDisplayFormat = tableDisplayPretty
 	}
-	return ""
+	cliCtx.showTimes = false
+	cliCtx.cmdTimeout = 0 // no timeout
+	cliCtx.sqlConnURL = ""
+	cliCtx.sqlConnUser = security.RootUser
+	cliCtx.sqlConnDBName = ""
+
+	sqlCtx.execStmts = nil
+	sqlCtx.safeUpdates = false
+	sqlCtx.echo = false
+
+	dumpCtx.dumpMode = dumpBoth
+	dumpCtx.asOf = ""
+
+	debugCtx.startKey = engine.NilKey
+	debugCtx.endKey = engine.MVCCKeyMax
+	debugCtx.values = false
+	debugCtx.sizes = false
+	debugCtx.replicated = false
+	debugCtx.inputFile = ""
+	debugCtx.printSystemConfig = false
+	debugCtx.maxResults = 1000
+
+	zoneCtx.zoneConfig = ""
+	zoneCtx.zoneDisableReplication = false
+
+	serverCfg.SocketFile = ""
+	serverCfg.ListeningURLFile = ""
+	serverCfg.PIDFile = ""
+	startCtx.serverInsecure = baseCfg.Insecure
+	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
+	startCtx.serverConnHost = ""
+	startCtx.tempDir = ""
+	startCtx.externalIODir = ""
+
+	quitCtx.serverDecommission = false
+
+	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
+	nodeCtx.statusShowRanges = false
+	nodeCtx.statusShowStats = false
+	nodeCtx.statusShowAll = false
+	nodeCtx.statusShowDecommission = false
+
+	initPreFlagsDefaults()
 }
 
-// Set implements the pflag.Value interface.
-func (f *tableDisplayFormat) Set(s string) error {
-	switch s {
-	case "tsv":
-		*f = tableDisplayTSV
-	case "csv":
-		*f = tableDisplayCSV
-	case "pretty":
-		*f = tableDisplayPretty
-	case "records":
-		*f = tableDisplayRecords
-	case "sql":
-		*f = tableDisplaySQL
-	case "html":
-		*f = tableDisplayHTML
-	case "raw":
-		*f = tableDisplayRaw
-	default:
-		return fmt.Errorf("invalid table display format: %s "+
-			"(possible values: tsv, csv, pretty, records, sql, html, raw)", s)
+// cliContext captures the command-line parameters of most CLI commands.
+type cliContext struct {
+	// Embed the base context.
+	*base.Config
+
+	// isInteractive indicates whether the session is interactive, that
+	// is, the commands executed are extremely likely to be *input* from
+	// a human user: the standard input is a terminal and `-e` was not
+	// used (the shell has a prompt).
+	isInteractive bool
+
+	// terminalOutput indicates whether output is going to a terminal,
+	// that is, it is not going to a file, another program for automated
+	// processing, etc.: the standard output is a terminal.
+	terminalOutput bool
+
+	// tableDisplayFormat indicates how to format result tables.
+	tableDisplayFormat tableDisplayFormat
+
+	// showTimes indicates whether to display query times after each result line.
+	showTimes bool
+
+	// cmdTimeout sets the maximum run time for the command.
+	// Commands that wish to use this must use cmdTimeoutContext().
+	cmdTimeout time.Duration
+
+	// for CLI commands that use the SQL interface, these parameters
+	// determine how to connect to the server.
+	sqlConnURL, sqlConnUser, sqlConnDBName string
+}
+
+// cliCtx captures the command-line parameters common to most CLI utilities.
+// Defaults set by InitCLIDefaults() above.
+var cliCtx = cliContext{Config: baseCfg}
+
+func cmdTimeoutContext(ctx context.Context) (context.Context, func()) {
+	if cliCtx.cmdTimeout != 0 {
+		return context.WithTimeout(ctx, cliCtx.cmdTimeout)
 	}
-	return nil
+	return context.WithCancel(ctx)
 }
 
 // sqlCtx captures the command-line parameters of the `sql` command.
+// Defaults set by InitCLIDefaults() above.
 var sqlCtx = struct {
 	*cliContext
 
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
 
-	// unsafeUpdates indicates whether to unset
-	// sql_safe_updates in the CLI shell.
-	unsafeUpdates bool
+	// safeUpdates indicates whether to set sql_safe_updates in the CLI
+	// shell.
+	safeUpdates bool
 
 	// echo, when set, requests that SQL queries sent to the server are
 	// also printed out on the client.
@@ -153,222 +172,61 @@ var sqlCtx = struct {
 }{cliContext: &cliCtx}
 
 // dumpCtx captures the command-line parameters of the `sql` command.
-var dumpCtx = struct {
+// Defaults set by InitCLIDefaults() above.
+var dumpCtx struct {
 	// dumpMode determines which part of the database should be dumped.
 	dumpMode dumpMode
 
 	// asOf determines the time stamp at which the dump should be taken.
 	asOf string
-}{
-	dumpMode: dumpBoth,
-}
-
-type dumpMode int
-
-const (
-	dumpBoth dumpMode = iota
-	dumpSchemaOnly
-	dumpDataOnly
-)
-
-// Type implements the pflag.Value interface.
-func (m *dumpMode) Type() string { return "string" }
-
-// String implements the pflag.Value interface.
-func (m *dumpMode) String() string {
-	switch *m {
-	case dumpBoth:
-		return "both"
-	case dumpSchemaOnly:
-		return "schema"
-	case dumpDataOnly:
-		return "data"
-	}
-	return ""
-}
-
-// Set implements the pflag.Value interface.
-func (m *dumpMode) Set(s string) error {
-	switch s {
-	case "both":
-		*m = dumpBoth
-	case "schema":
-		*m = dumpSchemaOnly
-	case "data":
-		*m = dumpDataOnly
-	default:
-		return fmt.Errorf("invalid value for --dump-mode: %s", s)
-	}
-	return nil
-}
-
-type keyType int
-
-//go:generate stringer -type=keyType
-const (
-	raw keyType = iota
-	human
-	rangeID
-)
-
-var _keyTypes []string
-
-func keyTypes() []string {
-	if _keyTypes == nil {
-		for i := 0; i+1 < len(_keyType_index); i++ {
-			_keyTypes = append(_keyTypes, _keyType_name[_keyType_index[i]:_keyType_index[i+1]])
-		}
-	}
-	return _keyTypes
-}
-
-func parseKeyType(value string) (keyType, error) {
-	for i, typ := range keyTypes() {
-		if strings.EqualFold(value, typ) {
-			return keyType(i), nil
-		}
-	}
-	return 0, fmt.Errorf("unknown key type '%s'", value)
-}
-
-// unquoteArg unquotes the provided argument using Go double-quoted
-// string literal rules.
-func unquoteArg(arg string) (string, error) {
-	s, err := strconv.Unquote(`"` + arg + `"`)
-	if err != nil {
-		return "", errors.Wrapf(err, "invalid argument %q", arg)
-	}
-	return s, nil
-}
-
-type mvccKey engine.MVCCKey
-
-func (k *mvccKey) String() string {
-	return engine.MVCCKey(*k).String()
-}
-
-func (k *mvccKey) Set(value string) error {
-	var typ keyType
-	var keyStr string
-	i := strings.IndexByte(value, ':')
-	if i == -1 {
-		keyStr = value
-	} else {
-		var err error
-		typ, err = parseKeyType(value[:i])
-		if err != nil {
-			return err
-		}
-		keyStr = value[i+1:]
-	}
-
-	switch typ {
-	case raw:
-		unquoted, err := unquoteArg(keyStr)
-		if err != nil {
-			return err
-		}
-		*k = mvccKey(engine.MakeMVCCMetadataKey(roachpb.Key(unquoted)))
-	case human:
-		key, err := keys.UglyPrint(keyStr)
-		if err != nil {
-			return err
-		}
-		*k = mvccKey(engine.MakeMVCCMetadataKey(key))
-	case rangeID:
-		fromID, err := parseRangeID(keyStr)
-		if err != nil {
-			return err
-		}
-		*k = mvccKey(engine.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(fromID)))
-	default:
-		return fmt.Errorf("unknown key type %s", typ)
-	}
-
-	return nil
-}
-
-func (k *mvccKey) Type() string {
-	return "engine.MVCCKey"
 }
 
 // debugCtx captures the command-line parameters of the `debug` command.
-var debugCtx = struct {
+// Defaults set by InitCLIDefaults() above.
+var debugCtx struct {
 	startKey, endKey  engine.MVCCKey
 	values            bool
 	sizes             bool
 	replicated        bool
 	inputFile         string
 	printSystemConfig bool
-}{
-	startKey: engine.NilKey,
-	endKey:   engine.MVCCKeyMax,
+	maxResults        int64
 }
 
 // zoneCtx captures the command-line parameters of the `zone` command.
+// Defaults set by InitCLIDefaults() above.
 var zoneCtx struct {
 	zoneConfig             string
 	zoneDisableReplication bool
 }
 
 // startCtx captures the command-line arguments for the `start` command.
+// Defaults set by InitCLIDefaults() above.
 var startCtx struct {
 	// server-specific values of some flags.
 	serverInsecure    bool
 	serverSSLCertsDir string
+	serverConnHost    string
+
+	// temporary directory to use to spill computation results to disk.
+	tempDir string
+	// directory to use for remotely-initiated operations that can
+	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
+	externalIODir string
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
+// Defaults set by InitCLIDefaults() above.
 var quitCtx struct {
 	serverDecommission bool
 }
 
 // nodeCtx captures the command-line parameters of the `node` command.
-var nodeCtx = struct {
+// Defaults set by InitCLIDefaults() above.
+var nodeCtx struct {
 	nodeDecommissionWait   nodeDecommissionWaitType
 	statusShowRanges       bool
 	statusShowStats        bool
 	statusShowDecommission bool
 	statusShowAll          bool
-}{
-	nodeDecommissionWait: nodeDecommissionWaitAll,
-}
-
-type nodeDecommissionWaitType int
-
-const (
-	nodeDecommissionWaitAll nodeDecommissionWaitType = iota
-	nodeDecommissionWaitLive
-	nodeDecommissionWaitNone
-)
-
-func (s *nodeDecommissionWaitType) String() string {
-	switch *s {
-	case nodeDecommissionWaitAll:
-		return "all"
-	case nodeDecommissionWaitLive:
-		return "live"
-	case nodeDecommissionWaitNone:
-		return "none"
-	}
-	return ""
-}
-
-func (s *nodeDecommissionWaitType) Type() string {
-	return "string"
-}
-
-func (s *nodeDecommissionWaitType) Set(value string) error {
-	switch value {
-	case "all":
-		*s = nodeDecommissionWaitAll
-	case "live":
-		*s = nodeDecommissionWaitLive
-	case "none":
-		*s = nodeDecommissionWaitNone
-	default:
-		return fmt.Errorf("invalid node decommission parameter: %s "+
-			"(possible values: all, live, none)", value)
-	}
-	return nil
 }

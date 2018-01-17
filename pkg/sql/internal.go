@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -94,17 +94,17 @@ func (ie InternalExecutor) GetTableSpan(
 }
 
 func (ie InternalExecutor) initSession(p *planner) {
-	p.evalCtx.NodeID = ie.LeaseManager.LeaseStore.nodeID.Get()
-	p.session.tables.leaseMgr = ie.LeaseManager
+	p.extendedEvalCtx.NodeID = ie.LeaseManager.LeaseStore.nodeID.Get()
+	p.extendedEvalCtx.Tables.leaseMgr = ie.LeaseManager
 }
 
 // getTableID retrieves the table ID for the specified table.
 func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID, error) {
-	if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+	if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
 		return 0, err
 	}
 
-	virtual, err := p.session.virtualSchemas.getVirtualTableDesc(tn)
+	virtual, err := p.getVirtualTabler().getVirtualTableDesc(tn)
 	if err != nil {
 		return 0, err
 	}
@@ -116,7 +116,7 @@ func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID
 		return retryable(ctx, p.txn)
 	}
 
-	dbID, err := p.session.tables.databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Database())
+	dbID, err := p.Tables().databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Database())
 	if err != nil {
 		return 0, err
 	}

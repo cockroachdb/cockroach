@@ -16,11 +16,13 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +39,7 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
+	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +61,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 	return &alterTableNode{n: n, tableDesc: tableDesc}, nil
 }
 
-func (n *alterTableNode) Start(params runParams) error {
+func (n *alterTableNode) startExec(params runParams) error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
@@ -79,7 +81,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.evalCtx)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
 				return err
 			}
@@ -142,12 +144,13 @@ func (n *alterTableNode) Start(params runParams) error {
 					return err
 				}
 				if d.PartitionBy != nil {
-					if err := addPartitionedBy(
-						params.ctx, params.evalCtx, n.tableDesc, &idx, &idx.Partitioning,
-						d.PartitionBy, 0, /* colOffset */
-					); err != nil {
+					partitioning, err := CreatePartitioning(
+						params.ctx, params.p.ExecCfg().Settings,
+						params.EvalContext(), n.tableDesc, &idx, d.PartitionBy)
+					if err != nil {
 						return err
 					}
+					idx.Partitioning = partitioning
 				}
 				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
@@ -160,7 +163,8 @@ func (n *alterTableNode) Start(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
-				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.evalCtx)
+				ck, err := makeCheckConstraint(
+					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext())
 				if err != nil {
 					return err
 				}
@@ -169,7 +173,9 @@ func (n *alterTableNode) Start(params runParams) error {
 				descriptorChanged = true
 
 			case *tree.ForeignKeyConstraintTableDef:
-				if _, err := d.Table.NormalizeWithDatabaseName(params.p.session.Database); err != nil {
+				if _, err := d.Table.NormalizeWithDatabaseName(
+					params.SessionData().Database,
+				); err != nil {
 					return err
 				}
 				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
@@ -189,7 +195,7 @@ func (n *alterTableNode) Start(params runParams) error {
 			}
 
 		case *tree.AlterTableDropColumn:
-			if params.p.session.SafeUpdates {
+			if params.SessionData().SafeUpdates {
 				return pgerror.NewDangerousStatementErrorf("ALTER TABLE DROP COLUMN will remove all data in that column")
 			}
 
@@ -294,8 +300,9 @@ func (n *alterTableNode) Start(params runParams) error {
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == tree.DropCascade {
 						if err := params.p.dropIndexByName(
-							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false, t.DropBehavior, ignoreOutboundFK,
-							tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
+							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
+							t.DropBehavior, ignoreIdxConstraint,
+							tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 						); err != nil {
 							return err
 						}
@@ -304,6 +311,34 @@ func (n *alterTableNode) Start(params runParams) error {
 					}
 				}
 			}
+
+			// Drop check constraints which reference the column.
+			// For every check on the table, walk the check expr
+			// and ensure any check which references the column
+			// is removed from the table descriptor.
+			validChecks := n.tableDesc.Checks[:0]
+
+			for _, check := range n.tableDesc.Checks {
+				expr, err := parser.ParseExpr(check.Expr)
+				if err != nil {
+					return err
+				}
+
+				exprDoesReferenceColumn, err := exprContainsColumnName(expr, col)
+				if err != nil {
+					return err
+				}
+
+				if !exprDoesReferenceColumn {
+					validChecks = append(validChecks, check)
+				}
+			}
+
+			if len(validChecks) != len(n.tableDesc.Checks) {
+				n.tableDesc.Checks = validChecks
+				descriptorChanged = true
+			}
+
 			found := false
 			for i := range n.tableDesc.Columns {
 				if n.tableDesc.Columns[i].ID == col.ID {
@@ -334,7 +369,7 @@ func (n *alterTableNode) Start(params runParams) error {
 			case sqlbase.ConstraintTypePK:
 				return fmt.Errorf("cannot drop primary key")
 			case sqlbase.ConstraintTypeUnique:
-				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX if you really want to drop it", t.Constraint)
+				return fmt.Errorf("UNIQUE constraint depends on index %q, use DROP INDEX with CASCADE if you really want to drop it", t.Constraint)
 			case sqlbase.ConstraintTypeCheck:
 				for i := range n.tableDesc.Checks {
 					if n.tableDesc.Checks[i].Name == name {
@@ -429,15 +464,34 @@ func (n *alterTableNode) Start(params runParams) error {
 				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 			}
 			if err := applyColumnMutation(
-				&col, t, &params.p.semaCtx, params.evalCtx,
+				&col, t, &params.p.semaCtx, params.EvalContext(),
 			); err != nil {
 				return err
 			}
 			n.tableDesc.UpdateColumnDescriptor(col)
 			descriptorChanged = true
 
+		case *tree.AlterTablePartitionBy:
+			partitioning, err := CreatePartitioning(
+				params.ctx, params.p.ExecCfg().Settings,
+				params.EvalContext(),
+				n.tableDesc, &n.tableDesc.PrimaryIndex, t.PartitionBy)
+			if err != nil {
+				return err
+			}
+			descriptorChanged = !proto.Equal(
+				&n.tableDesc.PrimaryIndex.Partitioning,
+				&partitioning,
+			)
+			err = deleteRemovedPartitionZoneConfigs(
+				params.ctx, params.p.txn, params.p.ExecCfg().Settings, params.p.ExecCfg().LeaseManager,
+				n.tableDesc, &n.tableDesc.PrimaryIndex, &n.tableDesc.PrimaryIndex.Partitioning, &partitioning)
+			if err != nil {
+				return err
+			}
+			n.tableDesc.PrimaryIndex.Partitioning = partitioning
 		default:
-			return fmt.Errorf("unsupported alter cmd: %T", cmd)
+			return fmt.Errorf("unsupported alter command: %T", cmd)
 		}
 	}
 	// Were some changes made?
@@ -460,7 +514,7 @@ func (n *alterTableNode) Start(params runParams) error {
 	var err error
 	if addedMutations {
 		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
-			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames))
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
@@ -480,14 +534,14 @@ func (n *alterTableNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogAlterTable,
 		int32(n.tableDesc.ID),
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			TableName           string
 			Statement           string
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{n.tableDesc.Name, n.n.String(), params.p.session.User, uint32(mutationID), droppedViews},
+		}{n.tableDesc.Name, n.n.String(), params.SessionData().User, uint32(mutationID), droppedViews},
 	); err != nil {
 		return err
 	}
@@ -539,4 +593,46 @@ func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) strin
 		s.WriteString(values[i].String())
 	}
 	return s.String()
+}
+
+// exprContainsColumnNames determines whether the given column occurs in the
+// given expression.
+// It achieves this using a lexical comparison without considering scoping.
+// WARNING: this logic only works for 'simple' expressions.
+// If/when CHECK expressions are extended to also support subqueries,
+// this logic will need to be amended.
+func exprContainsColumnName(expr tree.Expr, col sqlbase.ColumnDescriptor) (bool, error) {
+	exprContainsColumnName := false
+
+	preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		if string(c.ColumnName) == col.Name {
+			// This is a CHECK constraint which contains the column to be dropped
+			exprContainsColumnName = true
+		}
+		// Convert to a dummy node of the correct type.
+		return nil, false, &dummyColumnItem{col.Type.ToDatumType()}
+	}
+
+	_, err := tree.SimpleVisit(expr, preFn)
+	if err != nil {
+		return false, err
+	}
+
+	return exprContainsColumnName, nil
 }

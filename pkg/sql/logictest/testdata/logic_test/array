@@ -56,6 +56,13 @@ SELECT NULL::INT[]
 ----
 NULL
 
+# #19821
+
+query T
+SELECT ARRAY['one', 'two', 'fünf']
+----
+{"one","two","fünf"}
+
 query T
 SELECT ARRAY[e'\n', e'g\x10h']
 ----
@@ -117,6 +124,23 @@ query T
 SELECT '{hello}'::VARCHAR(2)[]
 ----
 {"he"}
+
+# array casting
+
+query T
+SELECT ARRAY[1,2,3]::INT[]
+----
+{1,2,3}
+
+query error invalid cast: int[] -> UUID[]
+SELECT ARRAY[1,2,3]::UUID[]
+
+query error invalid cast: inet[] -> INT[]
+SELECT ARRAY['8.8.8.8'::INET, '8.8.4.4'::INET]::INT[]
+
+# this _should_ be valid, but isn't, yet
+query error invalid cast: int[] -> TEXT[]
+SELECT ARRAY[1,2,3]::TEXT[]
 
 # array subscript access
 

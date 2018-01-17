@@ -15,10 +15,11 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
-	"golang.org/x/net/context"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 type chunkBackfiller interface {
@@ -71,13 +71,13 @@ func (*backfiller) OutputTypes() []sqlbase.ColumnType {
 }
 
 // Run is part of the processor interface.
-func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (b *backfiller) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
 	opName := fmt.Sprintf("%sBackfiller", b.name)
-	ctx = log.WithLogTagInt(ctx, opName, int(b.spec.Table.ID))
+	ctx := log.WithLogTagInt(b.flowCtx.Ctx, opName, int(b.spec.Table.ID))
 	ctx, span := processorSpan(ctx, opName)
 	defer tracing.FinishSpan(span)
 
@@ -87,7 +87,7 @@ func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	if err := b.mainLoop(ctx); err != nil {
-		b.output.Push(nil /* row */, ProducerMetadata{Err: err})
+		b.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 	}
 	sendTraceData(ctx, b.output)
 	b.output.ProducerDone()

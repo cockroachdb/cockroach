@@ -16,6 +16,7 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -24,11 +25,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -40,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -58,11 +61,16 @@ var crdbInternal = virtualSchema{
 		crdbInternalClusterSettingsTable,
 		crdbInternalCreateStmtsTable,
 		crdbInternalForwardDependenciesTable,
+		crdbInternalGossipNodesTable,
+		crdbInternalGossipLivenessTable,
 		crdbInternalIndexColumnsTable,
 		crdbInternalJobsTable,
+		crdbInternalKVNodeStatusTable,
+		crdbInternalKVStoreStatusTable,
 		crdbInternalLeasesTable,
 		crdbInternalLocalQueriesTable,
 		crdbInternalLocalSessionsTable,
+		crdbInternalPartitionsTable,
 		crdbInternalRangesTable,
 		crdbInternalRuntimeInfoTable,
 		crdbInternalSchemaChangesTable,
@@ -180,11 +188,12 @@ CREATE TABLE crdb_internal.tables (
   format_version           STRING NOT NULL,
   state                    STRING NOT NULL,
   sc_lease_node_id         INT,
-  sc_lease_expiration_time TIMESTAMP
+  sc_lease_expiration_time TIMESTAMP,
+  gc_deadline              TIMESTAMP
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		descs, err := getAllDescriptors(ctx, p.txn)
+		descs, err := GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -219,6 +228,12 @@ CREATE TABLE crdb_internal.tables (
 					timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 				)
 			}
+			gcDeadlineDatum := tree.DNull
+			if table.GCDeadline != 0 {
+				gcDeadlineDatum = tree.MakeDTimestamp(
+					timeutil.Unix(0, table.GCDeadline), time.Nanosecond,
+				)
+			}
 			if err := addRow(
 				tree.NewDInt(tree.DInt(int64(table.ID))),
 				tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
@@ -231,6 +246,7 @@ CREATE TABLE crdb_internal.tables (
 				tree.NewDString(table.State.String()),
 				leaseNodeDatum,
 				leaseExpDatum,
+				gcDeadlineDatum,
 			); err != nil {
 				return err
 			}
@@ -253,7 +269,7 @@ CREATE TABLE crdb_internal.schema_changes (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		descs, err := getAllDescriptors(ctx, p.txn)
+		descs, err := GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -376,7 +392,7 @@ CREATE TABLE crdb_internal.jobs (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		p = makeInternalPlanner("jobs", p.txn, p.evalCtx.User, p.session.memMetrics)
+		p = makeInternalPlanner("jobs", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, status, created, payload FROM system.jobs`)
 		if err != nil {
@@ -506,7 +522,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
 				anonymized := tree.DNull
-				anonStr, ok := scrubStmtStatKey(p.session.virtualSchemas, stmtKey.stmt)
+				anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stmtKey.stmt)
 				if ok {
 					anonymized = tree.NewDString(anonStr)
 				}
@@ -575,7 +591,7 @@ CREATE TABLE crdb_internal.session_trace (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		rows, err := p.session.Tracing.generateSessionTraceVTable()
+		rows, err := p.ExtendedEvalContext().Tracing.generateSessionTraceVTable()
 		if err != nil {
 			return err
 		}
@@ -607,7 +623,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 			setting, _ := settings.Lookup(k)
 			if err := addRow(
 				tree.NewDString(k),
-				tree.NewDString(setting.String(&p.session.execCfg.Settings.SV)),
+				tree.NewDString(setting.String(&p.ExecCfg().Settings.SV)),
 				tree.NewDString(setting.Typ()),
 				tree.NewDString(setting.Description()),
 			); err != nil {
@@ -629,7 +645,7 @@ CREATE TABLE crdb_internal.session_variables (
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
-			value := gen.Get(p.session)
+			value := gen.Get(&p.extendedEvalCtx)
 			if err := addRow(
 				tree.NewDString(vName),
 				tree.NewDString(value),
@@ -660,8 +676,8 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "node_queries"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.session.User}
-		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
+		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -674,8 +690,8 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.session.User}
-		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
+		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -753,8 +769,8 @@ CREATE TABLE crdb_internal.%s (
 var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.session.User}
-		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
+		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+		response, err := p.extendedEvalCtx.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -767,8 +783,8 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		req := serverpb.ListSessionsRequest{Username: p.session.User}
-		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
+		req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
+		response, err := p.extendedEvalCtx.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
 			return err
 		}
@@ -894,14 +910,18 @@ CREATE TABLE crdb_internal.create_statements (
 				var descType tree.Datum
 				var stmt string
 				var err error
-				var typeView = tree.DString("view")
-				var typeTable = tree.DString("table")
+				typeView := tree.DString("view")
+				typeTable := tree.DString("table")
+				typeSequence := tree.DString("sequence")
 				if table.IsView() {
 					descType = &typeView
-					stmt, err = p.showCreateView(ctx, tree.Name(table.Name), table)
+					stmt, err = p.showCreateView(ctx, (*tree.Name)(&table.Name), table)
+				} else if table.IsSequence() {
+					descType = &typeSequence
+					stmt, err = p.showCreateSequence(ctx, (*tree.Name)(&table.Name), table)
 				} else {
 					descType = &typeTable
-					stmt, err = p.showCreateTable(ctx, tree.Name(table.Name), prefix, table)
+					stmt, err = p.showCreateTable(ctx, (*tree.Name)(&table.Name), prefix, table)
 				}
 				if err != nil {
 					return err
@@ -1338,7 +1358,7 @@ CREATE TABLE crdb_internal.ranges (
 		if err := p.RequireSuperUser("read crdb_internal.ranges"); err != nil {
 			return err
 		}
-		descs, err := getAllDescriptors(ctx, p.txn)
+		descs, err := GetAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -1448,7 +1468,7 @@ CREATE TABLE crdb_internal.zones (
 			return 0, "", fmt.Errorf("object with ID %d does not exist", id)
 		}
 
-		p = makeInternalPlanner("zones", p.txn, p.evalCtx.User, p.session.memMetrics)
+		p = makeInternalPlanner("zones", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, config FROM system.zones`)
 		if err != nil {
@@ -1457,8 +1477,14 @@ CREATE TABLE crdb_internal.zones (
 		for _, r := range rows {
 			id := uint32(tree.MustBeDInt(r[0]))
 			zs, err := config.ZoneSpecifierFromID(id, resolveID)
-			if err != nil {
-				return err
+			var cliSpecifier tree.Datum
+			if err == nil {
+				cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+			} else {
+				// The table was deleted but hasn't yet been cleaned up by the schema
+				// changer. The user has no way to refer to the zone, so provide a NULL
+				// CLI specifier.
+				cliSpecifier = tree.DNull
 			}
 
 			configBytes := []byte(*r[1].(*tree.DBytes))
@@ -1482,7 +1508,7 @@ CREATE TABLE crdb_internal.zones (
 				}
 				if err := addRow(
 					r[0], // id
-					tree.NewDString(config.CLIZoneSpecifier(zs)),
+					cliSpecifier,
 					tree.NewDBytes(tree.DBytes(configYAML)),
 					tree.NewDBytes(tree.DBytes(configBytes)),
 				); err != nil {
@@ -1500,9 +1526,12 @@ CREATE TABLE crdb_internal.zones (
 					if err != nil {
 						return err
 					}
-					zs := zs
-					zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
-					zs.Partition = tree.Name(s.PartitionName)
+					if cliSpecifier != tree.DNull {
+						zs := zs
+						zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
+						zs.Partition = tree.Name(s.PartitionName)
+						cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+					}
 					configYAML, err := yaml.Marshal(s.Config)
 					if err != nil {
 						return err
@@ -1513,12 +1542,419 @@ CREATE TABLE crdb_internal.zones (
 					}
 					if err := addRow(
 						r[0], // id
-						tree.NewDString(config.CLIZoneSpecifier(zs)),
+						cliSpecifier,
 						tree.NewDBytes(tree.DBytes(configYAML)),
 						tree.NewDBytes(tree.DBytes(configBytes)),
 					); err != nil {
 						return err
 					}
+				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipNodesTable exposes local information about the cluster nodes.
+var crdbInternalGossipNodesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_nodes (
+  node_id         INT NOT NULL,
+  network         STRING NOT NULL,
+  address         STRING NOT NULL,
+  attrs           JSON NOT NULL,
+  locality        JSON NOT NULL,
+  server_version  STRING NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.gossip_nodes"); err != nil {
+			return err
+		}
+
+		g := p.ExecCfg().Gossip
+		var descriptors []roachpb.NodeDescriptor
+		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+
+			var d roachpb.NodeDescriptor
+			if err := protoutil.Unmarshal(bytes, &d); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			descriptors = append(descriptors, d)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		sort.Slice(descriptors, func(i, j int) bool {
+			return descriptors[i].NodeID < descriptors[j].NodeID
+		})
+
+		for _, d := range descriptors {
+			var attrs []json.JSON
+			for _, a := range d.Attrs.Attrs {
+				attrs = append(attrs, json.FromString(a))
+			}
+
+			b := json.NewBuilder()
+			for _, t := range d.Locality.Tiers {
+				b.Add(t.Key, json.FromString(t.Value))
+			}
+			locality := b.Build()
+
+			if err := addRow(
+				tree.NewDInt(tree.DInt(d.NodeID)),
+				tree.NewDString(d.Address.NetworkField),
+				tree.NewDString(d.Address.AddressField),
+				tree.NewDJSON(json.FromArrayOfJSON(attrs)),
+				tree.NewDJSON(locality),
+				tree.NewDString(d.ServerVersion.String()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipLivenessTable exposes local information about the nodes' liveness.
+var crdbInternalGossipLivenessTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_liveness (
+  node_id         INT NOT NULL,
+  epoch           INT NOT NULL,
+  expiration      STRING NOT NULL,
+  draining        BOOL NOT NULL,
+  decommissioning BOOL NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.gossip_liveness"); err != nil {
+			return err
+		}
+
+		g := p.ExecCfg().Gossip
+		var livenesses []storage.Liveness
+		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+
+			var l storage.Liveness
+			if err := protoutil.Unmarshal(bytes, &l); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			livenesses = append(livenesses, l)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		sort.Slice(livenesses, func(i, j int) bool {
+			return livenesses[i].NodeID < livenesses[j].NodeID
+		})
+
+		for _, l := range livenesses {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(l.NodeID)),
+				tree.NewDInt(tree.DInt(l.Epoch)),
+				tree.NewDString(l.Expiration.String()),
+				tree.MakeDBool(tree.DBool(l.Draining)),
+				tree.MakeDBool(tree.DBool(l.Decommissioning)),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+func addPartitioningRows(
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	partitioning *sqlbase.PartitioningDescriptor,
+	parentName tree.Datum,
+	colOffset int,
+	addRow func(...tree.Datum) error,
+) error {
+	tableID := tree.NewDInt(tree.DInt(table.ID))
+	indexID := tree.NewDInt(tree.DInt(index.ID))
+	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
+
+	for _, l := range partitioning.List {
+		name := tree.NewDString(l.Name)
+		if err := addRow(
+			tableID,
+			indexID,
+			parentName,
+			name,
+			numColumns,
+		); err != nil {
+			return err
+		}
+		err := addPartitioningRows(table, index, &l.Subpartitioning, name,
+			colOffset+int(partitioning.NumColumns), addRow)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, r := range partitioning.Range {
+		if err := addRow(
+			tableID,
+			indexID,
+			parentName,
+			tree.NewDString(r.Name),
+			numColumns,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// crdbInternalPartitionsTable decodes and exposes the partitions of each
+// table.
+var crdbInternalPartitionsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.partitions (
+	table_id    INT NOT NULL,
+	index_id    INT NOT NULL,
+	parent_name STRING,
+	name        STRING NOT NULL,
+	columns     INT NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, prefix,
+			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+					return addPartitioningRows(table, index, &index.Partitioning,
+						tree.DNull /* parentName */, 0 /* colOffset */, addRow)
+				})
+			})
+	},
+}
+
+// crdbInternalKVNodeStatusTable exposes information from the status server about the cluster nodes.
+var crdbInternalKVNodeStatusTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.kv_node_status (
+  node_id        INT NOT NULL,
+  network        STRING NOT NULL,
+  address        STRING NOT NULL,
+  attrs          JSON NOT NULL,
+  locality       JSON NOT NULL,
+  server_version STRING NOT NULL,
+  go_version     STRING NOT NULL,
+  tag            STRING NOT NULL,
+  time           STRING NOT NULL,
+  revision       STRING NOT NULL,
+  cgo_compiler   STRING NOT NULL,
+  platform       STRING NOT NULL,
+  distribution   STRING NOT NULL,
+  type           STRING NOT NULL,
+  dependencies   STRING NOT NULL,
+  started_at     TIMESTAMP NOT NULL,
+  updated_at     TIMESTAMP NOT NULL,
+  metrics        JSON NOT NULL,
+  args           JSON NOT NULL,
+  env            JSON NOT NULL,
+  activity       JSON NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.kv_node_status"); err != nil {
+			return err
+		}
+
+		response, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, n := range response.Nodes {
+			var attrs []json.JSON
+			for _, a := range n.Desc.Attrs.Attrs {
+				attrs = append(attrs, json.FromString(a))
+			}
+
+			locality := json.NewBuilder()
+			for _, t := range n.Desc.Locality.Tiers {
+				locality.Add(t.Key, json.FromString(t.Value))
+			}
+
+			var dependencies string
+			if n.BuildInfo.Dependencies == nil {
+				dependencies = ""
+			} else {
+				dependencies = *(n.BuildInfo.Dependencies)
+			}
+
+			metrics := json.NewBuilder()
+			for k, v := range n.Metrics {
+				metric, err := json.FromFloat64(v)
+				if err != nil {
+					return err
+				}
+				metrics.Add(k, metric)
+			}
+
+			var args []json.JSON
+			for _, a := range n.Args {
+				args = append(attrs, json.FromString(a))
+			}
+
+			var env []json.JSON
+			for _, v := range n.Env {
+				env = append(attrs, json.FromString(v))
+			}
+
+			activity := json.NewBuilder()
+			for nodeID, values := range n.Activity {
+				b := json.NewBuilder()
+				b.Add("incoming", json.FromInt64(values.Incoming))
+				b.Add("outgoing", json.FromInt64(values.Outgoing))
+				b.Add("latency", json.FromInt64(values.Latency))
+				activity.Add(nodeID.String(), b.Build())
+			}
+
+			if err := addRow(
+				tree.NewDInt(tree.DInt(n.Desc.NodeID)),
+				tree.NewDString(n.Desc.Address.NetworkField),
+				tree.NewDString(n.Desc.Address.AddressField),
+				tree.NewDJSON(json.FromArrayOfJSON(attrs)),
+				tree.NewDJSON(locality.Build()),
+				tree.NewDString(n.Desc.ServerVersion.String()),
+				tree.NewDString(n.BuildInfo.GoVersion),
+				tree.NewDString(n.BuildInfo.Tag),
+				tree.NewDString(n.BuildInfo.Time),
+				tree.NewDString(n.BuildInfo.Revision),
+				tree.NewDString(n.BuildInfo.CgoCompiler),
+				tree.NewDString(n.BuildInfo.Platform),
+				tree.NewDString(n.BuildInfo.Distribution),
+				tree.NewDString(n.BuildInfo.Type),
+				tree.NewDString(dependencies),
+				tree.MakeDTimestamp(timeutil.Unix(0, n.StartedAt), time.Microsecond),
+				tree.MakeDTimestamp(timeutil.Unix(0, n.UpdatedAt), time.Microsecond),
+				tree.NewDJSON(metrics.Build()),
+				tree.NewDJSON(json.FromArrayOfJSON(args)),
+				tree.NewDJSON(json.FromArrayOfJSON(env)),
+				tree.NewDJSON(activity.Build()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalKVStoreStatusTable exposes information about the cluster stores.
+var crdbInternalKVStoreStatusTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.kv_store_status (
+  node_id            INT NOT NULL,
+  store_id           INT NOT NULL,
+  attrs              JSON NOT NULL,
+  capacity           INT NOT NULL,
+  available          INT NOT NULL,
+  used               INT NOT NULL,
+  logical_bytes      INT NOT NULL,
+  range_count        INT NOT NULL,
+  lease_count        INT NOT NULL,
+  writes_per_second  FLOAT NOT NULL,
+  bytes_per_replica  JSON NOT NULL,
+  writes_per_replica JSON NOT NULL,
+  metrics            JSON NOT NULL
+)
+	`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.kv_store_status"); err != nil {
+			return err
+		}
+
+		response, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, n := range response.Nodes {
+			for _, s := range n.StoreStatuses {
+				var attrs []json.JSON
+				for _, a := range s.Desc.Attrs.Attrs {
+					attrs = append(attrs, json.FromString(a))
+				}
+
+				metrics := json.NewBuilder()
+				for k, v := range s.Metrics {
+					metric, err := json.FromFloat64(v)
+					if err != nil {
+						return err
+					}
+					metrics.Add(k, metric)
+				}
+
+				percentilesToJSON := func(ps roachpb.Percentiles) (json.JSON, error) {
+					b := json.NewBuilder()
+					v, err := json.FromFloat64(ps.P10)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P10", v)
+					v, err = json.FromFloat64(ps.P25)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P25", v)
+					v, err = json.FromFloat64(ps.P50)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P50", v)
+					v, err = json.FromFloat64(ps.P75)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P75", v)
+					v, err = json.FromFloat64(ps.P90)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("P90", v)
+					return b.Build(), nil
+				}
+
+				bytesPerReplica, err := percentilesToJSON(s.Desc.Capacity.BytesPerReplica)
+				if err != nil {
+					return err
+				}
+				writesPerReplica, err := percentilesToJSON(s.Desc.Capacity.WritesPerReplica)
+				if err != nil {
+					return err
+				}
+
+				if err := addRow(
+					tree.NewDInt(tree.DInt(s.Desc.Node.NodeID)),
+					tree.NewDInt(tree.DInt(s.Desc.StoreID)),
+					tree.NewDJSON(json.FromArrayOfJSON(attrs)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.Capacity)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.Available)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.Used)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.LogicalBytes)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.RangeCount)),
+					tree.NewDInt(tree.DInt(s.Desc.Capacity.LeaseCount)),
+					tree.NewDFloat(tree.DFloat(s.Desc.Capacity.WritesPerSecond)),
+					tree.NewDJSON(bytesPerReplica),
+					tree.NewDJSON(writesPerReplica),
+					tree.NewDJSON(metrics.Build()),
+				); err != nil {
+					return err
 				}
 			}
 		}

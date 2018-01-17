@@ -15,8 +15,9 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -40,7 +41,7 @@ func GetUserHashedPassword(
 		p := makeInternalPlanner("get-pwd", txn, security.RootUser, metrics)
 		defer finishInternalPlanner(p)
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
-			`WHERE username=$1`
+			`WHERE username=$1 AND "isRole" = false`
 		values, err := p.QueryRow(ctx, getHashedPassword, normalizedUsername)
 		if err != nil {
 			return errors.Errorf("error looking up user %s", normalizedUsername)
@@ -54,4 +55,45 @@ func GetUserHashedPassword(
 	})
 
 	return exists, hashedPassword, err
+}
+
+// The map value is true if the map key is a role, false if it is a user.
+func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
+	query := `SELECT username,"isRole"  FROM system.users`
+	newPlanner := makeInternalPlanner("get-all-users-and-roles", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics)
+	defer finishInternalPlanner(newPlanner)
+	rows, err := newPlanner.queryRows(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	users := make(map[string]bool)
+	for _, row := range rows {
+		username := tree.MustBeDString(row[0])
+		isRole := row[1].(*tree.DBool)
+		users[string(username)] = bool(*isRole)
+	}
+	return users, nil
+}
+
+// Returns true is the requested username is a role, false if it is a user.
+// Returns error if it does not exist.
+func existingUserIsRole(
+	ctx context.Context, ie InternalExecutor, opName string, txn *client.Txn, username string,
+) (bool, error) {
+	values, err := ie.QueryRowInTransaction(
+		ctx,
+		opName,
+		txn,
+		`SELECT "isRole" FROM system.users WHERE username=$1`,
+		username)
+	if err != nil {
+		return false, errors.Errorf("error looking up user %s", username)
+	}
+	if len(values) == 0 {
+		return false, errors.Errorf("no user or role named %s", username)
+	}
+
+	isRole := bool(*(values[0]).(*tree.DBool))
+	return isRole, nil
 }

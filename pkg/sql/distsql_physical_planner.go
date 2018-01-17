@@ -15,7 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -38,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // DistSQLPlanner is used to generate distributed plans from logical
@@ -153,7 +154,7 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 		return false, expr
 	}
 	switch t := expr.(type) {
-	case *subquery, *tree.Subquery:
+	case *tree.Subquery:
 		v.err = newQueryNotSupportedError("subqueries not supported yet")
 		return false, expr
 
@@ -334,13 +335,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.index)
 
 	case *groupNode:
-		for _, fholder := range n.funcs {
-			if f, ok := fholder.expr.(*tree.FuncExpr); ok {
-				if strings.ToUpper(f.Func.FunctionReference.String()) == "ARRAY_AGG" {
-					return 0, newQueryNotSupportedError("ARRAY_AGG aggregation not supported yet")
-				}
-			}
-		}
 		rec, err := dsp.checkSupportForNode(n.plan)
 		if err != nil {
 			return 0, err
@@ -359,6 +353,21 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *distinctNode:
 		return dsp.checkSupportForNode(n.plan)
+
+	case *unionNode:
+		// Only UNION and UNION ALL are supported so far.
+		if n.unionType == tree.UnionOp {
+			recLeft, err := dsp.checkSupportForNode(n.left)
+			if err != nil {
+				return 0, err
+			}
+			recRight, err := dsp.checkSupportForNode(n.right)
+			if err != nil {
+				return 0, err
+			}
+			return recLeft.compose(recRight), nil
+		}
+		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 
 	case *valuesNode:
 		if n.n == nil {
@@ -393,13 +402,17 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 // planningCtx contains data used and updated throughout the planning process of
 // a single query.
 type planningCtx struct {
-	ctx      context.Context
-	evalCtx  *tree.EvalContext
-	spanIter distsqlplan.SpanResolverIterator
+	ctx             context.Context
+	extendedEvalCtx *extendedEvalContext
+	spanIter        distsqlplan.SpanResolverIterator
 	// nodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// physicalPlan we generate with this context.
 	// Nodes that fail a health check have empty addresses.
 	nodeAddresses map[roachpb.NodeID]string
+}
+
+func (p *planningCtx) EvalContext() *tree.EvalContext {
+	return &p.extendedEvalCtx.EvalContext
 }
 
 // sanityCheckAddresses returns an error if the same address is used by two
@@ -480,11 +493,11 @@ type spanPartition struct {
 	spans roachpb.Spans
 }
 
-// partitionSpans finds out which nodes are owners for ranges touching the given
-// spans, and splits the spans according to owning nodes. The result is a set of
-// spanPartitions (one for each relevant node), which form a partitioning of the
-// spans (i.e. they are non-overlapping and their union is exactly the original
-// set of spans).
+// partitionSpans finds out which nodes are owners for ranges touching the
+// given spans, and splits the spans according to owning nodes. The result is a
+// set of spanPartitions (guaranteed one for each relevant node), which form a
+// partitioning of the spans (i.e. they are non-overlapping and their union is
+// exactly the original set of spans).
 //
 // partitionSpans does its best to not assign ranges on nodes that are known to
 // either be unhealthy or running an incompatible version. The ranges owned by
@@ -504,6 +517,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 	nodeVerCompatMap := make(map[roachpb.NodeID]bool)
 	it := planCtx.spanIter
 	for _, span := range spans {
+		// rspan is the span we are currently partitioning.
 		var rspan roachpb.RSpan
 		var err error
 		if rspan.Key, err = keys.Addr(span.Key); err != nil {
@@ -519,6 +533,9 @@ func (dsp *DistSQLPlanner) partitionSpans(
 		if log.V(1) {
 			log.Infof(ctx, "partitioning span %s", span)
 		}
+		// We break up rspan into its individual ranges (which may or
+		// may not be on separate nodes). We then create "partitioned
+		// spans" using the end keys of these individual ranges.
 		for it.Seek(ctx, span, kv.Ascending); ; it.Next(ctx) {
 			if !it.Valid() {
 				return nil, it.Error()
@@ -656,6 +673,7 @@ func initTableReaderSpec(
 	s := distsqlrun.TableReaderSpec{
 		Table:   *n.desc,
 		Reverse: n.reverse,
+		IsCheck: n.run.isCheck,
 	}
 	if n.index != &n.desc.PrimaryIndex {
 		for i := range n.desc.Indexes {
@@ -669,6 +687,13 @@ func initTableReaderSpec(
 			err := errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
 			return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
 		}
+	}
+
+	// When a TableReader is running scrub checks, do not allow a
+	// post-processor. This is because the outgoing stream is a fixed
+	// format (distsqlrun.ScrubTypes).
+	if n.run.isCheck {
+		return s, distsqlrun.PostProcessSpec{}, nil
 	}
 
 	post := distsqlrun.PostProcessSpec{
@@ -696,7 +721,7 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 	return outputColumns
 }
 
-// convertOrdering maps the columns in ord.ordering to the output columns of a
+// convertOrdering maps the columns in props.ordering to the output columns of a
 // processor.
 func (dsp *DistSQLPlanner) convertOrdering(
 	props physicalProps, planToStreamColMap []int,
@@ -739,7 +764,7 @@ func (dsp *DistSQLPlanner) convertOrdering(
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
-	spec, post, err := initTableReaderSpec(n, planCtx.evalCtx)
+	spec, post, err := initTableReaderSpec(n, planCtx.EvalContext())
 	if err != nil {
 		return physicalPlan{}, err
 	}
@@ -753,13 +778,11 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	stageID := p.NewStageID()
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
-		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
-		for j := range sp.spans {
-			tr.Spans[j].Span = sp.spans[j]
-		}
+		tr.Spans = makeTableReaderSpans(sp.spans)
 
 		proc := distsqlplan.Processor{
 			Node: sp.node,
@@ -867,14 +890,18 @@ func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 		// in the output columns of the sortNode; we set a projection such that the
 		// plan results map 1-to-1 to sortNode columns.
 		//
-		// Note that internally, AddProjection might retain more columns as
-		// necessary so we can preserve the p.Ordering between parallel streams when
-		// they merge later.
+		// Note that internally, AddProjection might retain more columns than
+		// necessary so we can preserve the p.Ordering between parallel streams
+		// when they merge later.
 		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		columns := make([]uint32, len(n.columns))
+		columns := make([]uint32, 0, len(n.columns))
 		for i, col := range p.planToStreamColMap {
-			columns[i] = uint32(col)
-			p.planToStreamColMap[i] = i
+			if col < 0 {
+				// This column isn't needed; ignore it.
+				continue
+			}
+			p.planToStreamColMap[i] = len(columns)
+			columns = append(columns, uint32(col))
 		}
 		p.AddProjection(columns)
 	}
@@ -1240,7 +1267,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 		if needRender {
 			// Build rendering expressions.
 			renderExprs := make([]distsqlrun.Expression, len(aggregations))
-			h := distsqlplan.MakeTypeIndexedVarHelper(finalPreRenderTypes)
+			h := tree.MakeTypesOnlyIndexedVarHelper(
+				sqlbase.ColumnTypesToDatumTypes(finalPreRenderTypes),
+			)
 			// finalIdx is an index inside finalAggs. It is used to
 			// keep track of the finalAggs results that correspond
 			// to each aggregation.
@@ -1255,7 +1284,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 					// aggregations if they are equivalent
 					// across and within stages.
 					mappedIdx := int(finalIdxMap[finalIdx])
-					renderExprs[i] = distsqlplan.MakeExpression(h.IndexedVar(mappedIdx), planCtx.evalCtx, nil)
+					renderExprs[i] = distsqlplan.MakeExpression(
+						h.IndexedVar(mappedIdx), planCtx.EvalContext(),
+						nil /* indexVarMap */)
 				} else {
 					// We have multiple final aggregation
 					// values that we need to be mapped to
@@ -1271,7 +1302,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 					if err != nil {
 						return err
 					}
-					renderExprs[i] = distsqlplan.MakeExpression(expr, planCtx.evalCtx, nil)
+					renderExprs[i] = distsqlplan.MakeExpression(
+						expr, planCtx.EvalContext(),
+						nil /* indexVarMap */)
 				}
 				finalIdx += len(info.FinalStage)
 			}
@@ -1405,7 +1438,8 @@ ColLoop:
 	}
 
 	post := distsqlrun.PostProcessSpec{
-		Filter:        distsqlplan.MakeExpression(n.table.filter, planCtx.evalCtx, nil),
+		Filter: distsqlplan.MakeExpression(
+			n.table.filter, planCtx.EvalContext(), nil /* indexVarMap */),
 		Projection:    true,
 		OutputColumns: getOutputColumnsFromScanNode(n.table),
 	}
@@ -1485,6 +1519,17 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.Co
 func (dsp *DistSQLPlanner) createPlanForJoin(
 	planCtx *planningCtx, n *joinNode,
 ) (physicalPlan, error) {
+	// See if we can create an interleave join plan.
+	if planInterleavedJoins.Get(&dsp.st.SV) {
+		plan, ok, err := dsp.tryCreatePlanForInterleavedJoin(planCtx, n)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		// An interleave join plan could be used. Return it.
+		if ok {
+			return plan, nil
+		}
+	}
 
 	// Outline of the planning process for joins:
 	//
@@ -1520,30 +1565,14 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
 	)
 
-	joinToStreamColMap := makePlanToStreamColMap(len(n.columns))
-
 	// Nodes where we will run the join processors.
 	var nodes []roachpb.NodeID
 
 	// We initialize these properties of the joiner. They will then be used to
 	// fill in the processor spec. See descriptions for HashJoinerSpec.
-	var joinType distsqlrun.JoinType
-	var onExpr distsqlrun.Expression
 	var leftEqCols, rightEqCols []uint32
 	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
-
-	switch n.joinType {
-	case joinTypeInner:
-		joinType = distsqlrun.JoinType_INNER
-	case joinTypeFullOuter:
-		joinType = distsqlrun.JoinType_FULL_OUTER
-	case joinTypeRightOuter:
-		joinType = distsqlrun.JoinType_RIGHT_OUTER
-	case joinTypeLeftOuter:
-		joinType = distsqlrun.JoinType_LEFT_OUTER
-	default:
-		panic(fmt.Sprintf("invalid join type %d", n.joinType))
-	}
+	joinType := distsqlJoinType(n.joinType)
 
 	// Figure out the left and right types.
 	leftTypes := leftPlan.ResultTypes
@@ -1570,14 +1599,9 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 
 		// Set up the equality columns.
-		leftEqCols = make([]uint32, numEq)
-		for i, leftPlanCol := range n.pred.leftEqualityIndices {
-			leftEqCols[i] = uint32(leftPlan.planToStreamColMap[leftPlanCol])
-		}
-		rightEqCols = make([]uint32, numEq)
-		for i, rightPlanCol := range n.pred.rightEqualityIndices {
-			rightEqCols[i] = uint32(rightPlan.planToStreamColMap[rightPlanCol])
-		}
+		leftEqCols = eqCols(n.pred.leftEqualityIndices, leftPlan.planToStreamColMap)
+		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightPlan.planToStreamColMap)
+
 		if planMergeJoins.Get(&dsp.st.SV) && len(n.mergeJoinOrdering) > 0 {
 			// TODO(radu): we currently only use merge joins when we have an ordering on
 			// all equality columns. We should relax this by either:
@@ -1587,18 +1611,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			//  - or: adding a sort processor to complete the order
 			if len(n.mergeJoinOrdering) == len(n.pred.leftEqualityIndices) {
 				// Excellent! We can use the merge joiner.
-				leftMergeOrd.Columns = make([]distsqlrun.Ordering_Column, len(n.mergeJoinOrdering))
-				rightMergeOrd.Columns = make([]distsqlrun.Ordering_Column, len(n.mergeJoinOrdering))
-				for i, c := range n.mergeJoinOrdering {
-					leftMergeOrd.Columns[i].ColIdx = leftEqCols[c.ColIdx]
-					rightMergeOrd.Columns[i].ColIdx = rightEqCols[c.ColIdx]
-					dir := distsqlrun.Ordering_Column_ASC
-					if c.Direction == encoding.Descending {
-						dir = distsqlrun.Ordering_Column_DESC
-					}
-					leftMergeOrd.Columns[i].Direction = dir
-					rightMergeOrd.Columns[i].Direction = dir
-				}
+				leftMergeOrd = distsqlOrdering(n.mergeJoinOrdering, leftEqCols)
+				rightMergeOrd = distsqlOrdering(n.mergeJoinOrdering, rightEqCols)
 			}
 		}
 	} else {
@@ -1615,54 +1629,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	post := distsqlrun.PostProcessSpec{
-		Projection: true,
-	}
-	// addOutCol appends to post.OutputColumns and returns the index
-	// in the slice of the added column.
-	addOutCol := func(col uint32) int {
-		idx := len(post.OutputColumns)
-		post.OutputColumns = append(post.OutputColumns, col)
-		return idx
-	}
-
-	// The join columns are in two groups:
-	//  - the columns on the left side (numLeftCols)
-	//  - the columns on the right side (numRightCols)
-	joinCol := 0
-
-	for i := 0; i < n.pred.numLeftCols; i++ {
-		if !n.columns[joinCol].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlan.planToStreamColMap[i]))
-		}
-		joinCol++
-	}
-	for i := 0; i < n.pred.numRightCols; i++ {
-		if !n.columns[joinCol].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(rightPlan.planToStreamColMap[i] + len(leftTypes)),
-			)
-		}
-		joinCol++
-	}
-
-	if n.pred.onCond != nil {
-		// We have to remap ordinal references in the on condition (which refer to
-		// the join columns as described above) to values that make sense in the
-		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
-		// input columns).
-		joinColMap := make([]int, len(n.columns))
-		idx := 0
-		for i := 0; i < n.pred.numLeftCols; i++ {
-			joinColMap[idx] = leftPlan.planToStreamColMap[i]
-			idx++
-		}
-		for i := 0; i < n.pred.numRightCols; i++ {
-			joinColMap[idx] = rightPlan.planToStreamColMap[i] + len(leftTypes)
-			idx++
-		}
-		onExpr = distsqlplan.MakeExpression(n.pred.onCond, planCtx.evalCtx, joinColMap)
-	}
+	post, joinToStreamColMap := joinOutColumns(n, leftPlan, rightPlan)
+	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan, rightPlan)
 
 	// Create the Core spec.
 	var core distsqlrun.ProcessorCoreUnion
@@ -1685,9 +1653,10 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	pIdxStart := distsqlplan.ProcessorIdx(len(p.Processors))
 	stageID := p.NewStageID()
 
-	if len(nodes) == 1 {
+	// Each node has a join processor.
+	for _, n := range nodes {
 		proc := distsqlplan.Processor{
-			Node: nodes[0],
+			Node: n,
 			Spec: distsqlrun.ProcessorSpec{
 				Input: []distsqlrun.InputSyncSpec{
 					{ColumnTypes: leftTypes},
@@ -1700,27 +1669,11 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			},
 		}
 		p.Processors = append(p.Processors, proc)
-	} else {
-		// Parallel hash join: we distribute rows (by hash of equality columns) to
-		// len(nodes) join processors.
+	}
 
-		// Each node has a join processor.
-		for _, n := range nodes {
-			proc := distsqlplan.Processor{
-				Node: n,
-				Spec: distsqlrun.ProcessorSpec{
-					Input: []distsqlrun.InputSyncSpec{
-						{ColumnTypes: leftTypes},
-						{ColumnTypes: rightTypes},
-					},
-					Core:    core,
-					Post:    post,
-					Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
-					StageID: stageID,
-				},
-			}
-			p.Processors = append(p.Processors, proc)
-		}
+	if len(nodes) > 1 {
+		// Parallel hash or merge join: we distribute rows (by hash of
+		// equality columns) to len(nodes) join processors.
 
 		// Set up the left routers.
 		for _, resultProc := range leftRouters {
@@ -1781,7 +1734,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		dsp.selectRenders(&plan, n, planCtx.evalCtx)
+		dsp.selectRenders(&plan, n, planCtx.EvalContext())
 		return plan, nil
 
 	case *groupNode:
@@ -1812,7 +1765,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			return physicalPlan{}, err
 		}
 
-		plan.AddFilter(n.filter, planCtx.evalCtx, plan.planToStreamColMap)
+		plan.AddFilter(n.filter, planCtx.EvalContext(), plan.planToStreamColMap)
 
 		return plan, nil
 
@@ -1821,7 +1774,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		if err := n.evalLimit(planCtx.evalCtx); err != nil {
+		if err := n.evalLimit(planCtx.EvalContext()); err != nil {
 			return physicalPlan{}, err
 		}
 		if err := plan.AddLimit(n.count, n.offset, dsp.nodeDesc.NodeID); err != nil {
@@ -1831,6 +1784,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 	case *distinctNode:
 		return dsp.createPlanForDistinct(planCtx, n)
+
+	case *unionNode:
+		return dsp.createPlanForUnion(planCtx, n)
 
 	case *valuesNode:
 		return dsp.createPlanForValues(planCtx, n)
@@ -1865,11 +1821,11 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 
 	var a sqlbase.DatumAlloc
 	params := runParams{
-		ctx:     planCtx.ctx,
-		evalCtx: planCtx.evalCtx,
-		p:       nil,
+		ctx:             planCtx.ctx,
+		extendedEvalCtx: planCtx.extendedEvalCtx,
+		p:               nil,
 	}
-	if err := n.Start(params); err != nil {
+	if err := n.startExec(params); err != nil {
 		return physicalPlan{}, err
 	}
 	defer n.Close(planCtx.ctx)
@@ -1928,9 +1884,18 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	}
 
 	var distinctColumns []uint32
-	for i := range planColumns(n) {
-		if plan.planToStreamColMap[i] != -1 {
-			distinctColumns = append(distinctColumns, uint32(plan.planToStreamColMap[i]))
+	if !n.distinctOnColIdxs.Empty() {
+		for planCol, streamCol := range plan.planToStreamColMap {
+			if streamCol != -1 && n.distinctOnColIdxs.Contains(planCol) {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
+		}
+	} else {
+		// If no distinct columns were specified, run distinct on the entire row.
+		for planCol := range planColumns(n) {
+			if streamCol := plan.planToStreamColMap[planCol]; streamCol != -1 {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
 		}
 	}
 
@@ -1953,17 +1918,138 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 
 	// TODO(arjun): We could distribute this final stage by hash.
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
+
 	return plan, nil
 }
 
+// isOnlyOnGateway returns true if a physical plan is executed entirely on the
+// gateway node.
+func (dsp *DistSQLPlanner) isOnlyOnGateway(plan *physicalPlan) bool {
+	if len(plan.ResultRouters) == 1 {
+		processorIdx := plan.ResultRouters[0]
+		if plan.Processors[processorIdx].Node == dsp.nodeDesc.NodeID {
+			return true
+		}
+	}
+	return false
+}
+
+func (dsp *DistSQLPlanner) createPlanForUnion(
+	planCtx *planningCtx, n *unionNode,
+) (physicalPlan, error) {
+	leftPlan, err := dsp.createPlanForNode(planCtx, n.left)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	rightPlan, err := dsp.createPlanForNode(planCtx, n.right)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	childPlans := []*physicalPlan{&leftPlan, &rightPlan}
+
+	var distinctSpec distsqlrun.ProcessorCoreUnion
+	if !n.all {
+		// Build a distinct processor spec, which will be used in three places:
+		// on the left plan, on the right, and on the union of the two once the
+		// results have been grouped together.
+		//
+		// Note there is the potential for further network I/O optimization here
+		// since rows are not deduplicated between left and right until the single
+		// group stage. In the worst case (total duplication), this causes double
+		// the amount of data to be streamed as necessary.
+		var distinctColumns []uint32
+		for planCol := range planColumns(n.left) {
+			if streamCol := leftPlan.planToStreamColMap[planCol]; streamCol != -1 {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
+		}
+		distinctSpec = distsqlrun.ProcessorCoreUnion{
+			Distinct: &distsqlrun.DistinctSpec{
+				DistinctColumns: distinctColumns,
+			},
+		}
+
+		for _, plan := range childPlans {
+			if !dsp.isOnlyOnGateway(plan) {
+				// TODO(solon): We could skip this stage if there is a strong key on
+				// the result columns.
+				plan.AddNoGroupingStage(
+					distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
+			}
+		}
+	}
+
+	var p physicalPlan
+
+	// Merge the plans' planToStreamColMap, which should be equivalent.
+	// TODO(solon): Are there any valid UNION ALL cases where these differ? If
+	// we encounter any, we could handle them similarly to the differing
+	// ResultTypes case below.
+	if !reflect.DeepEqual(leftPlan.planToStreamColMap, rightPlan.planToStreamColMap) {
+		return physicalPlan{}, errors.Errorf(
+			"planToStreamColMap mismatch: %v, %v", leftPlan.planToStreamColMap,
+			rightPlan.planToStreamColMap)
+	}
+	p.planToStreamColMap = leftPlan.planToStreamColMap
+
+	// Merge the plans' result types and merge ordering.
+	resultTypes, err := distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+	mergeOrdering := leftPlan.MergeOrdering
+	if err != nil || !mergeOrdering.Equal(rightPlan.MergeOrdering) {
+		// The result types or merge ordering can differ between the two sides in
+		// pathological cases, like if they have incompatible ORDER BY clauses.
+		// Resolve this by collecting results on a single node and adding a
+		// projection to the results that will be unioned.
+		columns := make([]uint32, 0, len(p.planToStreamColMap))
+		for _, col := range p.planToStreamColMap {
+			if col < 0 {
+				continue
+			}
+			columns = append(columns, uint32(col))
+		}
+
+		for _, plan := range childPlans {
+			plan.AddSingleGroupStage(
+				dsp.nodeDesc.NodeID,
+				distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+				distsqlrun.PostProcessSpec{},
+				plan.ResultTypes)
+			plan.AddProjection(columns)
+		}
+
+		// Result types should now be mergeable.
+		resultTypes, err = distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		mergeOrdering = distsqlrun.Ordering{}
+	}
+
+	// Merge processors, streams, result routers, and stage counter.
+	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
+	p.PhysicalPlan, leftRouters, rightRouters = distsqlplan.MergePlans(
+		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan)
+	p.ResultRouters = append(leftRouters, rightRouters...)
+
+	p.ResultTypes = resultTypes
+	p.MergeOrdering = mergeOrdering
+
+	if !n.all {
+		p.AddSingleGroupStage(
+			dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes)
+	}
+
+	return p, nil
+}
+
 func (dsp *DistSQLPlanner) newPlanningCtx(
-	ctx context.Context, evalCtx *tree.EvalContext, txn *client.Txn,
+	ctx context.Context, evalCtx *extendedEvalContext, txn *client.Txn,
 ) planningCtx {
 	planCtx := planningCtx{
-		ctx:           ctx,
-		evalCtx:       evalCtx,
-		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
-		nodeAddresses: make(map[roachpb.NodeID]string),
+		ctx:             ctx,
+		extendedEvalCtx: evalCtx,
+		spanIter:        dsp.spanResolver.NewSpanResolverIterator(txn),
+		nodeAddresses:   make(map[roachpb.NodeID]string),
 	}
 	planCtx.nodeAddresses[dsp.nodeDesc.NodeID] = dsp.nodeDesc.Address.String()
 	return planCtx
@@ -1996,4 +2082,13 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan
 	finalOut.Streams = append(finalOut.Streams, distsqlrun.StreamEndpointSpec{
 		Type: distsqlrun.StreamEndpointSpec_SYNC_RESPONSE,
 	})
+}
+
+func makeTableReaderSpans(spans roachpb.Spans) []distsqlrun.TableReaderSpan {
+	trSpans := make([]distsqlrun.TableReaderSpan, len(spans))
+	for i, span := range spans {
+		trSpans[i].Span = span
+	}
+
+	return trSpans
 }

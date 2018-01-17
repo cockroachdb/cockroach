@@ -15,12 +15,13 @@
 package server
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type semaphore chan struct{}
@@ -74,7 +75,7 @@ func (s *initServer) Bootstrap(
 
 	if err := s.server.node.bootstrap(ctx, s.server.engines, s.server.cfg.Settings.Version.BootstrapVersion()); err != nil {
 		if _, ok := err.(*duplicateBootstrapError); ok {
-			return nil, grpc.Errorf(codes.AlreadyExists, err.Error())
+			return nil, status.Errorf(codes.AlreadyExists, err.Error())
 		}
 		log.Error(ctx, "node bootstrap failed: ", err)
 		return nil, err

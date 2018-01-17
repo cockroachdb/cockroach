@@ -15,11 +15,11 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -66,6 +66,10 @@ type scanNode struct {
 	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
 
+	// The number of backfill columns among cols. These backfill
+	// columns are always the last columns within cols.
+	numBackfillColumns int
+
 	spans   []roachpb.Span
 	reverse bool
 	props   physicalProps
@@ -110,7 +114,10 @@ type scanNode struct {
 type scanVisibility int
 
 const (
-	publicColumns             scanVisibility = 0
+	publicColumns scanVisibility = 0
+	// Use this to request mutation columns that are currently being
+	// backfilled. These columns are needed to correctly update/delete
+	// a row by correctly constructing ColumnFamilies and Indexes.
 	publicAndNonPublicColumns scanVisibility = 1
 )
 
@@ -131,7 +138,7 @@ func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return tree.Name(n.resultColumns[idx].Name)
+	return (*tree.Name)(&n.resultColumns[idx].Name)
 }
 
 // scanRun contains the run-time state of scanNode during local execution.
@@ -146,10 +153,14 @@ type scanRun struct {
 	scanInitialized  bool
 	isSecondaryIndex bool
 
+	// Indicates if this scanNode will do a physical data check. This is
+	// only true when running SCRUB commands.
+	isCheck bool
+
 	fetcher sqlbase.MultiRowFetcher
 }
 
-func (n *scanNode) Start(params runParams) error {
+func (n *scanNode) startExec(params runParams) error {
 	tableArgs := sqlbase.MultiRowFetcherTableArgs{
 		Desc:             n.desc,
 		Index:            n.index,
@@ -158,7 +169,8 @@ func (n *scanNode) Start(params runParams) error {
 		Cols:             n.cols,
 		ValNeededForCol:  n.valNeededForCol.Copy(),
 	}
-	return n.run.fetcher.Init(n.reverse, false /* returnRangeInfo */, &params.p.alloc, tableArgs)
+	return n.run.fetcher.Init(n.reverse, false, /* returnRangeInfo */
+		false /* isCheck */, &params.p.alloc, tableArgs)
 }
 
 func (n *scanNode) Close(context.Context) {
@@ -181,8 +193,8 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 		if err != nil || n.run.row == nil {
 			return false, err
 		}
-		params.evalCtx.IVarHelper = &n.filterVars
-		passesFilter, err := sqlbase.RunFilter(n.filter, params.evalCtx)
+		params.extendedEvalCtx.IVarHelper = &n.filterVars
+		passesFilter, err := sqlbase.RunFilter(n.filter, params.EvalContext())
 		if err != nil {
 			return false, err
 		}
@@ -215,7 +227,7 @@ func (n *scanNode) initScan(params runParams) error {
 		n.spans,
 		!n.disableBatchLimits,
 		limitHint,
-		params.p.session.Tracing.KVTracingEnabled(),
+		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -265,7 +277,7 @@ func (n *scanNode) initTable(
 	}
 
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	return n.initDescDefaults(p.planDeps, scanVisibility, wantedColumns)
+	return n.initDescDefaults(p.curPlan.deps, scanVisibility, wantedColumns)
 }
 
 func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
@@ -283,7 +295,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index %q not found", tree.ErrString(indexHints.Index))
+			return errors.Errorf("index %q not found", tree.ErrString(&indexHints.Index))
 		}
 	} else if indexHints.IndexID != 0 {
 		// Search index by ID.
@@ -395,6 +407,9 @@ func (n *scanNode) initDescDefaults(
 	}
 
 	// Set up the rest of the scanNode.
+	if n.numBackfillColumns != 0 {
+		panic(fmt.Sprintf("%d backfill columns, already initialized", n.numBackfillColumns))
+	}
 	switch scanVisibility {
 	case publicColumns:
 		// Mutations are invisible.
@@ -406,9 +421,11 @@ func (n *scanNode) initDescDefaults(
 				// middle of a schema change.
 				col.Nullable = true
 				n.cols = append(n.cols, col)
+				n.numBackfillColumns++
 			}
 		}
 	}
+
 	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.cols)
 	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {

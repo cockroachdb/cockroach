@@ -16,10 +16,10 @@ package sql
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -132,6 +132,10 @@ type dataSourceInfo struct {
 	// The value is populated and used during name resolution, and shouldn't get
 	// touched by anything but the nameResolutionVisitor without care.
 	colOffset int
+
+	// The number of backfill source columns. The backfill columns are
+	// always the last columns from sourceColumns.
+	numBackfillColumns int
 }
 
 // planDataSource contains the data source information for data
@@ -271,7 +275,7 @@ func (p *planner) getSources(
 func (p *planner) getVirtualDataSource(
 	ctx context.Context, tn *tree.TableName,
 ) (planDataSource, bool, error) {
-	virtual, err := p.session.virtualSchemas.getVirtualTableEntry(tn)
+	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return planDataSource{}, false, err
 	}
@@ -297,7 +301,7 @@ func (p *planner) getVirtualDataSource(
 		// this.
 		prefix := string(tn.PrefixName)
 		if !tn.PrefixOriginallySpecified {
-			prefix = p.session.Database
+			prefix = p.SessionData().Database
 			if prefix == "" && p.RequireSuperUser("access virtual tables across all databases") != nil {
 				prefix = sqlbase.SystemDB.Name
 			}
@@ -345,7 +349,7 @@ func (p *planner) getDataSourceAsOneColumn(
 
 	// We use the name of the function to determine the name of the
 	// rendered column.
-	fd, err := src.Func.Resolve(p.session.SearchPath)
+	fd, err := src.Func.Resolve(p.SessionData().SearchPath)
 	if err != nil {
 		return planDataSource{}, err
 	}
@@ -368,6 +372,14 @@ func (p *planner) getDataSource(
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *tree.NormalizableTableName:
+		// If there's a CTE with this name, it takes priority over the normal flow.
+		ds, foundCTE, err := p.getCTEDataSource(t)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		if foundCTE {
+			return ds, nil
+		}
 		// Usual case: a table.
 		tn, err := p.QualifyWithDatabase(ctx, t)
 		if err != nil {
@@ -403,12 +415,17 @@ func (p *planner) getDataSource(
 		return p.makeJoin(ctx, t.Join, left, right, t.Cond)
 
 	case *tree.StatementSource:
-		plan, err := p.newPlan(ctx, t.Statement, nil)
+		plan, err := p.newPlan(ctx, t.Statement, nil /* desiredTypes */)
 		if err != nil {
 			return planDataSource{}, err
 		}
+		cols := planColumns(plan)
+		if len(cols) == 0 {
+			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"statement source \"%v\" does not return any columns", t.Statement)
+		}
 		return planDataSource{
-			info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
+			info: newSourceInfoForSingleTable(anonymousTable, cols),
 			plan: plan,
 		}, nil
 
@@ -463,7 +480,7 @@ func (p *planner) QualifyWithDatabase(
 func (p *planner) getTableDescByID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
-	descFunc := p.session.tables.getTableVersionByID
+	descFunc := p.Tables().getTableVersionByID
 	if p.avoidCachedDescriptors {
 		descFunc = sqlbase.GetTableDescFromID
 	}
@@ -540,7 +557,7 @@ func renameSource(
 				if tableAlias.DatabaseName != "" {
 					srcName = tree.ErrString(&tableAlias)
 				} else {
-					srcName = tree.ErrString(tableAlias.TableName)
+					srcName = tree.ErrString(&tableAlias.TableName)
 				}
 
 				return planDataSource{}, errors.Errorf(
@@ -584,7 +601,7 @@ func (p *planner) getTableDesc(
 		return MustGetTableOrViewDesc(
 			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
 	}
-	return p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+	return p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 }
 
 func (p *planner) getPlanForDesc(
@@ -615,10 +632,12 @@ func (p *planner) getPlanForDesc(
 		return planDataSource{}, err
 	}
 
-	return planDataSource{
+	ds := planDataSource{
 		info: newSourceInfoForSingleTable(*tn, planColumns(scan)),
 		plan: scan,
-	}, nil
+	}
+	ds.info.numBackfillColumns = scan.numBackfillColumns
+	return ds, nil
 }
 
 // getViewPlan builds a planDataSource for the view specified by the
@@ -650,20 +669,20 @@ func (p *planner) getViewPlan(
 	}
 
 	// Register the dependency to the planner, if requested.
-	if p.planDeps != nil {
+	if p.curPlan.deps != nil {
 		usedColumns := make([]sqlbase.ColumnID, len(desc.Columns))
 		for i := range desc.Columns {
 			usedColumns[i] = desc.Columns[i].ID
 		}
-		deps := p.planDeps[desc.ID]
+		deps := p.curPlan.deps[desc.ID]
 		deps.desc = desc
 		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{ColumnIDs: usedColumns})
-		p.planDeps[desc.ID] = deps
+		p.curPlan.deps[desc.ID] = deps
 
 		// We are only interested in the dependency to this view descriptor. Any
 		// further dependency by the view's query should not be tracked in this planner.
-		defer func(prev planDependencies) { p.planDeps = prev }(p.planDeps)
-		p.planDeps = nil
+		defer func(prev planDependencies) { p.curPlan.deps = prev }(p.curPlan.deps)
+		p.curPlan.deps = nil
 	}
 
 	plan, err := p.newPlan(ctx, sel, nil)
@@ -758,8 +777,8 @@ func newUnknownSourceError(tn *tree.TableName) error {
 		"source name %q not found in FROM clause", tree.ErrString(tn))
 }
 
-func newAmbiguousSourceError(t tree.Name, dbContext tree.Name) error {
-	if dbContext == "" {
+func newAmbiguousSourceError(t *tree.Name, dbContext *tree.Name) error {
+	if *dbContext == "" {
 		return pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
 			"ambiguous source name: %q", tree.ErrString(t))
 
@@ -779,7 +798,7 @@ func (sources multiSourceInfo) checkDatabaseName(tn tree.TableName) (tree.TableN
 			for _, alias := range src.sourceAliases {
 				if alias.name.TableName == tn.TableName {
 					if found {
-						return tree.TableName{}, newAmbiguousSourceError(tn.TableName, "")
+						return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tree.NoName)
 					}
 					tn.DatabaseName = alias.name.DatabaseName
 					found = true
@@ -797,7 +816,7 @@ func (sources multiSourceInfo) checkDatabaseName(tn tree.TableName) (tree.TableN
 	for _, src := range sources {
 		if _, ok := src.sourceAliases.srcIdx(tn); ok {
 			if found {
-				return tree.TableName{}, newAmbiguousSourceError(tn.TableName, tn.DatabaseName)
+				return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tn.DatabaseName)
 			}
 			found = true
 		}
@@ -817,7 +836,7 @@ func (src *dataSourceInfo) checkDatabaseName(tn tree.TableName) (tree.TableName,
 		for _, alias := range src.sourceAliases {
 			if alias.name.TableName == tn.TableName {
 				if found {
-					return tree.TableName{}, newAmbiguousSourceError(tn.TableName, "")
+					return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tree.NoName)
 				}
 				found = true
 				tn.DatabaseName = alias.name.DatabaseName
@@ -837,13 +856,47 @@ func (src *dataSourceInfo) checkDatabaseName(tn tree.TableName) (tree.TableName,
 }
 
 func findColHelper(
-	src *dataSourceInfo, c *tree.ColumnItem, colName string, iSrc, srcIdx, colIdx, idx int,
+	sources multiSourceInfo,
+	src *dataSourceInfo,
+	c *tree.ColumnItem,
+	colName string,
+	iSrc, srcIdx, colIdx, idx int,
 ) (int, int, error) {
 	col := src.sourceColumns[idx]
 	if col.Name == colName {
+		// Do not return a match if:
+		// 1. The column is being backfilled and therefore should not be
+		// used to resolve a column expression, and,
+		// 2. The column expression being resolved is not from a selector
+		// column expression from an UPDATE/DELETE.
+		if backfillThreshold := len(src.sourceColumns) - src.numBackfillColumns; idx >= backfillThreshold && !c.ForUpdateOrDelete {
+			return invalidSrcIdx, invalidColIdx,
+				pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+					"column %q is being backfilled", tree.ErrString(c))
+		}
 		if colIdx != invalidColIdx {
+			colString := tree.ErrString(c)
+			var msgBuf bytes.Buffer
+			sep := ""
+			fmtCandidate := func(alias *sourceAlias) {
+				name := tree.ErrString(&alias.name.TableName)
+				if len(name) == 0 {
+					name = "<anonymous>"
+				}
+				fmt.Fprintf(&msgBuf, "%s%s.%s", sep, name, colString)
+			}
+			for i := range src.sourceAliases {
+				fmtCandidate(&src.sourceAliases[i])
+				sep = ", "
+			}
+			if iSrc != srcIdx {
+				for i := range sources[srcIdx].sourceAliases {
+					fmtCandidate(&sources[srcIdx].sourceAliases[i])
+					sep = ", "
+				}
+			}
 			return invalidSrcIdx, invalidColIdx, pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
-				"column reference %q is ambiguous", tree.ErrString(c))
+				"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String())
 		}
 		srcIdx = iSrc
 		colIdx = idx
@@ -884,7 +937,7 @@ func (sources multiSourceInfo) findColumn(c *tree.ColumnItem) (srcIdx int, colId
 			continue
 		}
 		for idx, ok := colSet.Next(0); ok; idx, ok = colSet.Next(idx + 1) {
-			srcIdx, colIdx, err = findColHelper(src, c, colName, iSrc, srcIdx, colIdx, idx)
+			srcIdx, colIdx, err = findColHelper(sources, src, c, colName, iSrc, srcIdx, colIdx, idx)
 			if err != nil {
 				return srcIdx, colIdx, err
 			}
@@ -896,7 +949,7 @@ func (sources multiSourceInfo) findColumn(c *tree.ColumnItem) (srcIdx int, colId
 		// columns, not just columns of the anonymous table.
 		for iSrc, src := range sources {
 			for idx := 0; idx < len(src.sourceColumns); idx++ {
-				srcIdx, colIdx, err = findColHelper(src, c, colName, iSrc, srcIdx, colIdx, idx)
+				srcIdx, colIdx, err = findColHelper(sources, src, c, colName, iSrc, srcIdx, colIdx, idx)
 				if err != nil {
 					return srcIdx, colIdx, err
 				}
@@ -930,17 +983,17 @@ type varFormatter struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (c *varFormatter) Format(buf *bytes.Buffer, f tree.FmtFlags) {
-	if f.ShowTableAliases && c.TableName.TableName != "" {
+func (c *varFormatter) Format(ctx *tree.FmtCtx) {
+	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.TableName != "" {
 		if c.TableName.DatabaseName != "" {
-			tree.FormatNode(buf, f, c.TableName.DatabaseName)
-			buf.WriteByte('.')
+			ctx.FormatNode(&c.TableName.DatabaseName)
+			ctx.WriteByte('.')
 		}
 
-		tree.FormatNode(buf, f, c.TableName.TableName)
-		buf.WriteByte('.')
+		ctx.FormatNode(&c.TableName.TableName)
+		ctx.WriteByte('.')
 	}
-	tree.FormatNode(buf, f, c.ColumnName)
+	ctx.FormatNode(&c.ColumnName)
 }
 
 // NodeFormatter returns a tree.NodeFormatter that, when formatted,

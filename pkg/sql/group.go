@@ -15,10 +15,9 @@
 package sql
 
 import (
+	"context"
 	"fmt"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -104,7 +103,7 @@ func (p *planner) groupBy(
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
-	if isAggregate := p.txCtx.IsAggregate(n, p.session.SearchPath); !isAggregate {
+	if isAggregate := p.txCtx.IsAggregate(n, p.SessionData().SearchPath); !isAggregate {
 		return nil, nil, nil
 	}
 
@@ -159,13 +158,13 @@ func (p *planner) groupBy(
 				if err != nil {
 					return nil, nil, err
 				}
-				p.hasStar = p.hasStar || hasStar
+				p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 			}
 			groupByExprs[i] = resolvedExpr
 		}
 
 		if err := p.txCtx.AssertNoAggregationOrWindowing(
-			expr, "GROUP BY", p.session.SearchPath,
+			expr, "GROUP BY", p.SessionData().SearchPath,
 		); err != nil {
 			return nil, nil, err
 		}
@@ -179,7 +178,7 @@ func (p *planner) groupBy(
 		}
 		var err error
 		typedHaving, err = p.analyzeExpr(ctx, n.Having.Expr, r.sourceInfo, r.ivarHelper,
-			types.Bool, true, "HAVING")
+			types.Bool, true /* requireType */, "HAVING")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -214,7 +213,7 @@ func (p *planner) groupBy(
 		if err != nil {
 			return nil, nil, err
 		}
-		p.hasStar = p.hasStar || hasStar
+		p.curPlan.hasStar = p.curPlan.hasStar || hasStar
 
 		// GROUP BY (a, b) -> GROUP BY a, b
 		cols, exprs = flattenTuples(cols, exprs, &r.ivarHelper)
@@ -310,6 +309,8 @@ func (p *planner) groupBy(
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
 	group.run.addNullBucketIfEmpty = len(groupByExprs) == 0
 
+	// TODO(peter): This memory isn't being accounted for. The similar code in
+	// sql/distsqlrun/aggregator.go does account for the memory.
 	group.run.buckets = make(map[string]struct{})
 
 	if log.V(2) {
@@ -320,7 +321,7 @@ func (p *planner) groupBy(
 		log.Infof(ctx, "Group: %s", strings.Join(strs, ", "))
 	}
 
-	group.desiredOrdering = group.desiredAggregateOrdering(&p.evalCtx)
+	group.desiredOrdering = group.desiredAggregateOrdering(p.EvalContext())
 
 	return plan, group, nil
 }
@@ -340,10 +341,6 @@ type groupRun struct {
 	// gotOneRow becomes true after one result row has been produced.
 	// Used in conjunction with needOnlyOneRow.
 	gotOneRow bool
-}
-
-func (n *groupNode) Start(params runParams) error {
-	return n.plan.Start(params)
 }
 
 func (n *groupNode) Next(params runParams) (bool, error) {
@@ -397,7 +394,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 				value = values[f.argRenderIdx]
 			}
 
-			if err := f.add(params.ctx, params.evalCtx, bucket, value); err != nil {
+			if err := f.add(params.ctx, params.EvalContext(), bucket, value); err != nil {
 				return false, err
 			}
 		}
@@ -414,6 +411,9 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 	for bucket = range n.run.buckets {
 		break
 	}
+	// TODO(peter): Deleting from the n.run.buckets is fairly slow. The similar
+	// code in distsqlrun.aggregator performs a single step of copying all of the
+	// buckets to a slice and then releasing the buckets map.
 	delete(n.run.buckets, bucket)
 	for i, f := range n.funcs {
 		aggregateFunc, ok := f.run.buckets[bucket]
@@ -421,7 +421,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			// No input for this bucket (possible if f has a FILTER).
 			// In most cases the result is NULL but there are exceptions
 			// (like COUNT).
-			aggregateFunc = f.create(params.evalCtx)
+			aggregateFunc = f.create(params.EvalContext())
 		}
 		var err error
 		n.run.values[i], err = aggregateFunc.Result()
@@ -453,21 +453,21 @@ func (n *groupNode) setupOutput() {
 	n.run.values = make(tree.Datums, len(n.funcs))
 }
 
-// requiresIsNotNullFilter returns whether a "col IS NOT NULL" constraint must
+// requiresIsDisinctFromNullFilter returns whether a "col IS DISTINCT FROM NULL" constraint must
 // be added. This is the case when we have a single MIN/MAX aggregation
 // function.
-func (n *groupNode) requiresIsNotNullFilter() bool {
+func (n *groupNode) requiresIsDistinctFromNullFilter() bool {
 	return len(n.desiredOrdering) == 1
 }
 
-// isNotNullFilter adds as a "col IS NOT NULL" constraint to the filterNode
+// isNotNullFilter adds as a "col IS DISTINCT FROM NULL" constraint to the filterNode
 // (which is under the renderNode).
-func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
-	if !n.requiresIsNotNullFilter() {
-		panic("IS NOT NULL filter not required")
+func (n *groupNode) addIsDistinctFromNullFilter(where *filterNode, render *renderNode) {
+	if !n.requiresIsDistinctFromNullFilter() {
+		panic("IS DISTINCT FROM NULL filter not required")
 	}
-	isNotNull := tree.NewTypedComparisonExpr(
-		tree.IsNot,
+	isDistinctFromNull := tree.NewTypedComparisonExpr(
+		tree.IsDistinctFrom,
 		where.ivarHelper.Rebind(
 			render.render[n.desiredOrdering[0].ColIdx],
 			false, // alsoReset
@@ -476,9 +476,9 @@ func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
 		tree.DNull,
 	)
 	if where.filter == nil {
-		where.filter = isNotNull
+		where.filter = isDistinctFromNull
 	} else {
-		where.filter = tree.NewTypedAndExpr(where.filter, isNotNull)
+		where.filter = tree.NewTypedAndExpr(where.filter, isDistinctFromNull)
 	}
 }
 
@@ -554,7 +554,8 @@ func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *tree.
 	// We care about the name of the groupNode columns as an optimization: we want
 	// them to match the post-render node's columns if the post-render expressions
 	// are trivial (so the renderNode can be elided).
-	colName, err := getRenderColName(v.planner.session.SearchPath, tree.SelectExpr{Expr: f.expr}, &v.preRender.ivarHelper)
+	colName, err := getRenderColName(
+		v.planner.SessionData().SearchPath, tree.SelectExpr{Expr: f.expr}, &v.preRender.ivarHelper)
 	if err != nil {
 		colName = fmt.Sprintf("agg%d", renderIdx)
 	} else if strings.ToLower(colName) == "count_rows()" {
@@ -585,7 +586,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			groupIdx,
 			true, /* ident */
 			builtins.NewIdentAggregate,
-			v.planner.session.TxnState.makeBoundAccount(),
+			v.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 
 		return false, v.addAggregation(f)
@@ -603,7 +604,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 					noRenderIdx,
 					false, /* not ident */
 					agg,
-					v.planner.session.TxnState.makeBoundAccount(),
+					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
 
 			case 1:
@@ -611,8 +612,8 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					argExpr,
-					fmt.Sprintf("the argument of %s()", t.Func),
-					v.planner.session.SearchPath,
+					fmt.Sprintf("the argument of %s()", &t.Func),
+					v.planner.SessionData().SearchPath,
 				); err != nil {
 					v.err = err
 					return false, expr
@@ -631,7 +632,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 					argRenderIdx,
 					false, /* not ident */
 					agg,
-					v.planner.session.TxnState.makeBoundAccount(),
+					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
 
 			default:
@@ -648,7 +649,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 				filterExpr := t.Filter.(tree.TypedExpr)
 
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
-					filterExpr, "FILTER", v.planner.session.SearchPath,
+					filterExpr, "FILTER", v.planner.SessionData().SearchPath,
 				); err != nil {
 					v.err = err
 					return false, expr

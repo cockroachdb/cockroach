@@ -15,10 +15,8 @@
 package sql
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -45,7 +43,7 @@ type createViewNode struct {
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
 func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
-	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	name, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
@@ -64,13 +62,11 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	// changes are persisted in n.AsSource. We use tree.FormatNode
 	// merely as a traversal method; its output buffer is discarded
 	// immediately after the traversal because it is not needed further.
-	var queryBuf bytes.Buffer
 	var fmtErr error
-	tree.FormatNode(
-		&queryBuf,
-		tree.FmtReformatTableNames(
-			tree.FmtParsable,
-			func(t *tree.NormalizableTableName, buf *bytes.Buffer, f tree.FmtFlags) {
+	{
+		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		f.WithReformatTableNames(
+			func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
 				tn, err := p.QualifyWithDatabase(ctx, t)
 				if err != nil {
 					log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
@@ -81,9 +77,11 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 				// Persist the database prefix expansion.
 				tn.DBNameOriginallyOmitted = false
 			},
-		),
-		n.AsSource,
-	)
+		)
+		f.FormatNode(n.AsSource)
+		f.Close() // We don't need the string.
+	}
+
 	if fmtErr != nil {
 		return nil, fmtErr
 	}
@@ -112,7 +110,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	}, nil
 }
 
-func (n *createViewNode) Start(params runParams) error {
+func (n *createViewNode) startExec(params runParams) error {
 	viewName := n.n.Name.TableName().Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
 	key := tKey.Key()
@@ -123,9 +121,9 @@ func (n *createViewNode) Start(params runParams) error {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(params.ctx, params.p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.extendedEvalCtx.ExecCfg.DB)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// Inherit permissions from the database descriptor.
@@ -188,12 +186,12 @@ func (n *createViewNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateView,
 		int32(desc.ID),
-		int32(params.evalCtx.NodeID),
+		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			ViewName  string
 			Statement string
 			User      string
-		}{n.n.Name.String(), n.n.String(), params.p.session.User},
+		}{n.n.Name.String(), n.n.String(), params.SessionData().User},
 	)
 }
 
@@ -228,7 +226,7 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, params.evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, params.EvalContext())
 		if err != nil {
 			return desc, err
 		}

@@ -1,5 +1,5 @@
 - Feature Name: SQL Syntax for splitting tables
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-03-14
 - Authors: Radu Berinde
 - RFC PR: [#14146](https://github.com/cockroachdb/cockroach/pull/14146)

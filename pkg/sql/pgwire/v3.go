@@ -16,6 +16,7 @@ package pgwire
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"math"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 
 	"bytes"
 	"io"
@@ -135,6 +135,9 @@ type readTimeoutConn struct {
 func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
 	// net.Pipe does not support setting deadlines. See
 	// https://github.com/golang/go/blob/go1.7.4/src/net/pipe.go#L57-L67
+	//
+	// TODO(andrei): starting with Go 1.10, pipes are supposed to support
+	// timeouts, so this should go away when we upgrade the compiler.
 	if c.LocalAddr().Network() == "pipe" {
 		return c
 	}
@@ -176,7 +179,7 @@ type v3Conn struct {
 	wr          *bufio.Writer
 	executor    *sql.Executor
 	readBuf     readBuffer
-	writeBuf    writeBuffer
+	writeBuf    *writeBuffer
 	tagBuf      [64]byte
 	sessionArgs sql.SessionArgs
 	session     *sql.Session
@@ -255,11 +258,13 @@ func (s *streamingState) reset(formatCodes []formatCode, sendDescription bool, l
 func makeV3Conn(
 	conn net.Conn, metrics *ServerMetrics, sqlMemoryPool *mon.BytesMonitor, executor *sql.Executor,
 ) v3Conn {
+	wb := newWriteBuffer()
+	wb.bytecount = metrics.BytesOutCount
 	return v3Conn{
 		conn:          conn,
 		rd:            bufio.NewReader(conn),
 		wr:            bufio.NewWriter(conn),
-		writeBuf:      writeBuffer{bytecount: metrics.BytesOutCount},
+		writeBuf:      wb,
 		metrics:       metrics,
 		executor:      executor,
 		sqlMemoryPool: sqlMemoryPool,
@@ -335,20 +340,20 @@ var statusReportParams = map[string]string{
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
 func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error {
+	// Check that the requested user exists and retrieve the hashed
+	// password in case password authentication is needed.
+	exists, hashedPassword, err := sql.GetUserHashedPassword(
+		ctx, c.executor, c.metrics.internalMemMetrics, c.sessionArgs.User,
+	)
+	if err != nil {
+		return c.sendError(err)
+	}
+	if !exists {
+		return c.sendError(errors.Errorf("user %s does not exist", c.sessionArgs.User))
+	}
+
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
 		var authenticationHook security.UserAuthHook
-
-		// Check that the requested user exists and retrieve the hashed
-		// password in case password authentication is needed.
-		exists, hashedPassword, err := sql.GetUserHashedPassword(
-			ctx, c.executor, c.metrics.internalMemMetrics, c.sessionArgs.User,
-		)
-		if err != nil {
-			return c.sendError(err)
-		}
-		if !exists {
-			return c.sendError(errors.Errorf("user %s does not exist", c.sessionArgs.User))
-		}
 
 		tlsState := tlsConn.ConnectionState()
 		// If no certificates are provided, default to password
@@ -1358,9 +1363,9 @@ func (c *v3Conn) AddRow(ctx context.Context, row tree.Datums) error {
 		}
 		switch fmtCode {
 		case formatText:
-			c.writeBuf.writeTextDatum(ctx, col, c.session.Location)
+			c.writeBuf.writeTextDatum(ctx, col, c.session.Location())
 		case formatBinary:
-			c.writeBuf.writeBinaryDatum(ctx, col, c.session.Location)
+			c.writeBuf.writeBinaryDatum(ctx, col, c.session.Location())
 		default:
 			c.writeBuf.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}

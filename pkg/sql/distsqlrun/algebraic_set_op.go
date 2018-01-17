@@ -15,20 +15,23 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // algebraicSetOp is a processor for the algebraic set operations,
 // currently just EXCEPT ALL.
 type algebraicSetOp struct {
 	processorBase
+
+	evalCtx *tree.EvalContext
 
 	leftSource, rightSource RowSource
 	opType                  AlgebraicSetOpSpec_SetOpType
@@ -60,8 +63,8 @@ func newAlgebraicSetOp(
 		return nil, errors.Errorf("cannot create algebraicSetOp for unsupported algebraicSetOpType %v", e.opType)
 	}
 
-	lt := leftSource.Types()
-	rt := rightSource.Types()
+	lt := leftSource.OutputTypes()
+	rt := rightSource.OutputTypes()
 	if len(lt) != len(rt) {
 		return nil, errors.Errorf(
 			"Non union compatible: left and right have different numbers of columns %d and %d",
@@ -76,7 +79,7 @@ func newAlgebraicSetOp(
 	}
 
 	e.types = lt
-	err := e.init(post, e.types, flowCtx, output)
+	err := e.init(post, e.types, flowCtx, nil /* evalCtx */, output)
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +87,12 @@ func newAlgebraicSetOp(
 	return e, nil
 }
 
-func (e *algebraicSetOp) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (e *algebraicSetOp) Run(wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTag(ctx, "ExceptAll", nil)
+	ctx := log.WithLogTag(e.flowCtx.Ctx, "ExceptAll", nil)
 	ctx, span := processorSpan(ctx, "exceptAll")
 	defer tracing.FinishSpan(span)
 
@@ -98,6 +101,8 @@ func (e *algebraicSetOp) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	defer e.leftSource.ConsumerDone()
 	defer e.rightSource.ConsumerDone()
+
+	e.evalCtx = e.flowCtx.NewEvalCtx()
 
 	switch e.opType {
 	case AlgebraicSetOpSpec_Except_all:
@@ -113,20 +118,17 @@ func (e *algebraicSetOp) Run(ctx context.Context, wg *sync.WaitGroup) {
 // right stream. It does not remove duplicates.
 func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 	leftGroup := makeStreamGroupAccumulator(
-		MakeNoMetadataRowSource(e.leftSource, e.out.output),
-		convertToColumnOrdering(e.ordering),
+		e.leftSource, convertToColumnOrdering(e.ordering),
 	)
-
 	rightGroup := makeStreamGroupAccumulator(
-		MakeNoMetadataRowSource(e.rightSource, e.out.output),
-		convertToColumnOrdering(e.ordering),
+		e.rightSource, convertToColumnOrdering(e.ordering),
 	)
 
-	leftRows, err := leftGroup.advanceGroup()
+	leftRows, err := leftGroup.advanceGroup(e.evalCtx, e.out.output)
 	if err != nil {
 		return err
 	}
-	rightRows, err := rightGroup.advanceGroup()
+	rightRows, err := rightGroup.advanceGroup(e.evalCtx, e.out.output)
 	if err != nil {
 		return err
 	}
@@ -160,6 +162,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 			convertToColumnOrdering(e.ordering), convertToColumnOrdering(e.ordering),
 			false, /* nullEquality */
 			e.datumAlloc,
+			e.evalCtx,
 		)
 		if err != nil {
 			return err
@@ -195,11 +198,11 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 					}
 				}
 			}
-			leftRows, err = leftGroup.advanceGroup()
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
-			rightRows, err = rightGroup.advanceGroup()
+			rightRows, err = rightGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
@@ -214,13 +217,13 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 					return err
 				}
 			}
-			leftRows, err = leftGroup.advanceGroup()
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			if err != nil {
 				return err
 			}
 		}
 		if cmp > 0 {
-			rightRows, err = rightGroup.advanceGroup()
+			rightRows, err = rightGroup.advanceGroup(e.evalCtx, e.out.output)
 			if len(rightRows) == 0 {
 				break
 			}
@@ -244,7 +247,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 
 		// Emit all remaining rows.
 		for {
-			leftRows, err = leftGroup.advanceGroup()
+			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
 			// Emit all left rows until completion/error.
 			if err != nil || len(leftRows) == 0 {
 				return err

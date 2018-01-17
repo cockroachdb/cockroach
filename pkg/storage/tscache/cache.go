@@ -61,7 +61,7 @@ type Cache interface {
 	Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool)
 	// SetLowWater sets the low water mark of the cache for the specified span
 	// to the provided timestamp.
-	SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp)
+	SetLowWater(start, end roachpb.Key, ts hlc.Timestamp)
 
 	// GetMaxRead returns the maximum read timestamp which overlaps the interval
 	// spanning from start to end. If that maximum timestamp belongs to a single
@@ -83,12 +83,13 @@ type Cache interface {
 	getLowWater(readCache bool) hlc.Timestamp
 }
 
-// New returns a new timestamp cache with the supplied hybrid clock.
-func New(clock *hlc.Clock, metrics Metrics) Cache {
+// New returns a new timestamp cache with the supplied hybrid clock. If the
+// pageSize is provided, it will override the default page size.
+func New(clock *hlc.Clock, pageSize uint32, metrics Metrics) Cache {
 	if envutil.EnvOrDefaultBool("COCKROACH_USE_TREE_TSCACHE", false) {
 		return newTreeImpl(clock)
 	}
-	return newSklImpl(clock, metrics)
+	return newSklImpl(clock, pageSize, metrics)
 }
 
 // cacheValue combines a timestamp with an optional txnID. It is shared between

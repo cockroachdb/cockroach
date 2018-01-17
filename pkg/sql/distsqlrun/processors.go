@@ -15,10 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"math"
 	"sync"
-
-	"golang.org/x/net/context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,7 +38,7 @@ type Processor interface {
 
 	// Run is the main loop of the processor.
 	// If wg is non-nil, wg.Done is called before exiting.
-	Run(ctx context.Context, wg *sync.WaitGroup)
+	Run(wg *sync.WaitGroup)
 }
 
 // ProcOutputHelper is a helper type that performs filtering and projection on
@@ -200,14 +200,14 @@ func emitHelper(
 	ctx context.Context,
 	output *ProcOutputHelper,
 	row sqlbase.EncDatumRow,
-	meta ProducerMetadata,
+	meta *ProducerMetadata,
 	inputs ...RowSource,
 ) bool {
 	if output.output == nil {
 		panic("output RowReceiver not initialized for emitting")
 	}
 	var consumerStatus ConsumerStatus
-	if !meta.Empty() {
+	if meta != nil {
 		if row != nil {
 			panic("both row data and metadata in the same emitHelper call")
 		}
@@ -217,7 +217,7 @@ func emitHelper(
 		var err error
 		consumerStatus, err = output.EmitRow(ctx, row)
 		if err != nil {
-			output.output.Push(nil /* row */, ProducerMetadata{Err: err})
+			output.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 			for _, input := range inputs {
 				input.ConsumerClosed()
 			}
@@ -272,7 +272,7 @@ func (h *ProcOutputHelper) EmitRow(
 	if log.V(3) {
 		log.InfofDepth(ctx, 1, "pushing row %s", outRow)
 	}
-	if r := h.output.Push(outRow, ProducerMetadata{}); r != NeedMoreRows {
+	if r := h.output.Push(outRow, nil); r != NeedMoreRows {
 		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
 			r == DrainRequested)
 		return r, nil
@@ -349,8 +349,25 @@ func (h *ProcOutputHelper) Close() {
 	h.output.ProducerDone()
 }
 
+// consumerClosed stops output of additional rows from ProcessRow.
+func (h *ProcOutputHelper) consumerClosed() {
+	h.rowIdx = h.maxRowIdx
+}
+
 type processorBase struct {
-	out ProcOutputHelper
+	out     ProcOutputHelper
+	flowCtx *FlowCtx
+
+	// ctx and span contain the tracing state while the processor is active
+	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not be otherwise
+	// used).
+	ctx  context.Context
+	span opentracing.Span
+
+	// started and closed are used for initializing and closing a processor when
+	// used as a RowSource.
+	started bool
+	closed  bool
 }
 
 // OutputTypes is part of the processor interface.
@@ -359,9 +376,81 @@ func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
 }
 
 func (pb *processorBase) init(
-	post *PostProcessSpec, types []sqlbase.ColumnType, flowCtx *FlowCtx, output RowReceiver,
+	post *PostProcessSpec,
+	types []sqlbase.ColumnType,
+	flowCtx *FlowCtx,
+	evalCtx *tree.EvalContext,
+	output RowReceiver,
 ) error {
-	return pb.out.Init(post, types, flowCtx.NewEvalCtx(), output)
+	pb.flowCtx = flowCtx
+	if evalCtx == nil {
+		evalCtx = flowCtx.NewEvalCtx()
+	}
+	return pb.out.Init(post, types, evalCtx, output)
+}
+
+// maybeStart helps processors implement the RowSource interface, performing
+// common initialization when starting. Returns true iff the processor is being
+// started.
+//
+//   if pb.maybeStart("my processor") {
+//     // Perform processor specific initialization.
+//   }
+func (pb *processorBase) maybeStart(name, logTag string) bool {
+	if pb.started {
+		return false
+	}
+	pb.started = true
+	pb.ctx = pb.flowCtx.Ctx
+	if logTag != "" {
+		pb.ctx = log.WithLogTag(pb.ctx, logTag, nil)
+	}
+	pb.ctx, pb.span = processorSpan(pb.ctx, name)
+	return true
+}
+
+// internalClose helps processors implement the RowSource interface, performing
+// common close functionality. Returns true iff the processor was not already
+// closed.
+//
+//   if pb.internalClose() {
+//     // Perform processor specific close work.
+//   }
+func (pb *processorBase) internalClose() bool {
+	closing := !pb.closed
+	if closing {
+		pb.closed = true
+		tracing.FinishSpan(pb.span)
+		pb.span = nil
+	}
+	// This prevents Next() from returning more rows.
+	pb.out.consumerClosed()
+	return closing
+}
+
+// rowSourceBase provides common functionality for RowSource implementations
+// that need to track consumer status.
+type rowSourceBase struct {
+	// consumerStatus is an atomic used in implementation of the
+	// RowSource.Consumer{Done,Closed} methods to signal that the consumer is
+	// done accepting rows or is no longer accepting data.
+	consumerStatus ConsumerStatus
+}
+
+// consumerDone helps processors implement RowSource.ConsumerDone.
+func (rb *rowSourceBase) consumerDone() {
+	atomic.CompareAndSwapUint32((*uint32)(&rb.consumerStatus),
+		uint32(NeedMoreRows), uint32(DrainRequested))
+}
+
+// consumerDone helps processors implement RowSource.ConsumerClosed. The name
+// is only used for debug messages.
+func (rb *rowSourceBase) consumerClosed(name string) {
+	status := ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.consumerStatus)))
+	if status == ConsumerClosed {
+		log.Fatalf(context.Background(), "%s already closed", name)
+	}
+	atomic.StoreUint32((*uint32)(&rb.consumerStatus), uint32(ConsumerClosed))
 }
 
 // noopProcessor is a processor that simply passes rows through from the
@@ -370,18 +459,17 @@ func (pb *processorBase) init(
 // need the synchronizer to join streams.
 type noopProcessor struct {
 	processorBase
-
-	flowCtx *FlowCtx
-	input   RowSource
+	input RowSource
 }
 
 var _ Processor = &noopProcessor{}
+var _ RowSource = &noopProcessor{}
 
 func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
-	n := &noopProcessor{flowCtx: flowCtx, input: input}
-	if err := n.init(post, input.Types(), flowCtx, output); err != nil {
+	n := &noopProcessor{input: input}
+	if err := n.init(post, input.OutputTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
 	}
 	return n, nil
@@ -399,24 +487,80 @@ func processorSpan(ctx context.Context, name string) (context.Context, opentraci
 }
 
 // Run is part of the processor interface.
-func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
+func (n *noopProcessor) Run(wg *sync.WaitGroup) {
+	if n.out.output == nil {
+		panic("noopProcessor output not initialized for emitting rows")
 	}
-	ctx, span := processorSpan(ctx, "noop")
-	defer tracing.FinishSpan(span)
+	Run(n.flowCtx.Ctx, n, n.out.output)
+	if wg != nil {
+		wg.Done()
+	}
+}
+
+func (n *noopProcessor) close() {
+	if n.internalClose() {
+		n.input.ConsumerClosed()
+	}
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
+func (n *noopProcessor) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
+	if !n.closed {
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(n.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
+		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		n.close()
+	}
+	return meta
+}
+
+// Next is part of the RowSource interface.
+func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	n.maybeStart("noop", "" /* logTag */)
 
 	for {
 		row, meta := n.input.Next()
-		if row == nil && meta.Empty() {
-			sendTraceData(ctx, n.out.output)
-			n.out.Close()
-			return
+		if n.closed || meta != nil {
+			return nil, meta
 		}
-		if !emitHelper(ctx, &n.out, row, meta, n.input) {
-			return
+		if row == nil {
+			return nil, n.producerMeta(nil /* err */)
 		}
+
+		outRow, status, err := n.out.ProcessRow(n.ctx, row)
+		if err != nil {
+			return nil, n.producerMeta(err)
+		}
+		switch status {
+		case NeedMoreRows:
+			if outRow == nil && err == nil {
+				continue
+			}
+		case DrainRequested:
+			n.input.ConsumerDone()
+			continue
+		}
+		return outRow, nil
 	}
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (n *noopProcessor) ConsumerDone() {
+	n.input.ConsumerDone()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (n *noopProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	n.close()
 }
 
 func newProcessor(
@@ -474,6 +618,14 @@ func newProcessor(
 		}
 		return newMergeJoiner(
 			flowCtx, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
+		)
+	}
+	if core.InterleavedReaderJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newInterleavedReaderJoiner(
+			flowCtx, core.InterleavedReaderJoiner, post, outputs[0],
 		)
 	}
 	if core.HashJoiner != nil {
