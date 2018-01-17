@@ -1877,6 +1877,30 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
+func buildScanResumeKey(kvData []byte, max int) ([]byte, error) {
+	if len(kvData) == 0 {
+		return nil, nil
+	}
+	count, kvData, err := rocksDBBatchDecodeHeader(kvData)
+	if err != nil {
+		return nil, err
+	}
+	if count <= max {
+		return nil, nil
+	}
+	for i := 0; i < max; i++ {
+		_, _, kvData, err = rocksDBBatchDecodeValue(kvData)
+		if err != nil {
+			return nil, err
+		}
+	}
+	key, _, _, err := rocksDBBatchDecodeValue(kvData)
+	if err != nil {
+		return nil, err
+	}
+	return key.Key, nil
+}
+
 func buildScanResults(
 	kvData, intentData []byte, max int64, consistent bool,
 ) ([]roachpb.KeyValue, roachpb.Key, []roachpb.Intent, error) {
@@ -1885,7 +1909,13 @@ func buildScanResults(
 		return nil, nil, nil, err
 	}
 	if consistent && len(intents) > 0 {
-		return nil, nil, nil, &roachpb.WriteIntentError{Intents: intents}
+		// When encountering intents during a consistent scan we still need to
+		// return the resume key.
+		resumeKey, err := buildScanResumeKey(kvData, int(max))
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return nil, resumeKey, nil, &roachpb.WriteIntentError{Intents: intents}
 	}
 	if len(kvData) == 0 {
 		return nil, nil, intents, nil
@@ -1975,11 +2005,8 @@ func MVCCReverseScan(
 		consistent, txn, true /* reverse */)
 }
 
-// MVCCIterate iterates over the key range [start,end). At each step of the
-// iteration, f() is invoked with the current key/value pair. If f returns
-// true (done) or an error, the iteration stops and the error is propagated.
-// If the reverse is flag set the iterator will be moved in reverse order.
-func MVCCIterate(
+// TODO(peter): delete the old code.
+func mvccIterateOld(
 	ctx context.Context,
 	engine Reader,
 	startKey,
@@ -2155,6 +2182,83 @@ func MVCCIterate(
 			break
 		}
 	}
+	return intents, wiErr
+}
+
+// MVCCIterate iterates over the key range [start,end). At each step of the
+// iteration, f() is invoked with the current key/value pair. If f returns
+// true (done) or an error, the iteration stops and the error is propagated.
+// If the reverse is flag set the iterator will be moved in reverse order.
+func MVCCIterate(
+	ctx context.Context,
+	engine Reader,
+	startKey,
+	endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+	reverse bool,
+	f func(roachpb.KeyValue) (bool, error),
+) ([]roachpb.Intent, error) {
+	// TODO(peter): delete the old code.
+	if false {
+		return mvccIterateOld(ctx, engine, startKey, endKey, timestamp, consistent, txn, reverse, f)
+	}
+
+	var intents []roachpb.Intent
+	var wiErr error
+
+	for {
+		const maxKeysPerScan = 1000
+		kvs, resume, newIntents, err := mvccScanInternal(
+			ctx, engine, startKey, endKey, maxKeysPerScan, timestamp, consistent, txn, reverse)
+		if err != nil {
+			switch tErr := err.(type) {
+			case *roachpb.WriteIntentError:
+				// In the case of WriteIntentErrors, accumulate affected keys but continue scan.
+				if wiErr == nil {
+					wiErr = tErr
+				} else {
+					wiErr.(*roachpb.WriteIntentError).Intents = append(
+						wiErr.(*roachpb.WriteIntentError).Intents, tErr.Intents...)
+				}
+			default:
+				return nil, err
+			}
+		}
+
+		if len(newIntents) > 0 {
+			if intents == nil {
+				intents = newIntents
+			} else {
+				intents = append(intents, newIntents...)
+			}
+		}
+
+		for i := range kvs {
+			done, err := f(kvs[i])
+			if err != nil {
+				return nil, err
+			}
+			if done {
+				// TODO(peter): This isn't quite the same semantics as mvccIterateOld
+				// as we can return intents for keys that are "past" what we've invoked
+				// the callback on. That's fine as none of the callers use the returned
+				// intents.
+				return intents, wiErr
+			}
+		}
+
+		if resume == nil {
+			break
+		}
+		if reverse {
+			endKey = resume.EndKey
+		} else {
+			startKey = resume.Key
+		}
+	}
+
 	return intents, wiErr
 }
 
