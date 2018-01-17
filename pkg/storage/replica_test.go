@@ -712,6 +712,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 
 	lease, _ := tc.repl.GetLease()
 	invalidLease := lease
+	invalidLease.Sequence++
 	invalidLease.Replica.StoreID += 12345
 
 	raftCmd := storagebase.RaftCommand{
