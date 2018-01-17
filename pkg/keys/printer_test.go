@@ -204,6 +204,7 @@ func TestPrettyPrintRange(t *testing.T) {
 		maxChars   int
 		expected   string
 	}{
+		{key, nil, 20, "a"},
 		{key, key2, 20, "{a-z}"},
 		{MinKey, tableKey, 8, "/{M…-T…}"},
 		{MinKey, tableKey, 15, "/{Min-Tabl…}"},

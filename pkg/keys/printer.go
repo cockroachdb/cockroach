@@ -693,9 +693,14 @@ func MassagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) str
 // PrettyPrintRange pretty prints a compact representation of a key range. The
 // output is of the form:
 //    commonPrefix{remainingStart-remainingEnd}
+// If the end key is empty, the outut is of the form:
+//    start
 // It prints at most maxChars, truncating components as needed. See
 // TestPrettyPrintRange for some examples.
 func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
+	if len(end) == 0 {
+		return prettyPrintInternal(nil /* valDirs */, start, false /* quoteRawKeys */)
+	}
 	var b bytes.Buffer
 	if maxChars < 8 {
 		maxChars = 8
