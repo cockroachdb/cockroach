@@ -1993,6 +1993,9 @@ type EvalPlanner interface {
 
 	// SetSequenceValue sets the sequence's value.
 	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64) error
+
+	// EvalSubquery returns the Datum for the given subquery node.
+	EvalSubquery(expr *Subquery) (Datum, error)
 }
 
 // CtxProvider is anything that can return a Context.
@@ -3032,12 +3035,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
-	// Exists expressions are handled during subquery expansion.
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", t)
-}
-
-// Eval implements the TypedExpr interface.
 func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 	args := NewDTupleWithCap(len(expr.Exprs))
 	for _, e := range expr.Exprs {
@@ -3280,6 +3277,11 @@ func (t *Array) Eval(ctx *EvalContext) (Datum, error) {
 		}
 	}
 	return array, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *Subquery) Eval(ctx *EvalContext) (Datum, error) {
+	return ctx.Planner.EvalSubquery(expr)
 }
 
 // Eval implements the TypedExpr interface.

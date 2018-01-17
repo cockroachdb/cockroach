@@ -557,19 +557,6 @@ func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
-// ExistsExpr represents an EXISTS expression.
-type ExistsExpr struct {
-	Subquery Expr
-
-	typeAnnotation
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ExistsExpr) Format(ctx *FmtCtx) {
-	ctx.WriteString("EXISTS ")
-	exprFmtWithParen(ctx, node.Subquery)
-}
-
 // IfExpr represents an IF expression.
 type IfExpr struct {
 	Cond Expr
@@ -790,7 +777,7 @@ type ArrayFlatten struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ArrayFlatten) Format(ctx *FmtCtx) {
-	ctx.WriteString("ARRAY")
+	ctx.WriteString("ARRAY ")
 	exprFmtWithParen(ctx, node.Subquery)
 }
 
@@ -825,6 +812,19 @@ func (node *TypedExprs) String() string {
 // Subquery represents a subquery.
 type Subquery struct {
 	Select SelectStatement
+	Exists bool
+
+	// Idx is a query-unique index for the subquery.
+	// Subqueries are 1-indexed to ensure that the default
+	// value 0 can be used to detect uninitialized subqueries.
+	Idx int
+
+	typeAnnotation
+}
+
+// SetType forces the type annotation on the Subquery node.
+func (node *Subquery) SetType(t types.T) {
+	node.typ = t
 }
 
 // Variable implements the VariableExpr interface.
@@ -832,7 +832,19 @@ func (*Subquery) Variable() {}
 
 // Format implements the NodeFormatter interface.
 func (node *Subquery) Format(ctx *FmtCtx) {
-	ctx.FormatNode(node.Select)
+	if ctx.HasFlags(FmtSymbolicSubqueries) {
+		ctx.Printf("@S%d", node.Idx)
+	} else {
+		// Ensure that type printing is disabled during the recursion, as
+		// the type annotations are not available in subqueries.
+		noTypesCtx := *ctx
+		noTypesCtx.flags &= ^FmtShowTypes
+
+		if node.Exists {
+			noTypesCtx.WriteString("EXISTS ")
+		}
+		noTypesCtx.FormatNode(node.Select)
+	}
 }
 
 // BinaryOperator represents a binary operator.
@@ -1406,7 +1418,6 @@ func (node *DArray) String() string           { return AsString(node) }
 func (node *DTable) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }
 func (node *DOidWrapper) String() string      { return AsString(node) }
-func (node *ExistsExpr) String() string       { return AsString(node) }
 func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
