@@ -47,6 +47,8 @@ rocksdb::Status GenerateDataKey(rocksdb::Env* env, enginepbccl::DataKeysRegistry
 // Specific subclasses will provide different methods of accessing keys.
 class KeyManager {
  public:
+  virtual ~KeyManager();
+
   // CurrentKeyInfo returns the KeyInfo about the active key.
   // It does NOT include the key itself and can be logged, displayed, and stored.
   virtual std::unique_ptr<enginepbccl::KeyInfo> CurrentKeyInfo() {
