@@ -74,6 +74,8 @@ class KeyManager {
   // GetKey returns the key with requested `id`.
   // **WARNING**: this must not be logged, displayed, or stored outside the key registry.
   virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) = 0;
+
+  virtual ~KeyManager();
 };
 
 // FileKeyManager loads raw keys from files.
