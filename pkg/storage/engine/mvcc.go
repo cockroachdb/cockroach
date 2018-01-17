@@ -1633,37 +1633,74 @@ func MVCCDeleteRange(
 	txn *roachpb.Transaction,
 	returnKeys bool,
 ) ([]roachpb.Key, *roachpb.Span, int64, error) {
-	if max == 0 {
-		return nil, &roachpb.Span{Key: key, EndKey: endKey}, 0, nil
-	}
-	var keys []roachpb.Key
-	var resumeSpan *roachpb.Span
-	var num int64
-	buf := newPutBuffer()
-	iter := engine.NewIterator(true)
-	f := func(kv roachpb.KeyValue) (bool, error) {
-		if num == max {
-			// Another key was found beyond the max limit.
-			resumeSpan = &roachpb.Span{Key: kv.Key, EndKey: endKey}
-			return true, nil
+	// TODO(peter): delete the old code.
+	if false {
+		if max == 0 {
+			return nil, &roachpb.Span{Key: key, EndKey: endKey}, 0, nil
 		}
-		if err := mvccPutInternal(ctx, engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
-			return true, err
+
+		var keys []roachpb.Key
+		var resumeSpan *roachpb.Span
+		var num int64
+		buf := newPutBuffer()
+		iter := engine.NewIterator(true)
+		f := func(kv roachpb.KeyValue) (bool, error) {
+			if num == max {
+				// Another key was found beyond the max limit.
+				resumeSpan = &roachpb.Span{Key: kv.Key, EndKey: endKey}
+				return true, nil
+			}
+			if err := mvccPutInternal(ctx, engine, iter, ms, kv.Key, timestamp, nil, txn, buf, nil); err != nil {
+				return true, err
+			}
+			if returnKeys {
+				keys = append(keys, kv.Key)
+			}
+			num++
+			return false, nil
 		}
-		if returnKeys {
-			keys = append(keys, kv.Key)
-		}
-		num++
-		return false, nil
+
+		// In order to detect the potential write intent by another
+		// concurrent transaction with a newer timestamp, we need
+		// to use the max timestamp for scan.
+		_, err := MVCCIterate(ctx, engine, key, endKey, hlc.MaxTimestamp, true, txn, false, f)
+		iter.Close()
+		buf.release()
+		return keys, resumeSpan, num, err
 	}
 
-	// In order to detect the potential write intent by another
-	// concurrent transaction with a newer timestamp, we need
-	// to use the max timestamp for scan.
-	_, err := MVCCIterate(ctx, engine, key, endKey, hlc.MaxTimestamp, true, txn, false, f)
+	// In order to detect the potential write intent by another concurrent
+	// transaction with a newer timestamp, we need to use the max timestamp for
+	// scan.
+	kvs, resumeSpan, _, err := MVCCScan(
+		ctx, engine, key, endKey, max, hlc.MaxTimestamp, true /* consistent */, txn)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	buf := newPutBuffer()
+	iter := engine.NewIterator(true)
+
+	for i := range kvs {
+		err = mvccPutInternal(
+			ctx, engine, iter, ms, kvs[i].Key, timestamp, nil, txn, buf, nil)
+		if err != nil {
+			break
+		}
+	}
+
 	iter.Close()
 	buf.release()
-	return keys, resumeSpan, num, err
+
+	var keys []roachpb.Key
+	if returnKeys && err == nil && len(kvs) > 0 {
+		keys = make([]roachpb.Key, len(kvs))
+		for i := range kvs {
+			keys[i] = kvs[i].Key
+		}
+	}
+
+	return keys, resumeSpan, int64(len(kvs)), err
 }
 
 // getScanMeta returns the MVCCMetadata the iterator is currently pointed at
@@ -1919,7 +1956,6 @@ func MVCCScan(
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
 	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
 		consistent, txn, false /* reverse */)
-
 }
 
 // MVCCReverseScan scans the key range [start,end) key up to some maximum
