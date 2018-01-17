@@ -154,6 +154,7 @@ rocksdb::Status GenerateDataKey(rocksdb::Env* env, enginepbccl::DataKeysRegistry
 
 };  // namespace KeyManagerUtils
 
+KeyManager::~KeyManager() {}
 FileKeyManager::~FileKeyManager() {}
 
 rocksdb::Status FileKeyManager::LoadKeys() {
