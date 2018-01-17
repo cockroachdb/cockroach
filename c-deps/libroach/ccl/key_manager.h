@@ -47,9 +47,11 @@ rocksdb::Status GenerateDataKey(rocksdb::Env* env, enginepbccl::DataKeysRegistry
 // Specific subclasses will provide different methods of accessing keys.
 class KeyManager {
  public:
+  virtual ~KeyManager();
+
   // CurrentKeyInfo returns the KeyInfo about the active key.
   // It does NOT include the key itself and can be logged, displayed, and stored.
-  virtual std::unique_ptr<enginepbccl::KeyInfo> CurrentKeyInfo() {
+  std::unique_ptr<enginepbccl::KeyInfo> CurrentKeyInfo() {
     auto key = CurrentKey();
     if (key == nullptr) {
       return nullptr;
@@ -63,7 +65,7 @@ class KeyManager {
 
   // GetKeyInfo returns the KeyInfo about the key the requested `id`.
   // It does NOT include the key itself and can be logged, displayed, and stored.
-  virtual std::unique_ptr<enginepbccl::KeyInfo> GetKeyInfo(const std::string& id) {
+  std::unique_ptr<enginepbccl::KeyInfo> GetKeyInfo(const std::string& id) {
     auto key = GetKey(id);
     if (key == nullptr) {
       return nullptr;
@@ -91,20 +93,8 @@ class FileKeyManager : public KeyManager {
   // On error, existing keys held by the object are not overwritten.
   rocksdb::Status LoadKeys();
 
-  virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() override {
-    return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*active_key_.get()));
-  }
-
-  virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override {
-    if (active_key_ != nullptr && active_key_->info().key_id() == id) {
-      return std::unique_ptr<enginepbccl::SecretKey>(
-          new enginepbccl::SecretKey(*active_key_.get()));
-    }
-    if (old_key_ != nullptr && old_key_->info().key_id() == id) {
-      return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*old_key_.get()));
-    }
-    return nullptr;
-  }
+  virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() override;
+  virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
 
  private:
   rocksdb::Env* env_;
