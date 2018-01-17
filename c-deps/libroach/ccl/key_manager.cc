@@ -175,6 +175,21 @@ rocksdb::Status FileKeyManager::LoadKeys() {
   return rocksdb::Status::OK();
 }
 
+std::unique_ptr<enginepbccl::SecretKey> FileKeyManager::CurrentKey() {
+  return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*active_key_.get()));
+}
+
+std::unique_ptr<enginepbccl::SecretKey> FileKeyManager::GetKey(const std::string& id) {
+  if (active_key_ != nullptr && active_key_->info().key_id() == id) {
+    return std::unique_ptr<enginepbccl::SecretKey>(
+        new enginepbccl::SecretKey(*active_key_.get()));
+  }
+  if (old_key_ != nullptr && old_key_->info().key_id() == id) {
+    return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*old_key_.get()));
+  }
+  return nullptr;
+}
+
 DataKeyManager::~DataKeyManager() {}
 
 DataKeyManager::DataKeyManager(rocksdb::Env* env, const std::string& db_dir,
