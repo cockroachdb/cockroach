@@ -18,6 +18,7 @@ option go_package = "storage";
 
 import "roachpb/internal_raft.proto";
 import "roachpb/metadata.proto";
+import "storage/engine/enginepb/mvcc3.proto";
 import "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.
@@ -49,6 +50,8 @@ message CollectChecksumResponse {
   // TODO(tschottdorf): with larger ranges, this is no longer tenable.
   // See https://github.com/cockroachdb/cockroach/issues/21128.
   roachpb.RaftSnapshotData snapshot = 2;
+  // delta carries the stats of the range minus the recomputed stats.
+  storage.engine.enginepb.MVCCNetworkStats delta = 3 [(gogoproto.nullable) = false];
 }
 
 service Consistency {

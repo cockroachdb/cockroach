@@ -841,6 +841,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
 	b := &client.Batch{}
+	// TODO(tschottdorf): this might need a cluster migration.
 	b.AddRawRequest(&roachpb.ClearRangeRequest{
 		Span: roachpb.Span{
 			Key:    resume.Key,

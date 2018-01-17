@@ -661,7 +661,7 @@ func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) erro
 			if err != nil {
 				return false, err
 			}
-			ms, err := storage.ComputeStatsForRange(&desc, db, claimedMS.LastUpdateNanos)
+			ms, err := rditer.ComputeStatsForRange(&desc, db, claimedMS.LastUpdateNanos)
 			if err != nil {
 				return false, err
 			}
