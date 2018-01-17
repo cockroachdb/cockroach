@@ -544,9 +544,13 @@ func (h *hashJoiner) probeRow(
 		if renderedRow != nil {
 			probeMatched = true
 			shouldEmit := true
+			if h.joinType == leftAntiJoin {
+				shouldEmit = false
+			}
 			if shouldMark(h.storedSide, h.joinType) {
 				// Matched rows are marked on the stored side for 2 reasons.
-				// 1: For outer joins to iterate through the unmarked rows.
+				// 1: For outer and anti joins to iterate through the unmarked
+				// rows.
 				// 2: For semi-joins where the left-side is stored, multiple
 				// rows from the right may match to the same row on the left.
 				// The rows on the left should only be emitted the first time
@@ -554,7 +558,7 @@ func (h *hashJoiner) probeRow(
 				// (Note: an alternative is to remove the entry from the stored
 				// side, but our containers do not support that today).
 				// TODO(peter): figure out a way to reduce this special casing below.
-				if h.joinType == leftSemiJoin && i.IsMarked(ctx) {
+				if (h.joinType == leftSemiJoin) && i.IsMarked(ctx) {
 					shouldEmit = false
 				} else if err := i.Mark(ctx, true); err != nil {
 					return false, nil
@@ -631,8 +635,8 @@ func (h *hashJoiner) probePhase(
 	}
 
 	if shouldEmitUnmatchedRow(h.storedSide, h.joinType) {
-		// Produce results for unmatched rows, for FULL OUTER AND LEFT/RIGHT OUTER
-		// (depending on which stream we use).
+		// Produce results for unmatched rows, for FULL OUTER, LEFT/RIGHT OUTER
+		// and ANTI joins (depending on which stream we use).
 		i := storedRows.NewUnmarkedIterator(ctx)
 		defer i.Close()
 		for i.Rewind(); ; i.Next() {
@@ -664,6 +668,8 @@ func (h *hashJoiner) probePhase(
 func shouldMark(storedSide joinSide, joinType joinType) bool {
 	switch {
 	case joinType == leftSemiJoin && storedSide == leftSide:
+		return true
+	case joinType == leftAntiJoin && storedSide == leftSide:
 		return true
 	case shouldEmitUnmatchedRow(storedSide, joinType):
 		return true
