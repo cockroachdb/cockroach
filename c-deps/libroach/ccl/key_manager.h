@@ -49,7 +49,7 @@ class KeyManager {
  public:
   // CurrentKeyInfo returns the KeyInfo about the active key.
   // It does NOT include the key itself and can be logged, displayed, and stored.
-  virtual std::unique_ptr<enginepbccl::KeyInfo> CurrentKeyInfo() {
+  std::unique_ptr<enginepbccl::KeyInfo> CurrentKeyInfo() {
     auto key = CurrentKey();
     if (key == nullptr) {
       return nullptr;
@@ -63,7 +63,7 @@ class KeyManager {
 
   // GetKeyInfo returns the KeyInfo about the key the requested `id`.
   // It does NOT include the key itself and can be logged, displayed, and stored.
-  virtual std::unique_ptr<enginepbccl::KeyInfo> GetKeyInfo(const std::string& id) {
+  std::unique_ptr<enginepbccl::KeyInfo> GetKeyInfo(const std::string& id) {
     auto key = GetKey(id);
     if (key == nullptr) {
       return nullptr;
