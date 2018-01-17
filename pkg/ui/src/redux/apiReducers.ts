@@ -148,9 +148,8 @@ export const queryToID = (req: api.QueryPlanRequestMessage): string =>
 const queryPlanReducerObj = new CachedDataReducer(api.getQueryPlan, "queryPlan");
 export const refreshQueryPlan = queryPlanReducerObj.refresh;
 
-export const problemRangesRequestKey = (
-  req: api.ProblemRangesRequestMessage,
-): string => (_.isEmpty(req.node_id) ? "" : req.node_id.toString());
+export const problemRangesRequestKey = (req: api.ProblemRangesRequestMessage): string =>
+  _.isEmpty(req.node_id) ? "all" : req.node_id;
 
 const problemRangesReducerObj = new KeyedCachedDataReducer(
   api.getProblemRanges,
@@ -162,7 +161,7 @@ const problemRangesReducerObj = new KeyedCachedDataReducer(
 export const refreshProblemRanges = problemRangesReducerObj.refresh;
 
 export const certificatesRequestKey = (req: api.CertificatesRequestMessage): string =>
-  _.isEmpty(req.node_id) ? "" : req.node_id.toString();
+  _.isEmpty(req.node_id) ? "0" : req.node_id;
 
 const certificatesReducerObj = new KeyedCachedDataReducer(
   api.getCertificates,
@@ -184,9 +183,8 @@ const rangeReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshRange = rangeReducerObj.refresh;
 
-export const allocatorRangeRequestKey = (
-  req: api.AllocatorRangeRequestMessage,
-): string => (_.isNil(req.range_id) ? "0" : req.range_id.toString());
+export const allocatorRangeRequestKey = (req: api.AllocatorRangeRequestMessage): string =>
+  _.isNil(req.range_id) ? "0" : req.range_id.toString();
 
 const allocatorRangeReducerObj = new KeyedCachedDataReducer(
   api.getAllocatorRange,
