@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -1016,6 +1015,7 @@ func (s *SchemaChangeManager) newTimer() *time.Timer {
 func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 	stopper.RunWorker(s.ambientCtx.AnnotateCtx(context.Background()), func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
+		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
 		for {
@@ -1044,22 +1044,14 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					clock:                s.clock,
 					settings:             s.settings,
 				}
-				// Keep track of existing schema changers.
-				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))
-				for k := range s.schemaChangers {
-					oldSchemaChangers[k] = struct{}{}
-				}
+
 				execAfter := timeutil.Now().Add(delay)
-				// Loop through the configuration to find all the tables.
-				for _, kv := range cfg.Values {
-					if !bytes.HasPrefix(kv.Key, descKeyPrefix) {
-						continue
-					}
+				cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 					// Attempt to unmarshal config into a table/database descriptor.
 					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
 						log.Warningf(ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
-						continue
+						return
 					}
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
@@ -1067,7 +1059,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						table.MaybeUpgradeFormatVersion()
 						if err := table.ValidateTable(); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %v: %s", kv.Key, table, err)
-							continue
+							return
 						}
 
 						// Keep track of outstanding schema changes.
@@ -1099,12 +1091,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								schemaChanger.execAfter = timeutil.Unix(0, table.GCDeadline)
 							}
 							// Keep track of this schema change.
-							// Remove from oldSchemaChangers map.
-							delete(oldSchemaChangers, table.ID)
 							if sc, ok := s.schemaChangers[table.ID]; ok {
 								if sc.mutationID == schemaChanger.mutationID {
 									// Ignore duplicate.
-									continue
+									return
 								}
 							}
 							s.schemaChangers[table.ID] = schemaChanger
@@ -1113,11 +1103,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					case *sqlbase.Descriptor_Database:
 						// Ignore.
 					}
-				}
-				// Delete old schema changers.
-				for k := range oldSchemaChangers {
-					delete(s.schemaChangers, k)
-				}
+				})
 				timer = s.newTimer()
 
 			case <-timer.C:
