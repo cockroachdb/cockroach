@@ -491,7 +491,7 @@ func (ir *intentResolver) cleanupFinishedTxnIntents(
 	ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent, now hlc.Timestamp,
 ) error {
 	// Resolve intents.
-	min, _ := txn.TimeBounds()
+	min, _ := txn.InclusiveTimeBounds()
 	opts := ResolveOptions{Wait: true, Poison: false, MinTimestamp: min}
 	if err := ir.resolveIntents(ctx, intents, opts); err != nil {
 		return errors.Wrapf(err, "failed to resolve intents")

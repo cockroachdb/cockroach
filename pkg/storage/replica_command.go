@@ -486,7 +486,7 @@ func resolveLocalIntents(
 		desc = &mergeTrigger.LeftDesc
 	}
 
-	min, max := txn.TimeBounds()
+	min, max := txn.InclusiveTimeBounds()
 	iter := batch.NewTimeBoundIterator(min, max)
 	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
