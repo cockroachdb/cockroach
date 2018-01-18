@@ -314,8 +314,8 @@ func (bq *baseQueue) SetProcessTimeout(dur time.Duration) {
 
 // Start launches a goroutine to process entries in the queue. The
 // provided stopper is used to finish processing.
-func (bq *baseQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
-	bq.processLoop(clock, stopper)
+func (bq *baseQueue) Start(stopper *stop.Stopper) {
+	bq.processLoop(stopper)
 }
 
 // Add adds the specified replica to the queue, regardless of the
@@ -494,7 +494,7 @@ func (bq *baseQueue) MaybeRemove(rangeID roachpb.RangeID) {
 
 // processLoop processes the entries in the queue until the provided
 // stopper signals exit.
-func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
+func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 	ctx := bq.AnnotateCtx(context.Background())
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer func() {
@@ -537,9 +537,9 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 						annotatedCtx, fmt.Sprintf("storage.%s: processing replica", bq.name),
 						func(annotatedCtx context.Context) {
 							start := timeutil.Now()
-							if err := bq.processReplica(annotatedCtx, repl, clock); err != nil {
+							if err := bq.processReplica(annotatedCtx, repl); err != nil {
 								// Maybe add failing replica to purgatory if the queue supports it.
-								bq.maybeAddToPurgatory(annotatedCtx, repl, err, clock, stopper)
+								bq.maybeAddToPurgatory(annotatedCtx, stopper, repl, err)
 							}
 							duration = timeutil.Since(start)
 							if log.V(2) {
@@ -563,9 +563,7 @@ func (bq *baseQueue) processLoop(clock *hlc.Clock, stopper *stop.Stopper) {
 // processReplica processes a single replica. This should not be
 // called externally to the queue. bq.mu.Lock must not be held
 // while calling this method.
-func (bq *baseQueue) processReplica(
-	queueCtx context.Context, repl *Replica, clock *hlc.Clock,
-) error {
+func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) error {
 	bq.processMu.Lock()
 	defer bq.processMu.Unlock()
 
@@ -657,7 +655,7 @@ func (bq *baseQueue) processReplica(
 // mechanism for signaling re-processing of replicas held in
 // purgatory.
 func (bq *baseQueue) maybeAddToPurgatory(
-	ctx context.Context, repl *Replica, triggeringErr error, clock *hlc.Clock, stopper *stop.Stopper,
+	ctx context.Context, stopper *stop.Stopper, repl *Replica, triggeringErr error,
 ) {
 	// Increment failures metric here to capture all error returns from
 	// process().
@@ -723,8 +721,8 @@ func (bq *baseQueue) maybeAddToPurgatory(
 					if stopper.RunTask(
 						annotatedCtx, fmt.Sprintf("storage.%s: purgatory processing replica", bq.name),
 						func(annotatedCtx context.Context) {
-							if err := bq.processReplica(annotatedCtx, repl, clock); err != nil {
-								bq.maybeAddToPurgatory(annotatedCtx, repl, err, clock, stopper)
+							if err := bq.processReplica(annotatedCtx, repl); err != nil {
+								bq.maybeAddToPurgatory(annotatedCtx, stopper, repl, err)
 							}
 						}) != nil {
 						return
@@ -809,11 +807,11 @@ func (bq *baseQueue) remove(item *replicaItem) {
 // there to finish too. When that's done, the SucceedsSoon at the end
 // of TestRemoveRangeWithoutGC (and perhaps others) can be replaced
 // with a one-time check.
-func (bq *baseQueue) DrainQueue(clock *hlc.Clock) {
+func (bq *baseQueue) DrainQueue() {
 	ctx := bq.AnnotateCtx(context.TODO())
 	for repl := bq.pop(); repl != nil; repl = bq.pop() {
 		annotatedCtx := repl.AnnotateCtx(ctx)
-		if err := bq.processReplica(annotatedCtx, repl, clock); err != nil {
+		if err := bq.processReplica(annotatedCtx, repl); err != nil {
 			bq.failures.Inc(1)
 			log.Error(annotatedCtx, err)
 		}

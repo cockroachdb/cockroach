@@ -79,7 +79,7 @@ func forceScanAndProcess(s *Store, q *baseQueue) {
 		return true
 	})
 
-	q.DrainQueue(s.cfg.Clock)
+	q.DrainQueue()
 }
 
 // ForceReplicationScanAndProcess iterates over all ranges and

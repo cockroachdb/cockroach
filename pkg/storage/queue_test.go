@@ -337,7 +337,7 @@ func TestBaseQueueProcess(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
-	bq.Start(tc.Clock(), stopper)
+	bq.Start(stopper)
 
 	bq.MaybeAdd(r1, hlc.Timestamp{})
 	bq.MaybeAdd(r2, hlc.Timestamp{})
@@ -407,9 +407,7 @@ func TestBaseQueueAddRemove(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
-	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	bq.Start(clock, stopper)
+	bq.Start(stopper)
 
 	bq.MaybeAdd(r, hlc.Timestamp{})
 	bq.MaybeRemove(r.RangeID)
@@ -462,10 +460,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 		maxSize:              1,
 	})
 
-	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	bqNeedsSysCfg.Start(clock, stopper)
-
+	bqNeedsSysCfg.Start(stopper)
 	bqNeedsSysCfg.MaybeAdd(r, hlc.Timestamp{})
 	if queueFnCalled != 0 {
 		t.Fatalf("expected shouldQueueFn not to be called without valid system config, got %d calls", queueFnCalled)
@@ -490,7 +485,7 @@ func TestNeedsSystemConfig(t *testing.T) {
 		acceptsUnsplitRanges: true,
 		maxSize:              1,
 	})
-	bqNoSysCfg.Start(clock, stopper)
+	bqNoSysCfg.Start(stopper)
 	bqNoSysCfg.MaybeAdd(r, hlc.Timestamp{})
 	if queueFnCalled != 1 {
 		t.Fatalf("expected shouldQueueFn to be called even without valid system config, got %d calls", queueFnCalled)
@@ -552,7 +547,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	}
 
 	bq := makeTestBaseQueue("test", testQueue, s, s.cfg.Gossip, queueConfig{maxSize: 2})
-	bq.Start(s.cfg.Clock, stopper)
+	bq.Start(stopper)
 
 	// Check our config.
 	var sysCfg config.SystemConfig
@@ -667,7 +662,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	replicaCount := 10
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: replicaCount})
-	bq.Start(tc.Clock(), stopper)
+	bq.Start(stopper)
 
 	for i := 1; i <= replicaCount; i++ {
 		r := createReplica(tc.store, roachpb.RangeID(i+1000),
@@ -815,7 +810,7 @@ func TestBaseQueueProcessTimeout(t *testing.T) {
 			processTimeout:       time.Millisecond,
 			acceptsUnsplitRanges: true,
 		})
-	bq.Start(tc.Clock(), stopper)
+	bq.Start(stopper)
 	bq.MaybeAdd(r, hlc.Timestamp{})
 
 	if l := bq.Length(); l != 1 {
@@ -871,7 +866,7 @@ func TestBaseQueueTimeMetric(t *testing.T) {
 			processTimeout:       time.Millisecond,
 			acceptsUnsplitRanges: true,
 		})
-	bq.Start(tc.Clock(), stopper)
+	bq.Start(stopper)
 	bq.MaybeAdd(r, hlc.Timestamp{})
 
 	testutils.SucceedsSoon(t, func() error {
@@ -938,9 +933,7 @@ func TestBaseQueueDisable(t *testing.T) {
 		},
 	}
 	bq := makeTestBaseQueue("test", testQueue, tc.store, tc.gossip, queueConfig{maxSize: 2})
-	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	bq.Start(clock, stopper)
+	bq.Start(stopper)
 
 	bq.SetDisabled(true)
 	bq.MaybeAdd(r, hlc.Timestamp{})
