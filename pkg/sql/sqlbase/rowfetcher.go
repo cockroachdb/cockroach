@@ -794,7 +794,12 @@ func (rf *RowFetcher) processValueBytes(
 		}
 
 		var encValue EncDatum
+<<<<<<< HEAD
 		encValue, valueBytes, err = EncDatumValueFromBufferWithOffsetsAndType(valueBytes, typeOffset, dataOffset, typ)
+=======
+		encValue, valueBytes, err =
+			EncDatumFromBuffer(&table.cols[idx].Type, DatumEncoding_VALUE, valueBytes)
+>>>>>>> parent of e3a90b586... sqlbase: remove unused param of EncDatumFromBuffer
 		if err != nil {
 			return "", "", err
 		}
