@@ -681,6 +681,11 @@ INSERT INTO f VALUES (1, 1);
 INSERT INTO e VALUES (1);
 INSERT INTO d VALUES (1, 1, 1);
 INSERT INTO c VALUES (1);
+
+-- Test a table that uses a sequence to make sure the sequence is dumped first.
+CREATE SEQUENCE s;
+CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT);
+INSERT INTO s_tbl (v) VALUES (10), (11);
 `
 	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
 		t.Fatal(err)
@@ -747,6 +752,15 @@ CREATE TABLE c (
 	FAMILY "primary" (i, rowid)
 );
 
+CREATE SEQUENCE s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+CREATE TABLE s_tbl (
+	id INT NOT NULL DEFAULT nextval('s':::STRING),
+	v INT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, v)
+);
+
 INSERT INTO b (i) VALUES
 	(1);
 
@@ -767,6 +781,12 @@ INSERT INTO d (i, e, f) VALUES
 
 INSERT INTO c (i) VALUES
 	(1);
+
+SELECT setval('s', 2);
+
+INSERT INTO s_tbl (id, v) VALUES
+	(1, 10),
+	(2, 11);
 `
 
 	if out != expectDump {
@@ -873,6 +893,40 @@ func TestDumpView(t *testing.T) {
 
 	const expect = `dump d
 CREATE VIEW bar ("1") AS SELECT 1;
+`
+
+	if out != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
+
+func TestDumpSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE SEQUENCE d.bar;
+`
+	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(out)
+	}
+
+	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(out)
+	}
+
+	const expect = `dump d
+CREATE SEQUENCE bar MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+SELECT setval('bar', 0);
 `
 
 	if out != expect {
