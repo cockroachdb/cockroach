@@ -28,8 +28,9 @@ type PrivateID uint32
 
 // ListID identifies a variable-sized list used by a memo expression and stored
 // by the memo. The ID consists of an offset into the memo's lists slice, plus
-// the number of elements in the list. Lists have numbers greater than 0; a
-// ListID of 0 indicates an undefined list (probable indicator of a bug).
+// the number of elements in the list. Valid lists have offsets greater than 0;
+// a ListID with offset 0 indicates an undefined list (probable indicator of a
+// bug).
 type ListID struct {
 	offset uint32
 	len    uint32
@@ -172,7 +173,7 @@ func (m *memo) memoizeNormExpr(norm *memoExpr) GroupID {
 	}
 
 	mgrp := m.newGroup(norm)
-	e := extractLowestCostExpr(m, mgrp.id, minPhysPropsID)
+	e := makeExprView(m, mgrp.id, minPhysPropsID)
 	mgrp.logical = m.logPropsFactory.constructProps(&e)
 
 	m.exprMap[norm.fingerprint()] = mgrp.id

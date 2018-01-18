@@ -33,50 +33,50 @@ func (f *logicalPropsFactory) init(mem *memo) {
 // initialize the new group's logical properties.
 // NOTE: When deriving properties from children, be sure to keep the child
 //       properties immutable by copying them if necessary.
-// NOTE: The parent expression is passed as an Expr for convenient access to
-//       children, but certain properties on it are not yet defined (like its
-//       logical properties!).
-func (f *logicalPropsFactory) constructProps(e *Expr) LogicalProps {
-	if e.IsRelational() {
-		return f.constructRelationalProps(e)
+// NOTE: The parent expression is passed as an ExprView for convenient access
+//       to children, but certain properties on it are not yet defined (like
+//       its logical properties!).
+func (f *logicalPropsFactory) constructProps(ev *ExprView) LogicalProps {
+	if ev.IsRelational() {
+		return f.constructRelationalProps(ev)
 	}
 
-	return f.constructScalarProps(e)
+	return f.constructScalarProps(ev)
 }
 
-func (f *logicalPropsFactory) constructRelationalProps(e *Expr) LogicalProps {
-	switch e.Operator() {
+func (f *logicalPropsFactory) constructRelationalProps(ev *ExprView) LogicalProps {
+	switch ev.Operator() {
 	case ScanOp:
-		return f.constructScanProps(e)
+		return f.constructScanProps(ev)
 
 	case SelectOp:
-		return f.constructSelectProps(e)
+		return f.constructSelectProps(ev)
 
 	case ProjectOp:
-		return f.constructProjectProps(e)
+		return f.constructProjectProps(ev)
 
 	case ValuesOp:
-		return f.constructValuesProps(e)
+		return f.constructValuesProps(ev)
 
 	case InnerJoinOp, LeftJoinOp, RightJoinOp, FullJoinOp,
 		SemiJoinOp, AntiJoinOp, InnerJoinApplyOp, LeftJoinApplyOp,
 		RightJoinApplyOp, FullJoinApplyOp, SemiJoinApplyOp, AntiJoinApplyOp:
-		return f.constructJoinProps(e)
+		return f.constructJoinProps(ev)
 
 	case UnionOp:
-		return f.constructSetProps(e)
+		return f.constructSetProps(ev)
 
 	case GroupByOp:
-		return f.constructGroupByProps(e)
+		return f.constructGroupByProps(ev)
 	}
 
-	panic(fmt.Sprintf("unrecognized relational expression type: %v", e.op))
+	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 }
 
-func (f *logicalPropsFactory) constructScanProps(e *Expr) (props LogicalProps) {
+func (f *logicalPropsFactory) constructScanProps(ev *ExprView) (props LogicalProps) {
 	props.Relational = &RelationalProps{}
 
-	tblIndex := e.Private().(TableIndex)
+	tblIndex := ev.Private().(TableIndex)
 	tbl := f.mem.metadata.Table(tblIndex)
 
 	// A table's output column indexes are contiguous.
@@ -92,10 +92,10 @@ func (f *logicalPropsFactory) constructScanProps(e *Expr) (props LogicalProps) {
 	return
 }
 
-func (f *logicalPropsFactory) constructSelectProps(e *Expr) (props LogicalProps) {
+func (f *logicalPropsFactory) constructSelectProps(ev *ExprView) (props LogicalProps) {
 	props.Relational = &RelationalProps{}
 
-	inputProps := f.mem.lookupGroup(e.ChildGroup(0)).logical
+	inputProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
 
 	// Inherit output columns from input.
 	props.Relational.OutputCols = inputProps.Relational.OutputCols
@@ -106,13 +106,13 @@ func (f *logicalPropsFactory) constructSelectProps(e *Expr) (props LogicalProps)
 	return
 }
 
-func (f *logicalPropsFactory) constructProjectProps(e *Expr) (props LogicalProps) {
+func (f *logicalPropsFactory) constructProjectProps(ev *ExprView) (props LogicalProps) {
 	props.Relational = &RelationalProps{}
 
-	inputProps := f.mem.lookupGroup(e.ChildGroup(0)).logical
+	inputProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
 
 	// Use output columns from projection list.
-	projections := e.Child(1)
+	projections := ev.Child(1)
 	props.Relational.OutputCols = *projections.Private().(*ColSet)
 
 	// Inherit not null columns from input.
@@ -122,16 +122,16 @@ func (f *logicalPropsFactory) constructProjectProps(e *Expr) (props LogicalProps
 	return
 }
 
-func (f *logicalPropsFactory) constructJoinProps(e *Expr) (props LogicalProps) {
+func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) (props LogicalProps) {
 	props.Relational = &RelationalProps{}
 
-	leftProps := f.mem.lookupGroup(e.ChildGroup(0)).logical
-	rightProps := f.mem.lookupGroup(e.ChildGroup(1)).logical
+	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
+	rightProps := f.mem.lookupGroup(ev.ChildGroup(1)).logical
 
 	// Output columns are union of columns from left and right inputs, except
 	// in case of semi and anti joins, which only project the left columns.
 	props.Relational.OutputCols = leftProps.Relational.OutputCols.Copy()
-	switch e.Operator() {
+	switch ev.Operator() {
 	case SemiJoinOp, AntiJoinOp, SemiJoinApplyOp, AntiJoinApplyOp:
 
 	default:
@@ -140,7 +140,7 @@ func (f *logicalPropsFactory) constructJoinProps(e *Expr) (props LogicalProps) {
 
 	// Left/full outer joins can result in right columns becoming null.
 	// Otherwise, propagate not null setting from right child.
-	switch e.Operator() {
+	switch ev.Operator() {
 	case LeftJoinOp, FullJoinOp, LeftJoinApplyOp, FullJoinApplyOp,
 		SemiJoinOp, SemiJoinApplyOp, AntiJoinOp, AntiJoinApplyOp:
 
@@ -150,7 +150,7 @@ func (f *logicalPropsFactory) constructJoinProps(e *Expr) (props LogicalProps) {
 
 	// Right/full outer joins can result in left columns becoming null.
 	// Otherwise, propagate not null setting from left child.
-	switch e.Operator() {
+	switch ev.Operator() {
 	case RightJoinOp, FullJoinOp, RightJoinApplyOp, FullJoinApplyOp:
 
 	default:
@@ -160,25 +160,25 @@ func (f *logicalPropsFactory) constructJoinProps(e *Expr) (props LogicalProps) {
 	return
 }
 
-func (f *logicalPropsFactory) constructGroupByProps(e *Expr) (props LogicalProps) {
+func (f *logicalPropsFactory) constructGroupByProps(ev *ExprView) (props LogicalProps) {
 	props.Relational = &RelationalProps{}
 
 	// Output columns are union of columns from grouping and aggregate
 	// projection lists.
-	groupings := e.Child(1)
+	groupings := ev.Child(1)
 	props.Relational.OutputCols = groupings.Private().(*ColSet).Copy()
-	agg := e.Child(2)
+	agg := ev.Child(2)
 	props.Relational.OutputCols.UnionWith(*agg.Private().(*ColSet))
 
 	return
 }
 
-func (f *logicalPropsFactory) constructSetProps(e *Expr) (props LogicalProps) {
+func (f *logicalPropsFactory) constructSetProps(ev *ExprView) (props LogicalProps) {
 	props.Relational = &RelationalProps{}
 
-	leftProps := f.mem.lookupGroup(e.ChildGroup(0)).logical
-	rightProps := f.mem.lookupGroup(e.ChildGroup(1)).logical
-	colMap := *e.Private().(*ColMap)
+	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
+	rightProps := f.mem.lookupGroup(ev.ChildGroup(1)).logical
+	colMap := *ev.Private().(*ColMap)
 
 	// Use left input's output columns.
 	props.Relational.OutputCols = leftProps.Relational.OutputCols
@@ -200,15 +200,15 @@ func (f *logicalPropsFactory) constructSetProps(e *Expr) (props LogicalProps) {
 	return
 }
 
-func (f *logicalPropsFactory) constructValuesProps(e *Expr) (props LogicalProps) {
+func (f *logicalPropsFactory) constructValuesProps(ev *ExprView) (props LogicalProps) {
 	props.Relational = &RelationalProps{}
 
 	// Use output columns that are attached to the values op.
-	props.Relational.OutputCols = *e.Private().(*ColSet)
+	props.Relational.OutputCols = *ev.Private().(*ColSet)
 	return
 }
 
-func (f *logicalPropsFactory) constructScalarProps(e *Expr) LogicalProps {
+func (f *logicalPropsFactory) constructScalarProps(ev *ExprView) LogicalProps {
 	return LogicalProps{}
 }
 
