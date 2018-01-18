@@ -97,7 +97,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 
 // SetSequenceValue implements the tree.EvalPlanner interface.
 func (p *planner) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64,
+	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
 ) error {
 	if p.session.TxnState.readOnly {
 		return readOnlyError("setval()")
@@ -113,6 +113,9 @@ func (p *planner) SetSequenceValue(
 			`value %d is out of bounds for sequence "%s" (%d..%d)`,
 			newVal, descriptor.Name, opts.MinValue, opts.MaxValue,
 		)
+	}
+	if !isCalled {
+		newVal = newVal - descriptor.SequenceOpts.Increment
 	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,

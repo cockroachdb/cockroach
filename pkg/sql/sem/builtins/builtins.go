@@ -1029,6 +1029,8 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	// Note: behavior is slightly different than Postgres for performance reasons.
+	// See https://github.com/cockroachdb/cockroach/issues/21564
 	"setval": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}, {"value", types.Int}},
@@ -1042,14 +1044,41 @@ CockroachDB supports the following flags:
 					return nil, err
 				}
 
-				// TODO(vilterp): test that this works with expressions like len('foo') or something...
 				newVal := tree.MustBeDInt(args[1])
-				if err := evalCtx.Planner.SetSequenceValue(evalCtx.Ctx(), qualifiedName, int64(newVal)); err != nil {
+				if err := evalCtx.Planner.SetSequenceValue(
+					evalCtx.Ctx(), qualifiedName, int64(newVal), true); err != nil {
 					return nil, err
 				}
 				return args[1], nil
 			},
-			Info: "Set the given sequence's current value.",
+			Info: "Set the given sequence's current value. The next call to nextval will return " +
+				"`value + Increment`",
+		},
+		tree.Builtin{
+			Types: tree.ArgTypes{
+				{"sequence_name", types.String}, {"value", types.Int}, {"is_called", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categorySequences,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				qualifiedName, err := evalCtx.Planner.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				if err != nil {
+					return nil, err
+				}
+
+				isCalled := bool(tree.MustBeDBool(args[2]))
+
+				newVal := tree.MustBeDInt(args[1])
+				if err := evalCtx.Planner.SetSequenceValue(
+					evalCtx.Ctx(), qualifiedName, int64(newVal), isCalled); err != nil {
+					return nil, err
+				}
+				return args[1], nil
+			},
+			Info: "Set the given sequence's current value. If is_called is false, the next call to " +
+				"nextval will return `value`; otherwise `value + Increment`.",
 		},
 	},
 
