@@ -88,6 +88,7 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),
 		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  tree.MakeTestingEvalContext(),
 	}
 
 	s, err := newAlgebraicSetOp(&flowCtx, &tc.spec, inL, inR, &PostProcessSpec{}, out)
@@ -188,6 +189,31 @@ func TestExceptAll(t *testing.T) {
 				{v[6], v[6]},
 				{v[7], v[5]},
 				{v[8], v[9]},
+			},
+		},
+		{
+			spec: AlgebraicSetOpSpec{
+				OpType: AlgebraicSetOpSpec_Except_all,
+			},
+			inputLeft: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
+			},
+			inputRight: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[5], v[6]},
+				{v[5], v[6]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[2], v[6]},
+				{v[3], v[5]},
+				{v[2], v[9]},
 			},
 		},
 	}
