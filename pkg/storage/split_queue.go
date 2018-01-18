@@ -31,6 +31,11 @@ import (
 const (
 	// splitQueueTimerDuration is the duration between splits of queued ranges.
 	splitQueueTimerDuration = 0 // zero duration to process splits greedily.
+
+	// splits should be relatively isolated, other than requiring expensive
+	// RocksDB scans over part of the splitting range to recompute stats. We
+	// allow a limitted number of splits to be processed at once.
+	splitQueueConcurrency = 4
 )
 
 // splitQueue manages a queue of ranges slated to be split due to size
@@ -49,6 +54,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 		"split", sq, store, gossip,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
+			maxConcurrency:       splitQueueConcurrency,
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: true,
