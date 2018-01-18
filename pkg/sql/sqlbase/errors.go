@@ -274,7 +274,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 		if err != nil {
 			return err
 		}
-		var rf MultiRowFetcher
+		var rf RowFetcher
 
 		var valNeededForCol util.FastIntSet
 		valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
@@ -290,7 +290,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			cols[i] = *col
 		}
 
-		tableArgs := MultiRowFetcherTableArgs{
+		tableArgs := RowFetcherTableArgs{
 			Desc:             tableDesc,
 			Index:            index,
 			ColIdxMap:        colIdxMap,

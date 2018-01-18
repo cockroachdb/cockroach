@@ -83,7 +83,7 @@ type tableInfo struct {
 	hasLast bool
 	// lastDatums is a buffer for the current key. It is only present when
 	// doing a physical check in order to verify round-trip encoding.
-	// It is required because MultiRowFetcher.kv is overwritten before NextRow
+	// It is required because RowFetcher.kv is overwritten before NextRow
 	// returns.
 	lastKV roachpb.KeyValue
 	// lastDatums is a buffer for the previously scanned k/v datums. It is
@@ -92,12 +92,12 @@ type tableInfo struct {
 	lastDatums tree.Datums
 }
 
-// MultiRowFetcherTableArgs are the arguments passed to MultiRowFetcher.Init
+// RowFetcherTableArgs are the arguments passed to RowFetcher.Init
 // for a given table that includes descriptors and row information.
-type MultiRowFetcherTableArgs struct {
-	// The spans of keys to return for the given table. MultiRowFetcher
+type RowFetcherTableArgs struct {
+	// The spans of keys to return for the given table. RowFetcher
 	// ignores keys outside these spans.
-	// This is irrelevant if MultiRowFetcher is initialize with only one
+	// This is irrelevant if RowFetcher is initialize with only one
 	// table.
 	Spans            roachpb.Spans
 	Desc             *TableDescriptor
@@ -109,10 +109,10 @@ type MultiRowFetcherTableArgs struct {
 	ValNeededForCol util.FastIntSet
 }
 
-// MultiRowFetcher handles fetching kvs and forming table rows for an
+// RowFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
 // Usage:
-//   var mrf MultiRowFetcher
+//   var mrf RowFetcher
 //   err := mrf.Init(..)
 //   // Handle err
 //   err := mrf.StartScan(..)
@@ -126,7 +126,7 @@ type MultiRowFetcherTableArgs struct {
 //      }
 //      // Process res.row
 //   }
-type MultiRowFetcher struct {
+type RowFetcher struct {
 	// tables is a slice of all the tables and their descriptors for which
 	// rows are returned.
 	tables []tableInfo
@@ -201,15 +201,12 @@ type MultiRowFetcher struct {
 	alloc *DatumAlloc
 }
 
-// Init sets up a MultiRowFetcher for a given table and index. If we are using a
+// Init sets up a RowFetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
-func (mrf *MultiRowFetcher) Init(
+func (mrf *RowFetcher) Init(
 	reverse,
-	returnRangeInfo bool,
-	isCheck bool,
-	alloc *DatumAlloc,
-	tables ...MultiRowFetcherTableArgs,
+	returnRangeInfo bool, isCheck bool, alloc *DatumAlloc, tables ...RowFetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		panic("no tables to fetch from")
@@ -362,7 +359,7 @@ func (mrf *MultiRowFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
-func (mrf *MultiRowFetcher) StartScan(
+func (mrf *RowFetcher) StartScan(
 	ctx context.Context,
 	txn *client.Txn,
 	spans roachpb.Spans,
@@ -399,7 +396,7 @@ func (mrf *MultiRowFetcher) StartScan(
 
 // StartScanFrom initializes and starts a scan from the given kvFetcher. Can be
 // used multiple times.
-func (mrf *MultiRowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
+func (mrf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
 	mrf.indexKey = nil
 	mrf.kvFetcher = f
 	// Retrieve the first key.
@@ -409,7 +406,7 @@ func (mrf *MultiRowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) erro
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
-func (mrf *MultiRowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
+func (mrf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
@@ -476,7 +473,7 @@ func (mrf *MultiRowFetcher) NextKey(ctx context.Context) (rowDone bool, err erro
 	}
 }
 
-func (mrf *MultiRowFetcher) prettyEncDatums(types []ColumnType, vals []EncDatum) string {
+func (mrf *RowFetcher) prettyEncDatums(types []ColumnType, vals []EncDatum) string {
 	var buf bytes.Buffer
 	for i, v := range vals {
 		if err := v.EnsureDecoded(&types[i], mrf.alloc); err != nil {
@@ -489,8 +486,8 @@ func (mrf *MultiRowFetcher) prettyEncDatums(types []ColumnType, vals []EncDatum)
 
 // ReadIndexKey decodes an index key for a given table.
 // It returns whether or not the key is for any of the tables initialized
-// in MultiRowFetcher, and the remaining part of the key if it is.
-func (mrf *MultiRowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, err error) {
+// in RowFetcher, and the remaining part of the key if it is.
+func (mrf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, err error) {
 	// If there is only one table to check keys for, there is no need
 	// to go through the equivalence signature checks.
 	if len(mrf.tables) == 1 {
@@ -565,7 +562,7 @@ func (mrf *MultiRowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok 
 // processKV processes the given key/value, setting values in the row
 // accordingly. If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
-func (mrf *MultiRowFetcher) processKV(
+func (mrf *RowFetcher) processKV(
 	ctx context.Context, kv roachpb.KeyValue,
 ) (prettyKey string, prettyValue string, err error) {
 	table := mrf.currentTable
@@ -698,7 +695,7 @@ func (mrf *MultiRowFetcher) processKV(
 // processValueSingle processes the given value (of column
 // family.DefaultColumnID), setting values in table.row accordingly. The key is
 // only used for logging.
-func (mrf *MultiRowFetcher) processValueSingle(
+func (mrf *RowFetcher) processValueSingle(
 	ctx context.Context,
 	table *tableInfo,
 	family *ColumnFamilyDescriptor,
@@ -752,7 +749,7 @@ func (mrf *MultiRowFetcher) processValueSingle(
 	return prettyKey, prettyValue, nil
 }
 
-func (mrf *MultiRowFetcher) processValueBytes(
+func (mrf *RowFetcher) processValueBytes(
 	ctx context.Context,
 	table *tableInfo,
 	kv roachpb.KeyValue,
@@ -822,7 +819,7 @@ func (mrf *MultiRowFetcher) processValueBytes(
 
 // processValueTuple processes the given values (of columns family.ColumnIDs),
 // setting values in the mrf.row accordingly. The key is only used for logging.
-func (mrf *MultiRowFetcher) processValueTuple(
+func (mrf *RowFetcher) processValueTuple(
 	ctx context.Context, table *tableInfo, kv roachpb.KeyValue, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	tupleBytes, err := kv.Value.GetTuple()
@@ -840,7 +837,7 @@ func (mrf *MultiRowFetcher) processValueTuple(
 // be a scrub.ScrubError, which the caller is responsible for unwrapping.
 // It also returns the table and index descriptor associated with the row
 // (relevant when more than one table is specified during initialization).
-func (mrf *MultiRowFetcher) NextRow(
+func (mrf *RowFetcher) NextRow(
 	ctx context.Context,
 ) (row EncDatumRow, table *TableDescriptor, index *IndexDescriptor, err error) {
 	if mrf.kvEnd {
@@ -881,7 +878,7 @@ func (mrf *MultiRowFetcher) NextRow(
 // When there are no more rows, the Datums is nil.
 // It also returns the table and index descriptor associated with the row
 // (relevant when more than one table is specified during initialization).
-func (mrf *MultiRowFetcher) NextRowDecoded(
+func (mrf *RowFetcher) NextRowDecoded(
 	ctx context.Context,
 ) (datums tree.Datums, table *TableDescriptor, index *IndexDescriptor, err error) {
 	row, table, index, err := mrf.NextRow(ctx)
@@ -916,7 +913,7 @@ func (mrf *MultiRowFetcher) NextRowDecoded(
 //  - There is no extra unexpected or incorrect data encoded in the k/v
 //    pair.
 //  - Decoded keys follow the same ordering as their encoding.
-func (mrf *MultiRowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow, error) {
+func (mrf *RowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow, error) {
 	row, table, index, err := mrf.NextRow(ctx)
 	if row == nil {
 		return nil, nil
@@ -961,7 +958,7 @@ func (mrf *MultiRowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow,
 // checkPrimaryIndexDatumEncodings will run a round-trip encoding check
 // on all values in the buffered row. This check is specific to primary
 // index datums.
-func (mrf *MultiRowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
+func (mrf *RowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 	table := mrf.rowReadyTable
 	scratch := make([]byte, 1024)
 	colIDToColumn := make(map[ColumnID]ColumnDescriptor)
@@ -1017,7 +1014,7 @@ func (mrf *MultiRowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context)
 // checkSecondaryIndexDatumEncodings will run a round-trip encoding
 // check on all values in the buffered row. This check is specific to
 // secondary index datums.
-func (mrf *MultiRowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
+func (mrf *RowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
 	table := mrf.rowReadyTable
 	colToEncDatum := make(map[ColumnID]EncDatum, len(table.row))
 	values := make(tree.Datums, len(table.row))
@@ -1047,7 +1044,7 @@ func (mrf *MultiRowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Contex
 
 // checkKeyOrdering verifies that the datums decoded for the current key
 // have the same ordering as the encoded key.
-func (mrf *MultiRowFetcher) checkKeyOrdering(ctx context.Context) error {
+func (mrf *RowFetcher) checkKeyOrdering(ctx context.Context) error {
 	defer func() {
 		mrf.rowReadyTable.lastDatums = append(tree.Datums(nil), mrf.rowReadyTable.decodedRow...)
 	}()
@@ -1078,7 +1075,7 @@ func (mrf *MultiRowFetcher) checkKeyOrdering(ctx context.Context) error {
 	return nil
 }
 
-func (mrf *MultiRowFetcher) finalizeRow() error {
+func (mrf *RowFetcher) finalizeRow() error {
 	table := mrf.rowReadyTable
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
@@ -1118,13 +1115,13 @@ func (mrf *MultiRowFetcher) finalizeRow() error {
 
 // Key returns the next key (the key that follows the last returned row).
 // Key returns nil when there are no more rows.
-func (mrf *MultiRowFetcher) Key() roachpb.Key {
+func (mrf *RowFetcher) Key() roachpb.Key {
 	return mrf.kv.Key
 }
 
 // GetRangeInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
-func (mrf *MultiRowFetcher) GetRangeInfo() []roachpb.RangeInfo {
+func (mrf *RowFetcher) GetRangeInfo() []roachpb.RangeInfo {
 	return mrf.kvFetcher.getRangesInfo()
 }
 

@@ -98,16 +98,16 @@ The following changes are introduced for running physical checks:
   similar to any regular plan.
 
 - Add a `IsCheck` enum to `scanNode` and plumb it through the
-  `TableReader` for `MultiRowFetcher` initialization during distSQL planning.
+  `TableReader` for `RowFetcher` initialization during distSQL planning.
   This enum would only be meaningfully set during planning of `SCRUB`
   when doing a physical check.
 
-- Modify the `MultiRowFetcher` to conditionally run check code in existing
+- Modify the `RowFetcher` to conditionally run check code in existing
   row fetching code paths, using the `IsCheck` indicator. For example,
   we want to return an error instead of panic when NULL is encountered
   on a non-NULL column.
 
-- Add a new iterator function to `MultiRowFetcher`, `NextRowWithErrors`, for
+- Add a new iterator function to `RowFetcher`, `NextRowWithErrors`, for
   just scanning for errors. In here we can execute additional checking
   code on a separate code path than the critical fetching one. This lets
   us consume check errors instead of row data.
@@ -221,11 +221,11 @@ groupings of certain data (column families), how index data is organized
 
 Most of the checks that involve the physical table are encoding and
 related data validity. This data is already partially checked during
-scanning in `MultiRowFetcher`. Because of this, adding checks is a matter of
+scanning in `RowFetcher`. Because of this, adding checks is a matter of
 a few additive changes, and handling the error to instead return row
 results.
 
-The checks we can implement in `MultiRowFetcher` include:
+The checks we can implement in `RowFetcher` include:
 - Tables using [FAMILY][] have the data organized into families
   correctly
 - Invalid data encodings
@@ -235,8 +235,8 @@ The checks we can implement in `MultiRowFetcher` include:
 - `NOT NULL` constraint violation (not physical table, but checked at
   this layer)
 
-The underlying scanning is in the `MultiRowFetcher`. Inside the current
-`MultiRowFetcher` the method `processKv` is responsible for encoding
+The underlying scanning is in the `RowFetcher`. Inside the current
+`RowFetcher` the method `processKv` is responsible for encoding
 specific work as it iterates over the k/v, which is where the checks
 will be added, including:
 - Check composite encodings are correct and round-trip
@@ -255,7 +255,7 @@ and the returned values will be the `CheckError` as found in the
 there will be very few results relative to the data scanned.
 
 Invalid data encoding (and others) already return an `error` while
-scanning. We want to capture errors in `MultiRowFetcher` that come from
+scanning. We want to capture errors in `RowFetcher` that come from
 any external function calls and wrap them in a `scrub.Error` struct with
 an error code annotated.
 
@@ -263,7 +263,7 @@ Those error structs will be captured further upstream inside the
 TableReader and translated into the row results. In the existing
 scanning code path, this same error struct will simply be unwrapped.
 
-For example, consider this excerpt from `MultiRowFetcher.processValueSingle`:
+For example, consider this excerpt from `RowFetcher.processValueSingle`:
 
 ```go
 value, err := UnmarshalColumnValue(rf.alloc, typ, kv.Value)
@@ -284,7 +284,7 @@ Another chunk of the work will then be plumbing through the check error
 results out as the table schema we are scanning will differ from the
 result rows representing errors. To get around this we must manually
 construct the distSQL physical plan. This will also take some extra code
-to wrap the call from TableReader to MultiRowFetcher where it will transform
+to wrap the call from TableReader to RowFetcher where it will transform
 any caught errors.
 
 [SCRUB interface RFC]: https://github.com/cockroachdb/cockroach/pull/18675
@@ -319,7 +319,7 @@ A challenge here is producing both check errors and the necessary data
 to run index checks simultaneously. It is not currently known if
 multiple different schemas can be streamed out of one table reader.
 
-In the `MultiRowFetcher`, this may look like a `NextRowOrCheckError` iterator
+In the `RowFetcher`, this may look like a `NextRowOrCheckError` iterator
 that may return either row data or check error data, and we emit those
 to the corresponding outputs.
 
@@ -328,8 +328,8 @@ stream which filters out only the columns desired for each consumer --
 either a specific index check (a joiner), or the final result errors (in
 final aggregation).
 
-Alternatively, a crazy idea may modify the MultiRowFetcher or TableReader to
-produce two separate schemas, branching off the idea of MultiMultiRowFetchers
+Alternatively, a crazy idea may modify the RowFetcher or TableReader to
+produce two separate schemas, branching off the idea of RowFetchers
 made for the adjustments for interleaved tables.
 
 
@@ -384,15 +384,15 @@ This has two major problems:
 
 This is by far the easiest method to do as it only involves:
 1) Collect the required secondary index data. The first code path that
-   accesses required data is in `MultiRowFetcher`.
+   accesses required data is in `RowFetcher`.
 2) Do point-lookups for the secondary index entry, and compare.
 
-Step 1 is ideally done in the `MultiRowFetcher` as this is also where we can
+Step 1 is ideally done in the `RowFetcher` as this is also where we can
 avoid passing decoded data further upstream, when we only need check
 errors.
 
 Step 2 can be optimized by batching the k/v lookups, which would be a
-trivial mechanism to add inside `MultiRowFetcher`. In this case, having an
+trivial mechanism to add inside `RowFetcher`. In this case, having an
 alternative `NextRow` called `NextRowWithErrors` makes more sense to not
 add this code to the critical code path.
 

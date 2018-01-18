@@ -38,7 +38,7 @@ type joinReader struct {
 	desc  sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
 
-	fetcher sqlbase.MultiRowFetcher
+	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
 
 	input      RowSource
