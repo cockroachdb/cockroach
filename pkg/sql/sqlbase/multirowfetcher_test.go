@@ -39,10 +39,10 @@ type initFetcherArgs struct {
 
 func initFetcher(
 	entries []initFetcherArgs, reverseScan bool, alloc *DatumAlloc,
-) (fetcher *MultiRowFetcher, err error) {
-	fetcher = &MultiRowFetcher{}
+) (fetcher *RowFetcher, err error) {
+	fetcher = &RowFetcher{}
 
-	fetcherArgs := make([]MultiRowFetcherTableArgs, len(entries))
+	fetcherArgs := make([]RowFetcherTableArgs, len(entries))
 
 	for i, entry := range entries {
 		var index *IndexDescriptor
@@ -60,7 +60,7 @@ func initFetcher(
 			colIdxMap[c.ID] = i
 		}
 
-		fetcherArgs[i] = MultiRowFetcherTableArgs{
+		fetcherArgs[i] = RowFetcherTableArgs{
 			Spans:            entry.spans,
 			Desc:             entry.tableDesc,
 			Index:            index,
@@ -654,12 +654,12 @@ func TestNextRowInterleaved(t *testing.T) {
 		testName := strings.Join(testNames, "-")
 
 		t.Run(testName, func(t *testing.T) {
-			// Initialize the MultiRowFetcher.
+			// Initialize the RowFetcher.
 			args := make([]initFetcherArgs, len(entries))
 			lookupSpans := make([]roachpb.Span, len(entries))
 			// Used during NextRow to see if tableID << 32 |
 			// indexID (key) are with what we initialize
-			// MultiRowFetcher.
+			// RowFetcher.
 			idLookups := make(map[uint64]*fetcherEntryArgs, len(entries))
 			for i, entry := range entries {
 				tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, entry.tableName)

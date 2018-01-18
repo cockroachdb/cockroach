@@ -33,18 +33,18 @@ type cascader struct {
 	alloc      *DatumAlloc
 	evalCtx    *tree.EvalContext
 
-	indexPKRowFetchers map[ID]map[IndexID]MultiRowFetcher // PK RowFetchers by Table ID and Index ID
+	indexPKRowFetchers map[ID]map[IndexID]RowFetcher // PK RowFetchers by Table ID and Index ID
 
 	// Row Deleters
-	rowDeleters        map[ID]RowDeleter      // RowDeleters by Table ID
-	deleterRowFetchers map[ID]MultiRowFetcher // RowFetchers for rowDeleters by Table ID
-	deletedRows        map[ID]*RowContainer   // Rows that have been deleted by Table ID
+	rowDeleters        map[ID]RowDeleter    // RowDeleters by Table ID
+	deleterRowFetchers map[ID]RowFetcher    // RowFetchers for rowDeleters by Table ID
+	deletedRows        map[ID]*RowContainer // Rows that have been deleted by Table ID
 
 	// Row Updaters
-	rowUpdaters        map[ID]RowUpdater      // RowUpdaters by Table ID
-	updaterRowFetchers map[ID]MultiRowFetcher // RowFetchers for rowUpdaters by Table ID
-	originalRows       map[ID]*RowContainer   // Original values for rows that have been updated by Table ID
-	updatedRows        map[ID]*RowContainer   // New values for rows that have been updated by Table ID
+	rowUpdaters        map[ID]RowUpdater    // RowUpdaters by Table ID
+	updaterRowFetchers map[ID]RowFetcher    // RowFetchers for rowUpdaters by Table ID
+	originalRows       map[ID]*RowContainer // Original values for rows that have been updated by Table ID
+	updatedRows        map[ID]*RowContainer // New values for rows that have been updated by Table ID
 }
 
 // makeDeleteCascader only creates a cascader if there is a chance that there is
@@ -92,12 +92,12 @@ Outer:
 	return &cascader{
 		txn:                txn,
 		tablesByID:         tablesByID,
-		indexPKRowFetchers: make(map[ID]map[IndexID]MultiRowFetcher),
+		indexPKRowFetchers: make(map[ID]map[IndexID]RowFetcher),
 		rowDeleters:        make(map[ID]RowDeleter),
-		deleterRowFetchers: make(map[ID]MultiRowFetcher),
+		deleterRowFetchers: make(map[ID]RowFetcher),
 		deletedRows:        make(map[ID]*RowContainer),
 		rowUpdaters:        make(map[ID]RowUpdater),
-		updaterRowFetchers: make(map[ID]MultiRowFetcher),
+		updaterRowFetchers: make(map[ID]RowFetcher),
 		originalRows:       make(map[ID]*RowContainer),
 		updatedRows:        make(map[ID]*RowContainer),
 		evalCtx:            evalCtx,
@@ -165,12 +165,12 @@ Outer:
 	return &cascader{
 		txn:                txn,
 		tablesByID:         tablesByID,
-		indexPKRowFetchers: make(map[ID]map[IndexID]MultiRowFetcher),
+		indexPKRowFetchers: make(map[ID]map[IndexID]RowFetcher),
 		rowDeleters:        make(map[ID]RowDeleter),
-		deleterRowFetchers: make(map[ID]MultiRowFetcher),
+		deleterRowFetchers: make(map[ID]RowFetcher),
 		deletedRows:        make(map[ID]*RowContainer),
 		rowUpdaters:        make(map[ID]RowUpdater),
-		updaterRowFetchers: make(map[ID]MultiRowFetcher),
+		updaterRowFetchers: make(map[ID]RowFetcher),
 		originalRows:       make(map[ID]*RowContainer),
 		updatedRows:        make(map[ID]*RowContainer),
 		evalCtx:            evalCtx,
@@ -295,7 +295,7 @@ func batchRequestForPKValues(
 // action.
 func (c *cascader) addIndexPKRowFetcher(
 	table *TableDescriptor, index *IndexDescriptor,
-) (MultiRowFetcher, error) {
+) (RowFetcher, error) {
 	// Is there a cached row fetcher?
 	rowFetchersForTable, exists := c.indexPKRowFetchers[table.ID]
 	if exists {
@@ -304,7 +304,7 @@ func (c *cascader) addIndexPKRowFetcher(
 			return rowFetcher, nil
 		}
 	} else {
-		c.indexPKRowFetchers[table.ID] = make(map[IndexID]MultiRowFetcher)
+		c.indexPKRowFetchers[table.ID] = make(map[IndexID]RowFetcher)
 	}
 
 	// Create a new row fetcher. Only the primary key columns are required.
@@ -312,20 +312,20 @@ func (c *cascader) addIndexPKRowFetcher(
 	for _, id := range table.PrimaryIndex.ColumnIDs {
 		cDesc, err := table.FindColumnByID(id)
 		if err != nil {
-			return MultiRowFetcher{}, err
+			return RowFetcher{}, err
 		}
 		colDesc = append(colDesc, *cDesc)
 	}
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(colDesc)-1)
 	isSecondary := table.PrimaryIndex.ID != index.ID
-	var rowFetcher MultiRowFetcher
+	var rowFetcher RowFetcher
 	if err := rowFetcher.Init(
 		false, /* reverse */
 		false, /* returnRangeInfo */
 		false, /* isCheck */
 		c.alloc,
-		MultiRowFetcherTableArgs{
+		RowFetcherTableArgs{
 			Desc:             table,
 			Index:            index,
 			ColIdxMap:        ColIDtoRowIndexFromCols(colDesc),
@@ -334,7 +334,7 @@ func (c *cascader) addIndexPKRowFetcher(
 			ValNeededForCol:  valNeededForCol,
 		},
 	); err != nil {
-		return MultiRowFetcher{}, err
+		return RowFetcher{}, err
 	}
 	// Cache the row fetcher.
 	c.indexPKRowFetchers[table.ID][index.ID] = rowFetcher
@@ -342,12 +342,12 @@ func (c *cascader) addIndexPKRowFetcher(
 }
 
 // addRowDeleter creates the row deleter and primary index row fetcher.
-func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, MultiRowFetcher, error) {
+func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, RowFetcher, error) {
 	// Is there a cached row fetcher and deleter?
 	if rowDeleter, exists := c.rowDeleters[table.ID]; exists {
 		rowFetcher, existsFetcher := c.deleterRowFetchers[table.ID]
 		if !existsFetcher {
-			return RowDeleter{}, MultiRowFetcher{}, pgerror.NewErrorf(pgerror.CodeInternalError,
+			return RowDeleter{}, RowFetcher{}, pgerror.NewErrorf(pgerror.CodeInternalError,
 				"programming error: no corresponding row fetcher for the row deleter for table: (%d)%s",
 				table.ID, table.Name,
 			)
@@ -366,14 +366,14 @@ func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, MultiRowFe
 		c.alloc,
 	)
 	if err != nil {
-		return RowDeleter{}, MultiRowFetcher{}, err
+		return RowDeleter{}, RowFetcher{}, err
 	}
 
 	// Create the row fetcher that will retrive the rows and columns needed for
 	// deletion.
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(rowDeleter.FetchCols)-1)
-	tableArgs := MultiRowFetcherTableArgs{
+	tableArgs := RowFetcherTableArgs{
 		Desc:             table,
 		Index:            &table.PrimaryIndex,
 		ColIdxMap:        rowDeleter.FetchColIDtoRowIndex,
@@ -381,7 +381,7 @@ func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, MultiRowFe
 		Cols:             rowDeleter.FetchCols,
 		ValNeededForCol:  valNeededForCol,
 	}
-	var rowFetcher MultiRowFetcher
+	var rowFetcher RowFetcher
 	if err := rowFetcher.Init(
 		false, /* reverse */
 		false, /* returnRangeInfo */
@@ -389,7 +389,7 @@ func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, MultiRowFe
 		c.alloc,
 		tableArgs,
 	); err != nil {
-		return RowDeleter{}, MultiRowFetcher{}, err
+		return RowDeleter{}, RowFetcher{}, err
 	}
 
 	// Cache both the fetcher and deleter.
@@ -399,13 +399,13 @@ func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, MultiRowFe
 }
 
 // addRowUpdater creates the row updater and primary index row fetcher.
-func (c *cascader) addRowUpdater(table *TableDescriptor) (RowUpdater, MultiRowFetcher, error) {
+func (c *cascader) addRowUpdater(table *TableDescriptor) (RowUpdater, RowFetcher, error) {
 	// Is there a cached updater?
 	rowUpdater, existsUpdater := c.rowUpdaters[table.ID]
 	if existsUpdater {
 		rowFetcher, existsFetcher := c.updaterRowFetchers[table.ID]
 		if !existsFetcher {
-			return RowUpdater{}, MultiRowFetcher{}, pgerror.NewErrorf(pgerror.CodeInternalError,
+			return RowUpdater{}, RowFetcher{}, pgerror.NewErrorf(pgerror.CodeInternalError,
 				"programming error: no corresponding row fetcher for the row updater for table: (%d)%s",
 				table.ID, table.Name,
 			)
@@ -425,14 +425,14 @@ func (c *cascader) addRowUpdater(table *TableDescriptor) (RowUpdater, MultiRowFe
 		c.alloc,
 	)
 	if err != nil {
-		return RowUpdater{}, MultiRowFetcher{}, err
+		return RowUpdater{}, RowFetcher{}, err
 	}
 
 	// Create the row fetcher that will retrive the rows and columns needed for
 	// deletion.
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(rowUpdater.FetchCols)-1)
-	tableArgs := MultiRowFetcherTableArgs{
+	tableArgs := RowFetcherTableArgs{
 		Desc:             table,
 		Index:            &table.PrimaryIndex,
 		ColIdxMap:        rowUpdater.FetchColIDtoRowIndex,
@@ -440,7 +440,7 @@ func (c *cascader) addRowUpdater(table *TableDescriptor) (RowUpdater, MultiRowFe
 		Cols:             rowUpdater.FetchCols,
 		ValNeededForCol:  valNeededForCol,
 	}
-	var rowFetcher MultiRowFetcher
+	var rowFetcher RowFetcher
 	if err := rowFetcher.Init(
 		false, /* reverse */
 		false, /* returnRangeInfo */
@@ -448,7 +448,7 @@ func (c *cascader) addRowUpdater(table *TableDescriptor) (RowUpdater, MultiRowFe
 		c.alloc,
 		tableArgs,
 	); err != nil {
-		return RowUpdater{}, MultiRowFetcher{}, err
+		return RowUpdater{}, RowFetcher{}, err
 	}
 
 	// Cache the updater and the fetcher.
