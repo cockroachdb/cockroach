@@ -26,7 +26,7 @@ import (
 // group may return rows or columns in a different order, or compute the
 // result using different algorithms, the complete set of data is returned
 // and can be transformed into whatever layout or presentation format that is
-// is desired.
+// desired.
 type LogicalProps struct {
 	// Relational contains the set of properties that describe relational
 	// operators, like select, join, and project. It is nil for scalar
