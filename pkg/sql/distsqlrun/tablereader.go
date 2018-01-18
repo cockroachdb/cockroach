@@ -56,7 +56,7 @@ type tableReader struct {
 	spans     roachpb.Spans
 	limitHint int64
 
-	fetcher sqlbase.MultiRowFetcher
+	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
 
 	isCheck bool
@@ -152,7 +152,7 @@ func newTableReader(
 }
 
 func initRowFetcher(
-	fetcher *sqlbase.MultiRowFetcher,
+	fetcher *sqlbase.RowFetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
 	reverseScan bool,
@@ -170,7 +170,7 @@ func initRowFetcher(
 		colIdxMap[c.ID] = i
 	}
 
-	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,

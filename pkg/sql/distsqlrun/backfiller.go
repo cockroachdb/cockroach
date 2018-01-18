@@ -60,7 +60,7 @@ type backfiller struct {
 	spec    BackfillerSpec
 	output  RowReceiver
 	flowCtx *FlowCtx
-	fetcher sqlbase.MultiRowFetcher
+	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
 }
 

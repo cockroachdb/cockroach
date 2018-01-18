@@ -121,7 +121,7 @@ func (cb *columnBackfiller) init() error {
 		colIdxMap[c.ID] = i
 	}
 
-	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:            &desc,
 		Index:           &desc.PrimaryIndex,
 		ColIdxMap:       colIdxMap,

@@ -110,7 +110,7 @@ func (ib *indexBackfiller) init() error {
 		}
 	}
 
-	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:            &desc,
 		Index:           &desc.PrimaryIndex,
 		ColIdxMap:       ib.colIdxMap,
