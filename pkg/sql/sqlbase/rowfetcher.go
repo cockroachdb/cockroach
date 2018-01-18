@@ -112,13 +112,13 @@ type RowFetcherTableArgs struct {
 // RowFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
 // Usage:
-//   var mrf RowFetcher
-//   err := mrf.Init(..)
+//   var rf RowFetcher
+//   err := rf.Init(..)
 //   // Handle err
-//   err := mrf.StartScan(..)
+//   err := rf.StartScan(..)
 //   // Handle err
 //   for {
-//      res, err := mrf.NextRow()
+//      res, err := rf.NextRow()
 //      // Handle err
 //      if res.row == nil {
 //         // Done
@@ -204,7 +204,7 @@ type RowFetcher struct {
 // Init sets up a RowFetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
-func (mrf *RowFetcher) Init(
+func (rf *RowFetcher) Init(
 	reverse,
 	returnRangeInfo bool, isCheck bool, alloc *DatumAlloc, tables ...RowFetcherTableArgs,
 ) error {
@@ -212,17 +212,17 @@ func (mrf *RowFetcher) Init(
 		panic("no tables to fetch from")
 	}
 
-	mrf.reverse = reverse
-	mrf.returnRangeInfo = returnRangeInfo
-	mrf.alloc = alloc
-	mrf.allEquivSignatures = make(map[string]int, len(tables))
-	mrf.isCheck = isCheck
+	rf.reverse = reverse
+	rf.returnRangeInfo = returnRangeInfo
+	rf.alloc = alloc
+	rf.allEquivSignatures = make(map[string]int, len(tables))
+	rf.isCheck = isCheck
 
 	// We must always decode the index key if we need to distinguish between
 	// rows from more than one table.
-	mrf.mustDecodeIndexKey = len(tables) >= 2
+	rf.mustDecodeIndexKey = len(tables) >= 2
 
-	mrf.tables = make([]tableInfo, 0, len(tables))
+	rf.tables = make([]tableInfo, 0, len(tables))
 	for tableIdx, tableArgs := range tables {
 		table := tableInfo{
 			spans:            tableArgs.Spans,
@@ -248,7 +248,7 @@ func (mrf *RowFetcher) Init(
 				// This allows us to overwrite previous "ancestor
 				// signatures" (see below).
 				if i == len(equivSignatures)-1 {
-					mrf.allEquivSignatures[string(sig)] = tableIdx
+					rf.allEquivSignatures[string(sig)] = tableIdx
 					break
 				}
 				// Map each table's ancestors' signatures to -1 so
@@ -258,8 +258,8 @@ func (mrf *RowFetcher) Init(
 				// since it's possible for a later 'table' to have an
 				// ancestor that is a previous 'table', and we do not
 				// want to overwrite the previous table's tableIdx.
-				if _, exists := mrf.allEquivSignatures[string(sig)]; !exists {
-					mrf.allEquivSignatures[string(sig)] = -1
+				if _, exists := rf.allEquivSignatures[string(sig)]; !exists {
+					rf.allEquivSignatures[string(sig)] = -1
 				}
 			}
 			// The last signature is the given table's equivalence signature.
@@ -286,11 +286,11 @@ func (mrf *RowFetcher) Init(
 		// TODO(jordan): Relax this restriction. Ideally we could skip doing key
 		// reading work if we need values from outside of the key, but not from
 		// inside of the key.
-		if !mrf.mustDecodeIndexKey && (!table.neededCols.Empty() || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0) {
-			mrf.mustDecodeIndexKey = true
+		if !rf.mustDecodeIndexKey && (!table.neededCols.Empty() || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0) {
+			rf.mustDecodeIndexKey = true
 		}
 
-		mrf.knownPrefixLength = len(MakeIndexKeyPrefix(table.desc, table.index.ID))
+		rf.knownPrefixLength = len(MakeIndexKeyPrefix(table.desc, table.index.ID))
 
 		var indexColumnIDs []ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
@@ -307,7 +307,7 @@ func (mrf *RowFetcher) Init(
 		// The number of columns we need to read from the value part of the key.
 		// It's the total number of needed columns minus the ones we read from the
 		// index key, except for composite columns.
-		mrf.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
+		rf.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
 
 		if table.isSecondaryIndex {
 			for i := range table.cols {
@@ -339,19 +339,19 @@ func (mrf *RowFetcher) Init(
 
 		// Keep track of the maximum keys per row to accommodate a
 		// limitHint when StartScan is invoked.
-		if keysPerRow := table.desc.KeysPerRow(table.index.ID); keysPerRow > mrf.maxKeysPerRow {
-			mrf.maxKeysPerRow = keysPerRow
+		if keysPerRow := table.desc.KeysPerRow(table.index.ID); keysPerRow > rf.maxKeysPerRow {
+			rf.maxKeysPerRow = keysPerRow
 		}
 
-		mrf.tables = append(mrf.tables, table)
+		rf.tables = append(rf.tables, table)
 	}
 
 	if len(tables) == 1 {
 		// If there is more than one table, currentTable will be
 		// updated every time NextKey is invoked and rowReadyTable
 		// will be updated when a row is fully decoded.
-		mrf.currentTable = &(mrf.tables[0])
-		mrf.rowReadyTable = &(mrf.tables[0])
+		rf.currentTable = &(rf.tables[0])
+		rf.rowReadyTable = &(rf.tables[0])
 	}
 
 	return nil
@@ -359,7 +359,7 @@ func (mrf *RowFetcher) Init(
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
-func (mrf *RowFetcher) StartScan(
+func (rf *RowFetcher) StartScan(
 	ctx context.Context,
 	txn *client.Txn,
 	spans roachpb.Spans,
@@ -371,7 +371,7 @@ func (mrf *RowFetcher) StartScan(
 		panic("no spans")
 	}
 
-	mrf.traceKV = traceKV
+	rf.traceKV = traceKV
 
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
@@ -382,51 +382,51 @@ func (mrf *RowFetcher) StartScan(
 		// of more than one key. We take the maximum possible keys
 		// per row out of all the table rows we could potentially
 		// scan over.
-		firstBatchLimit = limitHint * int64(mrf.maxKeysPerRow)
+		firstBatchLimit = limitHint * int64(rf.maxKeysPerRow)
 		// We need an extra key to make sure we form the last row.
 		firstBatchLimit++
 	}
 
-	f, err := makeKVFetcher(txn, spans, mrf.reverse, limitBatches, firstBatchLimit, mrf.returnRangeInfo)
+	f, err := makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
 	if err != nil {
 		return err
 	}
-	return mrf.StartScanFrom(ctx, &f)
+	return rf.StartScanFrom(ctx, &f)
 }
 
 // StartScanFrom initializes and starts a scan from the given kvFetcher. Can be
 // used multiple times.
-func (mrf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
-	mrf.indexKey = nil
-	mrf.kvFetcher = f
+func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
+	rf.indexKey = nil
+	rf.kvFetcher = f
 	// Retrieve the first key.
-	_, err := mrf.NextKey(ctx)
+	_, err := rf.NextKey(ctx)
 	return err
 }
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
-func (mrf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
+func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, mrf.kv, err = mrf.kvFetcher.nextKV(ctx)
+		ok, rf.kv, err = rf.kvFetcher.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
-		mrf.kvEnd = !ok
-		if mrf.kvEnd {
+		rf.kvEnd = !ok
+		if rf.kvEnd {
 			// No more keys in the scan. We need to transition
-			// mrf.rowReadyTable to mrf.currentTable for the last
+			// rf.rowReadyTable to rf.currentTable for the last
 			// row.
-			mrf.rowReadyTable = mrf.currentTable
+			rf.rowReadyTable = rf.currentTable
 			return true, nil
 		}
 
 		// See Init() for a detailed description of when we can get away with not
 		// reading the index key.
-		if mrf.mustDecodeIndexKey || mrf.traceKV {
-			mrf.keyRemainingBytes, ok, err = mrf.ReadIndexKey(mrf.kv.Key)
+		if rf.mustDecodeIndexKey || rf.traceKV {
+			rf.keyRemainingBytes, ok, err = rf.ReadIndexKey(rf.kv.Key)
 			if err != nil {
 				return false, err
 			}
@@ -440,11 +440,11 @@ func (mrf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			// We still need to consume the key until the family
 			// id, so processKV can know whether we've finished a
 			// row or not.
-			prefixLen, err := keys.GetRowPrefixLength(mrf.kv.Key)
+			prefixLen, err := keys.GetRowPrefixLength(rf.kv.Key)
 			if err != nil {
 				return false, err
 			}
-			mrf.keyRemainingBytes = mrf.kv.Key[prefixLen:]
+			rf.keyRemainingBytes = rf.kv.Key[prefixLen:]
 		}
 
 		// For unique secondary indexes, the index-key does not distinguish one row
@@ -460,12 +460,12 @@ func (mrf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		// we could detect this case and enlarge the index-key. A simpler fix for
 		// this problem is to simply always output a row for each key scanned from a
 		// secondary index as secondary indexes have only one key per row.
-		// If mrf.rowReadyTable differs from mrf.currentTable, this denotes
+		// If rf.rowReadyTable differs from rf.currentTable, this denotes
 		// a row is ready for output.
-		if mrf.indexKey != nil && (mrf.currentTable.isSecondaryIndex || !bytes.HasPrefix(mrf.kv.Key, mrf.indexKey) || mrf.rowReadyTable != mrf.currentTable) {
+		if rf.indexKey != nil && (rf.currentTable.isSecondaryIndex || !bytes.HasPrefix(rf.kv.Key, rf.indexKey) || rf.rowReadyTable != rf.currentTable) {
 			// The current key belongs to a new row. Output the
 			// current row.
-			mrf.indexKey = nil
+			rf.indexKey = nil
 			return true, nil
 		}
 
@@ -473,10 +473,10 @@ func (mrf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	}
 }
 
-func (mrf *RowFetcher) prettyEncDatums(types []ColumnType, vals []EncDatum) string {
+func (rf *RowFetcher) prettyEncDatums(types []ColumnType, vals []EncDatum) string {
 	var buf bytes.Buffer
 	for i, v := range vals {
-		if err := v.EnsureDecoded(&types[i], mrf.alloc); err != nil {
+		if err := v.EnsureDecoded(&types[i], rf.alloc); err != nil {
 			fmt.Fprintf(&buf, "error decoding: %v", err)
 		}
 		fmt.Fprintf(&buf, "/%v", v.Datum)
@@ -487,17 +487,17 @@ func (mrf *RowFetcher) prettyEncDatums(types []ColumnType, vals []EncDatum) stri
 // ReadIndexKey decodes an index key for a given table.
 // It returns whether or not the key is for any of the tables initialized
 // in RowFetcher, and the remaining part of the key if it is.
-func (mrf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, err error) {
+func (rf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, err error) {
 	// If there is only one table to check keys for, there is no need
 	// to go through the equivalence signature checks.
-	if len(mrf.tables) == 1 {
+	if len(rf.tables) == 1 {
 		return DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-			mrf.currentTable.desc,
-			mrf.currentTable.index,
-			mrf.currentTable.keyValTypes,
-			mrf.currentTable.keyVals,
-			mrf.currentTable.indexColumnDirs,
-			key[mrf.knownPrefixLength:],
+			rf.currentTable.desc,
+			rf.currentTable.index,
+			rf.currentTable.keyValTypes,
+			rf.currentTable.keyVals,
+			rf.currentTable.indexColumnDirs,
+			key[rf.knownPrefixLength:],
 		)
 	}
 
@@ -507,13 +507,13 @@ func (mrf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool,
 
 	// key now contains the bytes in the key (if match) that are not part
 	// of the signature in order.
-	tableIdx, key, match, err := IndexKeyEquivSignature(key, mrf.allEquivSignatures, mrf.keySigBuf, mrf.keyRestBuf)
+	tableIdx, key, match, err := IndexKeyEquivSignature(key, rf.allEquivSignatures, rf.keySigBuf, rf.keyRestBuf)
 	if err != nil {
 		return nil, false, err
 	}
 	// The index key does not belong to our table because either:
 	// !match:	    part of the index key's signature did not match any of
-	//		    mrf.allEquivSignatures.
+	//		    rf.allEquivSignatures.
 	// tableIdx == -1:  index key belongs to an ancestor.
 	if !match || tableIdx == -1 {
 		return nil, false, nil
@@ -526,22 +526,22 @@ func (mrf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool,
 	// the last span we've checked for each table. We can pass in this
 	// information to ContainsKey as a hint for which span to start
 	// checking first.
-	if !mrf.tables[tableIdx].spans.ContainsKey(initialKey) {
+	if !rf.tables[tableIdx].spans.ContainsKey(initialKey) {
 		return nil, false, nil
 	}
 
 	// Either a new table is encountered or the rowReadyTable differs from
 	// the currentTable (the rowReadyTable was outputted in the previous
 	// read). We transition the references.
-	if &mrf.tables[tableIdx] != mrf.currentTable || mrf.rowReadyTable != mrf.currentTable {
-		mrf.rowReadyTable = mrf.currentTable
-		mrf.currentTable = &mrf.tables[tableIdx]
+	if &rf.tables[tableIdx] != rf.currentTable || rf.rowReadyTable != rf.currentTable {
+		rf.rowReadyTable = rf.currentTable
+		rf.currentTable = &rf.tables[tableIdx]
 
-		// mrf.rowReadyTable is nil if this is the very first key.
-		// We want to ensure this does not differ from mrf.currentTable
+		// rf.rowReadyTable is nil if this is the very first key.
+		// We want to ensure this does not differ from rf.currentTable
 		// to prevent another transition.
-		if mrf.rowReadyTable == nil {
-			mrf.rowReadyTable = mrf.currentTable
+		if rf.rowReadyTable == nil {
+			rf.rowReadyTable = rf.currentTable
 		}
 	}
 
@@ -549,8 +549,8 @@ func (mrf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool,
 	// when processing the index key. The column values are at the
 	// front of the key.
 	if key, err = DecodeKeyVals(
-		mrf.currentTable.keyVals,
-		mrf.currentTable.indexColumnDirs,
+		rf.currentTable.keyVals,
+		rf.currentTable.indexColumnDirs,
 		key,
 	); err != nil {
 		return nil, false, err
@@ -562,25 +562,25 @@ func (mrf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool,
 // processKV processes the given key/value, setting values in the row
 // accordingly. If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
-func (mrf *RowFetcher) processKV(
+func (rf *RowFetcher) processKV(
 	ctx context.Context, kv roachpb.KeyValue,
 ) (prettyKey string, prettyValue string, err error) {
-	table := mrf.currentTable
+	table := rf.currentTable
 
-	if mrf.traceKV {
+	if rf.traceKV {
 		prettyKey = fmt.Sprintf(
 			"/%s/%s%s",
 			table.desc.Name,
 			table.index.Name,
-			mrf.prettyEncDatums(table.keyValTypes, table.keyVals),
+			rf.prettyEncDatums(table.keyValTypes, table.keyVals),
 		)
 	}
 
 	// Either this is the first key of the fetch or the first key of a new
 	// row.
-	if mrf.indexKey == nil {
+	if rf.indexKey == nil {
 		// This is the first key for the row.
-		mrf.indexKey = []byte(kv.Key[:len(kv.Key)-len(mrf.keyRemainingBytes)])
+		rf.indexKey = []byte(kv.Key[:len(kv.Key)-len(rf.keyRemainingBytes)])
 
 		// Reset the row to nil; it will get filled in with the column
 		// values as we decode the key-value pairs for the row.
@@ -593,18 +593,18 @@ func (mrf *RowFetcher) processKV(
 			table.row[table.indexColIdx[i]] = table.keyVals[i]
 		}
 
-		mrf.valueColsFound = 0
+		rf.valueColsFound = 0
 	}
 
 	if table.neededCols.Empty() {
 		// We don't need to decode any values.
-		if mrf.traceKV {
+		if rf.traceKV {
 			prettyValue = tree.DNull.String()
 		}
 		return prettyKey, prettyValue, nil
 	}
 
-	if !table.isSecondaryIndex && len(mrf.keyRemainingBytes) > 0 {
+	if !table.isSecondaryIndex && len(rf.keyRemainingBytes) > 0 {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
 		// (obtained from the key encoding) might not be correct (e.g. for decimals,
@@ -620,10 +620,10 @@ func (mrf *RowFetcher) processKV(
 			// In this case, we don't need to decode the column family ID, because
 			// the ValueType_TUPLE encoding includes the column id with every encoded
 			// column value.
-			prettyKey, prettyValue, err = mrf.processValueTuple(ctx, table, kv, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueTuple(ctx, table, kv, prettyKey)
 		default:
 			var familyID uint64
-			_, familyID, err = encoding.DecodeUvarintAscending(mrf.keyRemainingBytes)
+			_, familyID, err = encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
@@ -634,7 +634,7 @@ func (mrf *RowFetcher) processKV(
 				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
 
-			prettyKey, prettyValue, err = mrf.processValueSingle(ctx, table, family, kv, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, kv, prettyKey)
 		}
 		if err != nil {
 			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
@@ -662,21 +662,21 @@ func (mrf *RowFetcher) processKV(
 					table.row[table.colIdxMap[id]] = table.extraVals[i]
 				}
 			}
-			if mrf.traceKV {
-				prettyValue = mrf.prettyEncDatums(table.extraTypes, table.extraVals)
+			if rf.traceKV {
+				prettyValue = rf.prettyEncDatums(table.extraTypes, table.extraVals)
 			}
 		}
 
 		if debugRowFetch {
 			if hasExtraCols(table) {
-				log.Infof(ctx, "Scan %s -> %s", kv.Key, mrf.prettyEncDatums(table.extraTypes, table.extraVals))
+				log.Infof(ctx, "Scan %s -> %s", kv.Key, rf.prettyEncDatums(table.extraTypes, table.extraVals))
 			} else {
 				log.Infof(ctx, "Scan %s", kv.Key)
 			}
 		}
 
 		if len(valueBytes) > 0 {
-			prettyKey, prettyValue, err = mrf.processValueBytes(
+			prettyKey, prettyValue, err = rf.processValueBytes(
 				ctx, table, kv, valueBytes, prettyKey,
 			)
 			if err != nil {
@@ -685,7 +685,7 @@ func (mrf *RowFetcher) processKV(
 		}
 	}
 
-	if mrf.traceKV && prettyValue == "" {
+	if rf.traceKV && prettyValue == "" {
 		prettyValue = tree.DNull.String()
 	}
 
@@ -695,7 +695,7 @@ func (mrf *RowFetcher) processKV(
 // processValueSingle processes the given value (of column
 // family.DefaultColumnID), setting values in table.row accordingly. The key is
 // only used for logging.
-func (mrf *RowFetcher) processValueSingle(
+func (rf *RowFetcher) processValueSingle(
 	ctx context.Context,
 	table *tableInfo,
 	family *ColumnFamilyDescriptor,
@@ -715,9 +715,9 @@ func (mrf *RowFetcher) processValueSingle(
 		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
-	if mrf.traceKV || table.neededCols.Contains(int(colID)) {
+	if rf.traceKV || table.neededCols.Contains(int(colID)) {
 		if idx, ok := table.colIdxMap[colID]; ok {
-			if mrf.traceKV {
+			if rf.traceKV {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
 			}
 			typ := table.cols[idx].Type
@@ -726,11 +726,11 @@ func (mrf *RowFetcher) processValueSingle(
 			// although that would require changing UnmarshalColumnValue to operate
 			// on bytes, and for Encode/DecodeTableValue to operate on marshaled
 			// single values.
-			value, err := UnmarshalColumnValue(mrf.alloc, typ, kv.Value)
+			value, err := UnmarshalColumnValue(rf.alloc, typ, kv.Value)
 			if err != nil {
 				return "", "", err
 			}
-			if mrf.traceKV {
+			if rf.traceKV {
 				prettyValue = value.String()
 			}
 			table.row[idx] = DatumToEncDatum(typ, value)
@@ -749,7 +749,7 @@ func (mrf *RowFetcher) processValueSingle(
 	return prettyKey, prettyValue, nil
 }
 
-func (mrf *RowFetcher) processValueBytes(
+func (rf *RowFetcher) processValueBytes(
 	ctx context.Context,
 	table *tableInfo,
 	kv roachpb.KeyValue,
@@ -757,18 +757,18 @@ func (mrf *RowFetcher) processValueBytes(
 	prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
-	if mrf.traceKV {
-		if mrf.prettyValueBuf == nil {
-			mrf.prettyValueBuf = &bytes.Buffer{}
+	if rf.traceKV {
+		if rf.prettyValueBuf == nil {
+			rf.prettyValueBuf = &bytes.Buffer{}
 		}
-		mrf.prettyValueBuf.Reset()
+		rf.prettyValueBuf.Reset()
 	}
 
 	var colIDDiff uint32
 	var lastColID ColumnID
 	var typeOffset, dataOffset int
 	var typ encoding.Type
-	for len(valueBytes) > 0 && mrf.valueColsFound < mrf.neededValueCols {
+	for len(valueBytes) > 0 && rf.valueColsFound < rf.neededValueCols {
 		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
@@ -789,7 +789,7 @@ func (mrf *RowFetcher) processValueBytes(
 		}
 		idx := table.colIdxMap[colID]
 
-		if mrf.traceKV {
+		if rf.traceKV {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
 		}
 
@@ -798,35 +798,35 @@ func (mrf *RowFetcher) processValueBytes(
 		if err != nil {
 			return "", "", err
 		}
-		if mrf.traceKV {
-			err := encValue.EnsureDecoded(&table.cols[idx].Type, mrf.alloc)
+		if rf.traceKV {
+			err := encValue.EnsureDecoded(&table.cols[idx].Type, rf.alloc)
 			if err != nil {
 				return "", "", err
 			}
-			fmt.Fprintf(mrf.prettyValueBuf, "/%v", encValue.Datum)
+			fmt.Fprintf(rf.prettyValueBuf, "/%v", encValue.Datum)
 		}
 		table.row[idx] = encValue
-		mrf.valueColsFound++
+		rf.valueColsFound++
 		if debugRowFetch {
 			log.Infof(ctx, "Scan %d -> %v", idx, encValue)
 		}
 	}
-	if mrf.traceKV {
-		prettyValue = mrf.prettyValueBuf.String()
+	if rf.traceKV {
+		prettyValue = rf.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
 }
 
 // processValueTuple processes the given values (of columns family.ColumnIDs),
-// setting values in the mrf.row accordingly. The key is only used for logging.
-func (mrf *RowFetcher) processValueTuple(
+// setting values in the rf.row accordingly. The key is only used for logging.
+func (rf *RowFetcher) processValueTuple(
 	ctx context.Context, table *tableInfo, kv roachpb.KeyValue, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	tupleBytes, err := kv.Value.GetTuple()
 	if err != nil {
 		return "", "", err
 	}
-	return mrf.processValueBytes(ctx, table, kv, tupleBytes, prettyKeyPrefix)
+	return rf.processValueBytes(ctx, table, kv, tupleBytes, prettyKeyPrefix)
 }
 
 // NextRow processes keys until we complete one row, which is returned as an
@@ -837,10 +837,10 @@ func (mrf *RowFetcher) processValueTuple(
 // be a scrub.ScrubError, which the caller is responsible for unwrapping.
 // It also returns the table and index descriptor associated with the row
 // (relevant when more than one table is specified during initialization).
-func (mrf *RowFetcher) NextRow(
+func (rf *RowFetcher) NextRow(
 	ctx context.Context,
 ) (row EncDatumRow, table *TableDescriptor, index *IndexDescriptor, err error) {
-	if mrf.kvEnd {
+	if rf.kvEnd {
 		return nil, nil, nil, nil
 	}
 
@@ -851,24 +851,24 @@ func (mrf *RowFetcher) NextRow(
 	// into a map keyed by column name. When the index key changes we
 	// output a row containing the current values.
 	for {
-		prettyKey, prettyVal, err := mrf.processKV(ctx, mrf.kv)
+		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		if mrf.traceKV {
+		if rf.traceKV {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 
-		if mrf.isCheck {
-			mrf.rowReadyTable.lastKV = mrf.kv
+		if rf.isCheck {
+			rf.rowReadyTable.lastKV = rf.kv
 		}
-		rowDone, err := mrf.NextKey(ctx)
+		rowDone, err := rf.NextKey(ctx)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		if rowDone {
-			err := mrf.finalizeRow()
-			return mrf.rowReadyTable.row, mrf.rowReadyTable.desc, mrf.rowReadyTable.index, err
+			err := rf.finalizeRow()
+			return rf.rowReadyTable.row, rf.rowReadyTable.desc, rf.rowReadyTable.index, err
 		}
 	}
 }
@@ -878,10 +878,10 @@ func (mrf *RowFetcher) NextRow(
 // When there are no more rows, the Datums is nil.
 // It also returns the table and index descriptor associated with the row
 // (relevant when more than one table is specified during initialization).
-func (mrf *RowFetcher) NextRowDecoded(
+func (rf *RowFetcher) NextRowDecoded(
 	ctx context.Context,
 ) (datums tree.Datums, table *TableDescriptor, index *IndexDescriptor, err error) {
-	row, table, index, err := mrf.NextRow(ctx)
+	row, table, index, err := rf.NextRow(ctx)
 	if err != nil {
 		err = scrub.UnwrapScrubError(err)
 		return nil, nil, nil, err
@@ -892,16 +892,16 @@ func (mrf *RowFetcher) NextRowDecoded(
 
 	for i, encDatum := range row {
 		if encDatum.IsUnset() {
-			mrf.rowReadyTable.decodedRow[i] = tree.DNull
+			rf.rowReadyTable.decodedRow[i] = tree.DNull
 			continue
 		}
-		if err := encDatum.EnsureDecoded(&mrf.rowReadyTable.cols[i].Type, mrf.alloc); err != nil {
+		if err := encDatum.EnsureDecoded(&rf.rowReadyTable.cols[i].Type, rf.alloc); err != nil {
 			return nil, nil, nil, err
 		}
-		mrf.rowReadyTable.decodedRow[i] = encDatum.Datum
+		rf.rowReadyTable.decodedRow[i] = encDatum.Datum
 	}
 
-	return mrf.rowReadyTable.decodedRow, table, index, nil
+	return rf.rowReadyTable.decodedRow, table, index, nil
 }
 
 // NextRowWithErrors calls NextRow to fetch the next row and also run
@@ -913,8 +913,8 @@ func (mrf *RowFetcher) NextRowDecoded(
 //  - There is no extra unexpected or incorrect data encoded in the k/v
 //    pair.
 //  - Decoded keys follow the same ordering as their encoding.
-func (mrf *RowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow, error) {
-	row, table, index, err := mrf.NextRow(ctx)
+func (rf *RowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow, error) {
+	row, table, index, err := rf.NextRow(ctx)
 	if row == nil {
 		return nil, nil
 	} else if err != nil {
@@ -932,25 +932,25 @@ func (mrf *RowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow, erro
 	// functions require that the table.row datums are decoded.
 	for i := range row {
 		if row[i].IsUnset() {
-			mrf.rowReadyTable.decodedRow[i] = tree.DNull
+			rf.rowReadyTable.decodedRow[i] = tree.DNull
 			continue
 		}
-		if err := row[i].EnsureDecoded(&mrf.rowReadyTable.cols[i].Type, mrf.alloc); err != nil {
+		if err := row[i].EnsureDecoded(&rf.rowReadyTable.cols[i].Type, rf.alloc); err != nil {
 			return nil, err
 		}
-		mrf.rowReadyTable.decodedRow[i] = row[i].Datum
+		rf.rowReadyTable.decodedRow[i] = row[i].Datum
 	}
 
 	if index.ID == table.PrimaryIndex.ID {
-		err = mrf.checkPrimaryIndexDatumEncodings(ctx)
+		err = rf.checkPrimaryIndexDatumEncodings(ctx)
 	} else {
-		err = mrf.checkSecondaryIndexDatumEncodings(ctx)
+		err = rf.checkSecondaryIndexDatumEncodings(ctx)
 	}
 	if err != nil {
 		return row, err
 	}
 
-	err = mrf.checkKeyOrdering(ctx)
+	err = rf.checkKeyOrdering(ctx)
 
 	return row, err
 }
@@ -958,8 +958,8 @@ func (mrf *RowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow, erro
 // checkPrimaryIndexDatumEncodings will run a round-trip encoding check
 // on all values in the buffered row. This check is specific to primary
 // index datums.
-func (mrf *RowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
-	table := mrf.rowReadyTable
+func (rf *RowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
+	table := rf.rowReadyTable
 	scratch := make([]byte, 1024)
 	colIDToColumn := make(map[ColumnID]ColumnDescriptor)
 	for _, col := range table.desc.Columns {
@@ -1004,7 +1004,7 @@ func (mrf *RowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) erro
 			} else if !bytes.Equal(result, rowVal.encoded) {
 				return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
 					"value failed to round-trip encode. Column=%s colIDDiff=%d Key=%s expected %#v, got: %#v",
-					col.Name, colIDDiff, mrf.kv.Key, rowVal.encoded, result))
+					col.Name, colIDDiff, rf.kv.Key, rowVal.encoded, result))
 			}
 		}
 	}
@@ -1014,8 +1014,8 @@ func (mrf *RowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) erro
 // checkSecondaryIndexDatumEncodings will run a round-trip encoding
 // check on all values in the buffered row. This check is specific to
 // secondary index datums.
-func (mrf *RowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
-	table := mrf.rowReadyTable
+func (rf *RowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
+	table := rf.rowReadyTable
 	colToEncDatum := make(map[ColumnID]EncDatum, len(table.row))
 	values := make(tree.Datums, len(table.row))
 	for i, col := range table.cols {
@@ -1030,38 +1030,38 @@ func (mrf *RowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) er
 
 	// We ignore the first 4 bytes of the values. These bytes are a
 	// checksum which are not set by EncodeSecondaryIndex.
-	if !indexEntry.Key.Equal(mrf.rowReadyTable.lastKV.Key) {
+	if !indexEntry.Key.Equal(rf.rowReadyTable.lastKV.Key) {
 		return scrub.WrapError(scrub.IndexKeyDecodingError, errors.Errorf(
 			"secondary index key failed to round-trip encode. expected %#v, got: %#v",
-			mrf.rowReadyTable.lastKV.Key, indexEntry.Key))
+			rf.rowReadyTable.lastKV.Key, indexEntry.Key))
 	} else if !bytes.Equal(indexEntry.Value.RawBytes[4:], table.lastKV.Value.RawBytes[4:]) {
 		return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
 			"secondary index value failed to round-trip encode. expected %#v, got: %#v",
-			mrf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry.Value.RawBytes[4:]))
+			rf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry.Value.RawBytes[4:]))
 	}
 	return nil
 }
 
 // checkKeyOrdering verifies that the datums decoded for the current key
 // have the same ordering as the encoded key.
-func (mrf *RowFetcher) checkKeyOrdering(ctx context.Context) error {
+func (rf *RowFetcher) checkKeyOrdering(ctx context.Context) error {
 	defer func() {
-		mrf.rowReadyTable.lastDatums = append(tree.Datums(nil), mrf.rowReadyTable.decodedRow...)
+		rf.rowReadyTable.lastDatums = append(tree.Datums(nil), rf.rowReadyTable.decodedRow...)
 	}()
 
-	if !mrf.rowReadyTable.hasLast {
-		mrf.rowReadyTable.hasLast = true
+	if !rf.rowReadyTable.hasLast {
+		rf.rowReadyTable.hasLast = true
 		return nil
 	}
 
 	evalCtx := tree.EvalContext{}
-	for i, id := range mrf.rowReadyTable.index.ColumnIDs {
-		idx := mrf.rowReadyTable.colIdxMap[id]
-		result := mrf.rowReadyTable.decodedRow[idx].Compare(&evalCtx, mrf.rowReadyTable.lastDatums[idx])
-		expectedDirection := mrf.rowReadyTable.index.ColumnDirections[i]
-		if mrf.reverse && expectedDirection == IndexDescriptor_ASC {
+	for i, id := range rf.rowReadyTable.index.ColumnIDs {
+		idx := rf.rowReadyTable.colIdxMap[id]
+		result := rf.rowReadyTable.decodedRow[idx].Compare(&evalCtx, rf.rowReadyTable.lastDatums[idx])
+		expectedDirection := rf.rowReadyTable.index.ColumnDirections[i]
+		if rf.reverse && expectedDirection == IndexDescriptor_ASC {
 			expectedDirection = IndexDescriptor_DESC
-		} else if mrf.reverse && expectedDirection == IndexDescriptor_DESC {
+		} else if rf.reverse && expectedDirection == IndexDescriptor_DESC {
 			expectedDirection = IndexDescriptor_ASC
 		}
 
@@ -1075,11 +1075,11 @@ func (mrf *RowFetcher) checkKeyOrdering(ctx context.Context) error {
 	return nil
 }
 
-func (mrf *RowFetcher) finalizeRow() error {
-	table := mrf.rowReadyTable
+func (rf *RowFetcher) finalizeRow() error {
+	table := rf.rowReadyTable
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
-		if mrf.valueColsFound == mrf.neededValueCols {
+		if rf.valueColsFound == rf.neededValueCols {
 			// Found all cols - done!
 			return nil
 		}
@@ -1089,7 +1089,7 @@ func (mrf *RowFetcher) finalizeRow() error {
 				for i := range table.indexColIdx {
 					indexColValues = append(indexColValues, table.row[i].String(&table.cols[i].Type))
 				}
-				if mrf.isCheck {
+				if rf.isCheck {
 					return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
 						"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 						table.desc.Name, table.cols[i].Name, table.index.Name,
@@ -1107,7 +1107,7 @@ func (mrf *RowFetcher) finalizeRow() error {
 			// already, in processValueBytes. Now, we're filling in columns that have
 			// no encoded values with NULL - so we increment valueColsFound to permit
 			// early exit from this loop once all needed columns are filled in.
-			mrf.valueColsFound++
+			rf.valueColsFound++
 		}
 	}
 	return nil
@@ -1115,14 +1115,14 @@ func (mrf *RowFetcher) finalizeRow() error {
 
 // Key returns the next key (the key that follows the last returned row).
 // Key returns nil when there are no more rows.
-func (mrf *RowFetcher) Key() roachpb.Key {
-	return mrf.kv.Key
+func (rf *RowFetcher) Key() roachpb.Key {
+	return rf.kv.Key
 }
 
 // GetRangeInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
-func (mrf *RowFetcher) GetRangeInfo() []roachpb.RangeInfo {
-	return mrf.kvFetcher.getRangesInfo()
+func (rf *RowFetcher) GetRangeInfo() []roachpb.RangeInfo {
+	return rf.kvFetcher.getRangesInfo()
 }
 
 // Only unique secondary indexes have extra columns to decode (namely the
