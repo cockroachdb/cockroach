@@ -26,6 +26,12 @@ export const ALTER_INDEX = "alter_index";
 export const CREATE_VIEW = "create_view";
 // Recorded when a view is dropped.
 export const DROP_VIEW = "drop_view";
+// Recorded when a sequence is created.
+export const CREATE_SEQUENCE = "create_sequence";
+// Recorded when a sequence is altered.
+export const ALTER_SEQUENCE = "alter_sequence";
+// Recorded when a sequence is dropped.
+export const DROP_SEQUENCE = "drop_sequence";
 // Recorded when an in-progress schema change encounters a problem and is
 // reversed.
 export const REVERSE_SCHEMA_CHANGE = "reverse_schema_change";
