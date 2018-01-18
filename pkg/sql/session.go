@@ -643,8 +643,6 @@ func (s *Session) extendedEvalCtx(
 		clusterTs = txn.OrigTimestamp()
 	}
 
-	log.Warningf(context.TODO(), "*!*!*!*!*! extendedEvalCtx TXN %+v", s.TxnState.implicitTxn)
-
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:              txn,
