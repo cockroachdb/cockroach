@@ -228,85 +228,85 @@ func assignSequenceOptions(
 	return nil
 }
 
-// maybeAddSequenceDependency:
-// - if the given expr uses a sequence
-//   - adds a reference on `col` to the sequence. (mutates `col`; caller must persist changes to KV)
-//   - adds a reference on the sequence descriptor to `col`. (returns the modified sequence
-//     descriptor for the caller to save)
-func maybeAddSequenceDependency(
+// maybeAddSequenceDependencies adds references between the column and sequence descriptors,
+// if the column has a DEFAULT expression that uses one or more sequences. (Usually just one,
+// e.g. `DEFAULT nextval('my_sequence')`.
+// The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
+func maybeAddSequenceDependencies(
 	tableDesc *sqlbase.TableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
 	evalCtx *tree.EvalContext,
-) (*sqlbase.TableDescriptor, error) {
+) ([]*sqlbase.TableDescriptor, error) {
 	ctx := evalCtx.Ctx()
-	seqName, err := getUsedSequenceName(expr)
+	seqNames, err := getUsedSequenceNames(expr)
 	if err != nil {
 		return nil, err
 	}
-	if seqName == nil {
-		return nil, nil
+	var seqDescs []*sqlbase.TableDescriptor
+	for _, seqName := range seqNames {
+		parsedSeqName, err := evalCtx.Planner.ParseQualifiedTableName(ctx, seqName)
+		if err != nil {
+			return nil, err
+		}
+		seqDesc, err := getSequenceDesc(ctx, evalCtx.Txn, NilVirtualTabler, parsedSeqName)
+		if err != nil {
+			return nil, err
+		}
+		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
+		// Add reference from sequence descriptor to column.
+		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, sqlbase.TableDescriptor_Reference{
+			ID:        tableDesc.ID,
+			ColumnIDs: []sqlbase.ColumnID{col.ID},
+		})
+		seqDescs = append(seqDescs, seqDesc)
 	}
-	parsedSeqName, err := evalCtx.Planner.ParseQualifiedTableName(ctx, *seqName)
-	if err != nil {
-		return nil, err
-	}
-	seqDesc, err := getSequenceDesc(ctx, evalCtx.Txn, NilVirtualTabler, parsedSeqName)
-	if err != nil {
-		return nil, err
-	}
-	col.UsesSequenceId = &seqDesc.ID
-	// Now that we've gotten the sequence descriptor, I guess we can mutate it?
-	seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, sqlbase.TableDescriptor_Reference{
-		ID:        tableDesc.ID,
-		ColumnIDs: []sqlbase.ColumnID{col.ID},
-	})
-	return seqDesc, nil
+	return seqDescs, nil
 }
 
-// removeSequenceDependency:
+// removeSequenceDependencies:
 //   - removes the reference from the column descriptor to the sequence descriptor.
 //   - removes the reference from the sequence descriptor to the column descriptor.
 //   - writes the sequence descriptor and notifies a schema change.
-// The column is mutated but not saved to persistent storage; the caller must save
-// the modified column descriptor.
-func removeSequenceDependency(
+// The column descriptor is mutated but not saved to persistent storage; the caller must save it.
+func removeSequenceDependencies(
 	tableDesc *sqlbase.TableDescriptor, col *sqlbase.ColumnDescriptor, params runParams,
 ) error {
-	// Get the sequence descriptor so we can remove the reference from it.
-	seqDesc := sqlbase.TableDescriptor{}
-	if err := getDescriptorByID(params.ctx, params.p.txn, *col.UsesSequenceId, &seqDesc); err != nil {
-		return err
-	}
-	// Find an item in seqDesc.DependedOnBy which references tableDesc.
-	refIdx := -1
-	for i := 0; i < len(seqDesc.DependedOnBy); i++ {
-		reference := seqDesc.DependedOnBy[i]
-		if reference.ID == tableDesc.ID {
-			refIdx = i
+	for _, sequenceID := range col.UsesSequenceIds {
+		// Get the sequence descriptor so we can remove the reference from it.
+		seqDesc := sqlbase.TableDescriptor{}
+		if err := getDescriptorByID(params.ctx, params.p.txn, sequenceID, &seqDesc); err != nil {
+			return err
 		}
+		// Find an item in seqDesc.DependedOnBy which references tableDesc.
+		refIdx := -1
+		for i, reference := range seqDesc.DependedOnBy {
+			if reference.ID == tableDesc.ID {
+				refIdx = i
+			}
+		}
+		if refIdx == -1 {
+			return pgerror.NewError(
+				pgerror.CodeInternalError, "couldn't find reference from sequence to this column")
+		}
+		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:refIdx], seqDesc.DependedOnBy[refIdx+1:]...)
+		if err := params.p.writeTableDesc(params.ctx, &seqDesc); err != nil {
+			return err
+		}
+		params.p.notifySchemaChange(&seqDesc, sqlbase.InvalidMutationID)
 	}
-	if refIdx == -1 {
-		return pgerror.NewError(
-			pgerror.CodeInternalError, "couldn't find reference from sequence to this column")
-	}
-	seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:refIdx], seqDesc.DependedOnBy[refIdx+1:]...)
-	if err := params.p.writeTableDesc(params.ctx, &seqDesc); err != nil {
-		return err
-	}
-	params.p.notifySchemaChange(&seqDesc, sqlbase.InvalidMutationID)
 	// Remove the reference from the column descriptor to the sequence descriptor.
-	col.UsesSequenceId = nil
+	col.UsesSequenceIds = []sqlbase.ID{}
 	return nil
 }
 
-// getUsedSequenceName returns the name of the sequence passed to
+// getUsedSequenceNames returns the name of the sequence passed to
 // a call to nextval in the given expression, or nil if there is
 // no call to nextval.
 // e.g. nextval('foo') => "foo"; <some other expression> => nil
-func getUsedSequenceName(defaultExpr tree.TypedExpr) (*string, error) {
+func getUsedSequenceNames(defaultExpr tree.TypedExpr) ([]string, error) {
 	searchPath := sessiondata.SearchPath{}
-	var sequenceName *string
+	var names []string
 	_, err := tree.SimpleVisit(
 		defaultExpr,
 		func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
@@ -320,8 +320,7 @@ func getUsedSequenceName(defaultExpr tree.TypedExpr) (*string, error) {
 					arg := t.Exprs[0]
 					switch a := arg.(type) {
 					case *tree.DString:
-						asString := string(*a)
-						sequenceName = &asString
+						names = append(names, string(*a))
 					}
 				}
 			}
@@ -331,5 +330,5 @@ func getUsedSequenceName(defaultExpr tree.TypedExpr) (*string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sequenceName, nil
+	return names, nil
 }
