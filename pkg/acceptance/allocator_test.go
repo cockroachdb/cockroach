@@ -187,7 +187,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := at.runScrubChecks(ctx, t, "tpch", "customer"); err != nil {
+			if err := at.runScrubChecks(ctx, "tpch", "customer"); err != nil {
 				t.Error(err)
 			}
 
@@ -217,7 +217,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := at.runScrubChecks(ctx, t, "datablocks", "blocks"); err != nil {
+			if err := at.runScrubChecks(ctx, "datablocks", "blocks"); err != nil {
 				t.Error(err)
 			}
 
@@ -336,17 +336,15 @@ func (at *allocatorTest) runValidationQueries(
 	return nil
 }
 
-func (at *allocatorTest) runScrubChecks(
-	ctx context.Context, t *testing.T, database, table string,
-) error {
+func (at *allocatorTest) runScrubChecks(ctx context.Context, database, table string) error {
 	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
-		t.Error(err)
+		return err
 	}
 	defer func() {
 		_ = db.Close()
 	}()
-	return sqlutils.RunScrub(t, db, database, table)
+	return sqlutils.RunScrub(db, database, table)
 }
 
 type timeSpan struct {
