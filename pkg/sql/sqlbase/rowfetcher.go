@@ -549,6 +549,7 @@ func (rf *RowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok bool, 
 	// when processing the index key. The column values are at the
 	// front of the key.
 	if key, err = DecodeKeyVals(
+		rf.currentTable.keyValTypes,
 		rf.currentTable.keyVals,
 		rf.currentTable.indexColumnDirs,
 		key,
@@ -650,6 +651,7 @@ func (rf *RowFetcher) processKV(
 			// column values from the value.
 			var err error
 			valueBytes, err = DecodeKeyVals(
+				table.extraTypes,
 				table.extraVals,
 				nil,
 				valueBytes,
