@@ -54,24 +54,22 @@ import (
 )
 
 const (
-	importOptionDelimiter     = "delimiter"
-	importOptionComment       = "comment"
-	importOptionDistributed   = "distributed"
-	importOptionNullIf        = "nullif"
-	importOptionTransformOnly = "transform_only"
-	importOptionSSTSize       = "sstsize"
-	importOptionTemp          = "temp"
+	importOptionDelimiter = "delimiter"
+	importOptionComment   = "comment"
+	importOptionLocal     = "local"
+	importOptionNullIf    = "nullif"
+	importOptionTransform = "transform"
+	importOptionSSTSize   = "sstsize"
 )
 
 var importOptionExpectValues = map[string]bool{
-	importOptionDelimiter:     true,
-	importOptionComment:       true,
-	importOptionDistributed:   false,
-	importOptionNullIf:        true,
-	importOptionTransformOnly: false,
-	importOptionSSTSize:       true,
-	importOptionTemp:          true,
-	restoreOptIntoDB:          true,
+	importOptionDelimiter: true,
+	importOptionComment:   true,
+	importOptionLocal:     false,
+	importOptionNullIf:    true,
+	importOptionTransform: true,
+	importOptionSSTSize:   true,
+	restoreOptIntoDB:      true,
 }
 
 // LoadCSV converts CSV files into enterprise backup format.
@@ -836,28 +834,20 @@ func importJobDescription(
 		stmt.Files = append(stmt.Files, tree.NewDString(clean))
 	}
 	stmt.Options = nil
-	hasTransformOnly := false
 	for k, v := range opts {
 		switch k {
-		case importOptionTemp:
+		case importOptionTransform:
 			clean, err := storageccl.SanitizeExportStorageURI(v)
 			if err != nil {
 				return "", err
 			}
 			v = clean
-		case importOptionTransformOnly:
-			hasTransformOnly = true
-		case restoreOptIntoDB:
-			continue
 		}
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if importOptionExpectValues[k] {
 			opt.Value = tree.NewDString(v)
 		}
 		stmt.Options = append(stmt.Options, opt)
-	}
-	if !hasTransformOnly {
-		stmt.Options = append(stmt.Options, tree.KVOption{Key: importOptionTransformOnly})
 	}
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
 	return tree.AsStringWithFlags(&stmt, tree.FmtAlwaysQualifyTableNames), nil
@@ -938,10 +928,11 @@ func importPlanHook(
 			return err
 		}
 
-		_, transformOnly := opts[importOptionTransformOnly]
-
+		parentID := defaultCSVParentID
+		transform := opts[importOptionTransform]
 		var targetDB string
-		if !transformOnly {
+		var transformStorage storageccl.ExportStorage
+		if transform == "" {
 			if override, ok := opts[restoreOptIntoDB]; !ok {
 				if session := p.SessionData().Database; session != "" {
 					targetDB = session
@@ -961,10 +952,20 @@ func importPlanHook(
 				if id.Value == nil {
 					return errors.Errorf("database does not exist: %q", targetDB)
 				}
+				parentID = sqlbase.ID(id.ValueInt())
 				return nil
 			}); err != nil {
 				return err
 			}
+		} else {
+			if _, ok := opts[restoreOptIntoDB]; ok {
+				return errors.Errorf("cannot specify both %s and %s", importOptionTransform, restoreOptIntoDB)
+			}
+			transformStorage, err = exportStorageFromURI(ctx, transform, p.ExecCfg().Settings)
+			if err != nil {
+				return err
+			}
+			defer transformStorage.Close()
 		}
 
 		var comma rune
@@ -987,19 +988,6 @@ func importPlanHook(
 		if override, ok := opts[importOptionNullIf]; ok {
 			nullif = &override
 		}
-
-		var temp string
-		if override, ok := opts[importOptionTemp]; ok {
-			temp = override
-		} else {
-			return errors.Errorf("must provide a temporary storage location")
-		}
-
-		tempStorage, err := exportStorageFromURI(ctx, temp, p.ExecCfg().Settings)
-		if err != nil {
-			return err
-		}
-		defer tempStorage.Close()
 
 		sstSize := config.DefaultZoneConfig().RangeMaxBytes / 2
 		if override, ok := opts[importOptionSSTSize]; ok {
@@ -1028,7 +1016,6 @@ func importPlanHook(
 			}
 		}
 
-		parentID := defaultCSVParentID
 		tableDesc, err := makeSimpleTableDescriptor(
 			ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
 		if err != nil {
@@ -1040,9 +1027,20 @@ func importPlanHook(
 			return err
 		}
 
-		// Delay writing the BACKUP-CHECKPOINT file until as late as possible.
-		if err := verifyUsableExportTarget(ctx, tempStorage, temp); err != nil {
-			return err
+		if transform != "" {
+			// Delay writing the BACKUP-CHECKPOINT file until as late as possible.
+			if err := verifyUsableExportTarget(ctx, transformStorage, transform); err != nil {
+				return err
+			}
+		} else {
+			// Verification steps have passed, generate a new table ID if we're
+			// restoring. We do this last because we want to avoid calling
+			// GenerateUniqueDescID if there's any kind of error above.
+			// Reserving a table ID now means we can avoid the rekey work during restore.
+			tableDesc.ID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+			if err != nil {
+				return err
+			}
 		}
 
 		// NB: the post-conversion RESTORE will create and maintain its own job.
@@ -1055,7 +1053,7 @@ func importPlanHook(
 				Tables: []jobs.ImportDetails_Table{{
 					Desc:       tableDesc,
 					URIs:       files,
-					BackupPath: temp,
+					BackupPath: transform,
 				}},
 			},
 		})
@@ -1067,23 +1065,28 @@ func importPlanHook(
 		}
 
 		var importErr error
-		if _, distributed := opts[importOptionDistributed]; distributed {
-			_, importErr = doDistributedCSVTransform(
-				ctx, job, files, p, tableDesc, temp,
+		if _, local := opts[importOptionLocal]; !local {
+			importErr = doDistributedCSVTransform(
+				ctx, job, files, p, parentID, tableDesc, transform,
 				comma, comment, nullif, walltime,
 				sstSize,
 			)
 		} else {
+			if transform == "" {
+				return errors.Errorf("%s option required for local import", importOptionTransform)
+			}
 			_, _, _, importErr = doLocalCSVTransform(
-				ctx, job, parentID, tableDesc, temp, files,
+				ctx, job, parentID, tableDesc, transform, files,
 				comma, comment, nullif, sstSize,
 				p.ExecCfg().DistSQLSrv.TempStorage,
 				walltime, p.ExecCfg(),
 			)
 		}
-		// Always attempt to cleanup the checkpoint even if the import failed.
-		if err := tempStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
-			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+		if transform != "" {
+			// Always attempt to cleanup the checkpoint even if the import failed.
+			if err := transformStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
+				log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+			}
 		}
 		if importErr != nil {
 			if err := job.Failed(ctx, importErr, jobs.NoopFn); err != nil {
@@ -1101,30 +1104,16 @@ func importPlanHook(
 			return importErr
 		}
 
-		if transformOnly {
-			resultsCh <- tree.Datums{
-				tree.NewDInt(tree.DInt(*job.ID())),
-				tree.NewDString(string(jobs.StatusSucceeded)),
-				tree.NewDFloat(tree.DFloat(1.0)),
-				tree.NewDInt(tree.DInt(0)),
-				tree.NewDInt(tree.DInt(0)),
-				tree.NewDInt(tree.DInt(0)),
-				tree.NewDInt(tree.DInt(0)),
-			}
-			return nil
+		resultsCh <- tree.Datums{
+			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDString(string(jobs.StatusSucceeded)),
+			tree.NewDFloat(tree.DFloat(1.0)),
+			tree.NewDInt(tree.DInt(0)),
+			tree.NewDInt(tree.DInt(0)),
+			tree.NewDInt(tree.DInt(0)),
+			tree.NewDInt(tree.DInt(0)),
 		}
-
-		restore := &tree.Restore{
-			Targets: tree.TargetList{
-				Tables: []tree.TablePattern{&tree.AllTablesSelector{Database: csvDatabaseName}},
-			},
-			From: tree.Exprs{tree.NewDString(temp)},
-		}
-		from := []string{temp}
-		endTime := hlc.Timestamp{}
-		opts = map[string]string{restoreOptIntoDB: targetDB}
-
-		return doRestorePlan(ctx, restore, p, from, endTime, opts, resultsCh)
+		return nil
 	}
 	return fn, restoreHeader, nil
 }
@@ -1134,19 +1123,20 @@ func doDistributedCSVTransform(
 	job *jobs.Job,
 	files []string,
 	p sql.PlanHookState,
+	parentID sqlbase.ID,
 	tableDesc *sqlbase.TableDescriptor,
 	temp string,
 	comma, comment rune,
 	nullif *string,
 	walltime int64,
 	sstSize int64,
-) (int64, error) {
+) error {
 	evalCtx := p.ExtendedEvalContext()
 
 	// TODO(dan): Filter out unhealthy nodes.
 	resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
-		return 0, err
+		return err
 	}
 	var nodes []roachpb.NodeDescriptor
 	for _, node := range resp.Nodes {
@@ -1183,7 +1173,27 @@ func doDistributedCSVTransform(
 		walltime,
 		sstSize,
 	); err != nil {
-		return 0, err
+		// If the job was canceled, any of the distsql processors could have been
+		// the first to encounter the .Progress error. This error's string is sent
+		// through distsql back here, so we can't examine the err type in this case
+		// to see if it's a jobs.InvalidStatusError. Instead, attempt to update the
+		// job progress to coerce out the correct error type. If the update succeeds
+		// then return the original error, otherwise return this error instead so
+		// it can be cleaned up at a higher level.
+		if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+			d := details.(*jobs.Payload_Import).Import
+			return d.Tables[0].Completed()
+		}); err != nil {
+			return err
+		}
+		return err
+	}
+
+	if temp == "" {
+		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return restoreTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{tableDesc}, job.Record.Username)
+		})
+		return errors.Wrap(err, "creating table descriptor")
 	}
 
 	backupDesc := BackupDescriptor{
@@ -1210,19 +1220,15 @@ func doDistributedCSVTransform(
 
 	dest, err := storageccl.ExportStorageConfFromURI(temp)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	es, err := storageccl.MakeExportStorage(ctx, dest, p.ExecCfg().Settings)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer es.Close()
 
-	if err := finalizeCSVBackup(ctx, &backupDesc, defaultCSVParentID, tableDesc, es, p.ExecCfg()); err != nil {
-		return 0, err
-	}
-	total := int64(len(backupDesc.Files))
-	return total, nil
+	return finalizeCSVBackup(ctx, &backupDesc, parentID, tableDesc, es, p.ExecCfg())
 }
 
 var csvOutputTypes = []sqlbase.ColumnType{
@@ -1421,6 +1427,7 @@ func newSSTWriterProcessor(
 		settings:    flowCtx.Settings,
 		registry:    flowCtx.JobRegistry,
 		progress:    spec.Progress,
+		db:          flowCtx.EvalCtx.Txn.DB(),
 	}
 	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -1438,6 +1445,7 @@ type sstWriter struct {
 	settings    *cluster.Settings
 	registry    *jobs.Registry
 	progress    distsqlrun.JobProgress
+	db          *client.DB
 }
 
 var _ distsqlrun.Processor = &sstWriter{}
@@ -1504,69 +1512,113 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 		// Fetch all the keys in each span and write them to storage.
 		iter := store.NewIterator()
 		iter.Rewind()
+		maxSize := storageccl.MaxImportBatchSize(sp.settings)
 		for i, span := range sp.spec.Spans {
-			data, firstKey, lastKey, err := extractSSTSpan(iter, span.End, sp.spec.WalltimeNanos)
-			if err != nil {
-				return err
-			}
-			// Empty span.
-			if data == nil {
-				continue
-			}
+			// Since we sampled the CSVs, it is possible for an SST to end up larger
+			// than the max raft command size. Split them up into correctly sized chunks.
+			for chunk := 0; ; chunk++ {
+				data, firstKey, lastKey, more, err := extractSSTSpan(iter, span.End, sp.spec.WalltimeNanos, maxSize)
+				if err != nil {
+					return err
+				}
+				// Empty span.
+				if data == nil {
+					break
+				}
 
-			checksum, err := storageccl.SHA512ChecksumData(data)
-			if err != nil {
-				return err
-			}
-			conf, err := storageccl.ExportStorageConfFromURI(sp.spec.Destination)
-			if err != nil {
-				return err
-			}
-			es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
-			if err := es.WriteFile(ctx, span.Name, bytes.NewReader(data)); err != nil {
-				return err
-			}
+				var checksum []byte
+				name := span.Name
+				if chunk > 0 {
+					name = fmt.Sprintf("%d-%s", chunk, name)
+				}
 
-			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
-				d := details.(*jobs.Payload_Import).Import
-				d.Tables[0].WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
-				return d.Tables[0].Completed()
-			}); err != nil {
-				return err
-			}
+				if sp.spec.Destination == "" {
+					end := span.End
+					if more {
+						end = lastKey
+					}
+					if err := sp.db.AdminSplit(ctx, end, end); err != nil {
+						return err
+					}
 
-			row := sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
-					tree.NewDString(span.Name),
-				),
-				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-					tree.NewDInt(tree.DInt(len(data))),
-				),
-				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-					tree.NewDBytes(tree.DBytes(checksum)),
-				),
-				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-					tree.NewDBytes(tree.DBytes(firstKey)),
-				),
-				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-					tree.NewDBytes(tree.DBytes(lastKey)),
-				),
-			}
-			cs, err := sp.out.EmitRow(ctx, row)
-			if err != nil {
-				return err
-			}
-			if cs != distsqlrun.NeedMoreRows {
-				return errors.New("unexpected closure of consumer")
+					log.VEventf(ctx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
+					scatterReq := &roachpb.AdminScatterRequest{
+						Span: roachpb.Span{
+							Key:    end,
+							EndKey: roachpb.Key(end).Next(),
+						},
+					}
+					if _, pErr := client.SendWrapped(ctx, sp.db.GetSender(), scatterReq); pErr != nil {
+						// TODO(dan): Unfortunately, Scatter is still too unreliable to
+						// fail the IMPORT when Scatter fails. I'm uncomfortable that
+						// this could break entirely and not start failing the tests,
+						// but on the bright side, it doesn't affect correctness, only
+						// throughput.
+						log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
+					}
+					if err := storageccl.AddSSTable(ctx, sp.db, firstKey, lastKey, data); err != nil {
+						return err
+					}
+				} else {
+					checksum, err = storageccl.SHA512ChecksumData(data)
+					if err != nil {
+						return err
+					}
+					conf, err := storageccl.ExportStorageConfFromURI(sp.spec.Destination)
+					if err != nil {
+						return err
+					}
+					es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
+					if err != nil {
+						return err
+					}
+					err = es.WriteFile(ctx, name, bytes.NewReader(data))
+					es.Close()
+					if err != nil {
+						return err
+					}
+				}
+
+				if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+					d := details.(*jobs.Payload_Import).Import
+					d.Tables[0].WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
+					return d.Tables[0].Completed()
+				}); err != nil {
+					return err
+				}
+
+				row := sqlbase.EncDatumRow{
+					sqlbase.DatumToEncDatum(
+						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+						tree.NewDString(name),
+					),
+					sqlbase.DatumToEncDatum(
+						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+						tree.NewDInt(tree.DInt(len(data))),
+					),
+					sqlbase.DatumToEncDatum(
+						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+						tree.NewDBytes(tree.DBytes(checksum)),
+					),
+					sqlbase.DatumToEncDatum(
+						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+						tree.NewDBytes(tree.DBytes(firstKey)),
+					),
+					sqlbase.DatumToEncDatum(
+						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+						tree.NewDBytes(tree.DBytes(lastKey)),
+					),
+				}
+				cs, err := sp.out.EmitRow(ctx, row)
+				if err != nil {
+					return err
+				}
+				if cs != distsqlrun.NeedMoreRows {
+					return errors.New("unexpected closure of consumer")
+				}
+				if !more {
+					break
+				}
 			}
 		}
 		return nil
@@ -1576,11 +1628,11 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 
 // extractSSTSpan creates an SST from the iterator, excluding keys >= end.
 func extractSSTSpan(
-	iter engine.SortedDiskMapIterator, end []byte, walltimeNanos int64,
-) (data, firstKey, lastKey []byte, err error) {
+	iter engine.SortedDiskMapIterator, end []byte, walltimeNanos int64, maxSize int64,
+) (data, firstKey, lastKey []byte, more bool, err error) {
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 	defer sst.Close()
 	var kv engine.MVCCKeyValue
@@ -1588,7 +1640,7 @@ func extractSSTSpan(
 	any := false
 	for {
 		if ok, err := iter.Valid(); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, false, err
 		} else if !ok {
 			break
 		}
@@ -1606,17 +1658,22 @@ func extractSSTSpan(
 		}
 		any = true
 		if err := sst.Add(kv); err != nil {
-			return nil, nil, nil, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
+			return nil, nil, nil, false, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 		}
 		lastKey = append(lastKey[:0], kv.Key.Key.Next()...)
 
 		iter.Next()
+
+		if sst.DataSize > maxSize {
+			more = true
+			break
+		}
 	}
 	if !any {
-		return nil, nil, nil, nil
+		return nil, nil, nil, false, nil
 	}
 	data, err = sst.Finish()
-	return data, firstKey, lastKey, err
+	return data, firstKey, lastKey, more, err
 }
 
 func init() {
