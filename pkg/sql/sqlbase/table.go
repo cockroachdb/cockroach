@@ -859,7 +859,7 @@ func DecodeKeyVals(vals []EncDatum, directions []encoding.Direction, key []byte)
 			enc = DatumEncoding_DESCENDING_KEY
 		}
 		var err error
-		vals[j], key, err = EncDatumFromBuffer(enc, key)
+		vals[j], key, err = EncDatumFromBuffer(&types[j], enc, key)
 		if err != nil {
 			return nil, err
 		}

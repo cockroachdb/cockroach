@@ -302,7 +302,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 				t.Fatal("buffer ended early")
 			}
 			var decoded EncDatum
-			decoded, b, err = EncDatumFromBuffer(enc[i], b)
+			decoded, b, err = EncDatumFromBuffer(&types[i], enc[i], b)
 			if err != nil {
 				t.Fatal(err)
 			}
