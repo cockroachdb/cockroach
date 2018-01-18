@@ -762,3 +762,20 @@ ALTER TABLE multiple_usage_test_tbl ALTER COLUMN other_id DROP DEFAULT
 
 statement ok
 DROP SEQUENCE multiple_usage_test_2
+
+# Verify that deps are removed when a sequence-using table is dropped.
+
+statement ok
+CREATE SEQUENCE drop_test
+
+statement ok
+CREATE TABLE drop_test_tbl (id INT PRIMARY KEY DEFAULT nextval('drop_test'))
+
+statement error pq: cannot drop sequence drop_test because other objects depend on it
+DROP SEQUENCE drop_test
+
+statement ok
+DROP TABLE drop_test_tbl
+
+statement ok
+DROP SEQUENCE drop_test
