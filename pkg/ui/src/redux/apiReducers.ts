@@ -154,7 +154,7 @@ const problemRangesReducerObj = new KeyedCachedDataReducer(
 export const refreshProblemRanges = problemRangesReducerObj.refresh;
 
 export const certificatesRequestKey = (req: api.CertificatesRequestMessage): string =>
-  _.isEmpty(req.node_id) ? "0" : req.node_id;
+  _.isEmpty(req.node_id) ? "none" : req.node_id;
 
 const certificatesReducerObj = new KeyedCachedDataReducer(
   api.getCertificates,
@@ -165,7 +165,7 @@ const certificatesReducerObj = new KeyedCachedDataReducer(
 export const refreshCertificates = certificatesReducerObj.refresh;
 
 export const rangeRequestKey = (req: api.RangeRequestMessage): string =>
-  _.isNil(req.range_id) ? "0" : req.range_id.toString();
+  _.isNil(req.range_id) ? "none" : req.range_id.toString();
 
 const rangeReducerObj = new KeyedCachedDataReducer(
   api.getRange,
@@ -177,7 +177,7 @@ const rangeReducerObj = new KeyedCachedDataReducer(
 export const refreshRange = rangeReducerObj.refresh;
 
 export const allocatorRangeRequestKey = (req: api.AllocatorRangeRequestMessage): string =>
-  _.isNil(req.range_id) ? "0" : req.range_id.toString();
+  _.isNil(req.range_id) ? "none" : req.range_id.toString();
 
 const allocatorRangeReducerObj = new KeyedCachedDataReducer(
   api.getAllocatorRange,
@@ -189,7 +189,7 @@ const allocatorRangeReducerObj = new KeyedCachedDataReducer(
 export const refreshAllocatorRange = allocatorRangeReducerObj.refresh;
 
 export const rangeLogRequestKey = (req: api.RangeLogRequestMessage): string =>
-  _.isNil(req.range_id) ? "0" : req.range_id.toString();
+  _.isNil(req.range_id) ? "none" : req.range_id.toString();
 
 const rangeLogReducerObj = new KeyedCachedDataReducer(
   api.getRangeLog,
@@ -201,7 +201,7 @@ const rangeLogReducerObj = new KeyedCachedDataReducer(
 export const refreshRangeLog = rangeLogReducerObj.refresh;
 
 export const commandQueueRequestKey = (req: api.CommandQueueRequestMessage): string =>
-  _.isNil(req.range_id) ? "0" : req.range_id.toString();
+  _.isNil(req.range_id) ? "none" : req.range_id.toString();
 
 const commandQueueReducerObj = new KeyedCachedDataReducer(
   api.getCommandQueue,

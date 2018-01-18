@@ -55,7 +55,7 @@ function ProblemRangeList(props: {
   );
 }
 
-function problemRangeRequest(props: ProblemRangesProps) {
+function problemRangeRequestFromProps(props: ProblemRangesProps) {
   return new protos.cockroach.server.serverpb.ProblemRangesRequest({
     node_id: props.params[nodeIDAttr],
   });
@@ -70,7 +70,7 @@ function problemRangeRequest(props: ProblemRangesProps) {
  */
 class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   refresh(props = this.props) {
-    props.refreshProblemRanges(problemRangeRequest(props));
+    props.refreshProblemRanges(problemRangeRequestFromProps(props));
   }
 
   componentWillMount() {
@@ -164,7 +164,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 
 export default connect(
   (state: AdminUIState, props: ProblemRangesProps) => {
-    const nodeIDKey = problemRangesRequestKey(problemRangeRequest(props));
+    const nodeIDKey = problemRangesRequestKey(problemRangeRequestFromProps(props));
     return {
       problemRanges: state.cachedData.problemRanges[nodeIDKey] && state.cachedData.problemRanges[nodeIDKey].data,
     };
