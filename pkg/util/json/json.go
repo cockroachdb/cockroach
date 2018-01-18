@@ -1000,16 +1000,13 @@ func scalarConcat(left, other JSON) (JSON, error) {
 			return nil, err
 		}
 		right := decoded.(jsonArray)
-		result := make([]interface{}, len(right)+1)
-		result[0] = left
-		for i := range right {
-			result[i+1] = right[i]
-		}
-		return MakeJSON(result)
+		result := make(jsonArray, 0, len(right)+1)
+		result = append(append(result, left), right...)
+		return result, nil
 	case ObjectJSONType:
 		return nil, errInvalidConcat
 	default:
-		return MakeJSON([]interface{}{left, other})
+		return jsonArray{left, other}, nil
 	}
 }
 
@@ -1028,21 +1025,13 @@ func (j jsonArray) Concat(other JSON) (JSON, error) {
 			return nil, err
 		}
 		right := decoded.(jsonArray)
-		result := make([]interface{}, len(left)+len(right))
-		for i := range left {
-			result[i] = left[i]
-		}
-		for i := range right {
-			result[len(left)+i] = right[i]
-		}
-		return MakeJSON(result)
+		result := make(jsonArray, 0, len(left)+len(right))
+		result = append(append(result, left...), right...)
+		return result, nil
 	default:
-		result := make([]interface{}, len(left)+1)
-		result[len(result)-1] = other
-		for i := range left {
-			result[i] = left[i]
-		}
-		return MakeJSON(result)
+		result := make(jsonArray, 0, len(left)+1)
+		result = append(append(result, left...), other)
+		return result, nil
 	}
 }
 
