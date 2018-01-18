@@ -19,7 +19,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 // Resource is an interface used to abstract the specifics of tracking bytes
 // usage by different types of resources.
 type Resource interface {
-	NewBudgetExceededError(requestedBytes int64, budgetBytes int64) error
+	NewBudgetExceededError(requestedBytes int64, reservedBytes int64, budgetBytes int64) error
 }
 
 // memoryResource is a Resource that represents memory.
@@ -30,11 +30,14 @@ type memoryResource struct{}
 var MemoryResource Resource = memoryResource{}
 
 // NewBudgetExceededError implements the Resource interface.
-func (m memoryResource) NewBudgetExceededError(requestedBytes int64, budgetBytes int64) error {
+func (m memoryResource) NewBudgetExceededError(
+	requestedBytes int64, reservedBytes int64, budgetBytes int64,
+) error {
 	return pgerror.NewErrorf(
 		pgerror.CodeOutOfMemoryError,
-		"memory budget exceeded: %d bytes requested, %d bytes in budget",
+		"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
 		requestedBytes,
+		reservedBytes,
 		budgetBytes,
 	)
 }
@@ -47,11 +50,14 @@ type diskResource struct{}
 var DiskResource Resource = diskResource{}
 
 // NewBudgetExceededError implements the Resource interface.
-func (d diskResource) NewBudgetExceededError(requestedBytes int64, budgetBytes int64) error {
+func (d diskResource) NewBudgetExceededError(
+	requestedBytes int64, reservedBytes int64, budgetBytes int64,
+) error {
 	return pgerror.NewErrorf(
 		pgerror.CodeDiskFullError,
-		"disk budget exceeded: %d bytes requested, %d bytes in budget",
+		"disk budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
 		requestedBytes,
+		reservedBytes,
 		budgetBytes,
 	)
 }

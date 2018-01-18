@@ -523,7 +523,9 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	// so that it handles overflow correctly. Consider what happens if
 	// x==math.MaxInt64. mm.limit-x will be a large negative number.
 	if mm.mu.curAllocated > mm.limit-x {
-		return errors.Wrap(mm.resource.NewBudgetExceededError(x, mm.limit), mm.name)
+		return errors.Wrap(
+			mm.resource.NewBudgetExceededError(x, mm.mu.curAllocated, mm.limit), mm.name,
+		)
 	}
 	// Check whether we need to request an increase of our budget.
 	if mm.mu.curAllocated > mm.mu.curBudget.used+mm.reserved.used-x {
@@ -587,7 +589,9 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 func (mm *BytesMonitor) increaseBudget(ctx context.Context, minExtra int64) error {
 	// NB: mm.mu Already locked by reserveBytes().
 	if mm.mu.curBudget.mon == nil {
-		return errors.Wrap(mm.resource.NewBudgetExceededError(minExtra, mm.reserved.used), mm.name)
+		return errors.Wrap(mm.resource.NewBudgetExceededError(
+			minExtra, mm.mu.curAllocated, mm.reserved.used), mm.name,
+		)
 	}
 	minExtra = mm.roundSize(minExtra)
 	if log.V(2) {
