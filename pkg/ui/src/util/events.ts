@@ -17,6 +17,7 @@ export function getEventDescription(e: Event$Properties): string {
     TableName: string,
     User: string,
     ViewName: string,
+    SequenceName: string,
     SettingName: string,
     Value: string,
   } = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
@@ -50,6 +51,12 @@ export function getEventDescription(e: Event$Properties): string {
       return `View Created: User ${info.User} created view ${info.ViewName}`;
     case eventTypes.DROP_VIEW:
       return `View Dropped: User ${info.User} dropped view ${info.ViewName}`;
+    case eventTypes.CREATE_SEQUENCE:
+      return `Sequence Created: User ${info.User} created sequence ${info.SequenceName}`;
+    case eventTypes.ALTER_SEQUENCE:
+      return `Sequence Altered: User ${info.User} altered sequence ${info.SequenceName}`;
+    case eventTypes.DROP_SEQUENCE:
+      return `Sequence Dropped: User ${info.User} dropped sequence ${info.SequenceName}`;
     case eventTypes.REVERSE_SCHEMA_CHANGE:
       return `Schema Change Reversed: Schema change with ID ${info.MutationID} was reversed.`;
     case eventTypes.FINISH_SCHEMA_CHANGE:
