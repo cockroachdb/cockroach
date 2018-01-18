@@ -5,18 +5,28 @@ import React from "react";
 import { connect } from "react-redux";
 
 import * as protos from "src/js/protos";
-import { refreshCommandQueue } from "src/redux/apiReducers";
+import { commandQueueRequestKey, refreshCommandQueue } from "src/redux/apiReducers";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
 import Print from "src/views/reports/containers/range/print";
+import Loading from "src/views/shared/components/loading";
 import CommandQueueViz from "src/views/reports/containers/commandQueue/commandQueueViz";
 
+import spinner from "assets/spinner.gif";
+
 interface CommandQueueOwnProps {
-  commandQueueReducerState: protos.cockroach.server.serverpb.CommandQueueResponse;
+  commandQueue: CachedDataReducerState<protos.cockroach.server.serverpb.CommandQueueResponse>;
   refreshCommandQueue: typeof refreshCommandQueue;
 }
 
 type CommandQueueProps = CommandQueueOwnProps & RouterState;
+
+function commandQueueRequestFromProps(props: CommandQueueProps) {
+  return new protos.cockroach.server.serverpb.CommandQueueRequest({
+    range_id: Long.fromString(props.params[rangeIDAttr]),
+  });
+}
 
 /**
  * Renders the Command Queue Report page.
@@ -24,9 +34,7 @@ type CommandQueueProps = CommandQueueOwnProps & RouterState;
 class CommandQueue extends React.Component<CommandQueueProps, {}> {
 
   refresh(props = this.props) {
-    props.refreshCommandQueue(new protos.cockroach.server.serverpb.CommandQueueRequest({
-      range_id: Long.fromString(props.params[rangeIDAttr]),
-    }));
+    props.refreshCommandQueue(commandQueueRequestFromProps(props));
   }
 
   componentWillMount() {
@@ -34,11 +42,29 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
   }
 
   renderReportBody() {
-    if (_.isNil(this.props.commandQueueReducerState)) {
-      return (<p>Loading...</p>);
+    const commandQueue = this.props.commandQueue;
+    if (_.isNil(commandQueue)) {
+      return null;
+    }
+    if (commandQueue && !_.isNil(commandQueue.lastError)) {
+      return (
+        <div>
+          <h2>Error loading the command queue:</h2>
+          {commandQueue.lastError.toString()}
+        </div>
+      );
     }
 
-    const snapshot = this.props.commandQueueReducerState.snapshot;
+    if (_.isNil(commandQueue.data) || _.isNil(commandQueue.data.snapshot)) {
+      return (
+        <div>
+          <h2>Error</h2>
+          "No command queue data was returned."
+        </div>
+      );
+    }
+
+    const snapshot = commandQueue.data.snapshot;
 
     return (
       <div>
@@ -65,7 +91,6 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
 
   render() {
     const rangeID = this.props.params[rangeIDAttr];
-
     return (
       <div className="section command-queue">
         <h1>
@@ -77,16 +102,22 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
           {" > "}
           Command queue
         </h1>
-        {this.renderReportBody()}
+        <Loading
+          loading={!this.props.commandQueue || this.props.commandQueue.inFlight}
+          className="loading-image loading-image__spinner-left"
+          image={spinner}
+        >
+          {this.renderReportBody()}
+        </Loading>
       </div>
     );
   }
 }
 
 function mapStateToProps(state: AdminUIState, props: CommandQueueProps) {
-  const rangeID = props.params[rangeIDAttr];
+  const commandQueueKey = commandQueueRequestKey(commandQueueRequestFromProps(props));
   return {
-    commandQueueReducerState: state.cachedData.commandQueue[rangeID] && state.cachedData.commandQueue[rangeID].data,
+    commandQueue: state.cachedData.commandQueue[commandQueueKey],
   };
 }
 
