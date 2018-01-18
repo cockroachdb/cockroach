@@ -869,9 +869,9 @@ func (t *Transaction) BumpEpoch() {
 	t.Epoch++
 }
 
-// TimeBounds returns the start and end timestamps which inclusively
-// cover all intents which were written as part of this transaction.
-func (t *Transaction) TimeBounds() (hlc.Timestamp, hlc.Timestamp) {
+// InclusiveTimeBounds returns start and end timestamps such that all intents written as
+// part of this transaction have a timestamp in the interval [start, end].
+func (t *Transaction) InclusiveTimeBounds() (hlc.Timestamp, hlc.Timestamp) {
 	min := t.OrigTimestamp
 	max := t.Timestamp
 	if t.Epoch != 0 {
@@ -880,7 +880,7 @@ func (t *Transaction) TimeBounds() (hlc.Timestamp, hlc.Timestamp) {
 		}
 		min = t.EpochZeroTimestamp
 	}
-	return min, max.Next() // Next() makes the end of the interval closed
+	return min, max
 }
 
 // Update ratchets priority, timestamp and original timestamp values (among
