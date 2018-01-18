@@ -68,13 +68,10 @@ func (jb *joinerBase) init(
 	jb.eqCols[rightSide] = columns(rightEqColumns)
 	jb.numMergedEqualityColumns = int(numMergedColumns)
 
-	size := len(leftTypes) + jb.numMergedEqualityColumns
-	if shouldIncludeRight(jb.joinType) {
-		size += len(rightTypes)
-	}
+	size := len(leftTypes) + jb.numMergedEqualityColumns + len(rightTypes)
 	jb.combinedRow = make(sqlbase.EncDatumRow, size)
 
-	types := make([]sqlbase.ColumnType, 0, size)
+	outputTypes := make([]sqlbase.ColumnType, 0, size)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
 		ltype := leftTypes[jb.eqCols[leftSide][idx]]
 		rtype := rightTypes[jb.eqCols[rightSide][idx]]
@@ -84,18 +81,20 @@ func (jb *joinerBase) init(
 		} else {
 			ctype = rtype
 		}
-		types = append(types, ctype)
+		outputTypes = append(outputTypes, ctype)
 	}
-	types = append(types, leftTypes...)
-	if shouldIncludeRight(jb.joinType) {
-		types = append(types, rightTypes...)
+	outputTypes = append(outputTypes, leftTypes...)
+	condTypes := append(outputTypes, rightTypes...)
+	// Semi-joins do not include the right columns in their output.
+	if jb.joinType != leftSemiJoin {
+		outputTypes = append(outputTypes, rightTypes...)
 	}
 
 	evalCtx := flowCtx.NewEvalCtx()
-	if err := jb.onCond.init(onExpr, types, evalCtx); err != nil {
+	if err := jb.onCond.init(onExpr, condTypes, evalCtx); err != nil {
 		return err
 	}
-	return jb.processorBase.init(post, types, flowCtx, evalCtx, output)
+	return jb.processorBase.init(post, outputTypes, flowCtx, evalCtx, output)
 }
 
 type joinSide uint8
@@ -130,11 +129,6 @@ func (jb *joinerBase) renderUnmatchedRow(
 	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
 	return jb.combinedRow
-}
-
-// Certain types of joins only emit the left columns.
-func shouldIncludeRight(joinType joinType) bool {
-	return joinType != leftSemiJoin
 }
 
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
@@ -191,9 +185,7 @@ func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRo
 		jb.combinedRow[i] = lrow[jb.eqCols[leftSide][i]]
 	}
 	copy(jb.combinedRow[n:], lrow)
-	if shouldIncludeRight(jb.joinType) {
-		copy(jb.combinedRow[n+len(lrow):], rrow)
-	}
+	copy(jb.combinedRow[n+len(lrow):], rrow)
 
 	if jb.onCond.expr != nil {
 		res, err := jb.onCond.evalFilter(jb.combinedRow)
