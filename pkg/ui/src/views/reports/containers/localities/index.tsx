@@ -3,26 +3,19 @@ import React from "react";
 import { connect } from "react-redux";
 
 import { refreshNodes, refreshLocations } from "src/redux/apiReducers";
-import { selectLocalityTree, LocalityTree } from "src/redux/localities";
+import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
 import { selectLocationTree, LocationTree } from "src/redux/locations";
 import { AdminUIState } from "src/redux/state";
+import { findMostSpecificLocation, hasLocation } from "src/util/locations";
 
 import "./localities.styl";
-
-export function getLocation(locations: LocationTree, key: string, value: string) {
-  if (!locations[key]) {
-    return null;
-  }
-
-  return locations[key][value];
-}
 
 function formatCoord(coordinate: number) {
   return coordinate.toFixed(4);
 }
 
-function renderLocation(locations: LocationTree, key: string, value: string) {
-  const location = getLocation(locations, key, value);
+function renderLocation(locations: LocationTree, tiers: LocalityTier[]) {
+  const location = findMostSpecificLocation(locations, tiers);
 
   if (_.isNil(location)) {
     return "";
@@ -31,7 +24,7 @@ function renderLocation(locations: LocationTree, key: string, value: string) {
   return `${formatCoord(location.latitude)}, ${formatCoord(location.longitude)}`;
 }
 
-function renderLocalityTree(locations: LocationTree, tree: LocalityTree, depth = 0) {
+function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
   let rows: React.ReactNode[] = [];
 
   tree.nodes.forEach((node) => {
@@ -39,22 +32,26 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree, depth =
       <tr>
         <td></td>
         <td>n{ node.desc.node_id } @ { node.desc.address.address_field }</td>
-        <td></td>
+        <td className="parent-location">{ renderLocation(locations, node.desc.locality.tiers) }</td>
       </tr>,
     );
   });
 
   Object.keys(tree.localities).forEach((key) => {
     Object.keys(tree.localities[key]).forEach((value) => {
+      const child = tree.localities[key][value];
+
       rows.push(
         <tr>
-          <td className={`depth-${depth}`}>{ key }={ value }</td>
+          <td className={`depth-${tree.tiers.length}`}>{ key }={ value }</td>
           <td></td>
-          <td>{ renderLocation(locations, key, value) }</td>
+          <td className={hasLocation(locations, { key, value }) ? "own-location" : "parent-location"}>
+            { renderLocation(locations, child.tiers) }
+          </td>
         </tr>,
       );
 
-      rows = rows.concat(renderLocalityTree(locations, tree.localities[key][value], depth + 1));
+      rows = rows.concat(renderLocalityTree(locations, child));
     });
   });
 
