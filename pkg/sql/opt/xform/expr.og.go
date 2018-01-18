@@ -2,428 +2,428 @@
 
 package xform
 
-type childCountLookupFunc func(e *Expr) int
+type childCountLookupFunc func(ev *ExprView) int
 
 var childCountLookup = []childCountLookupFunc{
 	// UnknownOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		panic("op type not initialized")
 	},
 
 	// SubqueryOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// VariableOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 0
 	},
 
 	// ConstOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 0
 	},
 
 	// PlaceholderOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 0
 	},
 
 	// ListOp
-	func(e *Expr) int {
-		listExpr := (*listExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) int {
+		listExpr := (*listExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(listExpr.items().len)
 	},
 
 	// OrderedListOp
-	func(e *Expr) int {
-		orderedListExpr := (*orderedListExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) int {
+		orderedListExpr := (*orderedListExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(orderedListExpr.items().len)
 	},
 
 	// TupleOp
-	func(e *Expr) int {
-		tupleExpr := (*tupleExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) int {
+		tupleExpr := (*tupleExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(tupleExpr.elems().len)
 	},
 
 	// FiltersOp
-	func(e *Expr) int {
-		filtersExpr := (*filtersExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) int {
+		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(filtersExpr.conditions().len)
 	},
 
 	// ProjectionsOp
-	func(e *Expr) int {
-		projectionsExpr := (*projectionsExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) int {
+		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(projectionsExpr.items().len)
 	},
 
 	// ExistsOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 1
 	},
 
 	// AndOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// OrOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// NotOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 1
 	},
 
 	// EqOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// LtOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// GtOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// LeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// GeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// NeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// InOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// NotInOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// LikeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// NotLikeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// ILikeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// NotILikeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// SimilarToOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// NotSimilarToOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// RegMatchOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// NotRegMatchOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// RegIMatchOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// NotRegIMatchOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// IsDistinctFromOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// IsNotDistinctFromOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// IsOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// IsNotOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// AnyOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// SomeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// AllOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// BitandOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// BitorOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// BitxorOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// PlusOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// MinusOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// MultOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// DivOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// FloorDivOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// ModOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// PowOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// ConcatOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// LShiftOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// RShiftOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// UnaryPlusOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 1
 	},
 
 	// UnaryMinusOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 1
 	},
 
 	// UnaryComplementOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 1
 	},
 
 	// FunctionOp
-	func(e *Expr) int {
-		functionExpr := (*functionExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) int {
+		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(functionExpr.args().len)
 	},
 
 	// TrueOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 0
 	},
 
 	// FalseOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 0
 	},
 
 	// ScanOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 0
 	},
 
 	// ValuesOp
-	func(e *Expr) int {
-		valuesExpr := (*valuesExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) int {
+		valuesExpr := (*valuesExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(valuesExpr.rows().len)
 	},
 
 	// SelectOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// ProjectOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// InnerJoinOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// LeftJoinOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// RightJoinOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// FullJoinOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// SemiJoinOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// AntiJoinOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// InnerJoinApplyOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// LeftJoinApplyOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// RightJoinApplyOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// FullJoinApplyOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// SemiJoinApplyOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// AntiJoinApplyOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// GroupByOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 3
 	},
 
 	// UnionOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// IntersectOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// ExceptOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 2
 	},
 
 	// SortOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 1
 	},
 
 	// ArrangeOp
-	func(e *Expr) int {
+	func(ev *ExprView) int {
 		return 1
 	},
 }
 
-type childGroupLookupFunc func(e *Expr, n int) GroupID
+type childGroupLookupFunc func(ev *ExprView, n int) GroupID
 
 var childGroupLookup = []childGroupLookupFunc{
 	// UnknownOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		panic("op type not initialized")
 	},
 
 	// SubqueryOp
-	func(e *Expr, n int) GroupID {
-		subqueryExpr := (*subqueryExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		subqueryExpr := (*subqueryExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -436,78 +436,78 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// VariableOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		panic("child index out of range")
 	},
 
 	// ConstOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		panic("child index out of range")
 	},
 
 	// PlaceholderOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		panic("child index out of range")
 	},
 
 	// ListOp
-	func(e *Expr, n int) GroupID {
-		listExpr := (*listExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		listExpr := (*listExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		default:
-			list := e.mem.lookupList(listExpr.items())
+			list := ev.mem.lookupList(listExpr.items())
 			return list[n-0]
 		}
 	},
 
 	// OrderedListOp
-	func(e *Expr, n int) GroupID {
-		orderedListExpr := (*orderedListExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		orderedListExpr := (*orderedListExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		default:
-			list := e.mem.lookupList(orderedListExpr.items())
+			list := ev.mem.lookupList(orderedListExpr.items())
 			return list[n-0]
 		}
 	},
 
 	// TupleOp
-	func(e *Expr, n int) GroupID {
-		tupleExpr := (*tupleExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		tupleExpr := (*tupleExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		default:
-			list := e.mem.lookupList(tupleExpr.elems())
+			list := ev.mem.lookupList(tupleExpr.elems())
 			return list[n-0]
 		}
 	},
 
 	// FiltersOp
-	func(e *Expr, n int) GroupID {
-		filtersExpr := (*filtersExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		default:
-			list := e.mem.lookupList(filtersExpr.conditions())
+			list := ev.mem.lookupList(filtersExpr.conditions())
 			return list[n-0]
 		}
 	},
 
 	// ProjectionsOp
-	func(e *Expr, n int) GroupID {
-		projectionsExpr := (*projectionsExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		default:
-			list := e.mem.lookupList(projectionsExpr.items())
+			list := ev.mem.lookupList(projectionsExpr.items())
 			return list[n-0]
 		}
 	},
 
 	// ExistsOp
-	func(e *Expr, n int) GroupID {
-		existsExpr := (*existsExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		existsExpr := (*existsExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -518,8 +518,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// AndOp
-	func(e *Expr, n int) GroupID {
-		andExpr := (*andExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		andExpr := (*andExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -532,8 +532,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// OrOp
-	func(e *Expr, n int) GroupID {
-		orExpr := (*orExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		orExpr := (*orExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -546,8 +546,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// NotOp
-	func(e *Expr, n int) GroupID {
-		notExpr := (*notExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		notExpr := (*notExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -558,8 +558,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// EqOp
-	func(e *Expr, n int) GroupID {
-		eqExpr := (*eqExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		eqExpr := (*eqExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -572,8 +572,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// LtOp
-	func(e *Expr, n int) GroupID {
-		ltExpr := (*ltExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		ltExpr := (*ltExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -586,8 +586,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// GtOp
-	func(e *Expr, n int) GroupID {
-		gtExpr := (*gtExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		gtExpr := (*gtExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -600,8 +600,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// LeOp
-	func(e *Expr, n int) GroupID {
-		leExpr := (*leExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		leExpr := (*leExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -614,8 +614,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// GeOp
-	func(e *Expr, n int) GroupID {
-		geExpr := (*geExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		geExpr := (*geExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -628,8 +628,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// NeOp
-	func(e *Expr, n int) GroupID {
-		neExpr := (*neExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		neExpr := (*neExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -642,8 +642,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// InOp
-	func(e *Expr, n int) GroupID {
-		inExpr := (*inExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		inExpr := (*inExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -656,8 +656,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// NotInOp
-	func(e *Expr, n int) GroupID {
-		notInExpr := (*notInExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		notInExpr := (*notInExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -670,8 +670,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// LikeOp
-	func(e *Expr, n int) GroupID {
-		likeExpr := (*likeExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		likeExpr := (*likeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -684,8 +684,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// NotLikeOp
-	func(e *Expr, n int) GroupID {
-		notLikeExpr := (*notLikeExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		notLikeExpr := (*notLikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -698,8 +698,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// ILikeOp
-	func(e *Expr, n int) GroupID {
-		iLikeExpr := (*iLikeExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		iLikeExpr := (*iLikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -712,8 +712,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// NotILikeOp
-	func(e *Expr, n int) GroupID {
-		notILikeExpr := (*notILikeExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		notILikeExpr := (*notILikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -726,8 +726,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// SimilarToOp
-	func(e *Expr, n int) GroupID {
-		similarToExpr := (*similarToExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		similarToExpr := (*similarToExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -740,8 +740,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// NotSimilarToOp
-	func(e *Expr, n int) GroupID {
-		notSimilarToExpr := (*notSimilarToExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		notSimilarToExpr := (*notSimilarToExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -754,8 +754,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// RegMatchOp
-	func(e *Expr, n int) GroupID {
-		regMatchExpr := (*regMatchExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		regMatchExpr := (*regMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -768,8 +768,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// NotRegMatchOp
-	func(e *Expr, n int) GroupID {
-		notRegMatchExpr := (*notRegMatchExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		notRegMatchExpr := (*notRegMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -782,8 +782,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// RegIMatchOp
-	func(e *Expr, n int) GroupID {
-		regIMatchExpr := (*regIMatchExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		regIMatchExpr := (*regIMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -796,8 +796,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// NotRegIMatchOp
-	func(e *Expr, n int) GroupID {
-		notRegIMatchExpr := (*notRegIMatchExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		notRegIMatchExpr := (*notRegIMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -810,8 +810,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// IsDistinctFromOp
-	func(e *Expr, n int) GroupID {
-		isDistinctFromExpr := (*isDistinctFromExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		isDistinctFromExpr := (*isDistinctFromExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -824,8 +824,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// IsNotDistinctFromOp
-	func(e *Expr, n int) GroupID {
-		isNotDistinctFromExpr := (*isNotDistinctFromExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		isNotDistinctFromExpr := (*isNotDistinctFromExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -838,8 +838,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// IsOp
-	func(e *Expr, n int) GroupID {
-		isExpr := (*isExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		isExpr := (*isExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -852,8 +852,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// IsNotOp
-	func(e *Expr, n int) GroupID {
-		isNotExpr := (*isNotExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		isNotExpr := (*isNotExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -866,8 +866,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// AnyOp
-	func(e *Expr, n int) GroupID {
-		anyExpr := (*anyExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		anyExpr := (*anyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -880,8 +880,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// SomeOp
-	func(e *Expr, n int) GroupID {
-		someExpr := (*someExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		someExpr := (*someExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -894,8 +894,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// AllOp
-	func(e *Expr, n int) GroupID {
-		allExpr := (*allExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		allExpr := (*allExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -908,8 +908,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// BitandOp
-	func(e *Expr, n int) GroupID {
-		bitandExpr := (*bitandExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		bitandExpr := (*bitandExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -922,8 +922,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// BitorOp
-	func(e *Expr, n int) GroupID {
-		bitorExpr := (*bitorExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		bitorExpr := (*bitorExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -936,8 +936,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// BitxorOp
-	func(e *Expr, n int) GroupID {
-		bitxorExpr := (*bitxorExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		bitxorExpr := (*bitxorExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -950,8 +950,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// PlusOp
-	func(e *Expr, n int) GroupID {
-		plusExpr := (*plusExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		plusExpr := (*plusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -964,8 +964,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// MinusOp
-	func(e *Expr, n int) GroupID {
-		minusExpr := (*minusExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		minusExpr := (*minusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -978,8 +978,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// MultOp
-	func(e *Expr, n int) GroupID {
-		multExpr := (*multExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		multExpr := (*multExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -992,8 +992,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// DivOp
-	func(e *Expr, n int) GroupID {
-		divExpr := (*divExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		divExpr := (*divExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1006,8 +1006,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// FloorDivOp
-	func(e *Expr, n int) GroupID {
-		floorDivExpr := (*floorDivExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		floorDivExpr := (*floorDivExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1020,8 +1020,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// ModOp
-	func(e *Expr, n int) GroupID {
-		modExpr := (*modExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		modExpr := (*modExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1034,8 +1034,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// PowOp
-	func(e *Expr, n int) GroupID {
-		powExpr := (*powExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		powExpr := (*powExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1048,8 +1048,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// ConcatOp
-	func(e *Expr, n int) GroupID {
-		concatExpr := (*concatExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		concatExpr := (*concatExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1062,8 +1062,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// LShiftOp
-	func(e *Expr, n int) GroupID {
-		lShiftExpr := (*lShiftExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		lShiftExpr := (*lShiftExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1076,8 +1076,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// RShiftOp
-	func(e *Expr, n int) GroupID {
-		rShiftExpr := (*rShiftExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		rShiftExpr := (*rShiftExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1090,8 +1090,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// UnaryPlusOp
-	func(e *Expr, n int) GroupID {
-		unaryPlusExpr := (*unaryPlusExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		unaryPlusExpr := (*unaryPlusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1102,8 +1102,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// UnaryMinusOp
-	func(e *Expr, n int) GroupID {
-		unaryMinusExpr := (*unaryMinusExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		unaryMinusExpr := (*unaryMinusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1114,8 +1114,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// UnaryComplementOp
-	func(e *Expr, n int) GroupID {
-		unaryComplementExpr := (*unaryComplementExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		unaryComplementExpr := (*unaryComplementExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1126,45 +1126,45 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// FunctionOp
-	func(e *Expr, n int) GroupID {
-		functionExpr := (*functionExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		default:
-			list := e.mem.lookupList(functionExpr.args())
+			list := ev.mem.lookupList(functionExpr.args())
 			return list[n-0]
 		}
 	},
 
 	// TrueOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		panic("child index out of range")
 	},
 
 	// FalseOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		panic("child index out of range")
 	},
 
 	// ScanOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		panic("child index out of range")
 	},
 
 	// ValuesOp
-	func(e *Expr, n int) GroupID {
-		valuesExpr := (*valuesExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		valuesExpr := (*valuesExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		default:
-			list := e.mem.lookupList(valuesExpr.rows())
+			list := ev.mem.lookupList(valuesExpr.rows())
 			return list[n-0]
 		}
 	},
 
 	// SelectOp
-	func(e *Expr, n int) GroupID {
-		selectExpr := (*selectExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		selectExpr := (*selectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1177,8 +1177,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// ProjectOp
-	func(e *Expr, n int) GroupID {
-		projectExpr := (*projectExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		projectExpr := (*projectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1191,8 +1191,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// InnerJoinOp
-	func(e *Expr, n int) GroupID {
-		innerJoinExpr := (*innerJoinExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		innerJoinExpr := (*innerJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1207,8 +1207,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// LeftJoinOp
-	func(e *Expr, n int) GroupID {
-		leftJoinExpr := (*leftJoinExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		leftJoinExpr := (*leftJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1223,8 +1223,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// RightJoinOp
-	func(e *Expr, n int) GroupID {
-		rightJoinExpr := (*rightJoinExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		rightJoinExpr := (*rightJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1239,8 +1239,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// FullJoinOp
-	func(e *Expr, n int) GroupID {
-		fullJoinExpr := (*fullJoinExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		fullJoinExpr := (*fullJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1255,8 +1255,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// SemiJoinOp
-	func(e *Expr, n int) GroupID {
-		semiJoinExpr := (*semiJoinExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		semiJoinExpr := (*semiJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1271,8 +1271,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// AntiJoinOp
-	func(e *Expr, n int) GroupID {
-		antiJoinExpr := (*antiJoinExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		antiJoinExpr := (*antiJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1287,8 +1287,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// InnerJoinApplyOp
-	func(e *Expr, n int) GroupID {
-		innerJoinApplyExpr := (*innerJoinApplyExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		innerJoinApplyExpr := (*innerJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1303,8 +1303,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// LeftJoinApplyOp
-	func(e *Expr, n int) GroupID {
-		leftJoinApplyExpr := (*leftJoinApplyExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		leftJoinApplyExpr := (*leftJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1319,8 +1319,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// RightJoinApplyOp
-	func(e *Expr, n int) GroupID {
-		rightJoinApplyExpr := (*rightJoinApplyExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		rightJoinApplyExpr := (*rightJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1335,8 +1335,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// FullJoinApplyOp
-	func(e *Expr, n int) GroupID {
-		fullJoinApplyExpr := (*fullJoinApplyExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		fullJoinApplyExpr := (*fullJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1351,8 +1351,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// SemiJoinApplyOp
-	func(e *Expr, n int) GroupID {
-		semiJoinApplyExpr := (*semiJoinApplyExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		semiJoinApplyExpr := (*semiJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1367,8 +1367,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// AntiJoinApplyOp
-	func(e *Expr, n int) GroupID {
-		antiJoinApplyExpr := (*antiJoinApplyExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		antiJoinApplyExpr := (*antiJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1383,8 +1383,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// GroupByOp
-	func(e *Expr, n int) GroupID {
-		groupByExpr := (*groupByExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		groupByExpr := (*groupByExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1399,8 +1399,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// UnionOp
-	func(e *Expr, n int) GroupID {
-		unionExpr := (*unionExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		unionExpr := (*unionExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1413,8 +1413,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// IntersectOp
-	func(e *Expr, n int) GroupID {
-		intersectExpr := (*intersectExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		intersectExpr := (*intersectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1427,8 +1427,8 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// ExceptOp
-	func(e *Expr, n int) GroupID {
-		exceptExpr := (*exceptExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView, n int) GroupID {
+		exceptExpr := (*exceptExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
 		case 0:
@@ -1441,432 +1441,432 @@ var childGroupLookup = []childGroupLookupFunc{
 	},
 
 	// SortOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		if n == 0 {
-			return e.loc.group
+			return ev.loc.group
 		}
 
 		panic("child index out of range")
 	},
 
 	// ArrangeOp
-	func(e *Expr, n int) GroupID {
+	func(ev *ExprView, n int) GroupID {
 		if n == 0 {
-			return e.loc.group
+			return ev.loc.group
 		}
 
 		panic("child index out of range")
 	},
 }
 
-type privateLookupFunc func(e *Expr) PrivateID
+type privateLookupFunc func(ev *ExprView) PrivateID
 
 var privateLookup = []privateLookupFunc{
 	// UnknownOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		panic("op type not initialized")
 	},
 
 	// SubqueryOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// VariableOp
-	func(e *Expr) PrivateID {
-		variableExpr := (*variableExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) PrivateID {
+		variableExpr := (*variableExpr)(ev.mem.lookupExpr(ev.loc))
 		return variableExpr.col()
 	},
 
 	// ConstOp
-	func(e *Expr) PrivateID {
-		constExpr := (*constExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) PrivateID {
+		constExpr := (*constExpr)(ev.mem.lookupExpr(ev.loc))
 		return constExpr.value()
 	},
 
 	// PlaceholderOp
-	func(e *Expr) PrivateID {
-		placeholderExpr := (*placeholderExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) PrivateID {
+		placeholderExpr := (*placeholderExpr)(ev.mem.lookupExpr(ev.loc))
 		return placeholderExpr.value()
 	},
 
 	// ListOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// OrderedListOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// TupleOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// FiltersOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// ProjectionsOp
-	func(e *Expr) PrivateID {
-		projectionsExpr := (*projectionsExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) PrivateID {
+		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
 		return projectionsExpr.cols()
 	},
 
 	// ExistsOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// AndOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// OrOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// NotOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// EqOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// LtOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// GtOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// LeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// GeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// NeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// InOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// NotInOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// LikeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// NotLikeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// ILikeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// NotILikeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// SimilarToOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// NotSimilarToOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// RegMatchOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// NotRegMatchOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// RegIMatchOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// NotRegIMatchOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// IsDistinctFromOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// IsNotDistinctFromOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// IsOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// IsNotOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// AnyOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// SomeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// AllOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// BitandOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// BitorOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// BitxorOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// PlusOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// MinusOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// MultOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// DivOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// FloorDivOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// ModOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// PowOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// ConcatOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// LShiftOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// RShiftOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// UnaryPlusOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// UnaryMinusOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// UnaryComplementOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// FunctionOp
-	func(e *Expr) PrivateID {
-		functionExpr := (*functionExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) PrivateID {
+		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 		return functionExpr.def()
 	},
 
 	// TrueOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// FalseOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// ScanOp
-	func(e *Expr) PrivateID {
-		scanExpr := (*scanExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) PrivateID {
+		scanExpr := (*scanExpr)(ev.mem.lookupExpr(ev.loc))
 		return scanExpr.table()
 	},
 
 	// ValuesOp
-	func(e *Expr) PrivateID {
-		valuesExpr := (*valuesExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) PrivateID {
+		valuesExpr := (*valuesExpr)(ev.mem.lookupExpr(ev.loc))
 		return valuesExpr.cols()
 	},
 
 	// SelectOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// ProjectOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// InnerJoinOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// LeftJoinOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// RightJoinOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// FullJoinOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// SemiJoinOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// AntiJoinOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// InnerJoinApplyOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// LeftJoinApplyOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// RightJoinApplyOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// FullJoinApplyOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// SemiJoinApplyOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// AntiJoinApplyOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// GroupByOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// UnionOp
-	func(e *Expr) PrivateID {
-		unionExpr := (*unionExpr)(e.mem.lookupExpr(e.loc))
+	func(ev *ExprView) PrivateID {
+		unionExpr := (*unionExpr)(ev.mem.lookupExpr(ev.loc))
 		return unionExpr.colMap()
 	},
 
 	// IntersectOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// ExceptOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// SortOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 
 	// ArrangeOp
-	func(e *Expr) PrivateID {
+	func(ev *ExprView) PrivateID {
 		return 0
 	},
 }
@@ -2291,24 +2291,24 @@ var isEnforcerLookup = []bool{
 	true,  // ArrangeOp
 }
 
-func (e *Expr) IsScalar() bool {
-	return isScalarLookup[e.op]
+func (ev *ExprView) IsScalar() bool {
+	return isScalarLookup[ev.op]
 }
 
-func (e *Expr) IsRelational() bool {
-	return isRelationalLookup[e.op]
+func (ev *ExprView) IsRelational() bool {
+	return isRelationalLookup[ev.op]
 }
 
-func (e *Expr) IsJoin() bool {
-	return isJoinLookup[e.op]
+func (ev *ExprView) IsJoin() bool {
+	return isJoinLookup[ev.op]
 }
 
-func (e *Expr) IsJoinApply() bool {
-	return isJoinApplyLookup[e.op]
+func (ev *ExprView) IsJoinApply() bool {
+	return isJoinApplyLookup[ev.op]
 }
 
-func (e *Expr) IsEnforcer() bool {
-	return isEnforcerLookup[e.op]
+func (ev *ExprView) IsEnforcer() bool {
+	return isEnforcerLookup[ev.op]
 }
 
 type subqueryExpr memoExpr
