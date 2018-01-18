@@ -213,6 +213,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
+	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
