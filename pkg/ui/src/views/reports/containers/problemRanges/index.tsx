@@ -16,6 +16,7 @@ type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesRes
 
 interface ProblemRangesOwnProps {
   problemRanges: ProblemRangesResponse;
+  lastError: Error;
   refreshProblemRanges: typeof refreshProblemRanges;
 }
 
@@ -86,6 +87,20 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 
   render() {
     const { problemRanges } = this.props;
+    if (!_.isNil(this.props.lastError)) {
+      let errorText: string;
+      if (_.isEmpty(this.props.params[nodeIDAttr])) {
+        errorText = `Error loading Problem Ranges on the Cluster`;
+      } else {
+        errorText = `Error loading Problem Range for node n${this.props.params[nodeIDAttr]}`;
+      }
+      return (
+        <div className="section">
+          <h1>Problem Ranges Report</h1>
+          <h2>{errorText}</h2>
+        </div>
+      );
+    }
     if (!problemRanges) {
       return (
         <div className="section">
@@ -167,6 +182,7 @@ export default connect(
     const nodeIDKey = problemRangesRequestKey(problemRangeRequestFromProps(props));
     return {
       problemRanges: state.cachedData.problemRanges[nodeIDKey] && state.cachedData.problemRanges[nodeIDKey].data,
+      lastError: state.cachedData.problemRanges[nodeIDKey] && state.cachedData.problemRanges[nodeIDKey].lastError,
     };
   },
   {
