@@ -2479,7 +2479,7 @@ func TableEquivSignatures(
 }
 
 // maxKeyTokens returns the maximum number of key tokens in an index's key,
-// including the table ID, index ID, and index column values (ncluding extra
+// including the table ID, index ID, and index column values (including extra
 // columns that may be stored in the key).
 // It requires knowledge of whether the key will or might contain a NULL value:
 // if uncertain, pass in true to 'overestimate' the maxKeyTokens.

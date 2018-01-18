@@ -492,10 +492,11 @@ func (c *cascader) deleteRows(
 	if err != nil {
 		return nil, nil, 0, err
 	}
+	indexPKRowFetcherColIDToRowIndex := indexPKRowFetcher.tables[0].colIdxMap
 
 	// Fetch all the primary keys that need to be deleted.
 	// TODO(Bram): consider chunking this into n, primary keys, perhaps 100.
-	pkColTypeInfo, err := makeColTypeInfo(referencingTable, indexPKRowFetcher.tables[0].colIdxMap)
+	pkColTypeInfo, err := makeColTypeInfo(referencingTable, indexPKRowFetcherColIDToRowIndex)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -536,7 +537,7 @@ func (c *cascader) deleteRows(
 	// Create a batch request to get all the spans of the primary keys that need
 	// to be deleted.
 	pkLookupReq, err := batchRequestForPKValues(
-		referencingTable, rowDeleter.FetchColIDtoRowIndex, primaryKeysToDelete,
+		referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToDelete,
 	)
 	if err != nil {
 		return nil, nil, 0, err
@@ -676,10 +677,11 @@ func (c *cascader) updateRows(
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
+		indexPKRowFetcherColIDToRowIndex := indexPKRowFetcher.tables[0].colIdxMap
 
 		// Fetch all the primary keys for rows that will be updated.
 		// TODO(Bram): consider chunking this into n, primary keys, perhaps 100.
-		pkColTypeInfo, err := makeColTypeInfo(referencingTable, indexPKRowFetcher.tables[0].colIdxMap)
+		pkColTypeInfo, err := makeColTypeInfo(referencingTable, indexPKRowFetcherColIDToRowIndex)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
@@ -714,7 +716,7 @@ func (c *cascader) updateRows(
 		// Create a batch request to get all the spans of the primary keys that need
 		// to be updated.
 		pkLookupReq, err := batchRequestForPKValues(
-			referencingTable, rowUpdater.FetchColIDtoRowIndex, primaryKeysToUpdate,
+			referencingTable, indexPKRowFetcherColIDToRowIndex, primaryKeysToUpdate,
 		)
 		if err != nil {
 			return nil, nil, nil, 0, err
