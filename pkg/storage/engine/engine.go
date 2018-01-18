@@ -151,7 +151,12 @@ type Reader interface {
 	NewIterator(prefix bool) Iterator
 	// NewTimeBoundIterator is like NewIterator, but the underlying iterator will
 	// efficiently skip over SSTs that contain no MVCC keys in the time range
-	// (start, end].
+	// [start, end].
+	//
+	// Note that time-bound iterators are strictly a performance optimization, and
+	// will frequently return keys outside of the [start, end] time range. If you
+	// must guarantee that you never see a key outside of the time bounds, perform
+	// your own filtering.
 	NewTimeBoundIterator(start, end hlc.Timestamp) Iterator
 }
 
