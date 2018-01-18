@@ -127,7 +127,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			}
 			tbNameStrings = append(tbNameStrings, cascadedViews...)
 		} else {
-			cascadedViews, err := p.dropTableImpl(ctx, tbDesc)
+			cascadedViews, err := p.dropTableImpl(params, tbDesc)
 			if err != nil {
 				return err
 			}
