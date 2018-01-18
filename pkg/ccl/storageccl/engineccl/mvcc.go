@@ -62,7 +62,11 @@ func NewMVCCIncrementalIterator(
 	e engine.Reader, startTime, endTime hlc.Timestamp,
 ) *MVCCIncrementalIterator {
 	return &MVCCIncrementalIterator{
-		iter:      e.NewTimeBoundIterator(startTime, endTime),
+		// The call to startTime.Next() converts our half-open (start, end] time
+		// interval into the fully-inclusive [start, end] interval that
+		// NewTimeBoundIterator expects. This is strictly a performance
+		// optimization; omitting the call would still return correct results.
+		iter:      e.NewTimeBoundIterator(startTime.Next(), endTime),
 		startTime: startTime,
 		endTime:   endTime,
 	}
