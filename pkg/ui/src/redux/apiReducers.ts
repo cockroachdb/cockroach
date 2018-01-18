@@ -122,14 +122,8 @@ export const livenessReducerObj = new CachedDataReducer(
 );
 export const refreshLiveness = livenessReducerObj.refresh;
 
-export const jobsKey = (
-  status: string,
-  type: protos.cockroach.sql.jobs.Type,
-  limit: number,
-) =>
-  `${encodeURIComponent(status)}/${encodeURIComponent(
-    type.toString(),
-  )}/${encodeURIComponent(limit.toString())}`;
+export const jobsKey = (status: string, type: protos.cockroach.sql.jobs.Type, limit: number) =>
+  `${encodeURIComponent(status)}/${encodeURIComponent(type.toString())}/${encodeURIComponent(limit.toString())}`;
 
 const jobsRequestKey = (req: api.JobsRequestMessage): string =>
   jobsKey(req.status, req.type, req.limit);
@@ -142,8 +136,7 @@ const jobsReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshJobs = jobsReducerObj.refresh;
 
-export const queryToID = (req: api.QueryPlanRequestMessage): string =>
-  req.query;
+export const queryToID = (req: api.QueryPlanRequestMessage): string => req.query;
 
 const queryPlanReducerObj = new CachedDataReducer(api.getQueryPlan, "queryPlan");
 export const refreshQueryPlan = queryPlanReducerObj.refresh;
