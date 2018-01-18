@@ -14,16 +14,13 @@ interface ConnectionsTableProps {
 
 export default function ConnectionsTable(props: ConnectionsTableProps) {
   const { range } = props;
-  if (!range || _.isNil(range.data)) {
-    return null;
-  }
-  const ids = _.chain(_.keys(range.data.responses_by_node_id))
-    .map(id => parseInt(id, 10))
-    .sortBy(id => id)
-    .value();
-
+  let ids: number[];
   let viaNodeID = "";
-  if (range && !_.isEmpty(range.data)) {
+  if (range && !range.inFlight && !_.isNil(range.data)) {
+    ids = _.chain(_.keys(range.data.responses_by_node_id))
+      .map(id => parseInt(id, 10))
+      .sortBy(id => id)
+      .value();
     viaNodeID = ` (via n${range.data.node_id.toString()})`;
   }
 

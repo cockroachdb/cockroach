@@ -16,6 +16,7 @@ type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesRes
 
 interface ProblemRangesOwnProps {
   problemRanges: ProblemRangesResponse;
+  lastError: Error;
   refreshProblemRanges: typeof refreshProblemRanges;
 }
 
@@ -55,7 +56,7 @@ function ProblemRangeList(props: {
   );
 }
 
-function problemRangeRequest(props: ProblemRangesProps) {
+function problemRangeRequestFromProps(props: ProblemRangesProps) {
   return new protos.cockroach.server.serverpb.ProblemRangesRequest({
     node_id: props.params[nodeIDAttr],
   });
@@ -70,7 +71,7 @@ function problemRangeRequest(props: ProblemRangesProps) {
  */
 class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   refresh(props = this.props) {
-    props.refreshProblemRanges(problemRangeRequest(props));
+    props.refreshProblemRanges(problemRangeRequestFromProps(props));
   }
 
   componentWillMount() {
@@ -86,6 +87,20 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 
   render() {
     const { problemRanges } = this.props;
+    if (!_.isNil(this.props.lastError)) {
+      let errorText: string;
+      if (_.isEmpty(this.props.params[nodeIDAttr])) {
+        errorText = `Error loading Problem Ranges on the Cluster`;
+      } else {
+        errorText = `Error loading Problem Range for node n${this.props.params[nodeIDAttr]}`;
+      }
+      return (
+        <div className="section">
+          <h1>Problem Ranges Report</h1>
+          <h2>{errorText}</h2>
+        </div>
+      );
+    }
     if (!problemRanges) {
       return (
         <div className="section">
@@ -164,9 +179,10 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 
 export default connect(
   (state: AdminUIState, props: ProblemRangesProps) => {
-    const nodeIDKey = problemRangesRequestKey(problemRangeRequest(props));
+    const nodeIDKey = problemRangesRequestKey(problemRangeRequestFromProps(props));
     return {
       problemRanges: state.cachedData.problemRanges[nodeIDKey] && state.cachedData.problemRanges[nodeIDKey].data,
+      lastError: state.cachedData.problemRanges[nodeIDKey] && state.cachedData.problemRanges[nodeIDKey].lastError,
     };
   },
   {

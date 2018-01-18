@@ -4,7 +4,7 @@ import { connect } from "react-redux";
 import { RouterState } from "react-router";
 
 import * as protos from "src/js/protos";
-import { refreshCertificates } from "src/redux/apiReducers";
+import { certificatesRequestKey, refreshCertificates } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
@@ -26,14 +26,18 @@ const emptyRow = (
   </tr>
 );
 
+function certificatesRequestFromProps(props: CertificatesProps) {
+  return new protos.cockroach.server.serverpb.CertificatesRequest({
+    node_id: props.params[nodeIDAttr],
+  });
+}
+
 /**
  * Renders the Certificate Report page.
  */
 class Certificates extends React.Component<CertificatesProps, {}> {
   refresh(props = this.props) {
-    props.refreshCertificates(new protos.cockroach.server.serverpb.CertificatesRequest({
-      node_id: props.params[nodeIDAttr],
-    }));
+    props.refreshCertificates(certificatesRequestFromProps(props));
   }
 
   componentWillMount() {
@@ -184,10 +188,10 @@ class Certificates extends React.Component<CertificatesProps, {}> {
 }
 
 function mapStateToProps(state: AdminUIState, props: CertificatesProps) {
-  const nodeID = props.params[nodeIDAttr];
+  const nodeIDKey = certificatesRequestKey(certificatesRequestFromProps(props));
   return {
-    certificates: state.cachedData.certificates[nodeID] && state.cachedData.certificates[nodeID].data,
-    lastError: state.cachedData.certificates[nodeID] && state.cachedData.certificates[nodeID].lastError,
+    certificates: state.cachedData.certificates[nodeIDKey] && state.cachedData.certificates[nodeIDKey].data,
+    lastError: state.cachedData.certificates[nodeIDKey] && state.cachedData.certificates[nodeIDKey].lastError,
   };
 }
 
