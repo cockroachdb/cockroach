@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -182,12 +183,12 @@ func MakeServer(
 
 // Match returns true if rd appears to be a Postgres connection.
 func Match(rd io.Reader) bool {
-	var buf readBuffer
-	_, err := buf.readUntypedMsg(rd)
+	var buf pgwirebase.ReadBuffer
+	_, err := buf.ReadUntypedMsg(rd)
 	if err != nil {
 		return false
 	}
-	version, err := buf.getUint32()
+	version, err := buf.GetUint32()
 	if err != nil {
 		return false
 	}
@@ -336,20 +337,20 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		defer s.metrics.Conns.Dec(1)
 	}
 
-	var buf readBuffer
-	n, err := buf.readUntypedMsg(conn)
+	var buf pgwirebase.ReadBuffer
+	n, err := buf.ReadUntypedMsg(conn)
 	if err != nil {
 		return err
 	}
 	s.metrics.BytesInCount.Inc(int64(n))
-	version, err := buf.getUint32()
+	version, err := buf.GetUint32()
 	if err != nil {
 		return err
 	}
 	errSSLRequired := false
 	if version == versionSSL {
-		if len(buf.msg) > 0 {
-			return errors.Errorf("unexpected data after SSLRequest: %q", buf.msg)
+		if len(buf.Msg) > 0 {
+			return errors.Errorf("unexpected data after SSLRequest: %q", buf.Msg)
 		}
 
 		if s.cfg.Insecure {
@@ -367,12 +368,12 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			conn = tls.Server(conn, tlsConfig)
 		}
 
-		n, err := buf.readUntypedMsg(conn)
+		n, err := buf.ReadUntypedMsg(conn)
 		if err != nil {
 			return err
 		}
 		s.metrics.BytesInCount.Inc(int64(n))
-		version, err = buf.getUint32()
+		version, err = buf.GetUint32()
 		if err != nil {
 			return err
 		}
@@ -387,7 +388,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		v3conn := makeV3Conn(conn, &s.metrics, &s.sqlMemoryPool, s.executor)
 		defer v3conn.finish(ctx)
 
-		if v3conn.sessionArgs, err = parseOptions(ctx, buf.msg); err != nil {
+		if v3conn.sessionArgs, err = parseOptions(ctx, buf.Msg); err != nil {
 			return v3conn.sendError(pgerror.NewError(pgerror.CodeProtocolViolationError, err.Error()))
 		}
 
