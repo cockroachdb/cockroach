@@ -133,9 +133,41 @@ TRUNCATE foo
 statement error pgcode 42809 "foo" is not a table
 DROP TABLE foo
 
-# TODO(vilterp): match PG (returns a single row with the sequence settings and value)
-statement error pgcode 42809 pq: cannot SELECT from a sequence
-SELECT * FROM foo
+# You can select from a sequence to get its value.
+
+statement ok
+CREATE SEQUENCE select_test
+
+query IIB colnames
+SELECT * FROM select_test
+----
+last_value log_cnt is_called
+0          0       true
+
+# Test selecting just last_value.
+query I
+SELECT last_value FROM select_test
+----
+0
+
+statement ok
+SELECT nextval('select_test')
+
+query I
+SELECT last_value FROM select_test
+----
+1
+
+# Since this is a custom plan node, verify that column validation works.
+statement error pq: column name "foo" not found
+SELECT foo from select_test
+
+query TTT colnames
+EXPLAIN SELECT * FROM select_test
+----
+Tree                  Field  Description
+render                ·      ·
+ └── sequence select  ·      ·
 
 # USING THE `nextval` AND `currval` FUNCTIONS
 

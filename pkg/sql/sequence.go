@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // IncrementSequence implements the tree.EvalPlanner interface.
@@ -119,6 +120,20 @@ func (p *planner) SetSequenceValue(
 	// according to comments on Inc operation. Switch to Inc if `desired-current`
 	// overflows correctly.
 	return p.txn.Put(ctx, seqValueKey, newVal)
+}
+
+// GetSequenceValue returns the current value of the sequence.
+func (p *planner) GetSequenceValue(
+	ctx context.Context, desc *sqlbase.TableDescriptor,
+) (int64, error) {
+	if desc.SequenceOpts == nil {
+		return 0, errors.New("descriptor is not a sequence")
+	}
+	keyValue, err := p.txn.Get(ctx, keys.MakeSequenceKey(uint32(desc.ID)))
+	if err != nil {
+		return 0, err
+	}
+	return keyValue.ValueInt(), nil
 }
 
 func readOnlyError(s string) error {

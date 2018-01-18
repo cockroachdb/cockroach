@@ -336,6 +336,7 @@ func (p *planner) propagateFilters(
 	case *hookFnNode:
 	case *valueGenerator:
 	case *valuesNode:
+	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
