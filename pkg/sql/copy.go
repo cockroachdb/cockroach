@@ -75,7 +75,7 @@ func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) 
 	for i, c := range cols {
 		cn.resultColumns[i] = sqlbase.ResultColumn{Typ: c.Type.ToDatumType()}
 	}
-	cn.rowsMemAcc = p.session.mon.MakeBoundAccount()
+	cn.rowsMemAcc = p.evalCtx.Mon.MakeBoundAccount()
 	return cn, nil
 }
 
@@ -337,7 +337,7 @@ func (p *planner) CopyData(ctx context.Context, n *CopyDataBlock) (planNode, err
 		},
 		Returning: tree.AbsentReturningClause,
 	}
-	return p.Insert(ctx, &in, nil)
+	return p.Insert(ctx, &in, nil /* desiredTypes */)
 }
 
 // Format implements the NodeFormatter interface.
