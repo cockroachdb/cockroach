@@ -24,7 +24,10 @@ function buildLocalityTree(nodes: NodeStatus$Properties[] = [], depth = 0): Loca
       ),
   );
 
+  const tiers = _.isEmpty(nodes) ? [] : <LocalityTier[]>nodes[0].desc.locality.tiers.slice(0, depth);
+
   return {
+    tiers: tiers;
     nodes: thisLevelNodes,
     localities: childLocalities,
   };
@@ -35,7 +38,13 @@ export const selectLocalityTree = createSelector(
   buildLocalityTree,
 );
 
+export interface LocalityTier {
+  key: string;
+  value: string;
+}
+
 export interface LocalityTree {
+  tiers: LocalityTier[];
   localities: {
     [localityKey: string]: {
       [localityValue: string]: LocalityTree,
