@@ -41,7 +41,7 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
 
     return (
       <div>
-        <h2>Simulated Allocator Output {fromNodeID}</h2>
+        <h2>Simulated Allocator Output{fromNodeID}</h2>
         <Loading
           loading={!allocator || allocator.inFlight}
           className="loading-image loading-image__spinner-left"

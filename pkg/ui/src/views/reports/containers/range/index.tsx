@@ -5,7 +5,14 @@ import { connect } from "react-redux";
 import { RouterState } from "react-router";
 
 import * as protos from "src/js/protos";
-import { refreshAllocatorRange, refreshRange, refreshRangeLog } from "src/redux/apiReducers";
+import {
+  allocatorRangeRequestKey,
+  rangeRequestKey,
+  rangeLogRequestKey,
+  refreshAllocatorRange,
+  refreshRange,
+  refreshRangeLog,
+} from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
@@ -42,29 +49,34 @@ function ErrorPage(props: {
   );
 }
 
+function rangeRequestFromProps(props: RangeProps) {
+  return new protos.cockroach.server.serverpb.RangeRequest({
+    range_id: Long.fromString(props.params[rangeIDAttr]),
+  });
+}
+
+function allocatorRequestFromProps(props: RangeProps) {
+  return new protos.cockroach.server.serverpb.AllocatorRangeRequest({
+    range_id: Long.fromString(props.params[rangeIDAttr]),
+  });
+}
+
+function rangeLogRequestFromProps(props: RangeProps) {
+  // TODO(bram): Remove this limit once #18159 is resolved.
+  return new protos.cockroach.server.serverpb.RangeLogRequest({
+    range_id: Long.fromString(props.params[rangeIDAttr]),
+    limit: -1,
+  });
+}
+
 /**
  * Renders the Range Report page.
  */
 class Range extends React.Component<RangeProps, {}> {
   refresh(props = this.props) {
-    const rangeID = Long.fromString(props.params[rangeIDAttr]);
-    props.refreshRange(
-      new protos.cockroach.server.serverpb.RangeRequest({
-        range_id: rangeID,
-      }),
-    );
-    props.refreshAllocatorRange(
-      new protos.cockroach.server.serverpb.AllocatorRangeRequest({
-        range_id: rangeID,
-      }),
-    );
-    // TODO(bram): Remove this limit once #18159 is resolved.
-    props.refreshRangeLog(
-      new protos.cockroach.server.serverpb.RangeLogRequest({
-        range_id: rangeID,
-        limit: -1,
-      }),
-    );
+    props.refreshRange(rangeRequestFromProps(props));
+    props.refreshAllocatorRange(allocatorRequestFromProps(props));
+    props.refreshRangeLog(rangeLogRequestFromProps(props));
   }
 
   componentWillMount() {
@@ -164,11 +176,10 @@ class Range extends React.Component<RangeProps, {}> {
 }
 
 function mapStateToProps(state: AdminUIState, props: RangeProps) {
-  const rangeID = props.params[rangeIDAttr];
   return {
-    range: state.cachedData.range[rangeID],
-    allocator: state.cachedData.allocatorRange[rangeID],
-    rangeLog: state.cachedData.rangeLog[rangeID],
+    range: state.cachedData.range[rangeRequestKey(rangeRequestFromProps(props))],
+    allocator: state.cachedData.allocatorRange[allocatorRangeRequestKey(allocatorRequestFromProps(props))],
+    rangeLog: state.cachedData.rangeLog[rangeLogRequestKey(rangeLogRequestFromProps(props))],
   };
 }
 
