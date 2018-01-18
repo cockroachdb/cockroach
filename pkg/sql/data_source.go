@@ -394,7 +394,7 @@ func (p *planner) getDataSource(
 		if foundVirtual {
 			return ds, nil
 		}
-		return p.getTableScanOrViewPlan(ctx, tn, hints, scanVisibility)
+		return p.getTableScanOrSequenceOrViewPlan(ctx, tn, hints, scanVisibility)
 
 	case *tree.FuncExpr:
 		return p.getGeneratorPlan(ctx, t)
@@ -574,10 +574,10 @@ func renameSource(
 	return src, nil
 }
 
-// getTableScanOrViewPlan builds a planDataSource from a single data source
+// getTableScanOrSequenceOrViewPlan builds a planDataSource from a single data source
 // clause (either a table or a view) in a SelectClause, expanding views out
 // into subqueries.
-func (p *planner) getTableScanOrViewPlan(
+func (p *planner) getTableScanOrSequenceOrViewPlan(
 	ctx context.Context, tn *tree.TableName, hints *tree.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	if tn.PrefixOriginallySpecified {
@@ -619,8 +619,7 @@ func (p *planner) getPlanForDesc(
 		}
 		return p.getViewPlan(ctx, tn, desc)
 	} else if desc.IsSequence() {
-		return planDataSource{}, pgerror.NewError(
-			pgerror.CodeWrongObjectTypeError, "cannot SELECT from a sequence")
+		return p.getSequenceSource(ctx, *tn, desc)
 	} else if !desc.IsTable() {
 		return planDataSource{}, errors.Errorf(
 			"unexpected table descriptor of type %s for %q", desc.TypeName(), tree.ErrString(tn))
@@ -722,6 +721,32 @@ func (p *planner) getGeneratorPlan(ctx context.Context, t *tree.FuncExpr) (planD
 	return planDataSource{
 		info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
 		plan: plan,
+	}, nil
+}
+
+func (p *planner) getSequenceSource(
+	ctx context.Context, tn tree.TableName, desc *sqlbase.TableDescriptor,
+) (planDataSource, error) {
+	node, err := p.SequenceSelectNode(desc)
+	if err != nil {
+		return planDataSource{}, err
+	}
+	return planDataSource{
+		plan: node,
+		info: newSourceInfoForSingleTable(tn, []sqlbase.ResultColumn{
+			{
+				Name: "last_value",
+				Typ:  types.Int,
+			},
+			{
+				Name: "log_cnt",
+				Typ:  types.Int,
+			},
+			{
+				Name: "is_called",
+				Typ:  types.Bool,
+			},
+		}),
 	}, nil
 }
 

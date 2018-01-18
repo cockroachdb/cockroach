@@ -252,6 +252,7 @@ func doExpandPlan(
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
+	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
@@ -639,6 +640,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
+	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
