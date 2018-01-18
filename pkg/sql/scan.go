@@ -157,11 +157,11 @@ type scanRun struct {
 	// only true when running SCRUB commands.
 	isCheck bool
 
-	fetcher sqlbase.MultiRowFetcher
+	fetcher sqlbase.RowFetcher
 }
 
 func (n *scanNode) startExec(params runParams) error {
-	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:             n.desc,
 		Index:            n.index,
 		ColIdxMap:        n.colIdxMap,

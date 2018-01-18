@@ -264,7 +264,7 @@ type tableUpserter struct {
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	fetchCols             []sqlbase.ColumnDescriptor
 	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
-	fetcher               sqlbase.MultiRowFetcher
+	fetcher               sqlbase.RowFetcher
 
 	// Used for the fast path.
 	fastPathBatch *client.Batch
@@ -364,7 +364,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 		}
 	}
 
-	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:            tableDesc,
 		Index:           &tableDesc.PrimaryIndex,
 		ColIdxMap:       tu.fetchColIDtoRowIndex,
@@ -887,8 +887,8 @@ func (td *tableDeleter) deleteAllRowsScan(
 		valNeededForCol.Add(idx)
 	}
 
-	var rf sqlbase.MultiRowFetcher
-	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+	var rf sqlbase.RowFetcher
+	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:            td.rd.Helper.TableDesc,
 		Index:           &td.rd.Helper.TableDesc.PrimaryIndex,
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
@@ -998,8 +998,8 @@ func (td *tableDeleter) deleteIndexScan(
 		valNeededForCol.Add(idx)
 	}
 
-	var rf sqlbase.MultiRowFetcher
-	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+	var rf sqlbase.RowFetcher
+	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:            td.rd.Helper.TableDesc,
 		Index:           &td.rd.Helper.TableDesc.PrimaryIndex,
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
