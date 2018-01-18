@@ -161,12 +161,12 @@ func (n *scrubNode) Values() tree.Datums {
 	return n.run.row
 }
 
-func (n *scrubNode) Close(ctx context.Context) {
+func (n *scrubNode) Clear(ctx context.Context) {
 	// Close any iterators which have not been completed.
-	for len(n.run.checkQueue) > 0 {
-		n.run.checkQueue[0].Close(ctx)
-		n.run.checkQueue = n.run.checkQueue[1:]
+	for _, c := range n.run.checkQueue {
+		c.Clear(ctx)
 	}
+	n.run.checkQueue = nil
 }
 
 // startScrubDatabase prepares a scrub check for each of the tables in

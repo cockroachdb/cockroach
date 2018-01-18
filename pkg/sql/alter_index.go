@@ -133,4 +133,3 @@ func (n *alterIndexNode) startExec(params runParams) error {
 
 func (n *alterIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterIndexNode) Values() tree.Datums          { return tree.Datums{} }
-func (n *alterIndexNode) Close(context.Context)        {}

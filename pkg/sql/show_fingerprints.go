@@ -162,5 +162,4 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *showFingerprintsNode) Values() tree.Datums     { return n.run.values }
-func (n *showFingerprintsNode) Close(_ context.Context) {}
+func (n *showFingerprintsNode) Values() tree.Datums { return n.run.values }

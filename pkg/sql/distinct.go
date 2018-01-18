@@ -265,12 +265,11 @@ func (n *distinctNode) Values() tree.Datums {
 	return n.plan.Values()
 }
 
-func (n *distinctNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+func (n *distinctNode) Clear(ctx context.Context) {
 	n.run.prefixSeen = nil
-	n.run.prefixMemAcc.Close(ctx)
+	n.run.prefixMemAcc.Clear(ctx)
 	n.run.suffixSeen = nil
-	n.run.suffixMemAcc.Close(ctx)
+	n.run.suffixMemAcc.Clear(ctx)
 }
 
 func (n *distinctNode) addSuffixSeen(

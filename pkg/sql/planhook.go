@@ -132,4 +132,3 @@ func (f *hookFnNode) Next(params runParams) (bool, error) {
 	}
 }
 func (f *hookFnNode) Values() tree.Datums { return f.run.row }
-func (*hookFnNode) Close(context.Context) {}

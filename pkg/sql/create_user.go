@@ -139,9 +139,6 @@ func (*CreateUserNode) Next(runParams) (bool, error) { return false, nil }
 // Values implements the planNode interface.
 func (*CreateUserNode) Values() tree.Datums { return tree.Datums{} }
 
-// Close implements the planNode interface.
-func (*CreateUserNode) Close(context.Context) {}
-
 // FastPathResults implements the planNodeFastPath interface.
 func (n *CreateUserNode) FastPathResults() (int, bool) { return n.run.rowsAffected, true }
 

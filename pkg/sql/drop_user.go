@@ -200,8 +200,5 @@ func (*DropUserNode) Next(runParams) (bool, error) { return false, nil }
 // Values implements the planNode interface.
 func (*DropUserNode) Values() tree.Datums { return tree.Datums{} }
 
-// Close implements the planNode interface.
-func (*DropUserNode) Close(context.Context) {}
-
 // FastPathResults implements the planNodeFastPath interface.
 func (n *DropUserNode) FastPathResults() (int, bool) { return n.run.numDeleted, true }

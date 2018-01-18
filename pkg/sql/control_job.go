@@ -114,4 +114,3 @@ func (n *controlJobNode) startExec(params runParams) error {
 
 func (n *controlJobNode) Next(runParams) (bool, error) { return false, nil }
 func (*controlJobNode) Values() tree.Datums            { return nil }
-func (*controlJobNode) Close(context.Context)          {}

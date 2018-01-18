@@ -193,10 +193,6 @@ func (n *testingRelocateNode) Values() tree.Datums {
 	}
 }
 
-func (n *testingRelocateNode) Close(ctx context.Context) {
-	n.rows.Close(ctx)
-}
-
 func lookupRangeDescriptor(
 	ctx context.Context, db *client.DB, rowKey []byte,
 ) (roachpb.RangeDescriptor, error) {

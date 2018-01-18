@@ -86,4 +86,3 @@ func (n *cancelQueryNode) startExec(params runParams) error {
 
 func (n *cancelQueryNode) Next(runParams) (bool, error) { return false, nil }
 func (*cancelQueryNode) Values() tree.Datums            { return nil }
-func (*cancelQueryNode) Close(context.Context)          {}

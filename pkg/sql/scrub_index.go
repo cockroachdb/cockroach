@@ -237,10 +237,10 @@ func (o *indexCheckOperation) Done(ctx context.Context) bool {
 	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
 }
 
-// Close4 implements the checkOperation interface.
-func (o *indexCheckOperation) Close(ctx context.Context) {
+// Clear implements the checkOperation interface.
+func (o *indexCheckOperation) Clear(ctx context.Context) {
 	if o.run.rows != nil {
-		o.run.rows.Close(ctx)
+		o.run.rows.Clear(ctx)
 	}
 }
 

@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -267,9 +266,4 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 
 func (n *indexJoinNode) Values() tree.Datums {
 	return n.table.Values()
-}
-
-func (n *indexJoinNode) Close(ctx context.Context) {
-	n.index.Close(ctx)
-	n.table.Close(ctx)
 }

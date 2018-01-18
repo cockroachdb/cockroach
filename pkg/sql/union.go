@@ -169,7 +169,8 @@ func (p *planner) Union(
 type unionRun struct {
 	// scratch is a preallocated buffer for formatting the key of the
 	// current row on the right.
-	scratch []byte
+	scratch   []byte
+	rightDone bool
 }
 
 func (n *unionNode) startExec(params runParams) error {
@@ -181,34 +182,17 @@ func (n *unionNode) Next(params runParams) (bool, error) {
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return false, err
 	}
-	if n.right != nil {
+	if !n.rightDone {
 		return n.readRight(params)
 	}
-	if n.left != nil {
-		return n.readLeft(params)
-	}
-	return false, nil
+	return n.readLeft(params)
 }
 
 func (n *unionNode) Values() tree.Datums {
-	if n.right != nil {
+	if !n.rightDone {
 		return n.right.Values()
 	}
-	if n.left != nil {
-		return n.left.Values()
-	}
-	return nil
-}
-
-func (n *unionNode) Close(ctx context.Context) {
-	if n.right != nil {
-		n.right.Close(ctx)
-		n.right = nil
-	}
-	if n.left != nil {
-		n.left.Close(ctx)
-		n.left = nil
-	}
+	return n.left.Values()
 }
 
 func (n *unionNode) readRight(params runParams) (bool, error) {
@@ -232,8 +216,8 @@ func (n *unionNode) readRight(params runParams) (bool, error) {
 		return false, err
 	}
 
-	n.right.Close(params.ctx)
-	n.right = nil
+	clearPlan(params.ctx, n.right)
+	n.rightDone = true
 	return n.readLeft(params)
 }
 
@@ -254,8 +238,7 @@ func (n *unionNode) readLeft(params runParams) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	n.left.Close(params.ctx)
-	n.left = nil
+	clearPlan(params.ctx, n.left)
 	return false, nil
 }
 

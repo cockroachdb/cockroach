@@ -175,9 +175,9 @@ func (o *sqlCheckConstraintCheckOperation) Done(ctx context.Context) bool {
 	return o.run.rows == nil || !o.run.hasRowsLeft
 }
 
-// Close implements the checkOperation interface.
-func (o *sqlCheckConstraintCheckOperation) Close(ctx context.Context) {
+// Clear implements the checkOperation interface.
+func (o *sqlCheckConstraintCheckOperation) Clear(ctx context.Context) {
 	if o.run.rows != nil {
-		o.run.rows.Close(ctx)
+		o.run.rows.Clear(ctx)
 	}
 }

@@ -120,10 +120,6 @@ func (n *showTraceReplicaNode) Values() tree.Datums {
 	return n.run.values
 }
 
-func (n *showTraceReplicaNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
-}
-
 var showTraceReplicaColumns = sqlbase.ResultColumns{
 	{
 		Name: `timestamp`,

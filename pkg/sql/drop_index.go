@@ -94,7 +94,6 @@ func (n *dropIndexNode) startExec(params runParams) error {
 
 func (*dropIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropIndexNode) Values() tree.Datums          { return tree.Datums{} }
-func (*dropIndexNode) Close(context.Context)        {}
 
 type fullIndexName struct {
 	tn      *tree.TableName

@@ -15,8 +15,6 @@
 package sql
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -71,8 +69,7 @@ func (f *filterNode) Next(params runParams) (bool, error) {
 	}
 }
 
-func (f *filterNode) Values() tree.Datums       { return f.source.plan.Values() }
-func (f *filterNode) Close(ctx context.Context) { f.source.plan.Close(ctx) }
+func (f *filterNode) Values() tree.Datums { return f.source.plan.Values() }
 
 func (f *filterNode) computePhysicalProps(evalCtx *tree.EvalContext) {
 	f.props = planPhysicalProps(f.source.plan)

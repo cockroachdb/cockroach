@@ -15,8 +15,6 @@
 package sql
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -39,5 +37,3 @@ func (u *unaryNode) Next(runParams) (bool, error) {
 	u.run.consumed = true
 	return r, nil
 }
-
-func (*unaryNode) Close(context.Context) {}

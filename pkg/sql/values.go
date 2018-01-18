@@ -188,10 +188,9 @@ func (n *valuesNode) Values() tree.Datums {
 	return n.rows.At(n.nextRow - 1)
 }
 
-func (n *valuesNode) Close(ctx context.Context) {
+func (n *valuesNode) Clear(ctx context.Context) {
 	if n.rows != nil {
-		n.rows.Close(ctx)
-		n.rows = nil
+		n.rows.Clear(ctx)
 	}
 }
 

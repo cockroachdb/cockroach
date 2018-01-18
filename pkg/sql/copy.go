@@ -92,8 +92,8 @@ func (n *copyNode) startExec(params runParams) error {
 func (*copyNode) Next(runParams) (bool, error) { return false, nil }
 func (*copyNode) Values() tree.Datums          { return nil }
 
-func (n *copyNode) Close(ctx context.Context) {
-	n.rowsMemAcc.Close(ctx)
+func (n *copyNode) Clear(ctx context.Context) {
+	n.rowsMemAcc.Clear(ctx)
 }
 
 // CopyDataBlock represents a data block of a COPY FROM statement.

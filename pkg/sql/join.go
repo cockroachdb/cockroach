@@ -604,15 +604,11 @@ func (n *joinNode) Values() tree.Datums {
 	return n.run.buffer.Values()
 }
 
-// Close implements the planNode interface.
-func (n *joinNode) Close(ctx context.Context) {
-	n.run.buffer.Close(ctx)
-	n.run.buffer = nil
+// Clear implements the planNode interface.
+func (n *joinNode) Clear(ctx context.Context) {
+	n.run.buffer.Clear(ctx)
 	n.run.buckets.Close(ctx)
-	n.run.bucketsMemAcc.Close(ctx)
-
-	n.right.plan.Close(ctx)
-	n.left.plan.Close(ctx)
+	n.run.bucketsMemAcc.Clear(ctx)
 }
 
 // bucket here is the set of rows for a given group key (comprised of
@@ -688,9 +684,8 @@ func (b *buckets) InitSeen(ctx context.Context, acc *mon.BoundAccount) error {
 	return nil
 }
 
-func (b *buckets) Close(ctx context.Context) {
-	b.rowContainer.Close(ctx)
-	b.rowContainer = nil
+func (b *buckets) Clear(ctx context.Context) {
+	b.rowContainer.Clear(ctx)
 	b.buckets = nil
 }
 

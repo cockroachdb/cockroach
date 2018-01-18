@@ -281,13 +281,13 @@ func (n *sortNode) Values() tree.Datums {
 	return n.run.valueIter.Values()[:len(n.columns)]
 }
 
-func (n *sortNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+func (n *sortNode) Clear(ctx context.Context) {
 	if n.run.sortStrategy != nil {
-		n.run.sortStrategy.Close(ctx)
+		n.run.sortStrategy.Clear(ctx)
 	}
 	// n.run.valueIter points to either n.plan or n.run.sortStrategy and thus has already
 	// been closed.
+	n.run.valueIter = nil
 }
 
 func ensureColumnOrderable(c sqlbase.ResultColumn) error {

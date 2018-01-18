@@ -62,9 +62,4 @@ type ValueGenerator interface {
 
 	// Values retrieves the current row of data.
 	Values() Datums
-
-	// Close must be called after Start() before disposing of the
-	// ValueGenerator. It does not need to be called if Start() has not
-	// been called yet.
-	Close()
 }

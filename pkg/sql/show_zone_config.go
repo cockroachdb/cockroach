@@ -140,8 +140,6 @@ func (n *showZoneConfigNode) Values() tree.Datums {
 	}
 }
 
-func (*showZoneConfigNode) Close(context.Context) {}
-
 // ascendZoneSpecifier logically ascends the zone hierarchy for the zone
 // specified by (zs, resolvedID) until the zone matching actualID is found, and
 // returns that zone's specifier. Results are undefined if actualID is not in

@@ -115,7 +115,6 @@ func (n *setVarNode) startExec(params runParams) error {
 
 func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setVarNode) Values() tree.Datums            { return nil }
-func (n *setVarNode) Close(_ context.Context)        {}
 
 func datumAsString(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (string, error) {
 	val, err := value.Eval(evalCtx)

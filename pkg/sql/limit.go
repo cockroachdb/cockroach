@@ -106,10 +106,6 @@ func (n *limitNode) Next(params runParams) (bool, error) {
 
 func (n *limitNode) Values() tree.Datums { return n.plan.Values() }
 
-func (n *limitNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
-}
-
 // estimateLimit pre-computes the count and offset fields if they are constants,
 // otherwise predefines them to be MaxInt64, 0. Used by index selection.
 // This must be called after type checking and constant folding.

@@ -109,9 +109,3 @@ func (n *valueGenerator) Next(params runParams) (bool, error) {
 	return n.run.gen.Next()
 }
 func (n *valueGenerator) Values() tree.Datums { return n.run.gen.Values() }
-
-func (n *valueGenerator) Close(context.Context) {
-	if n.run.gen != nil {
-		n.run.gen.Close()
-	}
-}

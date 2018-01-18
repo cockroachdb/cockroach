@@ -120,7 +120,6 @@ func (n *dropViewNode) startExec(params runParams) error {
 
 func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropViewNode) Values() tree.Datums          { return tree.Datums{} }
-func (*dropViewNode) Close(context.Context)        {}
 
 func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
 	for _, desc := range td {

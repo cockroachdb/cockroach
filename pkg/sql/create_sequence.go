@@ -118,7 +118,6 @@ func (n *createSequenceNode) startExec(params runParams) error {
 
 func (*createSequenceNode) Next(runParams) (bool, error) { return false, nil }
 func (*createSequenceNode) Values() tree.Datums          { return tree.Datums{} }
-func (*createSequenceNode) Close(context.Context)        {}
 
 func (n *createSequenceNode) makeSequenceTableDesc(
 	params runParams,

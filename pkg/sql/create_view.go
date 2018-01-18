@@ -197,7 +197,6 @@ func (n *createViewNode) startExec(params runParams) error {
 
 func (*createViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*createViewNode) Values() tree.Datums          { return tree.Datums{} }
-func (n *createViewNode) Close(ctx context.Context)  {}
 
 // makeViewTableDesc returns the table descriptor for a new view.
 //

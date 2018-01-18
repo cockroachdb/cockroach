@@ -353,8 +353,11 @@ func (u *updateNode) Values() tree.Datums {
 	return u.run.resultRow
 }
 
+func (u *updateNode) Clear(ctx context.Context) {
+	u.tw.clear(ctx)
+}
+
 func (u *updateNode) Close(ctx context.Context) {
-	u.run.rows.Close(ctx)
 	u.tw.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)

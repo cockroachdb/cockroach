@@ -191,8 +191,11 @@ func (d *deleteNode) Values() tree.Datums {
 	return d.run.resultRow
 }
 
+func (d *deleteNode) Clear(ctx context.Context) {
+	d.tw.clear(ctx)
+}
+
 func (d *deleteNode) Close(ctx context.Context) {
-	d.run.rows.Close(ctx)
 	d.tw.close(ctx)
 	*d = deleteNode{}
 	deleteNodePool.Put(d)

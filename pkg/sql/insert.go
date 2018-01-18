@@ -331,14 +331,15 @@ func (n *insertNode) Next(params runParams) (bool, error) {
 	return n.internalNext(params)
 }
 
+func (n *insertNode) Clear(ctx context.Context) {
+	n.tw.clear(ctx)
+	if n.run.rowsUpserted != nil {
+		n.run.rowsUpserted.Clear(ctx)
+	}
+}
+
 func (n *insertNode) Close(ctx context.Context) {
 	n.tw.close(ctx)
-	n.run.rows.Close(ctx)
-	n.run.rows = nil
-	if n.run.rowsUpserted != nil {
-		n.run.rowsUpserted.Close(ctx)
-		n.run.rowsUpserted = nil
-	}
 	switch t := n.tw.(type) {
 	case *tableInserter:
 		*t = tableInserter{}

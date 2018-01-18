@@ -284,15 +284,13 @@ func (n *showTraceNode) Values() tree.Datums {
 	return n.run.traceRows[n.run.curRow-1][:]
 }
 
-func (n *showTraceNode) Close(ctx context.Context) {
-	if n.plan != nil {
-		n.plan.Close(ctx)
-	}
+func (n *showTraceNode) Clear(ctx context.Context) {
 	n.run.traceRows = nil
 	if n.run.stopTracing != nil {
 		if err := n.run.stopTracing(); err != nil {
 			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
 		}
+		n.run.stopTracing = nil
 	}
 }
 

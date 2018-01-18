@@ -347,8 +347,7 @@ func (r *renderNode) Next(params runParams) (bool, error) {
 	return err == nil, err
 }
 
-func (r *renderNode) Values() tree.Datums       { return r.run.row }
-func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
+func (r *renderNode) Values() tree.Datums { return r.run.row }
 
 // initFrom initializes the table node, given the parsed select expression
 func (p *planner) initFrom(

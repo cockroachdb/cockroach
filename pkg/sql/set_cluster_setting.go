@@ -140,7 +140,6 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 
 func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setClusterSettingNode) Values() tree.Datums            { return nil }
-func (n *setClusterSettingNode) Close(_ context.Context)        {}
 
 func (p *planner) toSettingString(
 	ctx context.Context,

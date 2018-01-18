@@ -128,10 +128,6 @@ func (n *splitNode) Values() tree.Datums {
 	}
 }
 
-func (n *splitNode) Close(ctx context.Context) {
-	n.rows.Close(ctx)
-}
-
 // getRowKey generates a key that corresponds to a row (or prefix of a row) in a table or index.
 // Both tableDesc and index are required (index can be the primary index).
 func getRowKey(

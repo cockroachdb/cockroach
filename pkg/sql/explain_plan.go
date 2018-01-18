@@ -160,12 +160,18 @@ func (e *explainPlanNode) startExec(params runParams) error {
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
 func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
 
-func (e *explainPlanNode) Close(ctx context.Context) {
-	e.plan.Close(ctx)
+func (e *explainPlanNode) Clear(ctx context.Context) {
 	for i := range e.subqueryPlans {
-		e.subqueryPlans[i].plan.Close(ctx)
+		clearPlan(ctx, e.subqueryPlans[i].plan)
 	}
-	e.run.results.Close(ctx)
+	e.run.results.clear(ctx)
+}
+
+func (e *explainPlanNode) Close(ctx context.Context) {
+	for i := range e.subqueryPlans {
+		closePlan(ctx, e.subqueryPlans[i].plan)
+	}
+	e.run.results.clear(ctx)
 }
 
 // explainEntry is a representation of the info that makes it into an output row

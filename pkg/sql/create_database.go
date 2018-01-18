@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -104,4 +103,3 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 
 func (*createDatabaseNode) Next(runParams) (bool, error) { return false, nil }
 func (*createDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
-func (*createDatabaseNode) Close(context.Context)        {}

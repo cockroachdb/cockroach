@@ -436,10 +436,9 @@ func (n *groupNode) Values() tree.Datums {
 	return n.run.values
 }
 
-func (n *groupNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+func (n *groupNode) Clear(ctx context.Context) {
 	for _, f := range n.funcs {
-		f.close(ctx)
+		f.clear(ctx)
 	}
 	n.run.buckets = nil
 }
@@ -727,6 +726,7 @@ type aggregateFuncHolder struct {
 type aggregateFuncRun struct {
 	buckets       map[string]tree.AggregateFunc
 	bucketsMemAcc mon.BoundAccount
+	isDistinct    bool
 	seen          map[string]struct{}
 }
 
@@ -759,18 +759,19 @@ func (a *aggregateFuncHolder) setFilter(filterRenderIdx int) {
 
 // setDistinct causes a to ignore duplicate values of the argument.
 func (a *aggregateFuncHolder) setDistinct() {
+	a.run.isDistinct = true
 	a.run.seen = make(map[string]struct{})
 }
 
-func (a *aggregateFuncHolder) close(ctx context.Context) {
+func (a *aggregateFuncHolder) clear(ctx context.Context) {
 	for _, aggFunc := range a.run.buckets {
-		aggFunc.Close(ctx)
+		aggFunc.Clear(ctx)
 	}
 
 	a.run.buckets = nil
 	a.run.seen = nil
 
-	a.run.bucketsMemAcc.Close(ctx)
+	a.run.bucketsMemAcc.Clear(ctx)
 }
 
 // add accumulates one more value for a particular bucket into an aggregation

@@ -158,7 +158,6 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 func (n *setZoneConfigNode) Next(runParams) (bool, error) { return false, nil }
 func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
-func (*setZoneConfigNode) Close(context.Context)          {}
 
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 

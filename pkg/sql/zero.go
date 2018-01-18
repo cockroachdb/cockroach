@@ -15,8 +15,6 @@
 package sql
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -37,4 +35,3 @@ type zeroNode struct {
 
 func (z *zeroNode) Next(runParams) (bool, error) { return false, nil }
 func (*zeroNode) Values() tree.Datums            { return nil }
-func (*zeroNode) Close(context.Context)          {}

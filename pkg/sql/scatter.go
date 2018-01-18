@@ -166,5 +166,3 @@ func (n *scatterNode) Values() tree.Datums {
 		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.Key)),
 	}
 }
-
-func (*scatterNode) Close(ctx context.Context) {}

@@ -235,13 +235,6 @@ func (n *createTableNode) startExec(params runParams) error {
 func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
 func (*createTableNode) Values() tree.Datums          { return tree.Datums{} }
 
-func (n *createTableNode) Close(ctx context.Context) {
-	if n.sourcePlan != nil {
-		n.sourcePlan.Close(ctx)
-		n.sourcePlan = nil
-	}
-}
-
 func (n *createTableNode) FastPathResults() (int, bool) {
 	if n.n.As() {
 		return n.run.rowsAffected, true

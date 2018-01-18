@@ -138,7 +138,6 @@ func (n *dropTableNode) startExec(params runParams) error {
 
 func (*dropTableNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropTableNode) Values() tree.Datums          { return tree.Datums{} }
-func (*dropTableNode) Close(context.Context)        {}
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from a DROP TABLE, DROP VIEW, DROP SEQUENCE,

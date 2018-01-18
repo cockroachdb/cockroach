@@ -89,4 +89,3 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 
 func (n *alterSequenceNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterSequenceNode) Values() tree.Datums          { return tree.Datums{} }
-func (n *alterSequenceNode) Close(context.Context)        {}

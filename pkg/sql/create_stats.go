@@ -69,5 +69,4 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 }
 
 func (*createStatsNode) Next(runParams) (bool, error) { panic("not implemented") }
-func (*createStatsNode) Close(context.Context)        {}
 func (*createStatsNode) Values() tree.Datums          { panic("not implemented") }

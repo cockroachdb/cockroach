@@ -201,17 +201,16 @@ func (n *windowNode) Values() tree.Datums {
 	return n.run.values.Values()
 }
 
-func (n *windowNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+func (n *windowNode) Clear(ctx context.Context) {
 	if n.run.wrappedRenderVals != nil {
-		n.run.wrappedRenderVals.Close(ctx)
+		n.run.wrappedRenderVals.Clear(ctx)
 		n.run.wrappedRenderVals = nil
 	}
 	if n.run.windowValues != nil {
 		n.run.windowValues = nil
-		n.run.windowsAcc.Close(ctx)
+		n.run.windowsAcc.Clear(ctx)
 	}
-	n.run.values.Close(ctx)
+	clearPlan(ctx, n.run.values)
 }
 
 // extractWindowFunctions loops over the render expressions and extracts any window functions.

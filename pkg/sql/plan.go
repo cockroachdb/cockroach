@@ -113,6 +113,8 @@ func (r *runParams) SessionData() *sessiondata.SessionData {
 // Also, there are optional interfaces that new nodes may want to implement:
 // - execStartable
 // - autoCommitNode
+// - planClearable
+// - planClosable
 //
 type planNode interface {
 	// Next performs one unit of work, returning false if an error is
@@ -131,12 +133,6 @@ type planNode interface {
 	//
 	// Available after Next().
 	Values() tree.Datums
-
-	// Close terminates the planNode execution and releases its resources.
-	// This method should be called if the node has been used in any way (any
-	// methods on it have been called) after it was constructed. Note that this
-	// doesn't imply that startPlan() has been necessarily called.
-	Close(ctx context.Context)
 }
 
 // PlanNode is the exported name for planNode. Useful for CCL hooks.
@@ -331,10 +327,27 @@ func (p *planner) hideHiddenColumns(
 	return newPlan, nil
 }
 
-// close ensures that the plan's resources have been deallocated.
+// clear ensures that the plan's resources have been deallocated.
+// The plan is still alive afterwards.
 func (p *planTop) close(ctx context.Context) {
 	if p.plan != nil {
-		p.plan.Close(ctx)
+		clearPlan(ctx, p.plan)
+	}
+
+	for i := range p.subqueryPlans {
+		// Once a subquery plan has been evaluated, it already closes its
+		// plan.
+		if p.subqueryPlans[i].plan != nil {
+			clearPlan(ctx, p.subqueryPlans[i].plan)
+		}
+	}
+}
+
+// close ensures that the plan's resources have been deallocated.
+// Implies clear().
+func (p *planTop) close(ctx context.Context) {
+	if p.plan != nil {
+		closePlan(ctx, p.plan)
 		p.plan = nil
 	}
 
@@ -342,7 +355,7 @@ func (p *planTop) close(ctx context.Context) {
 		// Once a subquery plan has been evaluated, it already closes its
 		// plan.
 		if p.subqueryPlans[i].plan != nil {
-			p.subqueryPlans[i].plan.Close(ctx)
+			closePlan(ctx, p.subqueryPlans[i].plan)
 			p.subqueryPlans[i].plan = nil
 		}
 	}

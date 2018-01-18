@@ -99,7 +99,6 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 
 func (*dropSequenceNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropSequenceNode) Values() tree.Datums          { return tree.Datums{} }
-func (*dropSequenceNode) Close(context.Context)        {}
 
 func (p *planner) dropSequenceImpl(
 	ctx context.Context, seqDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,

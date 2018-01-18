@@ -181,7 +181,7 @@ func (n *showRangesNode) Values() tree.Datums {
 	return n.run.values
 }
 
-func (n *showRangesNode) Close(_ context.Context) {
+func (n *showRangesNode) Clear(_ context.Context) {
 	n.run.descriptorKVs = nil
 }
 

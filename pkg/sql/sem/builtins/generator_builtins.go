@@ -163,9 +163,6 @@ func makeKeywordsGenerator(_ *tree.EvalContext, _ tree.Datums) (tree.ValueGenera
 // ResolvedType implements the tree.ValueGenerator interface.
 func (*keywordsValueGenerator) ResolvedType() types.TTable { return keywordsValueGeneratorType }
 
-// Close implements the tree.ValueGenerator interface.
-func (*keywordsValueGenerator) Close() {}
-
 // Start implements the tree.ValueGenerator interface.
 func (k *keywordsValueGenerator) Start() error {
 	k.curKeyword = -1
@@ -327,9 +324,6 @@ func (s *seriesValueGenerator) ResolvedType() types.TTable {
 // Start implements the tree.ValueGenerator interface.
 func (s *seriesValueGenerator) Start() error { return nil }
 
-// Close implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) Close() {}
-
 // Next implements the tree.ValueGenerator interface.
 func (s *seriesValueGenerator) Next() (bool, error) {
 	return s.next(s)
@@ -367,9 +361,6 @@ func (s *arrayValueGenerator) Start() error {
 	s.nextIndex = -1
 	return nil
 }
-
-// Close implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
 func (s *arrayValueGenerator) Next() (bool, error) {
@@ -409,9 +400,6 @@ func (*unaryValueGenerator) ResolvedType() types.TTable { return unaryValueGener
 
 // Start implements the tree.ValueGenerator interface.
 func (s *unaryValueGenerator) Start() error { return nil }
-
-// Close implements the tree.ValueGenerator interface.
-func (s *unaryValueGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
 func (s *unaryValueGenerator) Next() (bool, error) {
@@ -516,9 +504,6 @@ func (g *jsonArrayGenerator) Start() error {
 	return nil
 }
 
-// Close implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) Close() {}
-
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Next() (bool, error) {
 	g.nextIndex++
@@ -586,9 +571,6 @@ func (g *jsonObjectKeysGenerator) ResolvedType() types.TTable {
 
 // Start implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Start() error { return nil }
-
-// Close implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Next() (bool, error) {
@@ -674,9 +656,6 @@ func (g *jsonEachGenerator) ResolvedType() types.TTable {
 
 // Start implements the tree.ValueGenerator interface.
 func (g *jsonEachGenerator) Start() error { return nil }
-
-// Close implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonEachGenerator) Next() (bool, error) {

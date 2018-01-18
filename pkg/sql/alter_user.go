@@ -93,7 +93,6 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 
 func (*alterUserSetPasswordNode) Next(runParams) (bool, error) { return false, nil }
 func (*alterUserSetPasswordNode) Values() tree.Datums          { return tree.Datums{} }
-func (*alterUserSetPasswordNode) Close(context.Context)        {}
 
 func (n *alterUserSetPasswordNode) FastPathResults() (int, bool) {
 	return n.run.rowsAffected, true

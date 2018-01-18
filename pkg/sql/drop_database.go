@@ -184,7 +184,6 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 }
 
 func (*dropDatabaseNode) Next(runParams) (bool, error) { return false, nil }
-func (*dropDatabaseNode) Close(context.Context)        {}
 func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 
 // filterCascadedTables takes a list of table descriptors and removes any
