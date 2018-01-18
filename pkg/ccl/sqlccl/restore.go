@@ -1133,6 +1133,16 @@ func doRestorePlan(
 		return err
 	}
 
+	var tables []*sqlbase.TableDescriptor
+	for _, desc := range sqlDescs {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
+			tables = append(tables, tableDesc)
+		}
+	}
+	if err := rewriteTableDescs(tables, tableRewrites); err != nil {
+		return err
+	}
+
 	_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: description,
 		Username:    p.User(),
@@ -1146,6 +1156,7 @@ func doRestorePlan(
 			EndTime:       endTime,
 			TableRewrites: tableRewrites,
 			URIs:          from,
+			TableDescs:    tables,
 		},
 	})
 	if err != nil {
@@ -1217,23 +1228,10 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, jo
 	if err := txn.SetSystemConfigTrigger(); err != nil {
 		return err
 	}
-	_, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
-	if err != nil {
-		return err
-	}
-	var tables []*sqlbase.TableDescriptor
-	for _, desc := range sqlDescs {
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			tableDesc.State = sqlbase.TableDescriptor_DROP
-			tables = append(tables, tableDesc)
-		}
-	}
-	if err := rewriteTableDescs(tables, details.TableRewrites); err != nil {
-		return err
-	}
 	b := txn.NewBatch()
-	for _, desc := range tables {
-		b.CPut(sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc), nil)
+	for _, tableDesc := range details.TableDescs {
+		tableDesc.State = sqlbase.TableDescriptor_DROP
+		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
 	}
 	return txn.Run(ctx, b)
 }
