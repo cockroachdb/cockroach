@@ -66,10 +66,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
   ) {
     return (
       <ul className="log-entries-list">
-        {this.renderLogInfoDescriptor(
-          "Updated Range Descriptor",
-          info.updated_desc,
-        )}
+        {this.renderLogInfoDescriptor("Updated Range Descriptor", info.updated_desc)}
         {this.renderLogInfoDescriptor("New Range Descriptor", info.new_desc)}
         {this.renderLogInfoDescriptor("Added Replica", info.added_replica)}
         {this.renderLogInfoDescriptor("Removed Replica", info.removed_replica)}
@@ -110,24 +107,12 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
           <table className="log-table">
             <tbody>
               <tr className="log-table__row log-table__row--header">
-                <th className="log-table__cell log-table__cell--header">
-                  Timestamp
-                </th>
-                <th className="log-table__cell log-table__cell--header">
-                  Store
-                </th>
-                <th className="log-table__cell log-table__cell--header">
-                  Event Type
-                </th>
-                <th className="log-table__cell log-table__cell--header">
-                  Range
-                </th>
-                <th className="log-table__cell log-table__cell--header">
-                  Other Range
-                </th>
-                <th className="log-table__cell log-table__cell--header">
-                  Info
-                </th>
+                <th className="log-table__cell log-table__cell--header">Timestamp</th>
+                <th className="log-table__cell log-table__cell--header">Store</th>
+                <th className="log-table__cell log-table__cell--header">Event Type</th>
+                <th className="log-table__cell log-table__cell--header">Range</th>
+                <th className="log-table__cell log-table__cell--header">Other Range</th>
+                <th className="log-table__cell log-table__cell--header">Info</th>
               </tr>
               {_.map(events, (event, key) => (
                 <tr key={key} className="log-table__row">
@@ -135,18 +120,10 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
                     {Print.Timestamp(event.event.timestamp)}
                   </td>
                   <td className="log-table__cell">s{event.event.store_id}</td>
-                  <td className="log-table__cell">
-                    {printLogEventType(event.event.event_type)}
-                  </td>
-                  <td className="log-table__cell">
-                    {this.renderRangeID(event.event.range_id)}
-                  </td>
-                  <td className="log-table__cell">
-                    {this.renderRangeID(event.event.other_range_id)}
-                  </td>
-                  <td className="log-table__cell">
-                    {this.renderLogInfo(event.pretty_info)}
-                  </td>
+                  <td className="log-table__cell">{printLogEventType(event.event.event_type)}</td>
+                  <td className="log-table__cell">{this.renderRangeID(event.event.range_id)}</td>
+                  <td className="log-table__cell">{this.renderRangeID(event.event.other_range_id)}</td>
+                  <td className="log-table__cell">{this.renderLogInfo(event.pretty_info)}</td>
                 </tr>
               ))}
             </tbody>
