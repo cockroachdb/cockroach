@@ -696,4 +696,69 @@ statement ok
 CREATE SEQUENCE drop_default_test_seq_2
 
 statement ok
-ALTER TABLE drop_default_tesT_tbl ALTER COLUMN id SET DEFAULT nextval('drop_default_test_seq_2')
+ALTER TABLE drop_default_test_tbl ALTER COLUMN id SET DEFAULT nextval('drop_default_test_seq_2')
+
+# Test that dependencies are recorded correctly when a column uses multiple sequences.
+
+statement ok
+CREATE SEQUENCE multiple_seq_test1
+
+statement ok
+CREATE SEQUENCE multiple_seq_test2
+
+statement ok
+CREATE TABLE multiple_seq_test_tbl (
+  id INT PRIMARY KEY DEFAULT nextval('multiple_seq_test1') + nextval('multiple_seq_test2')
+)
+
+statement error pq: cannot drop sequence multiple_seq_test1 because other objects depend on it
+DROP SEQUENCE multiple_seq_test1
+
+statement error pq: cannot drop sequence multiple_seq_test2 because other objects depend on it
+DROP SEQUENCE multiple_seq_test2
+
+# This should remove both sequence dependencies.
+statement ok
+ALTER TABLE multiple_seq_test_tbl ALTER COLUMN id SET DEFAULT unique_rowid()
+
+statement ok
+DROP SEQUENCE multiple_seq_test1
+
+statement ok
+DROP SEQUENCE multiple_seq_test2
+
+# Test that dependencies are recorded when multiple columns in a table use sequences.
+
+statement ok
+CREATE SEQUENCE multiple_usage_test_1
+
+statement ok
+CREATE SEQUENCE multiple_usage_test_2
+
+statement ok
+CREATE TABLE multiple_usage_test_tbl (
+  id INT PRIMARY KEY DEFAULT nextval('multiple_usage_test_1'),
+  other_id INT DEFAULT nextval('multiple_usage_test_2')
+)
+
+# We're prevented from dropping the first sequence until the dep is removed.
+
+statement error pq: cannot drop sequence multiple_usage_test_1 because other objects depend on it
+DROP SEQUENCE multiple_usage_test_1
+
+statement ok
+ALTER TABLE multiple_usage_test_tbl ALTER COLUMN id DROP DEFAULT
+
+statement ok
+DROP SEQUENCE multiple_usage_test_1
+
+# We're prevented from dropping the second sequence until the dep is removed.
+
+statement error pq: cannot drop sequence multiple_usage_test_2 because other objects depend on it
+DROP SEQUENCE multiple_usage_test_2
+
+statement ok
+ALTER TABLE multiple_usage_test_tbl ALTER COLUMN other_id DROP DEFAULT
+
+statement ok
+DROP SEQUENCE multiple_usage_test_2

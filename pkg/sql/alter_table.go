@@ -88,15 +88,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// If the new column has a DEFAULT expression that uses a sequence, add references between
 			// its descriptor and this column descriptor.
 			if d.HasDefaultExpr() {
-				seqDesc, err := maybeAddSequenceDependency(n.tableDesc, col, expr, params.EvalContext())
+				changedSeqDescs, err := maybeAddSequenceDependencies(n.tableDesc, col, expr, params.EvalContext())
 				if err != nil {
 					return err
 				}
-				if seqDesc != nil {
-					if err := params.p.writeTableDesc(params.ctx, seqDesc); err != nil {
+				for _, changedSeqDesc := range changedSeqDescs {
+					if err := params.p.writeTableDesc(params.ctx, changedSeqDesc); err != nil {
 						return err
 					}
-					params.p.notifySchemaChange(seqDesc, sqlbase.InvalidMutationID)
+					params.p.notifySchemaChange(changedSeqDesc, sqlbase.InvalidMutationID)
 				}
 			}
 
@@ -227,8 +227,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			// If the dropped column uses a sequence, remove references to it from that sequence.
-			if col.UsesSequenceId != nil {
-				if err := removeSequenceDependency(n.tableDesc, &col, params); err != nil {
+			if len(col.UsesSequenceIds) > 0 {
+				if err := removeSequenceDependencies(n.tableDesc, &col, params); err != nil {
 					return err
 				}
 			}
@@ -589,8 +589,8 @@ func applyColumnMutation(
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableSetDefault:
-		if col.UsesSequenceId != nil {
-			if err := removeSequenceDependency(tableDesc, col, params); err != nil {
+		if len(col.UsesSequenceIds) > 0 {
+			if err := removeSequenceDependencies(tableDesc, col, params); err != nil {
 				return err
 			}
 		}
@@ -606,12 +606,12 @@ func applyColumnMutation(
 			}
 			s := tree.Serialize(t.Default)
 			col.DefaultExpr = &s
-			// Add reference to the sequence descriptor this column is now using.
-			changedSeqDesc, err := maybeAddSequenceDependency(tableDesc, col, expr, params.EvalContext())
+			// Add references to the sequence descriptors this column is now using.
+			changedSeqDescs, err := maybeAddSequenceDependencies(tableDesc, col, expr, params.EvalContext())
 			if err != nil {
 				return err
 			}
-			if changedSeqDesc != nil {
+			for _, changedSeqDesc := range changedSeqDescs {
 				if err := params.p.writeTableDesc(params.ctx, changedSeqDesc); err != nil {
 					return err
 				}

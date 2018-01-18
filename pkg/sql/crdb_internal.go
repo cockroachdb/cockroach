@@ -1249,12 +1249,12 @@ CREATE TABLE crdb_internal.backward_dependencies (
 
 				// Record sequence dependencies.
 				for _, col := range table.Columns {
-					if col.UsesSequenceId != nil {
+					for _, sequenceID := range col.UsesSequenceIds {
 						if err := addRow(
 							tableID, tableName,
 							tree.DNull,
 							tree.NewDInt(tree.DInt(col.ID)),
-							tree.NewDInt(tree.DInt(*col.UsesSequenceId)),
+							tree.NewDInt(tree.DInt(sequenceID)),
 							sequenceDep,
 							tree.DNull,
 							tree.DNull,

@@ -861,12 +861,12 @@ func MakeTableDesc(
 			}
 
 			if d.HasDefaultExpr() {
-				seqDescriptor, err := maybeAddSequenceDependency(&desc, col, expr, evalCtx)
+				changedSeqDescs, err := maybeAddSequenceDependencies(&desc, col, expr, evalCtx)
 				if err != nil {
 					return desc, err
 				}
-				if seqDescriptor != nil {
-					affected[seqDescriptor.ID] = seqDescriptor
+				for _, changedSeqDesc := range changedSeqDescs {
+					affected[changedSeqDesc.ID] = changedSeqDesc
 				}
 			}
 
