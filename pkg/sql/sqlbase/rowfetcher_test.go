@@ -151,12 +151,12 @@ func TestNextRowSingle(t *testing.T) {
 				},
 			}
 
-			mrf, err := initFetcher(args, false /*reverseScan*/, alloc)
+			rf, err := initFetcher(args, false /*reverseScan*/, alloc)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if err := mrf.StartScan(
+			if err := rf.StartScan(
 				context.TODO(),
 				client.NewTxn(kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
@@ -171,7 +171,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, desc, index, err := mrf.NextRowDecoded(context.TODO())
+				datums, desc, index, err := rf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -325,12 +325,12 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				},
 			}
 
-			mrf, err := initFetcher(args, false /*reverseScan*/, alloc)
+			rf, err := initFetcher(args, false /*reverseScan*/, alloc)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if err := mrf.StartScan(
+			if err := rf.StartScan(
 				context.TODO(),
 				client.NewTxn(kvDB, 0),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.Indexes[0].ID)},
@@ -345,7 +345,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			nullCount := 0
 			var prevIdxVal int64
 			for {
-				datums, desc, index, err := mrf.NextRowDecoded(context.TODO())
+				datums, desc, index, err := rf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -685,12 +685,12 @@ func TestNextRowInterleaved(t *testing.T) {
 
 			lookupSpans, _ = roachpb.MergeSpans(lookupSpans)
 
-			mrf, err := initFetcher(args, false /*reverseScan*/, alloc)
+			rf, err := initFetcher(args, false /*reverseScan*/, alloc)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if err := mrf.StartScan(
+			if err := rf.StartScan(
 				context.TODO(),
 				client.NewTxn(kvDB, 0),
 				lookupSpans,
@@ -705,7 +705,7 @@ func TestNextRowInterleaved(t *testing.T) {
 			count := make(map[string]int, len(entries))
 
 			for {
-				datums, desc, index, err := mrf.NextRowDecoded(context.TODO())
+				datums, desc, index, err := rf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
