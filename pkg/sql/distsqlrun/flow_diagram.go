@@ -188,6 +188,15 @@ func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
 	return "InterleaveReaderJoiner", details
 }
 
+func (aso *AlgebraicSetOpSpec) summary() (string, []string) {
+	details := make([]string, 0, 2)
+	details = append(details, aso.OpType.String())
+	if len(aso.Ordering.Columns) > 0 {
+		details = append(details, aso.Ordering.diagramString())
+	}
+	return "AlgebraicSetOp", details
+}
+
 func (s *SorterSpec) summary() (string, []string) {
 	details := []string{s.OutputOrdering.diagramString()}
 	if s.OrderingMatchLen != 0 {
