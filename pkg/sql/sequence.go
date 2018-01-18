@@ -97,7 +97,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 
 // SetSequenceValue implements the tree.EvalPlanner interface.
 func (p *planner) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64,
+	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
 ) error {
 	if p.session.TxnState.readOnly {
 		return readOnlyError("setval()")
@@ -105,6 +105,9 @@ func (p *planner) SetSequenceValue(
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
 	if err != nil {
 		return err
+	}
+	if !isCalled {
+		newVal = newVal - descriptor.SequenceOpts.Increment
 	}
 	opts := descriptor.SequenceOpts
 	if newVal > opts.MaxValue || newVal < opts.MinValue {

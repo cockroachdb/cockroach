@@ -1992,7 +1992,10 @@ type EvalPlanner interface {
 	GetLatestValueInSessionForSequence(ctx context.Context, seqName *TableName) (int64, error)
 
 	// SetSequenceValue sets the sequence's value.
-	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64) error
+	// if isCalled is false, the sequence is set such that the next time nextval() is called,
+	// `newVal` is returned. Otherwise, the next call to nextval will return
+	// `newVal + seqOpts.Increment`.
+	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *Subquery) (Datum, error)

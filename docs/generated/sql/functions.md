@@ -569,6 +569,8 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 <tr><td><code>nextval(sequence_name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Advances the given sequence and returns its new value.</p>
 </span></td></tr>
 <tr><td><code>setval(sequence_name: <a href="string.html">string</a>, value: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the given sequence’s current value.</p>
+</span></td></tr>
+<tr><td><code>setval(sequence_name: <a href="string.html">string</a>, value: <a href="int.html">int</a>, is_caled: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the given sequence’s current value.</p>
 </span></td></tr></tbody>
 </table>
 
