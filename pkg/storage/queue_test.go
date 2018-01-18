@@ -41,7 +41,7 @@ import (
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
 type testQueueImpl struct {
 	shouldQueueFn func(hlc.Timestamp, *Replica) (bool, float64)
-	processed     int32
+	processed     int32 // accessed atomically
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
 	pChan         chan struct{}
@@ -136,7 +136,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	// Remove replica for range 1 since it encompasses the entire keyspace.
@@ -144,7 +145,7 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := tc.store.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(ctx, repl1, *repl1.Desc(), true); err != nil {
 		t.Error(err)
 	}
 
@@ -182,12 +183,16 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 	if bq.pop() != r2 {
 		t.Error("expected r2")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r2, nil)
 	}
 	if v := bq.pending.Value(); v != 1 {
 		t.Errorf("expected 1 pending replicas; got %d", v)
 	}
 	if bq.pop() != r1 {
 		t.Error("expected r1")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r1, nil)
 	}
 	if v := bq.pending.Value(); v != 0 {
 		t.Errorf("expected 0 pending replicas; got %d", v)
@@ -220,9 +225,13 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 	if bq.pop() != r1 {
 		t.Error("expected r1")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r1, nil)
 	}
 	if bq.pop() != r2 {
 		t.Error("expected r2")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r2, nil)
 	}
 	if r := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
@@ -238,9 +247,13 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 	if bq.pop() != r1 {
 		t.Error("expected r1")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r1, nil)
 	}
 	if bq.pop() != r2 {
 		t.Error("expected r2")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r2, nil)
 	}
 	if r := bq.pop(); r != nil {
 		t.Errorf("expected empty queue; got %v", r)
@@ -258,6 +271,8 @@ func TestBaseQueueAddUpdateAndRemove(t *testing.T) {
 	}
 	if bq.pop() != r1 {
 		t.Errorf("expected r1")
+	} else {
+		bq.finishProcessingReplica(ctx, stopper, r1, nil)
 	}
 	if v := bq.pending.Value(); v != 0 {
 		t.Errorf("expected 0 pending replicas; got %d", v)
@@ -957,4 +972,106 @@ func TestBaseQueueDisable(t *testing.T) {
 	if pc := testQueue.getProcessed(); pc > 0 {
 		t.Errorf("expected processed count of 0; got %d", pc)
 	}
+}
+
+type parallelQueueImpl struct {
+	testQueueImpl
+	processBlocker chan struct{}
+	processing     int32 // accessed atomically
+}
+
+func (pq *parallelQueueImpl) process(
+	ctx context.Context, repl *Replica, cfg config.SystemConfig,
+) error {
+	atomic.AddInt32(&pq.processing, 1)
+	if pq.processBlocker != nil {
+		<-pq.processBlocker
+	}
+	err := pq.testQueueImpl.process(ctx, repl, cfg)
+	atomic.AddInt32(&pq.processing, -1)
+	return err
+}
+
+func (pq *parallelQueueImpl) getProcessing() int {
+	return int(atomic.LoadInt32(&pq.processing))
+}
+
+func TestBaseQueueProcessConcurrently(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	// Remove replica for range 1 since it encompasses the entire keyspace.
+	repl1, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := tc.store.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
+		t.Error(err)
+	}
+
+	r1 := createReplica(tc.store, 1001, roachpb.RKey("1001"), roachpb.RKey("1001/end"))
+	if err := tc.store.AddReplica(r1); err != nil {
+		t.Fatal(err)
+	}
+	r2 := createReplica(tc.store, 1002, roachpb.RKey("1002"), roachpb.RKey("1002/end"))
+	if err := tc.store.AddReplica(r2); err != nil {
+		t.Fatal(err)
+	}
+	r3 := createReplica(tc.store, 1003, roachpb.RKey("1003"), roachpb.RKey("1003/end"))
+	if err := tc.store.AddReplica(r3); err != nil {
+		t.Fatal(err)
+	}
+
+	pQueue := &parallelQueueImpl{
+		testQueueImpl: testQueueImpl{
+			blocker: make(chan struct{}, 1),
+			shouldQueueFn: func(now hlc.Timestamp, r *Replica) (shouldQueue bool, priority float64) {
+				return true, 1
+			},
+		},
+		processBlocker: make(chan struct{}, 1),
+	}
+	bq := makeTestBaseQueue("test", pQueue, tc.store, tc.gossip,
+		queueConfig{
+			maxSize:        3,
+			maxConcurrency: 2,
+		},
+	)
+	bq.Start(stopper)
+
+	bq.MaybeAdd(r1, hlc.Timestamp{})
+	bq.MaybeAdd(r2, hlc.Timestamp{})
+	bq.MaybeAdd(r3, hlc.Timestamp{})
+
+	if l := bq.Length(); l != 3 {
+		t.Errorf("expected 3 queued replica; got %d   %d", l, pQueue.getProcessed())
+	}
+
+	assertProcessedAndProcessing := func(expProcessed, expProcessing int) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			if p := pQueue.getProcessed(); p != expProcessed {
+				return errors.Errorf("expected %d processed replicas; got %d", expProcessed, p)
+			}
+			if p := pQueue.getProcessing(); p != expProcessing {
+				return errors.Errorf("expected %d processing replicas; got %d", expProcessing, p)
+			}
+			return nil
+		})
+	}
+
+	close(pQueue.blocker)
+	assertProcessedAndProcessing(0, 2)
+
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(1, 2)
+
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(2, 1)
+
+	pQueue.processBlocker <- struct{}{}
+	assertProcessedAndProcessing(3, 0)
 }

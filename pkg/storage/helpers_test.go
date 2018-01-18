@@ -79,7 +79,7 @@ func forceScanAndProcess(s *Store, q *baseQueue) {
 		return true
 	})
 
-	q.DrainQueue()
+	q.DrainQueue(s.stopper)
 }
 
 // ForceReplicationScanAndProcess iterates over all ranges and
