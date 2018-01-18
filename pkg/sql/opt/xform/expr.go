@@ -25,16 +25,16 @@ import (
 // by operators that need to match columns from its inputs.
 type ColMap map[ColumnIndex]ColumnIndex
 
-// Expr virtualizes one of the trees in the memo forest (see comment in memo.go
-// for more details), making it both simple and efficient to traverse that tree
-// and examine its properties. Given a particular root memo group and a set of
-// required physical properties, there is exactly one lowest cost tree in the
-// memo forest that provides those properties. Expr overlays the memo groups
-// with a view of that single tree, exposing methods like ChildCount and Child
-// that enable traversal over that one tree in the forest. It does this
-// efficiently by avoiding creation of new objects. Expr is 24 bytes on a
-// 64-bit machine, and is immutable after construction, so it can be passed by
-// value.
+// ExprView provides a view of a single tree in the memo's forest of query plan
+// trees (see comment in memo.go for more details about the memo forest). Given
+// a particular root memo group and a set of required physical properties,
+// there is one designated lowest cost tree in the memo's forest that provides
+// those properties. ExprView overlays the memo groups with a view of that
+// single tree, exposing methods like ChildCount and Child that enable
+// efficient traversal over that one tree in the forest. ExprView is 24 bytes
+// on a 64-bit machine, and is immutable after construction, so it can be
+// constructed on the stack and passed by value. In addition, it is lazily
+// constructed only when needed (generally when the Child method is called).
 //
 // As an example, consider a memo forest with two alternate join orders. There
 // are two trees in this forest:
@@ -44,8 +44,8 @@ type ColMap map[ColumnIndex]ColumnIndex
 //   1: [scan a]
 //
 // If the second tree provides the same required properties as the first, but
-// is lower cost, then the Expr virtualizes its "extraction" so that it is
-// equivalent to the following standalone tree:
+// is lower cost, then the ExprView overlays a view that is equivalent to the
+// following standalone tree:
 //
 //   +-----------------+
 //   | inner-join b, a |
@@ -59,8 +59,9 @@ type ColMap map[ColumnIndex]ColumnIndex
 //      +----| scan b |
 //           +--------+
 //
-// Don't reorder fields without checking the size of Expr stays under 24 bytes.
-type Expr struct {
+// Don't reorder fields without checking the size of ExprView stays under 24
+// bytes.
+type ExprView struct {
 	// mem references the memo which holds the expression forest.
 	mem *memo
 
@@ -75,17 +76,17 @@ type Expr struct {
 	required physicalPropsID
 }
 
-// extractLowestCostExpr creates a new Expr instance that references the
-// expression in the specified group that satisfies the required properties at
-// the lowest cost.
+// makeExprView creates a new ExprView instance that references the expression
+// in the specified group that satisfies the required properties at the lowest
+// cost.
 // NOTE: While the minPhysPropsID property set always works, other property
 //       sets will only work once the optimizer has been invoked with that set,
 //       so that it's had an opportunity to compute the lowest cost path.
-func extractLowestCostExpr(mem *memo, group GroupID, required physicalPropsID) Expr {
+func makeExprView(mem *memo, group GroupID, required physicalPropsID) ExprView {
 	mgrp := mem.lookupGroup(group)
 
 	if required == minPhysPropsID {
-		return Expr{
+		return ExprView{
 			mem:      mem,
 			loc:      memoLoc{group: group, expr: normExprID},
 			op:       mgrp.lookupExpr(normExprID).op,
@@ -97,27 +98,27 @@ func extractLowestCostExpr(mem *memo, group GroupID, required physicalPropsID) E
 }
 
 // Operator returns the type of the expression.
-func (e *Expr) Operator() Operator {
-	return e.op
+func (ev *ExprView) Operator() Operator {
+	return ev.op
 }
 
 // Logical returns the set of logical properties that this expression provides.
-func (e *Expr) Logical() *LogicalProps {
-	return &e.mem.lookupGroup(e.loc.group).logical
+func (ev *ExprView) Logical() *LogicalProps {
+	return &ev.mem.lookupGroup(ev.loc.group).logical
 }
 
 // ChildCount returns the number of expressions that are inputs to this
 // parent expression.
-func (e *Expr) ChildCount() int {
-	return childCountLookup[e.op](e)
+func (ev *ExprView) ChildCount() int {
+	return childCountLookup[ev.op](ev)
 }
 
 // Child returns the nth expression that is an input to this parent expression.
 // It panics if the requested child does not exist.
-func (e *Expr) Child(nth int) Expr {
-	group := e.ChildGroup(nth)
-	if e.required == minPhysPropsID {
-		return extractLowestCostExpr(e.mem, group, minPhysPropsID)
+func (ev *ExprView) Child(nth int) ExprView {
+	group := ev.ChildGroup(nth)
+	if ev.required == minPhysPropsID {
+		return makeExprView(ev.mem, group, minPhysPropsID)
 	}
 
 	panic("physical properties other than min are not yet implemented")
@@ -125,54 +126,54 @@ func (e *Expr) Child(nth int) Expr {
 
 // ChildGroup returns the memo group containing the nth child of this parent
 // expression.
-func (e *Expr) ChildGroup(nth int) GroupID {
-	return childGroupLookup[e.op](e, nth)
+func (ev *ExprView) ChildGroup(nth int) GroupID {
+	return childGroupLookup[ev.op](ev, nth)
 }
 
 // Private returns any private data associated with this expression, or nil if
 // there is none.
-func (e *Expr) Private() interface{} {
-	return e.mem.lookupPrivate(e.privateID())
+func (ev *ExprView) Private() interface{} {
+	return ev.mem.lookupPrivate(ev.privateID())
 }
 
 // String returns a string representation of this expression for testing and
 // debugging.
-func (e *Expr) String() string {
+func (ev *ExprView) String() string {
 	tp := treeprinter.New()
-	e.format(tp)
+	ev.format(tp)
 	return tp.String()
 }
 
-func (e *Expr) privateID() PrivateID {
-	return privateLookup[e.op](e)
+func (ev *ExprView) privateID() PrivateID {
+	return privateLookup[ev.op](ev)
 }
 
-func (e *Expr) format(tp treeprinter.Node) {
-	if e.IsScalar() {
-		e.formatScalar(tp)
+func (ev *ExprView) format(tp treeprinter.Node) {
+	if ev.IsScalar() {
+		ev.formatScalar(tp)
 	} else {
-		e.formatRelational(tp)
+		ev.formatRelational(tp)
 	}
 }
 
-func (e *Expr) formatScalar(tp treeprinter.Node) {
+func (ev *ExprView) formatScalar(tp treeprinter.Node) {
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "%v", e.op)
-	e.formatPrivate(&buf, e.Private())
+	fmt.Fprintf(&buf, "%v", ev.op)
+	ev.formatPrivate(&buf, ev.Private())
 
 	tp = tp.Child(buf.String())
-	for i := 0; i < e.ChildCount(); i++ {
-		child := e.Child(i)
+	for i := 0; i < ev.ChildCount(); i++ {
+		child := ev.Child(i)
 		child.format(tp)
 	}
 }
 
-func (e *Expr) formatPrivate(buf *bytes.Buffer, private interface{}) {
-	switch e.op {
+func (ev *ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
+	switch ev.op {
 	case VariableOp:
 		colIndex := private.(ColumnIndex)
-		private = e.mem.metadata.ColumnLabel(colIndex)
+		private = ev.mem.metadata.ColumnLabel(colIndex)
 
 	case ProjectionsOp:
 		// Projections private data is similar to its output columns, so
@@ -185,12 +186,12 @@ func (e *Expr) formatPrivate(buf *bytes.Buffer, private interface{}) {
 	}
 }
 
-func (e *Expr) formatRelational(tp treeprinter.Node) {
+func (ev *ExprView) formatRelational(tp treeprinter.Node) {
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "%v", e.op)
+	fmt.Fprintf(&buf, "%v", ev.op)
 
-	logicalProps := e.Logical()
+	logicalProps := ev.Logical()
 
 	tp = tp.Child(buf.String())
 
@@ -198,10 +199,10 @@ func (e *Expr) formatRelational(tp treeprinter.Node) {
 
 	// Write the output columns. Fall back to writing output columns in column
 	// index order, with best guess label.
-	logicalProps.formatOutputCols(e.mem, tp)
+	logicalProps.formatOutputCols(ev.mem, tp)
 
-	for i := 0; i < e.ChildCount(); i++ {
-		child := e.Child(i)
+	for i := 0; i < ev.ChildCount(); i++ {
+		child := ev.Child(i)
 		child.format(tp)
 	}
 }

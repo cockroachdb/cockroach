@@ -65,8 +65,8 @@ func (g *memoGroup) memoGroupString(mem *memo) string {
 			buf.WriteByte(' ')
 		}
 
-		// Wrap the memo expr in Expr to make it easy to get children.
-		e := Expr{
+		// Wrap the memo expr in ExprView to make it easy to get children.
+		e := ExprView{
 			mem:      mem,
 			loc:      memoLoc{group: g.id, expr: exprID(i)},
 			op:       mexpr.op,
