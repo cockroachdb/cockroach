@@ -2207,10 +2207,8 @@ DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max
       return true;
     }
     // If the timestamp range of the table overlaps with the timestamp range we
-    // want to iterate, the table might contain timestamps we care about. For
-    // consistency with engineccl.MVCCIncrementalIterator, the min_ts bound is
-    // exclusive, but the max_ts bound is inclusive.
-    return max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) < 0;
+    // want to iterate, the table might contain timestamps we care about.
+    return max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) <= 0;
   };
   return db->NewIter(&opts);
 }

@@ -335,21 +335,21 @@ func TestTransactionBumpEpoch(t *testing.T) {
 	}
 }
 
-func TestTransactionTimeBounds(t *testing.T) {
+func TestTransactionInclusiveTimeBounds(t *testing.T) {
 	verify := func(txn Transaction, expMin, expMax hlc.Timestamp) {
-		if min, max := txn.TimeBounds(); min != expMin || max != expMax {
+		if min, max := txn.InclusiveTimeBounds(); min != expMin || max != expMax {
 			t.Errorf("expected (%s-%s); got (%s-%s)", expMin, expMax, min, max)
 		}
 	}
 	origNow := makeTS(1, 1)
 	txn := MakeTransaction("test", Key("a"), 1, enginepb.SERIALIZABLE, origNow, 0)
-	verify(txn, origNow, origNow.Next())
+	verify(txn, origNow, origNow)
 	txn.Timestamp.Forward(makeTS(1, 2))
-	verify(txn, origNow, makeTS(1, 3))
+	verify(txn, origNow, makeTS(1, 2))
 	txn.Restart(1, 1, makeTS(2, 1))
-	verify(txn, origNow, makeTS(2, 2))
+	verify(txn, origNow, makeTS(2, 1))
 	txn.Timestamp.Forward(makeTS(3, 1))
-	verify(txn, origNow, makeTS(3, 2))
+	verify(txn, origNow, makeTS(3, 1))
 }
 
 // TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as
