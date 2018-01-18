@@ -65,10 +65,12 @@ func colListStr(cols []uint32) string {
 	return buf.String()
 }
 
+// summary implements the diagramCellType interface.
 func (*NoopCoreSpec) summary() (string, []string) {
 	return "No-op", []string{}
 }
 
+// summary implements the diagramCellType interface.
 func (v *ValuesCoreSpec) summary() (string, []string) {
 	var bytes uint64
 	for _, b := range v.RawBytes {
@@ -78,6 +80,7 @@ func (v *ValuesCoreSpec) summary() (string, []string) {
 	return "Values", []string{detail}
 }
 
+// summary implements the diagramCellType interface.
 func (a *AggregatorSpec) summary() (string, []string) {
 	details := make([]string, 0, len(a.Aggregations)+1)
 	if len(a.GroupCols) > 0 {
@@ -111,11 +114,13 @@ func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
 	return []string{fmt.Sprintf("%s@%s", index, desc.Name)}
 }
 
+// summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
 	// TODO(radu): a summary of the spans
 	return "TableReader", indexDetails(tr.IndexIdx, &tr.Table)
 }
 
+// summary implements the diagramCellType interface.
 func (jr *JoinReaderSpec) summary() (string, []string) {
 	index := "primary"
 	if jr.IndexIdx > 0 {
@@ -127,6 +132,7 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	return "JoinReader", details
 }
 
+// summary implements the diagramCellType interface.
 func (hj *HashJoinerSpec) summary() (string, []string) {
 	details := make([]string, 0, 3)
 
@@ -159,11 +165,13 @@ func orderedJoinDetails(left, right Ordering, onExpr Expression) []string {
 	return details
 }
 
+// summary implements the diagramCellType interface.
 func (mj *MergeJoinerSpec) summary() (string, []string) {
 	details := orderedJoinDetails(mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)
 	return "MergeJoiner", details
 }
 
+// summary implements the diagramCellType interface.
 func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
 	// As of right now, we only plan InterleaveReaderJoiner with two
 	// tables.
@@ -188,6 +196,22 @@ func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
 	return "InterleaveReaderJoiner", details
 }
 
+// summary implements the diagramCellType interface.
+func (aso *AlgebraicSetOpSpec) summary() (string, []string) {
+	var details []string
+	if len(aso.Ordering.Columns) > 0 {
+		details = append(details, aso.Ordering.diagramString())
+	}
+
+	switch aso.OpType {
+	case AlgebraicSetOpSpec_Except_all:
+		return "ExceptAll", details
+	default:
+		panic(fmt.Sprintf("Unsupported op type: %v", aso.OpType))
+	}
+}
+
+// summary implements the diagramCellType interface.
 func (s *SorterSpec) summary() (string, []string) {
 	details := []string{s.OutputOrdering.diagramString()}
 	if s.OrderingMatchLen != 0 {
@@ -196,6 +220,7 @@ func (s *SorterSpec) summary() (string, []string) {
 	return "Sorter", details
 }
 
+// summary implements the diagramCellType interface.
 func (bf *BackfillerSpec) summary() (string, []string) {
 	details := []string{
 		bf.Table.Name,
@@ -204,6 +229,7 @@ func (bf *BackfillerSpec) summary() (string, []string) {
 	return "Backfiller", details
 }
 
+// summary implements the diagramCellType interface.
 func (d *DistinctSpec) summary() (string, []string) {
 	details := []string{
 		colListStr(d.DistinctColumns),
@@ -214,6 +240,7 @@ func (d *DistinctSpec) summary() (string, []string) {
 	return "Distinct", details
 }
 
+// summary implements the diagramCellType interface.
 func (s *SamplerSpec) summary() (string, []string) {
 	details := []string{fmt.Sprintf("SampleSize: %d", s.SampleSize)}
 	for _, sk := range s.Sketches {
@@ -223,6 +250,7 @@ func (s *SamplerSpec) summary() (string, []string) {
 	return "Sampler", details
 }
 
+// summary implements the diagramCellType interface.
 func (s *SampleAggregatorSpec) summary() (string, []string) {
 	details := []string{
 		fmt.Sprintf("SampleSize: %d", s.SampleSize),
@@ -238,6 +266,7 @@ func (s *SampleAggregatorSpec) summary() (string, []string) {
 	return "SampleAggregator", details
 }
 
+// summary implements the diagramCellType interface.
 func (is *InputSyncSpec) summary() (string, []string) {
 	switch is.Type {
 	case InputSyncSpec_UNORDERED:
@@ -249,6 +278,7 @@ func (is *InputSyncSpec) summary() (string, []string) {
 	}
 }
 
+// summary implements the diagramCellType interface.
 func (r *OutputRouterSpec) summary() (string, []string) {
 	switch r.Type {
 	case OutputRouterSpec_PASS_THROUGH:
@@ -264,6 +294,7 @@ func (r *OutputRouterSpec) summary() (string, []string) {
 	}
 }
 
+// summary implements the diagramCellType interface.
 func (post *PostProcessSpec) summary() []string {
 	return post.summaryWithPrefix("")
 }
@@ -307,10 +338,12 @@ func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	return res
 }
 
+// summary implements the diagramCellType interface.
 func (c *ReadCSVSpec) summary() (string, []string) {
 	return "ReadCSV", c.Uri
 }
 
+// summary implements the diagramCellType interface.
 func (s *SSTWriterSpec) summary() (string, []string) {
 	var res []string
 	for _, span := range s.Spans {
