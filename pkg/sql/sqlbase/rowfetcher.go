@@ -275,21 +275,6 @@ func (rf *RowFetcher) Init(
 			}
 		}
 
-		// If there is more than one table, we have to decode the index key to
-		// figure out which table the row belongs to.
-		// If there are interleaves, we need to read the index key in order to
-		// determine whether this row is actually part of the index we're scanning.
-		// If we need to return any values from the row, we also have to read the
-		// index key to either get those values directly or determine the row's
-		// column family id to map the row values to their columns.
-		// Otherwise, we can completely avoid decoding the index key.
-		// TODO(jordan): Relax this restriction. Ideally we could skip doing key
-		// reading work if we need values from outside of the key, but not from
-		// inside of the key.
-		if !rf.mustDecodeIndexKey && (!table.neededCols.Empty() || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0) {
-			rf.mustDecodeIndexKey = true
-		}
-
 		rf.knownPrefixLength = len(MakeIndexKeyPrefix(table.desc, table.index.ID))
 
 		var indexColumnIDs []ColumnID
@@ -302,6 +287,17 @@ func (rf *RowFetcher) Init(
 				neededIndexCols++
 			}
 			table.indexColIdx[i] = table.colIdxMap[id]
+		}
+
+		// - If there is more than one table, we have to decode the index key to
+		//   figure out which table the row belongs to.
+		// - If there are interleaves, we need to read the index key in order to
+		//   determine whether this row is actually part of the index we're scanning.
+		// - If there are needed columns from the index key, we need to read it.
+		//
+		// Otherwise, we can completely avoid decoding the index key.
+		if !rf.mustDecodeIndexKey && (neededIndexCols > 0 || len(table.index.InterleavedBy) > 0 || len(table.index.Interleave.Ancestors) > 0) {
+			rf.mustDecodeIndexKey = true
 		}
 
 		// The number of columns we need to read from the value part of the key.
