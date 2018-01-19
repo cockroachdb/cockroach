@@ -221,7 +221,7 @@ func (p *planner) dropViewImpl(
 		}
 	}
 
-	if err := p.initiateDropTable(ctx, viewDesc); err != nil {
+	if err := p.initiateDropTable(ctx, viewDesc, true /* drainName */); err != nil {
 		return cascadeDroppedViews, err
 	}
 
