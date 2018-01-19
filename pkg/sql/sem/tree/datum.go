@@ -205,6 +205,27 @@ func MakeDBool(d DBool) *DBool {
 	return DBoolFalse
 }
 
+// MustBeDBool attempts to retrieve a DBool from an Expr, panicking if the
+// assertion fails.
+func MustBeDBool(e Expr) DBool {
+	b, ok := AsDBool(e)
+	if !ok {
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DBool, found %T", e))
+	}
+	return b
+}
+
+// AsDBool attempts to retrieve a *DBool from an Expr, returning a *DBool and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions.
+func AsDBool(e Expr) (DBool, bool) {
+	switch t := e.(type) {
+	case *DBool:
+		return *t, true
+	}
+	return false, false
+}
+
 // makeParseError returns a parse error using the provided string and type. An
 // optional error can be provided, which will be appended to the end of the
 // error string.

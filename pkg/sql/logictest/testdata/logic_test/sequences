@@ -388,6 +388,76 @@ SELECT setval('setval_bounds_test', 0)
 statement error pgcode 42P01 relation "nonexistent_seq" does not exist
 SELECT nextval('nonexistent_seq')
 
+# The three-argument variant of setval lets you set the next value to be retrieved from nextval().
+
+statement ok
+CREATE SEQUENCE setval_is_called_test
+
+query I
+SELECT setval('setval_is_called_test', 10, false)
+----
+10
+
+query I
+SELECT nextval('setval_is_called_test')
+----
+10
+
+query I
+SELECT nextval('setval_is_called_test')
+----
+11
+
+query I
+SELECT setval('setval_is_called_test', 20, true)
+----
+20
+
+query I
+SELECT nextval('setval_is_called_test')
+----
+21
+
+query I
+SELECT nextval('setval_is_called_test')
+----
+22
+
+# You can use setval to reset to minvalue.
+
+statement ok
+CREATE SEQUENCE setval_minval_test MINVALUE 10
+
+query I
+SELECT nextval('setval_minval_test')
+----
+10
+
+query I
+SELECT nextval('setval_minval_test')
+----
+11
+
+query I
+SELECT setval('setval_minval_test', 10, false)
+----
+10
+
+query I
+SELECT nextval('setval_minval_test')
+----
+10
+
+query I
+SELECT setval('setval_minval_test', 10, true)
+----
+10
+
+query I
+SELECT nextval('setval_minval_test')
+----
+11
+
 # BEHAVIOR UPON HITTING LIMITS (minvalue, maxvalue)
 
 statement ok
