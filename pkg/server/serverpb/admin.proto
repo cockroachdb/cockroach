@@ -530,8 +530,7 @@ message ReplicaMatrixResponse {
   }
 
   message TableInfo {
-    map<int32, int64> replica_count_by_node_id = 1
-      [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    map<int32, int64> replica_count_by_node_id = 1 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
     int64 zone_config_id = 2;
   }
@@ -546,6 +545,36 @@ message ReplicaMatrixResponse {
 
   // By zone config id.
   map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
+}
+
+message QueriesRequest {
+  enum OrderByCol {
+    SvcLatAvg = 0;
+    Count = 1;
+  }
+
+  enum OrderDir {
+    DESC = 0;
+    ASC = 1;
+  }
+
+  OrderByCol order_by_col = 1;
+  OrderDir order_dir = 2;
+}
+
+message QueriesResponse {
+  message Query {
+    int64 node_id = 1;
+    string application_name = 2;
+    string query_anonymized = 3;
+    int64 count = 4;
+    float rows_avg = 5;
+    float rows_var = 6;
+    float service_lat_avg = 7;
+    float service_lat_var = 8;
+  }
+
+  repeated Query queries = 1 [(gogoproto.nullable) = false];
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -725,6 +754,12 @@ service Admin {
   rpc ReplicaMatrix(ReplicaMatrixRequest) returns (ReplicaMatrixResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/replica_matrix"
+    };
+  }
+
+  rpc Queries(QueriesRequest) returns (QueriesResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/queries"
     };
   }
 }
