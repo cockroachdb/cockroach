@@ -41,8 +41,8 @@ var _ sqlutil.InternalExecutor = InternalExecutor{}
 func (ie InternalExecutor) ExecuteStatementInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
-	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
-	defer finishInternalPlanner(p)
+	p, cleanup := newInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	defer cleanup()
 	ie.initSession(p)
 	return p.exec(ctx, statement, qargs...)
 }
@@ -53,8 +53,8 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 func (ie InternalExecutor) QueryRowInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
-	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
-	defer finishInternalPlanner(p)
+	p, cleanup := newInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	defer cleanup()
 	ie.initSession(p)
 	return p.QueryRow(ctx, statement, qargs...)
 }
@@ -65,8 +65,8 @@ func (ie InternalExecutor) QueryRowInTransaction(
 func (ie InternalExecutor) QueryRowsInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) ([]tree.Datums, error) {
-	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
-	defer finishInternalPlanner(p)
+	p, cleanup := newInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	defer cleanup()
 	ie.initSession(p)
 	return p.queryRows(ctx, statement, qargs...)
 }
@@ -76,8 +76,8 @@ func (ie InternalExecutor) GetTableSpan(
 	ctx context.Context, user string, txn *client.Txn, dbName, tableName string,
 ) (roachpb.Span, error) {
 	// Lookup the table ID.
-	p := makeInternalPlanner("get-table-span", txn, user, ie.LeaseManager.memMetrics)
-	defer finishInternalPlanner(p)
+	p, cleanup := newInternalPlanner("get-table-span", txn, user, ie.LeaseManager.memMetrics)
+	defer cleanup()
 	ie.initSession(p)
 
 	tn := tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}

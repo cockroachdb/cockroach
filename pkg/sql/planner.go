@@ -90,9 +90,6 @@ type testingVerifyMetadata interface {
 type planner struct {
 	txn *client.Txn
 
-	// session is the Session on whose behalf this planner is working.
-	session *Session
-
 	// preparedStatements points to the Session's collection of prepared
 	// statements.
 	preparedStatements *PreparedStatements
@@ -107,6 +104,9 @@ type planner struct {
 	// sessionDataMutator is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
 	sessionDataMutator sessionDataMutator
+
+	// statsCollector is used to collect statistics about SQL statement execution.
+	statsCollector sqlStatsCollector
 
 	// asOfSystemTime indicates whether the transaction timestamp was
 	// forced to a specific value (in which case that value is stored in
@@ -145,10 +145,6 @@ type planner struct {
 	// want to do 1PC transactions have to implement the autoCommitNode interface.
 	autoCommit bool
 
-	// phaseTimes helps measure the time spent in each phase of SQL execution.
-	// See executor_statement_metrics.go for details.
-	phaseTimes phaseTimes
-
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
 	cancelChecker *sqlbase.CancelChecker
@@ -181,10 +177,17 @@ var emptyPlanner planner
 // growth in the log.
 var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
 
-// makePlanner creates a new planner instance, referencing a dummy session.
-func makeInternalPlanner(
+// newInternalPlanner creates a new planner instance for internal usage. This
+// planner is not associated with a sql session.
+//
+// Since it can't be reset, the planner can be used only for planning a single
+// statement.
+//
+// Returns a cleanup function that must be called once the caller is done with
+// the planner.
+func newInternalPlanner(
 	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
-) *planner {
+) (*planner, func()) {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
@@ -237,22 +240,22 @@ func makeInternalPlanner(
 		}
 		ts = txn.Proto().OrigTimestamp.GoTime()
 	}
-	p := s.newPlanner(txn, ts /* txnTimestamp */, ts /* stmtTimestamp */, nil /* reCache */)
+	p := s.newPlanner(
+		txn, ts /* txnTimestamp */, ts, /* stmtTimestamp */
+		nil /* reCache */, s.statsCollector())
 
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Tables = &s.tables
 
-	return p
+	return p, func() {
+		s.TxnState.mon.Stop(ctx)
+		s.sessionMon.Stop(ctx)
+		s.mon.Stop(ctx)
+	}
 }
 
-func finishInternalPlanner(p *planner) {
-	p.session.TxnState.mon.Stop(p.session.context)
-	p.session.sessionMon.Stop(p.session.context)
-	p.session.mon.Stop(p.session.context)
-}
-
-func (p *planner) ExtendedEvalContext() extendedEvalContext {
-	return p.extendedEvalCtx
+func (p *planner) ExtendedEvalContext() *extendedEvalContext {
+	return &p.extendedEvalCtx
 }
 
 // EvalContext() provides convenient access to the planner's EvalContext().
@@ -551,4 +554,26 @@ func (p *planner) testingVerifyMetadata() testingVerifyMetadata {
 // transaction.
 type txnModesSetter interface {
 	setTransactionModes(modes tree.TransactionModes) error
+}
+
+// sqlStatsCollector is the interface used by SQL execution, through the
+// planner, for recording statistics about SQL statements.
+type sqlStatsCollector interface {
+	// PhaseTimes returns that phaseTimes struct that measures the time spent in
+	// each phase of SQL execution.
+	// See executor_statement_metrics.go for details.
+	PhaseTimes() *phaseTimes
+
+	// RecordStatement record stats for one statement.
+	RecordStatement(
+		stmt Statement,
+		distSQLUsed bool,
+		automaticRetryCount int,
+		numRows int,
+		err error,
+		parseLat, planLat, runLat, svcLat, ovhLat float64,
+	)
+
+	// SQLStats provides access to the global sqlStats object.
+	SQLStats() *sqlStats
 }
