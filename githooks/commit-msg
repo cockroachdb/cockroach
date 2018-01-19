@@ -13,9 +13,118 @@ if grep -qE '.{80,}' "$1"; then
     echo >&2
 fi
 
-if ! grep -qE '^Release note( \([^)]+\))?: ' "$1" ; then
+# Lint the release notes.  It's OK to have multiple entries per commit
+# (e.g. changes in different categories). But that means we need to
+# extract them separately for analysis.
+tmpdir=${TMPDIR:-/tmp}/commit-msg.$$
+mkdir -p "$tmpdir"
+finish() {
+  rm -rf "$tmpdir"
+}
+trap finish EXIT
+
+allnotes=$tmpdir/allnotes
+thenote=$tmpdir/thenote
+
+warn() {
     echo >&2
-    echo "${red}Warning: no release note specified!${reset}" >&2
-    echo "Please amend and add a 'Release note:' line." >&2
+    echo "${red}$*${reset}" >&2
+}
+hint() {
+    echo "- $*" >&2
+}
+informed=
+inform() {
+    info=$(echo "$rnote"|cut -c1-40)
+    if test "$info" != "$rnote"; then info="$info..."; fi
+    test -z "$informed" && warn "Warning: malformed release note entry: $info"
+    informed=1
+}
+
+grep -iE '^release note' "$1" >"$allnotes"
+if [ 0 = $(wc -l <"$tmpdir/allnotes") ]; then
+    warn "No release note specified."
+    hint "Try: 'Release note (...): ...'"
+else
+    while read -r rnote; do
+	informed=
+	printf '%s\n' "$rnote" >"$thenote"
+	if grep -qiE '^release note' "$thenote" && ! grep -qE '^Release note' "$thenote"; then
+	    entered=$(cut -c1-12 <"$thenote")
+	    inform
+	    hint "case matters! Try '$entered' -> 'Release note'" >&2
+	fi
+	if grep -qiE '^release notes' "$thenote"; then
+	    entered=$(cut -c1-13 <"$thenote")
+	    inform
+	    hint "singular please. Use multiple entries if there are multiple notes. Try '$entered' -> 'Release note'" >&2
+	fi
+	if grep -qiE '^release notes? *: *\(' "$thenote"; then
+	    entered=$(cut -d')' -f1 <"$thenote" | cut -c1-40)\)
+	    cat=$(cut -d'(' -f2 <"$thenote" | cut -d')' -f1)
+	    inform
+	    hint "place the category before the colon. Try '$entered' -> 'Release note ($cat):'"
+	fi
+	if grep -qiE '^release notes? *: *[^ ]* *:' "$thenote"; then
+	    cat=$(cut -d: -f2 "$thenote"|sed -e 's/^ *//g;s/ *$//g')
+	    entered=$(cut -d: -f1-2 "$thenote")
+	    inform
+	    hint "place category within parentheses. Try '$entered:' -> 'Release note ($cat):'"
+	fi
+	if grep -qiE '^release notes?[^:]*: *none' "$thenote" && ! grep -qE '^Release note: [nN]one' "$thenote"; then
+	    entered=$(sed -e 's/none.*/none/ig' <"$thenote")
+	    inform
+	    hint "for no release notes use 'none' with no category. Try '$entered' -> 'Release note: none'"
+	fi
+	if ! grep -qiE '^release notes? *: *none' "$thenote" && grep -qiE '^release notes? *: *[^( ]' "$thenote"; then
+	    entered=$(cut -d: -f2- <"$thenote"|cut -c1-40)
+	    inform
+	    hint "category missing (can only be omitted if note is 'none'). Try 'Release note (category):$entered'"
+	fi
+	if grep -qiE '^release notes?[^:]*:([^ ]|   *)' "$thenote" || \
+		grep -qiE '^release notes?(|  +)\(' "$thenote" || \
+		grep -qiE '^release notes? *\( +' "$thenote" || \
+		grep -qiE '^release notes? *\( *[^)]* +\)' "$thenote" ; then
+	    entered=$(cut -c1-40<"$thenote")
+	    body=$(cut -d: -f2- <"$thenote"|cut -c1-40|sed -e 's/^ *//g')
+	    cat=$(cut -d'(' -f2 <"$thenote"|cut -d')' -f1|sed -e 's/^ *//g;s/ *$//g')
+	    if test -z "$cat"; then cat=...; fi
+	    inform
+	    hint "some space problem. Try '$entered' -> 'Release note ($cat): $body'"
+	fi
+	# Now prune the category
+	if grep -qiE '^release notes? *\([^)]*\)' "$thenote"; then
+	    cat=$(cut -d'(' -f2 <"$thenote"|cut -d')' -f1|sed -e 's/^ *//g;s/ *$//g')
+	    lower=$(echo "$cat"|tr A-Z a-z)
+	    if test "$cat" != "$lower"; then
+		inform
+		hint "categories in lowercase. Try 'Release note ($cat)' -> 'Release note ($lower)'"
+	    fi
+	    if grep -qiE '^release notes? *\([^)/]*/' "$thenote"; then
+		repl=$(echo "$lower"|sed -e 's| */ *|, |g')
+		inform
+		hint "use commas to separate categories. Try '($lower)' -> '($repl)'"
+		lower=$repl
+	    fi
+	    echo "$lower" | tr ',' '\n' | sed -e 's/^ *//g' >"$tmpdir/cats"
+	    while read lcat; do
+		case $lcat in
+		    "cli change") ;;
+		    "sql change") ;;
+		    "admin ui change") ;;
+		    "general change") ;;
+		    "build change") ;;
+		    "enterprise change") ;;
+		    "backward-incompatible change") ;;
+		    "performance improvement") ;;
+		    "bug fix") ;;
+		    bugfix) inform; hint "Try 'Release note (bugfix)' -> 'Release note (bug fix)'" ;;
+		    sql*)   inform; hint "Try 'Release note ($lcat)' -> 'Release note (sql change)'" ;;
+		    "backwards-incompatible"*|"backward incompatible"*) inform; hint "Try '$lcat' -> 'backward-incompatible change'" ;;
+		    *) inform; hint "unknown category '$lcat'" ;;
+		esac
+	    done <"$tmpdir/cats"
+	fi
+    done <"$allnotes"
     echo >&2
 fi
