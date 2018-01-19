@@ -52,6 +52,7 @@ import ReduxDebug from "src/views/reports/containers/redux";
 import Range from "src/views/reports/containers/range";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
+import QueriesPage from "src/views/queries";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -127,6 +128,7 @@ ReactDOM.render(
           <Route path="redux" component={ReduxDebug} />
           <Route path="chart" component={CustomChart} />
         </Route>
+        <Route path="queries" component={ QueriesPage } />
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />
