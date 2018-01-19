@@ -6,6 +6,7 @@ col_qualification ::=
 	| 'CONSTRAINT' name 'CHECK' '(' a_expr ')'
 	| 'CONSTRAINT' name 'DEFAULT' b_expr
 	| 'CONSTRAINT' name 'REFERENCES' qualified_name opt_name_parens reference_actions
+	| 'CONSTRAINT' name 'AS' b_expr 'STORED'
 	| 'NOT' 'NULL'
 	| 'NULL'
 	| 'UNIQUE'
@@ -13,6 +14,7 @@ col_qualification ::=
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' qualified_name opt_name_parens reference_actions
+	| 'AS' b_expr 'STORED'
 	| 'COLLATE' unrestricted_name
 	| 'FAMILY' name
 	| 'CREATE' 'FAMILY' opt_name

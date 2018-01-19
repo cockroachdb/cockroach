@@ -102,24 +102,40 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 		return nil, true, expr
 	}
 
-	exprStrings := make([]string, len(tableDesc.Checks))
-	for i, check := range tableDesc.Checks {
-		exprStrings[i] = check.Expr
-	}
-	exprs, err := parser.ParseExprs(exprStrings)
-	if err != nil {
-		return nil, err
+	renameIn := func(expression string) (string, error) {
+		parsed, err := parser.ParseExpr(expression)
+		if err != nil {
+			return "", err
+		}
+
+		renamed, err := tree.SimpleVisit(parsed, preFn)
+		if err != nil {
+			return "", err
+		}
+
+		return renamed.String(), nil
 	}
 
+	// Rename the column in CHECK constraints.
 	for i := range tableDesc.Checks {
-		expr, err := tree.SimpleVisit(exprs[i], preFn)
+		var err error
+		tableDesc.Checks[i].Expr, err = renameIn(tableDesc.Checks[i].Expr)
 		if err != nil {
 			return nil, err
 		}
-		if after := expr.String(); after != tableDesc.Checks[i].Expr {
-			tableDesc.Checks[i].Expr = after
+	}
+
+	// Rename the column in computed columns.
+	for i := range tableDesc.Columns {
+		if tableDesc.Columns[i].ComputeExpr != nil {
+			newExpr, err := renameIn(*tableDesc.Columns[i].ComputeExpr)
+			if err != nil {
+				return nil, err
+			}
+			tableDesc.Columns[i].ComputeExpr = &newExpr
 		}
 	}
+
 	// Rename the column in the indexes.
 	tableDesc.RenameColumnDescriptor(col, string(n.NewName))
 

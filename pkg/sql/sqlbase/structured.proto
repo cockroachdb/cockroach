@@ -128,6 +128,9 @@ message ColumnDescriptor {
   reserved 7;
   // Ids of sequences used in this column's DEFAULT expression, in calls to nextval().
   repeated uint32 uses_sequence_ids = 10 [(gogoproto.casttype) = "ID"];
+  // Expression to use to compute the value of this column if this is a
+  // computed column.
+  optional string compute_expr = 11;
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
