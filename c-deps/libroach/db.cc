@@ -12,10 +12,10 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
+#include <stdarg.h>
 #include "db.h"
 #include <algorithm>
 #include <chrono>
-#include <google/protobuf/stubs/stringprintf.h>
 #include <mutex>
 #include <rocksdb/cache.h>
 #include <rocksdb/db.h>
