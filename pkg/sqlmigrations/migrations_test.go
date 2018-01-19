@@ -673,6 +673,20 @@ CREATE INDEX y ON test.x(x);
 	}
 }
 
+func checkZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, expected config.ZoneConfig) {
+	t.Helper()
+
+	var s string
+	sqlDB.QueryRow(t, `SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
+	var zone config.ZoneConfig
+	if err := protoutil.Unmarshal([]byte(s), &zone); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(expected, zone) {
+		t.Fatalf("unexpected .meta zone config: %s", pretty.Diff(expected, zone))
+	}
+}
+
 func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -696,26 +710,12 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	checkZoneConfig := func(id int, expected config.ZoneConfig) {
-		t.Helper()
-
-		var s string
-		mt.sqlDB.QueryRow(t, `SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
-		var zone config.ZoneConfig
-		if err := protoutil.Unmarshal([]byte(s), &zone); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(expected, zone) {
-			t.Fatalf("unexpected .meta zone config: %s", pretty.Diff(expected, zone))
-		}
-	}
-
 	expectedMeta := config.DefaultZoneConfig()
 	expectedMeta.GC.TTLSeconds = 60 * 60
-	checkZoneConfig(keys.MetaRangesID, expectedMeta)
+	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, expectedMeta)
 	expectedLiveness := config.DefaultZoneConfig()
 	expectedLiveness.GC.TTLSeconds = 10 * 60
-	checkZoneConfig(keys.LivenessRangesID, expectedLiveness)
+	checkZoneConfig(t, mt.sqlDB, keys.LivenessRangesID, expectedLiveness)
 
 	deleteZoneConfig := func(id int) {
 		mt.sqlDB.Exec(t, `DELETE FROM system.zones WHERE id=$1`, id)
@@ -739,9 +739,9 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	if err := mt.runMigration(ctx); err != nil {
 		t.Fatal(err)
 	}
-	checkZoneConfig(keys.MetaRangesID, testZone)
-	checkZoneConfig(keys.LivenessRangesID, testZone)
-	checkZoneConfig(keys.SystemRangesID, testZone)
+	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
+	checkZoneConfig(t, mt.sqlDB, keys.LivenessRangesID, testZone)
+	checkZoneConfig(t, mt.sqlDB, keys.SystemRangesID, testZone)
 
 	// Set configs for the .meta and .liveness zones and clear the zone config
 	// for .system.
@@ -752,8 +752,8 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	if err := mt.runMigration(ctx); err != nil {
 		t.Fatal(err)
 	}
-	checkZoneConfig(keys.MetaRangesID, testZone)
-	checkZoneConfig(keys.LivenessRangesID, testZone)
+	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
+	checkZoneConfig(t, mt.sqlDB, keys.LivenessRangesID, testZone)
 	// NB: The .system zone config still doesn't exist.
 
 	// Verify that we'll update the meta/liveness zone config TTLs by migrating
@@ -768,9 +768,9 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	testZone.GC.TTLSeconds = 60 * 60
-	checkZoneConfig(keys.MetaRangesID, testZone)
+	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
 	testZone.GC.TTLSeconds = 10 * 60
-	checkZoneConfig(keys.LivenessRangesID, testZone)
+	checkZoneConfig(t, mt.sqlDB, keys.LivenessRangesID, testZone)
 
 	// Verify that we'll update the meta zone config even if it already exists as
 	// long as it has the default TTL.
@@ -781,7 +781,24 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	testZone.GC.TTLSeconds = 60 * 60
-	checkZoneConfig(keys.MetaRangesID, testZone)
+	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
+}
+
+func TestAddSystemJobsMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeIsolatedMigrationTest(ctx, t, "add default system.jobs zone config")
+	defer mt.close(ctx)
+
+	mt.start(t, base.TestServerArgs{})
+	if err := mt.runMigration(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	expected := config.DefaultZoneConfig()
+	expected.GC.TTLSeconds = 10 * 60
+	checkZoneConfig(t, mt.sqlDB, keys.JobsTableID, expected)
 }
 
 func TestAdminUserExists(t *testing.T) {
