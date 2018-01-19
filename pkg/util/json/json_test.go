@@ -1539,6 +1539,32 @@ func BenchmarkBuildJSONObject(b *testing.B) {
 	}
 }
 
+func BenchmarkArrayConcat(b *testing.B) {
+	for _, arraySize := range []int{1, 10, 100, 1000, 10000} {
+		b.Run(fmt.Sprintf("concat two arrays with size %d", arraySize), func(b *testing.B) {
+			arr := make([]interface{}, arraySize)
+			for i := 0; i < arraySize; i++ {
+				arr[i] = i
+			}
+			left, err := MakeJSON(arr)
+			if err != nil {
+				b.Fatal(err)
+			}
+			right, err := MakeJSON(arr)
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err = left.Concat(right)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkObjectStripNulls(b *testing.B) {
 	for _, objectSize := range []int{1, 10, 100, 1000} {
 		b.Run(fmt.Sprintf("object size %d no need to strip", objectSize), func(b *testing.B) {
