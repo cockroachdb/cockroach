@@ -58,6 +58,7 @@ message RestoreDetails {
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
   repeated string uris = 3 [(gogoproto.customname) = "URIs"];
+  repeated sqlbase.TableDescriptor table_descs = 5;
 }
 
 message ImportDetails {
