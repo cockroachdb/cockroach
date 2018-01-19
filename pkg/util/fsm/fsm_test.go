@@ -223,6 +223,6 @@ func BenchmarkStateTransition(b *testing.B) {
 		if i%2 == 1 {
 			e = event2{}
 		}
-		_ = m.ApplyWithBaggage(ctx, e, 12)
+		_ = m.ApplyWithPayload(ctx, e, 12)
 	}
 }
