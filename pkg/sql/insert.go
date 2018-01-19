@@ -49,11 +49,13 @@ type insertNode struct {
 	// The following fields are populated during makePlan.
 	editNodeBase
 	defaultExprs []tree.TypedExpr
+	computeExprs []tree.TypedExpr
 	n            *tree.Insert
 	checkHelper  checkHelper
 
-	insertCols []sqlbase.ColumnDescriptor
-	tw         tableWriter
+	insertCols   []sqlbase.ColumnDescriptor
+	computedCols []sqlbase.ColumnDescriptor
+	tw           tableWriter
 
 	run insertRun
 
@@ -109,11 +111,20 @@ func (p *planner) Insert(
 		}
 	}
 	// Number of columns expecting an input. This doesn't include the
-	// columns receiving a default value.
+	// columns receiving a default value, or computed columns.
 	numInputColumns := len(cols)
 
+	// We update the set of columns being inserted into with any default values
+	// for columns.
 	cols, defaultExprs, err :=
 		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.txCtx, p.EvalContext())
+	if err != nil {
+		return nil, err
+	}
+
+	// We update the set of columns being inserted into with any computed columns.
+	cols, computedCols, computeExprs, err :=
+		ProcessComputedColumns(ctx, cols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -217,8 +228,18 @@ func (p *planner) Insert(
 				updateCols[i] = col
 			}
 
+			// We also need to include any computed columns in the set of UpdateCols.
+			// They can't have been set explicitly so there's no chance of
+			// double-including a computed column.
+
+			// TODO(justin): we should size updateCols appropriately beforehand,
+			// but we'd need to know how many computed columns there are (and it
+			// would be more complicated if we only updated computed columns when
+			// necessary).
+			updateCols = append(updateCols, computedCols...)
+
 			helper, err := p.makeUpsertHelper(
-				ctx, tn, en.tableDesc, ri.InsertCols, updateCols, updateExprs, conflictIndex, n.OnConflict.Where,
+				ctx, tn, en.tableDesc, ri.InsertCols, updateCols, updateExprs, computeExprs, conflictIndex, n.OnConflict.Where,
 			)
 			if err != nil {
 				return nil, err
@@ -230,11 +251,13 @@ func (p *planner) Insert(
 			if err != nil {
 				return nil, err
 			}
+
 			tu := tableUpserterPool.Get().(*tableUpserter)
 			*tu = tableUpserter{
 				ri:            ri,
 				alloc:         &p.alloc,
 				collectRows:   isUpsertReturning,
+				anyComputed:   len(computeExprs) >= 0,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
 				conflictIndex: *conflictIndex,
@@ -250,7 +273,9 @@ func (p *planner) Insert(
 		n:            n,
 		editNodeBase: en,
 		defaultExprs: defaultExprs,
+		computeExprs: computeExprs,
 		insertCols:   ri.InsertCols,
+		computedCols: computedCols,
 		tw:           tw,
 		run: insertRun{
 			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
@@ -406,8 +431,10 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 
 	rowVals, err := GenerateInsertRow(
 		n.defaultExprs,
+		n.computeExprs,
 		n.run.insertColIDtoRowIndex,
 		n.insertCols,
+		n.computedCols,
 		*params.EvalContext(),
 		n.tableDesc,
 		n.run.rows.Values(),
@@ -446,12 +473,37 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 	return true, nil
 }
 
+// rowIndexedVarContainer is used to evaluate expressions over various rows.
+type rowIndexedVarContainer struct {
+	curSourceRow tree.Datums
+	// Because the rows we have might not be permuted in the same way as the
+	// original table, we need to store a mapping between them.
+	cols    []sqlbase.ColumnDescriptor
+	mapping map[sqlbase.ColumnID]int
+}
+
+func (r *rowIndexedVarContainer) IndexedVarEval(
+	idx int, ctx *tree.EvalContext,
+) (tree.Datum, error) {
+	return r.curSourceRow[r.mapping[r.cols[idx].ID]].Eval(ctx)
+}
+
+func (r *rowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
+	panic("unsupported")
+}
+
+func (*rowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return nil
+}
+
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default
 // expressions, verifies non-nullable columns, and checks column widths.
 func GenerateInsertRow(
 	defaultExprs []tree.TypedExpr,
+	computeExprs []tree.TypedExpr,
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int,
 	insertCols []sqlbase.ColumnDescriptor,
+	computedCols []sqlbase.ColumnDescriptor,
 	evalCtx tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 	rowVals tree.Datums,
@@ -478,6 +530,28 @@ func GenerateInsertRow(
 			}
 			rowVals[i] = d
 		}
+	}
+
+	if len(computeExprs) > 0 {
+		// Evaluate any computed columns. Since these obviously can reference other
+		// columns, we need an IVarHelper to be able to resolve column references.
+		iv := &rowIndexedVarContainer{rowVals, tableDesc.Columns, insertColIDtoRowIndex}
+		ivarHelper := tree.MakeIndexedVarHelper(iv, len(rowVals))
+		evalCtx.PushIVarHelper(&ivarHelper)
+
+		for i := range computedCols {
+			// Note that even though the row is not fully constructed at this point,
+			// since we disallow computed columns from referencing other computed
+			// columns, all the columns which could possibly be referenced *are*
+			// available.
+			d, err := computeExprs[i].Eval(&evalCtx)
+			if err != nil {
+				return nil, err
+			}
+			rowVals[insertColIDtoRowIndex[computedCols[i].ID]] = d
+		}
+
+		evalCtx.PopIVarHelper()
 	}
 
 	// Check to see if NULL is being inserted into any non-nullable column.
@@ -519,6 +593,9 @@ func (p *planner) processColumns(
 
 		if _, ok := colIDSet[col.ID]; ok {
 			return nil, fmt.Errorf("multiple assignments to the same column %q", &node[i])
+		}
+		if col.ComputeExpr != nil {
+			return nil, fmt.Errorf("cannot write directly to computed column %q", &node[i])
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col
