@@ -2617,7 +2617,7 @@ var jsonBuildObjectImpl = tree.Builtin{
 				"argument list must have even number of elements")
 		}
 
-		builder := json.NewBuilder()
+		builder := json.NewObjectBuilder(len(args) / 2)
 		for i := 0; i < len(args); i += 2 {
 			if args[i] == tree.DNull {
 				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
@@ -2660,15 +2660,15 @@ var jsonBuildArrayImpl = tree.Builtin{
 	ReturnType:   tree.FixedReturnType(types.JSON),
 	NullableArgs: true,
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		jsons := make([]json.JSON, len(args))
-		for i, arg := range args {
+		builder := json.NewArrayBuilder(len(args))
+		for _, arg := range args {
 			j, err := asJSON(arg)
 			if err != nil {
 				return nil, err
 			}
-			jsons[i] = j
+			builder.Add(j)
 		}
-		return tree.NewDJSON(json.FromArrayOfJSON(jsons)), nil
+		return tree.NewDJSON(builder.Build()), nil
 	},
 	Info: "Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.",
 }
@@ -2682,7 +2682,7 @@ var jsonObjectImpls = []tree.Builtin{
 			if arr.Len()%2 != 0 {
 				return nil, errJSONObjectNotEvenNumberOfElements
 			}
-			builder := json.NewBuilder()
+			builder := json.NewObjectBuilder(arr.Len() / 2)
 			for i := 0; i < arr.Len(); i += 2 {
 				if arr.Array[i] == tree.DNull {
 					return nil, errJSONObjectNullValueForKey
@@ -2713,7 +2713,7 @@ var jsonObjectImpls = []tree.Builtin{
 			if keys.Len() != values.Len() {
 				return nil, errJSONObjectMismatchedArrayDim
 			}
-			builder := json.NewBuilder()
+			builder := json.NewObjectBuilder(keys.Len())
 			for i := 0; i < keys.Len(); i++ {
 				if keys.Array[i] == tree.DNull {
 					return nil, errJSONObjectNullValueForKey
@@ -3516,17 +3516,17 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 	case *tree.DJSON:
 		return t.JSON, nil
 	case *tree.DArray:
-		jsons := make([]json.JSON, t.Len())
-		for i, e := range t.Array {
-			var err error
-			jsons[i], err = asJSON(e)
+		builder := json.NewArrayBuilder(t.Len())
+		for _, e := range t.Array {
+			j, err := asJSON(e)
 			if err != nil {
 				return nil, err
 			}
+			builder.Add(j)
 		}
-		return json.FromArrayOfJSON(jsons), nil
+		return builder.Build(), nil
 	case *tree.DTuple:
-		builder := json.NewBuilder()
+		builder := json.NewObjectBuilder(len(t.D))
 		for i, e := range t.D {
 			j, err := asJSON(e)
 			if err != nil {
