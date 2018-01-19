@@ -41,6 +41,10 @@ type upsertHelper struct {
 
 	ivarHelper *tree.IndexedVarHelper
 
+	ccIvarContainer *rowIndexedVarContainer
+	ccIvarHelper    *tree.IndexedVarHelper
+	computeExprs    []tree.TypedExpr
+
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
@@ -87,6 +91,7 @@ func (p *planner) makeUpsertHelper(
 	insertCols []sqlbase.ColumnDescriptor,
 	updateCols []sqlbase.ColumnDescriptor,
 	updateExprs tree.UpdateExprs,
+	computeExprs []tree.TypedExpr,
 	upsertConflictIndex *sqlbase.IndexDescriptor,
 	whereClause *tree.Where,
 ) (*upsertHelper, error) {
@@ -141,6 +146,20 @@ func (p *planner) makeUpsertHelper(
 	helper.ivarHelper = &ivarHelper
 	helper.evalExprs = evalExprs
 
+	// We need this IVarContainer to be able to evaluate the computed columns for each row.
+	// Since we just have the entire row, this is just the identity mapping.
+	mapping := make(map[sqlbase.ColumnID]int)
+	for i, c := range tableDesc.Columns {
+		mapping[c.ID] = i
+	}
+	helper.ccIvarContainer = &rowIndexedVarContainer{
+		cols:    tableDesc.Columns,
+		mapping: mapping,
+	}
+	ccIvarHelper := tree.MakeIndexedVarHelper(helper.ccIvarContainer, len(sourceInfo.sourceColumns))
+	helper.ccIvarHelper = &ccIvarHelper
+	helper.computeExprs = computeExprs
+
 	if whereClause != nil {
 		whereExpr, err := p.analyzeExpr(
 			ctx, whereClause.Expr, sources, ivarHelper, types.Bool, true /* requireType */, "WHERE",
@@ -185,7 +204,27 @@ func (uh *upsertHelper) eval(insertRow tree.Datums, existingRow tree.Datums) (tr
 			return nil, err
 		}
 	}
+
 	return ret, nil
+}
+
+// evalComputedCols handles after we've figured out the values of all regular
+// columns, what the values of any incoming computed columns should be.
+// It then appends those new values to the end of a given slice.
+func (uh *upsertHelper) evalComputedCols(
+	updatedRow tree.Datums, appendTo tree.Datums,
+) (tree.Datums, error) {
+	uh.ccIvarContainer.curSourceRow = updatedRow
+	uh.p.EvalContext().IVarHelper = uh.ccIvarHelper
+	defer func() { uh.p.EvalContext().IVarHelper = nil }()
+	for i := range uh.computeExprs {
+		res, err := uh.computeExprs[i].Eval(uh.p.EvalContext())
+		if err != nil {
+			return nil, err
+		}
+		appendTo = append(appendTo, res)
+	}
+	return appendTo, nil
 }
 
 // shouldUpdate returns the result of evaluating the WHERE clause of the

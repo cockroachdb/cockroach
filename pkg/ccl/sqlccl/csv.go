@@ -334,6 +334,9 @@ func makeSimpleTableDescriptor(
 			if def.DefaultExpr.Expr != nil {
 				return nil, errors.Errorf("DEFAULT expressions not supported: %s", tree.AsString(def))
 			}
+			if def.Computed.Expr != nil {
+				return nil, errors.Errorf("computed columns not supported: %s", tree.AsString(def))
+			}
 		case *tree.ForeignKeyConstraintTableDef:
 			return nil, errors.Errorf("foreign keys not supported: %s", tree.AsString(def))
 		default:
@@ -578,7 +581,11 @@ func convertRecord(
 				}
 			}
 
-			row, err := sql.GenerateInsertRow(defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, datums)
+			// TODO(justin): we currently disallow computed columns in import statements.
+			var computeExprs []tree.TypedExpr
+			var computedCols []sqlbase.ColumnDescriptor
+
+			row, err := sql.GenerateInsertRow(defaultExprs, computeExprs, ri.InsertColIDtoRowIndex, cols, computedCols, evalCtx, tableDesc, datums)
 			if err != nil {
 				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
 			}
