@@ -814,6 +814,21 @@ func makeTableDescIfAs(
 	return desc, desc.AllocateIDs()
 }
 
+func validateComputedColumnHasNoImpureFunctions(e tree.TypedExpr, colName tree.Name) error {
+	if fns := tree.ImpureFunctions(e); len(fns) != 0 {
+		var errMsg bytes.Buffer
+		errMsg.WriteString(fmt.Sprintf("computed column %s contains impure functions: ", colName))
+		for i, fn := range fns {
+			if i != 0 {
+				errMsg.WriteString(", ")
+			}
+			errMsg.WriteString(fn.String())
+		}
+		return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError, errMsg.String())
+	}
+	return nil
+}
+
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
 func MakeTableDesc(
 	ctx context.Context,
@@ -982,8 +997,16 @@ func MakeTableDesc(
 	generatedNames := map[string]struct{}{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
-		case *tree.ColumnTableDef, *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
-			// pass, handled above.
+		case *tree.ColumnTableDef:
+			// Now that we have all the other columns set up, we can validate any
+			// computed columns.
+			if d.IsComputed() {
+				if err := validateComputedColumn(desc, n, d, semaCtx, evalCtx); err != nil {
+					return desc, err
+				}
+			}
+		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
+			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
 			ck, err := makeCheckConstraint(desc, d, generatedNames, semaCtx, evalCtx)
@@ -1088,34 +1111,16 @@ func (d *dummyColumnItem) ResolvedType() types.T {
 }
 
 func generateNameForCheckConstraint(
-	expr tree.Expr, inuseNames map[string]struct{},
+	desc sqlbase.TableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
 ) (string, error) {
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
 
-	_, err := tree.SimpleVisit(expr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
-		vBase, ok := expr.(tree.VarName)
-		if !ok {
-			// Not a VarName, don't do anything to this node.
-			return nil, true, expr
-		}
-
-		v, err := vBase.NormalizeVarName()
-		if err != nil {
-			return err, false, nil
-		}
-
-		c, ok := v.(*tree.ColumnItem)
-		if !ok {
-			return nil, true, expr
-		}
-
+	if err := iterColDescriptors(desc, expr, func(c sqlbase.ColumnDescriptor) error {
 		nameBuf.WriteByte('_')
-		nameBuf.WriteString(string(c.ColumnName))
-		return nil, false, expr
-	})
-
-	if err != nil {
+		nameBuf.WriteString(c.Name)
+		return nil
+	}); err != nil {
 		return "", err
 	}
 	name := nameBuf.String()
@@ -1138,6 +1143,109 @@ func generateNameForCheckConstraint(
 	}
 
 	return name, nil
+}
+
+func iterColDescriptors(
+	desc sqlbase.TableDescriptor, rootExpr tree.Expr, f func(sqlbase.ColumnDescriptor) error,
+) error {
+	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		col, err := desc.FindActiveColumnByName(string(c.ColumnName))
+		if err != nil {
+			return pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+				"column %q not found, referenced in %q",
+				c.ColumnName, rootExpr), false, nil
+		}
+
+		if err := f(col); err != nil {
+			return err, false, nil
+		}
+		return nil, false, expr
+	})
+
+	return err
+}
+
+// validateComputedColumn checks that a computed column satisfies a number of
+// validity constraints, for instance, that it typechecks.
+func validateComputedColumn(
+	desc sqlbase.TableDescriptor,
+	t *tree.CreateTable,
+	d *tree.ColumnTableDef,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+) error {
+	dependencies := make(map[string]struct{})
+	// First, check that no column in the expression is a computed column.
+	if err := iterColDescriptors(desc, d.Computed.Expr, func(c sqlbase.ColumnDescriptor) error {
+		if c.ComputeExpr != nil {
+			return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
+				"computed columns cannot reference other computed columns")
+		}
+		dependencies[c.Name] = struct{}{}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// TODO(justin,bram): allow depending on columns like this.
+	for _, def := range t.Defs {
+		switch c := def.(type) {
+		case *tree.ColumnTableDef:
+			if _, ok := dependencies[string(c.Name)]; !ok {
+				// We don't depend on this column.
+				continue
+			}
+			for _, action := range []tree.ReferenceAction{
+				c.References.Actions.Update,
+				c.References.Actions.Delete,
+			} {
+				switch action {
+				case tree.Cascade, tree.SetNull, tree.SetDefault:
+					return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
+						"computed columns cannot reference non-restricted FK columns")
+				}
+			}
+		}
+	}
+
+	// We replace column references with typed dummies to allow typechecking.
+	replacedExpr, err := replaceVars(desc, d.Computed.Expr)
+	if err != nil {
+		return err
+	}
+
+	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+		replacedExpr, coltypes.CastTargetToDatumType(d.Type), "computed column", semaCtx, evalCtx,
+	)
+	if err != nil {
+		return err
+	}
+
+	if d.HasDefaultExpr() {
+		return pgerror.NewError(
+			pgerror.CodeInvalidTableDefinitionError,
+			"computed columns cannot have default values",
+		)
+	}
+
+	return validateComputedColumnHasNoImpureFunctions(typedExpr, d.Name)
 }
 
 // replaceVars replaces the occurrences of column names in an expression with
@@ -1181,7 +1289,7 @@ func makeCheckConstraint(
 
 	if name == "" {
 		var err error
-		name, err = generateNameForCheckConstraint(d.Expr, inuseNames)
+		name, err = generateNameForCheckConstraint(desc, d.Expr, inuseNames)
 		if err != nil {
 			return nil, err
 		}

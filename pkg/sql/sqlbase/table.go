@@ -220,6 +220,17 @@ func MakeColumnDefDescs(
 		col.DefaultExpr = &s
 	}
 
+	if d.IsComputed() {
+		var t transform.ExprTransformContext
+		if err := t.AssertNoAggregationOrWindowing(
+			d.Computed.Expr, "computed column expressions", semaCtx.SearchPath,
+		); err != nil {
+			return nil, nil, err
+		}
+		s := tree.Serialize(d.Computed.Expr)
+		col.ComputeExpr = &s
+	}
+
 	var idx *IndexDescriptor
 	if d.PrimaryKey || d.Unique {
 		idx = &IndexDescriptor{

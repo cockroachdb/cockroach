@@ -392,6 +392,13 @@ func (p *planner) makeEditNode(
 				priv, tableDesc.Kind(), tn, tableDesc.Kind())
 	}
 
+	// TODO(justin): temporary to split up computed columns PR.
+	for _, col := range tableDesc.Columns {
+		if col.ComputeExpr != nil {
+			return editNodeBase{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "TODO(justin)")
+		}
+	}
+
 	if err := p.CheckPrivilege(tableDesc, priv); err != nil {
 		return editNodeBase{}, err
 	}
