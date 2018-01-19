@@ -1454,3 +1454,72 @@ func BenchmarkAdminAPIReplicaMatrix(b *testing.B) {
 	}
 	b.StopTimer()
 }
+
+func TestAdminAPIQueries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServer := testCluster.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+
+	statements := []struct {
+		stmt          string
+		fingerprinted string
+		notInStats    bool
+	}{
+		{
+			stmt: `CREATE DATABASE roachblog`,
+		},
+		{
+			stmt:       `USE roachblog`,
+			notInStats: true,
+		},
+		{
+			stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body TEXT)`,
+		},
+		{
+			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+		},
+		{
+			stmt: `SELECT * FROM posts`,
+		},
+	}
+
+	for _, stmt := range statements {
+		sqlDB.Exec(t, stmt.stmt)
+	}
+
+	// Hit query endpoint.
+	var resp serverpb.QueriesResponse
+	if err := getAdminJSONProto(firstServer, "queries", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// See if the statements returned are what we executed.
+	var expectedStatements []string
+	for _, stmt := range statements {
+		if stmt.notInStats {
+			continue
+		}
+		var expectedStmt = stmt.stmt
+		if stmt.fingerprinted != "" {
+			expectedStmt = stmt.fingerprinted
+		}
+		expectedStatements = append(expectedStatements, expectedStmt)
+	}
+
+	var statementsInResponse []string
+	for _, respQuery := range resp.Queries {
+		statementsInResponse = append(statementsInResponse, respQuery.Key.Query)
+	}
+
+	sort.Strings(expectedStatements)
+	sort.Strings(statementsInResponse)
+
+	if !reflect.DeepEqual(expectedStatements, statementsInResponse) {
+		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v", expectedStatements, statementsInResponse)
+	}
+}
