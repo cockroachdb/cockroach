@@ -1374,6 +1374,7 @@ func (s *adminServer) ReplicaMatrix(
 	// This relies on crdb_internal.tables returning data even for newly added tables
 	// and deleted tables (as opposed to e.g. information_schema) because we are interested
 	// in the data for all ranges, not just ranges for visible tables.
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
 	tablesQuery := `SELECT name, table_id, database_name, parent_id FROM "".crdb_internal.tables`
 	rows1, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
@@ -1500,6 +1501,74 @@ func (s *adminServer) ReplicaMatrix(
 	}
 
 	return resp, nil
+}
+
+func (s *adminServer) Queries(
+	ctx context.Context, req *serverpb.QueriesRequest,
+) (*serverpb.QueriesResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+	args := sql.SessionArgs{User: s.getUser(req)}
+
+	orderByCol := "count"
+	switch req.OrderByCol {
+	case serverpb.QueriesRequest_SvcLatAvg:
+		orderByCol = "service_lat_avg"
+	case serverpb.QueriesRequest_Count:
+		orderByCol = "count"
+	}
+
+	orderDir := "DESC"
+	switch req.OrderDir {
+	case serverpb.QueriesRequest_DESC:
+		orderDir = "DESC"
+	case serverpb.QueriesRequest_ASC:
+		orderDir = "ASC"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			node_id,
+			application_name,
+			key,
+			count,
+			rows_avg,
+			rows_var,
+			service_lat_avg,
+			service_lat_var
+		FROM crdb_internal.node_statement_statistics
+		ORDER BY %s %s
+	`, orderByCol, orderDir)
+	results, resultCols, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "get-queries", nil /* txn */, args, query,
+	)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+
+	scanner := makeResultScanner(resultCols)
+
+	resp := serverpb.QueriesResponse{
+		Queries: make([]serverpb.QueriesResponse_Query, len(results)),
+	}
+
+	for idx, row := range results {
+		query := &resp.Queries[idx]
+		if err := scanner.ScanAll(
+			row,
+			&query.NodeId,
+			&query.ApplicationName,
+			&query.QueryAnonymized,
+			&query.Count,
+			&query.RowsAvg,
+			&query.RowsVar,
+			&query.ServiceLatAvg,
+			&query.ServiceLatVar,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	return &resp, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
