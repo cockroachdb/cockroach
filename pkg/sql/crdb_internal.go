@@ -1597,23 +1597,22 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		})
 
 		for _, d := range descriptors {
-			var attrs []json.JSON
+			attrs := json.NewArrayBuilder(len(d.Attrs.Attrs))
 			for _, a := range d.Attrs.Attrs {
-				attrs = append(attrs, json.FromString(a))
+				attrs.Add(json.FromString(a))
 			}
 
-			b := json.NewBuilder()
+			locality := json.NewObjectBuilder(len(d.Locality.Tiers))
 			for _, t := range d.Locality.Tiers {
-				b.Add(t.Key, json.FromString(t.Value))
+				locality.Add(t.Key, json.FromString(t.Value))
 			}
-			locality := b.Build()
 
 			if err := addRow(
 				tree.NewDInt(tree.DInt(d.NodeID)),
 				tree.NewDString(d.Address.NetworkField),
 				tree.NewDString(d.Address.AddressField),
-				tree.NewDJSON(json.FromArrayOfJSON(attrs)),
-				tree.NewDJSON(locality),
+				tree.NewDJSON(attrs.Build()),
+				tree.NewDJSON(locality.Build()),
 				tree.NewDString(d.ServerVersion.String()),
 			); err != nil {
 				return err
@@ -1782,12 +1781,12 @@ CREATE TABLE crdb_internal.kv_node_status (
 		}
 
 		for _, n := range response.Nodes {
-			var attrs []json.JSON
+			attrs := json.NewArrayBuilder(len(n.Desc.Attrs.Attrs))
 			for _, a := range n.Desc.Attrs.Attrs {
-				attrs = append(attrs, json.FromString(a))
+				attrs.Add(json.FromString(a))
 			}
 
-			locality := json.NewBuilder()
+			locality := json.NewObjectBuilder(len(n.Desc.Locality.Tiers))
 			for _, t := range n.Desc.Locality.Tiers {
 				locality.Add(t.Key, json.FromString(t.Value))
 			}
@@ -1799,7 +1798,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 				dependencies = *(n.BuildInfo.Dependencies)
 			}
 
-			metrics := json.NewBuilder()
+			metrics := json.NewObjectBuilder(len(n.Metrics))
 			for k, v := range n.Metrics {
 				metric, err := json.FromFloat64(v)
 				if err != nil {
@@ -1808,19 +1807,19 @@ CREATE TABLE crdb_internal.kv_node_status (
 				metrics.Add(k, metric)
 			}
 
-			var args []json.JSON
+			args := json.NewArrayBuilder(len(n.Args))
 			for _, a := range n.Args {
-				args = append(attrs, json.FromString(a))
+				args.Add(json.FromString(a))
 			}
 
-			var env []json.JSON
+			env := json.NewArrayBuilder(len(n.Env))
 			for _, v := range n.Env {
-				env = append(attrs, json.FromString(v))
+				env.Add(json.FromString(v))
 			}
 
-			activity := json.NewBuilder()
+			activity := json.NewObjectBuilder(len(n.Activity))
 			for nodeID, values := range n.Activity {
-				b := json.NewBuilder()
+				b := json.NewObjectBuilder(3)
 				b.Add("incoming", json.FromInt64(values.Incoming))
 				b.Add("outgoing", json.FromInt64(values.Outgoing))
 				b.Add("latency", json.FromInt64(values.Latency))
@@ -1831,7 +1830,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 				tree.NewDInt(tree.DInt(n.Desc.NodeID)),
 				tree.NewDString(n.Desc.Address.NetworkField),
 				tree.NewDString(n.Desc.Address.AddressField),
-				tree.NewDJSON(json.FromArrayOfJSON(attrs)),
+				tree.NewDJSON(attrs.Build()),
 				tree.NewDJSON(locality.Build()),
 				tree.NewDString(n.Desc.ServerVersion.String()),
 				tree.NewDString(n.BuildInfo.GoVersion),
@@ -1846,8 +1845,8 @@ CREATE TABLE crdb_internal.kv_node_status (
 				tree.MakeDTimestamp(timeutil.Unix(0, n.StartedAt), time.Microsecond),
 				tree.MakeDTimestamp(timeutil.Unix(0, n.UpdatedAt), time.Microsecond),
 				tree.NewDJSON(metrics.Build()),
-				tree.NewDJSON(json.FromArrayOfJSON(args)),
-				tree.NewDJSON(json.FromArrayOfJSON(env)),
+				tree.NewDJSON(args.Build()),
+				tree.NewDJSON(env.Build()),
 				tree.NewDJSON(activity.Build()),
 			); err != nil {
 				return err
@@ -1888,12 +1887,12 @@ CREATE TABLE crdb_internal.kv_store_status (
 
 		for _, n := range response.Nodes {
 			for _, s := range n.StoreStatuses {
-				var attrs []json.JSON
+				attrs := json.NewArrayBuilder(len(s.Desc.Attrs.Attrs))
 				for _, a := range s.Desc.Attrs.Attrs {
-					attrs = append(attrs, json.FromString(a))
+					attrs.Add(json.FromString(a))
 				}
 
-				metrics := json.NewBuilder()
+				metrics := json.NewObjectBuilder(len(s.Metrics))
 				for k, v := range s.Metrics {
 					metric, err := json.FromFloat64(v)
 					if err != nil {
@@ -1903,7 +1902,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 				}
 
 				percentilesToJSON := func(ps roachpb.Percentiles) (json.JSON, error) {
-					b := json.NewBuilder()
+					b := json.NewObjectBuilder(5)
 					v, err := json.FromFloat64(ps.P10)
 					if err != nil {
 						return nil, err
@@ -1944,7 +1943,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 				if err := addRow(
 					tree.NewDInt(tree.DInt(s.Desc.Node.NodeID)),
 					tree.NewDInt(tree.DInt(s.Desc.StoreID)),
-					tree.NewDJSON(json.FromArrayOfJSON(attrs)),
+					tree.NewDJSON(attrs.Build()),
 					tree.NewDInt(tree.DInt(s.Desc.Capacity.Capacity)),
 					tree.NewDInt(tree.DInt(s.Desc.Capacity.Available)),
 					tree.NewDInt(tree.DInt(s.Desc.Capacity.Used)),
