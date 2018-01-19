@@ -13,16 +13,22 @@ cat > "$1" << EOF
 
 Release note: None
 
-# Write a commit message of the form
+# Write a commit message of the form:
 #
+# ---
 # <pkg>: <short description>
 #
-# Please add a release note with a category if your commit has user-facing
-# changes. Leave the default above if not. For example,
+# <long description>
 #
-# Release note (sql change): Add support for JSON columns.
+# Release note (category): <release note description>
+# ---
 #
-# Categories.
+# Wrap long lines! 72 columns is best.
+#
+# The release note must be present if your commit has
+# user-facing changes. Leave the default above if not.
+#
+# Categories for release notes:
 # - cli change
 # - sql change
 # - admin ui change
