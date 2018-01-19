@@ -15,7 +15,6 @@
 #include "db.h"
 #include <algorithm>
 #include <chrono>
-#include <google/protobuf/stubs/stringprintf.h>
 #include <mutex>
 #include <rocksdb/cache.h>
 #include <rocksdb/db.h>
@@ -30,6 +29,7 @@
 #include <rocksdb/statistics.h>
 #include <rocksdb/table.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
+#include <stdarg.h>
 #include "encoding.h"
 #include "env_switching.h"
 #include "eventlistener.h"
@@ -3041,7 +3041,7 @@ template <bool reverse> class mvccScanner {
 
   // iterPeekPrev "peeks" at the previous key before the current
   // iterator position.
-  bool iterPeekPrev(rocksdb::Slice *peeked_key) {
+  bool iterPeekPrev(rocksdb::Slice* peeked_key) {
     if (!peeked_) {
       peeked_ = true;
       // We need to save a copy of the current iterator key and value
