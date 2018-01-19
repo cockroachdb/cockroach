@@ -63,6 +63,10 @@ type tableInfo struct {
 	// The set of ColumnIDs that are required.
 	neededCols util.FastIntSet
 
+	// The set of indexes into the cols array that are required for columns
+	// in the value part.
+	neededValueColsByIdx util.FastIntSet
+
 	// Map used to get the index for columns in cols.
 	colIdxMap map[ColumnID]int
 
@@ -295,13 +299,16 @@ func (rf *RowFetcher) Init(
 		var indexColumnIDs []ColumnID
 		indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
 
+		table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
 		neededIndexCols := 0
 		table.indexColIdx = make([]int, len(indexColumnIDs))
 		for i, id := range indexColumnIDs {
+			colIdx := table.colIdxMap[id]
+			table.indexColIdx[i] = colIdx
 			if table.neededCols.Contains(int(id)) {
 				neededIndexCols++
+				table.neededValueColsByIdx.Remove(colIdx)
 			}
-			table.indexColIdx[i] = table.colIdxMap[id]
 		}
 
 		// The number of columns we need to read from the value part of the key.
@@ -584,8 +591,11 @@ func (rf *RowFetcher) processKV(
 
 		// Reset the row to nil; it will get filled in with the column
 		// values as we decode the key-value pairs for the row.
-		for i := range table.row {
-			table.row[i].UnsetDatum()
+		// We only need to reset the needed columns in the value component, because
+		// non-needed columns are never set and key columns are unconditionally set
+		// below.
+		for idx, ok := table.neededValueColsByIdx.Next(0); ok; idx, ok = table.neededValueColsByIdx.Next(idx + 1) {
+			table.row[idx].UnsetDatum()
 		}
 
 		// Fill in the column values that are part of the index key.
