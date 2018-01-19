@@ -172,6 +172,12 @@ func Load(
 				Union: &sqlbase.Descriptor_Table{Table: tableDesc},
 			})
 
+			for _, col := range tableDesc.Columns {
+				if col.ComputeExpr != nil {
+					return BackupDescriptor{}, errors.Errorf("computed columns are not allowed")
+				}
+			}
+
 			ri, err = sqlbase.MakeRowInserter(nil, tableDesc, nil, tableDesc.Columns,
 				true, &sqlbase.DatumAlloc{})
 			if err != nil {
@@ -296,8 +302,12 @@ func insertStmtToKVs(
 				return err
 			}
 		}
+
+		// We have disallowed computed exprs.
+		var computeExprs []tree.TypedExpr = nil
+
 		row, err := sql.GenerateInsertRow(
-			defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, row,
+			defaultExprs, computeExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, row,
 		)
 		if err != nil {
 			return errors.Wrapf(err, "process insert %q", row)

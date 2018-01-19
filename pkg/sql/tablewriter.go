@@ -224,6 +224,11 @@ type tableUpsertEvaler interface {
 	// that would have been inserted and the existing (conflicting) values.
 	eval(insertRow tree.Datums, existingRow tree.Datums) (tree.Datums, error)
 
+	// evalComputedCols evaluates the computed columns for this upsert using the
+	// values in updatedRow and appends the results, in order, to appendTo,
+	// returning the result.
+	evalComputedCols(updatedRow tree.Datums, appendTo tree.Datums) (tree.Datums, error)
+
 	// shouldUpdate returns the result of evaluating the WHERE clause of the
 	// ON CONFLICT ... DO UPDATE clause.
 	shouldUpdate(insertRow tree.Datums, existingRow tree.Datums) (bool, error)
@@ -251,6 +256,7 @@ type tableUpserter struct {
 	isUpsertAlias bool
 	alloc         *sqlbase.DatumAlloc
 	collectRows   bool
+	anyComputed   bool
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
 	updateCols []sqlbase.ColumnDescriptor
@@ -484,12 +490,35 @@ func (tu *tableUpserter) flush(
 				if err != nil {
 					return nil, err
 				}
+
+				// TODO(justin): We're currently wasteful here: we construct the
+				// result row *twice* because we need it once to evaluate any computed
+				// columns and again to actually perform the update. we need to find a
+				// way to reuse it. I'm not sure right now how best to factor this -
+				// suggestions welcome.
+				if tu.anyComputed {
+					newValues := make([]tree.Datum, len(existingValues))
+					copy(newValues, existingValues)
+					for i, updateValue := range updateValues {
+						newValues[tu.ru.FetchColIDtoRowIndex[tu.ru.UpdateCols[i].ID]] = updateValue
+					}
+
+					// Now that we have a complete row save for computed columns, since the
+					// computed columns are at the end of the update row, we must evaluate
+					// the computed columns and add the results to the end of updateValues.
+					updateValues, err = tu.evaler.evalComputedCols(newValues, updateValues)
+					if err != nil {
+						return nil, err
+					}
+				}
+
 				updatedRow, err := tu.ru.UpdateRow(
 					ctx, b, existingValues, updateValues, sqlbase.CheckFKs, traceKV,
 				)
 				if err != nil {
 					return nil, err
 				}
+
 				if tu.collectRows {
 					_, err = tu.rowsUpserted.AddRow(ctx, updatedRow)
 					if err != nil {

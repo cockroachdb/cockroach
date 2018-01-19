@@ -40,6 +40,7 @@ type updateNode struct {
 	n             *tree.Update
 	updateCols    []sqlbase.ColumnDescriptor
 	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
+	computeExprs  []tree.TypedExpr
 	tw            tableUpdater
 	checkHelper   checkHelper
 	sourceSlots   []sourceSlot
@@ -104,6 +105,13 @@ func (p *planner) Update(
 
 	defaultExprs, err := sqlbase.MakeDefaultExprs(
 		updateCols, &p.txCtx, p.EvalContext())
+	if err != nil {
+		return nil, err
+	}
+
+	// We update the set of columns being updated into with any computed columns.
+	updateCols, computeExprs, err :=
+		ProcessComputedColumns(ctx, updateCols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -250,6 +258,7 @@ func (p *planner) Update(
 		n:             n,
 		editNodeBase:  en,
 		updateCols:    ru.UpdateCols,
+		computeExprs:  computeExprs,
 		updateColsIdx: updateColsIdx,
 		tw:            tw,
 		sourceSlots:   sourceSlots,
@@ -308,6 +317,35 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 		}
 	}
 
+	newVals := make(tree.Datums, len(oldValues))
+
+	copy(newVals, oldValues)
+	for i, col := range u.tw.ru.UpdateCols {
+		newVals[u.tw.ru.FetchColIDtoRowIndex[col.ID]] = updateValues[i]
+	}
+
+	// Evaluate computed columns.
+
+	iv := &rowIndexedVarContainer{newVals, u.tableDesc.Columns, u.tw.ru.FetchColIDtoRowIndex}
+	ivarHelper := tree.MakeIndexedVarHelper(iv, len(newVals))
+	params.EvalContext().IVarHelper = &ivarHelper
+
+	idx := 0
+	for i := range u.updateCols {
+		if u.updateCols[i].ComputeExpr != nil {
+			d, err := u.computeExprs[idx].Eval(params.EvalContext())
+			if err != nil {
+				return false, err
+			}
+			updateValues[i] = d
+			idx++
+		}
+	}
+
+	params.EvalContext().IVarHelper = nil
+
+	// TODO(justin): we have actually constructed the whole row at this point and
+	// thus should be able to avoid loading it separately like this now.
 	if err := u.checkHelper.loadRow(u.tw.ru.FetchColIDtoRowIndex, oldValues, false); err != nil {
 		return false, err
 	}
@@ -390,13 +428,6 @@ func (p *planner) makeEditNode(
 				pgerror.CodeWrongObjectTypeError,
 				"cannot run %s on %s %q - %ss are not updateable",
 				priv, tableDesc.Kind(), tn, tableDesc.Kind())
-	}
-
-	// TODO(justin): temporary to split up computed columns PR.
-	for _, col := range tableDesc.Columns {
-		if col.ComputeExpr != nil {
-			return editNodeBase{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "TODO(justin)")
-		}
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, priv); err != nil {

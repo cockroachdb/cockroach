@@ -4,7 +4,7 @@ statement ok
 CREATE TABLE with_no_column_refs (
   a INT,
   b INT,
-  c INT AS (3) STORED
+  c INT AS 3 STORED
 )
 
 query TT
@@ -13,15 +13,20 @@ SHOW CREATE TABLE with_no_column_refs
 with_no_column_refs CREATE TABLE with_no_column_refs (
                       a INT NULL,
                       b INT NULL,
-                      c INT NULL AS (3) STORED,
+                      c INT NULL AS 3 STORED,
                       FAMILY "primary" (a, b, c, rowid)
                     )
 
-statement error TODO\(justin\)
+statement error cannot write directly to computed column "c"
 INSERT INTO with_no_column_refs (c) VALUES (1)
 
-statement error TODO\(justin\)
+statement ok
 INSERT INTO with_no_column_refs (a, b) VALUES (1, 2)
+
+query I
+SELECT c FROM with_no_column_refs
+----
+3
 
 statement ok
 CREATE TABLE x (
@@ -42,23 +47,45 @@ x CREATE TABLE x (
     FAMILY "primary" (a, b, c, d, rowid)
   )
 
-statement error TODO\(justin\)
+statement error cannot write directly to computed column "c"
 INSERT INTO x (c) VALUES (1)
 
-statement error TODO\(justin\)
+statement ok
 INSERT INTO x (a, b) VALUES (1, 2)
 
-statement error TODO\(justin\)
+query II
+SELECT c, d FROM x
+----
+1 3
+
+statement ok
 DELETE FROM x
 
-statement error TODO\(justin\)
+# Ensure that defaults are handled properly.
+statement ok
 INSERT INTO x VALUES (DEFAULT)
 
-statement error TODO\(justin\)
+query I
+SELECT c FROM x
+----
+3
+
+query I
+SELECT d FROM x
+----
+10
+
+statement ok
 DELETE FROM x
 
-statement error TODO\(justin\)
+# We can use DEFAULT as a placeholder for computed columns
+statement ok
 INSERT INTO x VALUES (1, 2, DEFAULT, DEFAULT)
+
+query II
+SELECT c, d FROM x
+----
+1 3
 
 statement ok
 DROP TABLE x
@@ -72,24 +99,53 @@ CREATE TABLE x (
   d INT AS b - 1 STORED
 )
 
-statement error TODO\(justin\)
+statement ok
 INSERT INTO x (a, b) VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b + 1
 
-statement error TODO\(justin\)
+query II
+SELECT c, d FROM x
+----
+2 0
+
+statement ok
 INSERT INTO x (a, b) VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b + 1
 
-statement error TODO\(justin\)
+query IIII
+SELECT a, b, c, d FROM x
+----
+1 2 3 1
+
+statement ok
 INSERT INTO x (a, b) VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = x.b + 1
+
+query III
+SELECT a, b, c FROM x
+----
+1 3 4
 
 # Update.
 
-statement error TODO\(justin\)
+statement ok
 UPDATE x SET b = 3
 
-statement error TODO\(justin\)
+query III
+SELECT a, b, c FROM x
+----
+1 3 4
+
+# Update/self-reference.
+
+statement ok
 UPDATE x SET b = c
 
-statement error TODO\(justin\)
+query III
+SELECT a, b, c FROM x
+----
+1 4 5
+
+# Updating with default is not allowed.
+
+statement error cannot write directly to computed column "c"
 UPDATE x SET (b, c) = (1, DEFAULT)
 
 statement ok
@@ -101,11 +157,17 @@ CREATE TABLE x (
   a INT
 )
 
-statement error TODO\(justin\)
+statement ok
 INSERT INTO x VALUES (DEFAULT, 1)
 
-statement error TODO\(justin\)
+statement ok
 INSERT INTO x VALUES (DEFAULT, '2')
+
+query I
+SELECT b FROM x ORDER BY b
+----
+1
+2
 
 statement ok
 DROP TABLE x
@@ -220,13 +282,144 @@ render     ·      ·
 ·          spans  ALL
 
 statement ok
+INSERT INTO x (k, a) VALUES (1, '{"q":"xyz"}'), (2, '{"q":"abc"}')
+
+query IT
+SELECT k, b FROM x ORDER BY b
+----
+2 abc
+1 xyz
+
+statement ok
+DROP TABLE x
+
+statement ok
+CREATE TABLE x (
+  k INT AS ((data->>'id')::INT) STORED PRIMARY KEY,
+  data JSON
+)
+
+statement ok
+INSERT INTO x (data) VALUES
+ ('{"id": 1, "name": "lucky"}'),
+ ('{"id": 2, "name": "rascal"}'),
+ ('{"id": 3, "name": "captain"}'),
+ ('{"id": 4, "name": "lola"}')
+
+# ON CONFLICT that modifies a PK.
+statement ok
+INSERT INTO x (data) VALUES ('{"id": 1, "name": "ernie"}')
+ON CONFLICT (k) DO UPDATE SET data = '{"id": 5, "name": "ernie"}'
+
+# ON CONFLICT that modifies a PK which then also conflicts.
+statement error duplicate key value
+INSERT INTO x (data) VALUES ('{"id": 5, "name": "oliver"}')
+ON CONFLICT (k) DO UPDATE SET data = '{"id": 2, "name": "rascal"}'
+
+# Updating a non-PK column.
+statement ok
+UPDATE x SET data = data || '{"name": "carl"}' WHERE k = 2
+
+query T
+SELECT data->>'name' FROM x WHERE k = 2
+----
+carl
+
+query T
+SELECT data->>'name' FROM x WHERE k = 5
+----
+ernie
+
+statement ok
+DROP TABLE x
+
+statement ok
+CREATE TABLE x (
+  a INT,
+  b INT,
+  c INT,
+  d INT[] AS (ARRAY[a, b, c]) STORED
+)
+
+statement ok
+INSERT INTO x (a, b, c) VALUES (1, 2, 3)
+
+query T
+SELECT d FROM x
+----
+{1,2,3}
+
+statement ok
+TRUNCATE x
+
+# Make sure we get the permutation on the inserts correct.
+
+statement ok
+INSERT INTO x (b, a, c) VALUES (1, 2, 3)
+
+query T
+SELECT d FROM x
+----
+{2,1,3}
+
+# Make sure we get the permutation on the updates correct.
+statement ok
+UPDATE x SET (c, a, b) = (1, 2, 3)
+
+query T
+SELECT d FROM x
+----
+{2,3,1}
+
+statement ok
+UPDATE x SET (a, c) = (1, 2)
+
+query T
+SELECT d FROM x
+----
+{1,3,2}
+
+statement ok
+UPDATE x SET c = 2, a = 3, b = 1
+
+query T
+SELECT d FROM x
+----
+{3,1,2}
+
+# Make sure we get the permutation on upserts correct.
+statement ok
+INSERT INTO x (rowid) VALUES ((SELECT rowid FROM x)) ON CONFLICT(rowid) DO UPDATE SET (a, b, c) = (1, 2, 3)
+
+query T
+SELECT d FROM x
+----
+{1,2,3}
+
+statement ok
+INSERT INTO x (rowid) VALUES ((SELECT rowid FROM x)) ON CONFLICT(rowid) DO UPDATE SET (c, a, b) = (1, 2, 3)
+
+query T
+SELECT d FROM x
+----
+{2,3,1}
+
+statement ok
+INSERT INTO x (rowid) VALUES ((SELECT rowid FROM x)) ON CONFLICT(rowid) DO UPDATE SET (c, a) = (1, 2)
+
+query T
+SELECT d FROM x
+----
+{2,3,1}
+
+statement ok
 DROP TABLE x
 
 # Check that computed columns are resilient to column renames.
 statement ok
 CREATE TABLE x (
   a INT,
-  b INT AS a STORED
+  b INT AS (a) STORED
 )
 
 statement ok
@@ -237,7 +430,7 @@ SHOW CREATE TABLE x
 ----
 x CREATE TABLE x (
     c INT NULL,
-    b INT NULL AS c STORED,
+    b INT NULL AS (c) STORED,
     FAMILY "primary" (c, b, rowid)
   )
 

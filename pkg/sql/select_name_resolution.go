@@ -228,8 +228,30 @@ func (p *planner) resolveNames(
 		searchPath:         p.SessionData().SearchPath,
 		foundDependentVars: false,
 	}
+	return resolveNamesUsingVisitor(expr, v)
+}
+
+func resolveNames(
+	expr tree.Expr,
+	sources multiSourceInfo,
+	ivarHelper tree.IndexedVarHelper,
+	searchPath sessiondata.SearchPath,
+) (tree.Expr, bool, bool, error) {
+	v := &nameResolutionVisitor{
+		err:                nil,
+		sources:            sources,
+		iVarHelper:         ivarHelper,
+		searchPath:         searchPath,
+		foundDependentVars: false,
+	}
+	return resolveNamesUsingVisitor(expr, v)
+}
+
+func resolveNamesUsingVisitor(
+	expr tree.Expr, v *nameResolutionVisitor,
+) (tree.Expr, bool, bool, error) {
 	colOffset := 0
-	for _, s := range sources {
+	for _, s := range v.sources {
 		s.colOffset = colOffset
 		colOffset += len(s.sourceColumns)
 	}
