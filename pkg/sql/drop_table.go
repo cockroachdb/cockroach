@@ -307,7 +307,7 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	if err := p.initiateDropTable(ctx, tableDesc); err != nil {
+	if err := p.initiateDropTable(ctx, tableDesc, true /* drain name */); err != nil {
 		return droppedViews, err
 	}
 
@@ -318,7 +318,13 @@ func (p *planner) dropTableImpl(
 	return droppedViews, nil
 }
 
-func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
+// drainName when set implies that the name needs to go through the draining
+// names process. This parameter is always passed in as true except from
+// TRUNCATE which directly deletes the old name to id map and doesn't need
+// drain the old map.
+func (p *planner) initiateDropTable(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, drainName bool,
+) error {
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return err
 	}
@@ -347,6 +353,13 @@ func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.Tabl
 	}
 
 	tableDesc.State = sqlbase.TableDescriptor_DROP
+	if drainName {
+		// Queue up name for draining.
+		nameDetails := sqlbase.TableDescriptor_NameInfo{
+			ParentID: tableDesc.ParentID,
+			Name:     tableDesc.Name}
+		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
+	}
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return err
 	}
