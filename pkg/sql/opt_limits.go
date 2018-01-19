@@ -187,6 +187,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
+	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
