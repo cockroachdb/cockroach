@@ -220,6 +220,11 @@ func MakeColumnDefDescs(
 		col.DefaultExpr = &s
 	}
 
+	if d.IsComputed() {
+		s := tree.Serialize(d.Computed.Expr)
+		col.ComputeExpr = &s
+	}
+
 	var idx *IndexDescriptor
 	if d.PrimaryKey || d.Unique {
 		idx = &IndexDescriptor{

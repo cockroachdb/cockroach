@@ -1344,6 +1344,7 @@ reserved_keyword ::=
 	| 'SELECT'
 	| 'SESSION_USER'
 	| 'SOME'
+	| 'STORED'
 	| 'SYMMETRIC'
 	| 'TABLE'
 	| 'THEN'
@@ -1861,6 +1862,7 @@ col_qualification_elem ::=
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' qualified_name opt_name_parens reference_actions
+	| 'AS' b_expr 'STORED'
 
 reference_on_update ::=
 	'ON' 'UPDATE' reference_action

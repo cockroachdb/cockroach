@@ -212,6 +212,10 @@ type ColumnTableDef struct {
 		ConstraintName Name
 		Actions        ReferenceActions
 	}
+	Computed struct {
+		Computed bool
+		Expr     Expr
+	}
 	Family struct {
 		Name        Name
 		Create      bool
@@ -309,6 +313,9 @@ func NewColumnTableDef(
 			d.References.Col = t.Col
 			d.References.ConstraintName = c.Name
 			d.References.Actions = t.Actions
+		case *ColumnComputedDef:
+			d.Computed.Computed = true
+			d.Computed.Expr = t.Expr
 		case *ColumnFamilyConstraint:
 			if d.HasColumnFamily() {
 				return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
@@ -337,6 +344,11 @@ func (node *ColumnTableDef) HasDefaultExpr() bool {
 // HasFKConstraint returns if the ColumnTableDef has a foreign key constraint.
 func (node *ColumnTableDef) HasFKConstraint() bool {
 	return node.References.Table.TableNameReference != nil
+}
+
+// IsComputed returns if the ColumnTableDef is a computed column.
+func (node *ColumnTableDef) IsComputed() bool {
+	return node.Computed.Computed
 }
 
 // HasColumnFamily returns if the ColumnTableDef has a column family.
@@ -395,6 +407,11 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		}
 		ctx.FormatNode(&node.References.Actions)
 	}
+	if node.IsComputed() {
+		ctx.WriteString(" AS ")
+		ctx.FormatNode(node.Computed.Expr)
+		ctx.WriteString(" STORED")
+	}
 	if node.HasColumnFamily() {
 		if node.Family.Create {
 			ctx.WriteString(" CREATE")
@@ -428,6 +445,7 @@ func (NullConstraint) columnQualification()          {}
 func (PrimaryKeyConstraint) columnQualification()    {}
 func (UniqueConstraint) columnQualification()        {}
 func (*ColumnCheckConstraint) columnQualification()  {}
+func (*ColumnComputedDef) columnQualification()      {}
 func (*ColumnFKConstraint) columnQualification()     {}
 func (*ColumnFamilyConstraint) columnQualification() {}
 
@@ -461,6 +479,11 @@ type ColumnFKConstraint struct {
 	Table   NormalizableTableName
 	Col     Name // empty-string means use PK
 	Actions ReferenceActions
+}
+
+// ColumnComputedDef represents the description of a computed column.
+type ColumnComputedDef struct {
+	Expr Expr
 }
 
 // ColumnFamilyConstraint represents FAMILY on a column.

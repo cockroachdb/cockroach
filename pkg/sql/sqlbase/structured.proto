@@ -126,6 +126,9 @@ message ColumnDescriptor {
   reserved 9;
   optional bool hidden = 6 [(gogoproto.nullable) = false];
   reserved 7;
+  // Expression to use to compute the value of this column if this is a
+  // computed column.
+  optional string compute_expr = 10;
 }
 
 // ColumnFamilyDescriptor is set of columns stored together in one kv entry.
