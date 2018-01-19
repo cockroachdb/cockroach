@@ -44,7 +44,7 @@ func (f fileEntry) String() string {
 	if f.settings.EncryptionType != enginepbccl.EncryptionType_Plaintext {
 		ret += fmt.Sprintf("  keyID: %s\n  nonce: % x\n  counter: %d\n",
 			f.settings.KeyId,
-			[]byte(f.settings.Nonce),
+			f.settings.Nonce,
 			f.settings.Counter)
 	}
 	return ret
@@ -76,7 +76,7 @@ func loadFileRegistry() {
 	log.Infof(context.Background(), "file registry version: %s", reg.Version)
 	for name, entry := range reg.Files {
 		var encSettings enginepbccl.EncryptionSettings
-		settings := []byte(entry.EncryptionSettings)
+		settings := entry.EncryptionSettings
 		if err := protoutil.Unmarshal(settings, &encSettings); err != nil {
 			log.Fatalf(context.Background(), "could not unmarshal encryption setting for %s: %v", name, err)
 		}

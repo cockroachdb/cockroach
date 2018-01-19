@@ -20,7 +20,8 @@ SwitchingProvider::~SwitchingProvider() {}
 
 rocksdb::Status SwitchingProvider::RegisterCipherStreamCreator(int env_level,
                                                                CipherStreamCreator* creator) {
-  auto res = creators_.insert(std::make_pair(env_level, creator));
+  auto res =
+      creators_.insert(std::make_pair(env_level, std::unique_ptr<CipherStreamCreator>(creator)));
   if (res.second != true) {
     return rocksdb::Status::InvalidArgument(
         fmt::StringPrintf("double registration of cipher creator at env_level %d", env_level));
