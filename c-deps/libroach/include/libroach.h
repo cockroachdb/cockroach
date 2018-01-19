@@ -259,11 +259,10 @@ typedef struct {
   DBTimestamp uncertainty_timestamp;
 } DBScanResults;
 
-DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp,
-                      DBTxn txn, bool consistent);
-DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end,
-                       DBTimestamp timestamp, int64_t max_keys,
-                       DBTxn txn, bool consistent, bool reverse);
+DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
+                      bool consistent);
+DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
+                       int64_t max_keys, DBTxn txn, bool consistent, bool reverse);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {
