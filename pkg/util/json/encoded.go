@@ -42,6 +42,8 @@ type jsonEncoded struct {
 	}
 }
 
+const jsonEncodedSize = unsafe.Sizeof(jsonEncoded{})
+
 // alreadyDecoded returns a decoded JSON value if this jsonEncoded has already
 // been decoded, otherwise it returns nil. This allows us to fast-path certain
 // operations if we've already done the work of decoding an object.
@@ -493,6 +495,9 @@ func (j *jsonEncoded) AsText() (*string, error) {
 }
 
 func (j *jsonEncoded) Compare(other JSON) (int, error) {
+	if cmp := cmpJSONTypes(j.Type(), other.Type()); cmp != 0 {
+		return cmp, nil
+	}
 	// TODO(justin): this can be optimized in some cases. We don't necessarily
 	// need to decode all of an array or every object key.
 	dec, err := j.shallowDecode()
@@ -600,7 +605,7 @@ func (j *jsonEncoded) RemoveKey(key string) (JSON, error) {
 
 // Size implements the JSON interface.
 func (j *jsonEncoded) Size() uintptr {
-	return unsafe.Sizeof(j) + uintptr(len(j.value))
+	return jsonEncodedSize + uintptr(cap(j.value))
 }
 
 func (j *jsonEncoded) String() string {

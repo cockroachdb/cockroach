@@ -45,6 +45,18 @@ const (
 	ObjectJSONType
 )
 
+const (
+	wordSize          = unsafe.Sizeof(big.Word(0))
+	jsonNumberSize    = unsafe.Sizeof(apd.Decimal{})
+	jsonStringSize    = unsafe.Sizeof((jsonString)(""))
+	jsonInterfaceSize = unsafe.Sizeof((JSON)(nil))
+	keyValuePairSize  = unsafe.Sizeof(jsonKeyValuePair{})
+)
+
+const (
+	msgModifyAfterBuild = "modify after Build()"
+)
+
 // JSON represents a JSON value.
 type JSON interface {
 	fmt.Stringer
@@ -148,26 +160,97 @@ type jsonKeyValuePair struct {
 	v JSON
 }
 
-// Builder builds JSON Object by a key value pair sequence.
-type Builder struct {
+// ArrayBuilder builds JSON Array by a JSON sequence.
+type ArrayBuilder struct {
+	jsons []JSON
+}
+
+// NewArrayBuilder returns an ArrayBuilder. The builder will reserve spaces
+// based on hint about number of adds to reduce times of growing capacity.
+func NewArrayBuilder(numAddsHint int) *ArrayBuilder {
+	return &ArrayBuilder{
+		jsons: make([]JSON, 0, numAddsHint),
+	}
+}
+
+// Add appends JSON to the sequence.
+func (b *ArrayBuilder) Add(j JSON) {
+	if b.jsons == nil {
+		panic(msgModifyAfterBuild)
+	}
+	b.jsons = append(b.jsons, j)
+}
+
+// Build returns a JSON array built from a JSON sequence. After that, it should
+// not be modified any longer.
+func (b *ArrayBuilder) Build() JSON {
+	if b.jsons == nil {
+		panic(msgModifyAfterBuild)
+	}
+	arr := jsonArray(b.jsons)
+	b.jsons = nil
+	return arr
+}
+
+// ArrayBuilderWithCounter builds JSON Array by a JSON sequence with a size counter.
+type ArrayBuilderWithCounter struct {
+	ab   *ArrayBuilder
+	size uintptr
+}
+
+// NewArrayBuilderWithCounter returns an ArrayBuilderWithCounter.
+func NewArrayBuilderWithCounter() *ArrayBuilderWithCounter {
+	return &ArrayBuilderWithCounter{
+		ab:   NewArrayBuilder(0),
+		size: 0,
+	}
+}
+
+// Add appends JSON to the sequence and updates the size counter.
+func (b *ArrayBuilderWithCounter) Add(j JSON) {
+	oldCap := cap(b.ab.jsons)
+	b.ab.Add(j)
+	b.size += j.Size() + (uintptr)(cap(b.ab.jsons)-oldCap)*jsonInterfaceSize
+}
+
+// Build returns a JSON array built from a JSON sequence. After that, it should
+// not be modified any longer.
+func (b *ArrayBuilderWithCounter) Build() JSON {
+	return b.ab.Build()
+}
+
+// Size returns the size in bytes of the JSON Array the builder is going to build.
+func (b *ArrayBuilderWithCounter) Size() uintptr {
+	return b.size
+}
+
+// ObjectBuilder builds JSON Object by a key value pair sequence.
+type ObjectBuilder struct {
 	pairs []jsonKeyValuePair
 }
 
-// NewBuilder returns a Builder with empty state.
-func NewBuilder() *Builder {
-	return &Builder{
-		pairs: []jsonKeyValuePair{},
+// NewObjectBuilder returns an ObjectBuilder. The builder will reserve spaces
+// based on hint about number of adds to reduce times of growing capacity.
+func NewObjectBuilder(numAddsHint int) *ObjectBuilder {
+	return &ObjectBuilder{
+		pairs: make([]jsonKeyValuePair, 0, numAddsHint),
 	}
 }
 
 // Add appends key value pair to the sequence.
-func (b *Builder) Add(k string, v JSON) {
+func (b *ObjectBuilder) Add(k string, v JSON) {
+	if b.pairs == nil {
+		panic(msgModifyAfterBuild)
+	}
 	b.pairs = append(b.pairs, jsonKeyValuePair{k: jsonString(k), v: v})
 }
 
-// Build returns a JSON object built from a key value pair sequence and clears
-// Builder to empty state.
-func (b *Builder) Build() JSON {
+// Build returns a JSON object built from a key value pair sequence. After that,
+// it should not be modified any longer.
+func (b *ObjectBuilder) Build() JSON {
+	if b.pairs == nil {
+		panic(msgModifyAfterBuild)
+	}
 	orders := make([]int, len(b.pairs))
 	for i := range orders {
 		orders[i] = i
@@ -177,7 +260,7 @@ func (b *Builder) Build() JSON {
 		orders:       orders,
 		hasNonUnique: false,
 	}
-	b.pairs = []jsonKeyValuePair{}
+	b.pairs = nil
 	sort.Sort(&sorter)
 	sorter.unique()
 	return jsonObject(sorter.pairs)
@@ -510,28 +593,26 @@ func (jsonTrue) Size() uintptr { return 0 }
 
 func (j jsonNumber) Size() uintptr {
 	intVal := j.Coeff
-	return unsafe.Sizeof(j) + uintptr(cap(intVal.Bits()))*unsafe.Sizeof(big.Word(0))
+	return jsonNumberSize + uintptr(cap(intVal.Bits()))*wordSize
 }
 
 func (j jsonString) Size() uintptr {
-	return unsafe.Sizeof(j) + uintptr(len(j))
+	return jsonStringSize + uintptr(len(j))
 }
 
 func (j jsonArray) Size() uintptr {
-	valSize := uintptr(0)
-	for i := range j {
-		valSize += unsafe.Sizeof(j[i])
-		valSize += j[i].Size()
+	valSize := uintptr(cap(j)) * jsonInterfaceSize
+	for _, elem := range j {
+		valSize += elem.Size()
 	}
 	return valSize
 }
 
 func (j jsonObject) Size() uintptr {
-	valSize := uintptr(0)
-	for i := range j {
-		valSize += unsafe.Sizeof(j[i])
-		valSize += j[i].k.Size()
-		valSize += j[i].v.Size()
+	valSize := uintptr(cap(j)) * keyValuePairSize
+	for _, elem := range j {
+		valSize += elem.k.Size()
+		valSize += elem.v.Size()
 	}
 	return valSize
 }
@@ -615,11 +696,6 @@ func FromDecimal(v apd.Decimal) JSON {
 	return jsonNumber(v)
 }
 
-// FromArrayOfJSON returns a JSON value given a []JSON.
-func FromArrayOfJSON(v []JSON) JSON {
-	return jsonArray(v)
-}
-
 // FromNumber returns a JSON value given a json.Number.
 func FromNumber(v json.Number) (JSON, error) {
 	// The JSON decoder has already verified that the string `v` represents a
@@ -655,8 +731,7 @@ func fromArray(v []interface{}) (JSON, error) {
 	return jsonArray(elems), nil
 }
 
-// FromMap returns a JSON value given a map[string]interface{}.
-func FromMap(v map[string]interface{}) (JSON, error) {
+func fromMap(v map[string]interface{}) (JSON, error) {
 	keys := make([]string, len(v))
 	i := 0
 	for k := range v {
@@ -723,7 +798,7 @@ func MakeJSON(d interface{}) (JSON, error) {
 	case []interface{}:
 		return fromArray(v)
 	case map[string]interface{}:
-		return FromMap(v)
+		return fromMap(v)
 		// The below are not used by ParseJSON, but are provided for ease-of-use when
 		// constructing Datums.
 	case int:

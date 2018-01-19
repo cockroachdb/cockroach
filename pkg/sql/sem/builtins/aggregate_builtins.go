@@ -1423,14 +1423,16 @@ func (a *intXorAggregate) Result() (tree.Datum, error) {
 func (a *intXorAggregate) Close(context.Context) {}
 
 type jsonAggregate struct {
-	jsons []json.JSON
-	acc   mon.BoundAccount
+	builder    *json.ArrayBuilderWithCounter
+	acc        mon.BoundAccount
+	sawNonNull bool
 }
 
 func newJSONAggregate(params []types.T, evalCtx *tree.EvalContext) tree.AggregateFunc {
 	return &jsonAggregate{
-		jsons: []json.JSON{},
-		acc:   evalCtx.Mon.MakeBoundAccount(),
+		builder:    json.NewArrayBuilderWithCounter(),
+		acc:        evalCtx.Mon.MakeBoundAccount(),
+		sawNonNull: false,
 	}
 }
 
@@ -1440,17 +1442,19 @@ func (a *jsonAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Dat
 	if err != nil {
 		return err
 	}
-	if err = a.acc.Grow(ctx, int64(j.Size())); err != nil {
+	oldSize := a.builder.Size()
+	a.builder.Add(j)
+	if err = a.acc.Grow(ctx, int64(a.builder.Size()-oldSize)); err != nil {
 		return err
 	}
-	a.jsons = append(a.jsons, j)
-	return err
+	a.sawNonNull = true
+	return nil
 }
 
 // Result returns an DJSON from the array of JSON.
 func (a *jsonAggregate) Result() (tree.Datum, error) {
-	if len(a.jsons) > 0 {
-		return tree.NewDJSON(json.FromArrayOfJSON(a.jsons)), nil
+	if a.sawNonNull {
+		return tree.NewDJSON(a.builder.Build()), nil
 	}
 	return tree.DNull, nil
 }

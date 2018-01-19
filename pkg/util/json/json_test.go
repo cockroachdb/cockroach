@@ -347,6 +347,44 @@ func TestMakeJSON(t *testing.T) {
 	}
 }
 
+func TestArrayBuilderWithCounter(t *testing.T) {
+	testCases := []struct {
+		input []interface{}
+	}{
+		{[]interface{}{}},
+		{[]interface{}{"a"}},
+		{[]interface{}{1, 2, "abc", nil, 1.2}},
+		{[]interface{}{"a", "aa", "aaa", "aaaa"}},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("array %v", tc.input), func(t *testing.T) {
+			builder := NewArrayBuilderWithCounter()
+			for _, e := range tc.input {
+				j, err := MakeJSON(e)
+				if err != nil {
+					t.Fatal(err)
+				}
+				builder.Add(j)
+			}
+			result := builder.Build()
+			expectedJSON, err := MakeJSON(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := result.Compare(expectedJSON)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
+				t.Fatalf("expected %v to equal %v", result, expectedJSON)
+			}
+			if builder.Size() != result.Size() {
+				t.Fatalf("expected %v to equal %v", builder.Size(), result.Size())
+			}
+		})
+	}
+}
+
 func TestBuildJSONObject(t *testing.T) {
 	testCases := []struct {
 		input []string
@@ -356,12 +394,10 @@ func TestBuildJSONObject(t *testing.T) {
 		{[]string{"a", "c", "a", "b", "a"}},
 		{[]string{"2", "1", "10", "3", "10", "1"}},
 	}
-	// Test whether JSONs built by sorting and map are same and whether
-	// Builder could be reused.
-	b := NewBuilder()
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("keys %v", tc.input), func(t *testing.T) {
 			m := map[string]interface{}{}
+			b := NewObjectBuilder(0)
 			for i, k := range tc.input {
 				j := FromString(fmt.Sprintf("%d", i))
 				m[k] = j
@@ -1516,7 +1552,7 @@ func BenchmarkBuildJSONObject(b *testing.B) {
 		b.Run(fmt.Sprintf("object size %d", objectSize), func(b *testing.B) {
 			b.Run("from builder", func(b *testing.B) {
 				for n := 0; n < b.N; n++ {
-					builder := NewBuilder()
+					builder := NewObjectBuilder(0)
 					for i, k := range keys {
 						builder.Add(k, FromInt(i))
 					}
@@ -1530,7 +1566,7 @@ func BenchmarkBuildJSONObject(b *testing.B) {
 					for i, k := range keys {
 						m[k] = FromInt(i)
 					}
-					if _, err := FromMap(m); err != nil {
+					if _, err := fromMap(m); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -1568,7 +1604,7 @@ func BenchmarkArrayConcat(b *testing.B) {
 func BenchmarkObjectStripNulls(b *testing.B) {
 	for _, objectSize := range []int{1, 10, 100, 1000} {
 		b.Run(fmt.Sprintf("object size %d no need to strip", objectSize), func(b *testing.B) {
-			builder := NewBuilder()
+			builder := NewObjectBuilder(0)
 			for i := 0; i < objectSize; i++ {
 				builder.Add(strconv.Itoa(i), FromInt(i))
 			}
@@ -1582,7 +1618,7 @@ func BenchmarkObjectStripNulls(b *testing.B) {
 			}
 		})
 		b.Run(fmt.Sprintf("object size %d need to strip", objectSize), func(b *testing.B) {
-			builder := NewBuilder()
+			builder := NewObjectBuilder(0)
 			builder.Add(strconv.Itoa(0), NullJSONValue)
 			for i := 1; i < objectSize; i++ {
 				builder.Add(strconv.Itoa(i), FromInt(i))
