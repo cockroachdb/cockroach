@@ -1095,7 +1095,11 @@ func restoreFailHook(ctx context.Context, txn *client.Txn, details *jobs.Restore
 	}
 	_, sqlDescs, err := loadBackupSQLDescs(ctx, *details)
 	if err != nil {
-		return err
+		// If the original data is gone, we can't correctly clean up the ingested
+		// data. However we need to prevent the job from failing to be marked as
+		// failed, so just log the error and move on. See #20261.
+		log.Errorf(ctx, "could not fetch descriptors for cleanup: %v", err)
+		return nil
 	}
 	var tables []*sqlbase.TableDescriptor
 	for _, desc := range sqlDescs {
