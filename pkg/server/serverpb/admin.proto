@@ -17,6 +17,7 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "config/zone.proto";
+import "roachpb/app_stats.proto";
 import "sql/jobs/jobs.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
@@ -530,8 +531,7 @@ message ReplicaMatrixResponse {
   }
 
   message TableInfo {
-    map<int32, int64> replica_count_by_node_id = 1
-      [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    map<int32, int64> replica_count_by_node_id = 1 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
     int64 zone_config_id = 2;
   }
@@ -546,6 +546,13 @@ message ReplicaMatrixResponse {
 
   // By zone config id.
   map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
+}
+
+message QueriesRequest {
+}
+
+message QueriesResponse {
+  repeated cockroach.sql.CollectedStatementStatistics queries = 1 [(gogoproto.nullable) = false];
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -725,6 +732,12 @@ service Admin {
   rpc ReplicaMatrix(ReplicaMatrixRequest) returns (ReplicaMatrixResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/replica_matrix"
+    };
+  }
+
+  rpc Queries(QueriesRequest) returns (QueriesResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/queries"
     };
   }
 }
