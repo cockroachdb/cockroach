@@ -128,7 +128,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	serverParams := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLSchemaChanger: &SchemaChangerTestingKnobs{
-				RenameOldNameNotInUseNotification: func() {
+				OldNamesDrainedNotification: func() {
 					<-renameUnblocked
 				},
 			},

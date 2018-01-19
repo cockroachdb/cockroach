@@ -349,36 +349,33 @@ func (sc *SchemaChanger) maybeAddDropRename(
 		if err := sc.ExtendLease(ctx, lease); err != nil {
 			return false, err
 		}
-		// Wait for everyone to see the version with the new name. When this
-		// returns, no new transactions will be using the old name for the table, so
-		// the old name can now be re-used (by CREATE).
-		if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
-			return false, err
-		}
 
-		if sc.testingKnobs.RenameOldNameNotInUseNotification != nil {
-			sc.testingKnobs.RenameOldNameNotInUseNotification()
-		}
-		// Free up the old name(s).
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			b := txn.NewBatch()
-			for _, drain := range table.DrainingNames {
-				tbKey := tableKey{drain.ParentID, drain.Name}.Key()
-				b.Del(tbKey)
-			}
-			if err := txn.SetSystemConfigTrigger(); err != nil {
-				return err
-			}
-			return txn.Run(ctx, b)
-		}); err != nil {
-			return false, err
-		}
-
-		// Clean up - clear the descriptor's state.
-		if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
-			desc.DrainingNames = nil
-			return nil
-		}, nil); err != nil {
+		// Publish a new version with all the names drained after everyone
+		// has seen the version with the new name. All the draining names
+		// can be reused henceforth.
+		var namesToReclaim []sqlbase.TableDescriptor_NameInfo
+		if _, err := sc.leaseMgr.Publish(
+			ctx,
+			sc.tableID,
+			func(desc *sqlbase.TableDescriptor) error {
+				if sc.testingKnobs.OldNamesDrainedNotification != nil {
+					sc.testingKnobs.OldNamesDrainedNotification()
+				}
+				// Free up the old name(s) for reuse.
+				namesToReclaim = desc.DrainingNames
+				desc.DrainingNames = nil
+				return nil
+			},
+			// Reclaim all the old names.
+			func(txn *client.Txn) error {
+				b := txn.NewBatch()
+				for _, drain := range namesToReclaim {
+					tbKey := tableKey{drain.ParentID, drain.Name}.Key()
+					b.Del(tbKey)
+				}
+				return txn.Run(ctx, b)
+			},
+		); err != nil {
 			return false, err
 		}
 	}
@@ -912,11 +909,11 @@ type SchemaChangerTestingKnobs struct {
 	// function returns an error, or if the table has already been dropped.
 	RunAfterBackfillChunk func()
 
-	// RenameOldNameNotInUseNotification is called during a rename schema
-	// change, after all leases on the version of the descriptor with the old
-	// name are gone, and just before the mapping of the old name to the
-	// descriptor id is about to be deleted.
-	RenameOldNameNotInUseNotification func()
+	// OldNamesDrainedNotification is called during a schema change,
+	// after all leases on the version of the descriptor with the old
+	// names are gone, and just before the mapping of the old names to the
+	// descriptor id are about to be deleted.
+	OldNamesDrainedNotification func()
 
 	// AsyncExecNotification is a function called before running a schema
 	// change asynchronously. Returning an error will prevent the asynchronous
