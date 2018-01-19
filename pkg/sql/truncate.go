@@ -135,8 +135,12 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	newTableDesc.Version = 1
 
 	// Remove old name -> id map.
+	// TODO(vivek): This is done without going through the draining process
+	// which is a violation of the invariant that a name can only name
+	// a single descriptor. This violation is needed so that TRUNCATE can be used
+	// along with other CRUD commands that follow it in the same transaction.
+	// Fix properly along with #12123 .
 	zoneKey, nameKey, _ := GetKeysForTableDescriptor(tableDesc)
-
 	b := &client.Batch{}
 	// Use CPut because we want to remove a specific name -> id map.
 	if traceKV {
@@ -148,7 +152,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	}
 
 	// Drop table.
-	if err := p.initiateDropTable(ctx, tableDesc); err != nil {
+	if err := p.initiateDropTable(ctx, tableDesc, false /* drainName */); err != nil {
 		return err
 	}
 
