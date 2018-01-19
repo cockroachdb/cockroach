@@ -181,8 +181,7 @@ std::unique_ptr<enginepbccl::SecretKey> FileKeyManager::CurrentKey() {
 
 std::unique_ptr<enginepbccl::SecretKey> FileKeyManager::GetKey(const std::string& id) {
   if (active_key_ != nullptr && active_key_->info().key_id() == id) {
-    return std::unique_ptr<enginepbccl::SecretKey>(
-        new enginepbccl::SecretKey(*active_key_.get()));
+    return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*active_key_.get()));
   }
   if (old_key_ != nullptr && old_key_->info().key_id() == id) {
     return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*old_key_.get()));

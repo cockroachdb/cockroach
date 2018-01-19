@@ -3041,7 +3041,7 @@ template <bool reverse> class mvccScanner {
 
   // iterPeekPrev "peeks" at the previous key before the current
   // iterator position.
-  bool iterPeekPrev(rocksdb::Slice *peeked_key) {
+  bool iterPeekPrev(rocksdb::Slice* peeked_key) {
     if (!peeked_) {
       peeked_ = true;
       // We need to save a copy of the current iterator key and value
