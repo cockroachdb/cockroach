@@ -64,7 +64,7 @@ var wrappedPlanHooks []wrappedPlanHookFn
 // interface as we find we need them, to avoid churn in the planHookFn sig and
 // the hooks that implement it.
 type PlanHookState interface {
-	ExtendedEvalContext() extendedEvalContext
+	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
 	DistLoader() *DistLoader

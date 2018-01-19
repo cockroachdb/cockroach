@@ -36,7 +36,11 @@ import (
 )
 
 func makeTestPlanner() *planner {
-	return makeInternalPlanner("test", nil /* txn */, security.RootUser, &MemoryMetrics{})
+	// TODO(andrei): pass the cleanup along to the caller.
+	p, _ /* cleanup */ := newInternalPlanner(
+		"test", nil /* txn */, security.RootUser, &MemoryMetrics{},
+	)
+	return p
 }
 
 func TestValues(t *testing.T) {

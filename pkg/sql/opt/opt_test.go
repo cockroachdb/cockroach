@@ -220,7 +220,9 @@ func TestOpt(t *testing.T) {
 						if e == nil {
 							d.Fatalf(t, "no expression for exec")
 						}
-						n, err := makeExec(e, NewExecFactory(s))
+						factory := NewExecFactory(s)
+						defer factory.Close()
+						n, err := makeExec(e, factory)
 						if err != nil {
 							d.Fatalf(t, "MakeExec: %v", err)
 						}
