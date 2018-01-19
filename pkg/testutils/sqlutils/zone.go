@@ -50,6 +50,22 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 	}, nil
 }
 
+// RemoveAllZoneConfigs removes all installed zone configs.
+func RemoveAllZoneConfigs(t testing.TB, sqlDB *SQLRunner) {
+	t.Helper()
+	for _, zone := range sqlDB.QueryStr(t, "SELECT cli_specifier FROM crdb_internal.zones") {
+		zs, err := config.ParseCLIZoneSpecifier(zone[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if zs.NamedZone == config.DefaultZoneName {
+			// The default zone cannot be removed.
+			continue
+		}
+		sqlDB.Exec(t, fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL", &zs))
+	}
+}
+
 // DeleteZoneConfig deletes the specified zone config through the SQL interface.
 func DeleteZoneConfig(t testing.TB, sqlDB *SQLRunner, target string) {
 	t.Helper()

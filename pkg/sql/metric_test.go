@@ -40,6 +40,7 @@ type queryCounter struct {
 	miscCount          int64
 	txnCommitCount     int64
 	txnRollbackCount   int64
+	txnAbortCount      int64
 }
 
 func TestQueryCounts(t *testing.T) {
@@ -73,15 +74,7 @@ func TestQueryCounts(t *testing.T) {
 		{query: "SET database = system", miscCount: 1},
 	}
 
-	// Initialize accum while accounting for system migrations that may have run
-	// DDL statements.
-	accum := queryCounter{
-		selectCount: 2, // non-zero due to migrations
-		insertCount: 6, // non-zero due to migrations
-		deleteCount: 2, // non-zero due to migrations
-		ddlCount:    s.MustGetSQLCounter(sql.MetaDdl.Name),
-		miscCount:   s.MustGetSQLCounter(sql.MetaMisc.Name),
-	}
+	accum := initializeQueryCounter(s)
 
 	for _, tc := range testcases {
 		t.Run(tc.query, func(t *testing.T) {
@@ -104,7 +97,7 @@ func TestQueryCounts(t *testing.T) {
 			if accum.txnRollbackCount, err = checkCounterDelta(s, sql.MetaTxnRollback, accum.txnRollbackCount, tc.txnRollbackCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if err := checkCounterEQ(s, sql.MetaTxnAbort, 0); err != nil {
+			if accum.txnAbortCount, err = checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 0); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.selectCount, err = checkCounterDelta(s, sql.MetaSelect, accum.selectCount, tc.selectCount); err != nil {
@@ -135,6 +128,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	params, cmdFilters := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
+
+	accum := initializeQueryCounter(s)
 
 	if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
 		t.Fatal(err)
@@ -177,19 +172,19 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := checkCounterEQ(s, sql.MetaTxnAbort, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 1); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaTxnBegin, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnBegin, accum.txnBeginCount, 1); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaTxnRollback, 0); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnRollback, accum.txnRollbackCount, 0); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaTxnCommit, 0); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnCommit, accum.txnCommitCount, 0); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaInsert, 7); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaInsert, accum.insertCount, 1); err != nil {
 		t.Error(err)
 	}
 }
@@ -202,6 +197,8 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
+	accum := initializeQueryCounter(s)
+
 	txn, err := sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
@@ -211,13 +208,13 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal("Expected an error but didn't get one")
 	}
 
-	if err := checkCounterEQ(s, sql.MetaTxnAbort, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 1); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaTxnBegin, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnBegin, accum.txnBeginCount, 1); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaSelect, 3); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaSelect, accum.selectCount, 1); err != nil {
 		t.Error(err)
 	}
 
