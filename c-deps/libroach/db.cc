@@ -15,7 +15,6 @@
 #include "db.h"
 #include <algorithm>
 #include <chrono>
-#include <google/protobuf/stubs/stringprintf.h>
 #include <mutex>
 #include <rocksdb/cache.h>
 #include <rocksdb/db.h>
@@ -30,6 +29,7 @@
 #include <rocksdb/statistics.h>
 #include <rocksdb/table.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
+#include <stdarg.h>
 #include "encoding.h"
 #include "env_switching.h"
 #include "eventlistener.h"
