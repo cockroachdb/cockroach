@@ -28,9 +28,9 @@ struct DBIterator {
   std::unique_ptr<rocksdb::WriteBatch> intents;
 };
 
-namespace cockroach {
-
 struct EnvContext;
+
+namespace cockroach {
 
 // DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
 rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts, EnvContext* env_ctx);
