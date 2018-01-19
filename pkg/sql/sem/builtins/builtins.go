@@ -3539,8 +3539,9 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 		return json.FromString(tree.AsStringWithFlags(t, tree.FmtBareStrings)), nil
 	default:
 		if d == tree.DNull {
-			return json.MakeJSON(nil)
+			return json.NullJSONValue, nil
 		}
+
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSON", d)
 	}
 }
