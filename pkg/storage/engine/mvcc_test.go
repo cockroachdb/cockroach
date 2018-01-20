@@ -1008,7 +1008,7 @@ func TestMVCCScanWriteIntentError(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(intents, scan.expIntents) {
-			t.Errorf("%s(%d): expected intents:\n%+v;\n got\n%+v", cStr, i, scan.expIntents, intents)
+			t.Fatalf("%s(%d): expected intents:\n%+v;\n got\n%+v", cStr, i, scan.expIntents, intents)
 		}
 
 		if !reflect.DeepEqual(kvs, scan.expValues) {
@@ -1046,7 +1046,7 @@ func TestMVCCGetInconsistent(t *testing.T) {
 			}
 		} else {
 			if len(intents) == 0 || !intents[0].Key.Equal(testKey1) {
-				t.Fatal(err)
+				t.Fatalf("expected %v, but got %v", testKey1, intents)
 			}
 		}
 		if !bytes.Equal(val.RawBytes, value1.RawBytes) {
@@ -1415,8 +1415,11 @@ func TestMVCCScanInconsistent(t *testing.T) {
 		{Span: roachpb.Span{Key: testKey3}, Txn: txn2.TxnMeta},
 	}
 	kvs, _, intents, err := MVCCScan(context.Background(), engine, testKey1, testKey4.Next(), math.MaxInt64, hlc.Timestamp{WallTime: 7}, false, nil)
-	if !reflect.DeepEqual(intents, expIntents) {
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(intents, expIntents) {
+		t.Fatalf("expected %v, but found %v", expIntents, intents)
 	}
 
 	makeTimestampedValue := func(v roachpb.Value, ts hlc.Timestamp) roachpb.Value {
