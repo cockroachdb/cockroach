@@ -94,7 +94,7 @@ func TestServerStartClock(t *testing.T) {
 		Span: roachpb.Span{Key: roachpb.Key("a")},
 	}
 	if _, err := client.SendWrapped(
-		context.Background(), s.KVClient().(*client.DB).GetSender(), get,
+		context.Background(), s.DB().GetSender(), get,
 	); err != nil {
 		t.Fatal(err)
 	}

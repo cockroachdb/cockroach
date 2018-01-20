@@ -57,10 +57,17 @@ type testContext struct {
 func makeTestContext() testContext {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
+		return client.TxnSenderFunc(
+			func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				return nil, nil
+			},
+		)
+	})
 	return testContext{
 		manualClock: manual,
 		clock:       clock,
-		mockDB:      client.NewDB(nil /* sender */, clock),
+		mockDB:      client.NewDB(factory, clock),
 		mon: mon.MakeMonitor(
 			"test root mon",
 			mon.MemoryResource,
@@ -112,7 +119,7 @@ func (tc *testContext) createOpenState(
 		priority:     roachpb.NormalUserPriority,
 		mon:          &txnStateMon,
 	}
-	ts.mu.txn = client.NewTxn(tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
+	ts.mu.txn = client.NewTxn(tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */, client.RootTxn)
 
 	state := stateOpen{
 		ImplicitTxn: FromBool(typ == implicitTxn),

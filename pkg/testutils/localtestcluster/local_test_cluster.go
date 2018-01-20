@@ -42,7 +42,7 @@ import (
 //
 //   s := &LocalTestCluster{}
 //   s.Start(t, testutils.NewNodeTestBaseContext(),
-//           kv.InitSenderForLocalTestCluster)
+//           kv.InitFactoryForLocalTestCluster)
 //   defer s.Stop()
 //
 // Note that the LocalTestCluster is different from server.TestCluster
@@ -58,16 +58,16 @@ type LocalTestCluster struct {
 	DBContext                *client.DBContext
 	DB                       *client.DB
 	Stores                   *storage.Stores
-	Sender                   client.Sender
 	Stopper                  *stop.Stopper
 	Latency                  time.Duration // sleep for each RPC sent
 	tester                   testing.TB
 	DontRetryPushTxnFailures bool
 }
 
-// InitSenderFn is a callback used to initiate the txn coordinator (we don't
-// do it directly from this package to avoid a dependency on kv).
-type InitSenderFn func(
+// InitFactoryFn is a callback used to initiate the txn coordinator
+// sender factory (we don't do it directly from this package to avoid
+// a dependency on kv).
+type InitFactoryFn func(
 	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
 	tracer opentracing.Tracer,
@@ -76,14 +76,14 @@ type InitSenderFn func(
 	stores client.Sender,
 	stopper *stop.Stopper,
 	gossip *gossip.Gossip,
-) client.Sender
+) client.TxnSenderFactory
 
 // Start starts the test cluster by bootstrapping an in-memory store
 // (defaults to maximum of 50M). The server is started, launching the
 // node RPC server and all HTTP endpoints. Use the value of
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
-func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSender InitSenderFn) {
+func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
 	ltc.Manual = hlc.NewManualClock(123)
 	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	cfg := storage.TestStoreConfig(ltc.Clock)
@@ -106,13 +106,12 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 
 	ltc.Stores = storage.NewStores(ambient, ltc.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 
-	ltc.Sender = initSender(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
-		ltc.Gossip)
+	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper, ltc.Gossip)
 	if ltc.DBContext == nil {
 		dbCtx := client.DefaultDBContext()
 		ltc.DBContext = &dbCtx
 	}
-	ltc.DB = client.NewDBWithContext(ltc.Sender, ltc.Clock, *ltc.DBContext)
+	ltc.DB = client.NewDBWithContext(factory, ltc.Clock, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport(cfg.Settings)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.

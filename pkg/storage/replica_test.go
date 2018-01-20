@@ -183,8 +183,8 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		// Create a test sender without setting a store. This is to deal with the
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
-		sender := &testSender{}
-		cfg.DB = client.NewDB(sender, cfg.Clock)
+		factory := &testSenderFactory{}
+		cfg.DB = client.NewDB(factory, cfg.Clock)
 		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := tc.store.Bootstrap(ctx, roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
@@ -193,8 +193,8 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		}, cfg.Settings.Version.BootstrapVersion()); err != nil {
 			t.Fatal(err)
 		}
-		// Now that we have our actual store, monkey patch the sender used in cfg.DB.
-		sender.store = tc.store
+		// Now that we have our actual store, monkey patch the factory used in cfg.DB.
+		factory.store = tc.store
 		// We created the store without a real KV client, so it can't perform splits.
 		tc.store.splitQueue.SetDisabled(true)
 
@@ -8758,7 +8758,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	var ba roachpb.BatchRequest
 	ba.Header.Txn = txn
 	ba.Add(&btArgs)
-	if _, pErr := s.DistSender().Send(context.TODO(), ba); pErr != nil {
+	if _, pErr := s.DB().GetSender().Send(context.TODO(), ba); pErr != nil {
 		t.Fatal(pErr.GoError())
 	}
 

@@ -422,3 +422,19 @@ message AbortSpanEntry {
   // The priority of the transaction.
   int32 priority = 3;
 }
+
+// TxnCoordMeta is metadata held by a transaction coordinator. This
+// message is defined here because it is used in several layers of the
+// system (internal/client, sql/distsqlrun, kv).
+message TxnCoordMeta {
+  // txn is a copy of the transaction record, updated with each request.
+  Transaction txn = 1 [(gogoproto.nullable) = false];
+  // intents stores key spans affected by this transaction through
+  // this coordinator. These spans allow the coordinator to set the
+  // list of intent spans in the EndTransactionRequest when the
+  // transaction is finalized.
+  repeated Span intents = 2 [(gogoproto.nullable) = false];
+  // command_count indicates how many requests have been sent through
+  // this transaction. Reset on retryable txn errors.
+  int32 command_count = 3;
+}

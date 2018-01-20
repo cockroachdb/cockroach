@@ -600,11 +600,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 
 	now := manual.UnixNano()
 
-	gcTxnAndAC := now - txnCleanupThreshold.Nanoseconds()
-	gcACOnly := now - abortSpanAgeThreshold.Nanoseconds()
-	if gcTxnAndAC >= gcACOnly {
-		t.Fatalf("test assumption violated due to changing constants; needs adjustment")
-	}
+	gcExpiration := now - txnCleanupThreshold.Nanoseconds()
 
 	type spec struct {
 		status      roachpb.TransactionStatus
@@ -620,40 +616,25 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	// be confused by that.
 	testCases := map[string]spec{
 		// Too young, should not touch.
-		"aa": {
+		"a": {
 			status:    roachpb.PENDING,
-			orig:      gcACOnly + 1,
+			orig:      gcExpiration + 1,
 			newStatus: roachpb.PENDING,
 		},
-		// A little older, so the AbortSpan gets cleaned up.
-		"ab": {
-			status:     roachpb.PENDING,
-			orig:       gcTxnAndAC + 1,
-			newStatus:  roachpb.PENDING,
-			expAbortGC: true,
-		},
-		// Old and pending, but still heartbeat (so no Push attempted; it would succeed).
-		// It's old enough to delete the AbortSpan entry though.
-		"ba": {
-			status:     roachpb.PENDING,
-			orig:       1, // immaterial
-			hb:         gcTxnAndAC + 1,
-			newStatus:  roachpb.PENDING,
-			expAbortGC: true,
-		},
-		// Not old enough for Txn GC, but old enough to remove the AbortSpan entry.
-		"bb": {
-			status:     roachpb.ABORTED,
-			orig:       gcACOnly - 1,
-			newStatus:  roachpb.ABORTED,
-			expAbortGC: true,
+		// Old and pending, but still heartbeat (so no Push attempted; it
+		// would succeed).
+		"b": {
+			status:    roachpb.PENDING,
+			orig:      1, // immaterial
+			hb:        gcExpiration + 1,
+			newStatus: roachpb.PENDING,
 		},
 		// Old, pending and abandoned. Should push and abort it
 		// successfully, and GC it, along with resolving the intent. The
 		// AbortSpan is also cleaned up.
 		"c": {
 			status:     roachpb.PENDING,
-			orig:       gcTxnAndAC - 1,
+			orig:       gcExpiration - 1,
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
@@ -661,24 +642,22 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		// Old and aborted, should delete.
 		"d": {
 			status:     roachpb.ABORTED,
-			orig:       gcTxnAndAC - 1,
+			orig:       gcExpiration - 1,
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
 		},
-		// Committed and fresh, so no action. But the AbortSpan entry is old
-		// enough to be discarded.
+		// Committed and fresh, so no action.
 		"e": {
-			status:     roachpb.COMMITTED,
-			orig:       gcTxnAndAC + 1,
-			newStatus:  roachpb.COMMITTED,
-			expAbortGC: true,
+			status:    roachpb.COMMITTED,
+			orig:      gcExpiration + 1,
+			newStatus: roachpb.COMMITTED,
 		},
 		// Committed and old. It has an intent (like all tests here), which is
 		// resolvable and hence we can GC.
 		"f": {
 			status:     roachpb.COMMITTED,
-			orig:       gcTxnAndAC - 1,
+			orig:       gcExpiration - 1,
 			newStatus:  -1,
 			expResolve: true,
 			expAbortGC: true,
@@ -687,7 +666,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		// resolution here will fail and consequently no GC is expected.
 		"g": {
 			status:      roachpb.COMMITTED,
-			orig:        gcTxnAndAC - 1,
+			orig:        gcExpiration - 1,
 			newStatus:   roachpb.COMMITTED,
 			failResolve: true,
 			expResolve:  true,
@@ -831,7 +810,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	tc.repl.mu.Unlock()
 
 	// Verify that the new TxnSpanGCThreshold has reached the Replica.
-	if expWT := gcTxnAndAC; txnSpanThreshold.WallTime != expWT {
+	if expWT := gcExpiration; txnSpanThreshold.WallTime != expWT {
 		t.Fatalf("expected TxnSpanGCThreshold.Walltime %d, got timestamp %s",
 			expWT, txnSpanThreshold)
 	}

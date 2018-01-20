@@ -566,7 +566,7 @@ func scrubRunDistSQL(
 		},
 	)
 
-	if err := p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, &recv, &p.extendedEvalCtx); err != nil {
+	if err := p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, recv, &p.extendedEvalCtx); err != nil {
 		return rows, err
 	} else if recv.err != nil {
 		return rows, recv.err

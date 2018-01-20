@@ -45,7 +45,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
-			kvDB := tc.Server(0).KVClient().(*client.DB)
+			kvDB := tc.Server(0).DB()
 
 			id := sqlbase.ID(keys.MaxReservedDescID + 1)
 
@@ -103,7 +103,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
-			kvDB := tc.Server(0).KVClient().(*client.DB)
+			kvDB := tc.Server(0).DB()
 
 			id := sqlbase.ID(keys.MaxReservedDescID + 1)
 			var batch engine.RocksDBBatchBuilder
@@ -159,7 +159,7 @@ func BenchmarkImport(b *testing.B) {
 			ctx := context.Background()
 			tc := testcluster.StartTestCluster(b, 3, args)
 			defer tc.Stopper().Stop(ctx)
-			kvDB := tc.Server(0).KVClient().(*client.DB)
+			kvDB := tc.Server(0).DB()
 
 			id := sqlbase.ID(keys.MaxReservedDescID + 1)
 
