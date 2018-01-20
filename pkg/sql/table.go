@@ -278,6 +278,13 @@ type TableCollection struct {
 	// Same as uncommittedTables applying to databases modified within
 	// an uncommitted transaction.
 	uncommittedDatabases []uncommittedDatabase
+
+	// allDescriptors is a slice of all available descriptors. The descriptors
+	// are cached to avoid repeated lookups by users like virtual tables. The
+	// cache is purged whenever events would cause a scan of all descriptors to
+	// return different values, such as when the txn timestamp changes or when
+	// new descriptors are written in the txn.
+	allDescriptors []sqlbase.DescriptorProto
 }
 
 // Check if the timestamp used so far to pick tables has changed because
@@ -444,20 +451,21 @@ func (tc *TableCollection) getTableVersionByID(
 	return table, nil
 }
 
-// releaseTables releases all tables currently held by the Session.
+// releaseTables releases all tables currently held by the TableCollection.
 func (tc *TableCollection) releaseTables(ctx context.Context) {
 	tc.timestamp = hlc.Timestamp{}
-	if len(tc.tables) > 0 {
-		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
-		for _, table := range tc.tables {
+	if len(tc.leasedTables) > 0 {
+		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
+		for _, table := range tc.leasedTables {
 			if err := tc.leaseMgr.Release(table); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
-		tc.tables = tc.tables[:0]
+		tc.leasedTables = tc.leasedTables[:0]
 	}
 	tc.uncommittedTables = nil
 	tc.uncommittedDatabases = nil
+	tc.releaseAllDescriptors()
 }
 
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
@@ -468,11 +476,13 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
 		}
 	}
 	tc.uncommittedTables = append(tc.uncommittedTables, &desc)
+	tc.releaseAllDescriptors()
 }
 
 func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, dropped bool) {
 	db := uncommittedDatabase{name: name, id: id, dropped: dropped}
 	tc.uncommittedDatabases = append(tc.uncommittedDatabases, db)
+	tc.releaseAllDescriptors()
 }
 
 // getUncommittedDatabaseID returns a database ID for the requested tablename
@@ -519,6 +529,33 @@ func (tc *TableCollection) getUncommittedTable(
 		}
 	}
 	return nil, nil
+}
+
+// getAllDescriptors returns all descriptors visible by the transaction,
+// first checking the TableCollection's cached descriptors for validity
+// before defaulting to a key-value scan, if necessary.
+func (tc *TableCollection) getAllDescriptors(
+	ctx context.Context, txn *client.Txn,
+) ([]sqlbase.DescriptorProto, error) {
+	// If the txn has been pushed the table collection is released and txn
+	// deadline is reset.
+	tc.resetForTxnRetry(ctx, txn)
+
+	if tc.allDescriptors == nil {
+		descs, err := GetAllDescriptors(ctx, txn)
+		if err != nil {
+			return nil, err
+		}
+		tc.timestamp = txn.OrigTimestamp()
+		tc.allDescriptors = descs
+	}
+	return tc.allDescriptors, nil
+}
+
+// releaseAllDescriptors releases the cached slice of all descriptors
+// held by TableCollection.
+func (tc *TableCollection) releaseAllDescriptors() {
+	tc.allDescriptors = nil
 }
 
 // getTableNames retrieves the list of qualified names of tables

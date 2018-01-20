@@ -193,7 +193,7 @@ CREATE TABLE crdb_internal.tables (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		descs, err := GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -269,7 +269,7 @@ CREATE TABLE crdb_internal.schema_changes (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		descs, err := GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -1358,7 +1358,7 @@ CREATE TABLE crdb_internal.ranges (
 		if err := p.RequireSuperUser("read crdb_internal.ranges"); err != nil {
 			return err
 		}
-		descs, err := GetAllDescriptors(ctx, p.txn)
+		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
