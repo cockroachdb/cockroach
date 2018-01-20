@@ -366,12 +366,17 @@ func (p *planner) rewriteIndexOrderings(
 	// ORDER BY clause only uses the column syntax, we should reuse the
 	// same slice. So we start with an empty slice whose underlying
 	// array is the same as the original specification.
-	newOrderBy := orderBy[:0]
-	for _, o := range orderBy {
+	newOrderBy := orderBy
+	rewrite := false
+	for i, o := range orderBy {
 		switch o.OrderType {
 		case tree.OrderByColumn:
 			// Nothing to do, just propagate the setting.
-			newOrderBy = append(newOrderBy, o)
+			if rewrite {
+				// We only need to-reappend if we've allocated a new slice
+				// (see below).
+				newOrderBy = append(newOrderBy, o)
+			}
 
 		case tree.OrderByIndex:
 			tn, err := p.QualifyWithDatabase(ctx, &o.Table)
@@ -403,12 +408,12 @@ func (p *planner) rewriteIndexOrderings(
 			// Now, expand the ORDER BY clause by an equivalent clause using that
 			// index's columns.
 
-			// First, make the final slice bigger.
-			prevNewOrderBy := newOrderBy
-			newOrderBy = make(tree.OrderBy,
-				len(newOrderBy),
-				cap(newOrderBy)+len(idxDesc.ColumnNames)-1)
-			copy(newOrderBy, prevNewOrderBy)
+			if !rewrite {
+				// First, make a final slice that's intelligently larger.
+				newOrderBy = make(tree.OrderBy, i, len(orderBy)+len(idxDesc.ColumnNames)-1)
+				copy(newOrderBy, orderBy[:i])
+				rewrite = true
+			}
 
 			// Now expand the clause.
 			for k, colName := range idxDesc.ColumnNames {
