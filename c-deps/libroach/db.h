@@ -35,6 +35,7 @@ std::string ToString(DBString s);
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k);
+std::string EncodeKey(const rocksdb::Slice& s, int64_t wall_time, int32_t logical);
 
 // ToDBStatus converts a rocksdb Status to a DBStatus.
 DBStatus ToDBStatus(const rocksdb::Status& status);
