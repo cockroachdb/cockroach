@@ -136,44 +136,11 @@ func (p *planner) Insert(
 					return nil, err
 				}
 			}
-			src, err = fillDefaults(defaultExprs, cols, values)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			pselect, ok := src.(*tree.ParenSelect)
-			if ok {
-				sc, ok := pselect.Select.Select.(*tree.SelectClause)
-				if ok {
-					outputNames := make([]string, len(sc.Exprs))
-					for _, target := range sc.Exprs {
-						outputName, err := getRenderColName(p.SessionData().SearchPath, target, nil)
-						if err != nil {
-							//TODO(sum12) do something usefull with the error
-							break
-						}
-						outputNames = append(outputNames, outputName)
-					}
-					if len(cols) > len(outputNames) {
-						for i, expectedName := range cols {
-							if i > len(outputNames) {
-								found := false
-								for _, willBeName := range outputNames {
-									if willBeName == expectedName.Name {
-										found = true
-										break
-									}
-								}
-								if !found {
-									strval := tree.NewStrVal(expectedName.Name)
-									expr := tree.Expr(strval)
-									sc.Exprs = append(sc.Exprs, tree.SelectExpr{Expr: expr})
-								}
-							}
-						}
-					}
-				}
-			}
+			src = values
+		}
+		insertRows, err = fillDefaults(defaultExprs, cols, src)
+		if err != nil {
+			return nil, err
 		}
 		insertRows = src
 	}
@@ -637,15 +604,9 @@ func getDefaultValuesClause(
 //
 // The function returns a ValuesClause with defaults filled or an error.
 func fillDefaults(
-	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor, values *tree.ValuesClause,
-) (*tree.ValuesClause, error) {
-	ret := values
-	copyValues := func() {
-		if ret == values {
-			ret = &tree.ValuesClause{Tuples: append([]*tree.Tuple(nil), values.Tuples...)}
-		}
-	}
-
+	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor, receivedValues tree.SelectStatement,
+) (tree.SelectStatement, error) {
+	var ret *tree.ValuesClause
 	defaultExpr := func(idx int) tree.Expr {
 		if defaultExprs == nil || idx >= len(defaultExprs) {
 			// The case where idx is too large for defaultExprs will be
@@ -655,37 +616,55 @@ func fillDefaults(
 		}
 		return defaultExprs[idx]
 	}
-
-	numColsOrig := len(ret.Tuples[0].Exprs)
-	for tIdx, tuple := range ret.Tuples {
-		if a, e := len(tuple.Exprs), numColsOrig; a != e {
-			return nil, newValuesListLenErr(e, a)
-		}
-
-		tupleCopied := false
-		copyTuple := func() {
-			if !tupleCopied {
-				copyValues()
-				tuple = &tree.Tuple{Exprs: append([]tree.Expr(nil), tuple.Exprs...)}
-				ret.Tuples[tIdx] = tuple
-				tupleCopied = true
+	switch values := receivedValues.(type) {
+	case *tree.ValuesClause:
+		ret := values
+		copyValues := func() {
+			if ret == values {
+				ret = &tree.ValuesClause{Tuples: append([]*tree.Tuple(nil), values.Tuples...)}
 			}
 		}
 
-		for eIdx, val := range tuple.Exprs {
-			switch val.(type) {
-			case tree.DefaultVal:
+		numColsOrig := len(ret.Tuples[0].Exprs)
+		for tIdx, tuple := range ret.Tuples {
+			if a, e := len(tuple.Exprs), numColsOrig; a != e {
+				return nil, newValuesListLenErr(e, a)
+			}
+
+			tupleCopied := false
+			copyTuple := func() {
+				if !tupleCopied {
+					copyValues()
+					tuple = &tree.Tuple{Exprs: append([]tree.Expr(nil), tuple.Exprs...)}
+					ret.Tuples[tIdx] = tuple
+					tupleCopied = true
+				}
+			}
+
+			for eIdx, val := range tuple.Exprs {
+				switch val.(type) {
+				case tree.DefaultVal:
+					copyTuple()
+					tuple.Exprs[eIdx] = defaultExpr(eIdx)
+				}
+			}
+
+			// The values for the row may be shorter than the number of columns being
+			// inserted into. Populate default expressions for those columns.
+			for i := len(tuple.Exprs); i < len(cols); i++ {
 				copyTuple()
-				tuple.Exprs[eIdx] = defaultExpr(eIdx)
+				tuple.Exprs = append(tuple.Exprs, defaultExpr(len(tuple.Exprs)))
 			}
 		}
-
-		// The values for the row may be shorter than the number of columns being
-		// inserted into. Populate default expressions for those columns.
-		for i := len(tuple.Exprs); i < len(cols); i++ {
-			copyTuple()
-			tuple.Exprs = append(tuple.Exprs, defaultExpr(len(tuple.Exprs)))
+	case *tree.SelectClause:
+		for i := len(values.Exprs); i < len(cols); i++ {
+			if cols[i].Hidden {
+				continue
+			}
+			expr := tree.SelectExpr{Expr: defaultExpr(len(values.Exprs))}
+			values.Exprs = append(values.Exprs, expr)
 		}
+		return values, nil
 	}
 	return ret, nil
 }
