@@ -226,7 +226,9 @@ func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
 	// Put request will create a new transaction.
 	key := roachpb.Key("key")
 	txn.InternalSetPriority(10)
-	txn.Proto().Priority = 11
+	txn.Sender().SetTxn(func(proto *roachpb.Transaction) {
+		proto.Priority = 11
+	})
 	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 		t.Fatal(err)
 	}

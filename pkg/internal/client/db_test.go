@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -345,7 +346,9 @@ func TestDebugName(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		txn.Proto().ID = uuid
+		txn.Sender().SetTxn(func(proto *roachpb.Transaction) {
+			proto.ID = uuid
+		})
 
 		expected := fmt.Sprintf("unnamed (id: %s)", id)
 		if txn.DebugName() != expected {

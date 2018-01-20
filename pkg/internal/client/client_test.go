@@ -867,7 +867,10 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
 			// Set a deadline, then set a higher commit timestamp for the txn.
 			txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
-			txn.Proto().Timestamp.Forward(s.Clock().Now())
+			// This is a big hack.
+			txn.Sender().SetTxn(func(proto *roachpb.Transaction) {
+				proto.Timestamp.Forward(s.Clock().Now())
+			})
 			_, err := txn.Get(ctx, "k")
 			return err
 		}); !testutils.IsError(err, "txn aborted") {

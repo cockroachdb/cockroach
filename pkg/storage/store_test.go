@@ -78,20 +78,25 @@ type testSenderFactory struct {
 }
 
 func (f *testSenderFactory) New(typ client.TxnType) client.TxnSender {
-	return &testSender{store: f.store}
+	return &testTxnSender{store: f.store}
 }
 
-// testSender is an implementation of the client.TxnSender interface
+// testTxnSender is an implementation of the client.TxnSender interface
 // which passes all requests through to a single store.
-type testSender struct {
+type testTxnSender struct {
 	store *Store
+	proto roachpb.Transaction
 }
 
-func (db *testSender) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+func (db *testTxnSender) GetTxn() roachpb.Transaction { return db.proto }
 
-func (db *testSender) AugmentMeta(roachpb.TxnCoordMeta) { panic("unimplemented") }
+func (db *testTxnSender) SetTxn(f func(*roachpb.Transaction)) { f(&db.proto) }
 
-func (db *testSender) OnFinish(func(error)) { panic("unimplemented") }
+func (db *testTxnSender) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+
+func (db *testTxnSender) AugmentMeta(roachpb.TxnCoordMeta) { panic("unimplemented") }
+
+func (db *testTxnSender) OnFinish(func(error)) { panic("unimplemented") }
 
 // Send forwards the call to the single store. This is a poor man's
 // version of kv.TxnCoordSender, but it serves the purposes of
@@ -99,7 +104,7 @@ func (db *testSender) OnFinish(func(error)) { panic("unimplemented") }
 // Since kv/ depends on storage/, we can't get access to a
 // TxnCoordSender from here.
 // TODO(tschottdorf): {kv->storage}.LocalSender
-func (db *testSender) Send(
+func (db *testTxnSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
@@ -127,6 +132,7 @@ func (db *testSender) Send(
 	if pErr != nil {
 		return nil, pErr
 	}
+	db.proto.Update(br.Txn)
 	return br, nil
 }
 

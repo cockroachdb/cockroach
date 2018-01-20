@@ -63,6 +63,13 @@ type Sender interface {
 type TxnSender interface {
 	Sender
 
+	// GetTxn gets a cloned copy of the transaction.
+	GetTxn() roachpb.Transaction
+	// SetTxn allows the caller to safely change the txn sender's
+	// transaction via the supplied function, which will be invoked in
+	// with a pointer to the underlying transaction, to be modified by
+	// the caller.
+	SetTxn(func(*roachpb.Transaction))
 	// GetMeta retrieves a copy of the TxnCoordMeta, which can be sent
 	// upstream in situations where there are multiple, leaf TxnSenders,
 	// to be combined via AugmentMeta().
@@ -101,26 +108,45 @@ func (f SenderFunc) Send(
 	return f(ctx, ba)
 }
 
+type txnSenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+
+type txnSenderImpl struct {
+	fn    txnSenderFunc
+	proto roachpb.Transaction
+}
+
 // TxnSenderFunc is an adapter to allow the use of ordinary functions
 // as TxnSenders with GetMeta or AugmentMeta panicing with unimplemented.
 // This is a helper mechanism to facilitate testing.
-type TxnSenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
-
-// Send calls f(ctx, c).
-func (f TxnSenderFunc) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	return f(ctx, ba)
+func TxnSenderFunc(fn txnSenderFunc) TxnSender {
+	return &txnSenderImpl{fn: fn}
 }
 
+// Send calls f(ctx, c).
+func (tsf *txnSenderImpl) Send(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	br, pErr := tsf.fn(ctx, ba)
+	if pErr == nil {
+		tsf.proto.Update(br.Txn)
+	}
+	return br, pErr
+}
+
+// GetTxn is part of the TxnSender interface.
+func (tsf *txnSenderImpl) GetTxn() roachpb.Transaction { return tsf.proto }
+
+// SetTxn is part of the TxnSender interface.
+func (tsf *txnSenderImpl) SetTxn(f func(*roachpb.Transaction)) { f(&tsf.proto) }
+
 // GetMeta is part of the TxnSender interface.
-func (f TxnSenderFunc) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+func (tsf *txnSenderImpl) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
 
 // AugmentMeta is part of the TxnSender interface.
-func (f TxnSenderFunc) AugmentMeta(_ roachpb.TxnCoordMeta) { panic("unimplemented") }
+func (tsf *txnSenderImpl) AugmentMeta(_ roachpb.TxnCoordMeta) { panic("unimplemented") }
 
 // OnFinish is part of the TxnSender interface.
-func (f TxnSenderFunc) OnFinish(_ func(error)) { panic("unimplemented") }
+func (tsf *txnSenderImpl) OnFinish(_ func(error)) { panic("unimplemented") }
 
 // TxnSenderFactoryFunc is an adapter to allow the use of ordinary functions
 // as TxnSenderFactories. This is a helper mechanism to facilitate testing.

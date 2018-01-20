@@ -799,7 +799,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mc := hlc.NewManualClock(1)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	db := NewDB(TxnSenderFactoryFunc(func(_ TxnType) TxnSender { return nil }), clock)
+	db := NewDB(TxnSenderFactoryFunc(func(_ TxnType) TxnSender { return TxnSenderFunc(nil) }), clock)
 	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
 
 	if txn.deadline != nil {
