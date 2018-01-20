@@ -85,9 +85,7 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
-func populateTypeAttrs(
-	base ColumnType, typ coltypes.T, semaCtx *tree.SemaContext,
-) (ColumnType, error) {
+func populateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	// Set other attributes of col.Type and perform type-specific verification.
 	switch t := typ.(type) {
 	case *coltypes.TBool:
@@ -134,7 +132,7 @@ func populateTypeAttrs(
 	case *coltypes.TArray:
 		base.ArrayDimensions = t.Bounds
 		var err error
-		base, err = populateTypeAttrs(base, t.ParamType, semaCtx)
+		base, err = populateTypeAttrs(base, t.ParamType)
 		if err != nil {
 			return ColumnType{}, err
 		}
@@ -151,7 +149,9 @@ func populateTypeAttrs(
 
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
-// The search path is used for name resolution for DEFAULT expressions.
+//
+// semaCtx and evalCtx can be nil if no default expression is used for the
+// column.
 func MakeColumnDefDescs(
 	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, error) {
@@ -167,7 +167,7 @@ func MakeColumnDefDescs(
 		return nil, nil, err
 	}
 
-	col.Type, err = populateTypeAttrs(colTyp, d.Type, semaCtx)
+	col.Type, err = populateTypeAttrs(colTyp, d.Type)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -152,7 +152,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
-		params.p.ExecCfg().Settings, params.p.LeaseMgr(), targetID, table, zone)
+		targetID, table, zone, params.extendedEvalCtx.ExecCfg)
 	return err
 }
 
@@ -165,14 +165,13 @@ func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffe
 func writeZoneConfig(
 	ctx context.Context,
 	txn *client.Txn,
-	settings *cluster.Settings,
-	leaseMgr *LeaseManager,
 	targetID sqlbase.ID,
 	table *sqlbase.TableDescriptor,
 	zone config.ZoneConfig,
+	execCfg *ExecutorConfig,
 ) (numAffected int, err error) {
 	if len(zone.Subzones) > 0 {
-		if !settings.Version.IsMinSupported(cluster.VersionPartitioning) {
+		if !execCfg.Settings.Version.IsMinSupported(cluster.VersionPartitioning) {
 			return 0, errors.New("cluster version does not support zone configs on indexes or partitions")
 		}
 		zone.SubzoneSpans, err = GenerateSubzoneSpans(table, zone.Subzones)
@@ -181,7 +180,7 @@ func writeZoneConfig(
 		}
 	}
 
-	internalExecutor := InternalExecutor{LeaseManager: leaseMgr}
+	internalExecutor := InternalExecutor{ExecCfg: execCfg}
 
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
 		return internalExecutor.ExecuteStatementInTransaction(ctx, "set zone", txn,

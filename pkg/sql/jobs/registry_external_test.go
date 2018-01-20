@@ -76,7 +76,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
-	ex := sql.InternalExecutor{LeaseManager: s.LeaseManager().(*sql.LeaseManager)}
+	ex := &sql.InternalExecutor{ExecCfg: s.InternalExecutor().(*sql.InternalExecutor).ExecCfg}
 	gossip := s.Gossip()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	nodeLiveness := jobs.NewFakeNodeLiveness(clock, 4)

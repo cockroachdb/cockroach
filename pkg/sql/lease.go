@@ -107,9 +107,7 @@ func (s *tableVersionState) leaseExpiration() tree.DTimestamp {
 // LeaseStore implements the operations for acquiring and releasing leases and
 // publishing a new version of a descriptor. Exported only for testing.
 type LeaseStore struct {
-	db     client.DB
-	clock  *hlc.Clock
-	nodeID *base.NodeIDContainer
+	execCfg *ExecutorConfig
 
 	// leaseDuration is the mean duration a lease will be acquired for. The
 	// actual duration is jittered using leaseJitterFraction. Jittering is done to
@@ -143,7 +141,7 @@ func (s LeaseStore) acquire(
 	ctx context.Context, tableID sqlbase.ID, minExpirationTime hlc.Timestamp,
 ) (*tableVersionState, error) {
 	var table *tableVersionState
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		expiration := txn.OrigTimestamp()
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
 		if expiration.Less(minExpirationTime) {
@@ -172,11 +170,12 @@ func (s LeaseStore) acquire(
 			return err
 		}
 
-		nodeID := s.nodeID.Get()
+		nodeID := s.execCfg.NodeID.Get()
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		p, cleanup := newInternalPlanner("lease-insert", txn, security.RootUser, s.memMetrics)
+		p, cleanup := newInternalPlanner(
+			"lease-insert", txn, security.RootUser, s.memMetrics, s.execCfg)
 		defer cleanup()
 		const insertLease = `INSERT INTO system.lease ("descID", version, "nodeID", expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
@@ -205,13 +204,14 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 	firstAttempt := true
 	for r := retry.Start(retryOptions); r.Next(); {
 		// This transaction is idempotent.
-		err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			log.VEventf(ctx, 2, "LeaseStore releasing lease %s", table)
-			nodeID := s.nodeID.Get()
+			nodeID := s.execCfg.NodeID.Get()
 			if nodeID == 0 {
 				panic("zero nodeID")
 			}
-			p, cleanup := newInternalPlanner("lease-release", txn, security.RootUser, s.memMetrics)
+			p, cleanup := newInternalPlanner(
+				"lease-release", txn, security.RootUser, s.memMetrics, s.execCfg)
 			defer cleanup()
 			const deleteLease = `DELETE FROM system.lease ` +
 				`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
@@ -255,7 +255,7 @@ func (s LeaseStore) WaitForOneVersion(
 		// Get the current version of the table descriptor non-transactionally.
 		//
 		// TODO(pmattis): Do an inconsistent read here?
-		if err := s.db.GetProto(context.TODO(), descKey, desc); err != nil {
+		if err := s.execCfg.DB.GetProto(ctx, descKey, desc); err != nil {
 			return 0, err
 		}
 		tableDesc = desc.GetTable()
@@ -264,7 +264,7 @@ func (s LeaseStore) WaitForOneVersion(
 		}
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
-		now := s.clock.Now()
+		now := s.execCfg.Clock.Now()
 		count, err := s.countLeases(ctx, tableDesc.ID, tableDesc.Version-1, now.GoTime())
 		if err != nil {
 			return 0, err
@@ -309,7 +309,7 @@ func (s LeaseStore) Publish(
 		desc := &sqlbase.Descriptor{}
 		// There should be only one version of the descriptor, but it's
 		// a race now to update to the next version.
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		err = s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			descKey := sqlbase.MakeDescMetadataKey(tableID)
 
 			// Re-read the current version of the table descriptor, this time
@@ -396,8 +396,9 @@ func (s LeaseStore) countLeases(
 	ctx context.Context, descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
 ) (int, error) {
 	var count int
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p, cleanup := newInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics)
+	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		p, cleanup := newInternalPlanner(
+			"leases-count", txn, security.RootUser, s.memMetrics, s.execCfg)
 		defer cleanup()
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
@@ -423,7 +424,7 @@ func (s LeaseStore) getForExpiration(
 	ctx context.Context, expiration hlc.Timestamp, id sqlbase.ID,
 ) (*tableVersionState, error) {
 	var table *tableVersionState
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		descKey := sqlbase.MakeDescMetadataKey(id)
 		prevTimestamp := expiration
 		prevTimestamp.WallTime--
@@ -967,7 +968,7 @@ func (t *tableState) purgeOldVersions(
 	// Acquire a lease on the table on the latest version to maintain an
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
-	table, err := t.acquire(ctx, m.clock.Now(), m)
+	table, err := t.acquire(ctx, m.execCfg.Clock.Now(), m)
 
 	if dropped := err == errTableDropped; dropped || err == nil {
 		removeInactives(dropped)
@@ -1186,12 +1187,13 @@ type LeaseManager struct {
 
 // NewLeaseManager creates a new LeaseManager.
 //
+// execCfg can be nil to help bootstrapping, but then it needs to be set via
+// SetExecCfg before the LeaseManager is used.
+//
 // stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
 	ambientCtx log.AmbientContext,
-	nodeID *base.NodeIDContainer,
-	db client.DB,
-	clock *hlc.Clock,
+	execCfg *ExecutorConfig,
 	testingKnobs LeaseManagerTestingKnobs,
 	stopper *stop.Stopper,
 	memMetrics *MemoryMetrics,
@@ -1199,9 +1201,7 @@ func NewLeaseManager(
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			db:                  db,
-			clock:               clock,
-			nodeID:              nodeID,
+			execCfg:             execCfg,
 			leaseDuration:       cfg.TableDescriptorLeaseDuration,
 			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
 			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
@@ -1216,12 +1216,15 @@ func NewLeaseManager(
 		stopper:    stopper,
 	}
 
-	lm.mu.Lock()
 	lm.mu.tables = make(map[sqlbase.ID]*tableState)
-	lm.mu.Unlock()
 
 	lm.draining.Store(false)
 	return lm
+}
+
+// SetExecCfg has to be called if a nil execCfg was passed to NewLeaseManager.
+func (m *LeaseManager) SetExecCfg(execCfg *ExecutorConfig) {
+	m.execCfg = execCfg
 }
 
 func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName string) bool {
@@ -1351,7 +1354,7 @@ func (m *LeaseManager) resolveName(
 	nameKey := tableKey{dbID, tableName}
 	key := nameKey.Key()
 	id := sqlbase.InvalidID
-	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := m.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, timestamp)
 		gr, err := txn.Get(ctx, key)
 		if err != nil {

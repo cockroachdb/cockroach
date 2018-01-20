@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -118,7 +117,7 @@ func createTestNode(
 	)
 	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness, nodeRPCContext, cfg.Gossip, st)
 	node := NewNode(cfg, metricsRecorder, metric.NewRegistry(), stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil),
+		kv.MakeTxnMetrics(metric.TestSampleInterval), nil, /* execCfg */
 		&nodeRPCContext.ClusterID)
 	roachpb.RegisterInternalServer(grpcServer, node)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)

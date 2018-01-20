@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -63,13 +64,13 @@ var virtualSchemas = []virtualSchema{
 // SQL-layer interface to work with virtual schemas.
 //
 
-// virtualSchemaHolder is a type used to provide convenient access to virtual
-// database and table descriptors. virtualSchemaHolder, virtualSchemaEntry,
+// VirtualSchemaHolder is a type used to provide convenient access to virtual
+// database and table descriptors. VirtualSchemaHolder, virtualSchemaEntry,
 // and virtualTableEntry make up the generated data structure which the
 // virtualSchemas slice is mapped to. Because of this, they should not be
 // created directly, but instead will be populated in a post-startup hook
 // on an Executor.
-type virtualSchemaHolder struct {
+type VirtualSchemaHolder struct {
 	entries      map[string]virtualSchemaEntry
 	orderedNames []string
 }
@@ -142,8 +143,11 @@ func (e virtualTableEntry) getPlanInfo(
 	return columns, constructor
 }
 
-func (vs *virtualSchemaHolder) init(ctx context.Context, p *planner) error {
-	*vs = virtualSchemaHolder{
+// NewVirtualSchemaHolder creates a new VirtualSchemaHolder.
+func NewVirtualSchemaHolder(
+	ctx context.Context, st *cluster.Settings,
+) (*VirtualSchemaHolder, error) {
+	vs := &VirtualSchemaHolder{
 		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames: make([]string, len(virtualSchemas)),
 	}
@@ -153,9 +157,9 @@ func (vs *virtualSchemaHolder) init(ctx context.Context, p *planner) error {
 		tables := make(map[string]virtualTableEntry, len(schema.tables))
 		orderedTableNames := make([]string, 0, len(schema.tables))
 		for _, table := range schema.tables {
-			tableDesc, err := initVirtualTableDesc(ctx, p, table)
+			tableDesc, err := initVirtualTableDesc(ctx, table, st)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			tables[tableDesc.Name] = virtualTableEntry{
 				tableDef: table,
@@ -172,7 +176,7 @@ func (vs *virtualSchemaHolder) init(ctx context.Context, p *planner) error {
 		vs.orderedNames[i] = dbName
 	}
 	sort.Strings(vs.orderedNames)
-	return nil
+	return vs, nil
 }
 
 // Virtual databases and tables each have an empty set of privileges. In practice,
@@ -191,34 +195,45 @@ func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 }
 
 func initVirtualTableDesc(
-	ctx context.Context, p *planner, t virtualSchemaTable,
+	ctx context.Context, t virtualSchemaTable, st *cluster.Settings,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
 	create := stmt.(*tree.CreateTable)
-	return p.makeTableDesc(ctx, create, 0, keys.VirtualDescriptorID, hlc.Timestamp{}, emptyPrivileges, nil)
+	return MakeTableDesc(
+		ctx,
+		nil, /* txn */
+		nil, /* vt */
+		st,
+		create,
+		0, /* parentID */
+		keys.VirtualDescriptorID,
+		hlc.Timestamp{}, /* creationTime */
+		emptyPrivileges,
+		nil, /* affected */
+		"",  /* sessionDB */
+		nil, /* semaCtx */
+		nil, /* evalCtx */
+	)
 }
 
 // entries is part of the VirtualTabler interface.
-func (vs *virtualSchemaHolder) getEntries() map[string]virtualSchemaEntry {
+func (vs *VirtualSchemaHolder) getEntries() map[string]virtualSchemaEntry {
 	return vs.entries
 }
 
 // getVirtualSchemaEntry retrieves a virtual schema entry given a database name.
 // getVirtualSchemaEntry is part of the VirtualTabler interface.
-func (vs *virtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
-	if vs == nil {
-		return virtualSchemaEntry{}, false
-	}
+func (vs *VirtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
 	e, ok := vs.entries[name]
 	return e, ok
 }
 
 // getVirtualDatabaseDesc checks if the provided name matches a virtual database,
 // and if so, returns that database's descriptor.
-func (vs *virtualSchemaHolder) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
+func (vs *VirtualSchemaHolder) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 	if e, ok := vs.getVirtualSchemaEntry(name); ok {
 		return e.desc
 	}
@@ -227,7 +242,7 @@ func (vs *virtualSchemaHolder) getVirtualDatabaseDesc(name string) *sqlbase.Data
 
 // isVirtualDatabase checks if the provided name corresponds to a virtual database.
 // isVirtualDatabase is part of the VirtualTabler interface.
-func (vs *virtualSchemaHolder) isVirtualDatabase(name string) bool {
+func (vs *VirtualSchemaHolder) isVirtualDatabase(name string) bool {
 	_, ok := vs.getVirtualSchemaEntry(name)
 	return ok
 }
@@ -235,7 +250,7 @@ func (vs *virtualSchemaHolder) isVirtualDatabase(name string) bool {
 // IsVirtualDatabase checks if the provided name corresponds to a virtual database,
 // exposing this information on the Executor object itself.
 func (e *Executor) IsVirtualDatabase(name string) bool {
-	return e.virtualSchemas.isVirtualDatabase(name)
+	return e.cfg.VirtualSchemas.isVirtualDatabase(name)
 }
 
 // getVirtualTableEntry checks if the provided name matches a virtual database/table
@@ -243,7 +258,7 @@ func (e *Executor) IsVirtualDatabase(name string) bool {
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
 // getVirtualTableEntry is part of the VirtualTabler interface.
-func (vs *virtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
+func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
 	if db, ok := vs.getVirtualSchemaEntry(string(tn.DatabaseName)); ok {
 		if t, ok := db.tables[string(tn.TableName)]; ok {
 			return t, nil
@@ -266,7 +281,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc checks if the provided name matches a virtual database/table
 // pair, and returns its descriptor if it does.
 // getVirtualTableDesc is part of the VirtualTabler interface.
-func (vs *virtualSchemaHolder) getVirtualTableDesc(
+func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	t, err := vs.getVirtualTableEntry(tn)
