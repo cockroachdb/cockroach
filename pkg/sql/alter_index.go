@@ -71,8 +71,11 @@ func (n *alterIndexNode) startExec(params runParams) error {
 				&partitioning,
 			)
 			err = deleteRemovedPartitionZoneConfigs(
-				params.ctx, params.p.txn, params.p.ExecCfg().Settings, params.p.ExecCfg().LeaseManager,
-				n.tableDesc, &n.tableDesc.PrimaryIndex, &n.tableDesc.PrimaryIndex.Partitioning, &partitioning)
+				params.ctx, params.p.txn,
+				n.tableDesc, &n.tableDesc.PrimaryIndex,
+				&n.tableDesc.PrimaryIndex.Partitioning, &partitioning,
+				params.extendedEvalCtx.ExecCfg,
+			)
 			if err != nil {
 				return err
 			}
@@ -106,7 +109,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	// Record this index alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+	if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
 		EventLogAlterIndex,

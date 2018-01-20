@@ -352,7 +352,7 @@ func (tc *TableCollection) getTableVersion(
 	if dbID == 0 {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.LeaseStore.db.Txn, vt, tn.Database())
+		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.execCfg.DB.Txn, vt, tn.Database())
 		if err != nil {
 			return nil, err
 		}
@@ -652,6 +652,7 @@ func (p *planner) notifySchemaChange(
 		rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
+		execCfg:              p.ExecCfg(),
 	}
 	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }

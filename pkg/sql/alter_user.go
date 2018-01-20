@@ -73,7 +73,7 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 		return errors.Errorf("user %s cannot use password authentication", security.RootUser)
 	}
 
-	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
+	internalExecutor := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
 	n.run.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
 		params.ctx,
 		"create-user",

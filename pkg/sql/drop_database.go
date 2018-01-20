@@ -168,7 +168,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	return MakeEventLogger(p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		ctx,
 		p.txn,
 		EventLogDropDatabase,

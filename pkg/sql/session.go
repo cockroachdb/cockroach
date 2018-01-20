@@ -164,10 +164,6 @@ type Session struct {
 	// that have been prepared via pgwire.
 	PreparedStatements PreparedStatements
 	PreparedPortals    PreparedPortals
-	// virtualSchemas aliases Executor.virtualSchemas.
-	// It is duplicated in Session so that it can find its way to the planners'
-	// EvalContext.
-	virtualSchemas virtualSchemaHolder
 
 	// planner is the "default planner" on a session, to save planner allocations
 	// during serial execution. Since planners are not threadsafe, this is only
@@ -403,7 +399,6 @@ func NewSession(
 			User:          args.User,
 			SequenceState: sessiondata.NewSequenceState(),
 		},
-		virtualSchemas:   e.virtualSchemas,
 		execCfg:          &e.cfg,
 		distSQLPlanner:   e.distSQLPlanner,
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
@@ -589,10 +584,8 @@ func (s *Session) resetPlanner(
 
 	p.extendedEvalCtx = s.extendedEvalCtx(txn, txnTimestamp, stmtTimestamp)
 	p.extendedEvalCtx.Planner = p
-	if s.execCfg != nil {
-		p.extendedEvalCtx.ClusterID = s.execCfg.ClusterID()
-		p.extendedEvalCtx.NodeID = s.execCfg.NodeID.Get()
-	}
+	p.extendedEvalCtx.ClusterID = s.execCfg.ClusterID()
+	p.extendedEvalCtx.NodeID = s.execCfg.NodeID.Get()
 	p.extendedEvalCtx.ReCache = reCache
 
 	p.sessionDataMutator = s.dataMutator
@@ -675,7 +668,7 @@ func (s *Session) extendedEvalCtx(
 			ClusterTimestamp: clusterTs,
 		},
 		SessionMutator:        s.dataMutator,
-		VirtualSchemas:        &s.virtualSchemas,
+		VirtualSchemas:        s.execCfg.VirtualSchemas,
 		Tracing:               &s.Tracing,
 		StatusServer:          statusServer,
 		MemMetrics:            s.memMetrics,
@@ -1388,7 +1381,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	var firstError error
 	for _, scEntry := range scc.schemaChangers {
 		sc := &scEntry.sc
-		sc.db = *e.cfg.DB
+		sc.db = e.cfg.DB
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		sc.distSQLPlanner = e.distSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {

@@ -158,7 +158,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 			return errors.Errorf("user %s cannot be dropped", security.RootUser)
 		}
 
-		internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
+		internalExecutor := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
 		rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
 			params.ctx,
 			"drop-user",

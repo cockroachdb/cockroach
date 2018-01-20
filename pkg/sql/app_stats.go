@@ -278,7 +278,7 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 // scrubbed will be omitted from the returned map.
 func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics {
 	var ret []roachpb.CollectedStatementStatistics
-	vt := e.virtualSchemas
+	vt := e.cfg.VirtualSchemas
 	e.sqlStats.Lock()
 	for appName, a := range e.sqlStats.apps {
 		if cap(ret) == 0 {
@@ -288,7 +288,7 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 		hashedApp := HashAppName(appName)
 		a.Lock()
 		for q, stats := range a.stmts {
-			scrubbed, ok := scrubStmtStatKey(&vt, q.stmt)
+			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
 			if ok {
 				k := roachpb.StatementStatisticsKey{
 					Query:   scrubbed,

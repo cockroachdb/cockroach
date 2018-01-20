@@ -24,7 +24,7 @@ import (
 // InternalExecutor is meant to be used by layers below SQL in the system that
 // nevertheless want to execute SQL queries (presumably against system tables).
 // It is extracted in this "sql/util" package to avoid circular references and
-// is implemented by sql.InternalExecutor.
+// is implemented by *sql.InternalExecutor.
 type InternalExecutor interface {
 	// ExecuteStatementInTransaction executes the supplied SQL statement as part of
 	// the supplied transaction. Statements are currently executed as the root user.

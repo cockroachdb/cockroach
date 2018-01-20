@@ -31,17 +31,20 @@ import (
 // that the caller has access to a cockroach KV client to handle connection and
 // transaction management.
 type InternalExecutor struct {
-	LeaseManager *LeaseManager
+	ExecCfg *ExecutorConfig
 }
 
-var _ sqlutil.InternalExecutor = InternalExecutor{}
+var _ sqlutil.InternalExecutor = &InternalExecutor{}
 
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
 // the supplied transaction. Statements are currently executed as the root user.
-func (ie InternalExecutor) ExecuteStatementInTransaction(
+func (ie *InternalExecutor) ExecuteStatementInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
-	p, cleanup := newInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	// TODO(andrei): The use of the LeaseManager's memMetrics is very dubious. We
+	// should probably pass in the metrics to use.
+	p, cleanup := newInternalPlanner(
+		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)
 	return p.exec(ctx, statement, qargs...)
@@ -50,10 +53,11 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 // QueryRowInTransaction executes the supplied SQL statement as part of the
 // supplied transaction and returns the result. Statements are currently
 // executed as the root user.
-func (ie InternalExecutor) QueryRowInTransaction(
+func (ie *InternalExecutor) QueryRowInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
-	p, cleanup := newInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	p, cleanup := newInternalPlanner(
+		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)
 	return p.QueryRow(ctx, statement, qargs...)
@@ -62,21 +66,23 @@ func (ie InternalExecutor) QueryRowInTransaction(
 // QueryRowsInTransaction executes the supplied SQL statement as part of the
 // supplied transaction and returns the resulting rows. Statements are currently
 // executed as the root user.
-func (ie InternalExecutor) QueryRowsInTransaction(
+func (ie *InternalExecutor) QueryRowsInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) ([]tree.Datums, error) {
-	p, cleanup := newInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
+	p, cleanup := newInternalPlanner(
+		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)
 	return p.queryRows(ctx, statement, qargs...)
 }
 
 // GetTableSpan gets the key span for a SQL table, including any indices.
-func (ie InternalExecutor) GetTableSpan(
+func (ie *InternalExecutor) GetTableSpan(
 	ctx context.Context, user string, txn *client.Txn, dbName, tableName string,
 ) (roachpb.Span, error) {
 	// Lookup the table ID.
-	p, cleanup := newInternalPlanner("get-table-span", txn, user, ie.LeaseManager.memMetrics)
+	p, cleanup := newInternalPlanner(
+		"get-table-span", txn, user, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)
 
@@ -93,9 +99,9 @@ func (ie InternalExecutor) GetTableSpan(
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}, nil
 }
 
-func (ie InternalExecutor) initSession(p *planner) {
-	p.extendedEvalCtx.NodeID = ie.LeaseManager.LeaseStore.nodeID.Get()
-	p.extendedEvalCtx.Tables.leaseMgr = ie.LeaseManager
+func (ie *InternalExecutor) initSession(p *planner) {
+	p.extendedEvalCtx.NodeID = ie.ExecCfg.LeaseManager.LeaseStore.execCfg.NodeID.Get()
+	p.extendedEvalCtx.Tables.leaseMgr = ie.ExecCfg.LeaseManager
 }
 
 // getTableID retrieves the table ID for the specified table.

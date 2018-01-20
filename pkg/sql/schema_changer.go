@@ -29,9 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -75,7 +73,7 @@ type SchemaChanger struct {
 	tableID    sqlbase.ID
 	mutationID sqlbase.MutationID
 	nodeID     roachpb.NodeID
-	db         client.DB
+	db         *client.DB
 	leaseMgr   *LeaseManager
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
@@ -90,6 +88,7 @@ type SchemaChanger struct {
 	leaseHolderCache     *kv.LeaseHolderCache
 	clock                *hlc.Clock
 	settings             *cluster.Settings
+	execCfg              *ExecutorConfig
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -100,15 +99,17 @@ func NewSchemaChangerForTesting(
 	db client.DB,
 	leaseMgr *LeaseManager,
 	jobRegistry *jobs.Registry,
+	execCfg *ExecutorConfig,
 ) SchemaChanger {
 	return SchemaChanger{
 		tableID:     tableID,
 		mutationID:  mutationID,
 		nodeID:      nodeID,
-		db:          db,
+		db:          &db,
 		leaseMgr:    leaseMgr,
 		jobRegistry: jobRegistry,
 		settings:    cluster.MakeTestingClusterSettings(),
+		execCfg:     execCfg,
 	}
 }
 
@@ -300,7 +301,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 			return false, err
 		}
 
-		if err := DropTableName(ctx, table /* false */, &sc.db, false /* traceKV */); err != nil {
+		if err := DropTableName(ctx, table /* false */, sc.db, false /* traceKV */); err != nil {
 			return false, err
 		}
 
@@ -315,11 +316,11 @@ func (sc *SchemaChanger) maybeAddDropRename(
 			return false, nil
 		}
 		// Do all the hard work of deleting the table data and the table ID.
-		if err := truncateTableInChunks(ctx, table, &sc.db, false /* traceKV */); err != nil {
+		if err := truncateTableInChunks(ctx, table, sc.db, false /* traceKV */); err != nil {
 			return false, err
 		}
 
-		return true, DropTableDesc(ctx, table, &sc.db, false /* traceKV */)
+		return true, DropTableDesc(ctx, table, sc.db, false /* traceKV */)
 	}
 
 	if table.Adding() {
@@ -657,7 +658,7 @@ func (sc *SchemaChanger) done(ctx context.Context, isRollback bool) (*sqlbase.De
 		// event. Only the table ID and mutation ID are logged; this can
 		// be correlated with the DDL statement that initiated the change
 		// using the mutation id.
-		return MakeEventLogger(sc.leaseMgr).InsertEventRecord(
+		return MakeEventLogger(sc.execCfg).InsertEventRecord(
 			ctx,
 			txn,
 			schemaChangeEventType,
@@ -802,7 +803,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 		// Log "Reverse Schema Change" event. Only the causing error and the
 		// mutation ID are logged; this can be correlated with the DDL statement
 		// that initiated the change using the mutation id.
-		return MakeEventLogger(sc.leaseMgr).InsertEventRecord(
+		return MakeEventLogger(sc.execCfg).InsertEventRecord(
 			ctx,
 			txn,
 			EventLogReverseSchemaChange,
@@ -943,52 +944,28 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 // execution mechanism.
 type SchemaChangeManager struct {
 	ambientCtx   log.AmbientContext
-	db           client.DB
-	gossip       *gossip.Gossip
-	leaseMgr     *LeaseManager
+	execCfg      *ExecutorConfig
 	testingKnobs *SchemaChangerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
 	distSQLPlanner *DistSQLPlanner
-	clock          *hlc.Clock
-	jobRegistry    *jobs.Registry
-	settings       *cluster.Settings
-	// Caches updated by DistSQL.
-	rangeDescriptorCache *kv.RangeDescriptorCache
-	leaseHolderCache     *kv.LeaseHolderCache
 }
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
 	ambientCtx log.AmbientContext,
+	execCfg *ExecutorConfig,
 	testingKnobs *SchemaChangerTestingKnobs,
 	db client.DB,
 	nodeDesc roachpb.NodeDescriptor,
-	rpcContext *rpc.Context,
-	distSQLServ *distsqlrun.ServerImpl,
-	distSender *kv.DistSender,
-	gossip *gossip.Gossip,
-	leaseMgr *LeaseManager,
-	clock *hlc.Clock,
-	jobRegistry *jobs.Registry,
 	dsp *DistSQLPlanner,
-	settings *cluster.Settings,
-	rangeDescriptorCache *kv.RangeDescriptorCache,
-	leaseHolderCache *kv.LeaseHolderCache,
 ) *SchemaChangeManager {
 	return &SchemaChangeManager{
-		ambientCtx:           ambientCtx,
-		db:                   db,
-		gossip:               gossip,
-		leaseMgr:             leaseMgr,
-		testingKnobs:         testingKnobs,
-		schemaChangers:       make(map[sqlbase.ID]SchemaChanger),
-		distSQLPlanner:       dsp,
-		jobRegistry:          jobRegistry,
-		clock:                clock,
-		settings:             settings,
-		rangeDescriptorCache: rangeDescriptorCache,
-		leaseHolderCache:     leaseHolderCache,
+		ambientCtx:     ambientCtx,
+		execCfg:        execCfg,
+		testingKnobs:   testingKnobs,
+		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
+		distSQLPlanner: dsp,
 	}
 }
 
@@ -1016,7 +993,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 	stopper.RunWorker(s.ambientCtx.AnnotateCtx(context.Background()), func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
-		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
+		gossipUpdateC := s.execCfg.Gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
 		for {
 			// A jitter is added to reduce contention between nodes
@@ -1027,22 +1004,23 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 			}
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := s.gossip.GetSystemConfig()
+				cfg, _ := s.execCfg.Gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
 					log.Info(ctx, "received a new config")
 				}
 				schemaChanger := SchemaChanger{
-					nodeID:               s.leaseMgr.nodeID.Get(),
-					db:                   s.db,
-					leaseMgr:             s.leaseMgr,
+					execCfg:              s.execCfg,
+					nodeID:               s.execCfg.NodeID.Get(),
+					db:                   s.execCfg.DB,
+					leaseMgr:             s.execCfg.LeaseManager,
 					testingKnobs:         s.testingKnobs,
 					distSQLPlanner:       s.distSQLPlanner,
-					jobRegistry:          s.jobRegistry,
-					leaseHolderCache:     s.leaseHolderCache,
-					rangeDescriptorCache: s.rangeDescriptorCache,
-					clock:                s.clock,
-					settings:             s.settings,
+					jobRegistry:          s.execCfg.JobRegistry,
+					leaseHolderCache:     s.execCfg.LeaseHolderCache,
+					rangeDescriptorCache: s.execCfg.RangeDescriptorCache,
+					clock:                s.execCfg.Clock,
+					settings:             s.execCfg.Settings,
 				}
 
 				execAfter := timeutil.Now().Add(delay)
@@ -1114,7 +1092,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						evalCtx := createSchemaChangeEvalCtx(s.clock.Now())
+						evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now())
 
 						execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
 						err := sc.exec(execCtx, false /* inSession */, &evalCtx)

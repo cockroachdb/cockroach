@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -82,7 +81,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
-	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, nil, jobRegistry)
+	changer := sql.NewSchemaChangerForTesting(
+		id, 0, node, *kvDB, nil, jobRegistry,
+		s.InternalExecutor().(*sql.InternalExecutor).ExecCfg)
 
 	ctx := context.TODO()
 
@@ -182,9 +183,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	cfg := base.NewLeaseManagerConfig()
 	leaseMgr := sql.NewLeaseManager(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
-		&base.NodeIDContainer{},
-		*kvDB,
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		s.InternalExecutor().(*sql.InternalExecutor).ExecCfg,
 		sql.LeaseManagerTestingKnobs{},
 		stopper,
 		&sql.MemoryMetrics{},
@@ -192,7 +191,8 @@ func TestSchemaChangeProcess(t *testing.T) {
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.TODO())
-	changer := sql.NewSchemaChangerForTesting(id, 0, node, *kvDB, leaseMgr, jobRegistry)
+	changer := sql.NewSchemaChangerForTesting(
+		id, 0, node, *kvDB, leaseMgr, jobRegistry, s.InternalExecutor().(*sql.InternalExecutor).ExecCfg)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -265,7 +265,9 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
 	changer = sql.NewSchemaChangerForTesting(
-		id, tableDesc.NextMutationID, node, *kvDB, leaseMgr, jobRegistry)
+		id, tableDesc.NextMutationID, node, *kvDB, leaseMgr, jobRegistry,
+		s.InternalExecutor().(*sql.InternalExecutor).ExecCfg,
+	)
 	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{
 		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
 		Direction:   sqlbase.DescriptorMutation_ADD,
@@ -447,6 +449,7 @@ func runSchemaChangeWithOperations(
 	maxValue int,
 	keyMultiple int,
 	backfillNotification chan struct{},
+	execCfg *sql.ExecutorConfig,
 ) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
@@ -471,7 +474,7 @@ func runSchemaChangeWithOperations(
 
 	// Grabbing a schema change lease on the table will fail, disallowing
 	// another schema change from being simultaneously executed.
-	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry)
+	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry, execCfg)
 	if l, err := sc.AcquireLease(ctx); err == nil {
 		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
 	}
@@ -608,6 +611,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	defer tc.Stopper().Stop(context.TODO())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
+	execCfg := tc.Server(0).InternalExecutor().(*sql.InternalExecutor).ExecCfg
 	jobRegistry := tc.Server(0).JobRegistry().(*jobs.Registry)
 
 	if _, err := sqlDB.Exec(`
@@ -653,7 +657,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
 		2,
-		initBackfillNotification())
+		initBackfillNotification(),
+		execCfg)
 
 	// Drop column.
 	runSchemaChangeWithOperations(
@@ -664,7 +669,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"ALTER TABLE t.test DROP pi",
 		maxValue,
 		2,
-		initBackfillNotification())
+		initBackfillNotification(),
+		execCfg)
 
 	// Add index.
 	runSchemaChangeWithOperations(
@@ -675,7 +681,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"CREATE UNIQUE INDEX foo ON t.test (v)",
 		maxValue,
 		3,
-		initBackfillNotification())
+		initBackfillNotification(),
+		execCfg)
 
 	// Drop index.
 	runSchemaChangeWithOperations(
@@ -686,7 +693,8 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		"DROP INDEX t.test@vidx CASCADE",
 		maxValue,
 		2,
-		initBackfillNotification())
+		initBackfillNotification(),
+		execCfg)
 
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.
