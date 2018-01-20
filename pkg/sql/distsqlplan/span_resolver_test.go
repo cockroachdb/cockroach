@@ -52,7 +52,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	defer tc.Stopper().Stop(context.TODO())
 
 	rowRanges, _ := setupRanges(
-		tc.Conns[0], tc.Servers[0], tc.Servers[0].KVClient().(*client.DB), t)
+		tc.Conns[0], tc.Servers[0], tc.Servers[0].DB(), t)
 
 	// Replicate the row ranges on all of the first 3 nodes. Save the 4th node in
 	// a pristine state, with empty caches.

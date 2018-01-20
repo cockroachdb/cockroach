@@ -85,16 +85,16 @@ func createTestNode(
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, cfg.Gossip)
-	sender := kv.NewTxnCoordSender(
+	tsf := kv.NewTxnCoordSenderFactory(
 		cfg.AmbientCtx,
 		st,
 		distSender,
 		cfg.Clock,
-		false,
+		false, /* linearizable */
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	cfg.DB = client.NewDB(sender, cfg.Clock)
+	cfg.DB = client.NewDB(tsf, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(st)
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.HistogramWindowInterval = metric.TestSampleInterval

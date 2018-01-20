@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -225,7 +224,7 @@ func verifyTables(
 	for id := range completed {
 		count++
 		tableName := fmt.Sprintf("table_%d", id)
-		kvDB := tc.Servers[count%tc.NumServers()].KVClient().(*client.DB)
+		kvDB := tc.Servers[count%tc.NumServers()].DB()
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
 		if tableDesc.ID < descIDStart {
 			t.Fatalf(
@@ -253,7 +252,7 @@ func verifyTables(
 
 	// Check that no extra descriptors have been written in the range
 	// descIDStart..maxID.
-	kvDB := tc.Servers[0].KVClient().(*client.DB)
+	kvDB := tc.Servers[0].DB()
 	for id := descIDStart; id < maxID; id++ {
 		if _, ok := tableIDs[id]; ok {
 			continue
@@ -286,7 +285,7 @@ func TestParallelCreateTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Get the id descriptor generator count.
-	kvDB := tc.Servers[0].KVClient().(*client.DB)
+	kvDB := tc.Servers[0].DB()
 	var descIDStart sqlbase.ID
 	if descID, err := kvDB.Get(context.Background(), keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
@@ -340,7 +339,7 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 	}
 
 	// Get the id descriptor generator count.
-	kvDB := tc.Servers[0].KVClient().(*client.DB)
+	kvDB := tc.Servers[0].DB()
 	var descIDStart sqlbase.ID
 	if descID, err := kvDB.Get(context.Background(), keys.DescIDGenerator); err != nil {
 		t.Fatal(err)

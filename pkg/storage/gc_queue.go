@@ -50,20 +50,15 @@ const (
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
 	intentAgeThreshold = 2 * time.Hour // 2 hour
+
 	// txnCleanupThreshold is the threshold after which a transaction is
-	// considered abandoned and fit for removal, as measured by the maximum
-	// of its last heartbeat and timestamp.
+	// considered abandoned and fit for removal, as measured by the
+	// maximum of its last heartbeat and timestamp. Abort spans for the
+	// transaction are cleaned up at the same time.
+	//
 	// TODO(tschottdorf): need to enforce at all times that this is much
 	// larger than the heartbeat interval used by the coordinator.
 	txnCleanupThreshold = time.Hour
-
-	// abortSpanAgeThreshold is the duration after which AbortSpan entries
-	// of transactions are garbage collected.
-	// It's important that this is kept aligned with the (maximum) heartbeat
-	// interval used by transaction coordinators throughout the cluster to make
-	// sure that no coordinator can run with a transaction which has been
-	// aborted and whose AbortSpan entry is being deleted.
-	abortSpanAgeThreshold = 5 * base.DefaultHeartbeatInterval
 
 	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.
@@ -700,11 +695,8 @@ func RunGC(
 	infoMu.Now = now
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
-	intentExp := now
-	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
-	txnExp := now
-	txnExp.WallTime -= txnCleanupThreshold.Nanoseconds()
-	abortSpanGCThreshold := now.Add(-int64(abortSpanAgeThreshold), 0)
+	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-txnCleanupThreshold.Nanoseconds(), 0)
 
 	gc := engine.MakeGarbageCollector(now, policy)
 	infoMu.Threshold = gc.Threshold
@@ -851,7 +843,7 @@ func RunGC(
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu)
+	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &infoMu)
 	if len(abortSpanKeys) > 0 {
 		gcKeys = append(gcKeys, abortSpanKeys)
 	}

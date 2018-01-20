@@ -74,6 +74,9 @@ extern StoreIdentDefaultTypeInternal _StoreIdent_default_instance_;
 class Transaction;
 class TransactionDefaultTypeInternal;
 extern TransactionDefaultTypeInternal _Transaction_default_instance_;
+class TxnCoordMeta;
+class TxnCoordMetaDefaultTypeInternal;
+extern TxnCoordMetaDefaultTypeInternal _TxnCoordMeta_default_instance_;
 class Value;
 class ValueDefaultTypeInternal;
 extern ValueDefaultTypeInternal _Value_default_instance_;
@@ -1842,6 +1845,122 @@ class AbortSpanEntry : public ::google::protobuf::MessageLite /* @@protoc_insert
   mutable int _cached_size_;
   friend struct protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
+// -------------------------------------------------------------------
+
+class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.TxnCoordMeta) */ {
+ public:
+  TxnCoordMeta();
+  virtual ~TxnCoordMeta();
+
+  TxnCoordMeta(const TxnCoordMeta& from);
+
+  inline TxnCoordMeta& operator=(const TxnCoordMeta& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  TxnCoordMeta(TxnCoordMeta&& from) noexcept
+    : TxnCoordMeta() {
+    *this = ::std::move(from);
+  }
+
+  inline TxnCoordMeta& operator=(TxnCoordMeta&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const TxnCoordMeta& default_instance();
+
+  static inline const TxnCoordMeta* internal_default_instance() {
+    return reinterpret_cast<const TxnCoordMeta*>(
+               &_TxnCoordMeta_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    14;
+
+  void Swap(TxnCoordMeta* other);
+  friend void swap(TxnCoordMeta& a, TxnCoordMeta& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline TxnCoordMeta* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  TxnCoordMeta* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const TxnCoordMeta& from);
+  void MergeFrom(const TxnCoordMeta& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(TxnCoordMeta* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  int intents_size() const;
+  void clear_intents();
+  static const int kIntentsFieldNumber = 2;
+  const ::cockroach::roachpb::Span& intents(int index) const;
+  ::cockroach::roachpb::Span* mutable_intents(int index);
+  ::cockroach::roachpb::Span* add_intents();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+      mutable_intents();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+      intents() const;
+
+  bool has_txn() const;
+  void clear_txn();
+  static const int kTxnFieldNumber = 1;
+  const ::cockroach::roachpb::Transaction& txn() const;
+  ::cockroach::roachpb::Transaction* mutable_txn();
+  ::cockroach::roachpb::Transaction* release_txn();
+  void set_allocated_txn(::cockroach::roachpb::Transaction* txn);
+
+  // int32 command_count = 3;
+  void clear_command_count();
+  static const int kCommandCountFieldNumber = 3;
+  ::google::protobuf::int32 command_count() const;
+  void set_command_count(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.TxnCoordMeta)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
+  ::cockroach::roachpb::Transaction* txn_;
+  ::google::protobuf::int32 command_count_;
+  mutable int _cached_size_;
+  friend struct protobuf_roachpb_2fdata_2eproto::TableStruct;
+};
 // ===================================================================
 
 
@@ -3569,10 +3688,98 @@ inline void AbortSpanEntry::set_priority(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortSpanEntry.priority)
 }
 
+// -------------------------------------------------------------------
+
+// TxnCoordMeta
+
+inline bool TxnCoordMeta::has_txn() const {
+  return this != internal_default_instance() && txn_ != NULL;
+}
+inline void TxnCoordMeta::clear_txn() {
+  if (GetArenaNoVirtual() == NULL && txn_ != NULL) delete txn_;
+  txn_ = NULL;
+}
+inline const ::cockroach::roachpb::Transaction& TxnCoordMeta::txn() const {
+  const ::cockroach::roachpb::Transaction* p = txn_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.txn)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Transaction*>(
+      &::cockroach::roachpb::_Transaction_default_instance_);
+}
+inline ::cockroach::roachpb::Transaction* TxnCoordMeta::mutable_txn() {
+  
+  if (txn_ == NULL) {
+    txn_ = new ::cockroach::roachpb::Transaction;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TxnCoordMeta.txn)
+  return txn_;
+}
+inline ::cockroach::roachpb::Transaction* TxnCoordMeta::release_txn() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.TxnCoordMeta.txn)
+  
+  ::cockroach::roachpb::Transaction* temp = txn_;
+  txn_ = NULL;
+  return temp;
+}
+inline void TxnCoordMeta::set_allocated_txn(::cockroach::roachpb::Transaction* txn) {
+  delete txn_;
+  txn_ = txn;
+  if (txn) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TxnCoordMeta.txn)
+}
+
+inline int TxnCoordMeta::intents_size() const {
+  return intents_.size();
+}
+inline void TxnCoordMeta::clear_intents() {
+  intents_.Clear();
+}
+inline const ::cockroach::roachpb::Span& TxnCoordMeta::intents(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.intents)
+  return intents_.Get(index);
+}
+inline ::cockroach::roachpb::Span* TxnCoordMeta::mutable_intents(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TxnCoordMeta.intents)
+  return intents_.Mutable(index);
+}
+inline ::cockroach::roachpb::Span* TxnCoordMeta::add_intents() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TxnCoordMeta.intents)
+  return intents_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+TxnCoordMeta::mutable_intents() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TxnCoordMeta.intents)
+  return &intents_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+TxnCoordMeta::intents() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TxnCoordMeta.intents)
+  return intents_;
+}
+
+// int32 command_count = 3;
+inline void TxnCoordMeta::clear_command_count() {
+  command_count_ = 0;
+}
+inline ::google::protobuf::int32 TxnCoordMeta::command_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.command_count)
+  return command_count_;
+}
+inline void TxnCoordMeta::set_command_count(::google::protobuf::int32 value) {
+  
+  command_count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.command_count)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -6,6 +6,11 @@
 # laying down intents in a single pass, despite the certainty that it
 # will restart on commit. A SNAPSHOT transaction can proceed and
 # commit with its new timestamp.
+#
+# Note that ORDER BY id is done on selects which expect more than a
+# single result, to account for the distsql config, which randomly
+# splits ranges. This can cause table scans to return tuples in any
+# arbitrary order.
 
 statement ok
 CREATE TABLE t (id INT PRIMARY KEY)
@@ -42,7 +47,7 @@ COMMIT
 user root
 
 query I
-SELECT * FROM t
+SELECT * FROM t ORDER BY id
 ----
 1
 2
@@ -75,7 +80,7 @@ COMMIT
 user root
 
 query I
-SELECT * FROM t
+SELECT * FROM t ORDER BY id
 ----
 1
 2

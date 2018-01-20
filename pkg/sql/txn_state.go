@@ -161,7 +161,7 @@ func (ts *txnState2) resetForNewSQLTxn(
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 
 	ts.mu.Lock()
-	ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID)
+	ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID, client.RootTxn)
 	ts.mu.txn.SetDebugName(opName)
 	ts.mu.Unlock()
 

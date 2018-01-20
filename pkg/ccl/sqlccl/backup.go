@@ -349,7 +349,7 @@ func resolveTargetsToDescriptors(
 		// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
 		// express that whatever this txn does should not count towards lease
 		// placement stats.
-		txn := client.NewTxn(db, 0 /* gatewayNodeID */)
+		txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error

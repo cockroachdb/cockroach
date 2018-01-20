@@ -141,7 +141,7 @@ func createTestStoreWithEngine(
 		RPCRetryOptions: &retryOpts,
 	}, storeCfg.Gossip)
 
-	sender := kv.NewTxnCoordSender(
+	tcsFactory := kv.NewTxnCoordSenderFactory(
 		ac,
 		storeCfg.Settings,
 		distSender,
@@ -150,7 +150,7 @@ func createTestStoreWithEngine(
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	storeCfg.DB = client.NewDB(sender, storeCfg.Clock)
+	storeCfg.DB = client.NewDB(tcsFactory, storeCfg.Clock)
 	storeCfg.StorePool = storage.NewTestStorePool(storeCfg)
 	storeCfg.Transport = storage.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -659,7 +659,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		},
 		RPCRetryOptions: &retryOpts,
 	}, m.gossips[idx])
-	sender := kv.NewTxnCoordSender(
+	tcsFactory := kv.NewTxnCoordSenderFactory(
 		ambient,
 		m.storeConfig.Settings,
 		m.distSenders[idx],
@@ -668,7 +668,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	m.dbs[idx] = client.NewDB(sender, m.clock)
+	m.dbs[idx] = client.NewDB(tcsFactory, m.clock)
 }
 
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {

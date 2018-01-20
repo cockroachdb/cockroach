@@ -60,7 +60,7 @@ func TestServer(t *testing.T) {
 		OutputColumns: []uint32{0, 1}, // a
 	}
 
-	txn := client.NewTxn(kvDB, s.NodeID())
+	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
 
 	req := &SetupFlowRequest{Version: Version, Txn: *txn.Proto()}
 	req.Flow = FlowSpec{
@@ -100,6 +100,7 @@ func TestServer(t *testing.T) {
 		}
 		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
 	}
+	metas = ignoreTxnMeta(metas)
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata: %v", metas)
 	}

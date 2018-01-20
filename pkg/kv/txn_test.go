@@ -18,20 +18,21 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -42,7 +43,7 @@ import (
 // read from inside the txn.
 func TestTxnDBBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 	value := []byte("value")
 
@@ -108,7 +109,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 		b.Run(fmt.Sprintf("latency=%s", latency), func(b *testing.B) {
 			var s localtestcluster.LocalTestCluster
 			s.Latency = latency
-			s.Start(b, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+			s.Start(b, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 			defer s.Stop()
 			defer b.StopTimer()
 			key := roachpb.Key("key")
@@ -131,7 +132,7 @@ func BenchmarkSingleRoundtripWithLatency(b *testing.B) {
 // the transaction, not the forwarded timestamp.
 func TestSnapshotIsolationIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	var key = roachpb.Key("a")
@@ -212,7 +213,7 @@ func TestSnapshotIsolationIncrement(t *testing.T) {
 //   R1(A) W2(A,"hi") W1(A,"oops!") C1 [serializable restart] R1(A) W1(A,"correct") C1
 func TestSnapshotIsolationLostUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 	var key = roachpb.Key("a")
 
@@ -281,7 +282,7 @@ func TestSnapshotIsolationLostUpdate(t *testing.T) {
 // concurrent reader pushes an intent.
 func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	pushByReading := func(key roachpb.Key) {
@@ -365,145 +366,70 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 // by poisoning the gossip NodeID; this may break other functionality which
 // is usually not relevant in uncertainty tests.
 func disableOwnNodeCertain(tc *localtestcluster.LocalTestCluster) error {
-	distSender := tc.Sender.(*TxnCoordSender).wrapped.(*DistSender)
-	desc := distSender.getNodeDescriptor()
-	desc.NodeID = 999
-	distSender.gossip.NodeID.Reset(desc.NodeID)
-	return distSender.gossip.SetNodeDescriptor(desc)
-}
-
-// TestUncertaintyRestart verifies that a transaction which finds a write in
-// its near future will restart exactly once, meaning that it's made a note of
-// that node's clock for its new timestamp.
-func TestUncertaintyRestart(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const maxOffset = 250 * time.Millisecond
-	dbCtx := client.DefaultDBContext()
-	s := &localtestcluster.LocalTestCluster{
-		Clock:     hlc.NewClock(hlc.UnixNano, maxOffset),
-		DBContext: &dbCtx,
+	ownNodeID := tc.Gossip.NodeID.Get()
+	if ownNodeID > 0 {
+		desc := &roachpb.NodeDescriptor{}
+		if err := tc.Gossip.GetInfoProto(gossip.MakeNodeIDKey(ownNodeID), desc); err == nil {
+			desc.NodeID = 999
+			tc.Gossip.NodeID.Reset(desc.NodeID)
+			sender := tc.DB.GetSender().(*TxnCoordSender)
+			ds := sender.wrapped.(*DistSender)
+			atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(desc))
+			return tc.Gossip.SetNodeDescriptor(desc)
+		}
 	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
-	defer s.Stop()
-	if err := disableOwnNodeCertain(s); err != nil {
-		t.Fatal(err)
-	}
-	s.Manual.Increment(s.Clock.MaxOffset().Nanoseconds() + 1)
-
-	var key = roachpb.Key("a")
-
-	errChan := make(chan error)
-	start := make(chan struct{})
-	go func() {
-		<-start
-		errChan <- s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-			return txn.Put(ctx, key, "hi")
-		})
-	}()
-
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		if txn.Proto().Epoch > 2 {
-			t.Fatal("expected only one restart")
-		}
-		// Issue a read to pick a timestamp.
-		if _, err := txn.Get(ctx, key.Next()); err != nil {
-			t.Fatal(err)
-		}
-		if txn.Proto().Epoch == 0 {
-			close(start) // let someone write into our future
-			// when they're done, try to read
-			if err := <-errChan; err != nil {
-				t.Fatal(err)
-			}
-		}
-		if _, err := txn.Get(ctx, key.Next()); err != nil {
-			if _, ok := err.(*roachpb.ReadWithinUncertaintyIntervalError); !ok {
-				t.Fatalf("unexpected error: %T: %s", err, err)
-			}
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+	return errors.New("unable to disable own node certain")
 }
 
 // TestUncertaintyObservedTimestampForwarding checks that when receiving an
 // uncertainty restart on a node, the next attempt to read (at the increased
 // timestamp) is free from uncertainty. See roachpb.Transaction for details.
-func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
+func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	dbCtx := client.DefaultDBContext()
-	s := &localtestcluster.LocalTestCluster{
-		// Large offset so that any value in the future is an uncertain read. Also
-		// makes sure that the values we write in the future below don't actually
-		// wind up in the past.
-		Clock:     hlc.NewClock(hlc.UnixNano, 50*time.Second),
-		DBContext: &dbCtx,
-	}
-	s.Start(t, testutils.NewNodeTestBaseContext(), InitSenderForLocalTestCluster)
+	s := createTestDB(t)
 	defer s.Stop()
 	if err := disableOwnNodeCertain(s); err != nil {
 		t.Fatal(err)
 	}
 
-	offsetNS := int64(100)
-	keySlow := roachpb.Key("slow")
-	keyFast := roachpb.Key("fast")
-	valSlow := []byte("wols")
-	valFast := []byte("tsaf")
+	key := roachpb.Key("a")
+	valSlow := []byte("slow")
+	valFast := []byte("fast")
 
-	// Write keySlow at now+offset, keyFast at now+2*offset
-	futureTS := s.Clock.Now()
-	futureTS.WallTime += offsetNS
-	val := roachpb.MakeValueFromBytes(valSlow)
-	if err := engine.MVCCPut(context.Background(), s.Eng, nil, keySlow, futureTS, val, nil); err != nil {
-		t.Fatal(err)
-	}
-	futureTS.WallTime += offsetNS
-	val.SetBytes(valFast)
-	if err := engine.MVCCPut(context.Background(), s.Eng, nil, keyFast, futureTS, val, nil); err != nil {
+	// First write the slow value at key. This timestamp will occur
+	// before the transaction timestamp is set.
+	if err := s.DB.Put(context.Background(), key, valSlow); err != nil {
 		t.Fatal(err)
 	}
 
 	i := 0
 	if tErr := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		i++
-		// The first command serves to start a Txn, fixing the timestamps.
-		// There will be a restart, but this is idempotent.
-		if _, err := txn.Scan(ctx, "t", roachpb.Key("t").Next(), 0); err != nil {
+		// Now the the transaction has started, write the newer value at
+		// a higher timestamp than the txn timestamp.
+		if err := s.DB.Put(context.Background(), key, valFast); err != nil {
 			t.Fatal(err)
 		}
-		// This is a bit of a hack for the sake of this test: By visiting the
-		// node above, we've made a note of its clock, which allows us to
-		// prevent the restart. But we want to catch the restart, so reset the
-		// observed timestamps.
-		txn.Proto().ResetObservedTimestamps()
 
-		// The server's clock suddenly jumps ahead of keyFast's timestamp.
-		s.Manual.Increment(2*offsetNS + 1)
-
-		// Now read slowKey first. It should read at 0, catch an uncertainty error,
-		// and get keySlow's timestamp in that error, but upgrade it to the larger
-		// node clock (which is ahead of keyFast as well). If the last part does
-		// not happen, the read of keyFast should fail (i.e. read nothing).
-		// There will be exactly one restart here.
-		if gr, err := txn.Get(ctx, keySlow); err != nil {
+		// Read key. We should get an uncertainty restart the first iteration
+		// and read the valFast value the second iteration.
+		gr, err := txn.Get(ctx, key)
+		switch err.(type) {
+		case *roachpb.HandledRetryableTxnError:
 			if i != 1 {
-				t.Fatalf("unexpected transaction error: %s", err)
+				t.Fatalf("expected restart error; got %s on pass %d", err, i)
 			}
 			return err
-		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valSlow) {
-			t.Fatalf("read of %q returned %v, wanted value %q", keySlow, gr.Value, valSlow)
-		}
-
-		// The node should already be certain, so we expect no restart here
-		// and to read the correct key.
-		if gr, err := txn.Get(ctx, keyFast); err != nil {
-			t.Fatalf("second Get failed with %s", err)
-		} else if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valFast) {
-			t.Fatalf("read of %q returned %v, wanted value %q", keyFast, gr.Value, valFast)
+		case nil:
+			if i != 2 {
+				t.Fatalf("expected success; got success on pass %d", i)
+			}
+			if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valFast) {
+				t.Fatalf("read of %q returned %v, wanted value %q", key, gr.Value, valFast)
+			}
+		default:
+			t.Fatalf("unexpected error: %s", err)
 		}
 		return nil
 	}); tErr != nil {
@@ -517,7 +443,7 @@ func TestUncertaintyMaxTimestampForwarding(t *testing.T) {
 // the transaction's current timestamp instead of original timestamp.
 func TestTxnTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	keyA := "a"
@@ -556,7 +482,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	keyA := roachpb.Key("a")
@@ -625,7 +551,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 // See issue #676 for full details about original bug.
 func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	keyA := roachpb.Key("a")
@@ -710,7 +636,7 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 // with the original timestamp of a restarted transaction.
 func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	keyA := "a"
@@ -776,7 +702,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 // from earlier epochs are cleaned up on transaction commit.
 func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _ := createTestDB(t)
+	s := createTestDB(t)
 	defer s.Stop()
 
 	keys := []string{"a", "b", "c"}
