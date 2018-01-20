@@ -254,9 +254,9 @@ $(call make-lazy,SED_INPLACE)
 space := $(eval) $(eval)
 
 # Color support.
-yellow = $(shell tput setaf 3 2>/dev/null)
-cyan = $(shell tput setaf 6 2>/dev/null)
-term-reset = $(shell tput sgr0)
+yellow = $(shell { tput setaf 3 || tput AF 3; } 2>/dev/null)
+cyan = $(shell { tput setaf 6 || tput AF 6; } 2>/dev/null)
+term-reset = $(shell { tput sgr0 || tput me; } 2>/dev/null)
 $(call make-lazy,yellow)
 $(call make-lazy,cyan)
 $(call make-lazy,term-reset)
