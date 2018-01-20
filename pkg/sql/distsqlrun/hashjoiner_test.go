@@ -661,6 +661,35 @@ func TestHashJoiner(t *testing.T) {
 				{v[2], v[2]},
 			},
 		},
+		{
+			// Ensure that semi joins respect OnExprs on both inputs.
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0},
+				RightEqColumns: []uint32{0},
+				Type:           JoinType_LEFT_SEMI,
+				OnExpr:         Expression{Expr: "@4 > 4 and @2 + @4 = 8"},
+				// Implicit @1 = @3 constraint.
+			},
+			outCols:   []uint32{0, 1},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[1], v[1]},
+				{v[2], v[1]},
+				{v[2], v[2]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[5]},
+				{v[2], v[6]},
+				{v[3], v[3]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[2]},
+			},
+		},
 	}
 
 	ctx := context.Background()
