@@ -95,23 +95,6 @@ type tableVersionID struct {
 	version sqlbase.DescriptorVersion
 }
 
-// SchemaAccessor provides helper methods for using the SQL schema.
-type SchemaAccessor interface {
-	// NB: one can use GetTableDescFromID() to retrieve a descriptor for
-	// a table from a transaction using its ID, assuming it was loaded
-	// in the transaction already.
-
-	// notifySchemaChange notifies that an outstanding schema change
-	// exists for the table.
-	notifySchemaChange(tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID)
-
-	// writeTableDesc effectively writes a table descriptor to the
-	// database within the current planner transaction.
-	writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error
-}
-
-var _ SchemaAccessor = &planner{}
-
 func (p *planner) getVirtualTabler() VirtualTabler {
 	return p.extendedEvalCtx.VirtualSchemas
 }
@@ -638,7 +621,8 @@ func (p *planner) createSchemaChangeJob(
 	return mutationID, nil
 }
 
-// notifySchemaChange implements the SchemaAccessor interface.
+// notifySchemaChange notifies that an outstanding schema change
+// exists for the table.
 func (p *planner) notifySchemaChange(
 	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) {
@@ -656,7 +640,8 @@ func (p *planner) notifySchemaChange(
 	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }
 
-// writeTableDesc implements the SchemaAccessor interface.
+// writeTableDesc effectively writes a table descriptor to the
+// database within the current planner transaction.
 func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
 	if isVirtualDescriptor(tableDesc) {
 		panic(fmt.Sprintf("Virtual Descriptors cannot be stored, found: %v", tableDesc))
