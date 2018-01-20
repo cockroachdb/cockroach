@@ -113,7 +113,7 @@ func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor
 	lm := e.cfg.LeaseManager
 	// We run as NodeUser because we may update system descriptors.
 	p, cleanup := newInternalPlanner(
-		"recompute-view-dependencies", txn, security.NodeUser, lm.memMetrics,
+		"recompute-view-dependencies", txn, security.NodeUser, lm.memMetrics, &e.cfg,
 	)
 	defer cleanup()
 	p.Tables().leaseMgr = lm

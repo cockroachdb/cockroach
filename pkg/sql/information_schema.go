@@ -117,14 +117,14 @@ func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 var informationSchemaColumnPrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.column_privileges (
-	GRANTOR STRING NOT NULL DEFAULT '',
-	GRANTEE STRING NOT NULL DEFAULT '',
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	TABLE_NAME STRING NOT NULL DEFAULT '',
-	COLUMN_NAME STRING NOT NULL DEFAULT '',
-	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE STRING NOT NULL DEFAULT ''
+	GRANTOR STRING NOT NULL,
+	GRANTEE STRING NOT NULL,
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	COLUMN_NAME STRING NOT NULL,
+	PRIVILEGE_TYPE STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -158,14 +158,14 @@ CREATE TABLE information_schema.column_privileges (
 var informationSchemaColumnsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.columns (
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	TABLE_NAME STRING NOT NULL DEFAULT '',
-	COLUMN_NAME STRING NOT NULL DEFAULT '',
-	ORDINAL_POSITION INT NOT NULL DEFAULT 0,
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	COLUMN_NAME STRING NOT NULL,
+	ORDINAL_POSITION INT NOT NULL,
 	COLUMN_DEFAULT STRING,
-	IS_NULLABLE STRING NOT NULL DEFAULT '',
-	DATA_TYPE STRING NOT NULL DEFAULT '',
+	IS_NULLABLE STRING NOT NULL,
+	DATA_TYPE STRING NOT NULL,
 	CHARACTER_MAXIMUM_LENGTH INT,
 	CHARACTER_OCTET_LENGTH INT,
 	NUMERIC_PRECISION INT,
@@ -229,14 +229,14 @@ func datetimePrecision(colType sqlbase.ColumnType) tree.Datum {
 var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.key_column_usage (
-	CONSTRAINT_CATALOG STRING DEFAULT '',
-	CONSTRAINT_SCHEMA STRING DEFAULT '',
-	CONSTRAINT_NAME STRING DEFAULT '',
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	TABLE_NAME STRING NOT NULL DEFAULT '',
-	COLUMN_NAME STRING NOT NULL DEFAULT '',
-	ORDINAL_POSITION INT NOT NULL DEFAULT 0,
+	CONSTRAINT_CATALOG STRING,
+	CONSTRAINT_SCHEMA STRING,
+	CONSTRAINT_NAME STRING,
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	COLUMN_NAME STRING NOT NULL,
+	ORDINAL_POSITION INT NOT NULL,
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -289,9 +289,9 @@ CREATE TABLE information_schema.key_column_usage (
 var informationSchemaSchemataTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.schemata (
-	CATALOG_NAME STRING NOT NULL DEFAULT '',
-	SCHEMA_NAME STRING NOT NULL DEFAULT '',
-	DEFAULT_CHARACTER_SET_NAME STRING NOT NULL DEFAULT '',
+	CATALOG_NAME STRING NOT NULL,
+	SCHEMA_NAME STRING NOT NULL,
+	DEFAULT_CHARACTER_SET_NAME STRING NOT NULL,
 	SQL_PATH STRING
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -309,11 +309,11 @@ CREATE TABLE information_schema.schemata (
 var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.schema_privileges (
-	GRANTEE STRING NOT NULL DEFAULT '',
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE STRING NOT NULL DEFAULT ''
+	GRANTEE STRING NOT NULL,
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	PRIVILEGE_TYPE STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -356,18 +356,18 @@ func dStringForIndexDirection(dir sqlbase.IndexDescriptor_Direction) tree.Datum 
 var informationSchemaSequences = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.sequences (
-    SEQUENCE_CATALOG STRING NOT NULL DEFAULT '',
-    SEQUENCE_SCHEMA STRING NOT NULL DEFAULT '',
-    SEQUENCE_NAME STRING NOT NULL DEFAULT '',
-    DATA_TYPE STRING NOT NULL DEFAULT '',
-    NUMERIC_PRECISION INT NOT NULL DEFAULT 0,
-    NUMERIC_PRECISION_RADIX INT NOT NULL DEFAULT 0,
-    NUMERIC_SCALE INT NOT NULL DEFAULT 0,
-    START_VALUE STRING NOT NULL DEFAULT '',
-    MINIMUM_VALUE STRING NOT NULL DEFAULT '',
-    MAXIMUM_VALUE STRING NOT NULL DEFAULT '',
-    INCREMENT STRING NOT NULL DEFAULT '',
-    CYCLE_OPTION STRING NOT NULL DEFAULT 'NO'
+    SEQUENCE_CATALOG STRING NOT NULL,
+    SEQUENCE_SCHEMA STRING NOT NULL,
+    SEQUENCE_NAME STRING NOT NULL,
+    DATA_TYPE STRING NOT NULL,
+    NUMERIC_PRECISION INT NOT NULL,
+    NUMERIC_PRECISION_RADIX INT NOT NULL,
+    NUMERIC_SCALE INT NOT NULL,
+    START_VALUE STRING NOT NULL,
+    MINIMUM_VALUE STRING NOT NULL,
+    MAXIMUM_VALUE STRING NOT NULL,
+    INCREMENT STRING NOT NULL,
+    CYCLE_OPTION STRING NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -395,19 +395,19 @@ CREATE TABLE information_schema.sequences (
 var informationSchemaStatisticsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.statistics (
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	TABLE_NAME STRING NOT NULL DEFAULT '',
-	NON_UNIQUE STRING NOT NULL DEFAULT '',
-	INDEX_SCHEMA STRING NOT NULL DEFAULT '',
-	INDEX_NAME STRING NOT NULL DEFAULT '',
-	SEQ_IN_INDEX INT NOT NULL DEFAULT 0,
-	COLUMN_NAME STRING NOT NULL DEFAULT '',
-	"COLLATION" STRING NOT NULL DEFAULT '',
-	CARDINALITY INT NOT NULL DEFAULT 0,
-	DIRECTION STRING NOT NULL DEFAULT '',
-	STORING STRING NOT NULL DEFAULT '',
-	IMPLICIT STRING NOT NULL DEFAULT ''
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	NON_UNIQUE STRING NOT NULL,
+	INDEX_SCHEMA STRING NOT NULL,
+	INDEX_NAME STRING NOT NULL,
+	SEQ_IN_INDEX INT NOT NULL,
+	COLUMN_NAME STRING NOT NULL,
+	"COLLATION" STRING NOT NULL,
+	CARDINALITY INT NOT NULL,
+	DIRECTION STRING NOT NULL,
+	STORING STRING NOT NULL,
+	IMPLICIT STRING NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -487,15 +487,15 @@ CREATE TABLE information_schema.statistics (
 var informationSchemaTableConstraintTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_constraints (
-	CONSTRAINT_CATALOG STRING NOT NULL DEFAULT '',
-	CONSTRAINT_SCHEMA STRING NOT NULL DEFAULT '',
-	CONSTRAINT_NAME STRING NOT NULL DEFAULT '',
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	TABLE_NAME STRING NOT NULL DEFAULT '',
-	CONSTRAINT_TYPE STRING NOT NULL DEFAULT '',
-	IS_DEFERRABLE STRING NOT NULL DEFAULT '',
-	INITIALLY_DEFERRED STRING NOT NULL DEFAULT ''
+	CONSTRAINT_CATALOG STRING NOT NULL,
+	CONSTRAINT_SCHEMA STRING NOT NULL,
+	CONSTRAINT_NAME STRING NOT NULL,
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	CONSTRAINT_TYPE STRING NOT NULL,
+	IS_DEFERRABLE STRING NOT NULL,
+	INITIALLY_DEFERRED STRING NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
@@ -531,10 +531,10 @@ CREATE TABLE information_schema.table_constraints (
 var informationSchemaUserPrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.user_privileges (
-	GRANTEE STRING NOT NULL DEFAULT '',
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE STRING NOT NULL DEFAULT ''
+	GRANTEE STRING NOT NULL,
+	TABLE_CATALOG STRING NOT NULL,
+	PRIVILEGE_TYPE STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
@@ -557,14 +557,14 @@ CREATE TABLE information_schema.user_privileges (
 var informationSchemaTablePrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_privileges (
-	GRANTOR STRING NOT NULL DEFAULT '',
-	GRANTEE STRING NOT NULL DEFAULT '',
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	TABLE_NAME STRING NOT NULL DEFAULT '',
-	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE STRING NOT NULL DEFAULT '',
-	WITH_HIERARCHY STRING NOT NULL DEFAULT ''
+	GRANTOR STRING NOT NULL,
+	GRANTEE STRING NOT NULL,
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	PRIVILEGE_TYPE STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL,
+	WITH_HIERARCHY STRING NOT NULL
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -599,10 +599,10 @@ var (
 var informationSchemaTablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.tables (
-	TABLE_CATALOG STRING NOT NULL DEFAULT '',
-	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-	TABLE_NAME STRING NOT NULL DEFAULT '',
-	TABLE_TYPE STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	TABLE_TYPE STRING NOT NULL,
 	VERSION INT
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -630,16 +630,16 @@ CREATE TABLE information_schema.tables (
 var informationSchemaViewsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.views (
-    TABLE_CATALOG STRING NOT NULL DEFAULT '',
-    TABLE_SCHEMA STRING NOT NULL DEFAULT '',
-    TABLE_NAME STRING NOT NULL DEFAULT '',
-    VIEW_DEFINITION STRING NOT NULL DEFAULT '',
-    CHECK_OPTION STRING NOT NULL DEFAULT '',
-    IS_UPDATABLE STRING NOT NULL DEFAULT '',
-    IS_INSERTABLE_INTO STRING NOT NULL DEFAULT '',
-    IS_TRIGGER_UPDATABLE STRING NOT NULL DEFAULT '',
-    IS_TRIGGER_DELETABLE STRING NOT NULL DEFAULT '',
-    IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL DEFAULT ''
+    TABLE_CATALOG STRING NOT NULL,
+    TABLE_SCHEMA STRING NOT NULL,
+    TABLE_NAME STRING NOT NULL,
+    VIEW_DEFINITION STRING NOT NULL,
+    CHECK_OPTION STRING NOT NULL,
+    IS_UPDATABLE STRING NOT NULL,
+    IS_INSERTABLE_INTO STRING NOT NULL,
+    IS_TRIGGER_UPDATABLE STRING NOT NULL,
+    IS_TRIGGER_DELETABLE STRING NOT NULL,
+    IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -956,7 +956,9 @@ func forEachRole(
 ) error {
 	query := `SELECT username, "isRole" FROM system.users`
 	p, cleanup := newInternalPlanner(
-		"for-each-role", origPlanner.txn, security.RootUser, origPlanner.extendedEvalCtx.MemMetrics)
+		"for-each-role", origPlanner.txn, security.RootUser,
+		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),
+	)
 	defer cleanup()
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {

@@ -254,15 +254,23 @@ func (e *duplicateBootstrapError) Error() string {
 }
 
 // NewNode returns a new instance of Node.
+//
+// execCfg can be nil to help bootstrapping of a Server (the Node is created
+// before the ExecutorConfig is initialized). In that case, InitLogger() needs
+// to be called before the Node is used.
 func NewNode(
 	cfg storage.StoreConfig,
 	recorder *status.MetricsRecorder,
 	reg *metric.Registry,
 	stopper *stop.Stopper,
 	txnMetrics kv.TxnMetrics,
-	eventLogger sql.EventLogger,
+	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
 ) *Node {
+	var eventLogger sql.EventLogger
+	if execCfg != nil {
+		eventLogger = sql.MakeEventLogger(execCfg)
+	}
 	n := &Node{
 		storeCfg:    cfg,
 		stopper:     stopper,
@@ -275,6 +283,11 @@ func NewNode(
 	}
 	n.storesServer = storage.MakeServer(&n.Descriptor, n.stores)
 	return n
+}
+
+// InitLogger needs to be called if a nil execCfg was passed to NewNode().
+func (n *Node) InitLogger(execCfg *sql.ExecutorConfig) {
+	n.eventLogger = sql.MakeEventLogger(execCfg)
 }
 
 // String implements fmt.Stringer.

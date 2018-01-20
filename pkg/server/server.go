@@ -136,6 +136,7 @@ type Server struct {
 	raftTransport      *storage.RaftTransport
 	stopper            *stop.Stopper
 	sqlExecutor        *sql.Executor
+	execCfg            *sql.ExecutorConfig
 	leaseMgr           *sql.LeaseManager
 	sessionRegistry    *sql.SessionRegistry
 	jobRegistry        *jobs.Registry
@@ -295,15 +296,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.leaseMgr = sql.NewLeaseManager(
 		s.cfg.AmbientCtx,
-		&s.nodeIDContainer,
-		*s.db,
-		s.clock,
+		nil, /* execCfg - will be set later because of circular dependencies */
 		lmKnobs,
 		s.stopper,
 		&s.internalMemMetrics,
 		s.cfg.LeaseManagerConfig,
 	)
-	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// We do not set memory monitors or a noteworthy limit because the children of
 	// this monitor will be setting their own noteworthy limits.
@@ -352,7 +350,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.tsDB = ts.NewDB(s.db, s.cfg.Settings)
 	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
 
-	sqlExecutor := sql.InternalExecutor{LeaseManager: s.leaseMgr}
+	// The InternalExecutor will be further initialized later, as we create more
+	// of the server's components. There's a circular dependency - many things
+	// need an InternalExecutor, but the InternalExecutor needs an ExecutorConfig,
+	// which in turn needs many things. That's why everybody that needs an
+	// InternalExecutor takes pointers to this one instance.
+	sqlExecutor := sql.InternalExecutor{}
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
@@ -370,7 +373,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		StorePool:               s.storePool,
-		SQLExecutor:             sqlExecutor,
+		SQLExecutor:             &sqlExecutor,
 		LogRangeEvents:          s.cfg.EventLogEnabled,
 		TimeSeriesDataStore:     s.tsDB,
 
@@ -387,14 +390,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.runtime)
 
 	s.node = NewNode(
-		storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr),
-		&s.rpcContext.ClusterID)
+		storeCfg, s.recorder, s.registry, s.stopper,
+		txnMetrics, nil /* execCfg */, &s.rpcContext.ClusterID)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
-		s.cfg.AmbientCtx, s.clock, s.db, sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID, st)
+		s.cfg.AmbientCtx, s.clock, s.db, &sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID, st)
 
 	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
@@ -404,7 +407,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientContext: s.cfg.AmbientCtx,
 		Settings:       st,
 		DB:             s.db,
-		Executor:       sqlExecutor,
+		Executor:       &sqlExecutor,
 		FlowDB:         client.NewDB(s.tcsFactory, s.clock),
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
@@ -427,7 +430,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
-	s.admin = newAdminServer(s)
+	s.admin = newAdminServer(s, &sqlExecutor)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
 		s.cfg.Config,
@@ -441,7 +444,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.sessionRegistry,
 	)
-	s.authentication = newAuthenticationServer(s)
+	s.authentication = newAuthenticationServer(s, &sqlExecutor)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
@@ -458,6 +461,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		NodeID:    &s.nodeIDContainer,
 	}
 
+	virtualSchemas, err := sql.NewVirtualSchemaHolder(ctx, st)
+	if err != nil {
+		log.Fatal(ctx, err)
+	}
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
 		Settings:                s.st,
@@ -473,6 +480,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		StatusServer:            s.status,
 		SessionRegistry:         s.sessionRegistry,
 		JobRegistry:             s.jobRegistry,
+		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
@@ -502,6 +510,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.HistogramWindowInterval(),
 	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
+
+	sqlExecutor.ExecCfg = &execCfg
+	s.execCfg = &execCfg
+
+	s.leaseMgr.SetExecCfg(&execCfg)
+	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
+
+	s.node.InitLogger(&execCfg)
 
 	return s, nil
 }
@@ -1131,20 +1147,11 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 
 	sql.NewSchemaChangeManager(
 		s.cfg.AmbientCtx,
+		s.execCfg,
 		testingKnobs,
 		*s.db,
 		s.node.Descriptor,
-		s.rpcContext,
-		s.distSQLServer,
-		s.distSender,
-		s.gossip,
-		s.leaseMgr,
-		s.clock,
-		s.jobRegistry,
 		distSQLPlanner,
-		s.st,
-		s.distSender.RangeDescriptorCache(),
-		s.distSender.LeaseHolderCache(),
 	).Start(s.stopper)
 
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, distSQLPlanner)
@@ -1377,7 +1384,7 @@ func (s *Server) Undrain(off []serverpb.DrainMode) []serverpb.DrainMode {
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
 func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb.NodeID) error {
-	eventLogger := sql.MakeEventLogger(s.leaseMgr)
+	eventLogger := sql.MakeEventLogger(s.execCfg)
 	eventType := sql.EventLogNodeDecommissioned
 	if !setTo {
 		eventType = sql.EventLogNodeRecommissioned

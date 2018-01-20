@@ -206,10 +206,9 @@ func (r *Result) Close(ctx context.Context) {
 // An Executor executes SQL statements.
 // Executor is thread-safe.
 type Executor struct {
-	cfg            ExecutorConfig
-	stopper        *stop.Stopper
-	reCache        *tree.RegexpCache
-	virtualSchemas virtualSchemaHolder
+	cfg     ExecutorConfig
+	stopper *stop.Stopper
+	reCache *tree.RegexpCache
 
 	// Transient stats.
 	SelectCount   *metric.Counter
@@ -274,6 +273,7 @@ type ExecutorConfig struct {
 	StatusServer    serverpb.StatusServer
 	SessionRegistry *SessionRegistry
 	JobRegistry     *jobs.Registry
+	VirtualSchemas  *VirtualSchemaHolder
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
@@ -423,23 +423,6 @@ func (e *Executor) Start(
 			}
 		}
 	})
-
-	ctx = log.WithLogTag(ctx, "startup", nil)
-	startupSession := NewSession(
-		ctx, SessionArgs{}, e, nil /* remote */, startupMemMetrics, nil /* conn */)
-	startupSession.StartUnlimitedMonitor()
-	if err := e.virtualSchemas.init(
-		ctx, startupSession.newPlanner(
-			nil,                        /* txn */
-			time.Time{},                /* txnTimestamp */
-			e.cfg.Clock.PhysicalTime(), /* stmtTimestamp */
-			e.reCache,
-			startupSession.statsCollector(),
-		),
-	); err != nil {
-		log.Fatal(ctx, err)
-	}
-	startupSession.Finish(e)
 }
 
 // SetDistSQLSpanResolver changes the SpanResolver used for DistSQL. It is the

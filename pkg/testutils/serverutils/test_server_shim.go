@@ -73,7 +73,7 @@ type TestServerInterface interface {
 	// Executor() returns the *sql.Executor as an interface{}.
 	Executor() interface{}
 
-	// InternalExecutor returns a sqlutil.InternalExecutor as an interface{}.
+	// InternalExecutor returns a *sqlutil.InternalExecutor as an interface{}.
 	InternalExecutor() interface{}
 
 	// Gossip returns the gossip used by the TestServer.

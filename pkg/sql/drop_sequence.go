@@ -79,7 +79,7 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 		// Log a Drop Sequence event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+		if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 			ctx,
 			params.p.txn,
 			EventLogDropSequence,

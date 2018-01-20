@@ -196,10 +196,13 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 	if mgr == nil {
 		nc := &base.NodeIDContainer{}
 		nc.Set(context.TODO(), roachpb.NodeID(nodeID))
+		// Hack the ExecutorConfig that we pass to the LeaseManager to have a
+		// different node id.
+		cfgCpy := *t.server.InternalExecutor().(*sql.InternalExecutor).ExecCfg
+		cfgCpy.NodeInfo.NodeID = nc
 		mgr = sql.NewLeaseManager(
 			log.AmbientContext{Tracer: tracing.NewTracer()},
-			nc, *t.kvDB,
-			t.server.Clock(),
+			&cfgCpy,
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
 			&sql.MemoryMetrics{},

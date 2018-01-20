@@ -545,7 +545,7 @@ func (ts *TestServer) Executor() interface{} {
 
 // InternalExecutor is part of TestServerInterface.
 func (ts *TestServer) InternalExecutor() interface{} {
-	return sql.InternalExecutor{LeaseManager: ts.leaseMgr}
+	return &sql.InternalExecutor{ExecCfg: ts.execCfg}
 }
 
 // GetNode exposes the Server's Node.

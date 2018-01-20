@@ -101,7 +101,7 @@ func (p *planner) MemberOfWithAdminOption(
 
 	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
 
-	internalExecutor := InternalExecutor{LeaseManager: p.LeaseMgr()}
+	internalExecutor := InternalExecutor{ExecCfg: p.ExecCfg()}
 
 	for len(toVisit) > 0 {
 		// Pop first element.

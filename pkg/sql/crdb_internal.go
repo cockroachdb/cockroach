@@ -328,7 +328,7 @@ CREATE TABLE crdb_internal.leases (
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.execCfg.NodeID.Get())))
 
 		leaseMgr.mu.Lock()
 		defer leaseMgr.mu.Unlock()
@@ -392,7 +392,8 @@ CREATE TABLE crdb_internal.jobs (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		p, cleanup := newInternalPlanner("jobs", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics)
+		p, cleanup := newInternalPlanner(
+			"jobs", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
 		defer cleanup()
 		rows, err := p.queryRows(ctx, `SELECT id, status, created, payload FROM system.jobs`)
 		if err != nil {
@@ -494,7 +495,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}
 
 		leaseMgr := p.LeaseMgr()
-		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.execCfg.NodeID.Get())))
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -1469,8 +1470,7 @@ CREATE TABLE crdb_internal.zones (
 		}
 
 		p, cleanup := newInternalPlanner(
-			"zones", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics,
-		)
+			"zones", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
 		defer cleanup()
 		rows, err := p.queryRows(ctx, `SELECT id, config FROM system.zones`)
 		if err != nil {

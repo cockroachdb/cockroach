@@ -223,7 +223,7 @@ func (p *planner) dropIndexByName(
 	// Record index drop in the event log. This is an auditable log event
 	// and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(p.LeaseMgr()).InsertEventRecord(
+	if err := MakeEventLogger(p.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		ctx,
 		p.txn,
 		EventLogDropIndex,
