@@ -251,14 +251,16 @@ type uncommittedDatabase struct {
 // as errors, or retries that result in transaction timestamp changes.
 type TableCollection struct {
 	// The timestamp used to pick tables. The timestamp falls within the
-	// validity window of every table in tables.
+	// validity window of every table in leasedTables.
 	timestamp hlc.Timestamp
+
+	// leaseMgr manages acquiring and releasing per-table leases.
+	leaseMgr *LeaseManager
 	// A collection of table descriptor valid for the timestamp.
 	// They are released once the transaction using them is complete.
 	// If the transaction gets pushed and the timestamp changes,
 	// the tables are released.
-	tables []*sqlbase.TableDescriptor
-
+	leasedTables []*sqlbase.TableDescriptor
 	// Tables modified by the uncommitted transaction affiliated
 	// with this TableCollection. This allows a transaction to see
 	// its own modifications while bypassing the table lease mechanism.
@@ -269,16 +271,13 @@ type TableCollection struct {
 	// table is marked dropped.
 	uncommittedTables []*sqlbase.TableDescriptor
 
-	// Same as uncommittedTables applying to databases modified within
-	// an uncommitted transaction.
-	uncommittedDatabases []uncommittedDatabase
-
-	// leaseMgr manages acquiring and releasing per-table leases.
-	leaseMgr *LeaseManager
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
 	databaseCache *databaseCache
+	// Same as uncommittedTables applying to databases modified within
+	// an uncommitted transaction.
+	uncommittedDatabases []uncommittedDatabase
 }
 
 // Check if the timestamp used so far to pick tables has changed because
@@ -356,7 +355,7 @@ func (tc *TableCollection) getTableVersion(
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	for _, table := range tc.tables {
+	for _, table := range tc.leasedTables {
 		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
 			log.VEventf(ctx, 2, "found table in table collection for table '%s'", tn)
@@ -374,7 +373,7 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 	tc.timestamp = txn.OrigTimestamp()
-	tc.tables = append(tc.tables, table)
+	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
@@ -418,7 +417,7 @@ func (tc *TableCollection) getTableVersionByID(
 
 	// First, look to see if we already have the table -- including those
 	// via `getTableVersion`.
-	for _, table := range tc.tables {
+	for _, table := range tc.leasedTables {
 		if table.ID == tableID {
 			log.VEventf(ctx, 2, "found table %d in table cache", tableID)
 			return table, nil
@@ -436,7 +435,7 @@ func (tc *TableCollection) getTableVersionByID(
 		return nil, err
 	}
 	tc.timestamp = txn.OrigTimestamp()
-	tc.tables = append(tc.tables, table)
+	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
