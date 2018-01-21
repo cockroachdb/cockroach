@@ -39,8 +39,9 @@ import (
 // and tables in that their descriptors are not distributed, but instead live statically
 // in code. This means that they are accessed separately from standard descriptors.
 type virtualSchema struct {
-	name   string
-	tables []virtualSchemaTable
+	name           string
+	tables         []virtualSchemaTable
+	tableValidator func(*sqlbase.TableDescriptor) error // optional
 }
 
 // virtualSchemaTable represents a table within a virtualSchema.
@@ -156,6 +157,11 @@ func (vs *virtualSchemaHolder) init(ctx context.Context, p *planner) error {
 			tableDesc, err := initVirtualTableDesc(ctx, p, table)
 			if err != nil {
 				return err
+			}
+			if schema.tableValidator != nil {
+				if err := schema.tableValidator(&tableDesc); err != nil {
+					return err
+				}
 			}
 			tables[tableDesc.Name] = virtualTableEntry{
 				tableDef: table,
