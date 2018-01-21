@@ -16,6 +16,8 @@
 #include "include/libroach.h"
 #include "testutils.h"
 
+using namespace cockroach;
+
 TEST(Libroach, DBOpenHook) {
   DBOptions db_opts;
 
