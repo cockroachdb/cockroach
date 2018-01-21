@@ -29,13 +29,7 @@ import (
 // goroutines.
 type SystemConfigDeltaFilter struct {
 	keyPrefix roachpb.Key
-	lastVals  map[string]*filterVal
-	epoch     bool
-}
-
-type filterVal struct {
-	epoch bool
-	val   roachpb.Value
+	lastCfg   config.SystemConfig
 }
 
 // MakeSystemConfigDeltaFilter creates a new SystemConfigDeltaFilter. The filter
@@ -44,54 +38,49 @@ type filterVal struct {
 func MakeSystemConfigDeltaFilter(keyPrefix roachpb.Key) SystemConfigDeltaFilter {
 	return SystemConfigDeltaFilter{
 		keyPrefix: keyPrefix,
-		lastVals:  make(map[string]*filterVal),
 	}
 }
 
 // ForModified calls the provided function for all SystemConfig kvs that were modified
 // since the last call to this method.
 func (df *SystemConfigDeltaFilter) ForModified(
-	cfg config.SystemConfig, fn func(kv roachpb.KeyValue),
+	newCfg config.SystemConfig, fn func(kv roachpb.KeyValue),
 ) {
-	// Invert epoch counter so we can detect which kvs were removed from the
-	// map after updating all those that remain.
-	df.epoch = !df.epoch
-	for _, kv := range cfg.Values {
+	// SystemConfig values are always sorted by key, so scan over new and old
+	// configs in order to find new keys and modified values.
+	lastIdx := 0
+	for _, newKV := range newCfg.Values {
 		// Skip unimportant kvs.
-		if df.keyPrefix != nil && !bytes.HasPrefix(kv.Key, df.keyPrefix) {
+		if df.keyPrefix != nil && !bytes.HasPrefix(newKV.Key, df.keyPrefix) {
 			continue
 		}
 
-		keySlice := kv.Key[len(df.keyPrefix):]
-		keyStr := string(keySlice)
-		prevVal, ok := df.lastVals[keyStr]
-		if !ok || !bytes.Equal(kv.Value.RawBytes, prevVal.val.RawBytes) {
-			// The key is new or the value changed.
-			fn(kv)
-		}
+		// Find matching key in lastCfg.
+		for {
+			if lastIdx >= len(df.lastCfg.Values) {
+				// New key.
+				fn(newKV)
+				break
+			}
 
-		newVal := filterVal{epoch: df.epoch, val: kv.Value}
-		if ok {
-			*prevVal = newVal
-		} else {
-			// Both of these variables are split from a copy in the outer scope.
-			// The first is so that all uses of keyStr can take advantage of
-			// https://github.com/golang/go/wiki/CompilerOptimizations#string-and-byte.
-			// The second is so that newVal doesn't escape onto the heap. Look
-			// at memory benchmarks when making any changes here.
-			keyStrAlloc := string(keySlice)
-			newValAlloc := newVal
-			df.lastVals[keyStrAlloc] = &newValAlloc
+			oldKV := df.lastCfg.Values[lastIdx]
+			if cmp := oldKV.Key.Compare(newKV.Key); cmp < 0 {
+				// Deleted key.
+				lastIdx++
+			} else if cmp == 0 {
+				// Matching key.
+				lastIdx++
+				if !bytes.Equal(newKV.Value.RawBytes, oldKV.Value.RawBytes) {
+					// Modified value.
+					fn(newKV)
+				}
+				break
+			} else if cmp > 0 {
+				// New key.
+				fn(newKV)
+				break
+			}
 		}
 	}
-
-	// Delete the kvs that no longer exist in the system config from the map.
-	//
-	// We can expose the kvs that are being removed in this loop, if we ever
-	// need to.
-	for key, val := range df.lastVals {
-		if val.epoch != df.epoch {
-			delete(df.lastVals, key)
-		}
-	}
+	df.lastCfg = newCfg
 }
