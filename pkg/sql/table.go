@@ -285,6 +285,22 @@ func (tc *TableCollection) getTableVersion(
 
 	origTimestamp := flags.txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
+	if err == sqlbase.ErrDescriptorNotFound {
+		// The table doesn't exist at the requested fixed timestamp.
+		// Read the table descriptor directly from the store to check
+		// if the descriptor exists at a future timestamp within the
+		// clock uncertainty interval in which case the error returned
+		// will be ReadWithinUncertaintyIntervalError.
+		flags.avoidCached = true
+		// Read the CommitTimestamp() so that the transaction cannot be
+		// pushed transparently and instead sees
+		// ReadWithinUncertaintyIntervalError.
+		_ = flags.txn.CommitTimestamp()
+		phyAccessor := UncachedPhysicalAccessor{}
+		if _, _, err := phyAccessor.GetObjectDesc(tn, flags); err != nil {
+			return nil, nil, err
+		}
+	}
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			if flags.required {
