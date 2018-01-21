@@ -269,11 +269,11 @@ func evalEndTransaction(
 	} else if !ok {
 		return result.Result{}, roachpb.NewTransactionStatusError("does not exist")
 	}
-	// We're using existingTxn on the reply, even though it can be stale compared
-	// to the Transaction in the request (e.g. the Sequence can be stale). This is
-	// OK since we're processing an EndTransaction and so there's not going to be
-	// more requests using the transaction from this reply (or, in case of a
-	// restart, we'll reset the Transaction anyway).
+	// We're using existingTxn on the reply, although it can be stale
+	// compared to the Transaction in the request (e.g. the Sequence,
+	// and various timestamps). We must be careful to update it with the
+	// supplied ba.Txn if we return it with an error which might be
+	// retried, as for example to avoid client-side serializable restart.
 	reply.Txn = &existingTxn
 
 	// Verify that we can either commit it or abort it (according
@@ -337,27 +337,13 @@ func evalEndTransaction(
 		)
 	}
 
-	// Take max of requested epoch and existing epoch. The requester
-	// may have incremented the epoch on retries.
-	if reply.Txn.Epoch < h.Txn.Epoch {
-		reply.Txn.Epoch = h.Txn.Epoch
-	}
-	// Take max of requested priority and existing priority. This isn't
-	// terribly useful, but we do it for completeness.
-	if reply.Txn.Priority < h.Txn.Priority {
-		reply.Txn.Priority = h.Txn.Priority
-	}
-
-	// Take max of supplied txn's timestamp and persisted txn's
-	// timestamp. It may have been pushed by another transaction.
-	// Note that we do not use the batch request timestamp, which for
-	// a transaction is always set to the txn's original timestamp.
-	reply.Txn.Timestamp.Forward(h.Txn.Timestamp)
+	// Update the existing txn with the supplied txn.
+	reply.Txn.Update(h.Txn)
 
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
-		if retry, reason := isEndTransactionTriggeringRetryError(h.Txn, reply.Txn); retry {
+		if retry, reason := isEndTransactionTriggeringRetryError(reply.Txn); retry {
 			return result.Result{}, roachpb.NewTransactionRetryError(reason)
 		}
 
@@ -436,25 +422,27 @@ func isEndTransactionExceedingDeadline(t hlc.Timestamp, args roachpb.EndTransact
 // EndTransactionRequest cannot be committed and needs to return a
 // TransactionRetryError.
 func isEndTransactionTriggeringRetryError(
-	headerTxn, currentTxn *roachpb.Transaction,
+	txn *roachpb.Transaction,
 ) (bool, roachpb.TransactionRetryReason) {
 	// If we saw any WriteTooOldErrors, we must restart to avoid lost
 	// update anomalies.
-	if headerTxn.WriteTooOld {
+	if txn.WriteTooOld {
 		return true, roachpb.RETRY_WRITE_TOO_OLD
 	}
 
-	isTxnPushed := currentTxn.Timestamp != headerTxn.OrigTimestamp
+	origTimestamp := txn.OrigTimestamp
+	origTimestamp.Forward(txn.RefreshedTimestamp)
+	isTxnPushed := txn.Timestamp != origTimestamp
 
 	// If the isolation level is SERIALIZABLE, return a transaction
 	// retry error if the commit timestamp isn't equal to the txn
 	// timestamp.
-	if headerTxn.Isolation == enginepb.SERIALIZABLE && isTxnPushed {
+	if txn.Isolation == enginepb.SERIALIZABLE && isTxnPushed {
 		return true, roachpb.RETRY_SERIALIZABLE
 	}
 
 	// If pushing requires a retry and the transaction was pushed, retry.
-	if headerTxn.RetryOnPush && isTxnPushed {
+	if txn.RetryOnPush && isTxnPushed {
 		return true, roachpb.RETRY_DELETE_RANGE
 	}
 

@@ -139,7 +139,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 		{&roachpb.PutRequest{}, enginepb.SERIALIZABLE, false, 1},
 		// Read/write conflicts.
 		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, true, 1},
-		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, true, 2},
+		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, true, 1},
 		{&roachpb.GetRequest{}, enginepb.SNAPSHOT, false, 1},
 		{&roachpb.GetRequest{}, enginepb.SERIALIZABLE, false, 1},
 	}
@@ -870,7 +870,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 			txn.Proto().Timestamp.Forward(s.Clock().Now())
 			_, err := txn.Get(ctx, "k")
 			return err
-		}); !testutils.IsError(err, "txn aborted") {
+		}); !testutils.IsError(err, "deadline exceeded before transaction finalization") {
 		// We test for TransactionAbortedError. If this was not a read-only txn,
 		// the error returned by the server would have been different - a
 		// TransactionStatusError. This inconsistency is unfortunate.

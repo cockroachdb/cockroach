@@ -16,6 +16,7 @@ package uuid
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/pkg/errors"
@@ -35,6 +36,16 @@ var Nil = UUID{uuid.Nil}
 func (u UUID) Short() string {
 	return u.String()[:8]
 }
+
+// ShortStringer implements fmt.Stringer to output Short() on String().
+type ShortStringer UUID
+
+// String is part of fmt.Stringer.
+func (s ShortStringer) String() string {
+	return UUID(s).Short()
+}
+
+var _ fmt.Stringer = ShortStringer{}
 
 // Bytes shadows (*github.com/satori/go.uuid.UUID).Bytes() to prevent UUID
 // from implementing github.com/golang/protobuf/proto.raw, the semantics of
