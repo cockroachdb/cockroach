@@ -695,7 +695,9 @@ func (t *tableState) findForTimestamp(
 		table, err := m.LeaseStore.getForExpiration(ctx, expiration, t.id)
 		if err != nil {
 			t.mu.Lock()
-			return nil, err
+			return nil, errors.Wrapf(
+				err, "retry: use a higher timestamp (%s < min %s)", timestamp, expiration,
+			)
 		}
 		versions = append(versions, table)
 		if !timestamp.Less(table.ModificationTime) {
