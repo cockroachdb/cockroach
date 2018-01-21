@@ -29,12 +29,12 @@ func (p *planner) ShowIndex(ctx context.Context, n *tree.ShowIndex) (planNode, e
 				SELECT
 					TABLE_NAME AS "Table",
 					INDEX_NAME AS "Name",
-					NOT NON_UNIQUE AS "Unique",
+					NOT NON_UNIQUE::BOOL AS "Unique",
 					SEQ_IN_INDEX AS "Seq",
 					COLUMN_NAME AS "Column",
 					DIRECTION AS "Direction",
-					STORING AS "Storing",
-					IMPLICIT AS "Implicit"
+					STORING::BOOL AS "Storing",
+					IMPLICIT::BOOL AS "Implicit"
 				FROM "".information_schema.statistics
 				WHERE TABLE_SCHEMA=%[1]s AND TABLE_NAME=%[2]s`
 	return p.showTableDetails(ctx, "SHOW INDEX", n.Table, getIndexes)

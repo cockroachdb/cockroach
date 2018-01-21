@@ -50,6 +50,7 @@ var informationSchema = virtualSchema{
 		informationSchemaViewsTable,
 		informationSchemaUserPrivileges,
 	},
+	tableValidator: validateInformationSchemaTable,
 }
 
 var (
@@ -59,8 +60,10 @@ var (
 	defString = tree.NewDString("def")
 
 	// information_schema was defined before the BOOLEAN data type was added to
-	// the SQL specification. Because of this, boolean values are represented
-	// as strings.
+	// the SQL specification. Because of this, boolean values are represented as
+	// STRINGs. The BOOLEAN data type should NEVER be used in information_schema
+	// tables. Instead, define columns as STRINGs and map bools to STRINGs using
+	// yesOrNoDatum.
 	yesString = tree.NewDString("YES")
 	noString  = tree.NewDString("NO")
 )
@@ -100,6 +103,17 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 	return tree.DNull
 }
 
+func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
+	// Make sure no tables have boolean columns.
+	for _, col := range table.Columns {
+		if col.Type.SemanticType == sqlbase.ColumnType_BOOL {
+			return errors.Errorf("information_schema tables should never use BOOL columns. "+
+				"See the comment about yesOrNoDatum. Found BOOL column in %s.", table.Name)
+		}
+	}
+	return nil
+}
+
 var informationSchemaColumnPrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.column_privileges (
@@ -110,25 +124,25 @@ CREATE TABLE information_schema.column_privileges (
 	TABLE_NAME STRING NOT NULL DEFAULT '',
 	COLUMN_NAME STRING NOT NULL DEFAULT '',
 	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+	IS_GRANTABLE STRING NOT NULL DEFAULT ''
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
 			for _, u := range table.Privileges.Users {
-				for _, privilege := range columndata {
-					if privilege.Mask()&u.Privileges != 0 {
+				for _, priv := range columndata {
+					if priv.Mask()&u.Privileges != 0 {
 						for _, cd := range table.Columns {
 							if err := addRow(
-								tree.DNull,                          // grantor
-								tree.NewDString(u.User),             // grantee
-								defString,                           // table_catalog
-								tree.NewDString(db.Name),            // table_schema
-								tree.NewDString(table.Name),         // table_name
-								tree.NewDString(cd.Name),            // column_name
-								tree.NewDString(privilege.String()), // privilege_type
-								tree.DNull,                          // is_grantable
+								tree.DNull,                     // grantor
+								tree.NewDString(u.User),        // grantee
+								defString,                      // table_catalog
+								tree.NewDString(db.Name),       // table_schema
+								tree.NewDString(table.Name),    // table_name
+								tree.NewDString(cd.Name),       // column_name
+								tree.NewDString(priv.String()), // privilege_type
+								tree.DNull,                     // is_grantable
 							); err != nil {
 								return err
 							}
@@ -299,19 +313,19 @@ CREATE TABLE information_schema.schema_privileges (
 	TABLE_CATALOG STRING NOT NULL DEFAULT '',
 	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
 	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+	IS_GRANTABLE STRING NOT NULL DEFAULT ''
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.Privileges.Show() {
-				for _, privilege := range u.Privileges {
+				for _, priv := range u.Privileges {
 					if err := addRow(
-						tree.NewDString(u.User),    // grantee
-						defString,                  // table_catalog
-						tree.NewDString(db.Name),   // table_schema
-						tree.NewDString(privilege), // privilege_type
-						tree.DNull,                 // is_grantable
+						tree.NewDString(u.User),  // grantee
+						defString,                // table_catalog
+						tree.NewDString(db.Name), // table_schema
+						tree.NewDString(priv),    // privilege_type
+						tree.DNull,               // is_grantable
 					); err != nil {
 						return err
 					}
@@ -384,7 +398,7 @@ CREATE TABLE information_schema.statistics (
 	TABLE_CATALOG STRING NOT NULL DEFAULT '',
 	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
 	TABLE_NAME STRING NOT NULL DEFAULT '',
-	NON_UNIQUE BOOL NOT NULL DEFAULT FALSE,
+	NON_UNIQUE STRING NOT NULL DEFAULT '',
 	INDEX_SCHEMA STRING NOT NULL DEFAULT '',
 	INDEX_NAME STRING NOT NULL DEFAULT '',
 	SEQ_IN_INDEX INT NOT NULL DEFAULT 0,
@@ -392,8 +406,8 @@ CREATE TABLE information_schema.statistics (
 	"COLLATION" STRING NOT NULL DEFAULT '',
 	CARDINALITY INT NOT NULL DEFAULT 0,
 	DIRECTION STRING NOT NULL DEFAULT '',
-	STORING BOOL NOT NULL DEFAULT FALSE,
-	IMPLICIT BOOL NOT NULL DEFAULT FALSE
+	STORING STRING NOT NULL DEFAULT '',
+	IMPLICIT STRING NOT NULL DEFAULT ''
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -401,19 +415,19 @@ CREATE TABLE information_schema.statistics (
 				direction tree.Datum, isStored, isImplicit bool,
 			) error {
 				return addRow(
-					defString,                                 // table_catalog
-					tree.NewDString(db.GetName()),             // table_schema
-					tree.NewDString(table.GetName()),          // table_name
-					tree.MakeDBool(tree.DBool(!index.Unique)), // non_unique
-					tree.NewDString(db.GetName()),             // index_schema
-					tree.NewDString(index.Name),               // index_name
-					tree.NewDInt(tree.DInt(sequence)),         // seq_in_index
-					tree.NewDString(colName),                  // column_name
-					tree.DNull,                                // collation
-					tree.DNull,                                // cardinality
-					direction,                                 // direction
-					tree.MakeDBool(tree.DBool(isStored)),   // storing
-					tree.MakeDBool(tree.DBool(isImplicit)), // implicit
+					defString,                         // table_catalog
+					tree.NewDString(db.GetName()),     // table_schema
+					tree.NewDString(table.GetName()),  // table_name
+					yesOrNoDatum(!index.Unique),       // non_unique
+					tree.NewDString(db.GetName()),     // index_schema
+					tree.NewDString(index.Name),       // index_name
+					tree.NewDInt(tree.DInt(sequence)), // seq_in_index
+					tree.NewDString(colName),          // column_name
+					tree.DNull,                        // collation
+					tree.DNull,                        // cardinality
+					direction,                         // direction
+					yesOrNoDatum(isStored),            // storing
+					yesOrNoDatum(isImplicit),          // implicit
 				)
 			}
 
@@ -520,7 +534,7 @@ CREATE TABLE information_schema.user_privileges (
 	GRANTEE STRING NOT NULL DEFAULT '',
 	TABLE_CATALOG STRING NOT NULL DEFAULT '',
 	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
+	IS_GRANTABLE STRING NOT NULL DEFAULT ''
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
@@ -549,8 +563,8 @@ CREATE TABLE information_schema.table_privileges (
 	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
 	TABLE_NAME STRING NOT NULL DEFAULT '',
 	PRIVILEGE_TYPE STRING NOT NULL DEFAULT '',
-	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE,
-	WITH_HIERARCHY BOOL NOT NULL DEFAULT FALSE
+	IS_GRANTABLE STRING NOT NULL DEFAULT '',
+	WITH_HIERARCHY STRING NOT NULL DEFAULT ''
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -621,11 +635,11 @@ CREATE TABLE information_schema.views (
     TABLE_NAME STRING NOT NULL DEFAULT '',
     VIEW_DEFINITION STRING NOT NULL DEFAULT '',
     CHECK_OPTION STRING NOT NULL DEFAULT '',
-    IS_UPDATABLE BOOL NOT NULL DEFAULT FALSE,
-    IS_INSERTABLE_INTO BOOL NOT NULL DEFAULT FALSE,
-    IS_TRIGGER_UPDATABLE BOOL NOT NULL DEFAULT FALSE,
-    IS_TRIGGER_DELETABLE BOOL NOT NULL DEFAULT FALSE,
-    IS_TRIGGER_INSERTABLE_INTO BOOL NOT NULL DEFAULT FALSE
+    IS_UPDATABLE STRING NOT NULL DEFAULT '',
+    IS_INSERTABLE_INTO STRING NOT NULL DEFAULT '',
+    IS_TRIGGER_UPDATABLE STRING NOT NULL DEFAULT '',
+    IS_TRIGGER_DELETABLE STRING NOT NULL DEFAULT '',
+    IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL DEFAULT ''
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
