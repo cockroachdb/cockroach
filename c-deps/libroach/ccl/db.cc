@@ -7,6 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "../db.h"
+#include "../status.h"
 #include <iostream>
 #include <libroachccl.h>
 #include <memory>
@@ -17,7 +18,7 @@
 #include "ccl/baseccl/encryption_options.pb.h"
 #include "key_manager.h"
 
-const DBStatus kSuccess = {NULL, 0};
+using namespace cockroach;
 
 // DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
 // needed.

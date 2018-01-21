@@ -14,8 +14,13 @@
 
 #pragma once
 
+#include <libroach.h>
 #include <rocksdb/slice.h>
 #include <stdint.h>
+#include "defines.h"
+#include "protos/storage/engine/enginepb/mvcc.pb.h"
+
+namespace cockroach {
 
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer.
@@ -32,6 +37,51 @@ bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value);
 // DecodedUint64 decodes a fixed-length encoded uint64 from a buffer, returning
 // true on a successful decode. The decoded value is returned in *value.
 bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value);
+
+const int kMVCCVersionTimestampSize = 12;
+
+void EncodeTimestamp(std::string& s, int64_t wall_time, int32_t logical);
+std::string EncodeTimestamp(DBTimestamp ts);
+
+// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
+// custom RocksDB comparator (DBComparator) is used to maintain the desired
+// ordering as these keys do not sort lexicographically correctly.
+std::string EncodeKey(const rocksdb::Slice& key, int64_t wall_time, int32_t logical);
+
+// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
+// custom RocksDB comparator (DBComparator) is used to maintain the desired
+// ordering as these keys do not sort lexicographically correctly.
+std::string EncodeKey(DBKey k);
+
+// SplitKey splits an MVCC key into key and timestamp slices. See also
+// DecodeKey if you want to decode the timestamp. Returns true on
+// success and false on any decoding error.
+WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
+                                 rocksdb::Slice* timestamp);
+
+// DecodeTimestamp an MVCC encoded timestamp. Returns true on success
+// and false on any decoding error.
+WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice* timestamp, int64_t* wall_time,
+                                        int32_t* logical);
+WARN_UNUSED_RESULT bool DecodeTimestamp(rocksdb::Slice buf,
+                                        cockroach::util::hlc::Timestamp* timestamp);
+
+// DecodeKey splits an MVCC key into a key slice and decoded
+// timestamp. See also SplitKey if you want to do not need to decode
+// the timestamp. Returns true on success and false on any decoding
+// error.
+WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key,
+                                  int64_t* wall_time, int32_t* logical);
+WARN_UNUSED_RESULT inline bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, DBTimestamp* ts) {
+  return DecodeKey(buf, key, &ts->wall_time, &ts->logical);
+}
+
+// KeyPrefix strips the timestamp from an MVCC encoded key, returning
+// a slice that is still MVCC encoded. This is used by the prefix
+// extractor used to build bloom filters on the prefix.
+rocksdb::Slice KeyPrefix(const rocksdb::Slice& src);
+
+} // namespace cockroach
 
 // local variables:
 // mode: c++
