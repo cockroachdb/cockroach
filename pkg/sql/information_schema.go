@@ -39,6 +39,7 @@ var informationSchema = virtualSchema{
 		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
 		informationSchemaKeyColumnUsageTable,
+		informationSchemaReferentialConstraintsTable,
 		informationSchemaSchemataTable,
 		informationSchemaSchemataTablePrivileges,
 		informationSchemaSequences,
@@ -287,6 +288,94 @@ CREATE TABLE information_schema.key_column_usage (
 				}
 			}
 			return nil
+		})
+	},
+}
+
+var (
+	matchOptionFull    = tree.NewDString("FULL")
+	matchOptionPartial = tree.NewDString("PARTIAL")
+	matchOptionNone    = tree.NewDString("NONE")
+
+	// Avoid unused warning for constants.
+	_ = matchOptionPartial
+	_ = matchOptionNone
+
+	refConstraintRuleNoAction   = tree.NewDString("NO ACTION")
+	refConstraintRuleRestrict   = tree.NewDString("RESTRICT")
+	refConstraintRuleSetNull    = tree.NewDString("SET NULL")
+	refConstraintRuleSetDefault = tree.NewDString("SET DEFAULT")
+	refConstraintRuleCascade    = tree.NewDString("CASCADE")
+)
+
+func dStringForFKAction(action sqlbase.ForeignKeyReference_Action) tree.Datum {
+	switch action {
+	case sqlbase.ForeignKeyReference_NO_ACTION:
+		return refConstraintRuleNoAction
+	case sqlbase.ForeignKeyReference_RESTRICT:
+		return refConstraintRuleRestrict
+	case sqlbase.ForeignKeyReference_SET_NULL:
+		return refConstraintRuleSetNull
+	case sqlbase.ForeignKeyReference_SET_DEFAULT:
+		return refConstraintRuleSetDefault
+	case sqlbase.ForeignKeyReference_CASCADE:
+		return refConstraintRuleCascade
+	}
+	panic(errors.Errorf("unexpected ForeignKeyReference_Action: %v", action))
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-referential-constraints.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/referential-constraints-table.html
+var informationSchemaReferentialConstraintsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.referential_constraints (
+	CONSTRAINT_CATALOG STRING NOT NULL DEFAULT '',
+	CONSTRAINT_SCHEMA STRING NOT NULL DEFAULT '',
+	CONSTRAINT_NAME STRING NOT NULL DEFAULT '',
+	UNIQUE_CONSTRAINT_CATALOG STRING NOT NULL DEFAULT '',
+	UNIQUE_CONSTRAINT_SCHEMA STRING NOT NULL DEFAULT '',
+	UNIQUE_CONSTRAINT_NAME STRING DEFAULT NULL,
+	MATCH_OPTION STRING NOT NULL DEFAULT '',
+	UPDATE_RULE STRING NOT NULL DEFAULT '',
+	DELETE_RULE STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	REFERENCED_TABLE_NAME STRING NOT NULL DEFAULT ''
+);`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
+			db *sqlbase.DatabaseDescriptor,
+			table *sqlbase.TableDescriptor,
+			tableLookup tableLookupFn,
+		) error {
+			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+				fk := index.ForeignKey
+				if !fk.IsSet() {
+					return nil
+				}
+
+				refTable, err := tableLookup.tableOrErr(fk.Table)
+				if err != nil {
+					return err
+				}
+				refIndex, err := refTable.FindIndexByID(fk.Index)
+				if err != nil {
+					return err
+				}
+
+				return addRow(
+					defString,                       // constraint_catalog
+					tree.NewDString(db.Name),        // constraint_schema
+					tree.NewDString(fk.Name),        // constraint_name
+					defString,                       // unique_constraint_catalog
+					tree.NewDString(db.Name),        // unique_constraint_schema
+					tree.NewDString(refIndex.Name),  // unique_constraint_name
+					matchOptionFull,                 // match_option
+					dStringForFKAction(fk.OnUpdate), // update_rule
+					dStringForFKAction(fk.OnDelete), // delete_rule
+					tree.NewDString(table.Name),     // table_name
+					tree.NewDString(refTable.Name),  // referenced_table_name
+				)
+			})
 		})
 	},
 }
