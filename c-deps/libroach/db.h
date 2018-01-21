@@ -54,3 +54,9 @@ const ::rocksdb::Comparator* CockroachComparator();
 // Stats are only computed for keys between the given range.
 MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start,
                                          DBKey end, int64_t now_nanos);
+
+struct DBIterator {
+  std::unique_ptr<rocksdb::Iterator> rep;
+  std::unique_ptr<rocksdb::WriteBatch> kvs;
+  std::unique_ptr<rocksdb::WriteBatch> intents;
+};

@@ -204,12 +204,6 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
 };
 
-struct DBIterator {
-  std::unique_ptr<rocksdb::Iterator> rep;
-  std::unique_ptr<rocksdb::WriteBatch> kvs;
-  std::unique_ptr<rocksdb::WriteBatch> intents;
-};
-
 std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
 
 std::string ToString(DBString s) { return std::string(s.data, s.len); }
