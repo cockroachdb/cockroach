@@ -35,6 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
+func makeAmbCtx() log.AmbientContext {
+	return log.AmbientContext{Tracer: tracing.NewTracer()}
+}
+
 // Test implementation of a range set backed by btree.BTree.
 type testRangeSet struct {
 	syncutil.Mutex
@@ -123,7 +127,7 @@ func (tq *testQueue) setDisabled(d bool) {
 	tq.disabled = d
 }
 
-func (tq *testQueue) Start(clock *hlc.Clock, stopper *stop.Stopper) {
+func (tq *testQueue) Start(stopper *stop.Stopper) {
 	stopper.RunWorker(context.TODO(), func(context.Context) {
 		for {
 			select {
@@ -191,14 +195,14 @@ func TestScannerAddToQueues(t *testing.T) {
 	// We don't want to actually consume entries from the queues during this test.
 	q1.setDisabled(true)
 	q2.setDisabled(true)
-	s := newReplicaScanner(log.AmbientContext{Tracer: tracing.NewTracer()}, 1*time.Millisecond, 0, ranges)
-	s.AddQueues(q1, q2)
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, ranges)
+	s.AddQueues(q1, q2)
 	stopper := stop.NewStopper()
 
 	// Start scanner and verify that all ranges are added to both queues.
-	s.Start(clock, stopper)
+	s.Start(stopper)
 	testutils.SucceedsSoon(t, func() error {
 		if q1.count() != count || q2.count() != count {
 			return errors.Errorf("q1 or q2 count != %d; got %d, %d", count, q1.count(), q2.count())
@@ -243,12 +247,12 @@ func TestScannerTiming(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			ranges := newTestRangeSet(count, t)
 			q := &testQueue{}
-			s := newReplicaScanner(log.AmbientContext{Tracer: tracing.NewTracer()}, duration, 0, ranges)
-			s.AddQueues(q)
 			mc := hlc.NewManualClock(123)
 			clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+			s := newReplicaScanner(makeAmbCtx(), clock, duration, 0, ranges)
+			s.AddQueues(q)
 			stopper := stop.NewStopper()
-			s.Start(clock, stopper)
+			s.Start(stopper)
 			time.Sleep(runTime)
 			stopper.Stop(context.TODO())
 
@@ -283,16 +287,16 @@ func TestScannerPaceInterval(t *testing.T) {
 	for _, duration := range durations {
 		startTime := timeutil.Now()
 		ranges := newTestRangeSet(count, t)
-		s := newReplicaScanner(log.AmbientContext{Tracer: tracing.NewTracer()}, duration, 0, ranges)
+		s := newReplicaScanner(makeAmbCtx(), nil, duration, 0, ranges)
 		interval := s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration/count, interval)
 		// The range set is empty
 		ranges = newTestRangeSet(0, t)
-		s = newReplicaScanner(log.AmbientContext{Tracer: tracing.NewTracer()}, duration, 0, ranges)
+		s = newReplicaScanner(makeAmbCtx(), nil, duration, 0, ranges)
 		interval = s.paceInterval(startTime, startTime)
 		logErrorWhenNotCloseTo(duration, interval)
 		ranges = newTestRangeSet(count, t)
-		s = newReplicaScanner(log.AmbientContext{Tracer: tracing.NewTracer()}, duration, 0, ranges)
+		s = newReplicaScanner(makeAmbCtx(), nil, duration, 0, ranges)
 		// Move the present to duration time into the future
 		interval = s.paceInterval(startTime, startTime.Add(duration))
 		logErrorWhenNotCloseTo(0, interval)
@@ -306,13 +310,13 @@ func TestScannerDisabled(t *testing.T) {
 	const count = 3
 	ranges := newTestRangeSet(count, t)
 	q := &testQueue{}
-	s := newReplicaScanner(log.AmbientContext{Tracer: tracing.NewTracer()}, 1*time.Millisecond, 0, ranges)
-	s.AddQueues(q)
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, ranges)
+	s.AddQueues(q)
 	stopper := stop.NewStopper()
-	s.Start(clock, stopper)
 	defer stopper.Stop(context.TODO())
+	s.Start(stopper)
 
 	// Verify queue gets all ranges.
 	testutils.SucceedsSoon(t, func() error {
@@ -358,7 +362,7 @@ func TestScannerDisabled(t *testing.T) {
 func TestScannerDisabledWithZeroInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ranges := newTestRangeSet(1, t)
-	s := newReplicaScanner(log.AmbientContext{Tracer: tracing.NewTracer()}, 0*time.Millisecond, 0, ranges)
+	s := newReplicaScanner(makeAmbCtx(), nil, 0*time.Millisecond, 0, ranges)
 	if !s.GetDisabled() {
 		t.Errorf("expected scanner to be disabled")
 	}
@@ -369,13 +373,13 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
-	s := newReplicaScanner(log.AmbientContext{Tracer: tracing.NewTracer()}, time.Hour, 0, ranges)
-	s.AddQueues(q)
 	mc := hlc.NewManualClock(123)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	s := newReplicaScanner(makeAmbCtx(), clock, time.Hour, 0, ranges)
+	s.AddQueues(q)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	s.Start(clock, stopper)
+	s.Start(stopper)
 	time.Sleep(time.Millisecond) // give it some time to (not) busy loop
 	if count := s.scanCount(); count > 1 {
 		t.Errorf("expected at most one loop, but got %d", count)

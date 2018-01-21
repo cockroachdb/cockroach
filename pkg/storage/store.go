@@ -873,14 +873,15 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
-			s.cfg.AmbientCtx, cfg.ScanInterval, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
+			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
+			cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
 		s.gcQueue = newGCQueue(s, s.cfg.Gossip)
 		s.splitQueue = newSplitQueue(s, s.db, s.cfg.Gossip)
-		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator, s.cfg.Clock)
+		s.replicateQueue = newReplicateQueue(s, s.cfg.Gossip, s.allocator)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db, s.cfg.Gossip)
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
-		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip, s.cfg.Clock)
+		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip)
 		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
 		s.scanner.AddQueues(
 			s.gcQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
@@ -1301,7 +1302,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.stopper.RunWorker(ctx, func(context.Context) {
 			select {
 			case <-s.cfg.Gossip.Connected:
-				s.scanner.Start(s.cfg.Clock, s.stopper)
+				s.scanner.Start(s.stopper)
 			case <-s.stopper.ShouldStop():
 				return
 			}

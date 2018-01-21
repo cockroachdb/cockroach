@@ -1607,13 +1607,11 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 		// inactivity threshold and force a gc scan.
 		mtc.manualClock.Increment(int64(storage.ReplicaGCQueueInactivityThreshold + 1))
 		mtc.stores[1].ForceReplicaGCScanAndProcess()
-		testutils.SucceedsSoon(t, func() error {
-			_, err := mtc.stores[1].GetReplica(rangeID)
-			if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
-				return errors.Errorf("expected replica to be garbage collected")
-			}
-			return nil
-		})
+
+		_, err := mtc.stores[1].GetReplica(rangeID)
+		if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+			t.Fatalf("expected replica to be garbage collected")
+		}
 
 		mtc.replicateRange(rangeID, 1)
 	}
@@ -3308,21 +3306,18 @@ func TestRemoveRangeWithoutGC(t *testing.T) {
 	mtc.stores[0].SetReplicaGCQueueActive(true)
 	mtc.stores[0].ForceReplicaGCScanAndProcess()
 
-	testutils.SucceedsSoon(t, func() error {
-		// The Replica object should be removed.
-		if _, err := mtc.stores[0].GetReplica(rangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
-			return errors.Errorf("expected replica to be missing; got %v", err)
-		}
+	// The Replica object should be removed.
+	if _, err := mtc.stores[0].GetReplica(rangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
+		t.Fatalf("expected replica to be missing; got %v", err)
+	}
 
-		// And the data should no longer be on disk.
-		if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
-			mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
-			return err
-		} else if ok {
-			return errors.New("expected range descriptor to be absent")
-		}
-		return nil
-	})
+	// And the data should no longer be on disk.
+	if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), descKey,
+		mtc.stores[0].Clock().Now(), true, nil, &desc); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		t.Fatalf("expected range descriptor to be absent")
+	}
 }
 
 func TestTransferRaftLeadership(t *testing.T) {
