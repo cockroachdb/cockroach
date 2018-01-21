@@ -637,3 +637,13 @@ func (e *UnsupportedRequestError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &UnsupportedRequestError{}
+
+func (e *AmbiguousPartialSuccessError) Error() string {
+	return e.message(nil)
+}
+
+func (e *AmbiguousPartialSuccessError) message(_ *Error) string {
+	return "the batch experienced only partial success; results ambiguous"
+}
+
+var _ ErrorDetailInterface = &AmbiguousPartialSuccessError{}

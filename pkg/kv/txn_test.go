@@ -388,10 +388,8 @@ func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s := createTestDB(t)
+	s.Stores.DisableObservedTimestamps = true
 	defer s.Stop()
-	if err := disableOwnNodeCertain(s); err != nil {
-		t.Fatal(err)
-	}
 
 	key := roachpb.Key("a")
 	valSlow := []byte("slow")
@@ -404,32 +402,33 @@ func TestUncertaintyObservedTimestampForwarding(t *testing.T) {
 	}
 
 	i := 0
-	if tErr := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if tErr := s.DB.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
 		i++
-		// Now the the transaction has started, write the newer value at
-		// a higher timestamp than the txn timestamp.
+		if i > 1 {
+			t.Fatal("expected no client-side restart")
+		}
+		// Do a random read to force a timestamp to be chosen.
+		if _, err := txn.Get(context.Background(), roachpb.Key("b")); err != nil {
+			t.Fatal(err)
+		}
+		ts := txn.Proto().Timestamp
+		// Now that the transaction has picked a timestamp, write the
+		// newer value at a higher timestamp.
 		if err := s.DB.Put(context.Background(), key, valFast); err != nil {
 			t.Fatal(err)
 		}
-
-		// Read key. We should get an uncertainty restart the first iteration
-		// and read the valFast value the second iteration.
+		// Read key. We should get an uncertainty restart, which is hidden
+		// by the underlying txn coord sender.
 		gr, err := txn.Get(ctx, key)
-		switch err.(type) {
-		case *roachpb.HandledRetryableTxnError:
-			if i != 1 {
-				t.Fatalf("expected restart error; got %s on pass %d", err, i)
-			}
-			return err
-		case nil:
-			if i != 2 {
-				t.Fatalf("expected success; got success on pass %d", i)
-			}
-			if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valFast) {
-				t.Fatalf("read of %q returned %v, wanted value %q", key, gr.Value, valFast)
-			}
-		default:
+		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
+		}
+		if !gr.Exists() || !bytes.Equal(gr.ValueBytes(), valFast) {
+			t.Fatalf("read of %q returned %v, wanted value %q", key, gr.ValueBytes(), valFast)
+		}
+		newTS, safeTS := txn.Proto().Timestamp, txn.Proto().SafeTimestamp
+		if !ts.Less(newTS) || newTS != safeTS {
+			t.Fatalf("expected ts (%s) < newTS (%s) and newTS (%s) == safeTS (%s)", ts, newTS, newTS, safeTS)
 		}
 		return nil
 	}); tErr != nil {
@@ -656,7 +655,7 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 			if err := txn.Put(ctx, keyA, "value1"); err != nil {
 				return err
 			}
-			if count <= 2 {
+			if count <= 1 {
 				// Notify concurrent getter to push txnA on get(a).
 				ch <- struct{}{}
 				// Wait for txnB notify us to commit.
@@ -679,20 +678,17 @@ func TestTxnRestartedSerializableTimestampRegression(t *testing.T) {
 	}
 	// Notify txnA to commit.
 	ch <- struct{}{}
-	// Wait for txnA to restart.
-	<-ch
-	// Notify txnA to commit.
-	ch <- struct{}{}
 
 	// Wait for txnA to finish.
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
-	// We expect one restart (so a count of two). The transaction continues
+	// We expect no restarts (so a count of one). The transaction continues
 	// despite the push and timestamp forwarding in order to lay down all
 	// intents in the first pass. On the first EndTransaction, the difference
-	// in timestamps causes the serializable transaction to retry.
-	const expCount = 2
+	// in timestamps would cause the serializable transaction to update spans,
+	// but only writes occurred during the transaction, so the commit succeeds.
+	const expCount = 1
 	if count != expCount {
 		t.Fatalf("expected %d restarts, but got %d", expCount, count)
 	}
@@ -705,19 +701,24 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 	s := createTestDB(t)
 	defer s.Stop()
 
+	writeSkewKey := "write-skew"
 	keys := []string{"a", "b", "c"}
 	ch := make(chan struct{})
-	errChan := make(chan error)
+	errChan := make(chan error, 1)
 	// Launch goroutine to write the three keys on three successive epochs.
 	go func() {
 		var count int
 		errChan <- s.DB.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+			// Read the write skew key, which will be written by another goroutine
+			// to ensure transaction restarts.
+			if _, err := txn.Get(ctx, writeSkewKey); err != nil {
+				return err
+			}
 			// Signal that the transaction has (re)started.
 			ch <- struct{}{}
 			// Wait for concurrent writer to write key.
 			<-ch
-			// Now write our version over the top (will get write too old
-			// error for first two attempts).
+			// Now write our version over the top (will get a pushed timestamp).
 			if err := txn.Put(ctx, keys[count], "txn"); err != nil {
 				return err
 			}
@@ -726,35 +727,36 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 		})
 	}()
 
-	// Wait for transaction to start.
-	<-ch
-	// Write first key.
-	if err := s.DB.Put(context.Background(), keys[0], "db"); err != nil {
-		t.Fatal(err)
+	step := func(key string, causeWriteSkew bool) {
+		// Wait for transaction to start.
+		<-ch
+		if causeWriteSkew {
+			// Write to the write skew key to ensure a restart.
+			if err := s.DB.Put(context.Background(), writeSkewKey, "skew-"+key); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Read key to push txn's timestamp forward on its write.
+		if _, err := s.DB.Get(context.Background(), key); err != nil {
+			t.Fatal(err)
+		}
+		// Signal the transaction to continue.
+		ch <- struct{}{}
 	}
-	// Signal first key has been written.
-	ch <- struct{}{}
 
-	// Wait for transaction to restart.
-	<-ch
-	// Write second key.
-	if err := s.DB.Put(context.Background(), keys[1], "db"); err != nil {
-		t.Fatal(err)
-	}
-	// Signal second key has been written.
-	ch <- struct{}{}
-
-	// Wait for transaction to restart final time.
-	<-ch
-	// Signal txn to continue.
-	ch <- struct{}{}
+	// Step 1 causes a restart.
+	step(keys[0], true)
+	// Step 2 causes a restart.
+	step(keys[1], true)
+	// Step 3 does not result in a restart.
+	step(keys[2], false)
 
 	// Wait for txn to finish.
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
 
-	// Read values for three keys. The first two should be "db", "last should be "txn".
+	// Read values for three keys. The first two should be empty, the last should be "txn".
 	for i, k := range keys {
 		v, err := s.DB.Get(context.TODO(), k)
 		if err != nil {
@@ -762,8 +764,8 @@ func TestTxnResolveIntentsFromMultipleEpochs(t *testing.T) {
 		}
 		str := string(v.ValueBytes())
 		if i < len(keys)-1 {
-			if str != "db" {
-				t.Errorf("key %s expected \"db\"; got %s", k, str)
+			if str != "" {
+				t.Errorf("key %s expected \"\"; got %s", k, str)
 			}
 		} else {
 			if str != "txn" {

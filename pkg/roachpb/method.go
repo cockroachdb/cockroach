@@ -140,4 +140,12 @@ const (
 	AddSSTable
 	// RecomputeStats applies a delta to a Range's MVCCStats to fix computational errors.
 	RecomputeStats
+	// Update verifies no writes to a key have occurred since the
+	// transaction orig timestamp and sets a new entry in the timestamp
+	// cache at the current transaction timestamp.
+	Update
+	// UpdateRange verifies no writes have occurred to a span of keys
+	// since the transaction orig timestamp and sets a new span in the
+	// timestamp cache at the current transaction timestamp.
+	UpdateRange
 )

@@ -53,6 +53,11 @@ type Stores struct {
 		biLatestTS hlc.Timestamp         // Timestamp of gossip bootstrap info
 		latestBI   *gossip.BootstrapInfo // Latest cached bootstrap info
 	}
+
+	// DisableObservedTimestamps disables the use of a transaction's
+	// observed timestamps to avoid uncertainty interval restarts.
+	// Intended for testing only.
+	DisableObservedTimestamps bool
 }
 
 var _ client.Sender = &Stores{}  // Stores implements the client.Sender interface
@@ -189,7 +194,7 @@ func (ls *Stores) Send(
 		return nil, roachpb.NewError(err)
 	}
 
-	if ba.Txn != nil {
+	if ba.Txn != nil && !ls.DisableObservedTimestamps {
 		// For calls that read data within a txn, we keep track of timestamps
 		// observed from the various participating nodes' HLC clocks. If we have
 		// a timestamp on file for this Node which is smaller than MaxTimestamp,

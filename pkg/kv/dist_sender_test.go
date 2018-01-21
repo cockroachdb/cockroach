@@ -2310,12 +2310,13 @@ func TestErrorIndexAlignment(t *testing.T) {
 	// partial batch.
 	testCases := []struct {
 		// The nth request to return an error.
-		nthPartialBatch  int
-		expectedFinalIdx int32
+		nthPartialBatch                 int
+		expectedFinalIdx                int32
+		expectedAmbiguousPartialSuccess bool
 	}{
-		{0, 0},
-		{1, 1},
-		{2, 3},
+		{0, 0, false},
+		{1, 1, true},
+		{2, 3, true},
 	}
 
 	descDB := mockRangeDescriptorDBForDescs(
@@ -2379,9 +2380,16 @@ func TestErrorIndexAlignment(t *testing.T) {
 			if pErr == nil {
 				t.Fatalf("expected an error to be returned from distSender")
 			}
+			aPS, ok := pErr.GetDetail().(*roachpb.AmbiguousPartialSuccessError)
+			if a, e := ok, tc.expectedAmbiguousPartialSuccess; a != e {
+				t.Fatalf("expected ambiguous partial success %t; got %t", e, a)
+			}
+			if ok {
+				pErr = aPS.Wrapped
+			}
 
 			if pErr.Index == nil {
-				t.Fatalf("expected error index to be set")
+				t.Fatalf("expected error index to be set for err %T", pErr.GetDetail())
 			}
 
 			if pErr.Index.Index != tc.expectedFinalIdx {

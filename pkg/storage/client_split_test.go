@@ -1541,8 +1541,13 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := txnOld.Commit(ctx); !testutils.IsError(err, "retry txn") {
-		t.Fatalf("expected txn retry, got %v", err)
+	if err := txnOld.Commit(ctx); err != nil {
+		t.Fatalf("unexpected txn commit err: %s", err)
+	}
+
+	// Verify that the txn's safe timestamp was set.
+	if txnOld.Proto().SafeTimestamp == (hlc.Timestamp{}) {
+		t.Fatal("expected non-zero safe timestamp")
 	}
 
 	// As outlined above, the anomaly was fixed by giving the right-hand side

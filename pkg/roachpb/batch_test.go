@@ -181,8 +181,8 @@ func TestIntentSpanIterate(t *testing.T) {
 	}
 
 	var spans []Span
-	fn := func(key, endKey Key) {
-		spans = append(spans, Span{Key: key, EndKey: endKey})
+	fn := func(span Span) {
+		spans = append(spans, span)
 	}
 	ba.IntentSpanIterate(&br, fn)
 	// Only DeleteRangeResponse is a write request.
@@ -211,6 +211,86 @@ func TestIntentSpanIterate(t *testing.T) {
 	}
 	if e := (Span{Key("g"), Key("h")}); !reflect.DeepEqual(e, spans[0]) {
 		t.Fatalf("unexpected spans: e = %+v, found = %+v", e, spans[0])
+	}
+}
+
+func TestUpdateSpanIterate(t *testing.T) {
+	testCases := []struct {
+		req    Request
+		resp   Response
+		span   Span
+		resume *Span
+	}{
+		{&ConditionalPutRequest{}, &ConditionalPutResponse{},
+			Span{Key: Key("a")}, nil},
+		{&ScanRequest{}, &ScanResponse{},
+			Span{Key("a"), Key("c")}, &Span{Key("b"), Key("c")}},
+		{&GetRequest{}, &GetResponse{},
+			Span{Key: Key("b")}, nil},
+		{&ReverseScanRequest{}, &ReverseScanResponse{},
+			Span{Key("d"), Key("f")}, &Span{Key("d"), Key("e")}},
+		{&DeleteRangeRequest{}, &DeleteRangeResponse{},
+			Span{Key("g"), Key("i")}, &Span{Key("h"), Key("i")}},
+	}
+
+	// A batch request with a batch response with no ResumeSpan.
+	ba := BatchRequest{}
+	br := BatchResponse{}
+	for _, tc := range testCases {
+		tc.req.SetHeader(tc.span)
+		ba.Add(tc.req)
+		br.Add(tc.resp)
+	}
+
+	var readSpans []Span
+	var writeSpans []Span
+	fn := func(span Span, write bool) {
+		if write {
+			writeSpans = append(writeSpans, span)
+		} else {
+			readSpans = append(readSpans, span)
+		}
+	}
+	ba.UpdateSpanIterate(&br, fn)
+	// Only the conditional put isn't considered a read span.
+	expReadSpans := []Span{testCases[0].span, testCases[1].span, testCases[2].span, testCases[3].span}
+	expWriteSpans := []Span{testCases[4].span}
+	if !reflect.DeepEqual(expReadSpans, readSpans) {
+		t.Fatalf("unexpected read spans: expected %+v, found = %+v", expReadSpans, readSpans)
+	}
+	if !reflect.DeepEqual(expWriteSpans, writeSpans) {
+		t.Fatalf("unexpected write spans: expected %+v, found = %+v", expWriteSpans, writeSpans)
+	}
+
+	// Batch responses with ResumeSpans.
+	ba = BatchRequest{}
+	br = BatchResponse{}
+	for _, tc := range testCases {
+		tc.req.SetHeader(tc.span)
+		ba.Add(tc.req)
+		if tc.resume != nil {
+			tc.resp.SetHeader(ResponseHeader{ResumeSpan: tc.resume})
+		}
+		br.Add(tc.resp)
+	}
+
+	readSpans = []Span{}
+	writeSpans = []Span{}
+	ba.UpdateSpanIterate(&br, fn)
+	expReadSpans = []Span{
+		{Key: Key("a")},
+		{Key("a"), Key("b")},
+		{Key: Key("b")},
+		{Key("e"), Key("f")},
+	}
+	expWriteSpans = []Span{
+		{Key("g"), Key("h")},
+	}
+	if !reflect.DeepEqual(expReadSpans, readSpans) {
+		t.Fatalf("unexpected read spans: expected %+v, found = %+v", expReadSpans, readSpans)
+	}
+	if !reflect.DeepEqual(expWriteSpans, writeSpans) {
+		t.Fatalf("unexpected write spans: expected %+v, found = %+v", expWriteSpans, writeSpans)
 	}
 }
 

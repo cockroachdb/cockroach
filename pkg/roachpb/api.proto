@@ -132,7 +132,7 @@ message PutResponse {
 // - Returns true and sets value if exp_value equals existing value.
 // - If key doesn't exist and exp_value is nil, sets value.
 // - If key exists, but value is empty and exp_value is not nil but empty, sets value.
-// - Otherwise, returns error and the actual value of the key in the response.
+// - Otherwise, returns an error containing the actual value of the key.
 message ConditionalPutRequest {
   option (gogoproto.equal) = true;
 
@@ -1139,6 +1139,46 @@ message AddSSTableResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// UpdateRequest is arguments to the Update() method, which verifies
+// that no write has occurred since the transaction's orig timestamp
+// to the specified key. Either the read or write timestamp cache is
+// updated according to the write parameter. A transaction must be
+// supplied with this request. If the key has been written more
+// recently than the original txn timestamp, an error is returned
+// and the timestamp cache is not updated.
+message UpdateRequest {
+  option (gogoproto.equal) = true;
+
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // If set, indicates that the write timestamp cache should be
+  // updated. This handles the case of DeleteRange, which must set the
+  // write too old flag on transactions which attempt earlier writes.
+  bool write = 2;
+}
+
+// UpdateResponse is the response to the Udpate() operation.
+message UpdateResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// UpdateRangeRequest is arguments to the UpdateRange() method, which
+// is similar to UpdateRequest (see comments above), but operates on
+// a key span instead of a single key.
+message UpdateRangeRequest {
+  option (gogoproto.equal) = true;
+
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // If set, indicates that the write timestamp cache should be
+  // updated. This handles the case of DeleteRange, which must set the
+  // write too old flag on transactions which attempt earlier writes.
+  bool write = 2;
+}
+
+// UpdateRangeResponse is the response to the Udpate() operation.
+message UpdateRangeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -1191,6 +1231,8 @@ message RequestUnion {
   AdminScatterRequest admin_scatter = 36;
   AddSSTableRequest add_sstable = 37;
   RecomputeStatsRequest recompute_stats = 39;
+  UpdateRequest update = 40;
+  UpdateRangeRequest update_range = 41;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1242,6 +1284,8 @@ message ResponseUnion {
   AdminScatterResponse admin_scatter = 36;
   AddSSTableResponse add_sstable = 37;
   RecomputeStatsResponse recompute_stats = 39;
+  UpdateResponse update = 40;
+  UpdateRangeResponse update_range = 41;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

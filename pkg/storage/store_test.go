@@ -1381,67 +1381,6 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	})
 }
 
-// TestStoreLongTxnStarvation sets up a test which guarantees that
-// every time a txn writes, it gets a write-too-old error by always
-// having a non-transactional write succeed before the txn can retry,
-// which would force endless retries unless batch requests are
-// allowed to go ahead and lay down intents with advanced timestamps.
-// Verifies no starvation for both serializable and snapshot txns.
-func TestStoreLongTxnStarvation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	storeCfg := TestStoreConfig(nil)
-	storeCfg.DontRetryPushTxnFailures = true
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	store := createTestStoreWithConfig(t, stopper, &storeCfg)
-
-	for i, iso := range []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT} {
-		key := roachpb.Key(fmt.Sprintf("a-%d", i))
-		txn := newTransaction("test", key, 1, iso, store.cfg.Clock)
-
-		for retry := 0; ; retry++ {
-			if retry > 1 {
-				t.Fatalf("%d: too many retries", i)
-			}
-			// Always send non-transactional put to push the transaction
-			// and write a non-intent version.
-			nakedPut := putArgs(key, []byte("naked"))
-			_, pErr := client.SendWrapped(context.Background(), store.testSender(), &nakedPut)
-			if pErr != nil && retry == 0 {
-				t.Fatalf("%d: unexpected error on first put: %s", i, pErr)
-			} else if retry == 1 {
-				if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
-					t.Fatalf("%d: expected TransactionPushError; got %s", i, pErr)
-				}
-			}
-
-			// Within the transaction, write same key.
-			txn.Sequence++
-			var ba roachpb.BatchRequest
-			bt, btH := beginTxnArgs(key, txn)
-			put := putArgs(key, []byte("value"))
-			et, _ := endTxnArgs(txn, true)
-			ba.Header = btH
-			ba.Add(&bt)
-			ba.Add(&put)
-			ba.Add(&et)
-			_, pErr = store.testSender().Send(context.Background(), ba)
-			if retry == 0 {
-				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-					t.Fatalf("%d: expected retry error on first txn put: %s", i, pErr)
-				}
-				txn = pErr.GetTxn()
-			} else {
-				if pErr != nil {
-					t.Fatalf("%d: unexpected error: %s", i, pErr)
-				}
-				break
-			}
-			txn.Restart(1, 1, store.cfg.Clock.Now())
-		}
-	}
-}
-
 // TestStoreResolveWriteIntent adds a write intent and then verifies
 // that a put returns success and aborts intent's txn in the event the
 // pushee has lower priority. Otherwise, verifies that the put blocks
