@@ -3,8 +3,8 @@
 # This example session documents that a SERIALIZABLE transaction is
 # not immediately poisoned when it revisits a Range on which one of
 # its intents has had its timestamp pushed. This allows it to continue
-# laying down intents in a single pass, despite the certainty that it
-# will restart on commit. A SNAPSHOT transaction can proceed and
+# laying down intents in a single pass, despite the possibility that it
+# will restart on commit. A SNAPSHOT transaction can always proceed and
 # commit with its new timestamp.
 #
 # Note that ORDER BY id is done on selects which expect more than a
@@ -42,8 +42,8 @@ SELECT * FROM t
 statement ok
 COMMIT
 
-# Switch back and observe that we can still read our data - the txn is left
-# operational in order to lay down its intents in the first pass.
+# Switch back and observe that we can still read our data - the txn is still
+# operational and will continue to lay down its intents in the first pass.
 user root
 
 query I
@@ -52,8 +52,9 @@ SELECT * FROM t ORDER BY id
 1
 2
 
-# On commit, we should see the retry error.
-statement error retry txn.*
+# On commit, there were no key spans that require updating, so the txn
+# coordinator should handle the retry automatically and succeed.
+statement ok
 COMMIT
 
 # The same type of session for a SNAPSHOT transaction shouldn't be poisoned.
@@ -61,7 +62,7 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
 
 statement ok
-INSERT INTO t VALUES (2)
+INSERT INTO t VALUES (3)
 
 user testuser
 
@@ -70,9 +71,10 @@ BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH
 
 # This pushes the intent.
 query I
-SELECT * FROM t
+SELECT * FROM t ORDER BY id
 ----
 1
+2
 
 statement ok
 COMMIT
@@ -84,6 +86,7 @@ SELECT * FROM t ORDER BY id
 ----
 1
 2
+3
 
 statement ok
 COMMIT

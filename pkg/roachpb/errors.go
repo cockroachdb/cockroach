@@ -637,3 +637,13 @@ func (e *UnsupportedRequestError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &UnsupportedRequestError{}
+
+func (e *MixedSuccessError) Error() string {
+	return e.message(nil)
+}
+
+func (e *MixedSuccessError) message(_ *Error) string {
+	return "the batch experienced mixed success and failure"
+}
+
+var _ ErrorDetailInterface = &MixedSuccessError{}

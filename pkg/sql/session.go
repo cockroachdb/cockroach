@@ -1261,25 +1261,6 @@ func (ts *txnState) setReadOnly(readOnly bool) {
 	ts.readOnly = readOnly
 }
 
-// isSerializableRestart returns true if the KV transaction is serializable and
-// its timestamp has been pushed. Used to detect whether the SQL txn will be
-// allowed to commit.
-//
-// Note that this method allows for false negatives: sometimes the client only
-// figures out that it's been pushed when it sends an EndTransaction - i.e. it's
-// possible for the txn to have been pushed asynchoronously by some other
-// operation (usually, but not exclusively, by a high-priority txn with
-// conflicting writes).
-func (ts *txnState) isSerializableRestart() bool {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	txn := ts.mu.txn
-	if txn == nil {
-		return false
-	}
-	return txn.IsSerializableRestart()
-}
-
 func (ts *txnState) setTransactionModes(modes tree.TransactionModes) error {
 	if err := ts.setSQLIsolationLevel(modes.Isolation); err != nil {
 		return err

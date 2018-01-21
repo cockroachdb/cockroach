@@ -3524,50 +3524,6 @@ func TestReplicaAbortSpanStoredTxnRetryError(t *testing.T) {
 	}
 }
 
-// TestTransactionRetryLeavesIntents sets up a transaction retry event
-// and verifies that the intents which were written as part of a
-// single batch are left in place despite the failed end transaction.
-func TestTransactionRetryLeavesIntents(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-
-	key := roachpb.Key("a")
-	pushee := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-	pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-	pushee.Priority = 1
-	pusher.Priority = 2 // pusher will win
-
-	// Read from the key to increment the timestamp cache.
-	gArgs := getArgs(key)
-	if _, pErr := tc.SendWrapped(&gArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Begin txn, write to key (with now-higher timestamp), and attempt to
-	// commit the txn, which should result in a retryable error.
-	btArgs, _ := beginTxnArgs(key, pushee)
-	pArgs := putArgs(key, []byte("foo"))
-	etArgs, _ := endTxnArgs(pushee, true /* commit */)
-	var ba roachpb.BatchRequest
-	ba.Header.Txn = pushee
-	ba.Add(&btArgs)
-	ba.Add(&pArgs)
-	ba.Add(&etArgs)
-	_, pErr := tc.Sender().Send(context.Background(), ba)
-	if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-		t.Fatalf("expected retry error; got %s", pErr)
-	}
-
-	// Now verify that the intent was still written for key.
-	_, pErr = tc.SendWrapped(&gArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
-		t.Fatalf("expected write intent error; got %s", pErr)
-	}
-}
-
 // TestReplicaAbortSpanOnlyWithIntent verifies that a transactional command
 // which goes through Raft but is not a transactional write (i.e. does not
 // leave intents) passes the AbortSpan unhindered.
@@ -4240,7 +4196,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		txn.Sequence++
 
 		if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
-			t.Errorf("%d: expected error:\n%s\not match:\n%s", i, pErr, test.expErrRegexp)
+			t.Errorf("%d: expected error:\n%s\nto match:\n%s", i, pErr, test.expErrRegexp)
 		} else if txn := pErr.GetTxn(); txn != nil && txn.ID == (uuid.UUID{}) {
 			// Prevent regression of #5591.
 			t.Fatalf("%d: received empty Transaction proto in error", i)

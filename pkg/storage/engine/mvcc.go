@@ -963,7 +963,6 @@ func mvccGetInternal(
 type putBuffer struct {
 	meta    enginepb.MVCCMetadata
 	newMeta enginepb.MVCCMetadata
-	newTxn  enginepb.TxnMeta
 	ts      hlc.LegacyTimestamp
 	tmpbuf  []byte
 }
@@ -1635,10 +1634,11 @@ func MVCCDeleteRange(
 
 // mvccScanInternal scans the key range [key,endKey) up to some maximum number
 // of results. Specify reverse=true to scan in descending instead of ascending
-// order.
+// order. If iter is not specified, a new iterator is created from engine.
 func mvccScanInternal(
 	ctx context.Context,
 	engine Reader,
+	iter Iterator,
 	key,
 	endKey roachpb.Key,
 	max int64,
@@ -1651,10 +1651,16 @@ func mvccScanInternal(
 		return nil, &roachpb.Span{Key: key, EndKey: endKey}, nil, nil
 	}
 
-	iter := engine.NewIterator(false)
+	var ownIter bool
+	if iter == nil {
+		iter = engine.NewIterator(false)
+		ownIter = true
+	}
 	kvData, intentData, err := iter.MVCCScan(
 		key, endKey, max, timestamp, txn, consistent, reverse)
-	iter.Close()
+	if ownIter {
+		iter.Close()
+	}
 
 	if err != nil {
 		return nil, nil, nil, err
@@ -1812,7 +1818,7 @@ func MVCCScan(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
+	return mvccScanInternal(ctx, engine, nil, key, endKey, max, timestamp,
 		consistent, txn, false /* reverse */)
 }
 
@@ -1829,7 +1835,7 @@ func MVCCReverseScan(
 	consistent bool,
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
-	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
+	return mvccScanInternal(ctx, engine, nil, key, endKey, max, timestamp,
 		consistent, txn, true /* reverse */)
 }
 
@@ -1840,12 +1846,33 @@ func MVCCReverseScan(
 func MVCCIterate(
 	ctx context.Context,
 	engine Reader,
-	startKey,
-	endKey roachpb.Key,
+	startKey, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 	reverse bool,
+	f func(roachpb.KeyValue) (bool, error),
+) ([]roachpb.Intent, error) {
+	// Get a new iterator.
+	iter := engine.NewIterator(false)
+	defer iter.Close()
+
+	return MVCCIterateUsingIter(
+		ctx, engine, startKey, endKey, timestamp, consistent, txn, reverse, iter, f,
+	)
+}
+
+// MVCCIterateUsingIter iterates over the key range [start,end) using the
+// supplied iterator. See comments for MVCCIterate.
+func MVCCIterateUsingIter(
+	ctx context.Context,
+	engine Reader,
+	startKey, endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+	reverse bool,
+	iter Iterator,
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
 	var intents []roachpb.Intent
@@ -1854,7 +1881,7 @@ func MVCCIterate(
 	for {
 		const maxKeysPerScan = 1000
 		kvs, resume, newIntents, err := mvccScanInternal(
-			ctx, engine, startKey, endKey, maxKeysPerScan, timestamp, consistent, txn, reverse)
+			ctx, engine, iter, startKey, endKey, maxKeysPerScan, timestamp, consistent, txn, reverse)
 		if err != nil {
 			switch tErr := err.(type) {
 			case *roachpb.WriteIntentError:
@@ -1999,11 +2026,11 @@ func mvccResolveWriteIntent(
 		return false, err
 	}
 	// For cases where there's no value corresponding to the key we're
-	// resolving, and this is a committed, transaction, log a warning.
+	// resolving, and this is a committed transaction, log a warning.
 	if !ok {
 		if intent.Status == roachpb.COMMITTED {
-			log.Warningf(ctx, "unable to find value for %s @ %s",
-				intent.Key, intent.Txn.Timestamp)
+			log.Warningf(ctx, "unable to find value for %s (%+v)",
+				intent.Key, intent.Txn)
 		}
 		return false, nil
 	}
@@ -2060,10 +2087,11 @@ func mvccResolveWriteIntent(
 	timestampsValid := !intent.Txn.Timestamp.Less(hlc.Timestamp(meta.Timestamp))
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
 
-	// Note the small difference to commit epoch handling here: We allow a push
-	// from a previous epoch to move a newer intent. That's not necessary, but
-	// useful. Consider the following, where B reads at a timestamp that's
-	// higher than any write by A in the following diagram:
+	// Note the small difference to commit epoch handling here: We allow
+	// a push from a previous epoch to move a newer intent. That's not
+	// necessary, but useful for allowing pushers to make forward
+	// progress. Consider the following, where B reads at a timestamp
+	// that's higher than any write by A in the following diagram:
 	//
 	// | client A@epo | B (pusher) |
 	// =============================
@@ -2074,6 +2102,7 @@ func mvccResolveWriteIntent(
 	// | write@2      |            |
 	// |              | resolve@1  |
 	// ============================
+	//
 	// In this case, if we required the epochs to match, we would not push the
 	// intent forward, and client B would upon retrying after its successful
 	// push and apparent resolution run into the new version of an intent again
@@ -2120,9 +2149,11 @@ func mvccResolveWriteIntent(
 
 		var metaKeySize, metaValSize int64
 		if pushed {
-			// Keep intent if we're pushing timestamp.
-			buf.newTxn = intent.Txn
-			buf.newMeta.Txn = &buf.newTxn
+			// Keep existing intent if we're pushing timestamp. We keep the
+			// existing metadata instead of using the supplied intent meta
+			// to avoid overwriting a newer epoch (see comments above). The
+			// pusher's job isn't to do anything to update the intent but
+			// to move the timestamp forward, even if it can.
 			metaKeySize, metaValSize, err = buf.putMeta(engine, metaKey, &buf.newMeta)
 		} else {
 			metaKeySize = int64(metaKey.EncodedSize())
