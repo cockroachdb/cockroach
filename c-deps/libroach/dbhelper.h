@@ -4,6 +4,8 @@
 #include "protos/util/hlc/timestamp.pb.h"
 #include "protos/util/hlc/legacy_timestamp.pb.h"
 
+#pragma once
+
 // TODO(tschottdorf): consolidate with db.cc
 #if defined(COMPILER_GCC) || defined(__clang__)
 #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
