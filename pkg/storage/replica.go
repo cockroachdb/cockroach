@@ -2013,11 +2013,7 @@ func (r *Replica) updateTimestampCache(
 			}
 			header := args.Header()
 			start, end := header.Key, header.EndKey
-			switch args.(type) {
-			case *roachpb.DeleteRangeRequest:
-				// DeleteRange adds to the write timestamp cache to prevent
-				// subsequent writes from rewriting history.
-				tc.Add(start, end, ts, txnID, false /* readCache */)
+			switch t := args.(type) {
 			case *roachpb.EndTransactionRequest:
 				// EndTransaction adds the transaction key to the write
 				// timestamp cache to ensure replays create a transaction
@@ -2051,8 +2047,16 @@ func (r *Replica) updateTimestampCache(
 					start = resp.ResumeSpan.EndKey
 				}
 				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
+			case *roachpb.RefreshRequest:
+				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
+			case *roachpb.RefreshRangeRequest:
+				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
 			default:
-				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
+				readCache := readOnlyUseReadCache
+				if roachpb.UpdatesWriteTimestampCache(args) {
+					readCache = false
+				}
+				tc.Add(start, end, ts, txnID, readCache)
 			}
 		}
 	}
@@ -2134,9 +2138,8 @@ func (r *Replica) beginCmds(
 		scopeTS := func(scope spanset.SpanScope) hlc.Timestamp {
 			switch scope {
 			case spanset.SpanGlobal:
-				if txn := ba.Txn; txn != nil {
-					return txn.OrigTimestamp
-				}
+				// ba.Timestamp is always set appropriately, regardless of
+				// whether the batch is transactional or not.
 				return ba.Timestamp
 			case spanset.SpanLocal:
 				return hlc.Timestamp{}
@@ -5038,32 +5041,25 @@ func (r *Replica) evaluateProposalInner(
 	}
 
 	if result.Local.Err != nil && ba.IsWrite() {
-		if _, ok := result.Local.Err.GetDetail().(*roachpb.TransactionRetryError); !ok {
-			// TODO(tschottdorf): make `nil` acceptable. Corresponds to
-			// roachpb.Response{With->Or}Error.
-			result.Local.Reply = &roachpb.BatchResponse{}
-			// Reset the batch to clear out partial execution. Don't set
-			// a WriteBatch to signal to the caller that we fail-fast this
-			// proposal.
-			batch.Close()
-			batch = nil
-			// Restore the original txn's Writing bool if the error specifies a
-			// transaction.
-			if txn := result.Local.Err.GetTxn(); txn != nil {
-				if ba.Txn == nil {
-					log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
-				}
-				if txn.ID == ba.Txn.ID {
-					txn.Writing = wasWriting
-				}
+		// TODO(tschottdorf): make `nil` acceptable. Corresponds to
+		// roachpb.Response{With->Or}Error.
+		result.Local.Reply = &roachpb.BatchResponse{}
+		// Reset the batch to clear out partial execution. Don't set
+		// a WriteBatch to signal to the caller that we fail-fast this
+		// proposal.
+		batch.Close()
+		batch = nil
+		// Restore the original txn's Writing bool if the error specifies a
+		// transaction.
+		if txn := result.Local.Err.GetTxn(); txn != nil {
+			if ba.Txn == nil {
+				log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
 			}
-			return result
+			if txn.ID == ba.Txn.ID {
+				txn.Writing = wasWriting
+			}
 		}
-		// If the batch failed with a TransactionRetryError, any preceding
-		// mutations in the batch engine should still be applied so that
-		// intents are laid down in preparation for the retry. However,
-		// no reply is sent back.
-		result.Local.Reply = nil
+		return result
 	}
 
 	result.WriteBatch = &storagebase.WriteBatch{
@@ -5203,7 +5199,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if ba.Txn == nil {
 		return false
 	}
-	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn, ba.Txn); retry {
+	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn); retry {
 		return false
 	}
 	if _, hasBegin := ba.GetArg(roachpb.BeginTransaction); !hasBegin {

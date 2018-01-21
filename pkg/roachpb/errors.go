@@ -637,3 +637,13 @@ func (e *UnsupportedRequestError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &UnsupportedRequestError{}
+
+func (e *PartialSuccessError) Error() string {
+	return e.message(nil)
+}
+
+func (e *PartialSuccessError) message(_ *Error) string {
+	return "the batch experienced only partial success"
+}
+
+var _ ErrorDetailInterface = &PartialSuccessError{}

@@ -103,7 +103,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 // joined the gossip network.
 type firstRangeMissingError struct{}
 
-// Error implements the error interface.
+// Error is part of the error interface.
 func (f firstRangeMissingError) Error() string {
 	return "the descriptor for the first range is not available via gossip"
 }
@@ -585,6 +585,14 @@ var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 // other ranges. This is relevant in the case of a BeginTransaction
 // request. Intents written to other ranges before the transaction
 // record is created will cause the transaction to abort early.
+//
+// Note that on error, this method will return any batch responses for
+// successfully processed batch requests. This allows the caller to
+// deal with potential retry situations where a batch is split so that
+// EndTransaction is processed alone, after earlier requests in the
+// batch succeeded. Where possible, the caller may be able to update
+// spans encountered in the transaction and retry just the
+// EndTransaction request to avoid client-side serializable txn retries.
 func (ds *DistSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -601,13 +609,20 @@ func (ds *DistSender) Send(
 	defer cleanup()
 
 	var rplChunks []*roachpb.BatchResponse
-	parts := ba.Split(false /* don't split ET */)
+	splitET := false
+	// To ensure that we lay down intents to prevent starvation, always
+	// split the end transaction request into its own batch on retries.
+	if ba.Txn != nil && ba.Txn.Epoch > 0 {
+		splitET = true
+	}
+	parts := ba.Split(splitET)
 	if len(parts) > 1 && ba.MaxSpanRequestKeys != 0 {
 		// We already verified above that the batch contains only scan requests of the same type.
 		// Such a batch should never need splitting.
 		panic("batch with MaxSpanRequestKeys needs splitting")
 	}
 
+	var pErr *roachpb.Error
 	errIdxOffset := 0
 	for len(parts) > 0 {
 		part := parts[0]
@@ -621,7 +636,8 @@ func (ds *DistSender) Send(
 			return nil, roachpb.NewError(err)
 		}
 
-		rpl, pErr := ds.divideAndSendBatchToRanges(ctx, ba, rs, 0 /* batchIdx */)
+		var rpl *roachpb.BatchResponse
+		rpl, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, 0 /* batchIdx */)
 
 		if pErr == errNo1PCTxn {
 			// If we tried to send a single round-trip EndTransaction but
@@ -642,8 +658,9 @@ func (ds *DistSender) Send(
 			if pErr.Index != nil && pErr.Index.Index != -1 {
 				pErr.Index.Index += int32(errIdxOffset)
 			}
-
-			return nil, pErr
+			// Break out of loop to collate batch responses received so far to
+			// return with error.
+			break
 		}
 
 		errIdxOffset += len(ba.Requests)
@@ -655,15 +672,19 @@ func (ds *DistSender) Send(
 		parts = parts[1:]
 	}
 
-	reply := rplChunks[0]
-	for _, rpl := range rplChunks[1:] {
-		reply.Responses = append(reply.Responses, rpl.Responses...)
-		reply.CollectedSpans = append(reply.CollectedSpans, rpl.CollectedSpans...)
+	var reply *roachpb.BatchResponse
+	if len(rplChunks) > 0 {
+		reply = rplChunks[0]
+		for _, rpl := range rplChunks[1:] {
+			reply.Responses = append(reply.Responses, rpl.Responses...)
+			reply.CollectedSpans = append(reply.CollectedSpans, rpl.CollectedSpans...)
+		}
+		lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
+		lastHeader.CollectedSpans = reply.CollectedSpans
+		reply.BatchResponse_Header = lastHeader
 	}
-	lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
-	lastHeader.CollectedSpans = reply.CollectedSpans
-	reply.BatchResponse_Header = lastHeader
-	return reply, nil
+
+	return reply, pErr
 }
 
 type response struct {
@@ -717,13 +738,14 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	var couldHaveSkippedResponses bool
 	// If couldHaveSkippedResponses is set, resumeReason indicates the reason why
 	// the ResumeSpan is necessary. This reason is common to all individual
-	// response that carry a ResumeSpan.
+	// responses that carry a ResumeSpan.
 	var resumeReason roachpb.ResponseHeader_ResumeReason
 	defer func() {
 		if r := recover(); r != nil {
 			// If we're in the middle of a panic, don't wait on responseChs.
 			panic(r)
 		}
+		var hadSuccess bool
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
 			if resp.pErr != nil {
@@ -732,6 +754,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				}
 				continue
 			}
+			hadSuccess = true
 
 			// Combine the new response with the existing one (including updating
 			// the headers).
@@ -752,6 +775,12 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// ugly.
 			if br.Txn != nil {
 				pErr.UpdateTxn(br.Txn)
+			}
+			// If this is a write batch with any successful responses, but
+			// we're ultimately returning an error, wrap the error with an
+			// PartialSuccessError.
+			if hadSuccess && ba.IsWrite() {
+				pErr = roachpb.NewError(&roachpb.PartialSuccessError{Wrapped: pErr})
 			}
 		} else if couldHaveSkippedResponses {
 			fillSkippedResponses(ba, br, seekKey, resumeReason)
