@@ -96,19 +96,15 @@ type replicateQueue struct {
 	*baseQueue
 	metrics           ReplicateQueueMetrics
 	allocator         Allocator
-	clock             *hlc.Clock
 	updateChan        chan struct{}
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
 }
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(
-	store *Store, g *gossip.Gossip, allocator Allocator, clock *hlc.Clock,
-) *replicateQueue {
+func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *replicateQueue {
 	rq := &replicateQueue{
 		metrics:    makeReplicateQueueMetrics(),
 		allocator:  allocator,
-		clock:      clock,
 		updateChan: make(chan struct{}, 1),
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
@@ -233,7 +229,7 @@ func (rq *replicateQueue) process(
 			return err
 		} else if requeue {
 			// Enqueue this replica again to see if there are more changes to be made.
-			rq.MaybeAdd(repl, rq.clock.Now())
+			rq.MaybeAdd(repl, rq.store.Clock().Now())
 		}
 		return nil
 	}

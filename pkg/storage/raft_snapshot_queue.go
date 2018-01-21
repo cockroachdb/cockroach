@@ -40,14 +40,11 @@ const (
 // replica up with a snapshot to their range.
 type raftSnapshotQueue struct {
 	*baseQueue
-	clock *hlc.Clock
 }
 
 // newRaftSnapshotQueue returns a new instance of raftSnapshotQueue.
-func newRaftSnapshotQueue(store *Store, g *gossip.Gossip, clock *hlc.Clock) *raftSnapshotQueue {
-	rq := &raftSnapshotQueue{
-		clock: clock,
-	}
+func newRaftSnapshotQueue(store *Store, g *gossip.Gossip) *raftSnapshotQueue {
+	rq := &raftSnapshotQueue{}
 	rq.baseQueue = newBaseQueue(
 		"raftsnapshot", rq, store, g,
 		queueConfig{

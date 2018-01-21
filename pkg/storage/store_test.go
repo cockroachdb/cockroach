@@ -2389,7 +2389,7 @@ type fakeRangeQueue struct {
 	maybeRemovedRngs chan roachpb.RangeID
 }
 
-func (fq *fakeRangeQueue) Start(_ *hlc.Clock, _ *stop.Stopper) {
+func (fq *fakeRangeQueue) Start(_ *stop.Stopper) {
 	// Do nothing
 }
 
