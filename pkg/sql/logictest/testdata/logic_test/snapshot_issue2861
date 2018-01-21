@@ -43,7 +43,7 @@ SELECT * FROM t
 
 user root
 
-query I
+query I rowsort
 SELECT * FROM t
 ----
 1
