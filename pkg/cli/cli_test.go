@@ -753,8 +753,11 @@ func Example_sql_column_labels() {
 		`f"oo`,
 		`f'oo`,
 		`f\oo`,
-		`foo
-bar`,
+		`short
+very very long
+not much`,
+		`very very long
+thenshort`,
 		`κόσμε`,
 		`a|b`,
 		`܈85`,
@@ -780,93 +783,120 @@ bar`,
 	}
 
 	// Output:
-	// sql -e create database t; create table t.u ("f""oo" int, "f'oo" int, "f\oo" int, "foo
-	// bar" int, "κόσμε" int, "a|b" int, ܈85 int)
+	// sql -e create database t; create table t.u ("f""oo" int, "f'oo" int, "f\oo" int, "short
+	// very very long
+	// not much" int, "very very long
+	// thenshort" int, "κόσμε" int, "a|b" int, ܈85 int)
 	// CREATE TABLE
-	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0, 0)
+	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0, 0, 0)
 	// INSERT 1
 	// sql -e show columns from t.u
 	// Field	Type	Null	Default	Indices
 	// "f""oo"	INT	true	NULL	{}
 	// f'oo	INT	true	NULL	{}
 	// f\oo	INT	true	NULL	{}
-	// "foo
-	// bar"	INT	true	NULL	{}
+	// "short
+	// very very long
+	// not much"	INT	true	NULL	{}
+	// "very very long
+	// thenshort"	INT	true	NULL	{}
 	// κόσμε	INT	true	NULL	{}
 	// a|b	INT	true	NULL	{}
 	// ܈85	INT	true	NULL	{}
-	// # 7 rows
+	// # 8 rows
 	// sql -e select * from t.u
-	// "f""oo"	f'oo	f\oo	foo\nbar	κόσμε	a|b	܈85
-	// 0	0	0	0	0	0	0
+	// "f""oo"	f'oo	f\oo	"short
+	// very very long
+	// not much"	"very very long
+	// thenshort"	κόσμε	a|b	܈85
+	// 0	0	0	0	0	0	0	0
 	// # 1 row
 	// sql --format=pretty -e show columns from t.u
-	// +---------+------+------+---------+---------+
-	// |  Field  | Type | Null | Default | Indices |
-	// +---------+------+------+---------+---------+
-	// | f"oo    | INT  | true | NULL    | {}      |
-	// | f'oo    | INT  | true | NULL    | {}      |
-	// | f\oo    | INT  | true | NULL    | {}      |
-	// | foo␤    | INT  | true | NULL    | {}      |
-	// | bar     |      |      |         |         |
-	// | κόσμε   | INT  | true | NULL    | {}      |
-	// | a|b     | INT  | true | NULL    | {}      |
-	// | ܈85     | INT  | true | NULL    | {}      |
-	// +---------+------+------+---------+---------+
-	// (7 rows)
+	// +-------------------------------+------+------+---------+---------+
+	// |             Field             | Type | Null | Default | Indices |
+	// +-------------------------------+------+------+---------+---------+
+	// | f"oo                          | INT  | true | NULL    | {}      |
+	// | f'oo                          | INT  | true | NULL    | {}      |
+	// | f\oo                          | INT  | true | NULL    | {}      |
+	// | short␤                        | INT  | true | NULL    | {}      |
+	// | very very long␤               |      |      |         |         |
+	// | not much                      |      |      |         |         |
+	// | very very long␤               | INT  | true | NULL    | {}      |
+	// | thenshort                     |      |      |         |         |
+	// | κόσμε                         | INT  | true | NULL    | {}      |
+	// | a|b                           | INT  | true | NULL    | {}      |
+	// | ܈85                           | INT  | true | NULL    | {}      |
+	// +-------------------------------+------+------+---------+---------+
+	// (8 rows)
 	// sql --format=pretty -e select * from t.u
-	// +------+------+------+----------+-------+-----+-----+
-	// | f"oo | f'oo | f\oo | foo\nbar | κόσμε | a|b | ܈85 |
-	// +------+------+------+----------+-------+-----+-----+
-	// |    0 |    0 |    0 |        0 |     0 |   0 |   0 |
-	// +------+------+------+----------+-------+-----+-----+
+	// +------+------+------+--------------------------------+---------------------------+-------+-----+-----+
+	// | f"oo | f'oo | f\oo | short\nvery very long\nnot much | very very long\nthenshort | κόσμε | a|b | ܈85 |
+	// +------+------+------+--------------------------------+---------------------------+-------+-----+-----+
+	// |    0 |    0 |    0 |                              0 |                         0 |     0 |   0 |   0 |
+	// +------+------+------+--------------------------------+---------------------------+-------+-----+-----+
 	// (1 row)
 	// sql --format=tsv -e select * from t.u
-	// "f""oo"	f'oo	f\oo	foo\nbar	κόσμε	a|b	܈85
-	// 0	0	0	0	0	0	0
+	// "f""oo"	f'oo	f\oo	"short
+	// very very long
+	// not much"	"very very long
+	// thenshort"	κόσμε	a|b	܈85
+	// 0	0	0	0	0	0	0	0
 	// # 1 row
 	// sql --format=csv -e select * from t.u
-	// "f""oo",f'oo,f\oo,foo\nbar,κόσμε,a|b,܈85
-	// 0,0,0,0,0,0,0
+	// "f""oo",f'oo,f\oo,"short
+	// very very long
+	// not much","very very long
+	// thenshort",κόσμε,a|b,܈85
+	// 0,0,0,0,0,0,0,0
 	// # 1 row
 	// sql --format=pretty -e select * from t.u
-	// +------+------+------+----------+-------+-----+-----+
-	// | f"oo | f'oo | f\oo | foo\nbar | κόσμε | a|b | ܈85 |
-	// +------+------+------+----------+-------+-----+-----+
-	// |    0 |    0 |    0 |        0 |     0 |   0 |   0 |
-	// +------+------+------+----------+-------+-----+-----+
+	// +------+------+------+--------------------------------+---------------------------+-------+-----+-----+
+	// | f"oo | f'oo | f\oo | short\nvery very long\nnot much | very very long\nthenshort | κόσμε | a|b | ܈85 |
+	// +------+------+------+--------------------------------+---------------------------+-------+-----+-----+
+	// |    0 |    0 |    0 |                              0 |                         0 |     0 |   0 |   0 |
+	// +------+------+------+--------------------------------+---------------------------+-------+-----+-----+
 	// (1 row)
 	// sql --format=records -e select * from t.u
 	// -[ RECORD 1 ]
-	// f"oo     | 0
-	// f'oo     | 0
-	// f\oo     | 0
-	// foo\nbar | 0
-	// κόσμε    | 0
-	// a|b      | 0
-	// ܈85      | 0
+	// f"oo           | 0
+	// f'oo           | 0
+	// f\oo           | 0
+	// short         +| 0
+	// very very long+|
+	// not much       |
+	// very very long+| 0
+	// thenshort      |
+	// κόσμε          | 0
+	// a|b            | 0
+	// ܈85            | 0
 	// sql --format=sql -e select * from t.u
 	// CREATE TABLE results (
 	//   "f""oo" STRING,
 	//   "f'oo" STRING,
 	//   "f\oo" STRING,
-	//   "foo\nbar" STRING,
+	//   "short
+	// very very long
+	// not much" STRING,
+	//   "very very long
+	// thenshort" STRING,
 	//   "κόσμε" STRING,
 	//   "a|b" STRING,
 	//   ܈85 STRING
 	// );
 	//
-	// INSERT INTO results VALUES ('0', '0', '0', '0', '0', '0', '0');
+	// INSERT INTO results VALUES ('0', '0', '0', '0', '0', '0', '0', '0');
 	// sql --format=html -e select * from t.u
 	// <table>
-	// <thead><tr><th>row</th><th>f&#34;oo</th><th>f&#39;oo</th><th>f\oo</th><th>foo\nbar</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
+	// <thead><tr><th>row</th><th>f&#34;oo</th><th>f&#39;oo</th><th>f\oo</th><th>short<br/>very very long<br/>not much</th><th>very very long<br/>thenshort</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
 	// <tbody>
-	// <tr><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+	// <tr><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
 	// </tbody>
-	// <tfoot><tr><td colspan=8>1 row</td></tr></tfoot></table>
+	// <tfoot><tr><td colspan=9>1 row</td></tr></tfoot></table>
 	// sql --format=raw -e select * from t.u
-	// # 7 columns
+	// # 8 columns
 	// # row 1
+	// ## 1
+	// 0
 	// ## 1
 	// 0
 	// ## 1
@@ -1015,6 +1045,14 @@ def`,
 		c.RunWithArgs([]string{"sql", "--format=tsv", "-e", sql})
 	}
 
+	for _, identStr := range testData {
+		escaped1 := tree.NameString(identStr + "1")
+		escaped2 := tree.NameString(identStr + "2")
+		sql := "select 1 as " + escaped1 + ", 2 as " + escaped2
+		c.RunWithArgs([]string{"sql", "--format=csv", "-e", sql})
+		c.RunWithArgs([]string{"sql", "--format=tsv", "-e", sql})
+	}
+
 	// Output:
 	// sql --format=csv -e select 'ab' as s, 'ab' as t
 	// s,t
@@ -1087,6 +1125,86 @@ def`,
 	// sql --format=tsv -e select e'a\tb' as s, e'a\tb' as t
 	// s	t
 	// "a	b"	"a	b"
+	// # 1 row
+	// sql --format=csv -e select 1 as ab1, 2 as ab2
+	// ab1,ab2
+	// 1,2
+	// # 1 row
+	// sql --format=tsv -e select 1 as ab1, 2 as ab2
+	// ab1	ab2
+	// 1	2
+	// # 1 row
+	// sql --format=csv -e select 1 as "a b1", 2 as "a b2"
+	// a b1,a b2
+	// 1,2
+	// # 1 row
+	// sql --format=tsv -e select 1 as "a b1", 2 as "a b2"
+	// a b1	a b2
+	// 1	2
+	// # 1 row
+	// sql --format=csv -e select 1 as "a
+	// bc
+	// def1", 2 as "a
+	// bc
+	// def2"
+	// "a
+	// bc
+	// def1","a
+	// bc
+	// def2"
+	// 1,2
+	// # 1 row
+	// sql --format=tsv -e select 1 as "a
+	// bc
+	// def1", 2 as "a
+	// bc
+	// def2"
+	// "a
+	// bc
+	// def1"	"a
+	// bc
+	// def2"
+	// 1	2
+	// # 1 row
+	// sql --format=csv -e select 1 as "a, b1", 2 as "a, b2"
+	// "a, b1","a, b2"
+	// 1,2
+	// # 1 row
+	// sql --format=tsv -e select 1 as "a, b1", 2 as "a, b2"
+	// a, b1	a, b2
+	// 1	2
+	// # 1 row
+	// sql --format=csv -e select 1 as """a"", ""b""1", 2 as """a"", ""b""2"
+	// """a"", ""b""1","""a"", ""b""2"
+	// 1,2
+	// # 1 row
+	// sql --format=tsv -e select 1 as """a"", ""b""1", 2 as """a"", ""b""2"
+	// """a"", ""b""1"	"""a"", ""b""2"
+	// 1	2
+	// # 1 row
+	// sql --format=csv -e select 1 as "'a', 'b'1", 2 as "'a', 'b'2"
+	// "'a', 'b'1","'a', 'b'2"
+	// 1,2
+	// # 1 row
+	// sql --format=tsv -e select 1 as "'a', 'b'1", 2 as "'a', 'b'2"
+	// 'a', 'b'1	'a', 'b'2
+	// 1	2
+	// # 1 row
+	// sql --format=csv -e select 1 as "a\,b1", 2 as "a\,b2"
+	// "a\,b1","a\,b2"
+	// 1,2
+	// # 1 row
+	// sql --format=tsv -e select 1 as "a\,b1", 2 as "a\,b2"
+	// a\,b1	a\,b2
+	// 1	2
+	// # 1 row
+	// sql --format=csv -e select 1 as "a	b1", 2 as "a	b2"
+	// a	b1,a	b2
+	// 1,2
+	// # 1 row
+	// sql --format=tsv -e select 1 as "a	b1", 2 as "a	b2"
+	// "a	b1"	"a	b2"
+	// 1	2
 	// # 1 row
 }
 
