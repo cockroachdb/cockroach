@@ -43,6 +43,7 @@ const (
 	VersionUnreplicatedTombstoneKey
 	VersionRecomputeStats
 	VersionNoRaftProposalKeys
+	VersionTxnSpanRefresh
 
 	// Add new versions here (step one of two).
 
@@ -157,6 +158,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionNoRaftProposalKeys is https://github.com/cockroachdb/cockroach/pull/20647.
 		Key:     VersionNoRaftProposalKeys,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 11},
+	},
+	{
+		// VersionTxnSpanRefresh is https://github.com/cockroachdb/cockroach/pull/21140.
+		Key:     VersionTxnSpanRefresh,
+		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 12},
 	},
 
 	// Add new versions here (step two of two).
