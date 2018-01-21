@@ -1149,3 +1149,64 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 
 	wg.Wait()
 }
+
+// Tests that transactions with timestamps witin the uncertainty interval
+// of a TABLE CREATE are pushed.
+func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      params,
+	})
+	defer tc.Stopper().Stop(context.TODO())
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a transaction before the table is created.
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a transaction before the table is created. Use a different
+	// node so that clock uncertainty is presumed and it gets pushed.
+	tx1, err := tc.ServerConn(1).Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Was actually run in the past and so doesn't see the table.
+	if _, err := tx.Exec(`
+		INSERT INTO t.kv VALUES ('a', 'b');
+		`); !testutils.IsError(err, "does not exist") {
+		t.Fatal(err)
+	}
+
+	// Not sure whether run in the past and so sees clock uncertainty push.
+	if _, err := tx1.Exec(`
+INSERT INTO t.kv VALUES ('c', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx1.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}

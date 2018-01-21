@@ -285,6 +285,20 @@ func (tc *TableCollection) getTableVersion(
 
 	origTimestamp := flags.txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
+	if err == sqlbase.ErrDescriptorNotFound {
+		// The table doesn't exist at the requested timestamp.
+		// Read the table descriptor directly to check if the descriptor
+		// exists at a future timestamp within the clock uncertainty
+		// interval.
+		uncachedFlags := flags
+		uncachedFlags.avoidCached = true
+		phyAccessor := UncachedPhysicalAccessor{}
+		_, _, errRetry := phyAccessor.GetObjectDesc(tn, uncachedFlags)
+		if errRetry == nil && flags.txn.Proto().RefreshedTimestamp != (hlc.Timestamp{}) {
+			origTimestamp = flags.txn.Proto().RefreshedTimestamp
+			table, expiration, err = tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
+		}
+	}
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			if flags.required {
