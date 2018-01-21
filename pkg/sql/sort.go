@@ -364,8 +364,7 @@ func (p *planner) rewriteIndexOrderings(
 	// The loop above *may* allocate a new slice, but this is only
 	// needed if the INDEX / PRIMARY KEY syntax is used. In case the
 	// ORDER BY clause only uses the column syntax, we should reuse the
-	// same slice. So we start with an empty slice whose underlying
-	// array is the same as the original specification.
+	// same slice.
 	newOrderBy := orderBy
 	rewrite := false
 	for i, o := range orderBy {
