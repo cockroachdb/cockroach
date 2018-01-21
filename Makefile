@@ -38,7 +38,7 @@ endif
 ## Which package to run tests against, e.g. "./pkg/storage".
 PKG := ./pkg/...
 
-## Tests to run for use with `make test`.
+## Tests to run for use with `make test` or `make check-libroach`.
 TESTS := .
 
 ## Benchmarks to run for use with `make bench`.
@@ -102,7 +102,8 @@ help: ## Print help for targets with comments.
 		"make testlogic" "Run all OSS SQL logic tests." \
 		"make testccllogic" "Run all CCL SQL logic tests." \
 		"make testlogic FILES='prepare fk'" "Run the logic tests in the files named prepare and fk." \
-		"make testlogic FILES=fk SUBTESTS='20042|20045'" "Run the logic tests within subtests 20042 and 20045 in the file named fk."
+		"make testlogic FILES=fk SUBTESTS='20042|20045'" "Run the logic tests within subtests 20042 and 20045 in the file named fk." \
+		"make check-libroach TESTS=ccl" "Run the libroach tests matching .*ccl.*"
 
 # Possible values:
 # <empty>: use the default toolchain
@@ -645,8 +646,10 @@ libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
+check-libroach: ## Run libroach tests.
 check-libroach: $(LIBROACH_DIR)/Makefile libjemalloc libprotobuf libsnappy librocksdb libcryptopp
-	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) check
+	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR)
+	cd $(LIBROACH_DIR) && ctest -V -R $(TESTS)
 
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
