@@ -173,6 +173,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(os.Stdout, "Certificate directory: %s\n", baseCfg.SSLCertsDir)
 
 	certTableHeaders := []string{"Usage", "Certificate File", "Key File", "Expires", "Notes", "Error"}
+	alignment := "llllll"
 	var rows [][]string
 
 	addRow := func(ci *security.CertInfo, notes string) {
@@ -223,7 +224,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 		addRow(cert, fmt.Sprintf("user: %s", user))
 	}
 
-	return printQueryOutput(os.Stdout, certTableHeaders, newRowSliceIter(rows))
+	return printQueryOutput(os.Stdout, certTableHeaders, newRowSliceIter(rows, alignment))
 }
 
 var certCmds = []*cobra.Command{

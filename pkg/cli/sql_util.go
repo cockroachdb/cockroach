@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"reflect"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -348,7 +349,7 @@ func (c *sqlConn) Close() {
 }
 
 type sqlRowsI interface {
-	driver.Rows
+	driver.RowsColumnTypeScanType
 	Result() driver.Result
 	Tag() string
 
@@ -408,6 +409,10 @@ func (r *sqlRows) NextResultSet() (bool, error) {
 		return false, nil
 	}
 	return true, r.rows.NextResultSet()
+}
+
+func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
+	return r.rows.ColumnTypeScanType(index)
 }
 
 func makeSQLConn(url string) *sqlConn {
