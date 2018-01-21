@@ -269,7 +269,7 @@ func (tc *TxnCoordSender) AugmentMeta(meta roachpb.TxnCoordMeta) {
 		return
 	}
 	tc.mu.meta.Txn.Update(&meta.Txn)
-	tc.mu.meta.Intents, _ = roachpb.MergeSpans(append(tc.mu.meta.Intents, meta.Intents...))
+	tc.mu.meta.Intents, _ = roachpb.MergeSpans(append(meta.Intents, tc.mu.meta.Intents...))
 	tc.mu.meta.CommandCount += meta.CommandCount
 
 	// Recompute the size of the intents.
