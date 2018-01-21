@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -160,11 +161,12 @@ func TestRejectFutureCommand(t *testing.T) {
 // overrides an old value. The test uses a "Writer" and a "Reader"
 // to reproduce an out-of-order put.
 //
-// 1) The Writer executes a put operation and writes a write intent with
+// 1) The Writer executes a cput operation and writes a write intent with
 //    time T in a txn.
 // 2) Before the Writer's txn is committed, the Reader sends a high priority
 //    get operation with time T+100. This pushes the Writer txn timestamp to
-//    T+100 and triggers the restart of the Writer's txn. The original
+//    T+100. The Reader also writes to the same key the Writer did a cput to
+//    in order to trigger the restart of the Writer's txn. The original
 //    write intent timestamp is also updated to T+100.
 // 3) The Writer starts a new epoch of the txn, but before it writes, the
 //    Reader sends another high priority get operation with time T+200. This
@@ -185,7 +187,10 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// key is selected to fall within the meta range in order for the later
 	// routing of requests to range 1 to work properly. Removing the routing
 	// of all requests to range 1 would allow us to make the key more normal.
-	const key = "key"
+	const (
+		key        = "key"
+		restartKey = "restart"
+	)
 	// Set up a filter to so that the get operation at Step 3 will return an error.
 	var numGets int32
 
@@ -249,8 +254,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 				<-waitSecondGet
 			}
 
+			// Get a key which we can write to from the Reader in order to force a restart.
+			if _, err := txn.Get(ctx, restartKey); err != nil {
+				return err
+			}
+
 			updatedVal := []byte("updatedVal")
-			if err := txn.Put(ctx, key, updatedVal); err != nil {
+			if err := txn.CPut(ctx, key, updatedVal, "initVal"); err != nil {
+				log.Errorf(context.TODO(), "failed put value: %s", err)
 				return err
 			}
 
@@ -294,11 +305,22 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	requestHeader := roachpb.Span{
 		Key: roachpb.Key(key),
 	}
-	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+	h := roachpb.Header{
 		Timestamp:    cfg.Clock.Now(),
 		UserPriority: priority,
-	}, &roachpb.GetRequest{Span: requestHeader}); err != nil {
+	}
+	if _, err := client.SendWrappedWith(
+		context.Background(), rg1(store), h, &roachpb.GetRequest{Span: requestHeader},
+	); err != nil {
 		t.Fatalf("failed to get: %s", err)
+	}
+	// Write to the restart key so that the Writer's txn must restart.
+	putReq := &roachpb.PutRequest{
+		Span:  roachpb.Span{Key: roachpb.Key(restartKey)},
+		Value: roachpb.MakeValueFromBytes([]byte("restart-value")),
+	}
+	if _, err := client.SendWrappedWith(context.Background(), rg1(store), h, putReq); err != nil {
+		t.Fatalf("failed to put: %s", err)
 	}
 
 	// Wait until the writer restarts the txn.
@@ -311,11 +333,14 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// timestamp cache from being updated).
 	manual.Increment(100)
 
-	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
-		Timestamp:    cfg.Clock.Now(),
-		UserPriority: priority,
-	}, &roachpb.GetRequest{Span: requestHeader}); err == nil {
+	h.Timestamp = cfg.Clock.Now()
+	if _, err := client.SendWrappedWith(
+		context.Background(), rg1(store), h, &roachpb.GetRequest{Span: requestHeader},
+	); err == nil {
 		t.Fatal("unexpected success of get")
+	}
+	if _, err := client.SendWrappedWith(context.Background(), rg1(store), h, putReq); err != nil {
+		t.Fatalf("failed to put: %s", err)
 	}
 
 	close(waitSecondGet)

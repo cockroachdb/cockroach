@@ -901,30 +901,37 @@ func (t *Transaction) Update(o *Transaction) {
 	if o.Status != PENDING {
 		t.Status = o.Status
 	}
+
+	// If the epoch or safe timestamp move forward, overwrite
+	// WriteTooOld and RetryOnPush, otherwise the flags are cumulative.
+	if t.Epoch < o.Epoch || t.SafeTimestamp.Less(o.SafeTimestamp) {
+		t.WriteTooOld = o.WriteTooOld
+		t.RetryOnPush = o.RetryOnPush
+	} else {
+		t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
+		t.RetryOnPush = t.RetryOnPush || o.RetryOnPush
+	}
+
 	if t.Epoch < o.Epoch {
 		t.Epoch = o.Epoch
 	}
+
 	t.Timestamp.Forward(o.Timestamp)
 	t.LastHeartbeat.Forward(o.LastHeartbeat)
 	t.OrigTimestamp.Forward(o.OrigTimestamp)
 	t.MaxTimestamp.Forward(o.MaxTimestamp)
+	t.SafeTimestamp.Forward(o.SafeTimestamp)
 
 	// Absorb the collected clock uncertainty information.
 	for _, v := range o.ObservedTimestamps {
 		t.UpdateObservedTimestamp(v.NodeID, v.Timestamp)
 	}
 	t.UpgradePriority(o.Priority)
+
 	// We can't assert against regression here since it can actually happen
 	// that we update from a transaction which isn't Writing.
 	t.Writing = t.Writing || o.Writing
-	// This isn't or'd (similar to Writing) because we want WriteTooOld
-	// and RetryOnPush to be set each time according to "o". This allows
-	// a persisted txn to have its WriteTooOld flag reset on update.
-	// TODO(tschottdorf): reset in a central location when it's certifiably
-	//   a new request. Update is called in many situations and shouldn't
-	//   reset anything.
-	t.WriteTooOld = o.WriteTooOld
-	t.RetryOnPush = o.RetryOnPush
+
 	if t.Sequence < o.Sequence {
 		t.Sequence = o.Sequence
 	}
@@ -1058,17 +1065,8 @@ func PrepareTransactionForRetry(
 		// Use the priority communicated back by the server.
 		txn.Priority = errTxnPri
 	case *ReadWithinUncertaintyIntervalError:
-		// If the reader encountered a newer write within the uncertainty
-		// interval, we advance the txn's timestamp just past the last observed
-		// timestamp from the node.
-		ts, ok := txn.GetObservedTimestamp(pErr.OriginNode)
-		if !ok {
-			log.Fatalf(ctx,
-				"missing observed timestamp for node %d found on uncertainty restart. "+
-					"err: %s. txn: %s. Observed timestamps: %s",
-				pErr.OriginNode, pErr, txn, txn.ObservedTimestamps)
-		}
-		txn.Timestamp.Forward(ts)
+		txn.Timestamp.Forward(
+			readWithinUncertaintyIntervalRetryTimestamp(ctx, &txn, tErr, pErr.OriginNode))
 	case *TransactionPushError:
 		// Increase timestamp if applicable, ensuring that we're just ahead of
 		// the pushee.
@@ -1080,7 +1078,7 @@ func PrepareTransactionForRetry(
 		// the restart.
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
-		txn.Timestamp.Forward(tErr.ActualTimestamp)
+		txn.Timestamp.Forward(writeTooOldRetryTimestamp(&txn, tErr))
 	default:
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
@@ -1088,6 +1086,60 @@ func PrepareTransactionForRetry(
 		txn.Restart(pri, txn.Priority, txn.Timestamp)
 	}
 	return txn
+}
+
+// CanTransactionRetryAtSafeTimestamp returns whether the transaction
+// specified in the supplied error can be retried at a safe timestamp
+// to avoid a client-side transaction restart. If true, returns a cloned,
+// updated Transaction object with the safe timestamp set appropriately.
+func CanTransactionRetryAtSafeTimestamp(ctx context.Context, pErr *Error) (bool, *Transaction) {
+	txn := pErr.GetTxn()
+	if txn == nil || txn.Isolation != enginepb.SERIALIZABLE {
+		return false, nil
+	}
+	timestamp := txn.Timestamp
+	switch err := pErr.GetDetail().(type) {
+	case *TransactionRetryError:
+		if err.Reason != RETRY_SERIALIZABLE && err.Reason != RETRY_WRITE_TOO_OLD {
+			return false, nil
+		}
+	case *WriteTooOldError:
+		timestamp.Forward(writeTooOldRetryTimestamp(txn, err))
+	case *ReadWithinUncertaintyIntervalError:
+		timestamp.Forward(
+			readWithinUncertaintyIntervalRetryTimestamp(ctx, txn, err, pErr.OriginNode))
+	default:
+		return false, nil
+	}
+
+	newTxn := txn.Clone()
+	newTxn.Timestamp.Forward(timestamp)
+	newTxn.SafeTimestamp.Forward(newTxn.Timestamp)
+	newTxn.WriteTooOld = false
+
+	return true, &newTxn
+}
+
+func readWithinUncertaintyIntervalRetryTimestamp(
+	ctx context.Context, txn *Transaction, err *ReadWithinUncertaintyIntervalError, origin NodeID,
+) hlc.Timestamp {
+	// If the reader encountered a newer write within the uncertainty
+	// interval, we advance the txn's timestamp just past the last observed
+	// timestamp from the node.
+	ts, ok := txn.GetObservedTimestamp(origin)
+	if !ok {
+		log.Fatalf(ctx,
+			"missing observed timestamp for node %d found on uncertainty restart. "+
+				"err: %s. txn: %s. Observed timestamps: %s",
+			origin, err, txn, txn.ObservedTimestamps)
+	}
+	// Also forward by the existing timestamp.
+	ts.Forward(err.ExistingTimestamp)
+	return ts
+}
+
+func writeTooOldRetryTimestamp(txn *Transaction, err *WriteTooOldError) hlc.Timestamp {
+	return err.ActualTimestamp
 }
 
 var _ fmt.Stringer = &ChangeReplicasTrigger{}

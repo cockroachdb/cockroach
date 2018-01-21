@@ -286,6 +286,12 @@ message Transaction {
   // The case max_timestamp < timestamp is possible for transactions which have
   // been pushed; in this case, max_timestamp should be ignored.
   util.hlc.Timestamp max_timestamp = 7 [(gogoproto.nullable) = false];
+  // Safe timestamp is the timestamp at which the transaction can
+  // commit without necessitating a serializable restart. This value
+  // is forwarded to the transaction's current timestamp while and if the
+  // transaction coordinator is able to update all spans encountered
+  // during the course of the txn.
+  util.hlc.Timestamp safe_timestamp = 15 [(gogoproto.nullable) = false];
   // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
   // as observed from their local clock during this transaction. The purpose of
   // this map is to avoid uncertainty related restarts which normally occur
@@ -437,4 +443,22 @@ message TxnCoordMeta {
   // command_count indicates how many requests have been sent through
   // this transaction. Reset on retryable txn errors.
   int32 command_count = 3;
+  // update_reads and update_writes store key spans which were read
+  // or, less frequently, written during a transaction. These fields
+  // are utilized for SERIALIZABLE transactions in the event a
+  // transaction experiences a retry error. In that case, the
+  // coordinator uses the UpdateSpan RPC to verify that no write has
+  // occurred to the spans more recently than the txn's original
+  // timestamp, and updates the affected timestamp caches to the
+  // transaction's pushed timestamp. On failure, the retry error is
+  // propagated. On success, the transaction's original and current
+  // timestamps are forwarded to the restart timestamp, and the end
+  // transaction is resent, with the expectation of success.
+  repeated Span update_reads = 4 [(gogoproto.nullable) = false];
+  repeated Span update_writes = 5 [(gogoproto.nullable) = false];
+  // updates_exceeded indicates that too many updates were set over
+  // the course of the transaction to track them all, so they were
+  // discarded, making it impossible to update spans to avoid a
+  // serializable txn restart.
+  bool updates_exceeded = 6;
 }

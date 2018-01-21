@@ -505,6 +505,7 @@ func runSchemaChangeWithOperations(
 		}
 	}
 	// Reinsert deleted rows.
+	log.Infof(ctx, "deleteStartKey: %d of %d", deleteStartKey, maxValue)
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
 		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {

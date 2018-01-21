@@ -423,6 +423,7 @@ var nonZeroTxn = Transaction{
 	Status:             COMMITTED,
 	LastHeartbeat:      makeTS(1, 2),
 	OrigTimestamp:      makeTS(30, 31),
+	SafeTimestamp:      makeTS(20, 22),
 	MaxTimestamp:       makeTS(40, 41),
 	ObservedTimestamps: []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	Writing:            true,
