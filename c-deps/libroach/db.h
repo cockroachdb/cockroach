@@ -60,3 +60,8 @@ struct DBIterator {
   std::unique_ptr<rocksdb::WriteBatch> kvs;
   std::unique_ptr<rocksdb::WriteBatch> intents;
 };
+
+std::string ToString(DBSlice s);
+std::string ToString(DBString s);
+rocksdb::Slice ToSlice(DBSlice s);
+rocksdb::Slice ToSlice(DBString s);

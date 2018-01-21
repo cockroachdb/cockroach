@@ -23,6 +23,7 @@ project(roachlib)
 
 add_library(roach
   db.cc
+  dbhelper.cc
   encoding.cc
   env_switching.cc
   eventlistener.cc
