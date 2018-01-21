@@ -1015,16 +1015,16 @@ user root
 statement ok
 CREATE TABLE other_db.teststatics(id INT PRIMARY KEY, c INT, d INT, e STRING, INDEX idx_c(c), UNIQUE INDEX idx_cd(c,d))
 
-query TTTBTTITIITBB colnames
+query TTTTTTITIITTT colnames
 SELECT * FROM information_schema.statistics WHERE table_schema='other_db' AND table_name='teststatics' ORDER BY INDEX_SCHEMA,INDEX_NAME,SEQ_IN_INDEX
 ----
 table_catalog  table_schema  table_name   non_unique  index_schema  index_name  seq_in_index  column_name  COLLATION  cardinality  direction  storing  implicit
-def            other_db      teststatics  true        other_db      idx_c       1             c            NULL       NULL         ASC        false    false
-def            other_db      teststatics  true        other_db      idx_c       2             id           NULL       NULL         ASC        false    true
-def            other_db      teststatics  false       other_db      idx_cd      1             c            NULL       NULL         ASC        false    false
-def            other_db      teststatics  false       other_db      idx_cd      2             d            NULL       NULL         ASC        false    false
-def            other_db      teststatics  false       other_db      idx_cd      3             id           NULL       NULL         ASC        false    true
-def            other_db      teststatics  false       other_db      primary     1             id           NULL       NULL         ASC        false    false
+def            other_db      teststatics  YES         other_db      idx_c       1             c            NULL       NULL         ASC        NO       NO
+def            other_db      teststatics  YES         other_db      idx_c       2             id           NULL       NULL         ASC        NO       YES
+def            other_db      teststatics  NO          other_db      idx_cd      1             c            NULL       NULL         ASC        NO       NO
+def            other_db      teststatics  NO          other_db      idx_cd      2             d            NULL       NULL         ASC        NO       NO
+def            other_db      teststatics  NO          other_db      idx_cd      3             id           NULL       NULL         ASC        NO       YES
+def            other_db      teststatics  NO          other_db      primary     1             id           NULL       NULL         ASC        NO       NO
 
 # Verify information_schema.views
 statement ok
@@ -1122,7 +1122,7 @@ table_schema    STRING  false  '':::STRING  {}
 table_name      STRING  false  '':::STRING  {}
 column_name     STRING  false  '':::STRING  {}
 privilege_type  STRING  false  '':::STRING  {}
-is_grantable    BOOL    false  false        {}
+is_grantable    STRING  false  '':::STRING  {}
 
 
 query TTTTTTTT colnames
