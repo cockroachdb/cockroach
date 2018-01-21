@@ -9,6 +9,8 @@
 #include "../db.h"
 #include "../testutils.h"
 
+using namespace cockroach;
+
 TEST(LibroachCCL, DBOpenHook) {
   DBOptions db_opts;
 
