@@ -231,7 +231,7 @@ func TestSorter(t *testing.T) {
 				// Override the default memory limit. This will result in using
 				// a memory row container which will hit this limit and fall
 				// back to using a disk row container.
-				s.flowCtx.testingKnobs.MemoryLimitBytes = memLimit
+				flowCtx.testingKnobs.MemoryLimitBytes = memLimit
 				s.Run(nil)
 				if !out.ProducerClosed {
 					t.Fatalf("output RowReceiver not closed")
