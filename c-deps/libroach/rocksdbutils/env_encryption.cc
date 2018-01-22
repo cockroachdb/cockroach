@@ -489,7 +489,13 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
     return EnvWrapper::RenameFile(src, target);
   }
 
-  // TODO(mberhault): do we want to support LinkFile (hardlink)?
+  virtual rocksdb::Status LinkFile(const std::string& src, const std::string& target) override {
+    auto status = provider_->LinkFile(src, target);
+    if (!status.ok()) {
+      return status;
+    }
+    return EnvWrapper::LinkFile(src, target);
+  }
 
  private:
   EncryptionProvider* provider_;
