@@ -1293,9 +1293,11 @@ func mvccPutInternal(
 	} else {
 		// There is no existing value for this key. Even if the new value is
 		// nil write a deletion tombstone for the key.
-		if value, err = maybeGetValue(
-			ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
-			return err
+		if valueFn != nil {
+			value, err = valueFn(nil)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	{
