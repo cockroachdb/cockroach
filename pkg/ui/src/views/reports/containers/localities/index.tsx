@@ -32,11 +32,14 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
   let rows: React.ReactNode[] = [];
 
   tree.nodes.forEach((node) => {
+    // Yet another problem caused by the Protobuf.js-generated types.
+    const tiers = node.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
+
     rows.push(
       <tr>
         <td></td>
         <td>n{ node.desc.node_id } @ { node.desc.address.address_field }</td>
-        <td className="parent-location">{ renderLocation(locations, node.desc.locality.tiers) }</td>
+        <td className="parent-location">{ renderLocation(locations, tiers) }</td>
       </tr>,
     );
   });
