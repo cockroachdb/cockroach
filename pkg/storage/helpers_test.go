@@ -22,7 +22,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
@@ -193,14 +192,6 @@ func (s *Store) GetOrCreateReplica(
 	creatingReplica *roachpb.ReplicaDescriptor,
 ) (*Replica, bool, error) {
 	return s.getOrCreateReplica(ctx, rangeID, replicaID, creatingReplica)
-}
-
-func (s *Store) SetIncomingRebalancesDisabled(v bool) {
-	var i int32
-	if v {
-		i = 1
-	}
-	atomic.StoreInt32(&s.incomingRebalancesDisabled, i)
 }
 
 // EnqueueRaftUpdateCheck enqueues the replica for a Raft update check, forcing
