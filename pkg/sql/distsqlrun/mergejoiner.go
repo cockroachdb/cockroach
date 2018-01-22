@@ -183,9 +183,9 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 					if m.emitUnmatchedRight {
 						m.matchedRight.Add(ridx)
 					}
-					if m.joinType == leftSemiJoin {
-						// Semi-joins only need to know if there is at least
-						// one match, so can skip the rest of the right rows.
+					if m.joinType == leftSemiJoin || m.joinType == intersectAllJoin {
+						// Semi-joins and INTERSECT ALL only need to know if there is at
+						// least one match, so can skip the rest of the right rows.
 						m.rightIdx = len(m.rightRows)
 					}
 					return renderedRow, nil
@@ -200,8 +200,18 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 			// We've exhausted the right-side batch. Adjust the indexes for the next
 			// row from the left-side of the batch.
-			m.rightIdx = 0
 			m.leftIdx++
+			m.rightIdx = 0
+
+			// Once a match is found, we make sure to skip the right-side rows that
+			// have already been matched in the next iteration, since a right-side row
+			// can only match one left-side row. We don't expect INTERSECT ALL to have
+			// a filter condition, so each left-side row should match with the first
+			// right-side row it encounters. Therefore, we can start rightIdx at
+			// leftIdx, which is the number of left-side rows matched so far.
+			if m.joinType == intersectAllJoin {
+				m.rightIdx = m.leftIdx
+			}
 
 			// If we didn't match any rows on the right-side of the batch and this is
 			// a left or full outer join, emit an unmatched left-side row.
