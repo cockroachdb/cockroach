@@ -143,3 +143,7 @@ rocksdb::Status SwitchingProvider::DeleteFile(const std::string& fname) {
 rocksdb::Status SwitchingProvider::RenameFile(const std::string& src, const std::string& target) {
   return registry_->MaybeRenameEntry(src, target);
 }
+
+rocksdb::Status SwitchingProvider::LinkFile(const std::string& src, const std::string& target) {
+  return registry_->MaybeLinkEntry(src, target);
+}

@@ -58,8 +58,11 @@ class FileRegistry {
   // Delete the entry for 'filename' if it exists and persist the registry.
   rocksdb::Status MaybeDeleteEntry(const std::string& filename);
 
-  // Move the entry under 'src' to 'target' if it exists, and persist the registry.
+  // Move the entry under 'src' to 'target' if 'src' exists, and persist the registry.
   rocksdb::Status MaybeRenameEntry(const std::string& src, const std::string& target);
+
+  // Copy the entry under 'src' to 'target' if 'src' exists, and persist the registry.
+  rocksdb::Status MaybeLinkEntry(const std::string& src, const std::string& target);
 
   // TransformPath takes an absolute path. If 'path' is inside 'db_dir_', return the relative
   // path, else return 'path'.
