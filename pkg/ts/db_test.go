@@ -24,6 +24,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,17 +60,27 @@ type testModel struct {
 	modelData   map[string]roachpb.Value
 	seenSources map[string]struct{}
 	*localtestcluster.LocalTestCluster
-	DB *DB
+	DB         *DB
+	memMonitor *mon.BytesMonitor
 }
 
 // newTestModel creates a new testModel instance. The Start() method must
 // be called before using it.
 func newTestModel(t *testing.T) testModel {
+	monitor := mon.MakeUnlimitedMonitor(
+		context.Background(),
+		"timeseries-testmodel",
+		mon.MemoryResource,
+		nil,
+		nil,
+		queryMemoryMax/10,
+	)
 	return testModel{
 		t:                t,
 		modelData:        make(map[string]roachpb.Value),
 		seenSources:      make(map[string]struct{}),
 		LocalTestCluster: &localtestcluster.LocalTestCluster{},
+		memMonitor:       &monitor,
 	}
 }
 

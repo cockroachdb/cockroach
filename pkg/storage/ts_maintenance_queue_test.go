@@ -17,6 +17,7 @@ package storage_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -273,6 +275,19 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	memMon := mon.MakeMonitor(
+		"test",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment: use default block size */
+		math.MaxInt64, /* noteworthy */
+	)
+	memMon.Start(context.TODO(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer memMon.Stop(context.TODO())
+	acc := memMon.MakeBoundAccount()
+	defer acc.Close(context.TODO())
+
 	// getDatapoints queries all datapoints in the series from the beginning
 	// of time to a point in the near future.
 	getDatapoints := func() ([]tspb.TimeSeriesDatapoint, error) {
@@ -284,6 +299,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			0,
 			now+ts.Resolution10s.SlabDuration(),
 			0,
+			&acc,
 		)
 		return dps, err
 	}
