@@ -14,6 +14,10 @@ type Pick<T, K1 extends keyof T, K2 extends keyof T[K1]> = {
 
 type LocationState = Pick<AdminUIState, "cachedData", "locations">;
 
+export function selectLocationsRequestStatus(state: LocationState) {
+  return state.cachedData.locations;
+}
+
 export function selectLocations(state: LocationState) {
   if (!state.cachedData.locations.valid) {
     return [];

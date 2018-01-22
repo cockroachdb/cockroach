@@ -2,11 +2,15 @@ import _ from "lodash";
 import React from "react";
 import { connect } from "react-redux";
 
+import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLocations } from "src/redux/apiReducers";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
-import { selectLocationTree, LocationTree } from "src/redux/locations";
+import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "src/redux/locations";
+import { selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
+import Loading from "src/views/shared/components/loading";
 
 import "./localities.styl";
 
@@ -60,7 +64,9 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
 
 interface LocalitiesProps {
   localityTree: LocalityTree;
+  localityStatus: CachedDataReducerState<any>;
   locationTree: LocationTree;
+  locationStatus: CachedDataReducerState<any>;
   refreshLocations: typeof refreshLocations;
   refreshNodes: typeof refreshNodes;
 }
@@ -82,20 +88,26 @@ class Localities extends React.Component<LocalitiesProps, {}> {
 
   render() {
     return (
-      <section className="section">
-        <table className="locality-table">
-          <thead>
-            <tr>
-              <th>Localities</th>
-              <th>Nodes</th>
-              <th>Location</th>
-            </tr>
-          </thead>
-          <tbody>
-            { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
-          </tbody>
-        </table>
-      </section>
+      <Loading
+        loading={ !this.props.localityStatus.valid || !this.props.locationStatus.valid }
+        className="loading-image loading-image__spinner-left"
+        image={ spinner }
+      >
+        <section className="section">
+          <table className="locality-table">
+            <thead>
+              <tr>
+                <th>Localities</th>
+                <th>Nodes</th>
+                <th>Location</th>
+              </tr>
+            </thead>
+            <tbody>
+              { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
+            </tbody>
+          </table>
+        </section>
+      </Loading>
     );
   }
 }
@@ -103,7 +115,9 @@ class Localities extends React.Component<LocalitiesProps, {}> {
 function mapStateToProps(state: AdminUIState) {
   return {
     localityTree: selectLocalityTree(state),
+    localityStatus: selectNodeRequestStatus(state),
     locationTree: selectLocationTree(state),
+    locationStatus: selectLocationsRequestStatus(state),
   };
 }
 
