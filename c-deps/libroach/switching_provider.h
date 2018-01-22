@@ -89,6 +89,7 @@ class SwitchingProvider final : public rocksdb_utils::EncryptionProvider {
 
   virtual rocksdb::Status DeleteFile(const std::string& fname) override;
   virtual rocksdb::Status RenameFile(const std::string& src, const std::string& target) override;
+  virtual rocksdb::Status LinkFile(const std::string& src, const std::string& target) override;
 
  private:
   std::unique_ptr<FileRegistry> registry_;
