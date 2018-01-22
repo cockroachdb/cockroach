@@ -35,7 +35,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Schema())
 	if err != nil {
 		return nil, err
 	}

@@ -42,7 +42,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), oldTn.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), oldTn.Schema())
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	// Check if target database exists.
-	targetDbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), newTn.Database())
+	targetDbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), newTn.Schema())
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	// oldTn and newTn are already normalized, so we can compare directly here.
-	if oldTn.Database() == newTn.Database() && oldTn.Table() == newTn.Table() {
+	if oldTn.Schema() == newTn.Schema() && oldTn.Table() == newTn.Table() {
 		// Noop.
 		return &zeroNode{}, nil
 	}

@@ -47,7 +47,7 @@ func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode,
 func (p *planner) CreateUserNode(
 	ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
 ) (*CreateUserNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{SchemaName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err
 	}

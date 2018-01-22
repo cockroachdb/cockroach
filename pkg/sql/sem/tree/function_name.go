@@ -129,7 +129,7 @@ func (n *UnresolvedName) normalizeFunctionName() (functionName, error) {
 
 	// Everything afterwards is the selector.
 	return functionName{
-		prefixName:   tn.DatabaseName,
+		prefixName:   tn.SchemaName,
 		functionName: tn.TableName,
 		selector:     NameParts((*n)[i:]),
 	}, nil

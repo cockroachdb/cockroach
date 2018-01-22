@@ -87,9 +87,9 @@ func (e virtualSchemaEntry) tableNames(dbNameOriginallyOmitted bool) tree.TableN
 	var res tree.TableNames
 	for _, tableName := range e.orderedTableNames {
 		tn := tree.TableName{
-			DatabaseName:               tree.Name(e.desc.Name),
-			TableName:                  tree.Name(tableName),
-			OmitDBNameDuringFormatting: dbNameOriginallyOmitted,
+			SchemaName:                     tree.Name(e.desc.Name),
+			TableName:                      tree.Name(tableName),
+			OmitSchemaNameDuringFormatting: dbNameOriginallyOmitted,
 		}
 		res = append(res, tn)
 	}
@@ -276,7 +276,7 @@ func (e *Executor) IsVirtualDatabase(name string) bool {
 // but the table is non-existent.
 // getVirtualTableEntry is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
-	if db, ok := vs.getVirtualSchemaEntry(string(tn.DatabaseName)); ok {
+	if db, ok := vs.getVirtualSchemaEntry(string(tn.SchemaName)); ok {
 		if t, ok := db.tables[string(tn.TableName)]; ok {
 			return t, nil
 		}

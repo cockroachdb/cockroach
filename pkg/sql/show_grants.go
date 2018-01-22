@@ -110,7 +110,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 
 			for i := range allTables {
 				params = append(params, fmt.Sprintf("(%s,%s)",
-					lex.EscapeSQLString(allTables[i].Database()),
+					lex.EscapeSQLString(allTables[i].Schema()),
 					lex.EscapeSQLString(allTables[i].Table())))
 			}
 
