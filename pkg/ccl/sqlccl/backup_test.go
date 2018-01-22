@@ -2451,6 +2451,7 @@ func TestBackupRestoreIncrementalAddTable(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE data2.t2 (i int)`)
 	sqlDB.Exec(t, "BACKUP data.*, data2.* TO $1 INCREMENTAL FROM $2", inc, full)
 }
+
 func TestBackupRestoreIncrementalAddTableMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2598,5 +2599,44 @@ func TestBackupRestoreNotInTxn(t *testing.T) {
 	}
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBackupRestoreSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	backupLoc := localFoo
+
+	sqlDB.Exec(t, `CREATE SEQUENCE data.t_id_seq`)
+	sqlDB.Exec(t, `CREATE TABLE data.t (id INT PRIMARY KEY DEFAULT nextval('data.t_id_seq'), v text)`)
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('foo')`)
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('baz')`)
+
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, backupLoc)
+	sqlDB.Exec(t, `DROP DATABASE data`)
+	sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, backupLoc)
+
+	// Verify that the db was restored correctly.
+	sqlDB.CheckQueryResults(t, `SELECT * FROM data.t`, [][]string{
+		{"1", "foo"},
+		{"2", "bar"},
+		{"3", "baz"},
+	})
+	sqlDB.CheckQueryResults(t, `SELECT last_value FROM data.t_id_seq`, [][]string{
+		{"3"},
+	})
+
+	// Verify that we can kkeep inserting into the table, without violating a uniqueness constraint.
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+
+	// Verify that sequence <=> table dependencies are still in place.
+	_, err := sqlDB.DB.Exec(`DROP SEQUENCE data.t_id_seq`)
+	expectedErrMsg := "pq: cannot drop sequence t_id_seq because other objects depend on it"
+	if err != nil && err.Error() != expectedErrMsg {
+		t.Fatalf("expected error %s; got %s", expectedErrMsg, err)
 	}
 }

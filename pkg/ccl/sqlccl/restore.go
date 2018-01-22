@@ -372,6 +372,15 @@ func rewriteTableDescs(tables []*sqlbase.TableDescriptor, tableRewrites tableRew
 			}
 		}
 
+		// Rewrite sequence references in column descriptors.
+		for _, col := range table.Columns {
+			newSeqRefs := make([]sqlbase.ID, len(col.UsesSequenceIds))
+			for idx, ref := range col.UsesSequenceIds {
+				newSeqRefs[idx] = tableRewrites[ref].TableID
+			}
+			col.UsesSequenceIds = newSeqRefs
+		}
+
 		// since this is a "new" table in eyes of new cluster, any leftover change
 		// lease is obviously bogus (plus the nodeID is relative to backup cluster).
 		table.Lease = nil

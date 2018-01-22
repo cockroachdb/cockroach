@@ -674,9 +674,22 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 	return encoding.EncodeUvarintAscending(key, uint64(len(key)-size))
 }
 
+const (
+	// SequenceIndexID is the ID of the single index on each special single-column,
+	// single-row sequence table.
+	SequenceIndexID = 1
+	// SequenceColumnFamilyID is the ID of the column family on each special single-column,
+	// single-row sequence table.
+	SequenceColumnFamilyID = 0
+)
+
 // MakeSequenceKey returns the key used to store the value of a sequence.
 func MakeSequenceKey(tableID uint32) []byte {
-	return makeKey(MakeTablePrefix(tableID), SequenceSuffix)
+	key := MakeTablePrefix(tableID)
+	key = encoding.EncodeUvarintAscending(key, SequenceIndexID)        // Index id
+	key = encoding.EncodeUvarintAscending(key, 0)                      // Primary key value
+	key = encoding.EncodeUvarintAscending(key, SequenceColumnFamilyID) // Column family
+	return key
 }
 
 // GetRowPrefixLength returns the length of the row prefix of the key. A table

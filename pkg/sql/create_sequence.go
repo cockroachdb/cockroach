@@ -120,6 +120,11 @@ func (*createSequenceNode) Next(runParams) (bool, error) { return false, nil }
 func (*createSequenceNode) Values() tree.Datums          { return tree.Datums{} }
 func (*createSequenceNode) Close(context.Context)        {}
 
+const (
+	sequenceColumnID   = 1
+	sequenceColumnName = "value"
+)
+
 func (n *createSequenceNode) makeSequenceTableDesc(
 	params runParams,
 	sequenceName string,
@@ -129,8 +134,34 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 ) (sqlbase.TableDescriptor, error) {
 	desc := initTableDescriptor(id, parentID, sequenceName, params.p.txn.OrigTimestamp(), privileges)
 
-	// Fill in options, starting with defaults then overriding.
+	// Mimic a table with one column, "value".
+	desc.Columns = []sqlbase.ColumnDescriptor{
+		{
+			ID:   1,
+			Name: sequenceColumnName,
+			Type: sqlbase.ColumnType{
+				SemanticType: sqlbase.ColumnType_INT,
+			},
+		},
+	}
+	desc.PrimaryIndex = sqlbase.IndexDescriptor{
+		ID:               keys.SequenceIndexID,
+		Name:             sqlbase.PrimaryKeyIndexName,
+		ColumnIDs:        []sqlbase.ColumnID{sqlbase.ColumnID(1)},
+		ColumnNames:      []string{sequenceColumnName},
+		ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+	}
+	desc.Families = []sqlbase.ColumnFamilyDescriptor{
+		{
+			ID:              keys.SequenceColumnFamilyID,
+			ColumnIDs:       []sqlbase.ColumnID{1},
+			ColumnNames:     []string{sequenceColumnName},
+			Name:            "primary",
+			DefaultColumnID: sequenceColumnID,
+		},
+	}
 
+	// Fill in options, starting with defaults then overriding.
 	opts := &sqlbase.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
@@ -140,5 +171,5 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	}
 	desc.SequenceOpts = opts
 
-	return desc, desc.AllocateIDs()
+	return desc, desc.ValidateTable()
 }

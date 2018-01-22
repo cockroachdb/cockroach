@@ -340,6 +340,13 @@ CREATE TABLE pg_catalog.pg_class (
 				return err
 			}
 
+			// Skip adding indexes for sequences (their table descriptors hav a primary
+			// index to make them comprehensible to backup/restore, but PG doesn't include
+			// an index in pg_class).
+			if table.IsSequence() {
+				return nil
+			}
+
 			// Indexes.
 			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 				return addRow(

@@ -155,7 +155,7 @@ func TestPrettyPrint(t *testing.T) {
 			"/Table/42/-2mon-2d743h59m58s999ms999µs999ns"},
 
 		// sequence
-		{MakeSequenceKey(55), `/Table/55/"seqval"`},
+		{MakeSequenceKey(55), `/Table/55/1/0/0`},
 
 		// others
 		{makeKey([]byte("")), "/Min"},

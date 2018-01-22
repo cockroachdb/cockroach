@@ -103,6 +103,20 @@ alternative for datum encoding types greater than 14, `encodeValueTag`
 sets the low four bits to `SentinelType` (15) and emits the actual datum
 encoding type next.
 
+**Note:** Values for sequences are a special case: the sequence value is
+encoded as if the sequence were a one-row, one-column table, with the
+key structured in the usual way: `/Table/<id>/<index>/<pk val>/<family>`.
+However, the value is a bare int64; it doesn't use the encoding
+specified here. This is because it is incremented using the KV
+`Increment` operation so that the increment can be done in one
+roundtrip, not a read followed by a write as would be required by a
+normal SQL `UPDATE`.
+
+An alternative design would be to teach the KV Inc operation to
+understand SQL value encoding so that the sequence could be encoded
+consistently with tables, but that would break the KV/SQL abstraction
+barrier.
+
 ### Sentinel KV pairs
 
 The column family with ID 0 is special because it contains the primary
