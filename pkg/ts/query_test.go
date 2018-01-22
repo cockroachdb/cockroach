@@ -656,9 +656,20 @@ func (tm *testModel) assertQuery(
 		Derivative:       derivative,
 		Sources:          sources,
 	}
+
+	account := tm.memMonitor.MakeBoundAccount()
+	defer account.Close(context.TODO())
 	actualDatapoints, actualSources, err := tm.DB.Query(
-		context.TODO(), q, r, sampleDuration, start, end, interpolationLimit,
+		context.TODO(),
+		q,
+		r,
+		sampleDuration,
+		start,
+		end,
+		interpolationLimit,
+		&account,
 	)
+
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -966,8 +977,13 @@ func TestQueryDownsampling(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
+	account := tm.memMonitor.MakeBoundAccount()
+	defer account.Close(context.TODO())
+
 	// Query with sampleDuration that is too small, expect error.
-	_, _, err := tm.DB.Query(context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, 0)
+	_, _, err := tm.DB.Query(
+		context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, 0, &account,
+	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
 	}
@@ -978,7 +994,14 @@ func TestQueryDownsampling(t *testing.T) {
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
 	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000, 0,
+		context.TODO(),
+		tspb.Query{},
+		Resolution10s,
+		Resolution10s.SampleDuration()+1,
+		0,
+		10000,
+		0,
+		&account,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")

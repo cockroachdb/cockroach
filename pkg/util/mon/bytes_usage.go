@@ -41,7 +41,7 @@ import (
 //
 // - components in CockroachDB that wish to have their allocations tracked
 //   declare/register their allocations to an instance of BytesMonitor. To do
-//   this, each component maintains one or more instances of BoundAcount, one
+//   this, each component maintains one or more instances of BoundAccount, one
 //   per "category" of allocation, and issue requests to Grow, Resize or Close
 //   to their monitor. Grow/Resize requests can be denied (return an error),
 //   which indicates the budget has been reached.

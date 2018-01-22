@@ -21,11 +21,22 @@ import (
 	"math"
 	"sort"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
+)
+
+// Compute the size of various structures to use when tracking memory usage.
+var (
+	sizeOfRune           = int(unsafe.Sizeof('a'))
+	sizeOfDataSpan       = int(unsafe.Sizeof(dataSpan{}))
+	sizeOfCalibratedData = int(unsafe.Sizeof(calibratedData{}))
+	sizeOfSample         = int(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{}))
+	sizeOfDataPoint      = int(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))
 )
 
 // calibratedData is used to calibrate an InternalTimeSeriesData object for
@@ -746,6 +757,7 @@ func (db *DB) Query(
 	query tspb.Query,
 	queryResolution Resolution,
 	sampleDuration, startNanos, endNanos, interpolationLimitNanos int64,
+	sessionAccount *mon.BoundAccount,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Verify that sampleDuration is a multiple of
 	// queryResolution.SampleDuration().
@@ -815,10 +827,14 @@ func (db *DB) Query(
 
 	// Convert the queried source data into a set of data spans, one for each
 	// source.
-	sourceSpans, err := makeDataSpans(rows, startNanos)
+	sourceSpans, size, err := makeDataSpans(ctx, rows, startNanos)
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := sessionAccount.Grow(ctx, int64(size)); err != nil {
+		return nil, nil, err
+	}
+	defer sessionAccount.Shrink(ctx, int64(size))
 
 	// Choose an extractor function which will be used to return values from
 	// each source for each sample period.
@@ -839,11 +855,19 @@ func (db *DB) Query(
 	sources := make([]string, 0, len(sourceSpans))
 	iters := make(aggregatingIterator, 0, len(sourceSpans))
 	maxDistance := int32(interpolationLimitNanos / sampleDuration)
+	totalSizeOfSources := 0
 	for name, span := range sourceSpans {
 		sources = append(sources, name)
+		totalSizeOfSources += sizeOfRune * len(name)
 		iters = append(iters, newInterpolatingIterator(
 			*span, 0, sampleDuration, maxDistance, extractor, downsampler, query.GetDerivative(),
 		))
+	}
+
+	// The list of sources will be returned, so track memory usage using the
+	// provided session account.
+	if err := sessionAccount.Grow(ctx, int64(totalSizeOfSources)); err != nil {
+		return nil, nil, err
 	}
 
 	// Choose an aggregation function to use when taking values from the
@@ -886,22 +910,30 @@ func (db *DB) Query(
 		iters.advance()
 	}
 
+	if err := sessionAccount.Grow(ctx, int64(sizeOfDataPoint*len(responseData))); err != nil {
+		return nil, nil, err
+	}
+
 	return responseData, sources, nil
 }
 
 // makeDataSpans constructs a new dataSpan for each distinct source encountered
 // in the query. Each dataspan will contain all data queried from a single
 // source.
-func makeDataSpans(rows []client.KeyValue, startNanos int64) (map[string]*dataSpan, error) {
+func makeDataSpans(
+	ctx context.Context, rows []client.KeyValue, startNanos int64,
+) (map[string]*dataSpan, int, error) {
+	totalSizeOfData := 0
+
 	sourceSpans := make(map[string]*dataSpan)
 	for _, row := range rows {
 		var data roachpb.InternalTimeSeriesData
 		if err := row.ValueProto(&data); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		_, source, _, _, err := DecodeDataKey(row.Key)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if _, ok := sourceSpans[source]; !ok {
 			sourceSpans[source] = &dataSpan{
@@ -909,12 +941,15 @@ func makeDataSpans(rows []client.KeyValue, startNanos int64) (map[string]*dataSp
 				sampleNanos: data.SampleDurationNanos,
 				datas:       make([]calibratedData, 0, 1),
 			}
+			totalSizeOfData += (sizeOfRune * len(source)) + sizeOfDataSpan
 		}
 		if err := sourceSpans[source].addData(data); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
+		totalSizeOfData += (sizeOfSample * len(data.Samples)) + sizeOfCalibratedData
 	}
-	return sourceSpans, nil
+
+	return sourceSpans, totalSizeOfData, nil
 }
 
 // getExtractionFunction returns
