@@ -110,6 +110,7 @@ SHOW TABLES FROM information_schema
 column_privileges
 columns
 key_column_usage
+referential_constraints
 schema_privileges
 schemata
 sequences
@@ -237,6 +238,7 @@ crdb_internal       zones
 information_schema  column_privileges
 information_schema  columns
 information_schema  key_column_usage
+information_schema  referential_constraints
 information_schema  schema_privileges
 information_schema  schemata
 information_schema  sequences
@@ -412,6 +414,7 @@ def            crdb_internal       zones                      SYSTEM VIEW  1
 def            information_schema  column_privileges          SYSTEM VIEW  1
 def            information_schema  columns                    SYSTEM VIEW  1
 def            information_schema  key_column_usage           SYSTEM VIEW  1
+def            information_schema  referential_constraints    SYSTEM VIEW  1
 def            information_schema  schema_privileges          SYSTEM VIEW  1
 def            information_schema  schemata                   SYSTEM VIEW  1
 def            information_schema  sequences                  SYSTEM VIEW  1
@@ -741,6 +744,7 @@ statement ok
 DROP TABLE num_prec
 
 ## information_schema.key_column_usage
+## information_schema.referential_constraints
 
 statement ok
 CREATE DATABASE constraint_column
@@ -757,14 +761,14 @@ CREATE TABLE constraint_column.t1 (
 statement ok
 CREATE TABLE constraint_column.t2 (
     t1_ID INT PRIMARY KEY,
-    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_column.t1(a)
+    CONSTRAINT fk FOREIGN KEY (t1_ID) REFERENCES constraint_column.t1(a) ON DELETE RESTRICT
 )
 
 statement ok
 CREATE TABLE constraint_column.t3 (
     a INT,
     b INT,
-    CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES constraint_column.t1(b, c),
+    CONSTRAINT fk2 FOREIGN KEY (a, b) REFERENCES constraint_column.t1(b, c) ON UPDATE CASCADE,
     INDEX (a, b)
 )
 
@@ -781,8 +785,15 @@ def                 constraint_column  primary          def            constrain
 def                 constraint_column  t1_a_key         def            constraint_column  t1          a            1                 NULL
 def                 constraint_column  fk               def            constraint_column  t2          t1_id        1                 1
 def                 constraint_column  primary          def            constraint_column  t2          t1_id        1                 NULL
-def                 constraint_column  fk               def            constraint_column  t3          a            1                 1
-def                 constraint_column  fk               def            constraint_column  t3          b            2                 2
+def                 constraint_column  fk2              def            constraint_column  t3          a            1                 1
+def                 constraint_column  fk2              def            constraint_column  t3          b            2                 2
+
+query TTTTTTTTTTT colnames
+SELECT * FROM information_schema.referential_constraints WHERE constraint_schema = 'constraint_column' ORDER BY TABLE_NAME, CONSTRAINT_NAME
+----
+constraint_catalog  constraint_schema  constraint_name  unique_constraint_catalog  unique_constraint_schema  unique_constraint_name  match_option  update_rule  delete_rule  table_name  referenced_table_name
+def                 constraint_column  fk               def                        constraint_column         t1_a_key                FULL          NO ACTION    RESTRICT     t2          t1
+def                 constraint_column  fk2              def                        constraint_column         index_key               FULL          CASCADE      NO ACTION    t3          t1
 
 statement ok
 DROP DATABASE constraint_column CASCADE
