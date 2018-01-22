@@ -443,6 +443,7 @@ func TestImportStmt(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 
 	tablePath := filepath.Join(dir, "table")
 	if err := ioutil.WriteFile(tablePath, []byte(`
@@ -469,8 +470,8 @@ func TestImportStmt(t *testing.T) {
 	expectedRows := numFiles * rowsPerFile
 
 	// Support subtests by keeping track of the number of jobs that are executed.
-	i := -1
-	for _, tc := range []struct {
+	testNum := -1
+	for i, tc := range []struct {
 		name    string
 		query   string        // must have one `%s` for the files list.
 		args    []interface{} // will have backupPath appended
@@ -480,117 +481,117 @@ func TestImportStmt(t *testing.T) {
 	}{
 		{
 			"schema-in-file",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
 			files,
-			`WITH temp = %s, transform_only`,
+			``,
 			"",
 		},
 		{
 			"schema-in-file-intodb",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, into_db = 'csv1'`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH into_db = 'csv1'`,
 			schema,
 			files,
-			`WITH temp = %s, transform_only`,
+			`WITH into_db = 'csv1'`,
 			"",
 		},
 		{
 			"schema-in-query",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1`,
-			nil,
-			files,
-			`WITH temp = %s, transform_only`,
-			"",
-		},
-		{
-			"schema-in-query-opts",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, delimiter = '|', comment = '#', nullif=''`,
-			nil,
-			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', "nullif" = '', temp = %s, transform_only`,
-			"",
-		},
-		{
-			"schema-in-file-dist",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
-			schema,
-			files,
-			`WITH distributed, temp = %s, transform_only`,
-			"",
-		},
-		{
-			// Force some SST splits.
-			"schema-in-file-sstsize-dist",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed, sstsize = '10K'`,
-			schema,
-			files,
-			`WITH distributed, sstsize = '10K', temp = %s, transform_only`,
-			"",
-		},
-		{
-			"schema-in-query-dist",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, distributed, transform_only`,
-			nil,
-			files,
-			`WITH distributed, temp = %s, transform_only`,
-			"",
-		},
-		{
-			"schema-in-query-dist-opts",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, distributed, delimiter = '|', comment = '#', nullif=''`,
-			nil,
-			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', distributed, "nullif" = '', temp = %s, transform_only`,
-			"",
-		},
-		{
-			"schema-in-query-transform-only",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, distributed, delimiter = '|', comment = '#', nullif='', transform_only`,
-			nil,
-			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', distributed, "nullif" = '', temp = %s, transform_only`,
-			"",
-		},
-		{
-			"empty-file",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
-			schema,
-			empty,
-			`WITH temp = %s, transform_only`,
-			"",
-		},
-		{
-			"empty-with-files",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
-			schema,
-			append(empty, files...),
-			`WITH temp = %s, transform_only`,
-			"",
-		},
-		{
-			"empty-file-dist",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
-			schema,
-			empty,
-			`WITH distributed, temp = %s, transform_only`,
-			"",
-		},
-		{
-			"empty-with-files-dist",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
-			schema,
-			append(empty, files...),
-			`WITH distributed, temp = %s, transform_only`,
-			"",
-		},
-		// NB: successes above, failures below, because we check the i-th job.
-		{
-			"missing-temp",
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`,
 			nil,
 			files,
 			``,
-			"must provide a temporary storage location",
+			"",
+		},
+		{
+			"schema-in-query-opts",
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif=''`,
+			nil,
+			filesWithOpts,
+			`WITH comment = '#', delimiter = '|', "nullif" = ''`,
+			"",
+		},
+		{
+			"schema-in-file-local",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
+			schema,
+			files,
+			`WITH local, transform = 'nodelocal:///4'`,
+			"",
+		},
+		{
+			// Force some SST splits.
+			"schema-in-file-sstsize",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH sstsize = '10K'`,
+			schema,
+			files,
+			`WITH sstsize = '10K'`,
+			"",
+		},
+		{
+			"schema-in-query-local",
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local, transform = $1`,
+			nil,
+			files,
+			`WITH local, transform = 'nodelocal:///6'`,
+			"",
+		},
+		{
+			"schema-in-query-local-opts",
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local, delimiter = '|', comment = '#', nullif='', transform = $1`,
+			nil,
+			filesWithOpts,
+			`WITH comment = '#', delimiter = '|', local, "nullif" = '', transform = 'nodelocal:///7'`,
+			"",
+		},
+		{
+			"schema-in-query-transform-only",
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', transform = $1`,
+			nil,
+			filesWithOpts,
+			`WITH comment = '#', delimiter = '|', "nullif" = '', transform = 'nodelocal:///8'`,
+			"",
+		},
+		{
+			"empty-file",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
+			schema,
+			empty,
+			``,
+			"",
+		},
+		{
+			"empty-with-files",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
+			schema,
+			append(empty, files...),
+			``,
+			"",
+		},
+		{
+			"empty-file-local",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
+			schema,
+			empty,
+			`WITH local, transform = 'nodelocal:///11'`,
+			"",
+		},
+		{
+			"empty-with-files-local",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
+			schema,
+			append(empty, files...),
+			`WITH local, transform = 'nodelocal:///12'`,
+			"",
+		},
+		// NB: successes above, failures below, because we check the i-th job.
+		{
+			"missing-transform",
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local`,
+			nil,
+			files,
+			``,
+			"transform option required for local import",
 		},
 		{
 			"bad-opt-name",
@@ -601,24 +602,24 @@ func TestImportStmt(t *testing.T) {
 			"invalid option \"foo\"",
 		},
 		{
-			"bad-opt-arg",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH distributed = 'bar'`,
-			nil,
-			files,
-			``,
-			"option \"distributed\" does not take a value",
-		},
-		{
 			"bad-opt-no-arg",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH transform`,
 			nil,
 			files,
 			``,
-			"option \"temp\" requires a value",
+			"option \"transform\" requires a value",
 		},
 		{
 			"primary-key-dup",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH transform = $2`,
+			schema,
+			dups,
+			``,
+			"primary or unique index has duplicate keys",
+		},
+		{
+			"primary-key-dup-local",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
 			schema,
 			dups,
 			``,
@@ -626,15 +627,22 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"no-database",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, into_db = 'nonexistent'`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH into_db = 'nonexistent'`,
 			schema,
 			files,
 			``,
 			`database does not exist: "nonexistent"`,
 		},
+		{
+			"transform-and-into-db",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH transform = $2, into_db = 'nonexistent'`,
+			schema,
+			files,
+			``,
+			`cannot specify both transform and into_db`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			i++
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE csv%d`, i))
 			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = csv%d`, i))
 
@@ -644,30 +652,34 @@ func TestImportStmt(t *testing.T) {
 			}
 
 			backupPath := fmt.Sprintf("nodelocal:///%d", i)
-			if strings.Contains(tc.query, "temp = $") {
+			hasTransform := strings.Contains(tc.query, "transform = $")
+			if hasTransform {
 				tc.args = append(tc.args, backupPath)
 			}
 
 			var result int
 			query := fmt.Sprintf(tc.query, strings.Join(tc.files, ", "))
+			testNum++
 			if err := sqlDB.DB.QueryRow(query, tc.args...).Scan(
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 			); err != nil {
 				if !testutils.IsError(err, tc.err) {
-					t.Fatalf("%s: %v", query, err)
+					t.Fatalf("%s: %v (%#v)", query, err, tc.args)
 				}
 				return
 			}
 
 			const jobPrefix = `IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
-			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+i*2, jobs.TypeImport, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+testNum, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
-				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", "), `'`+backupPath+`'`),
+				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", ")),
 			}); err != nil {
 				t.Fatal(err)
 			}
 
-			if strings.Contains(tc.query, "transform_only") {
+			isEmpty := len(tc.files) == 1 && tc.files[0] == empty[0]
+
+			if hasTransform {
 				if expected, actual := 0, restored.rows; expected != actual {
 					t.Fatalf("expected %d rows, got %d", expected, actual)
 				}
@@ -676,6 +688,7 @@ func TestImportStmt(t *testing.T) {
 				) {
 					t.Fatal(err)
 				}
+				testNum++
 				if err := sqlDB.DB.QueryRow(
 					`RESTORE csv.* FROM $1 WITH into_db = $2`, backupPath, fmt.Sprintf(`csv%d`, i),
 				).Scan(
@@ -683,18 +696,17 @@ func TestImportStmt(t *testing.T) {
 				); err != nil {
 					t.Fatal(err)
 				}
+				if expected, actual := expectedRows, restored.rows; expected != actual && !isEmpty {
+					t.Fatalf("expected %d rows, got %d", expected, actual)
+				}
 			}
 
-			if len(tc.files) == 1 && tc.files[0] == empty[0] {
+			if isEmpty {
 				sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
 				if expect := 0; result != expect {
 					t.Fatalf("expected %d rows, got %d", expect, result)
 				}
 				return
-			}
-
-			if expected, actual := expectedRows, restored.rows; expected != actual {
-				t.Fatalf("expected %d rows, got %d", expected, actual)
 			}
 
 			// Verify correct number of rows via COUNT.
@@ -731,19 +743,19 @@ func TestImportStmt(t *testing.T) {
 	t.Run("checkpoint-leftover", func(t *testing.T) {
 		nodetmp := "nodelocal:///tmp"
 		// Specify wrong number of columns.
-		_, err := conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT) CSV DATA (%s) WITH temp = $1, transform_only`, files[0]), nodetmp)
+		_, err := conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
 		if !testutils.IsError(err, "expected 1 fields, got 2") {
 			t.Fatalf("unexpected: %v", err)
 		}
 
 		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
-		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s) WITH temp = $2, transform_only`, files[0]), schema[0], nodetmp)
+		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s) WITH transform = $2`, files[0]), schema[0], nodetmp)
 		if !testutils.IsError(err, `file specifies a schema for table "t"`) {
 			t.Fatalf("unexpected: %v", err)
 		}
 
 		// Expect it to succeed with correct columns.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT, b STRING) CSV DATA (%s) WITH temp = $1, transform_only`, files[0]), nodetmp)
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT, b STRING) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
 	})
 }
 
@@ -752,15 +764,15 @@ func BenchmarkImport(b *testing.B) {
 		nodes    = 3
 		numFiles = nodes + 2
 	)
+	dir, cleanup := testutils.TempDir(b)
+	defer cleanup()
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	sqlDB.Exec(b, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
 
-	dir, cleanup := testutils.TempDir(b)
-	defer cleanup()
 	files, _, _ := makeCSVData(b, dir, numFiles, b.N*100)
 	tmp := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, b.Name()))
 
@@ -769,7 +781,7 @@ func BenchmarkImport(b *testing.B) {
 	sqlDB.Exec(b,
 		fmt.Sprintf(
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
-			CSV DATA (%s) WITH temp = $1, distributed, transform_only`,
+			CSV DATA (%s) WITH transform = $1`,
 			strings.Join(files, ","),
 		),
 		tmp,
