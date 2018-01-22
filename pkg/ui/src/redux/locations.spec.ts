@@ -38,11 +38,11 @@ function makeStateWithLocations(locationData: Location[]) {
   return {
     cachedData: {
       locations: {
-        valid: true,
-        inFlight: false,
         data: protos.cockroach.server.serverpb.LocationsResponse.fromObject({
           locations: locationData,
         }),
+        inFlight: false,
+        valid: true,
       },
     },
   };
@@ -66,13 +66,13 @@ describe("selectLocations", function() {
     const state = {
       cachedData: {
         locations: {
-          inFlight: false,
-          valid: false,
           data: protos.cockroach.server.serverpb.LocationsResponse.fromObject({
             locations: [
               {},
             ],
           }),
+          inFlight: false,
+          valid: false,
         },
       },
     };
