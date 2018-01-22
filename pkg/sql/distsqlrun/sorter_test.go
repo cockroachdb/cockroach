@@ -21,6 +21,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -220,7 +222,7 @@ func TestSorter(t *testing.T) {
 		// 2048: A memory limit that should not be hit; the strategy will not
 		// use disk.
 		for _, memLimit := range []int64{0, 1, 1150, 2048} {
-			t.Run(fmt.Sprintf("%sMemLimit=%d", c.name, memLimit), func(t *testing.T) {
+			t.Run(fmt.Sprintf("AsProcessor%sMemLimit=%d", c.name, memLimit), func(t *testing.T) {
 				in := NewRowBuffer(c.types, c.input, RowBufferArgs{})
 				out := &RowBuffer{}
 
@@ -231,11 +233,16 @@ func TestSorter(t *testing.T) {
 				// Override the default memory limit. This will result in using
 				// a memory row container which will hit this limit and fall
 				// back to using a disk row container.
-				s.flowCtx.testingKnobs.MemoryLimitBytes = memLimit
-				s.Run(nil)
+				flowCtx.testingKnobs.MemoryLimitBytes = memLimit
+				wg := sync.WaitGroup{}
+				wg.Add(1)
+				s.Run(&wg)
 				if !out.ProducerClosed {
 					t.Fatalf("output RowReceiver not closed")
 				}
+
+				wg.Wait()
+				s.ConsumerClosed()
 
 				var retRows sqlbase.EncDatumRows
 				for {
@@ -252,6 +259,9 @@ func TestSorter(t *testing.T) {
 					t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
 						expStr, retStr)
 				}
+			})
+			t.Run(fmt.Sprintf("AsRowSource%sMemLimit=%d", c.name, memLimit), func(t *testing.T) {
+
 			})
 		}
 	}

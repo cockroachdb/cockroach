@@ -17,24 +17,19 @@ package distsqlrun
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// sorter sorts the input rows according to the column ordering specified by ordering. Note
-// that this is a no-grouping aggregator and therefore it does not produce a global ordering but
-// simply guarantees an intra-stream ordering on the physical output stream.
-type sorter struct {
+// sorter sorts the input rows according to the specified ordering.
+type sorterBase struct {
 	processorBase
 
-	// input is a row source without metadata; the metadata is directed straight
-	// to out.output.
-	input NoMetadataRowSource
-	// rawInput is the true input, not wrapped in a NoMetadataRowSource.
-	rawInput RowSource
+	evalCtx *tree.EvalContext
+
+	input    RowSource
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
 	// count is the maximum number of rows that the sorter will push to the
@@ -46,44 +41,35 @@ type sorter struct {
 	tempStorage engine.Engine
 }
 
-var _ Processor = &sorter{}
+type sortImplementation interface {
+	RowSource
+	Run(wg *sync.WaitGroup)
+	FlowCtx() *FlowCtx
+	close()
+}
 
 func newSorter(
 	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
-) (*sorter, error) {
+) (sortImplementation, error) {
 	count := int64(0)
 	if post.Limit != 0 {
 		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
 		// will discard the first Offset ones.
 		count = int64(post.Limit) + int64(post.Offset)
 	}
-	s := &sorter{
-		input:       MakeNoMetadataRowSource(input, output),
-		rawInput:    input,
+
+	s := &sorterBase{
+		input:       input,
 		ordering:    convertToColumnOrdering(spec.OutputOrdering),
 		matchLen:    spec.OrderingMatchLen,
 		count:       count,
 		tempStorage: flowCtx.TempStorage,
+		evalCtx:     flowCtx.NewEvalCtx(),
 	}
-	if err := s.init(post, input.OutputTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
+	s.flowCtx = flowCtx
+
+	if err := s.init(post, input.OutputTypes(), flowCtx, s.evalCtx, output); err != nil {
 		return nil, err
-	}
-	return s, nil
-}
-
-// Run is part of the processor interface.
-func (s *sorter) Run(wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
-	}
-
-	ctx := log.WithLogTag(s.flowCtx.Ctx, "Sorter", nil)
-	ctx, span := processorSpan(ctx, "sorter")
-	defer tracing.FinishSpan(span)
-
-	if log.V(2) {
-		log.Infof(ctx, "starting sorter run")
-		defer log.Infof(ctx, "exiting sorter run")
 	}
 
 	var sv memRowContainer
@@ -105,27 +91,26 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 		limitedMon := mon.MakeMonitorInheritWithLimit(
 			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
 		)
-		limitedMon.Start(ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-		defer limitedMon.Stop(ctx)
+		limitedMon.Start(s.ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+		defer limitedMon.Stop(s.ctx)
 
 		rowContainerMon = &limitedMon
 	}
-	sv.initWithMon(s.ordering, s.rawInput.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+	sv.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
 	// Construct the optimal sorterStrategy.
-	var ss sorterStrategy
 	if s.matchLen == 0 {
 		if s.count == 0 {
 			// No specified ordering match length and unspecified limit; no
 			// optimizations are possible so we simply load all rows into memory and
 			// sort all values in-place. It has a worst-case time complexity of
 			// O(n*log(n)) and a worst-case space complexity of O(n).
-			ss = newSortAllStrategy(&sv, useTempStorage)
+			return newSortAllStrategy(s, &sv, useTempStorage), nil
 		} else {
 			// No specified ordering match length but specified limit; we can optimize
 			// our sort procedure by maintaining a max-heap populated with only the
 			// smallest k rows seen. It has a worst-case time complexity of
 			// O(n*log(k)) and a worst-case space complexity of O(k).
-			ss = newSortTopKStrategy(&sv, s.count)
+			return newSortTopKStrategy(s, &sv, s.count), nil
 		}
 	} else {
 		// Ordering match length is specified. We will be able to use existing
@@ -135,12 +120,6 @@ func (s *sorter) Run(wg *sync.WaitGroup) {
 		// chunk and then output.
 		// TODO(irfansharif): Add optimization for case where both ordering match
 		// length and limit is specified.
-		ss = newSortChunksStrategy(&sv)
+		return newSortChunksStrategy(s, &sv), nil
 	}
-
-	sortErr := ss.Execute(ctx, s)
-	if sortErr != nil {
-		log.Errorf(ctx, "error sorting rows: %s", sortErr)
-	}
-	DrainAndClose(ctx, s.out.output, sortErr, s.rawInput)
 }
