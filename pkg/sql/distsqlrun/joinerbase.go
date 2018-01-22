@@ -146,7 +146,7 @@ func shouldIncludeRightColsInOutput(joinType joinType) bool {
 // stored).
 func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 	switch joinType {
-	case leftSemiJoin, innerJoin:
+	case leftSemiJoin, innerJoin, intersectAllJoin:
 		return false
 	case rightOuter:
 		return side == rightSide
