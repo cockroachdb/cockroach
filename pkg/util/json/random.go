@@ -20,12 +20,28 @@ import (
 	"math/rand"
 )
 
+// Some issues will only be revealed if we have duplicate strings, so we
+// include a pool of common strings that we occasionally pull from rather than
+// generating a completely random string.
+var staticStrings = []string{
+	"a",
+	"b",
+	"c",
+	"foo",
+	"bar",
+	"baz",
+	"foobar",
+}
+
 // Random generates a random JSON value.
 func Random(complexity int, rng *rand.Rand) (JSON, error) {
 	return MakeJSON(doRandomJSON(complexity, rng))
 }
 
 func randomJSONString(rng *rand.Rand) interface{} {
+	if rng.Intn(2) == 0 {
+		return staticStrings[rng.Intn(len(staticStrings))]
+	}
 	result := make([]byte, 0)
 	l := rng.Intn(10) + 3
 	for i := 0; i < l; i++ {
