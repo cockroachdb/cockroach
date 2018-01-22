@@ -37,13 +37,18 @@ func (c *testColumn) IsNullable() bool {
 }
 
 // ColName is part of the optbase.Column interface.
-func (c *testColumn) ColName() string {
-	return c.colName
+func (c *testColumn) ColName() optbase.ColumnName {
+	return optbase.ColumnName(c.colName)
 }
 
 // DatumType is part of the optbase.Column interface.
 func (c *testColumn) DatumType() types.T {
 	return c.datumType
+}
+
+// IsHidden is part of the optbase.Column interface.
+func (c *testColumn) IsHidden() bool {
+	return false
 }
 
 type testTable struct {
@@ -54,8 +59,8 @@ type testTable struct {
 var _ optbase.Table = &testTable{}
 
 // TabName is part of the optbase.Table interface.
-func (t *testTable) TabName() string {
-	return t.tabName
+func (t *testTable) TabName() optbase.TableName {
+	return optbase.TableName(t.tabName)
 }
 
 // NumColumns is part of the optbase.Table interface.

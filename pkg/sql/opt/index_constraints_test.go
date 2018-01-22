@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -59,7 +60,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			varTypes, err := parseTypes(strings.Split(tc.varTypes, ", "))
+			varTypes, err := testutils.ParseTypes(strings.Split(tc.varTypes, ", "))
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -70,7 +71,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 			iVarHelper := tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
-			typedExpr, err := parseScalarExpr(tc.expr, &iVarHelper)
+			typedExpr, err := testutils.ParseScalarExpr(tc.expr, &iVarHelper)
 			if err != nil {
 				b.Fatal(err)
 			}

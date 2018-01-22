@@ -1,0 +1,214 @@
+build-scalar
+1
+----
+const: 1
+
+build-scalar
+1 + 2
+----
+plus
+ ├── const: 1
+ └── const: 2
+
+build-scalar vars=(string)
+@1
+----
+variable: @1
+
+build-scalar vars=(int)
+@1 + 2
+----
+plus
+ ├── variable: @1
+ └── const: 2
+
+build-scalar vars=(int, int)
+@1 >= 5 AND @1 <= 10 AND @2 < 4
+----
+and
+ ├── and
+ │    ├── ge
+ │    │    ├── variable: @1
+ │    │    └── const: 5
+ │    └── le
+ │         ├── variable: @1
+ │         └── const: 10
+ └── lt
+      ├── variable: @2
+      └── const: 4
+
+build-scalar vars=(int, int)
+(@1, @2) = (1, 2)
+----
+eq
+ ├── tuple
+ │    ├── variable: @1
+ │    └── variable: @2
+ └── tuple
+      ├── const: 1
+      └── const: 2
+
+build-scalar vars=(int)
+@1 IN (1, 2)
+----
+in
+ ├── variable: @1
+ └── tuple
+      ├── const: 1
+      └── const: 2
+
+build-scalar vars=(int, int)
+(@1, @2) IN ((1, 2), (3, 4))
+----
+in
+ ├── tuple
+ │    ├── variable: @1
+ │    └── variable: @2
+ └── tuple
+      ├── tuple
+      │    ├── const: 1
+      │    └── const: 2
+      └── tuple
+           ├── const: 3
+           └── const: 4
+
+build-scalar vars=(int, int, int, int)
+(@1, @2 + @3, 5 + @4 * 2) = (@2 + @3, 8, @1 - @4)
+----
+eq
+ ├── tuple
+ │    ├── variable: @1
+ │    ├── plus
+ │    │    ├── variable: @2
+ │    │    └── variable: @3
+ │    └── plus
+ │         ├── const: 5
+ │         └── mult
+ │              ├── variable: @4
+ │              └── const: 2
+ └── tuple
+      ├── plus
+      │    ├── variable: @2
+      │    └── variable: @3
+      ├── const: 8
+      └── minus
+           ├── variable: @1
+           └── variable: @4
+
+build-scalar vars=(int, int, int, int)
+((@1, @2), (@3, @4)) = ((1, 2), (3, 4))
+----
+eq
+ ├── tuple
+ │    ├── tuple
+ │    │    ├── variable: @1
+ │    │    └── variable: @2
+ │    └── tuple
+ │         ├── variable: @3
+ │         └── variable: @4
+ └── tuple
+      ├── tuple
+      │    ├── const: 1
+      │    └── const: 2
+      └── tuple
+           ├── const: 3
+           └── const: 4
+
+build-scalar vars=(int, int, int, string)
+(@1, (@2, 'a'), (@3, 'b', 5)) = (9, (@1 + @3, @4), (5, @4, @1))
+----
+eq
+ ├── tuple
+ │    ├── variable: @1
+ │    ├── tuple
+ │    │    ├── variable: @2
+ │    │    └── const: 'a'
+ │    └── tuple
+ │         ├── variable: @3
+ │         ├── const: 'b'
+ │         └── const: 5
+ └── tuple
+      ├── const: 9
+      ├── tuple
+      │    ├── plus
+      │    │    ├── variable: @1
+      │    │    └── variable: @3
+      │    └── variable: @4
+      └── tuple
+           ├── const: 5
+           ├── variable: @4
+           └── variable: @1
+
+build-scalar vars=(int, int)
+@1 IS NULL
+----
+is-not-distinct-from
+ ├── variable: @1
+ └── const: NULL
+
+build-scalar vars=(int, int)
+@1 IS NOT DISTINCT FROM NULL
+----
+is-not-distinct-from
+ ├── variable: @1
+ └── const: NULL
+
+build-scalar vars=(int, int)
+@1 IS NOT DISTINCT FROM @2
+----
+is-not-distinct-from
+ ├── variable: @1
+ └── variable: @2
+
+build-scalar vars=(int, int)
+@1 IS NOT NULL
+----
+is-distinct-from
+ ├── variable: @1
+ └── const: NULL
+
+build-scalar vars=(int, int)
+@1 IS DISTINCT FROM NULL
+----
+is-distinct-from
+ ├── variable: @1
+ └── const: NULL
+
+build-scalar vars=(int, int)
+@1 IS DISTINCT FROM @2
+----
+is-distinct-from
+ ├── variable: @1
+ └── variable: @2
+
+build-scalar vars=(int, int)
++ @1 + (- @2)
+----
+plus
+ ├── unary-plus
+ │    └── variable: @1
+ └── unary-minus
+      └── variable: @2
+
+build-scalar vars=(int, int)
+CASE WHEN @1 = 2 THEN 1 ELSE 2 END
+----
+error: not yet implemented: scalar expr: *tree.CaseExpr
+
+
+build-scalar vars=(string)
+LENGTH(@1) = 2
+----
+error: not yet implemented: scalar expr: *tree.FuncExpr
+
+
+build-scalar vars=(jsonb)
+@1 @> '{"a":1}'
+----
+error: not yet implemented: operator @>
+
+
+build-scalar vars=(jsonb)
+'{"a":1}' <@ @1
+----
+error: not yet implemented: operator <@
