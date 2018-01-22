@@ -519,14 +519,15 @@ bool FileEntry::MergePartialFromCodedStream(
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      // int32 env_level = 1;
+      // .cockroach.storage.engine.enginepb.EnvLevel env_level = 1;
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
-
+          int value;
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &env_level_)));
+                   int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+                 input, &value)));
+          set_env_level(static_cast< ::cockroach::storage::engine::enginepb::EnvLevel >(value));
         } else {
           goto handle_unusual;
         }
@@ -571,9 +572,10 @@ void FileEntry::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // int32 env_level = 1;
+  // .cockroach.storage.engine.enginepb.EnvLevel env_level = 1;
   if (this->env_level() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->env_level(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteEnum(
+      1, this->env_level(), output);
   }
 
   // bytes encryption_settings = 2;
@@ -600,11 +602,10 @@ size_t FileEntry::ByteSizeLong() const {
         this->encryption_settings());
   }
 
-  // int32 env_level = 1;
+  // .cockroach.storage.engine.enginepb.EnvLevel env_level = 1;
   if (this->env_level() != 0) {
     total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int32Size(
-        this->env_level());
+      ::google::protobuf::internal::WireFormatLite::EnumSize(this->env_level());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -665,15 +666,15 @@ void FileEntry::InternalSwap(FileEntry* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // FileEntry
 
-// int32 env_level = 1;
+// .cockroach.storage.engine.enginepb.EnvLevel env_level = 1;
 void FileEntry::clear_env_level() {
   env_level_ = 0;
 }
-::google::protobuf::int32 FileEntry::env_level() const {
+::cockroach::storage::engine::enginepb::EnvLevel FileEntry::env_level() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.env_level)
-  return env_level_;
+  return static_cast< ::cockroach::storage::engine::enginepb::EnvLevel >(env_level_);
 }
-void FileEntry::set_env_level(::google::protobuf::int32 value) {
+void FileEntry::set_env_level(::cockroach::storage::engine::enginepb::EnvLevel value) {
   
   env_level_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.env_level)

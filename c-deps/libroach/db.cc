@@ -23,6 +23,7 @@
 #include "defines.h"
 #include "encoding.h"
 #include "engine.h"
+#include "env_manager.h"
 #include "eventlistener.h"
 #include "fmt.h"
 #include "getter.h"
@@ -55,7 +56,7 @@ namespace cockroach {
 
 // DBOpenHook in OSS mode only verifies that no extra options are specified.
 __attribute__((weak)) rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts,
-                                                 EnvContext* env_ctx) {
+                                                 EnvManager* env_ctx) {
   if (opts.extra_options.len != 0) {
     return rocksdb::Status::InvalidArgument(
         "DBOptions has extra_options, but OSS code cannot handle them");
@@ -101,7 +102,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
 
   // Make the default options.env the default. It points to Env::Default which does not
   // need to be deleted.
-  std::unique_ptr<EnvContext> env_ctx(new EnvContext(options.env));
+  std::unique_ptr<EnvManager> env_ctx(new EnvManager(options.env));
 
   if (dir.len == 0) {
     // In-memory database: use a MemEnv as the base Env.
