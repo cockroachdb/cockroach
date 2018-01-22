@@ -1,18 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package testonlyccl
+package workloadccl
 
 import (
 	"context"
@@ -99,16 +93,16 @@ func TestFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 
-	store := workload.FixtureStore{
+	store := FixtureStore{
 		GCSBucket: gcsBucket,
 		GCSPrefix: fmt.Sprintf(`TestFixture-%d`, timeutil.Now().UnixNano()),
 	}
 
-	if _, err := workload.GetFixture(ctx, gcs, store, gen); !testutils.IsError(err, `fixture not found`) {
+	if _, err := GetFixture(ctx, gcs, store, gen); !testutils.IsError(err, `fixture not found`) {
 		t.Fatalf(`expected "fixture not found" error but got: %+v`, err)
 	}
 
-	fixtures, err := workload.ListFixtures(ctx, gcs, store)
+	fixtures, err := ListFixtures(ctx, gcs, store)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
@@ -116,12 +110,12 @@ func TestFixture(t *testing.T) {
 		t.Errorf(`expected no fixtures but got: %+v`, fixtures)
 	}
 
-	fixture, err := workload.MakeFixture(ctx, sqlDB.DB, gcs, store, gen)
+	fixture, err := MakeFixture(ctx, sqlDB.DB, gcs, store, gen)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 
-	fixtures, err = workload.ListFixtures(ctx, gcs, store)
+	fixtures, err = ListFixtures(ctx, gcs, store)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
@@ -130,7 +124,7 @@ func TestFixture(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE test`)
-	if err := workload.RestoreFixture(ctx, sqlDB.DB, fixture, `test`); err != nil {
+	if err := RestoreFixture(ctx, sqlDB.DB, fixture, `test`); err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 	sqlDB.CheckQueryResults(t,
