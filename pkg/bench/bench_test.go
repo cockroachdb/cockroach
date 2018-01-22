@@ -165,6 +165,46 @@ func BenchmarkCount(b *testing.B) {
 	})
 }
 
+func BenchmarkSort(b *testing.B) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		defer func() {
+			if _, err := db.Exec(`DROP TABLE IF EXISTS bench.sort`); err != nil {
+				b.Fatal(err)
+			}
+		}()
+
+		if _, err := db.Exec(`CREATE TABLE bench.sort (k INT PRIMARY KEY, v INT)`); err != nil {
+			b.Fatal(err)
+		}
+
+		var buf bytes.Buffer
+		val := 0
+		for i := 0; i < 100; i++ {
+			buf.Reset()
+			buf.WriteString(`INSERT INTO bench.sort VALUES `)
+			for j := 0; j < 1000; j++ {
+				if j > 0 {
+					buf.WriteString(", ")
+				}
+				fmt.Fprintf(&buf, "(%d, %d)", val, -val)
+				val++
+			}
+			if _, err := db.Exec(buf.String()); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := db.Exec("SELECT * FROM bench.sort ORDER BY v"); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StopTimer()
+	})
+}
+
 // runBenchmarkInsert benchmarks inserting count rows into a table.
 func runBenchmarkInsert(b *testing.B, db *gosql.DB, count int) {
 	defer func() {
