@@ -93,11 +93,10 @@ type EventLogger struct {
 	InternalExecutor
 }
 
-// MakeEventLogger constructs a new EventLogger. A LeaseManager is required in
-// order to correctly execute SQL statements.
-func MakeEventLogger(leaseMgr *LeaseManager) EventLogger {
+// MakeEventLogger constructs a new EventLogger.
+func MakeEventLogger(execCfg *ExecutorConfig) EventLogger {
 	return EventLogger{InternalExecutor{
-		LeaseManager: leaseMgr,
+		ExecCfg: execCfg,
 	}}
 }
 

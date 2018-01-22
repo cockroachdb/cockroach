@@ -38,7 +38,8 @@ func GetUserHashedPassword(
 	var hashedPassword []byte
 	var exists bool
 	err := executor.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p, cleanup := newInternalPlanner("get-pwd", txn, security.RootUser, metrics)
+		p, cleanup := newInternalPlanner(
+			"get-pwd", txn, security.RootUser, metrics, &executor.cfg)
 		defer cleanup()
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
 			`WHERE username=$1 AND "isRole" = false`
@@ -61,8 +62,7 @@ func GetUserHashedPassword(
 func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT username,"isRole"  FROM system.users`
 	newPlanner, cleanup := newInternalPlanner(
-		"get-all-users-and-roles", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics,
-	)
+		"get-all-users-and-roles", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
 	defer cleanup()
 	rows, err := newPlanner.queryRows(ctx, query)
 	if err != nil {

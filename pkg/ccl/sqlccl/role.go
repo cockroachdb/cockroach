@@ -157,7 +157,7 @@ func grantRolePlanHook(
 		memberStmt += ` DO NOTHING`
 	}
 
-	internalExecutor := sql.InternalExecutor{LeaseManager: p.LeaseMgr()}
+	internalExecutor := sql.InternalExecutor{ExecCfg: p.ExecCfg()}
 	for _, r := range grant.Roles {
 		for _, m := range grant.Members {
 			_, err := internalExecutor.ExecuteStatementInTransaction(
@@ -235,7 +235,7 @@ func revokeRolePlanHook(
 		memberStmt = `DELETE FROM system.role_members WHERE "role" = $1 AND "member" = $2`
 	}
 
-	internalExecutor := sql.InternalExecutor{LeaseManager: p.LeaseMgr()}
+	internalExecutor := sql.InternalExecutor{ExecCfg: p.ExecCfg()}
 	for _, r := range revoke.Roles {
 		for _, m := range revoke.Members {
 			if string(r) == sqlbase.AdminRole && string(m) == security.RootUser {

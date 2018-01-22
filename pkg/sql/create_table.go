@@ -175,7 +175,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+	if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
 		EventLogCreateTable,
@@ -815,6 +815,16 @@ func makeTableDescIfAs(
 }
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
+//
+// txn and vt can be nil if the table to be created does not contain references
+// to other tables (e.g. foreign keys or interleaving). This is useful at
+// bootstrap when creating descriptors for virtual tables.
+//
+// evalCtx can be nil if the table to be created has no default expression for
+// any of the columns and no partitioning expression.
+//
+// semaCtx can be nil if the table to be created has no default expression on
+// any of the columns and no check constraints.
 func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,

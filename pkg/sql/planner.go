@@ -186,7 +186,7 @@ var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NO
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
-	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics,
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
 ) (*planner, func()) {
 	// init with an empty session. We can't leave this nil because too much code
 	// looks in the session for the current database.
@@ -202,6 +202,7 @@ func newInternalPlanner(
 		TxnState: txnState{Ctx: ctx, implicitTxn: true},
 		context:  ctx,
 		tables:   TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
+		execCfg:  execCfg,
 	}
 	s.dataMutator = sessionDataMutator{
 		data: &s.data,

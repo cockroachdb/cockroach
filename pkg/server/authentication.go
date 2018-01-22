@@ -57,18 +57,16 @@ var webSessionTimeout = settings.RegisterNonNegativeDurationSetting(
 
 type authenticationServer struct {
 	server     *Server
-	executor   sql.InternalExecutor
+	executor   *sql.InternalExecutor
 	memMetrics *sql.MemoryMetrics
 }
 
 // newAuthenticationServer allocates and returns a new REST server for
 // authentication APIs.
-func newAuthenticationServer(s *Server) *authenticationServer {
+func newAuthenticationServer(s *Server, ie *sql.InternalExecutor) *authenticationServer {
 	return &authenticationServer{
-		server: s,
-		executor: sql.InternalExecutor{
-			LeaseManager: s.leaseMgr,
-		},
+		server:     s,
+		executor:   ie,
 		memMetrics: &s.adminMemMetrics,
 	}
 }

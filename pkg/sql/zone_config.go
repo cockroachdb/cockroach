@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -233,12 +232,11 @@ func resolveSubzone(
 func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
 	txn *client.Txn,
-	settings *cluster.Settings,
-	leaseMgr *LeaseManager,
 	tableDesc *sqlbase.TableDescriptor,
 	idxDesc *sqlbase.IndexDescriptor,
 	oldPartDesc *sqlbase.PartitioningDescriptor,
 	newPartDesc *sqlbase.PartitioningDescriptor,
+	execCfg *ExecutorConfig,
 ) error {
 	newNames := map[string]struct{}{}
 	for _, n := range newPartDesc.PartitionNames() {
@@ -260,6 +258,6 @@ func deleteRemovedPartitionZoneConfigs(
 	for _, n := range removedNames {
 		zone.DeleteSubzone(uint32(idxDesc.ID), n)
 	}
-	_, err = writeZoneConfig(ctx, txn, settings, leaseMgr, tableDesc.ID, tableDesc, zone)
+	_, err = writeZoneConfig(ctx, txn, tableDesc.ID, tableDesc, zone, execCfg)
 	return err
 }

@@ -125,22 +125,22 @@ SHOW CREATE TABLE information_schema.tables
 ----
 Table                      CreateTable
 information_schema.tables  CREATE TABLE tables (
-                           table_catalog STRING NOT NULL DEFAULT '':::STRING,
-                           table_schema STRING NOT NULL DEFAULT '':::STRING,
-                           table_name STRING NOT NULL DEFAULT '':::STRING,
-                           table_type STRING NOT NULL DEFAULT '':::STRING,
+                           table_catalog STRING NOT NULL,
+                           table_schema STRING NOT NULL,
+                           table_name STRING NOT NULL,
+                           table_type STRING NOT NULL,
                            version INT NULL
 )
 
 query TTBTT colnames
 SHOW COLUMNS FROM information_schema.tables
 ----
-Field            Type       Null   Default     Indices
-table_catalog    STRING     false  '':::STRING {}
-table_schema     STRING     false  '':::STRING {}
-table_name       STRING     false  '':::STRING {}
-table_type       STRING     false  '':::STRING {}
-version          INT        true   NULL        {}
+Field          Type    Null   Default  Indices
+table_catalog  STRING  false  NULL     {}
+table_schema   STRING  false  NULL     {}
+table_name     STRING  false  NULL     {}
+table_type     STRING  false  NULL     {}
+version        INT     true   NULL     {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM information_schema.tables
@@ -1114,15 +1114,15 @@ DROP DATABASE other_db CASCADE
 query TTBTT colnames
 SHOW COLUMNS FROM information_schema.column_privileges
 ----
-Field           Type    Null   Default      Indices
-grantor         STRING  false  '':::STRING  {}
-grantee         STRING  false  '':::STRING  {}
-table_catalog   STRING  false  '':::STRING  {}
-table_schema    STRING  false  '':::STRING  {}
-table_name      STRING  false  '':::STRING  {}
-column_name     STRING  false  '':::STRING  {}
-privilege_type  STRING  false  '':::STRING  {}
-is_grantable    STRING  false  '':::STRING  {}
+Field           Type    Null   Default  Indices
+grantor         STRING  false  NULL     {}
+grantee         STRING  false  NULL     {}
+table_catalog   STRING  false  NULL     {}
+table_schema    STRING  false  NULL     {}
+table_name      STRING  false  NULL     {}
+column_name     STRING  false  NULL     {}
+privilege_type  STRING  false  NULL     {}
+is_grantable    STRING  false  NULL     {}
 
 
 query TTTTTTTT colnames
