@@ -113,7 +113,7 @@ type AllColumnsSelector struct {
 
 // Format implements the NodeFormatter interface.
 func (a *AllColumnsSelector) Format(ctx *FmtCtx) {
-	if !a.TableName.DBNameOriginallyOmitted {
+	if !a.TableName.OmitDBNameDuringFormatting {
 		ctx.FormatNode(&a.TableName.DatabaseName)
 		ctx.WriteByte('.')
 	}
@@ -156,7 +156,7 @@ type ColumnItem struct {
 // Format implements the NodeFormatter interface.
 func (c *ColumnItem) Format(ctx *FmtCtx) {
 	if c.TableName.TableName != "" {
-		if !c.TableName.DBNameOriginallyOmitted {
+		if !c.TableName.OmitDBNameDuringFormatting {
 			ctx.FormatNode(&c.TableName.DatabaseName)
 			ctx.WriteByte('.')
 		}

@@ -566,9 +566,9 @@ func getTableNames(
 			return nil, err
 		}
 		tn := tree.TableName{
-			DatabaseName:            tree.Name(dbDesc.Name),
-			TableName:               tree.Name(tableName),
-			DBNameOriginallyOmitted: dbNameOriginallyOmitted,
+			DatabaseName:               tree.Name(dbDesc.Name),
+			TableName:                  tree.Name(tableName),
+			OmitDBNameDuringFormatting: dbNameOriginallyOmitted,
 		}
 		tableNames = append(tableNames, tn)
 	}
@@ -704,7 +704,7 @@ func expandTableGlob(
 		return nil, err
 	}
 
-	tableNames, err := getTableNames(ctx, txn, vt, dbDesc, glob.DBNameOriginallyOmitted)
+	tableNames, err := getTableNames(ctx, txn, vt, dbDesc, glob.OmitDBNameDuringFormatting)
 	if err != nil {
 		return nil, err
 	}

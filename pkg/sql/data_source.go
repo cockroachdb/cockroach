@@ -505,7 +505,7 @@ func (p *planner) getTableScanByRef(
 		// So instead, we mark the "database name as originally omitted"
 		// so as to prevent pretty-printing a potentially confusing empty
 		// database name in error messages (we want `foo` not `"".foo`).
-		DBNameOriginallyOmitted: true,
+		OmitDBNameDuringFormatting: true,
 	}
 
 	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, scanVisibility, tref.Columns)
@@ -769,7 +769,7 @@ func (src *dataSourceInfo) expandStar(
 		}
 	}
 
-	tableName := tree.TableName{DBNameOriginallyOmitted: true}
+	tableName := tree.TableName{OmitDBNameDuringFormatting: true}
 	if a, ok := v.(*tree.AllColumnsSelector); ok {
 		tableName = a.TableName
 	}

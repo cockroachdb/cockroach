@@ -24,7 +24,7 @@ import (
 )
 
 func resetRepr(tn *tree.TableName) {
-	tn.DBNameOriginallyOmitted = false
+	tn.OmitDBNameDuringFormatting = false
 }
 
 func TestNormalizeTableName(t *testing.T) {
