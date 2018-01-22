@@ -89,15 +89,25 @@ func EncDatumFromEncoded(enc DatumEncoding, encoded []byte) EncDatum {
 // possibly followed by other data. Similar to EncDatumFromEncoded,
 // except that this function figures out where the encoding stops and returns a
 // slice for the rest of the buffer.
-func EncDatumFromBuffer(enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
+func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
 	if len(buf) == 0 {
 		return EncDatum{}, nil, errors.New("empty encoded value")
 	}
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
-		encLen, err := encoding.PeekLength(buf)
-		if err != nil {
-			return EncDatum{}, nil, err
+		var encLen int
+		var err error
+		if typ.SemanticType == ColumnType_JSON {
+			encLen, err = encoding.GetJSONInvertedIndexKeyLength(buf)
+			if err != nil {
+				return EncDatum{}, nil, err
+			}
+		} else {
+			var err error
+			encLen, err = encoding.PeekLength(buf)
+			if err != nil {
+				return EncDatum{}, nil, err
+			}
 		}
 		ed := EncDatumFromEncoded(enc, buf[:encLen])
 		return ed, buf[encLen:], nil

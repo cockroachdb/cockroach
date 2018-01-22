@@ -180,7 +180,7 @@ func (ib *indexBackfiller) runChunk(
 			if err := sqlbase.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.da); err != nil {
 				return nil, err
 			}
-			if err := sqlbase.EncodeSecondaryIndexes(
+			if secondaryIndexEntries, err = sqlbase.EncodeSecondaryIndexes(
 				&ib.spec.Table, added, ib.colIdxMap,
 				ib.rowVals, secondaryIndexEntries); err != nil {
 				return nil, err
