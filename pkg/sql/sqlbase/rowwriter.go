@@ -242,9 +242,20 @@ func insertPutFn(
 	b.Put(key, value)
 }
 
+// insertPutFn is used by insertRow when conflicts should be ignored.
+func insertInvertedPutFn(
+	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
+) {
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "InitPut %s -> %s", *key, value.PrettyPrint())
+	}
+	b.InitPut(key, value, false)
+}
+
 type putter interface {
 	CPut(key, value, expValue interface{})
 	Put(key, value interface{})
+	InitPut(key, value interface{}, failOnTombstones bool)
 }
 
 // InsertRow adds to the batch the kv operations necessary to insert a table row
@@ -364,6 +375,7 @@ func (ri *RowInserter) InsertRow(
 		ri.key = nil
 	}
 
+	putFn = insertInvertedPutFn
 	for i := range secondaryIndexEntries {
 		e := &secondaryIndexEntries[i]
 		putFn(ctx, b, &e.Key, &e.Value, traceKV)
