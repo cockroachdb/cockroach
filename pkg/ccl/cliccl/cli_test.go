@@ -171,6 +171,7 @@ func Example_cclzone() {
 	// .meta
 	// db.t.p1
 	// db.t@primary
+	// system.jobs
 	// zone rm db.t@primary
 	// CONFIGURE ZONE 1
 	// zone get db.t.p0
@@ -194,6 +195,7 @@ func Example_cclzone() {
 	// .liveness
 	// .meta
 	// db.t.p1
+	// system.jobs
 	// zone rm db.t.p0
 	// CONFIGURE ZONE 0
 	// zone rm db.t.p1
@@ -202,4 +204,5 @@ func Example_cclzone() {
 	// .default
 	// .liveness
 	// .meta
+	// system.jobs
 }

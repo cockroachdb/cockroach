@@ -470,6 +470,7 @@ func Example_zone() {
 	// .default
 	// .liveness
 	// .meta
+	// system.jobs
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
@@ -482,6 +483,7 @@ func Example_zone() {
 	// .liveness
 	// .meta
 	// system
+	// system.jobs
 	// zone get .liveness
 	// .liveness
 	// range_min_bytes: 1048576
@@ -535,6 +537,7 @@ func Example_zone() {
 	// .default
 	// .liveness
 	// .meta
+	// system.jobs
 	// zone rm .default
 	// pq: cannot remove default zone
 	// zone set .liveness --file=./testdata/zone_range_max_bytes.yaml
@@ -579,6 +582,7 @@ func Example_zone() {
 	// .meta
 	// .system
 	// .timeseries
+	// system.jobs
 	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -618,10 +622,12 @@ func Example_zone() {
 	// zone ls
 	// .default
 	// .timeseries
+	// system.jobs
 	// zone rm .timeseries
 	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
+	// system.jobs
 	// zone rm .liveness
 	// CONFIGURE ZONE 0
 	// zone rm .meta
