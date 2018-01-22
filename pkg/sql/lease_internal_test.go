@@ -157,7 +157,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var expiration hlc.Timestamp
 	getLeases := func() {
 		for i := 0; i < 3; i++ {
-			table, exp, err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID)
+			if err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
+				t.Fatal(err)
+			}
+			table, exp, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -499,7 +502,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			table, _, err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID)
+			if err := leaseManager.acquireFreshestFromStore(context.TODO(), tableDesc.ID); err != nil {
+				t.Error(err)
+			}
+			table, _, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), tableDesc.ID)
 			if err != nil {
 				t.Error(err)
 			}
@@ -700,7 +706,11 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			go acquireBlock(ctx, leaseManager, acquireResultChan)
 			if test.isSecondCallAcquireFreshest {
 				go func(ctx context.Context, m *LeaseManager, acquireChan chan Result) {
-					table, e, err := m.acquireFreshestFromStore(ctx, descID)
+					if err := m.acquireFreshestFromStore(ctx, descID); err != nil {
+						acquireChan <- Result{err: err, exp: hlc.Timestamp{}, table: nil}
+						return
+					}
+					table, e, err := m.Acquire(ctx, s.Clock().Now(), descID)
 					acquireChan <- Result{err: err, exp: e, table: table}
 				}(ctx, leaseManager, acquireResultChan)
 
