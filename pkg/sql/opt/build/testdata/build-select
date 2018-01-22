@@ -1,0 +1,79 @@
+exec-raw
+CREATE DATABASE t
+
+exec-raw
+CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+
+build
+SELECT * FROM t.a
+----
+scan
+ └── columns: a.x:1 a.y:null:2
+
+build
+SELECT * FROM t.b
+----
+error: table missing
+
+build
+SELECT * FROM b
+----
+error: database missing
+
+build
+SELECT * FROM u.a
+----
+error: database missing
+
+build
+SELECT * FROM t.a WHERE x > 10
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── gt
+      ├── variable: a.x
+      └── const: 10
+
+build
+SELECT * FROM t.a WHERE (x > 10 AND (x < 20 AND x != 13))
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── and
+      ├── gt
+      │    ├── variable: a.x
+      │    └── const: 10
+      └── and
+           ├── lt
+           │    ├── variable: a.x
+           │    └── const: 20
+           └── ne
+                ├── variable: a.x
+                └── const: 13
+
+build
+SELECT * FROM t.a WHERE x IN (1, 2, 3)
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── in
+      ├── variable: a.x
+      └── tuple
+           ├── const: 1
+           ├── const: 2
+           └── const: 3
+
+build
+SELECT * FROM t.a AS A(X, Y)
+----
+scan
+ └── columns: a.x:1 a.y:null:2
+
+exec-raw
+DROP DATABASE t

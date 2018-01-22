@@ -23,9 +23,8 @@ type testFactory struct {
 
 func newTestFactory() *testFactory {
 	cat := &testCatalog{}
-	mem := newMemo(cat)
 	f := &testFactory{cat: cat}
-	f.Factory = *newFactory(mem, 0 /* maxSteps */)
+	f.Factory = *NewFactory(cat, 0 /* maxSteps */)
 	return f
 }
 

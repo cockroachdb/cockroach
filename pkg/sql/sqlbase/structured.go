@@ -2489,8 +2489,8 @@ func (desc *ColumnDescriptor) IsNullable() bool {
 }
 
 // ColName is part of the optbase.Column interface.
-func (desc *ColumnDescriptor) ColName() string {
-	return desc.Name
+func (desc *ColumnDescriptor) ColName() optbase.ColumnName {
+	return optbase.ColumnName(desc.Name)
 }
 
 // DatumType is part of the optbase.Column interface.
@@ -2498,11 +2498,16 @@ func (desc *ColumnDescriptor) DatumType() types.T {
 	return desc.Type.ToDatumType()
 }
 
+// IsHidden is part of the optbase.Column interface.
+func (desc *ColumnDescriptor) IsHidden() bool {
+	return desc.Hidden
+}
+
 var _ optbase.Table = &TableDescriptor{}
 
 // TabName is part of the optbase.Table interface.
-func (desc *TableDescriptor) TabName() string {
-	return desc.GetName()
+func (desc *TableDescriptor) TabName() optbase.TableName {
+	return optbase.TableName(desc.GetName())
 }
 
 // NumColumns is part of the optbase.Table interface.

@@ -1,0 +1,88 @@
+exec-raw
+CREATE DATABASE t
+
+exec-raw
+CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+
+exec-raw
+CREATE TABLE t.b (x INT, y FLOAT)
+
+exec-raw
+CREATE TABLE t.c (x INT, y FLOAT, z VARCHAR, CONSTRAINT fk_x_ref_a FOREIGN KEY (x) REFERENCES t.a (x))
+
+build
+SELECT * FROM t.a, t.b
+----
+project
+ ├── columns: a.x:1 a.y:null:2 b.x:null:3 b.y:null:4
+ ├── inner-join
+ │    ├── columns: a.x:1 a.y:null:2 b.x:null:3 b.y:null:4 b.rowid:5
+ │    ├── scan
+ │    │    └── columns: a.x:1 a.y:null:2
+ │    ├── scan
+ │    │    └── columns: b.x:null:3 b.y:null:4 b.rowid:5
+ │    └── true
+ └── projections
+      ├── variable: a.x
+      ├── variable: a.y
+      ├── variable: b.x
+      └── variable: b.y
+
+build
+SELECT a.x, b.y FROM t.a, t.b WHERE a.x = b.x
+----
+project
+ ├── columns: a.x:1 b.y:null:4
+ ├── select
+ │    ├── columns: a.x:1 a.y:null:2 b.x:null:3 b.y:null:4 b.rowid:5
+ │    ├── inner-join
+ │    │    ├── columns: a.x:1 a.y:null:2 b.x:null:3 b.y:null:4 b.rowid:5
+ │    │    ├── scan
+ │    │    │    └── columns: a.x:1 a.y:null:2
+ │    │    ├── scan
+ │    │    │    └── columns: b.x:null:3 b.y:null:4 b.rowid:5
+ │    │    └── true
+ │    └── eq
+ │         ├── variable: a.x
+ │         └── variable: b.x
+ └── projections
+      ├── variable: a.x
+      └── variable: b.y
+
+build
+SELECT * FROM t.c, t.b, t.a WHERE c.x = a.x AND b.x = a.x
+----
+project
+ ├── columns: c.x:null:1 c.y:null:2 c.z:null:3 b.x:null:5 b.y:null:6 a.x:8 a.y:null:9
+ ├── select
+ │    ├── columns: c.x:null:1 c.y:null:2 c.z:null:3 c.rowid:4 b.x:null:5 b.y:null:6 b.rowid:7 a.x:8 a.y:null:9
+ │    ├── inner-join
+ │    │    ├── columns: c.x:null:1 c.y:null:2 c.z:null:3 c.rowid:4 b.x:null:5 b.y:null:6 b.rowid:7 a.x:8 a.y:null:9
+ │    │    ├── inner-join
+ │    │    │    ├── columns: c.x:null:1 c.y:null:2 c.z:null:3 c.rowid:4 b.x:null:5 b.y:null:6 b.rowid:7
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: c.x:null:1 c.y:null:2 c.z:null:3 c.rowid:4
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: b.x:null:5 b.y:null:6 b.rowid:7
+ │    │    │    └── true
+ │    │    ├── scan
+ │    │    │    └── columns: a.x:8 a.y:null:9
+ │    │    └── true
+ │    └── and
+ │         ├── eq
+ │         │    ├── variable: c.x
+ │         │    └── variable: a.x
+ │         └── eq
+ │              ├── variable: b.x
+ │              └── variable: a.x
+ └── projections
+      ├── variable: c.x
+      ├── variable: c.y
+      ├── variable: c.z
+      ├── variable: b.x
+      ├── variable: b.y
+      ├── variable: a.x
+      └── variable: a.y
+
+exec-raw
+DROP DATABASE t

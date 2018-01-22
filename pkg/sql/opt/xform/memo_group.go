@@ -23,6 +23,11 @@ import (
 // GroupID of 0 indicates an invalid group.
 type GroupID uint32
 
+const (
+	// InvalidGroupID is the invalid group.
+	InvalidGroupID GroupID = 0
+)
+
 // exprID is the index of an expression within its group. exprID = 0 is always
 // the normalized expression for the group.
 type exprID uint32
