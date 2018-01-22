@@ -117,7 +117,7 @@ func (md *Metadata) AddTable(tbl optbase.Table) TableIndex {
 	for i := 0; i < tbl.NumColumns(); i++ {
 		col := tbl.Column(i)
 		if tbl.TabName() == "" {
-			md.AddColumn(col.ColName())
+			md.AddColumn(string(col.ColName()))
 		} else {
 			md.AddColumn(fmt.Sprintf("%s.%s", tbl.TabName(), col.ColName()))
 		}
