@@ -90,6 +90,9 @@ add_subdirectory(../googletest/googletest
                  ${CMAKE_BINARY_DIR}/googletest
                  EXCLUDE_FROM_ALL)
 
+# TODO(benesch): make this required when CMake 3.9 is widely deployed.
+include(GoogleTest OPTIONAL)
+
 # Iterate over all test sources.
 foreach(tsrc ${tests})
   # Build target name from filename (eg: ccl_db_test.cc for ccl/db_test.cc).
@@ -141,6 +144,14 @@ foreach(tsrc ${tests})
   )
 
   # Add the executable to the set of tests run by the "check" target.
-  add_test(${tname} ${tname})
+  if(COMMAND gtest_discover_tests)
+    # gtest_discover_tests, introduced in CMake 3.10, teaches CTest about the
+    # actual test cases within the test binary.
+    gtest_discover_tests(${tname})
+  else()
+    # In earlier versions, just tell CTest to treat the test binary as a black
+    # box that returns an exit code.
+    add_test(${tname} ${tname})
+  endif()
   add_dependencies(check ${tname})
 endforeach(tsrc)
