@@ -147,13 +147,14 @@ SELECT DISTINCT y AS w FROM xyz ORDER by z
 query TTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY z
 ----
-distinct             ·      ·
- └── nosort          ·      ·
-      │              order  +z
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  xyz@foo
-·                    spans  ALL
+distinct                  ·      ·
+ └── render               ·      ·
+      └── nosort          ·      ·
+           │              order  +z
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  xyz@foo
+·                         spans  ALL
 
 query I
 SELECT DISTINCT y AS w FROM xyz ORDER by y
