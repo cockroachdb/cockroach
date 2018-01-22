@@ -564,6 +564,120 @@ func TestMergeJoiner(t *testing.T) {
 				{v[5], v[1]},
 			},
 		},
+		{
+			// Ensure that duplicate rows in the left are matched
+			// in the output in anti-joins.
+			spec: MergeJoinerSpec{
+				LeftOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				RightOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				Type: JoinType_LEFT_ANTI,
+			},
+			outCols:   []uint32{0, 1},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[1], v[2]},
+				{v[1], v[3]},
+				{v[2], v[3]},
+				{v[3], v[4]},
+				{v[3], v[5]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[2], v[2]},
+				{v[3], v[3]},
+			},
+			expectedTypes: twoIntCols,
+			expected: sqlbase.EncDatumRows{
+				{v[1], v[2]},
+				{v[1], v[3]},
+			},
+		},
+		{
+			// Ensure that NULL == NULL doesn't match in anti-join.
+			spec: MergeJoinerSpec{
+				LeftOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				RightOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				Type: JoinType_LEFT_ANTI,
+			},
+			outCols:   []uint32{0, 1},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{null, v[2]},
+				{v[2], v[3]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{null, v[3]},
+				{v[2], v[4]},
+				{v[2], v[5]},
+			},
+			expectedTypes: twoIntCols,
+			expected: sqlbase.EncDatumRows{
+				{null, v[2]},
+			},
+		},
+		{
+			// Ensure that OnExprs are satisfied for semi-joins.
+			spec: MergeJoinerSpec{
+				LeftOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				RightOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+					}),
+				Type:   JoinType_LEFT_ANTI,
+				OnExpr: Expression{Expr: "@1 >= 4"},
+				// Implicit AND @1 = @3 constraint.
+			},
+			outCols:   []uint32{0, 1},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[1], v[0]},
+				{v[1], v[1]},
+				{v[5], v[0]},
+				{v[5], v[1]},
+				{v[6], v[0]},
+				{v[6], v[1]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[1]},
+				{v[0], v[0]},
+				{v[0], v[5]},
+				{v[0], v[4]},
+				{v[5], v[4]},
+				{v[5], v[1]},
+				{v[5], v[0]},
+				{v[5], v[5]},
+				{v[5], v[4]},
+			},
+			expectedTypes: twoIntCols,
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[1], v[0]},
+				{v[1], v[1]},
+				{v[6], v[0]},
+				{v[6], v[1]},
+			},
+		},
 	}
 
 	for _, c := range testCases {

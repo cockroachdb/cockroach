@@ -180,6 +180,9 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
+					if m.joinType == leftAntiJoin {
+						break
+					}
 					if m.emitUnmatchedRight {
 						m.matchedRight.Add(ridx)
 					}
@@ -204,7 +207,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			m.leftIdx++
 
 			// If we didn't match any rows on the right-side of the batch and this is
-			// a left or full outer join, emit an unmatched left-side row.
+			// a left, full outer or anti join, emit an unmatched left-side row.
 			if m.matchedRightCount == 0 && shouldEmitUnmatchedRow(leftSide, m.joinType) {
 				return m.renderUnmatchedRow(lrow, leftSide), nil
 			}
