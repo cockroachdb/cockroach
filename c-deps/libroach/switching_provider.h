@@ -18,27 +18,6 @@
 #include "file_registry.h"
 #include "rocksdbutils/env_encryption.h"
 
-class SwitchingProvider;
-
-// EnvContext manages all created Envs, as well as the switching provider.
-// All envs not owned by rocksdb (eg: all but Env::Default) should be added to envs for
-// deletion.
-//
-// Some useful envs are keps:
-// base_env: the env that all other envs must wrap. Usually a Env::Default or MemEnv.
-// db_env: the env used by rocksdb. This can be an EncryptedEnv.
-struct EnvContext {
-  EnvContext(rocksdb::Env* env) : base_env(env), db_env(env) {}
-  ~EnvContext() {}
-
-  void TakeEnvOwnership(rocksdb::Env* env) { envs.push_back(std::unique_ptr<rocksdb::Env>(env)); }
-
-  rocksdb::Env* base_env;
-  rocksdb::Env* db_env;
-  std::unique_ptr<SwitchingProvider> switching_provider;
-  std::vector<std::unique_ptr<rocksdb::Env>> envs;
-};
-
 // CipherStreamCreator is the abstract class passed to SwitchingProvider.
 // It performs two functions:
 // * initializes encryption settings and create a cipher stream with them
@@ -61,13 +40,22 @@ class CipherStreamCreator {
 // SwitchingProvider implement EncryptionProvider.
 //
 // It can have a number of cipher creators registered, each with a corresponding Env level.
+// Env level denotes which level of key source we are using:
+// - 0: plaintext
+// - 1: store-level keys
+// - 2: data-level keys
+//
+// For example: with encryption enabled, we have the following Envs being used:
+//   db_env: level 2, pointing to a cipher stream creator backed by data-level keys
+//   data_env: level 1, pointing to a cipher stream creater backed by store-level keys
+//   store_env: level 0, pointing to the base env (default or in memory env)
+//
+// The env level is stored in the file registry to ensure that:
+// 1) we have the necessary envs (eg: we can't stop specifying encryption flags if we have encrypted
+// files) 2) we know which env is responsible for which file
+//
 // When an Env requests a cipher stream, it specifies the env level, filename,
 // and whether the file is new.
-//
-// The 0 env level (for plaintext) is always present.
-//
-// The base_env should be a plain rocksdb::Env, either Env::Default(), or
-// an in-memory env.
 class SwitchingProvider final : public rocksdb_utils::EncryptionProvider {
  public:
   SwitchingProvider(std::unique_ptr<FileRegistry> registry) : registry_(std::move(registry)) {}
@@ -76,7 +64,8 @@ class SwitchingProvider final : public rocksdb_utils::EncryptionProvider {
   // Register a CipherStreamCreator. This must be done at initialization time (before any calls to
   // CreateCipherStream) and is not safe for concurrent use.
   // Returns an error if a creator is already registered for 'env_level'.
-  rocksdb::Status RegisterCipherStreamCreator(int env_level, CipherStreamCreator* creator);
+  rocksdb::Status RegisterCipherStreamCreator(enginepb::EnvLevel env_level,
+                                              CipherStreamCreator* creator);
 
   // Verifies that all env levels described by the file registry have a registered
   // CipherStreamCreator.
@@ -84,7 +73,7 @@ class SwitchingProvider final : public rocksdb_utils::EncryptionProvider {
 
   // The following implement EncryptionProvider.
   virtual rocksdb::Status
-  CreateCipherStream(int env_level, const std::string& fname, bool new_file,
+  CreateCipherStream(enginepb::EnvLevel env_level, const std::string& fname, bool new_file,
                      std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) override;
 
   virtual rocksdb::Status DeleteFile(const std::string& fname) override;
@@ -100,13 +89,13 @@ class SwitchingProvider final : public rocksdb_utils::EncryptionProvider {
   // Initialize encryption settings, maybe persist, and create cipher stream.
   // This may modify the registry.
   rocksdb::Status
-  InitAndCreateCipherStream(int env_level, const std::string& fname,
+  InitAndCreateCipherStream(enginepb::EnvLevel env_level, const std::string& fname,
                             std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result);
 
   // Lookup encryption settings, maybe persist, and create cipher stream.
   // This never modifies the registry.
   rocksdb::Status
-  LookupAndCreateCipherStream(int env_level, const std::string& fname,
+  LookupAndCreateCipherStream(enginepb::EnvLevel env_level, const std::string& fname,
                               std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result);
 
   typedef std::unordered_map<int, std::unique_ptr<CipherStreamCreator>> creator_map;
