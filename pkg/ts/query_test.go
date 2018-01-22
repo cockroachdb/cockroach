@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -656,9 +657,20 @@ func (tm *testModel) assertQuery(
 		Derivative:       derivative,
 		Sources:          sources,
 	}
+
+	account := tm.memMonitor.MakeBoundAccount()
+	defer account.Close(context.TODO())
 	actualDatapoints, actualSources, err := tm.DB.Query(
-		context.TODO(), q, r, sampleDuration, start, end, interpolationLimit,
+		context.TODO(),
+		q,
+		r,
+		sampleDuration,
+		start,
+		end,
+		interpolationLimit,
+		&account,
 	)
+
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -966,8 +978,13 @@ func TestQueryDownsampling(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
+	account := tm.memMonitor.MakeBoundAccount()
+	defer account.Close(context.TODO())
+
 	// Query with sampleDuration that is too small, expect error.
-	_, _, err := tm.DB.Query(context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, 0)
+	_, _, err := tm.DB.Query(
+		context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, 0, &account,
+	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
 	}
@@ -978,7 +995,14 @@ func TestQueryDownsampling(t *testing.T) {
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
 	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{}, Resolution10s, Resolution10s.SampleDuration()+1, 0, 10000, 0,
+		context.TODO(),
+		tspb.Query{},
+		Resolution10s,
+		Resolution10s.SampleDuration()+1,
+		0,
+		10000,
+		0,
+		&account,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")
@@ -1113,4 +1137,72 @@ func TestInterpolationLimit(t *testing.T) {
 	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 2, 9, 2)
 	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 3, 9, 2)
 	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 10, 9, 2)
+}
+
+func TestQueryMemoryAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tm := newTestModel(t)
+
+	memoryBudget := int64(100 * 1024)
+
+	// Swap model's memory monitor to install a limit.
+	unlimitedMon := tm.memMonitor
+	limitedMon := mon.MakeMonitorWithLimit(
+		"timeseries-test-limited",
+		mon.MemoryResource,
+		memoryBudget,
+		nil,
+		nil,
+		100,
+		100,
+	)
+	tm.memMonitor = &limitedMon
+	tm.memMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
+	defer tm.memMonitor.Stop(context.TODO())
+
+	tm.Start()
+	defer tm.Stop()
+
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
+		{
+			Name: "test.metric",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(1, 100),
+				datapoint(5, 200),
+				datapoint(15, 300),
+				datapoint(16, 400),
+				datapoint(17, 500),
+				datapoint(22, 600),
+				datapoint(52, 900),
+			},
+		},
+	})
+	tm.assertKeyCount(4)
+	tm.assertModelCorrect()
+
+	// Assert correctness with no memory pressure.
+	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 0, 7, 1)
+
+	// Assert failure with memory pressure.
+	acc := limitedMon.MakeBoundAccount()
+	if err := acc.Grow(context.TODO(), memoryBudget-1); err != nil {
+		t.Fatal(err)
+	}
+
+	queryAcc := limitedMon.MakeBoundAccount()
+	defer queryAcc.Close(context.TODO())
+	_, _, err := tm.DB.Query(
+		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, 0, &queryAcc,
+	)
+	if err == nil {
+		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
+	}
+	errorStr := "memory budget exceeded"
+	if !testutils.IsError(err, errorStr) {
+		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
+	}
+
+	// Assert success again with memory pressure released.
+	acc.Close(context.TODO())
+	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 0, 7, 1)
 }

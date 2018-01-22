@@ -267,6 +267,10 @@ func TestBoundAccount(t *testing.T) {
 		t.Fatal("closing spans leaves bytes in monitor")
 	}
 
+	if m2 := a1.Monitor(); m2 != &m {
+		t.Fatalf("a1.Monitor() returned %v, wanted %v", m2, &m)
+	}
+
 	m.Stop(ctx)
 }
 

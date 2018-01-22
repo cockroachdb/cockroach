@@ -17,6 +17,8 @@ package ts
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,6 +37,10 @@ const (
 	// queryWorkerMax is the default maximum number of worker goroutines that
 	// the time series server can use to service incoming queries.
 	queryWorkerMax = 250
+	// queryMemoryMax is a soft limit for the amount of total memory used by
+	// time series queries. This is not currently enforced, but is used for
+	// monitoring purposes.
+	queryMemoryMax = 64 * 1024 * 1024 // 64MiB
 )
 
 // ServerConfig provides a means for tests to override settings in the time
@@ -48,9 +54,10 @@ type ServerConfig struct {
 // Server handles incoming external requests related to time series data.
 type Server struct {
 	log.AmbientContext
-	db        *DB
-	stopper   *stop.Stopper
-	workerSem chan struct{}
+	db         *DB
+	memMonitor mon.BytesMonitor
+	stopper    *stop.Stopper
+	workerSem  chan struct{}
 }
 
 // MakeServer instantiates a new Server which services requests with data from
@@ -67,7 +74,15 @@ func MakeServer(
 		AmbientContext: ambient,
 		db:             db,
 		stopper:        stopper,
-		workerSem:      make(chan struct{}, queryWorkerMax),
+		memMonitor: mon.MakeUnlimitedMonitor(
+			context.Background(),
+			"timeseries",
+			mon.MemoryResource,
+			nil,
+			nil,
+			queryMemoryMax/10,
+		),
+		workerSem: make(chan struct{}, queryWorkerMax),
 	}
 }
 
@@ -106,6 +121,19 @@ func (s *Server) Query(
 	// be interpolated).
 	interpolationLimit := storage.TimeUntilStoreDead.Get(&s.db.st.SV).Nanoseconds()
 
+	monitor := mon.MakeMonitor(
+		"timeseries-query",
+		mon.MemoryResource,
+		nil,
+		nil,
+		0,
+		0,
+	)
+	monitor.Start(ctx, &s.memMonitor, mon.BoundAccount{})
+	defer monitor.Stop(ctx)
+	account := monitor.MakeBoundAccount()
+	defer account.Close(ctx)
+
 	response := tspb.TimeSeriesQueryResponse{
 		Results: make([]tspb.TimeSeriesQueryResponse_Result, len(request.Queries)),
 	}
@@ -143,6 +171,7 @@ func (s *Server) Query(
 						request.StartNanos,
 						request.EndNanos,
 						interpolationLimit,
+						&account,
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{
