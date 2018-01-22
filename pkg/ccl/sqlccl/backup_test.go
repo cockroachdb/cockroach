@@ -950,7 +950,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	})
 
 	t.Run("cancel import", func(t *testing.T) {
-		cancelDir := "nodelocal:///cancel-import"
 		sqlDB.Exec(t, `CREATE DATABASE cancelimport`)
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -966,14 +965,14 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			urls = append(urls, fmt.Sprintf("'%s/%d.csv'", srv.URL, i))
 		}
 		csvURLs := strings.Join(urls, ", ")
-		query := fmt.Sprintf(`IMPORT TABLE t (i INT) CSV DATA (%s) WITH temp = $1, into_db = 'cancelimport'`, csvURLs)
+		query := fmt.Sprintf(`IMPORT TABLE t (i INT) CSV DATA (%s) WITH into_db = 'cancelimport'`, csvURLs)
 
-		if _, err := run(t, "cancel", query, cancelDir); !testutils.IsError(err, "job canceled") {
+		if _, err := run(t, "cancel", query); !testutils.IsError(err, "job canceled") {
 			t.Fatalf("expected 'job canceled' error, but got %+v", err)
 		}
 		// Check that executing again succeeds. This won't work if the first import
 		// was not successfully canceled.
-		sqlDB.Exec(t, query, cancelDir)
+		sqlDB.Exec(t, query)
 	})
 }
 

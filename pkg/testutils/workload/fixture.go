@@ -158,13 +158,12 @@ func writeCSVs(
 // MakeFixture regenerates a fixture, storing it to GCS. It is expected that the
 // generator will have had Configure called on it.
 //
-// There's some ideal world in which we can generate backups (and thus fixtures)
-// directly from a Generator, but for now, we use `IMPORT ... CSV DATA`. First a
-// CSV file with the table data is written to GCS. `IMPORT ... CSV DATA` works
-// by turning a set of CSV files for a single table into a backup (in a cloud
-// storage location specified by the `temp=` option), then restoring that backup
-// into a cluster. The `transform_only` option gives us only the first half
-// (which is all we want for fixture generation).
+// There's some ideal world in which we can generate backups (and thus
+// fixtures) directly from a Generator, but for now, we use `IMPORT ... CSV
+// DATA`. First a CSV file with the table data is written to GCS. `IMPORT
+// ... CSV DATA` works by turning a set of CSV files for a single table into a
+// backup file, then restoring that file into a cluster. The `transform` option
+// gives us only the first half (which is all we want for fixture generation).
 func MakeFixture(
 	ctx context.Context, sqlDB *gosql.DB, gcs *storage.Client, store FixtureStore, gen Generator,
 ) (Fixture, error) {
@@ -190,7 +189,7 @@ func MakeFixture(
 			return Fixture{}, err
 		}
 		importStmt := fmt.Sprintf(
-			`IMPORT TABLE %s %s CSV DATA ($1) WITH transform_only, temp=$2`,
+			`IMPORT TABLE %s %s CSV DATA ($1) WITH transform=$2`,
 			table.Name, table.Schema,
 		)
 		if _, err := sqlDB.ExecContext(ctx, importStmt, csvURI, backupURI); err != nil {
