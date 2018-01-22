@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // TxnType specifies whether a transaction is the root (parent)
@@ -63,13 +64,9 @@ type Sender interface {
 type TxnSender interface {
 	Sender
 
-	// GetTxn gets a cloned copy of the transaction.
-	GetTxn() roachpb.Transaction
-	// SetTxn allows the caller to safely change the txn sender's
-	// transaction via the supplied function, which will be invoked in
-	// with a pointer to the underlying transaction, to be modified by
-	// the caller.
-	SetTxn(func(*roachpb.Transaction))
+	// WithTxn allows the caller to safely access or modify the txn
+	// sender's transaction via the supplied function.
+	WithTxn(func(*roachpb.Transaction))
 	// GetMeta retrieves a copy of the TxnCoordMeta, which can be sent
 	// upstream in situations where there are multiple, leaf TxnSenders,
 	// to be combined via AugmentMeta().
@@ -111,8 +108,11 @@ func (f SenderFunc) Send(
 type txnSenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 type txnSenderImpl struct {
-	fn    txnSenderFunc
-	proto roachpb.Transaction
+	fn txnSenderFunc
+	mu struct {
+		syncutil.Mutex
+		proto roachpb.Transaction
+	}
 }
 
 // TxnSenderFunc is an adapter to allow the use of ordinary functions
@@ -128,16 +128,19 @@ func (tsf *txnSenderImpl) Send(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	br, pErr := tsf.fn(ctx, ba)
 	if pErr == nil {
-		tsf.proto.Update(br.Txn)
+		tsf.mu.Lock()
+		defer tsf.mu.Unlock()
+		tsf.mu.proto.Update(br.Txn)
 	}
 	return br, pErr
 }
 
-// GetTxn is part of the TxnSender interface.
-func (tsf *txnSenderImpl) GetTxn() roachpb.Transaction { return tsf.proto }
-
-// SetTxn is part of the TxnSender interface.
-func (tsf *txnSenderImpl) SetTxn(f func(*roachpb.Transaction)) { f(&tsf.proto) }
+// WithTxn is part of the TxnSender interface.
+func (tsf *txnSenderImpl) WithTxn(f func(*roachpb.Transaction)) {
+	tsf.mu.Lock()
+	defer tsf.mu.Unlock()
+	f(&tsf.mu.proto)
+}
 
 // GetMeta is part of the TxnSender interface.
 func (tsf *txnSenderImpl) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }

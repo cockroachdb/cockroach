@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -85,12 +86,17 @@ func (f *testSenderFactory) New(typ client.TxnType) client.TxnSender {
 // which passes all requests through to a single store.
 type testTxnSender struct {
 	store *Store
-	proto roachpb.Transaction
+	mu    struct {
+		syncutil.Mutex
+		proto roachpb.Transaction
+	}
 }
 
-func (db *testTxnSender) GetTxn() roachpb.Transaction { return db.proto }
-
-func (db *testTxnSender) SetTxn(f func(*roachpb.Transaction)) { f(&db.proto) }
+func (db *testTxnSender) WithTxn(f func(*roachpb.Transaction)) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	f(&db.mu.proto)
+}
 
 func (db *testTxnSender) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
 

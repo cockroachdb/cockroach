@@ -249,15 +249,8 @@ func (tcf *TxnCoordSenderFactory) New(typ client.TxnType) client.TxnSender {
 	}
 }
 
-// GetTxn is part of the TxnSender interface.
-func (tc *TxnCoordSender) GetTxn() roachpb.Transaction {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	return tc.mu.meta.Txn.Clone()
-}
-
-// SetTxn is part of the TxnSender interface.
-func (tc *TxnCoordSender) SetTxn(f func(txn *roachpb.Transaction)) {
+// WithTxn is part of the TxnSender interface.
+func (tc *TxnCoordSender) WithTxn(f func(txn *roachpb.Transaction)) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	f(&tc.mu.meta.Txn)
