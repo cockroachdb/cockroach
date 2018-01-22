@@ -73,12 +73,12 @@ func (n *UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
 
 	switch t := (*n)[ln-1].(type) {
 	case UnqualifiedStar:
-		return &AllTablesSelector{Database: db, DBNameOriginallyOmitted: dbOmitted}, nil
+		return &AllTablesSelector{Database: db, OmitDBNameDuringFormatting: dbOmitted}, nil
 	case *Name:
 		if len(*t) == 0 {
 			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "empty table name: %q", *n)
 		}
-		return &TableName{DatabaseName: db, TableName: *t, DBNameOriginallyOmitted: dbOmitted}, nil
+		return &TableName{DatabaseName: db, TableName: *t, OmitDBNameDuringFormatting: dbOmitted}, nil
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table pattern: %q", *n)
 	}
@@ -90,13 +90,13 @@ func (t *TableName) NormalizeTablePattern() (TablePattern, error) { return t, ni
 // AllTablesSelector corresponds to a selection of all
 // tables in a database, e.g. when used with GRANT.
 type AllTablesSelector struct {
-	Database                Name
-	DBNameOriginallyOmitted bool
+	Database                   Name
+	OmitDBNameDuringFormatting bool
 }
 
 // Format implements the NodeFormatter interface.
 func (at *AllTablesSelector) Format(ctx *FmtCtx) {
-	if !at.DBNameOriginallyOmitted {
+	if !at.OmitDBNameDuringFormatting {
 		ctx.FormatNode(&at.Database)
 		ctx.WriteByte('.')
 	}
@@ -110,7 +110,7 @@ func (at *AllTablesSelector) NormalizeTablePattern() (TablePattern, error) { ret
 // QualifyWithDatabase adds an indirection for the database, if it's missing.
 // It transforms:  * -> database.*
 func (at *AllTablesSelector) QualifyWithDatabase(database string) error {
-	if !at.DBNameOriginallyOmitted {
+	if !at.OmitDBNameDuringFormatting {
 		return nil
 	}
 	if database == "" {
