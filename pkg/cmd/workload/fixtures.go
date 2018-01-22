@@ -25,12 +25,12 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
-	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/all"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-var useast1bFixtures = workload.FixtureStore{
+var useast1bFixtures = workloadccl.FixtureStore{
 	// TODO(dan): Keep fixtures in more than one region to better support
 	// geo-distributed clusters.
 	GCSBucket: `cockroach-fixtures`,
@@ -116,7 +116,7 @@ func fixturesList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	defer func() { _ = gcs.Close() }()
-	fixtures, err := workload.ListFixtures(ctx, gcs, useast1bFixtures)
+	fixtures, err := workloadccl.ListFixtures(ctx, gcs, useast1bFixtures)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func fixturesStore(cmd *cobra.Command, gen workload.Generator, crdbURI string) e
 		return err
 	}
 
-	fixture, err := workload.MakeFixture(ctx, sqlDB, gcs, useast1bFixtures, gen)
+	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, useast1bFixtures, gen)
 	if err != nil {
 		return err
 	}
@@ -165,11 +165,11 @@ func fixturesLoad(cmd *cobra.Command, gen workload.Generator, crdbURI string) er
 		return err
 	}
 
-	fixture, err := workload.GetFixture(ctx, gcs, useast1bFixtures, gen)
+	fixture, err := workloadccl.GetFixture(ctx, gcs, useast1bFixtures, gen)
 	if err != nil {
 		return errors.Wrap(err, `finding fixture`)
 	}
-	if err := workload.RestoreFixture(ctx, sqlDB, fixture, *fixturesLoadDB); err != nil {
+	if err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, *fixturesLoadDB); err != nil {
 		return errors.Wrap(err, `restoring fixture`)
 	}
 	for _, table := range fixture.Tables {

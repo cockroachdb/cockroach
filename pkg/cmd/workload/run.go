@@ -39,7 +39,6 @@ import (
 	"github.com/tylertreat/hdrhistogram-writer"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
-	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/all"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
