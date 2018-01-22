@@ -19,9 +19,10 @@ warn() {
 
 # First lint test: give  a friendly reminder on long lines.
 
-if grep -v '^#' "$1" | grep -qE '.{80,}'; then
+longlines=$(awk '/^# --* >8 --*/ {p = 1} { if (length() >= 80 && !p) print }' <"$1")
+if test -n "$longlines"; then
     warn "Long line(s) detected:"
-    grep -v '^#' "$1" | grep -E ".{80,}" | sed -e 's/^/   /g' >&2
+    echo "$longlines" | sed -e 's/^/   /g' >&2
     echo >&2
     echo "Please amend and wrap long lines." >&2
     echo "(Long lines are OK if inside a preformatted block or a table.)" >&2
@@ -58,6 +59,7 @@ hint() {
 if [ 0 = ${#notes[*]} ]; then
     warn "No release note specified."
     echo "Try: 'Release note (...): ...'" >&2
+    echo >&2
 else
     for rnote in "${notes[@]}"; do
         informed=
@@ -134,6 +136,5 @@ else
             done
         fi
     done
+    if test -n "$informed"; then echo >&2; fi
 fi
-echo >&2
-
