@@ -8511,7 +8511,6 @@ func TestReplicaMetrics(t *testing.T) {
 				RangeCounter:    false,
 				Unavailable:     false,
 				Underreplicated: false,
-				SelfBehindCount: 5,
 			}},
 		// Both replicas of a 2-replica range are live, but follower is behind.
 		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2),
@@ -8602,7 +8601,6 @@ func TestReplicaMetrics(t *testing.T) {
 				RangeCounter:    true,
 				Unavailable:     false,
 				Underreplicated: false,
-				SelfBehindCount: 15,
 			}},
 		// Range has no leader, local replica is the range counter.
 		{3, 3, desc(3, 2, 1), status(0, progress(2, 2, 2)), live(1, 2, 3),
@@ -8611,7 +8609,6 @@ func TestReplicaMetrics(t *testing.T) {
 				RangeCounter:    true,
 				Unavailable:     false,
 				Underreplicated: false,
-				SelfBehindCount: 16,
 			}},
 		// Range has no leader, local replica is not the range counter.
 		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
@@ -8620,7 +8617,6 @@ func TestReplicaMetrics(t *testing.T) {
 				RangeCounter:    false,
 				Unavailable:     false,
 				Underreplicated: false,
-				SelfBehindCount: 17,
 			}},
 		// Range has no leader, local replica is not the range counter.
 		{3, 3, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
@@ -8629,7 +8625,6 @@ func TestReplicaMetrics(t *testing.T) {
 				RangeCounter:    false,
 				Unavailable:     false,
 				Underreplicated: false,
-				SelfBehindCount: 18,
 			}},
 	}
 	for i, c := range testCases {
@@ -8643,7 +8638,7 @@ func TestReplicaMetrics(t *testing.T) {
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
 				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
-				c.storeID, c.expected.Quiescent, int64(i+1), CommandQueueMetrics{}, CommandQueueMetrics{})
+				c.storeID, c.expected.Quiescent, CommandQueueMetrics{}, CommandQueueMetrics{})
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}
