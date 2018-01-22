@@ -74,6 +74,7 @@ type adminServer struct {
 	server     *Server
 	memMonitor mon.BytesMonitor
 	memMetrics *sql.MemoryMetrics
+	executor   *sql.InternalExecutor
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
@@ -83,8 +84,8 @@ var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEW
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(s *Server) *adminServer {
-	server := &adminServer{server: s, memMetrics: &s.adminMemMetrics}
+func newAdminServer(s *Server, ie *sql.InternalExecutor) *adminServer {
+	server := &adminServer{server: s, memMetrics: &s.adminMemMetrics, executor: ie}
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
 	server.memMonitor = mon.MakeUnlimitedMonitor(
@@ -443,11 +444,10 @@ func (s *adminServer) TableDetails(
 	// Get the number of ranges in the table. We get the key span for the table
 	// data. Then, we count the number of ranges that make up that key span.
 	{
-		iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
 		var tableSpan roachpb.Span
 		if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			tableSpan, err = iexecutor.GetTableSpan(
+			tableSpan, err = s.executor.GetTableSpan(
 				ctx, s.getUser(req), txn, req.Database, req.Table,
 			)
 			return err
@@ -514,10 +514,9 @@ func (s *adminServer) TableStats(
 
 	// Get table span.
 	var tableSpan roachpb.Span
-	iexecutor := sql.InternalExecutor{LeaseManager: s.server.leaseMgr}
 	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		tableSpan, err = iexecutor.GetTableSpan(ctx, s.getUser(req), txn, req.Database, req.Table)
+		tableSpan, err = s.executor.GetTableSpan(ctx, s.getUser(req), txn, req.Database, req.Table)
 		return err
 	}); err != nil {
 		return nil, s.serverError(err)

@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -33,12 +34,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func makeTestPlanner() *planner {
+	// Initialize an Executorconfig sufficiently for the purposes of creating a
+	// planner.
+	var nodeID base.NodeIDContainer
+	nodeID.Set(context.TODO(), 1)
+	execCfg := ExecutorConfig{
+		NodeInfo: NodeInfo{
+			NodeID: &nodeID,
+			ClusterID: func() uuid.UUID {
+				return uuid.MakeV4()
+			},
+		},
+	}
+
 	// TODO(andrei): pass the cleanup along to the caller.
 	p, _ /* cleanup */ := newInternalPlanner(
-		"test", nil /* txn */, security.RootUser, &MemoryMetrics{},
+		"test", nil /* txn */, security.RootUser, &MemoryMetrics{}, &execCfg,
 	)
 	return p
 }

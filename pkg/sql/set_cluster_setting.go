@@ -97,7 +97,7 @@ func (p *planner) SetClusterSetting(
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
-	ie := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
+	ie := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
 
 	var reportedValue string
 	if n.value == nil {
@@ -124,7 +124,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		reportedValue = tree.AsStringWithFlags(n.value, tree.FmtBareStrings)
 	}
 
-	return MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
 		EventLogSetClusterSetting,

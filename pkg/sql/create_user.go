@@ -81,7 +81,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		opName = "create-user"
 	}
 
-	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
+	internalExecutor := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
 	n.run.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
 		params.ctx,
 		opName,

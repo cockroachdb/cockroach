@@ -129,7 +129,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Record index creation in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+	if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
 		params.ctx,
 		params.p.txn,
 		EventLogCreateIndex,
