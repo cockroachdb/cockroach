@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +14,8 @@
 
 #pragma once
 
-#include <rocksdb/env.h>
-#include <rocksdb/status.h>
-#include <string>
-
-// Write 'contents' to a temporary file, sync, rename to 'filename'.
-// On non-OK status, the original file has not been touched.
-rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, const std::string& filename,
-                                      const std::string& contents);
-
-// local variables:
-// mode: c++
-// end:
+#if defined(COMPILER_GCC) || defined(__clang__)
+#define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+#else
+#define WARN_UNUSED_RESULT
+#endif
