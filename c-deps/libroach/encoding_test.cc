@@ -19,6 +19,8 @@
 #include <vector>
 #include "encoding.h"
 
+using namespace cockroach;
+
 TEST(Libroach, Encoding) {
   // clang-format off
   std::vector<uint32_t> cases32{

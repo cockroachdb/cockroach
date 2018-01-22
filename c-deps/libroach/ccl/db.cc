@@ -14,10 +14,13 @@
 #include <rocksdb/iterator.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 #include <rocksdb/write_batch.h>
+#include "../status.h"
 #include "ccl/baseccl/encryption_options.pb.h"
 #include "key_manager.h"
 
-const DBStatus kSuccess = {NULL, 0};
+using namespace cockroach;
+
+namespace cockroach {
 
 // DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
 // needed.
@@ -67,6 +70,8 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts) {
 
   return rocksdb::Status::InvalidArgument("encryption is not supported");
 }
+
+}  // namespace cockroach
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos,
                            MVCCStatsResult* stats) {
