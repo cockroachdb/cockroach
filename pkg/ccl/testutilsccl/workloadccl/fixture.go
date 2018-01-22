@@ -1,18 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package workload
+package workloadccl
 
 import (
 	"bytes"
@@ -25,6 +19,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -57,7 +52,7 @@ func (s FixtureStore) objectPathToURI(folder string) string {
 // initialization of large clusters.
 type Fixture struct {
 	Store     FixtureStore
-	Generator Generator
+	Generator workload.Generator
 	Tables    []FixtureTable
 }
 
@@ -70,7 +65,7 @@ type FixtureTable struct {
 
 // serializeOptions deterministically represents the configuration of a
 // Generator as a string.
-func serializeOptions(gen Generator) string {
+func serializeOptions(gen workload.Generator) string {
 	// NB: VisitAll visits in a deterministic (alphabetical) order.
 	var buf bytes.Buffer
 	gen.Flags().VisitAll(func(f *pflag.Flag) {
@@ -82,7 +77,7 @@ func serializeOptions(gen Generator) string {
 	return buf.String()
 }
 
-func generatorToGCSFolder(store FixtureStore, gen Generator) string {
+func generatorToGCSFolder(store FixtureStore, gen workload.Generator) string {
 	meta := gen.Meta()
 	return filepath.Join(
 		store.GCSPrefix,
@@ -94,7 +89,7 @@ func generatorToGCSFolder(store FixtureStore, gen Generator) string {
 // GetFixture returns a handle for pre-computed Generator data stored on GCS. It
 // is expected that the generator will have had Configure called on it.
 func GetFixture(
-	ctx context.Context, gcs *storage.Client, store FixtureStore, gen Generator,
+	ctx context.Context, gcs *storage.Client, store FixtureStore, gen workload.Generator,
 ) (Fixture, error) {
 	b := gcs.Bucket(store.GCSBucket)
 
@@ -127,11 +122,10 @@ func GetFixture(
 // data for the given table. The GCS object path to the written file is
 // returned.
 func writeCSVs(
-	ctx context.Context, gcs *storage.Client, table Table, store FixtureStore, folder string,
+	ctx context.Context, gcs *storage.Client, table workload.Table, store FixtureStore, folder string,
 ) (string, error) {
 	// TODO(dan): For large tables, break this up into multiple CSVs.
 	csvPath := filepath.Join(folder, table.Name+`.csv`)
-	fmt.Println(csvPath)
 	const maxAttempts = 3
 	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
 		w := gcs.Bucket(store.GCSBucket).Object(csvPath).NewWriter(ctx)
@@ -165,7 +159,11 @@ func writeCSVs(
 // backup file, then restoring that file into a cluster. The `transform` option
 // gives us only the first half (which is all we want for fixture generation).
 func MakeFixture(
-	ctx context.Context, sqlDB *gosql.DB, gcs *storage.Client, store FixtureStore, gen Generator,
+	ctx context.Context,
+	sqlDB *gosql.DB,
+	gcs *storage.Client,
+	store FixtureStore,
+	gen workload.Generator,
 ) (Fixture, error) {
 	fixtureFolder := generatorToGCSFolder(store, gen)
 
