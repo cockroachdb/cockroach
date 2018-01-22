@@ -301,7 +301,7 @@ class EncryptedRandomRWFile : public rocksdb::RandomRWFile {
 // EncryptedEnv implements an Env wrapper that adds encryption to files stored on disk.
 class EncryptedEnv : public rocksdb::EnvWrapper {
  public:
-  EncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, int env_level)
+  EncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, enginepb::EnvLevel env_level)
       : rocksdb::EnvWrapper(base_env), provider_(provider), env_level_(env_level) {}
 
   // NewSequentialFile opens a file for sequential reading.
@@ -499,12 +499,13 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
  private:
   EncryptionProvider* provider_;
-  int env_level_;
+  enginepb::EnvLevel env_level_;
 };
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
-rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, int env_level) {
+rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider,
+                              enginepb::EnvLevel env_level) {
   return new EncryptedEnv(base_env, provider, env_level);
 }
 

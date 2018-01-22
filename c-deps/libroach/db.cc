@@ -32,6 +32,7 @@
 #include <stdarg.h>
 #include "defines.h"
 #include "encoding.h"
+#include "env_manager.h"
 #include "eventlistener.h"
 #include "fmt.h"
 #include "keys.h"
@@ -65,7 +66,7 @@ namespace cockroach {
 
 // DBOpenHook in OSS mode only verifies that no extra options are specified.
 __attribute__((weak)) rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts,
-                                                 EnvContext* env_ctx) {
+                                                 EnvManager* env_ctx) {
   if (opts.extra_options.len != 0) {
     return rocksdb::Status::InvalidArgument(
         "DBOptions has extra_options, but OSS code cannot handle them");
@@ -104,7 +105,7 @@ struct DBEngine {
 };
 
 struct DBImpl : public DBEngine {
-  std::unique_ptr<EnvContext> env_ctx;
+  std::unique_ptr<EnvManager> env_ctx;
   std::unique_ptr<rocksdb::DB> rep_deleter;
   std::shared_ptr<rocksdb::Cache> block_cache;
   std::shared_ptr<DBEventListener> event_listener;
@@ -112,7 +113,7 @@ struct DBImpl : public DBEngine {
   // Construct a new DBImpl from the specified DB.
   // The DB and passed Envs will be deleted when the DBImpl is deleted.
   // Either env can be NULL.
-  DBImpl(rocksdb::DB* r, std::unique_ptr<EnvContext> env_ctx, std::shared_ptr<rocksdb::Cache> bc,
+  DBImpl(rocksdb::DB* r, std::unique_ptr<EnvManager> env_ctx, std::shared_ptr<rocksdb::Cache> bc,
          std::shared_ptr<DBEventListener> event_listener)
       : DBEngine(r),
         env_ctx(std::move(env_ctx)),
@@ -1440,7 +1441,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
 
   // Make the default options.env the default. It points to Env::Default which does not
   // need to be deleted.
-  std::unique_ptr<EnvContext> env_ctx(new EnvContext(options.env));
+  std::unique_ptr<EnvManager> env_ctx(new EnvManager(options.env));
 
   if (dir.len == 0) {
     // In-memory database: use a MemEnv as the base Env.

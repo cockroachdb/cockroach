@@ -18,7 +18,7 @@
 
 SwitchingProvider::~SwitchingProvider() {}
 
-rocksdb::Status SwitchingProvider::RegisterCipherStreamCreator(int env_level,
+rocksdb::Status SwitchingProvider::RegisterCipherStreamCreator(enginepb::EnvLevel env_level,
                                                                CipherStreamCreator* creator) {
   auto res =
       creators_.insert(std::make_pair(env_level, std::unique_ptr<CipherStreamCreator>(creator)));
@@ -43,7 +43,7 @@ rocksdb::Status SwitchingProvider::CheckEnvLevels() {
 }
 
 rocksdb::Status SwitchingProvider::CreateCipherStream(
-    int env_level, const std::string& fname, bool new_file,
+    enginepb::EnvLevel env_level, const std::string& fname, bool new_file,
     std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) {
   if (new_file) {
     return InitAndCreateCipherStream(env_level, fname, result);
@@ -53,7 +53,7 @@ rocksdb::Status SwitchingProvider::CreateCipherStream(
 }
 
 rocksdb::Status SwitchingProvider::LookupAndCreateCipherStream(
-    int env_level, const std::string& fname,
+    enginepb::EnvLevel env_level, const std::string& fname,
     std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) {
 
   // Look for file in registry.
@@ -89,7 +89,7 @@ rocksdb::Status SwitchingProvider::LookupAndCreateCipherStream(
 }
 
 rocksdb::Status SwitchingProvider::InitAndCreateCipherStream(
-    int env_level, const std::string& fname,
+    enginepb::EnvLevel env_level, const std::string& fname,
     std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) {
 
   // Look for file in registry.

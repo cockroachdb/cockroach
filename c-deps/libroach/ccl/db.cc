@@ -14,6 +14,7 @@
 #include <rocksdb/iterator.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 #include <rocksdb/write_batch.h>
+#include "../env_manager.h"
 #include "../status.h"
 #include "../switching_provider.h"
 #include "ccl/baseccl/encryption_options.pb.h"
@@ -27,7 +28,7 @@ namespace cockroach {
 // DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
 // needed.
 rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
-                           EnvContext* env_ctx) {
+                           EnvManager* env_ctx) {
   DBSlice options = db_opts.extra_options;
   if (options.len == 0) {
     return rocksdb::Status::OK();

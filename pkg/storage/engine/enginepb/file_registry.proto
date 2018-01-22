@@ -50,7 +50,7 @@ message FileRegistry {
 
 message FileEntry {
   // Env level identifies which rocksdb::Env is responsible for this file.
-  int32 env_level = 1;
+  EnvLevel env_level = 1;
 
   // Env-specific fields for non-0 env. These are known by CCL code only.
   // This is a serialized protobuf. We cannot use protobuf.Any since we use
