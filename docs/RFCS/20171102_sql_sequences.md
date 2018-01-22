@@ -196,8 +196,12 @@ discussion of alternate approaches.
 Each sequence value will be stored in its own range, with a key in this format:
 
 ```
-/Table/<DescriptorID>/SequenceValue
+/Table/<DescriptorID>/1/0/1
 ```
+
+Where the numbers are dummy values for the index ID, primary key value, and
+column family ID, respectively. This mimics the structure of a normal table
+key, so backup/restore can work without modification.
 
 Reads and writes to the sequence value (via the functions `nextval`, `currval`,
 etc.), will be implemented by direct calls to the KV layer's `Get`, `Inc`, and
