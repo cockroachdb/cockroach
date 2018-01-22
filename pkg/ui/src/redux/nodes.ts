@@ -57,6 +57,13 @@ export const nodeStatusesSelector = (state: AdminUIState) => state.cachedData.no
 const livenessesSelector = (state: AdminUIState) => state.cachedData.liveness.data;
 const livenessCheckedAtSelector = (state: AdminUIState) => state.cachedData.liveness.requestedAt;
 
+/*
+ * selectNodeRequestStatus returns the current status of the node status request.
+ */
+export function selectNodeRequestStatus(state: AdminUIState) {
+  return state.cachedData.nodes;
+}
+
 /**
  * livenessByNodeIDSelector returns a map from NodeID to the Liveness record for
  * that node.
