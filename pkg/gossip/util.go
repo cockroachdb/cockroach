@@ -16,6 +16,7 @@ package gossip
 
 import (
 	"bytes"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,13 +30,7 @@ import (
 // goroutines.
 type SystemConfigDeltaFilter struct {
 	keyPrefix roachpb.Key
-	lastVals  map[string]*filterVal
-	epoch     bool
-}
-
-type filterVal struct {
-	epoch bool
-	val   roachpb.Value
+	lastCfg   config.SystemConfig
 }
 
 // MakeSystemConfigDeltaFilter creates a new SystemConfigDeltaFilter. The filter
@@ -44,54 +39,65 @@ type filterVal struct {
 func MakeSystemConfigDeltaFilter(keyPrefix roachpb.Key) SystemConfigDeltaFilter {
 	return SystemConfigDeltaFilter{
 		keyPrefix: keyPrefix,
-		lastVals:  make(map[string]*filterVal),
 	}
 }
 
 // ForModified calls the provided function for all SystemConfig kvs that were modified
 // since the last call to this method.
 func (df *SystemConfigDeltaFilter) ForModified(
-	cfg config.SystemConfig, fn func(kv roachpb.KeyValue),
+	newCfg config.SystemConfig, fn func(kv roachpb.KeyValue),
 ) {
-	// Invert epoch counter so we can detect which kvs were removed from the
-	// map after updating all those that remain.
-	df.epoch = !df.epoch
-	for _, kv := range cfg.Values {
-		// Skip unimportant kvs.
-		if df.keyPrefix != nil && !bytes.HasPrefix(kv.Key, df.keyPrefix) {
-			continue
-		}
+	// Save newCfg in the filter.
+	lastCfg := df.lastCfg
+	df.lastCfg = newCfg
 
-		keySlice := kv.Key[len(df.keyPrefix):]
-		keyStr := string(keySlice)
-		prevVal, ok := df.lastVals[keyStr]
-		if !ok || !bytes.Equal(kv.Value.RawBytes, prevVal.val.RawBytes) {
-			// The key is new or the value changed.
-			fn(kv)
-		}
-
-		newVal := filterVal{epoch: df.epoch, val: kv.Value}
-		if ok {
-			*prevVal = newVal
-		} else {
-			// Both of these variables are split from a copy in the outer scope.
-			// The first is so that all uses of keyStr can take advantage of
-			// https://github.com/golang/go/wiki/CompilerOptimizations#string-and-byte.
-			// The second is so that newVal doesn't escape onto the heap. Look
-			// at memory benchmarks when making any changes here.
-			keyStrAlloc := string(keySlice)
-			newValAlloc := newVal
-			df.lastVals[keyStrAlloc] = &newValAlloc
-		}
+	// SystemConfig values are always sorted by key, so scan over new and old
+	// configs in order to find new keys and modified values. Before doing so,
+	// skip all keys in each list of values that are less than the keyPrefix.
+	lastIdx, newIdx := 0, 0
+	if df.keyPrefix != nil {
+		lastIdx = sort.Search(len(lastCfg.Values), func(i int) bool {
+			return bytes.Compare(lastCfg.Values[i].Key, df.keyPrefix) >= 0
+		})
+		newIdx = sort.Search(len(newCfg.Values), func(i int) bool {
+			return bytes.Compare(newCfg.Values[i].Key, df.keyPrefix) >= 0
+		})
 	}
 
-	// Delete the kvs that no longer exist in the system config from the map.
-	//
-	// We can expose the kvs that are being removed in this loop, if we ever
-	// need to.
-	for key, val := range df.lastVals {
-		if val.epoch != df.epoch {
-			delete(df.lastVals, key)
+	for {
+		if newIdx == len(newCfg.Values) {
+			// All out of new keys.
+			break
+		}
+
+		newKV := newCfg.Values[newIdx]
+		if df.keyPrefix != nil && !bytes.HasPrefix(newKV.Key, df.keyPrefix) {
+			// All out of new keys matching prefix.
+			break
+		}
+
+		if lastIdx < len(lastCfg.Values) {
+			oldKV := lastCfg.Values[lastIdx]
+			switch oldKV.Key.Compare(newKV.Key) {
+			case -1:
+				// Deleted key.
+				lastIdx++
+			case 0:
+				if !bytes.Equal(newKV.Value.RawBytes, oldKV.Value.RawBytes) {
+					// Modified value.
+					fn(newKV)
+				}
+				lastIdx++
+				newIdx++
+			case 1:
+				// New key.
+				fn(newKV)
+				newIdx++
+			}
+		} else {
+			// New key.
+			fn(newKV)
+			newIdx++
 		}
 	}
 }

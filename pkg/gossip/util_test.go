@@ -17,6 +17,7 @@ package gossip
 import (
 	"math/rand"
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 
@@ -55,6 +56,7 @@ func addKV(rng *rand.Rand, cfg *config.SystemConfig, key int) {
 			RawBytes: randutil.RandBytes(rng, 100),
 		},
 	})
+	sort.Sort(roachpb.KeyValueByKey(newKVs))
 	cfg.Values = newKVs
 }
 
@@ -77,14 +79,6 @@ func assertModified(
 	}
 }
 
-// assertSize asserts that the filter has the specified number of kvs stored.
-func assertSize(t *testing.T, df SystemConfigDeltaFilter, size int) {
-	t.Helper()
-	if l := len(df.lastVals); l != size {
-		t.Errorf("expected map size=%d, found %d", size, l)
-	}
-}
-
 func TestSystemConfigDeltaFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
@@ -95,23 +89,24 @@ func TestSystemConfigDeltaFilter(t *testing.T) {
 	// Add one key.
 	addKV(rng, &cfg, 1)
 	assertModified(t, &df, cfg, 1)
-	assertSize(t, df, 1)
 
 	// Add two keys.
 	addKV(rng, &cfg, 2)
 	addKV(rng, &cfg, 3)
 	assertModified(t, &df, cfg, 2, 3)
-	assertSize(t, df, 3)
 
 	// Modify a key.
 	addKV(rng, &cfg, 2)
 	assertModified(t, &df, cfg, 2)
-	assertSize(t, df, 3)
+
+	// Add one key at beginning, modify one key.
+	addKV(rng, &cfg, 0)
+	addKV(rng, &cfg, 1)
+	assertModified(t, &df, cfg, 0, 1)
 
 	// Remove the first key.
 	cfg.Values = cfg.Values[1:]
 	assertModified(t, &df, cfg)
-	assertSize(t, df, 2)
 }
 
 func TestSystemConfigDeltaFilterWithKeyPrefix(t *testing.T) {
@@ -124,24 +119,20 @@ func TestSystemConfigDeltaFilterWithKeyPrefix(t *testing.T) {
 	// Add one non-matching key.
 	addKV(rng, &cfg, 1)
 	assertModified(t, &df, cfg)
-	assertSize(t, df, 0)
 
 	// Add one matching key.
 	addKV(rng, &cfg, 123)
 	assertModified(t, &df, cfg, 123)
-	assertSize(t, df, 1)
 
 	// Add two keys, one matching, one non-matching.
 	addKV(rng, &cfg, 125)
 	addKV(rng, &cfg, 135)
 	assertModified(t, &df, cfg, 125)
-	assertSize(t, df, 2)
 
 	// Modify two keys, one matching, one non-matching.
 	addKV(rng, &cfg, 1)
 	addKV(rng, &cfg, 123)
 	assertModified(t, &df, cfg, 123)
-	assertSize(t, df, 2)
 }
 
 func BenchmarkSystemConfigDeltaFilter(b *testing.B) {
