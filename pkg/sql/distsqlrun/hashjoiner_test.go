@@ -716,31 +716,36 @@ func TestHashJoiner(t *testing.T) {
 		// testFunc is a helper function that runs a hashJoin with the current
 		// test case after running the provided setup function.
 		testFunc := func(t *testing.T, setup func(h *hashJoiner)) error {
-			leftInput := NewRowBuffer(c.leftTypes, c.leftInput, RowBufferArgs{})
-			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
-			out := &RowBuffer{}
-			flowCtx := FlowCtx{
-				Ctx:         ctx,
-				Settings:    cluster.MakeTestingClusterSettings(),
-				EvalCtx:     evalCtx,
-				TempStorage: tempEngine,
-				diskMonitor: &diskMonitor,
-			}
+			for _, side := range [2]joinSide{leftSide, rightSide} {
+				leftInput := NewRowBuffer(c.leftTypes, c.leftInput, RowBufferArgs{})
+				rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
+				out := &RowBuffer{}
+				flowCtx := FlowCtx{
+					Ctx:         ctx,
+					Settings:    cluster.MakeTestingClusterSettings(),
+					EvalCtx:     evalCtx,
+					TempStorage: tempEngine,
+					diskMonitor: &diskMonitor,
+				}
+				post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
+				h, err := newHashJoiner(&flowCtx, &c.spec, leftInput, rightInput, &post, out)
+				if err != nil {
+					return err
+				}
+				outTypes := h.OutputTypes()
+				setup(h)
+				h.forcedStoredSide = &side
+				h.Run(nil)
 
-			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			h, err := newHashJoiner(&flowCtx, &c.spec, leftInput, rightInput, &post, out)
-			if err != nil {
-				return err
-			}
-			outTypes := h.OutputTypes()
-			setup(h)
-			h.Run(nil)
+				if !out.ProducerClosed {
+					return errors.New("output RowReceiver not closed")
+				}
 
-			if !out.ProducerClosed {
-				return errors.New("output RowReceiver not closed")
+				if err := checkExpectedRows(outTypes, c.expected, out); err != nil {
+					return err
+				}
 			}
-
-			return checkExpectedRows(outTypes, c.expected, out)
+			return nil
 		}
 
 		// Run test with a variety of initial buffer sizes.

@@ -94,6 +94,9 @@ type hashJoiner struct {
 	// stream we store fully and build the hashRowContainer from.
 	storedSide joinSide
 
+	// Used by tests to force a storedSide.
+	forcedStoredSide *joinSide
+
 	// testingKnobMemFailPoint specifies a phase in which the hashJoiner will
 	// fail at a random point during this phase.
 	testingKnobMemFailPoint hashJoinPhase
@@ -445,6 +448,10 @@ func (h *hashJoiner) bufferPhase(
 		side := rightSide
 		if leftUsage < rightUsage {
 			side = leftSide
+		}
+
+		if h.forcedStoredSide != nil {
+			side = *h.forcedStoredSide
 		}
 
 		row, earlyExit, err := h.receiveRow(ctx, srcs[side], side)
