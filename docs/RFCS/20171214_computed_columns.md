@@ -126,6 +126,14 @@ computed column. Computed column expressions for dependents of a column are
 kept up to date if columns are renamed (this is similar to what is done for
 `CHECK` constraints).
 
+## Modification to `information_schema`
+
+As computed columns are not a feature in Postgres, let alone a standard SQL
+feature, we will match [MySQL's extension] to `information_schema`, which is to
+add an extra `TEXT` column `generation_expression` to the
+`information_schema.columns` table which is empty for non-computed columns and
+contains the expression used to compute the column otherwise.
+
 # Drawbacks
 - As Postgres does not currently support this feature, by committing to
   particular semantics for it, we risk diverging from theirs if they choose to
@@ -160,3 +168,4 @@ kept up to date if columns are renamed (this is similar to what is done for
 # Unresolved Questions
 [Partioning]: https://github.com/cockroachdb/cockroach/blob/aa61db043e9c54c0b83a405cd76ce0ec7cc6a35d/docs/RFCS/20170921_sql_partitioning.md
 [Query planning changes in the RFC]: https://github.com/cockroachdb/cockroach/blob/aa61db043e9c54c0b83a405cd76ce0ec7cc6a35d/docs/RFCS/20170921_sql_partitioning.md#query-planning-changes
+[MySQL's extension]: https://dev.mysql.com/doc/refman/5.7/en/columns-table.html
