@@ -30,6 +30,9 @@ type exprID uint32
 const (
 	// normExprID is the index of the group's normalized expression.
 	normExprID exprID = 0
+
+	// InvalidGroupID is the invalid group.
+	InvalidGroupID GroupID = 0
 )
 
 // memoGroup stores a set of logically equivalent expressions. See the comments
