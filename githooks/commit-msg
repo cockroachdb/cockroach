@@ -17,7 +17,7 @@ warn() {
     echo "${red}$*${reset}" >&2
 }
 
-# First lint test: give a friendly reminder on long lines.
+# First lint test: give  a friendly reminder on long lines.
 
 if grep -v '^#' "$1" | grep -qE '.{80,}'; then
     warn "Long line(s) detected:"
