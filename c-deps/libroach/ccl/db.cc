@@ -14,6 +14,8 @@
 #include <rocksdb/iterator.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 #include <rocksdb/write_batch.h>
+#include "../batch.h"
+#include "../comparator.h"
 #include "../status.h"
 #include "ccl/baseccl/encryption_options.pb.h"
 #include "key_manager.h"
@@ -75,14 +77,12 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts) {
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos,
                            MVCCStatsResult* stats) {
-  const rocksdb::Comparator* kComparator = CockroachComparator();
-
   // TODO(dan): Inserting into a batch just to iterate over it is unfortunate.
   // Consider replacing this with WriteBatch's Iterate/Handler mechanism and
   // computing MVCC stats on the post-ApplyBatchRepr engine. splitTrigger does
   // the latter and it's a headache for propEvalKV, so wait to see how that
   // settles out before doing it that way.
-  rocksdb::WriteBatchWithIndex batch(kComparator, 0, true);
+  rocksdb::WriteBatchWithIndex batch(&kComparator, 0, true);
   rocksdb::WriteBatch b(ToString(repr));
   std::unique_ptr<rocksdb::WriteBatch::Handler> inserter(GetDBBatchInserter(&batch));
   rocksdb::Status status = b.Iterate(inserter.get());
@@ -93,11 +93,11 @@ DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nan
   iter.reset(batch.NewIteratorWithBase(rocksdb::NewEmptyIterator()));
 
   iter->SeekToFirst();
-  if (iter->Valid() && kComparator->Compare(iter->key(), EncodeKey(start)) < 0) {
+  if (iter->Valid() && kComparator.Compare(iter->key(), EncodeKey(start)) < 0) {
     return FmtStatus("key not in request range");
   }
   iter->SeekToLast();
-  if (iter->Valid() && kComparator->Compare(iter->key(), EncodeKey(end)) >= 0) {
+  if (iter->Valid() && kComparator.Compare(iter->key(), EncodeKey(end)) >= 0) {
     return FmtStatus("key not in request range");
   }
 

@@ -15,6 +15,8 @@
 #pragma once
 
 #include "db.h"
+#include "encoding.h"
+#include "iterator.h"
 #include "protos/storage/engine/enginepb/mvcc.pb.h"
 #include "status.h"
 #include "timestamp.h"
