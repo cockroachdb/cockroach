@@ -17,6 +17,7 @@ package json
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strconv"
 	"unsafe"
 
@@ -288,16 +289,63 @@ func (j *jsonEncoded) ObjectIter() (*ObjectIterator, error) {
 	return dec.ObjectIter()
 }
 
-func (j *jsonEncoded) arrayNthJEntry(n int, off int) (jEntry, error) {
+func (j *jsonEncoded) nthJEntry(n int, off int) (jEntry, error) {
 	return getJEntryAt(j.value, containerHeaderLen+n*jEntryLen, off)
+}
+
+// objectGetDataRange returns the [begin, end) subslice of the object's data.
+func (j *jsonEncoded) objectGetDataRange(begin, end int) []byte {
+	dataStart := containerHeaderLen + j.containerLen*jEntryLen*2
+	return j.value[dataStart+begin : dataStart+end]
+}
+
+// getNthEntryBounds returns the beginning, ending, and JEntry of the nth entry
+// in the container. If the container is an object, the i-th entry is the i-th
+// key, and the (i+length)-th entry is the i-th value.
+func (j *jsonEncoded) getNthEntryBounds(n int) (begin, end int, entry jEntry, err error) {
+	// First, we seek for the beginning of the current entry by stepping
+	// backwards via beginningOfIdx.
+	begin, err = j.beginningOfIdx(n)
+	if err != nil {
+		return 0, 0, jEntry{}, err
+	}
+
+	// Once we know where this entry starts, we can derive the end from its own
+	// JEntry.
+	entry, err = j.nthJEntry(n, begin)
+	if err != nil {
+		return 0, 0, jEntry{}, err
+	}
+	return begin, begin + int(entry.length), entry, nil
+}
+
+// objectGetNthDataRange returns the byte subslice and jEntry of the given nth entry.
+// If the container is an object, the i-th entry is the i-th key, and the
+// (i+length)-th entry is the i-th value.
+func (j *jsonEncoded) objectGetNthDataRange(n int) ([]byte, jEntry, error) {
+	begin, end, entry, err := j.getNthEntryBounds(n)
+	if err != nil {
+		return nil, jEntry{}, err
+	}
+	return j.objectGetDataRange(begin, end), entry, nil
+}
+
+// objectNthValue returns the nth value in the sorted-by-key representation of
+// the object.
+func (j *jsonEncoded) objectNthValue(n int) (JSON, error) {
+	data, entry, err := j.objectGetNthDataRange(j.containerLen + n)
+	if err != nil {
+		return nil, err
+	}
+	return newEncoded(entry, data)
 }
 
 func parseJEntry(jEntry uint32) (isOff bool, offlen int) {
 	return (jEntry & jEntryIsOffFlag) != 0, int(jEntry & jEntryOffLenMask)
 }
 
-// arrayBeginningOfIdx finds the offset to the beginning of the given entry.
-func (j *jsonEncoded) arrayBeginningOfIdx(idx int) (int, error) {
+// beginningOfIdx finds the offset to the beginning of the given entry.
+func (j *jsonEncoded) beginningOfIdx(idx int) (int, error) {
 	if idx == 0 {
 		return 0, nil
 	}
@@ -342,52 +390,54 @@ func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 		// We need to find the bounds for a given index, but this is nontrivial,
 		// since some headers store an offset and some store a length.
 
-		// First, we seek for the beginning of the current entry by stepping
-		// backwards via arrayBeginningOfIdx.
-		begin, err := j.arrayBeginningOfIdx(idx)
+		begin, end, entry, err := j.getNthEntryBounds(idx)
 		if err != nil {
 			return nil, err
 		}
 
-		// Once we know where this entry starts, we can derive the end from its own
-		// JEntry.
-		entry, err := j.arrayNthJEntry(idx, begin)
-		if err != nil {
-			return nil, err
-		}
-
-		return newEncoded(entry, j.arrayGetDataRange(begin, begin+int(entry.length)))
+		return newEncoded(entry, j.arrayGetDataRange(begin, end))
 	}
 	return nil, nil
 }
 
-// TODO(justin): this is quite slow as it requires a linear scan - implement
-// the length/offset distinction in order to make this fast.
 func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.FetchValKey(key)
 	}
 
 	if j.Type() == ObjectJSONType {
-		iter, err := j.iterObject()
+		// TODO(justin): This is not as absolutely efficient as it could be - every
+		// lookup we have to seek to find the actual location of the key. We could
+		// be caching the locations of all the intermediate keys that we have to
+		// scan in order to get to this one, in case we need to look them up later,
+		// or maybe there's something fancier we could do if we know the locations
+		// of the offsets by strategically positioning our binary search guesses to
+		// land on them.
+		var err error
+		i := sort.Search(j.containerLen, func(idx int) bool {
+			data, _, err := j.objectGetNthDataRange(idx)
+			if err != nil {
+				return false
+			}
+			return string(data) >= key
+		})
 		if err != nil {
 			return nil, err
 		}
-		for {
-			nextKey, entry, nextValue, ok, err := iter.nextEncoded()
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				return nil, nil
-			}
-			if string(nextKey) == key {
-				next, err := newEncoded(entry, nextValue)
-				if err != nil {
-					return nil, err
-				}
-				return next, nil
-			}
+
+		// The sort.Search API implies that we have to double-check if the key we
+		// landed on is the one we were searching for in the first place.
+		if i >= j.containerLen {
+			return nil, nil
+		}
+
+		data, _, err := j.objectGetNthDataRange(i)
+		if err != nil {
+			return nil, err
+		}
+
+		if string(data) == key {
+			return j.objectNthValue(i)
 		}
 	}
 	return nil, nil

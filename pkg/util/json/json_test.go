@@ -1700,6 +1700,9 @@ func BenchmarkFetchKey(b *testing.B) {
 
 			b.Run("fetch key by decoding and then reading", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
+					// This is a hack to get around the decoded caching.
+					encoded.mu.cachedDecoded = nil
+
 					decoded, err := encoded.shallowDecode()
 					if err != nil {
 						b.Fatal(err)
