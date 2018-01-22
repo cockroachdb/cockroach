@@ -27,6 +27,7 @@ import (
 type tableName string
 type columnName string
 type columnSet = util.FastIntSet
+type columnMap = util.FastIntMap
 type columnIndex = int
 
 // queryState holds per-query state.
