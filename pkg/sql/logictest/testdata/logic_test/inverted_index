@@ -115,9 +115,6 @@ INSERT INTO d VALUES(16, '{}')
 statement error pq: attempted access to empty key
 INSERT INTO d VALUES(16, '[]')
 
-statement error pq: duplicate key value \(b\)=\(NULL\) violates unique constraint "foo_inv"
-INSERT INTO d VALUES (20, '["a", "a"]')
-
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a":"b"}'
 ----
@@ -269,3 +266,19 @@ SELECT * from d where b @> '{}' ORDER BY a;
 
 statement error pq: constraints = , table ID = 53, index ID = 2: can't look up empty JSON
 SELECT * from d where b @> '[]' ORDER BY a;
+
+statement ok
+INSERT INTO d VALUES (20, '["a", "a"]')
+
+query IT
+SELECT * from d where b @> '["a"]' ORDER BY a;
+----
+20  ["a","a"]
+
+statement ok
+INSERT INTO d VALUES (21, '[{"a":"a"}, {"a":"a"}]')
+
+query IT
+SELECT * from d where b @> '[{"a":"a"}]' ORDER BY a;
+----
+21  [{"a":"a"},{"a":"a"}] 

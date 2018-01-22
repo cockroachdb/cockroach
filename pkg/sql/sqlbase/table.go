@@ -1584,7 +1584,23 @@ func EncodeInvertedIndexKeys(
 func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
 	switch t := tree.UnwrapDatum(nil, val).(type) {
 	case *tree.DJSON:
-		return (t.JSON).EncodeInvertedIndexKeys(inKey)
+		keys, err := (t.JSON).EncodeInvertedIndexKeys(inKey)
+		if err != nil {
+			return nil, err
+		}
+		keySet := make(map[string]struct{})
+		for _, key := range keys {
+			keySet[string(key)] = struct{}{}
+		}
+
+		outKeys := make([][]byte, len(keySet))
+		var i = 0
+		for key, _ := range keySet {
+			outKeys[i] = []byte(key)
+			i++
+		}
+
+		return outKeys, nil
 	}
 	return nil, pgerror.NewError(pgerror.CodeInternalError, "trying to apply inverted index to non JSON type")
 }
