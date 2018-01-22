@@ -251,6 +251,7 @@ information_schema  views
 pg_catalog          pg_am
 pg_catalog          pg_attrdef
 pg_catalog          pg_attribute
+pg_catalog          pg_auth_members
 pg_catalog          pg_class
 pg_catalog          pg_collation
 pg_catalog          pg_constraint
@@ -429,6 +430,7 @@ def            other_db            xyz                        BASE TABLE   3
 def            pg_catalog          pg_am                      SYSTEM VIEW  1
 def            pg_catalog          pg_attrdef                 SYSTEM VIEW  1
 def            pg_catalog          pg_attribute               SYSTEM VIEW  1
+def            pg_catalog          pg_auth_members            SYSTEM VIEW  1
 def            pg_catalog          pg_class                   SYSTEM VIEW  1
 def            pg_catalog          pg_collation               SYSTEM VIEW  1
 def            pg_catalog          pg_constraint              SYSTEM VIEW  1

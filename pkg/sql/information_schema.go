@@ -1063,7 +1063,7 @@ func forEachColumnInIndex(
 }
 
 func forEachRole(
-	ctx context.Context, origPlanner *planner, fn func(username string, isRole tree.DBool) error,
+	ctx context.Context, origPlanner *planner, fn func(username string, isRole bool) error,
 ) error {
 	query := `SELECT username, "isRole" FROM system.users`
 	p, cleanup := newInternalPlanner(
@@ -1083,7 +1083,33 @@ func forEachRole(
 			return errors.Errorf("isRole should be a boolean value, found %s instead", row[1].ResolvedType())
 		}
 
-		if err := fn(string(username), *isRole); err != nil {
+		if err := fn(string(username), bool(*isRole)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func forEachRoleMembership(
+	ctx context.Context, origPlanner *planner, fn func(role, member string, isAdmin bool) error,
+) error {
+	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
+	p, cleanup := newInternalPlanner(
+		"for-each-role-member", origPlanner.txn, security.RootUser,
+		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),
+	)
+	defer cleanup()
+	rows, _ /* cols */, err := p.queryRows(ctx, query)
+	if err != nil {
+		return err
+	}
+
+	for _, row := range rows {
+		roleName := tree.MustBeDString(row[0])
+		memberName := tree.MustBeDString(row[1])
+		isAdmin := row[2].(*tree.DBool)
+
+		if err := fn(string(roleName), string(memberName), bool(*isAdmin)); err != nil {
 			return err
 		}
 	}
