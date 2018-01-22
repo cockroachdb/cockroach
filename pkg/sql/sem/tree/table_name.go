@@ -99,12 +99,12 @@ type TableName struct {
 	DatabaseName Name
 	TableName    Name
 
-	// DBNameOriginallyOmitted, when set to true, causes the
+	// OmitDBNameDuringFormatting, when set to true, causes the
 	// String()/Format() methods to omit the database name even if one
 	// is set. This is used to ensure that pretty-printing
 	// a TableName normalized from a parser input yields back
 	// the original syntax.
-	DBNameOriginallyOmitted bool
+	OmitDBNameDuringFormatting bool
 
 	// PrefixOriginallySpecified indicates whether a prefix was
 	// explicitly indicated in the input syntax.
@@ -114,7 +114,7 @@ type TableName struct {
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !t.DBNameOriginallyOmitted ||
+	if !t.OmitDBNameDuringFormatting ||
 		f.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil {
 		if t.PrefixOriginallySpecified {
 			ctx.FormatNode(&t.PrefixName)
@@ -163,7 +163,7 @@ func (n *UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) 
 		return res, NewInvalidNameErrorf("empty table name: %q", ErrString(n))
 	}
 
-	res = TableName{TableName: *name, DBNameOriginallyOmitted: true}
+	res = TableName{TableName: *name, OmitDBNameDuringFormatting: true}
 
 	if len(*n) > 1 {
 		ndb, ok := (*n)[len(*n)-2].(*Name)
@@ -176,7 +176,7 @@ func (n *UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) 
 			return res, NewInvalidNameErrorf("empty database name: %q", ErrString(n))
 		}
 
-		res.DBNameOriginallyOmitted = false
+		res.OmitDBNameDuringFormatting = false
 
 		if len(*n) > 2 {
 			pn, ok := (*n)[len(*n)-3].(*Name)
@@ -206,7 +206,7 @@ func (n *UnresolvedName) NormalizeTableName() (*TableName, error) {
 // table       -> database.table
 // table@index -> database.table@index
 func (t *TableName) QualifyWithDatabase(database string) error {
-	if !t.DBNameOriginallyOmitted {
+	if !t.OmitDBNameDuringFormatting {
 		return nil
 	}
 	if database == "" {

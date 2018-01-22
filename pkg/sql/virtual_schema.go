@@ -87,9 +87,9 @@ func (e virtualSchemaEntry) tableNames(dbNameOriginallyOmitted bool) tree.TableN
 	var res tree.TableNames
 	for _, tableName := range e.orderedTableNames {
 		tn := tree.TableName{
-			DatabaseName:            tree.Name(e.desc.Name),
-			TableName:               tree.Name(tableName),
-			DBNameOriginallyOmitted: dbNameOriginallyOmitted,
+			DatabaseName:               tree.Name(e.desc.Name),
+			TableName:                  tree.Name(tableName),
+			OmitDBNameDuringFormatting: dbNameOriginallyOmitted,
 		}
 		res = append(res, tn)
 	}
