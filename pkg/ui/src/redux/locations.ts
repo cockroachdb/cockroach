@@ -3,14 +3,9 @@ import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
 import { AdminUIState } from "src/redux/state";
+import { Pick } from "src/util/pick";
 
 export type Location = protos.cockroach.server.serverpb.LocationsResponse.Location$Properties;
-
-type Pick<T, K1 extends keyof T, K2 extends keyof T[K1]> = {
-  [P1 in K1]: {
-    [P2 in K2]: T[P1][P2];
-  };
-};
 
 type LocationState = Pick<AdminUIState, "cachedData", "locations">;
 
