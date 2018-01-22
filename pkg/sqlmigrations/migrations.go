@@ -154,6 +154,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "remove cluster setting `kv.transaction.max_intents`",
 		workFn: purgeClusterSettingKVTransactionMaxIntents,
 	},
+	{
+		name:   "add default system.jobs zone config",
+		workFn: addDefaultSystemJobsZoneConfig,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -598,7 +602,7 @@ func addDefaultMetaAndLivenessZoneConfigs(ctx context.Context, r runner) error {
 	defaultTTLSeconds := config.DefaultZoneConfig().GC.TTLSeconds
 
 	// Retrieve the existing .meta zone config.
-	metaZone, err := getZoneConfig(ctx, r, keys.MetaRangesID)
+	metaZone, err := getZoneConfig(ctx, r, "RANGE meta")
 	if err != nil {
 		return err
 	}
@@ -612,7 +616,7 @@ func addDefaultMetaAndLivenessZoneConfigs(ctx context.Context, r runner) error {
 
 	// The liveness range was previously covered by the ".system" zone. Grab the
 	// existing ".system" zone (if any) for modification.
-	livenessZone, err := getZoneConfig(ctx, r, keys.SystemRangesID)
+	livenessZone, err := getZoneConfig(ctx, r, "RANGE system")
 	if err != nil {
 		return err
 	}
@@ -655,11 +659,10 @@ func upsertZoneConfig(ctx context.Context, r runner, id uint32, zone config.Zone
 	return err
 }
 
-func getZoneConfig(ctx context.Context, r runner, id uint32) (config.ZoneConfig, error) {
+func getZoneConfig(ctx context.Context, r runner, stmtFor string) (config.ZoneConfig, error) {
 	stmt := fmt.Sprintf(
-		`SELECT config_proto FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE %s]`,
-		config.NamedZonesByID[id])
-
+		`SELECT config_proto FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`,
+		stmtFor)
 	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
 
@@ -671,8 +674,8 @@ func getZoneConfig(ctx context.Context, r runner, id uint32) (config.ZoneConfig,
 		var res sql.StatementResults
 		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
 		if err != nil {
-			log.Warningf(ctx, "failed attempt to retrieve .%s zone config: %s",
-				config.NamedZonesByID[id], err)
+			log.Warningf(ctx, "failed attempt to retrieve %s zone config: %s",
+				stmtFor, err)
 			continue
 		}
 		defer res.Close(ctx)
@@ -696,8 +699,8 @@ func getZoneConfig(ctx context.Context, r runner, id uint32) (config.ZoneConfig,
 		return zone, nil
 	}
 
-	err = fmt.Errorf("failed attempt to retrieve .%s zone config: %v",
-		config.NamedZonesByID[id], err)
+	err = fmt.Errorf("failed attempt to retrieve %s zone config: %v",
+		stmtFor, err)
 	return config.ZoneConfig{}, err
 }
 
@@ -935,4 +938,18 @@ func purgeClusterSettingKVGCBatchSize(ctx context.Context, r runner) error {
 func purgeClusterSettingKVTransactionMaxIntents(ctx context.Context, r runner) error {
 	// This cluster setting has been removed.
 	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.transaction.max_intents'`)
+}
+
+func addDefaultSystemJobsZoneConfig(ctx context.Context, r runner) error {
+	defaultTTLSeconds := config.DefaultZoneConfig().GC.TTLSeconds
+
+	jobsZone, err := getZoneConfig(ctx, r, "TABLE system.jobs")
+	if err != nil {
+		return err
+	}
+	// Only update the TTL seconds if it is still at the default setting.
+	if jobsZone.GC.TTLSeconds == defaultTTLSeconds {
+		jobsZone.GC.TTLSeconds = 10 * 60 // 10m
+	}
+	return upsertZoneConfig(ctx, r, keys.JobsTableID, jobsZone)
 }
