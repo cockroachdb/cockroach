@@ -19,9 +19,9 @@ warn() {
 
 # First lint test: give a friendly reminder on long lines.
 
-if grep -qE '.{80,}' "$1"; then
+if grep -v '^#' "$1" | grep -qE '.{80,}'; then
     warn "Long line(s) detected:"
-    grep -E ".{80,}" "$1" | sed -e 's/^/   /g' >&2
+    grep -v '^#' "$1" | grep -E ".{80,}" | sed -e 's/^/   /g' >&2
     echo >&2
     echo "Please amend and wrap long lines." >&2
     echo "(Long lines are OK if inside a preformatted block or a table.)" >&2
