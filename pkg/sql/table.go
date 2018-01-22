@@ -112,7 +112,7 @@ func getTableOrViewDesc(
 		return virtual, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, tn.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, tn.Schema())
 	if err != nil {
 		return nil, err
 	}
@@ -315,8 +315,8 @@ func (tc *TableCollection) getTableVersion(
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
 
-	isSystemDB := tn.Database() == sqlbase.SystemDB.Name
-	isVirtualDB := vt.getVirtualDatabaseDesc(tn.Database()) != nil
+	isSystemDB := tn.Schema() == sqlbase.SystemDB.Name
+	isVirtualDB := vt.getVirtualDatabaseDesc(tn.Schema()) != nil
 	if isSystemDB || isVirtualDB || testDisableTableLeases {
 		// We don't go through the normal lease mechanism for:
 		// - system tables. The system.lease and system.descriptor table, in
@@ -341,7 +341,7 @@ func (tc *TableCollection) getTableVersion(
 	if dbID == 0 {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.execCfg.DB.Txn, vt, tn.Database())
+		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.execCfg.DB.Txn, vt, tn.Schema())
 		if err != nil {
 			return nil, err
 		}
@@ -492,7 +492,7 @@ func (tc *TableCollection) getUncommittedDatabaseID(tn *tree.TableName) (sqlbase
 	// Walk latest to earliest.
 	for i := len(tc.uncommittedDatabases) - 1; i >= 0; i-- {
 		db := tc.uncommittedDatabases[i]
-		if tn.Database() == db.name {
+		if tn.Schema() == db.name {
 			if db.dropped {
 				return 0, sqlbase.NewUndefinedRelationError(tn)
 			}
@@ -585,9 +585,9 @@ func getTableNames(
 			return nil, err
 		}
 		tn := tree.TableName{
-			DatabaseName:               tree.Name(dbDesc.Name),
-			TableName:                  tree.Name(tableName),
-			OmitDBNameDuringFormatting: dbNameOriginallyOmitted,
+			SchemaName:                     tree.Name(dbDesc.Name),
+			TableName:                      tree.Name(tableName),
+			OmitSchemaNameDuringFormatting: dbNameOriginallyOmitted,
 		}
 		tableNames = append(tableNames, tn)
 	}
@@ -721,12 +721,12 @@ func expandTableGlob(
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, string(glob.Database))
+	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, string(glob.Schema))
 	if err != nil {
 		return nil, err
 	}
 
-	tableNames, err := getTableNames(ctx, txn, vt, dbDesc, glob.OmitDBNameDuringFormatting)
+	tableNames, err := getTableNames(ctx, txn, vt, dbDesc, glob.OmitSchemaNameDuringFormatting)
 	if err != nil {
 		return nil, err
 	}
@@ -748,7 +748,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableNa
 	}
 
 	if p.SessionData().Database != "" {
-		t.DatabaseName = tree.Name(p.SessionData().Database)
+		t.SchemaName = tree.Name(p.SessionData().Database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
@@ -764,7 +764,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableNa
 	// the search path instead.
 	iter := p.SessionData().SearchPath.Iter()
 	for database, ok := iter(); ok; database, ok = iter() {
-		t.DatabaseName = tree.Name(database)
+		t.SchemaName = tree.Name(database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
@@ -789,8 +789,8 @@ func (p *planner) getQualifiedTableName(
 		return "", err
 	}
 	tbName := tree.TableName{
-		DatabaseName: tree.Name(dbDesc.Name),
-		TableName:    tree.Name(desc.Name),
+		SchemaName: tree.Name(dbDesc.Name),
+		TableName:  tree.Name(desc.Name),
 	}
 	return tbName.String(), nil
 }
@@ -869,7 +869,7 @@ func (p *planner) expandIndexName(
 		realTableName, err := p.findTableContainingIndex(
 			ctx,
 			p.txn, p.getVirtualTabler(),
-			tn.DatabaseName,
+			tn.SchemaName,
 			index.Index,
 			requireTable,
 		)
@@ -948,9 +948,9 @@ func resolveTableNameFromID(
 	table := tables[tableID]
 	tn := tree.TableName{TableName: tree.Name(table.Name)}
 	if parentDB, ok := databases[table.ParentID]; ok {
-		tn.DatabaseName = tree.Name(parentDB.Name)
+		tn.SchemaName = tree.Name(parentDB.Name)
 	} else {
-		tn.DatabaseName = tree.Name(fmt.Sprintf("[%d]", table.ParentID))
+		tn.SchemaName = tree.Name(fmt.Sprintf("[%d]", table.ParentID))
 		log.Errorf(ctx, "relation [%d] (%q) has no parent database (corrupted schema?)",
 			tableID, tree.ErrString(&tn))
 	}
