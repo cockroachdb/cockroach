@@ -60,6 +60,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogAmTable,
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
+		pgCatalogAuthMembersTable,
 		pgCatalogClassTable,
 		pgCatalogCollationTable,
 		pgCatalogConstraintTable,
@@ -228,6 +229,30 @@ CREATE TABLE pg_catalog.pg_attribute (
 				)
 			})
 		})
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-auth-members.html.
+var pgCatalogAuthMembersTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_auth_members (
+	roleid OID,
+	member OID,
+	grantor OID,
+	admin_option BOOL
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachRoleMembership(ctx, p,
+			func(roleName, memberName string, isAdmin tree.DBool) error {
+				return addRow(
+					h.UserOid(roleName),     // roleid
+					h.UserOid(memberName),   // member
+					tree.DNull,              // grantor
+					tree.MakeDBool(isAdmin), // admin_option
+				)
+			})
 	},
 }
 

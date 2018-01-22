@@ -1090,6 +1090,32 @@ func forEachRole(
 	return nil
 }
 
+func forEachRoleMembership(
+	ctx context.Context, origPlanner *planner, fn func(role, member string, isAdmin tree.DBool) error,
+) error {
+	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
+	p, cleanup := newInternalPlanner(
+		"for-each-role-member", origPlanner.txn, security.RootUser,
+		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),
+	)
+	defer cleanup()
+	rows, err := p.queryRows(ctx, query)
+	if err != nil {
+		return err
+	}
+
+	for _, row := range rows {
+		roleName := tree.MustBeDString(row[0])
+		memberName := tree.MustBeDString(row[1])
+		isAdmin := row[2].(*tree.DBool)
+
+		if err := fn(string(roleName), string(memberName), *isAdmin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func userCanSeeDatabase(p *planner, db *sqlbase.DatabaseDescriptor) bool {
 	return p.CheckAnyPrivilege(db) == nil
 }
