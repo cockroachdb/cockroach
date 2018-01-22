@@ -22,6 +22,11 @@ type FastIntMap struct {
 	large map[int]int
 }
 
+// Empty returns true if the map is empty.
+func (m FastIntMap) Empty() bool {
+	return m.small == [numWords]uint64{} && len(m.large) == 0
+}
+
 // Copy returns a FastIntMap that can be independently modified.
 func (m FastIntMap) Copy() FastIntMap {
 	if m.large == nil {
