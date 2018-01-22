@@ -78,6 +78,7 @@ class EncryptionProvider {
 
   virtual rocksdb::Status DeleteFile(const std::string& fname) = 0;
   virtual rocksdb::Status RenameFile(const std::string& src, const std::string& target) = 0;
+  virtual rocksdb::Status LinkFile(const std::string& src, const std::string& target) = 0;
 };
 
 }  // namespace rocksdb_utils
