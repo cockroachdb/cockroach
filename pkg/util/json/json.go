@@ -656,19 +656,47 @@ func (j jsonNumber) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 }
 func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	var outKeys [][]byte
+	var prevChildren = make([][]byte, 0)
 
 	for i := range j {
 		children, err := j[i].EncodeInvertedIndexKeys(nil)
 		if err != nil {
 			return nil, err
 		}
+		children = removeOverlappingKeys(prevChildren, children)
 		for _, childBytes := range children {
+			if childBytes == nil {
+				continue
+			}
 			encodedKey := bytes.Join([][]byte{b, encoding.EncodeArrayAscending(nil), childBytes}, nil)
 			outKeys = append(outKeys, encodedKey)
 		}
+		prevChildren = children
 	}
 
 	return outKeys, nil
+}
+
+func removeOverlappingKeys(keys1 [][]byte, keys2 [][]byte) [][]byte {
+	len1 := len(keys1)
+	len2 := len(keys2)
+
+	it1 := 0
+	it2 := 0
+
+	for it1 < len1 && it2 < len2 {
+		switch bytes.Compare(keys1[it1], keys2[it2]) {
+		case 0:
+			keys2[it2] = nil
+			it1++
+			it2++
+		case -1:
+			it1++
+		default:
+			it2++
+		}
+	}
+	return keys2
 }
 
 func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
