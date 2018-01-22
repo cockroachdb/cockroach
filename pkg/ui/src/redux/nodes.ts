@@ -4,6 +4,7 @@ import { createSelector } from "reselect";
 
 import { AdminUIState } from "./state";
 import { NanoToMilli } from "src/util/convert";
+import { Pick } from "src/util/pick";
 import { NodeStatus$Properties, MetricConstants, BytesUsed } from "src/util/proto";
 import { nullOfReturnType } from "src/util/types";
 
@@ -53,10 +54,14 @@ export enum LivenessStatus {
 }
 
 // Functions to select data directly from the redux state.
-export const nodeStatusesSelector = (state: AdminUIState) => state.cachedData.nodes.data;
 const livenessesSelector = (state: AdminUIState) => state.cachedData.liveness.data;
 const livenessCheckedAtSelector = (state: AdminUIState) => state.cachedData.liveness.requestedAt;
 
+/*
+ * nodeStatusesSelector returns the current status for each node in the cluster.
+ */
+type NodeStatusState = Pick<AdminUIState, "cachedData", "nodes">;
+export const nodeStatusesSelector = (state: NodeStatusState) => state.cachedData.nodes.data;
 /*
  * selectNodeRequestStatus returns the current status of the node status request.
  */
