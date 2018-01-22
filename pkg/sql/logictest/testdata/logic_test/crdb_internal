@@ -174,6 +174,7 @@ query IT
 SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
 ----
 0   .default
+15  system.jobs
 16  .meta
 17  .system
 18  .timeseries
