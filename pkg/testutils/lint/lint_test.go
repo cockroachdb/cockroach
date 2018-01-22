@@ -157,6 +157,7 @@ func TestLint(t *testing.T) {
 					":!ccl/storageccl/export_storage_test.go",
 					":!cmd",
 					":!testutils/lint",
+					":!testutils/workload/testonlyccl/fixture_test.go",
 					":!util/envutil/env.go",
 					":!util/log/clog.go",
 					":!util/color/color.go",
