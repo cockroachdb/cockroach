@@ -75,7 +75,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 					return
 				}
 				// Persist the database prefix expansion.
-				tn.DBNameOriginallyOmitted = false
+				tn.OmitDBNameDuringFormatting = false
 			},
 		)
 		f.FormatNode(n.AsSource)

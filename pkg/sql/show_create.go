@@ -126,9 +126,9 @@ func (p *planner) printForeignKeyConstraint(
 		return err
 	}
 	fkTableName := tree.TableName{
-		DatabaseName:            tree.Name(fkDb.Name),
-		TableName:               tree.Name(fkTable.Name),
-		DBNameOriginallyOmitted: fkDb.Name == dbPrefix,
+		DatabaseName:               tree.Name(fkDb.Name),
+		TableName:                  tree.Name(fkTable.Name),
+		OmitDBNameDuringFormatting: fkDb.Name == dbPrefix,
 	}
 	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
 	buf.WriteString("FOREIGN KEY (")
@@ -303,9 +303,9 @@ func (p *planner) showCreateInterleave(
 		return err
 	}
 	parentName := tree.TableName{
-		DatabaseName:            tree.Name(parentDbDesc.Name),
-		TableName:               tree.Name(parentTable.Name),
-		DBNameOriginallyOmitted: parentDbDesc.Name == dbPrefix,
+		DatabaseName:               tree.Name(parentDbDesc.Name),
+		TableName:                  tree.Name(parentTable.Name),
+		OmitDBNameDuringFormatting: parentDbDesc.Name == dbPrefix,
 	}
 	var sharedPrefixLen int
 	for _, ancestor := range intl.Ancestors {
