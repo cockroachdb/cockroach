@@ -16,25 +16,14 @@ package distsqlrun
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
-
-// sorterStrategy is an interface implemented by structs that know how to sort
-// rows on behalf of a sorter processor.
-type sorterStrategy interface {
-	// Execute performs a sorter processor's sorting work. Rows are read from the
-	// sorter's input and, after being sorted, passed to the sorter's
-	// post-processing stage.
-	//
-	// It returns once either all the input has been exhausted or the consumer
-	// indicated that no more rows are needed. In any case, the caller is
-	// responsible for draining and closing the producer and the consumer.
-	Execute(context.Context, *sorter) error
-}
 
 // sortAllStrategy reads in all values into the wrapped rows and
 // uses sort.Sort to sort all values in-place. It has a worst-case time
@@ -42,117 +31,259 @@ type sorterStrategy interface {
 //
 // The strategy is intended to be used when all values need to be sorted.
 type sortAllStrategy struct {
-	rows           *memRowContainer
-	useTempStorage bool
+	*sorterBase
+
+	useTempStorage  bool
+	diskContainer   *diskRowContainer
+	rows            *memRowContainer
+	rowContainerMon *mon.BytesMonitor
+
+	// The following variables are used by the state machine, and are used by Next()
+	// to determine where to resume emitting rows.
+	i      rowIterator
+	closed bool
+
+	// sortAllStrategy first calls Next() on its input stream to completion before
+	// outputting a single row. Thus when it receives ProducerMetadata, it has to
+	// cache it and output the rows its received so far, before emitting that metadata.
+	meta *ProducerMetadata
 }
 
-var _ sorterStrategy = &sortAllStrategy{}
+var _ Processor = &sortAllStrategy{}
 
-func newSortAllStrategy(rows *memRowContainer, useTempStorage bool) sorterStrategy {
+func newSortAllStrategy(s *sorterBase) Processor {
+	var rows memRowContainer
+	rowContainerMon := s.flowCtx.EvalCtx.Mon
+	useTempStorage := settingUseTempStorageSorts.Get(&s.flowCtx.Settings.SV) ||
+		s.flowCtx.testingKnobs.MemoryLimitBytes > 0
+	if useTempStorage {
+		// We will use the sortAllStrategy in this case and potentially fall
+		// back to disk.
+		// Limit the memory use by creating a child monitor with a hard limit.
+		// The strategy will overflow to disk if this limit is not enough.
+		limit := s.flowCtx.testingKnobs.MemoryLimitBytes
+		if limit <= 0 {
+			limit = settingWorkMemBytes.Get(&s.flowCtx.Settings.SV)
+		}
+		limitedMon := mon.MakeMonitorInheritWithLimit(
+			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
+		)
+		limitedMon.Start(s.flowCtx.Ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+
+		rowContainerMon = &limitedMon
+	}
+	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+
 	return &sortAllStrategy{
-		rows:           rows,
-		useTempStorage: useTempStorage,
+		sorterBase:      s,
+		rows:            &rows,
+		rowContainerMon: rowContainerMon,
+		useTempStorage:  useTempStorage,
 	}
 }
 
-// Execute runs an in memory implementation of a sort. If this run fails with a
-// memory error, the strategy will fall back to use disk.
-func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
-	defer ss.rows.Close(ctx)
-	row, err := ss.executeImpl(ctx, s, ss.rows)
-	// TODO(asubiotto): A memory error could also be returned if a limit other
-	// than the COCKROACH_WORK_MEM was reached. We should distinguish between
-	// these cases and log the event to facilitate debugging of queries that
-	// may be slow for this reason.
-	// We return the memory error if the row is nil because this case implies
-	// that we received the memory error from a code path that was not adding
-	// a row (e.g. from an upstream processor).
-	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) || row == nil {
-		return err
+func (s *sortAllStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	if s.closed {
+		return nil, nil
 	}
-	if !ss.useTempStorage {
-		return errors.Wrap(err, "external storage for large queries disabled")
-	}
-	log.VEventf(ctx, 2, "falling back to disk")
-	diskContainer := makeDiskRowContainer(
-		ctx, s.flowCtx.diskMonitor, ss.rows.types, ss.rows.ordering, s.tempStorage,
-	)
-	defer diskContainer.Close(ctx)
-
-	// Transfer the rows from memory to disk. Note that this frees up the
-	// memory taken up by ss.rows.
-	i := ss.rows.NewIterator(ctx)
-	defer i.Close()
-	for i.Rewind(); ; i.Next() {
-		if ok, err := i.Valid(); err != nil {
-			return err
-		} else if !ok {
-			break
+	if s.maybeStart("sortAllStrategy", "sortAllStrategy") {
+		if err := s.fill(); err != nil {
+			return nil, s.producerMeta(err)
 		}
-		memRow, err := i.Row()
+	}
+
+	if ok, err := s.i.Valid(); err != nil {
+		return nil, s.producerMeta(err)
+	} else if !ok {
+
+		return s.trailingMetadata()
+	}
+
+	for {
+		row, err := s.i.Row()
 		if err != nil {
-			return err
+			return nil, s.producerMeta(err)
 		}
-		if err := diskContainer.AddRow(ctx, memRow); err != nil {
-			return err
-		}
-	}
+		s.i.Next()
 
-	// Add the row that caused the memory container to run out of memory.
-	if err := diskContainer.AddRow(ctx, row); err != nil {
-		return err
+		outRow, status, err := s.out.ProcessRow(s.evalCtx.Ctx(), row)
+		if outRow != nil {
+			return outRow, nil
+		}
+		if outRow == nil && err == nil && status == NeedMoreRows {
+			continue
+		}
+		return nil, s.producerMeta(err)
 	}
-	if _, err := ss.executeImpl(ctx, s, &diskContainer); err != nil {
-		return err
+}
+
+// Sort processors read all their input before outputting a single output. Thus
+// they can't stop sending results when they encounter metadata. Instead they
+// must cache metadata, and output it after outputting all their non-metadata rows.
+// trailingMetadata() returns any cached metadata to output to Next(), and evicts
+// its cache so that subsequent calls return nil.
+// TODO(arjun): This is unnecessary. Metadata can be emitted immediately.
+// This should be refactored away.
+func (s *sortAllStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	s.close()
+	if s.meta != nil {
+		meta := s.meta
+		s.meta = nil
+		return nil, meta
+	}
+	return nil, nil
+}
+
+func (s *sortAllStrategy) fill() error {
+	ctx := s.evalCtx.Ctx()
+	// Attempt an in memory implementation of a sort. If this run fails with a
+	// memory error, fall back to use disk.
+	row, meta, err := s.fillWithContainer(ctx, s.rows)
+	if meta != nil {
+		s.meta = meta
+	} else if err != nil {
+		// TODO(asubiotto): A memory error could also be returned if a limit other
+		// than the COCKROACH_WORK_MEM was reached. We should distinguish between
+		// these cases and log the event to facilitate debugging of queries that
+		// may be slow for this reason.
+		// We return the memory error if the row is nil because this case implies
+		// that we received the memory error from a code path that was not adding
+		// a row (e.g. from an upstream processor).
+		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) || row == nil {
+			return err
+		}
+		if !s.useTempStorage {
+			return errors.Wrap(err, "external storage for large queries disabled")
+		}
+		log.VEventf(ctx, 2, "falling back to disk")
+		diskContainer := makeDiskRowContainer(
+			ctx, s.flowCtx.diskMonitor, s.rows.types, s.rows.ordering, s.tempStorage,
+		)
+		s.diskContainer = &diskContainer
+
+		// Transfer the rows from memory to disk. This frees up the memory taken up by s.rows.
+		i := s.rows.NewIterator(ctx)
+		for i.Rewind(); ; i.Next() {
+			if ok, err := i.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+			memRow, err := i.Row()
+			if err != nil {
+				return err
+			}
+			if err := s.diskContainer.AddRow(ctx, memRow); err != nil {
+				return err
+			}
+		}
+		s.i = nil
+
+		// Add the row that caused the memory container to run out of memory.
+		if err := s.diskContainer.AddRow(ctx, row); err != nil {
+			return err
+		}
+
+		// Continue and fill the rest of the rows from the input.
+		if _, meta, err := s.fillWithContainer(ctx, s.diskContainer); meta != nil {
+			// if we encounter metadata, we have to be careful: we can't return it
+			// right away. We save it for sending after we send all the rows we've
+			// already buffered.
+			s.meta = meta
+		} else if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// The execution loop for the SortAll strategy:
-//  - loads all rows into memory. If the memory budget is not high enough, all
-//    rows are stored on disk.
-//  - runs sort.Sort to sort rows in place. In the disk-backed case, the rows
-//    are already kept in sorted order.
-//  - sends each row out to the output stream.
-//
-// If an error occurs while adding a row to the given container, the row is
-// returned in order to not lose it.
-func (ss *sortAllStrategy) executeImpl(
-	ctx context.Context, s *sorter, r sortableRowContainer,
-) (sqlbase.EncDatumRow, error) {
+// fill the rows from the input into the given container. If an error occurs,
+// or the input sends metadata while adding a row to the given container, the
+// row is returned in order to not lose it.
+func (s *sortAllStrategy) fillWithContainer(
+	ctx context.Context, r sortableRowContainer,
+) (sqlbase.EncDatumRow, *ProducerMetadata, error) {
+	var meta *ProducerMetadata
 	for {
-		row, err := s.input.NextRow()
-		if err != nil {
-			return nil, err
+		row, inputMeta := s.input.Next()
+		if inputMeta != nil {
+			meta = inputMeta
+			continue
 		}
 		if row == nil {
 			break
 		}
+
 		if err := r.AddRow(ctx, row); err != nil {
-			return row, err
+			return row, nil, err
 		}
 	}
 	r.Sort(ctx)
 
-	i := r.NewIterator(ctx)
-	defer i.Close()
+	s.i = r.NewIterator(ctx)
+	s.i.Rewind()
 
-	for i.Rewind(); ; i.Next() {
-		if ok, err := i.Valid(); err != nil {
-			return nil, err
-		} else if !ok {
-			break
-		}
-		row, err := i.Row()
-		if err != nil {
-			return nil, err
-		}
-		consumerStatus, err := s.out.EmitRow(ctx, row)
-		if err != nil || consumerStatus != NeedMoreRows {
-			return nil, err
-		}
+	return nil, meta, nil
+}
+
+func (s *sortAllStrategy) Run(wg *sync.WaitGroup) {
+	if s.out.output == nil {
+		panic("sorter output not initialized for emitting rows")
 	}
-	return nil, nil
+	Run(s.flowCtx.Ctx, s, s.out.output)
+	if wg != nil {
+		wg.Done()
+	}
+}
+
+func (s *sortAllStrategy) close() {
+	// We are done sorting rows, close the iterators we have open. The row
+	// containers require a context, so must be called before internalClose().
+	if !s.closed {
+		if s.i != nil {
+			s.i.Close()
+		}
+		ctx := s.evalCtx.Ctx()
+		if s.diskContainer != nil {
+			s.diskContainer.Close(ctx)
+		}
+		s.rows.Close(ctx)
+		s.rowContainerMon.Stop(ctx)
+	}
+	if s.internalClose() {
+		s.input.ConsumerClosed()
+		s.closed = true
+	}
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (s *sortAllStrategy) ConsumerDone() {
+	s.input.ConsumerDone()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (s *sortAllStrategy) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	s.close()
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
+func (s *sortAllStrategy) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
+	if !s.closed {
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(s.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
+		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		s.close()
+	}
+	return meta
 }
 
 // sortTopKStrategy creates a max-heap in its wrapped rows and keeps
@@ -175,168 +306,331 @@ func (ss *sortAllStrategy) executeImpl(
 //
 // TODO(asubiotto): Use diskRowContainer for these other strategies.
 type sortTopKStrategy struct {
-	rows *memRowContainer
-	k    int64
+	sorterBase
+
+	rows            *memRowContainer
+	rowContainerMon *mon.BytesMonitor
+	k               int64
+
+	meta *ProducerMetadata
 }
 
-var _ sorterStrategy = &sortTopKStrategy{}
+var _ Processor = &sortTopKStrategy{}
 
-func newSortTopKStrategy(rows *memRowContainer, k int64) sorterStrategy {
-	ss := &sortTopKStrategy{
-		rows: rows,
-		k:    k,
+func newSortTopKStrategy(s *sorterBase, k int64) Processor {
+	var rows memRowContainer
+	rowContainerMon := s.flowCtx.EvalCtx.Mon
+	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+	return &sortTopKStrategy{
+		sorterBase:      *s,
+		rows:            &rows,
+		rowContainerMon: rowContainerMon,
+		k:               k,
+	}
+}
+
+func (s *sortTopKStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	if s.maybeStart("sortTopK", "SortTopK") {
+		// The execution loop for the SortTopK strategy is similar to that of the
+		// SortAll strategy; the difference is that we push rows into a max-heap
+		// of size at most K, and only sort those.
+		ctx := s.evalCtx.Ctx()
+
+		heapCreated := false
+		for {
+			row, meta := s.input.Next()
+			if meta != nil {
+				s.meta = meta
+				continue
+			}
+			if row == nil {
+				break
+			}
+
+			if int64(s.rows.Len()) < s.k {
+				// Accumulate up to k values.
+				if err := s.rows.AddRow(ctx, row); err != nil {
+					return nil, s.producerMeta(err)
+				}
+			} else {
+				if !heapCreated {
+					// Arrange the k values into a max-heap.
+					s.rows.InitMaxHeap()
+					heapCreated = true
+				}
+				// Replace the max value if the new row is smaller, maintaining the
+				// max-heap.
+				if err := s.rows.MaybeReplaceMax(ctx, row); err != nil {
+					return nil, s.producerMeta(err)
+				}
+			}
+		}
+		s.rows.Sort(ctx)
 	}
 
-	return ss
-}
+	if s.rows.Len() == 0 {
+		return s.trailingMetadata()
+	}
 
-// The execution loop for the SortTopK strategy is similar to that of the
-// SortAll strategy; the difference is that we push rows into a max-heap of size
-// at most K, and only sort those.
-func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
-	defer ss.rows.Close(ctx)
-	heapCreated := false
 	for {
-		row, err := s.input.NextRow()
+		row := s.rows.EncRow(0)
+		s.rows.PopFirst()
+
+		outRow, status, err := s.out.ProcessRow(s.evalCtx.Ctx(), row)
+		if outRow != nil {
+			return outRow, nil
+		}
+		if outRow == nil && err == nil && status == NeedMoreRows {
+			continue
+		}
+		return nil, s.producerMeta(err)
+	}
+}
+
+func (s *sortTopKStrategy) Run(wg *sync.WaitGroup) {
+	if s.out.output == nil {
+		panic("sorter output not initialized for emitting rows")
+	}
+	Run(s.flowCtx.Ctx, s, s.out.output)
+	if wg != nil {
+		wg.Done()
+	}
+}
+
+func (s *sortTopKStrategy) close() {
+	if s.internalClose() {
+		ctx := s.evalCtx.Ctx()
+		s.rows.Close(ctx)
+		s.rowContainerMon.Stop(ctx)
+		s.input.ConsumerClosed()
+	}
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (s *sortTopKStrategy) ConsumerDone() {
+	s.input.ConsumerDone()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (s *sortTopKStrategy) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	s.close()
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
+func (s *sortTopKStrategy) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
+	if !s.closed {
 		if err != nil {
-			return err
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(s.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
 		}
-		if row == nil {
-			break
-		}
-
-		if int64(ss.rows.Len()) < ss.k {
-			// Accumulate up to k values.
-			if err := ss.rows.AddRow(ctx, row); err != nil {
-				return err
-			}
-		} else {
-			if !heapCreated {
-				// Arrange the k values into a max-heap.
-				ss.rows.InitMaxHeap()
-				heapCreated = true
-			}
-			// Replace the max value if the new row is smaller, maintaining the
-			// max-heap.
-			if err := ss.rows.MaybeReplaceMax(ctx, row); err != nil {
-				return err
-			}
-		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		s.close()
 	}
+	return meta
+}
 
-	ss.rows.Sort(ctx)
-
-	for ss.rows.Len() > 0 {
-		// Push the row to the output; stop if they don't need more rows.
-		consumerStatus, err := s.out.EmitRow(ctx, ss.rows.EncRow(0))
-		if err != nil || consumerStatus != NeedMoreRows {
-			return err
-		}
-		ss.rows.PopFirst()
+// Sort processors read all their input before outputting a single output. Thus
+// they can't stop sending results when they encounter metadata. Instead they
+// must cache metadata, and output it after outputting all their non-metadata rows.
+// trailingMetadata() returns any cached metadata to output to Next(), and evicts
+// its cache so that subsequent calls return nil.
+func (s *sortTopKStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	s.close()
+	if s.meta != nil {
+		meta := s.meta
+		s.meta = nil
+		return nil, meta
 	}
-	return nil
+	return nil, nil
 }
 
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
 type sortChunksStrategy struct {
-	rows  *memRowContainer
-	alloc sqlbase.DatumAlloc
+	sorterBase
+
+	rows            *memRowContainer
+	rowContainerMon *mon.BytesMonitor
+	alloc           sqlbase.DatumAlloc
+
+	// sortChunksStrategy accumulates rows that are equal on a prefix, until it
+	// encounters a row that is greater. It stores that greater row in nextChunkRow
+	prefix       sqlbase.EncDatumRow
+	nextChunkRow sqlbase.EncDatumRow
+	meta         *ProducerMetadata
 }
 
-var _ sorterStrategy = &sortChunksStrategy{}
+var _ Processor = &sortChunksStrategy{}
 
-func newSortChunksStrategy(rows *memRowContainer) sorterStrategy {
+func newSortChunksStrategy(s *sorterBase) Processor {
+	var rows memRowContainer
+	rowContainerMon := s.flowCtx.EvalCtx.Mon
+	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+
 	return &sortChunksStrategy{
-		rows: rows,
+		sorterBase:      *s,
+		rows:            &rows,
+		rowContainerMon: rowContainerMon,
 	}
 }
 
-func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
-	defer ss.rows.Close(ctx)
-	// pivoted is a helper function that determines if the given row shares the same values for the
-	// first s.matchLen ordering columns with the given pivot.
-	pivoted := func(row, pivot sqlbase.EncDatumRow) (bool, error) {
-		for _, ord := range s.ordering[:s.matchLen] {
-			col := ord.ColIdx
-			cmp, err := row[col].Compare(&ss.rows.types[col], &ss.alloc, ss.rows.evalCtx, &pivot[col])
-			if err != nil || cmp != 0 {
-				return false, err
-			}
+// chunkCompleted is a helper function that determines if the given row shares the same
+// values for the first matchLen ordering columns with the given prefix.
+func (s *sortChunksStrategy) chunkCompleted() (bool, error) {
+	for _, ord := range s.ordering[:s.matchLen] {
+		col := ord.ColIdx
+		cmp, err := s.nextChunkRow[col].Compare(&s.rows.types[col], &s.alloc, s.rows.evalCtx, &s.prefix[col])
+		if cmp != 0 || err != nil {
+			return true, err
 		}
-		return true, nil
+	}
+	return false, nil
+}
+
+// fill one chunk of rows from the input and sort them.
+func (s *sortChunksStrategy) fill() (*ProducerMetadata, error) {
+	ctx := s.evalCtx.Ctx()
+
+	var meta *ProducerMetadata
+
+	if s.nextChunkRow == nil {
+		s.nextChunkRow, meta = s.input.Next()
+		if meta != nil || s.nextChunkRow == nil {
+			return meta, nil
+		}
+	}
+	s.prefix = s.nextChunkRow
+
+	// Add the chunk
+	if err := s.rows.AddRow(ctx, s.nextChunkRow); err != nil {
+		return nil, err
 	}
 
-	nextRow, err := s.input.NextRow()
-	if err != nil || nextRow == nil {
-		return err
-	}
+	defer s.rows.Sort(ctx)
 
+	// We will accumulate rows to form a chunk such that they all share the same values
+	// as prefix for the first s.matchLen ordering columns.
 	for {
-		pivot := nextRow
-
-		// We will accumulate rows to form a chunk such that they all share the same values
-		// for the first s.matchLen ordering columns.
-		for {
-			if log.V(3) {
-				log.Infof(ctx, "pushing row %s", nextRow.String(ss.rows.types))
-			}
-			if err := ss.rows.AddRow(ctx, nextRow); err != nil {
-				return err
-			}
-
-			nextRow, err = s.input.NextRow()
-			if err != nil {
-				return err
-			}
-			if nextRow == nil {
-				break
-			}
-
-			p, err := pivoted(nextRow, pivot)
-			if err != nil {
-				return err
-			}
-			if p {
-				continue
-			}
-
-			// We verify if the nextRow here is infact 'greater' than pivot.
-			if cmp, err := nextRow.Compare(
-				ss.rows.types, &ss.alloc, s.ordering, ss.rows.evalCtx, pivot,
-			); err != nil {
-				return err
-			} else if cmp < 0 {
-				return errors.Errorf(
-					"incorrectly ordered row %s before %s",
-					pivot.String(ss.rows.types),
-					nextRow.String(ss.rows.types),
-				)
-			}
+		s.nextChunkRow, meta = s.input.Next()
+		if meta != nil {
+			return meta, nil
+		}
+		if s.nextChunkRow == nil {
 			break
 		}
 
-		// Sort the rows that have been pushed onto the buffer.
-		ss.rows.Sort(ctx)
-
-		// Stream out sorted rows in order to row receiver.
-		for ss.rows.Len() > 0 {
-			consumerStatus, err := s.out.EmitRow(ctx, ss.rows.EncRow(0))
-			if err != nil || consumerStatus != NeedMoreRows {
-				// We don't need any more rows; clear out ss so to not hold on to that
-				// memory.
-				ss = &sortChunksStrategy{}
-				return err
-			}
-			ss.rows.PopFirst()
+		chunkCompleted, err := s.chunkCompleted()
+		if err != nil {
+			return nil, err
 		}
-		ss.rows.Clear(ctx)
-
-		if nextRow == nil {
-			// We've reached the end of the table.
+		if chunkCompleted {
 			break
+		}
+
+		if err := s.rows.AddRow(ctx, s.nextChunkRow); err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	return nil, nil
+}
+
+func (s *sortChunksStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	s.maybeStart("sortChunks", "SortChunks")
+	for {
+		// If we don't have an active chunk, clear and refill it.
+		if s.rows.Len() == 0 {
+
+			s.rows.Clear(s.rows.evalCtx.Ctx())
+			meta, err := s.fill()
+			if err != nil {
+				return nil, s.producerMeta(err)
+			} else if meta != nil {
+				s.meta = meta
+			}
+			// If that didn't result in an active chunk, we are done.
+			if s.rows.Len() == 0 {
+				return s.trailingMetadata()
+			}
+		}
+
+		// If we have an active chunk, get a row from it.
+		row := s.rows.EncRow(0)
+		s.rows.PopFirst()
+
+		outRow, status, err := s.out.ProcessRow(s.evalCtx.Ctx(), row)
+		if outRow != nil {
+			return outRow, nil
+		}
+		if outRow == nil && err == nil && status == NeedMoreRows {
+			continue
+		}
+		return nil, s.producerMeta(err)
+	}
+}
+
+func (s *sortChunksStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	s.close()
+	if s.meta != nil {
+		meta := s.meta
+		s.meta = nil
+		return nil, meta
+	}
+	return nil, nil
+}
+
+func (s *sortChunksStrategy) Run(wg *sync.WaitGroup) {
+	if s.out.output == nil {
+		panic("sorter output not initialized for emitting rows")
+	}
+	Run(s.flowCtx.Ctx, s, s.out.output)
+	if wg != nil {
+		wg.Done()
+	}
+}
+
+func (s *sortChunksStrategy) close() {
+	if s.internalClose() {
+		ctx := s.evalCtx.Ctx()
+		s.rows.Close(ctx)
+		s.rowContainerMon.Stop(ctx)
+		s.input.ConsumerClosed()
+	}
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (s *sortChunksStrategy) ConsumerDone() {
+	s.input.ConsumerDone()
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (s *sortChunksStrategy) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	s.close()
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
+func (s *sortChunksStrategy) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
+	if !s.closed {
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(s.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
+		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		s.close()
+	}
+	return meta
 }
