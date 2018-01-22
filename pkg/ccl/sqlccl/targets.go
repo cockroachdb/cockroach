@@ -92,7 +92,7 @@ func descriptorsMatchingTargets(
 					return ret, err
 				}
 			}
-			db := string(p.DatabaseName)
+			db := string(p.SchemaName)
 			tablesByDatabase[db] = append(tablesByDatabase[db], table{
 				name:     string(p.TableName),
 				validity: maybeValid,
@@ -103,7 +103,7 @@ func descriptorsMatchingTargets(
 					return ret, err
 				}
 			}
-			starByDatabase[string(p.Database)] = maybeValid
+			starByDatabase[string(p.Schema)] = maybeValid
 		default:
 			return ret, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
 		}

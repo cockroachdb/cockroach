@@ -2904,7 +2904,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				// queryOid like everyone else.
 				return queryOidWithJoin(ctx, typ, NewDString(tn.Table()),
 					"JOIN pg_catalog.pg_namespace ON relnamespace = pg_namespace.oid",
-					fmt.Sprintf("AND nspname = '%s'", tn.Database()))
+					fmt.Sprintf("AND nspname = '%s'", tn.Schema()))
 			default:
 				return queryOid(ctx, typ, NewDString(s))
 			}

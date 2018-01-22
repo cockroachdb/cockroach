@@ -702,8 +702,8 @@ CREATE TABLE pg_catalog.pg_depend (
 			p.txn,
 			p.getVirtualTabler(),
 			&tree.TableName{
-				DatabaseName: pgCatalogName,
-				TableName:    "pg_constraint"},
+				SchemaName: pgCatalogName,
+				TableName:  "pg_constraint"},
 		)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_constraint")
@@ -715,8 +715,8 @@ CREATE TABLE pg_catalog.pg_depend (
 			p.txn,
 			p.getVirtualTabler(),
 			&tree.TableName{
-				DatabaseName: pgCatalogName,
-				TableName:    "pg_class"},
+				SchemaName: pgCatalogName,
+				TableName:  "pg_class"},
 		)
 		if err != nil {
 			return errors.New("could not find pg_catalog.pg_class")
@@ -979,8 +979,8 @@ func indexDefFromDescriptor(
 		Name: tree.Name(index.Name),
 		Table: tree.NormalizableTableName{
 			TableNameReference: &tree.TableName{
-				DatabaseName: tree.Name(db.Name),
-				TableName:    tree.Name(table.Name),
+				SchemaName: tree.Name(db.Name),
+				TableName:  tree.Name(table.Name),
 			},
 		},
 		Unique:  index.Unique,
@@ -1018,8 +1018,8 @@ func indexDefFromDescriptor(
 		intlDef := &tree.InterleaveDef{
 			Parent: &tree.NormalizableTableName{
 				TableNameReference: &tree.TableName{
-					DatabaseName: tree.Name(parentDb.Name),
-					TableName:    tree.Name(parentTable.Name),
+					SchemaName: tree.Name(parentDb.Name),
+					TableName:  tree.Name(parentTable.Name),
 				},
 			},
 			Fields: make(tree.NameList, len(fields)),

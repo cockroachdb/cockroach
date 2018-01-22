@@ -95,16 +95,16 @@ type TableNameReference interface {
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement (and possibly other places).
 type TableName struct {
-	PrefixName   Name
-	DatabaseName Name
-	TableName    Name
+	PrefixName Name
+	SchemaName Name
+	TableName  Name
 
-	// OmitDBNameDuringFormatting, when set to true, causes the
+	// OmitSchemaNameDuringFormatting, when set to true, causes the
 	// String()/Format() methods to omit the database name even if one
 	// is set. This is used to ensure that pretty-printing
 	// a TableName normalized from a parser input yields back
 	// the original syntax.
-	OmitDBNameDuringFormatting bool
+	OmitSchemaNameDuringFormatting bool
 
 	// PrefixOriginallySpecified indicates whether a prefix was
 	// explicitly indicated in the input syntax.
@@ -114,13 +114,13 @@ type TableName struct {
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !t.OmitDBNameDuringFormatting ||
+	if !t.OmitSchemaNameDuringFormatting ||
 		f.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil {
 		if t.PrefixOriginallySpecified {
 			ctx.FormatNode(&t.PrefixName)
 			ctx.WriteByte('.')
 		}
-		ctx.FormatNode(&t.DatabaseName)
+		ctx.FormatNode(&t.SchemaName)
 		ctx.WriteByte('.')
 	}
 	ctx.FormatNode(&t.TableName)
@@ -135,9 +135,9 @@ func (t *TableName) Table() string {
 	return string(t.TableName)
 }
 
-// Database retrieves the unqualified database name.
-func (t *TableName) Database() string {
-	return string(t.DatabaseName)
+// Schema retrieves the unqualified schema name.
+func (t *TableName) Schema() string {
+	return string(t.SchemaName)
 }
 
 // NewInvalidNameErrorf initializes an error carrying the pg code CodeInvalidNameError.
@@ -163,20 +163,20 @@ func (n *UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) 
 		return res, NewInvalidNameErrorf("empty table name: %q", ErrString(n))
 	}
 
-	res = TableName{TableName: *name, OmitDBNameDuringFormatting: true}
+	res = TableName{TableName: *name, OmitSchemaNameDuringFormatting: true}
 
 	if len(*n) > 1 {
 		ndb, ok := (*n)[len(*n)-2].(*Name)
 		if !ok {
-			return res, NewInvalidNameErrorf("invalid database name: %q", ErrString((*n)[len(*n)-2]))
+			return res, NewInvalidNameErrorf("invalid schema name: %q", ErrString((*n)[len(*n)-2]))
 		}
-		res.DatabaseName = *ndb
+		res.SchemaName = *ndb
 
-		if len(res.DatabaseName) == 0 {
-			return res, NewInvalidNameErrorf("empty database name: %q", ErrString(n))
+		if len(res.SchemaName) == 0 {
+			return res, NewInvalidNameErrorf("empty schema name: %q", ErrString(n))
 		}
 
-		res.OmitDBNameDuringFormatting = false
+		res.OmitSchemaNameDuringFormatting = false
 
 		if len(*n) > 2 {
 			pn, ok := (*n)[len(*n)-3].(*Name)
@@ -206,13 +206,13 @@ func (n *UnresolvedName) NormalizeTableName() (*TableName, error) {
 // table       -> database.table
 // table@index -> database.table@index
 func (t *TableName) QualifyWithDatabase(database string) error {
-	if !t.OmitDBNameDuringFormatting {
+	if !t.OmitSchemaNameDuringFormatting {
 		return nil
 	}
 	if database == "" {
 		return pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "no database specified: %q", t)
 	}
-	t.DatabaseName = Name(database)
+	t.SchemaName = Name(database)
 	return nil
 }
 

@@ -31,7 +31,7 @@ func testInitDummySelectNode(p *planner, desc *sqlbase.TableDescriptor) *renderN
 
 	sel := &renderNode{}
 	sel.source.plan = scan
-	testName := tree.TableName{TableName: tree.Name(desc.Name), DatabaseName: tree.Name("test")}
+	testName := tree.TableName{TableName: tree.Name(desc.Name), SchemaName: tree.Name("test")}
 	cols := planColumns(scan)
 	sel.source.info = newSourceInfoForSingleTable(testName, cols)
 	sel.sourceInfo = multiSourceInfo{sel.source.info}
