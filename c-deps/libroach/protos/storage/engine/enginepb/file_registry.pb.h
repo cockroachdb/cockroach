@@ -311,18 +311,18 @@ class FileEntry : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   ::std::string* release_encryption_settings();
   void set_allocated_encryption_settings(::std::string* encryption_settings);
 
-  // int32 env_level = 1;
+  // .cockroach.storage.engine.enginepb.EnvLevel env_level = 1;
   void clear_env_level();
   static const int kEnvLevelFieldNumber = 1;
-  ::google::protobuf::int32 env_level() const;
-  void set_env_level(::google::protobuf::int32 value);
+  ::cockroach::storage::engine::enginepb::EnvLevel env_level() const;
+  void set_env_level(::cockroach::storage::engine::enginepb::EnvLevel value);
 
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.FileEntry)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr encryption_settings_;
-  ::google::protobuf::int32 env_level_;
+  int env_level_;
   mutable int _cached_size_;
   friend struct protobuf_storage_2fengine_2fenginepb_2ffile_5fregistry_2eproto::TableStruct;
 };
@@ -376,15 +376,15 @@ FileRegistry::mutable_files() {
 
 // FileEntry
 
-// int32 env_level = 1;
+// .cockroach.storage.engine.enginepb.EnvLevel env_level = 1;
 inline void FileEntry::clear_env_level() {
   env_level_ = 0;
 }
-inline ::google::protobuf::int32 FileEntry::env_level() const {
+inline ::cockroach::storage::engine::enginepb::EnvLevel FileEntry::env_level() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.FileEntry.env_level)
-  return env_level_;
+  return static_cast< ::cockroach::storage::engine::enginepb::EnvLevel >(env_level_);
 }
-inline void FileEntry::set_env_level(::google::protobuf::int32 value) {
+inline void FileEntry::set_env_level(::cockroach::storage::engine::enginepb::EnvLevel value) {
   
   env_level_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.FileEntry.env_level)

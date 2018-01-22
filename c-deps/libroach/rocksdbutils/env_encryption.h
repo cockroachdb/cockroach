@@ -7,8 +7,11 @@
 
 #include <string>
 
+#include "../protos/storage/engine/enginepb/file_registry.pb.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
+
+namespace enginepb = cockroach::storage::engine::enginepb;
 
 namespace rocksdb_utils {
 
@@ -16,7 +19,8 @@ class EncryptionProvider;
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
-rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, int env_level);
+rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider,
+                              enginepb::EnvLevel env_level);
 
 // BlockAccessCipherStream is the base class for any cipher stream that
 // supports random access at block level (without requiring data from other blocks).
@@ -73,7 +77,8 @@ class EncryptionProvider {
  public:
   virtual ~EncryptionProvider() {}
 
-  virtual rocksdb::Status CreateCipherStream(int env_level, const std::string& fname, bool new_file,
+  virtual rocksdb::Status CreateCipherStream(enginepb::EnvLevel env_level, const std::string& fname,
+                                             bool new_file,
                                              std::unique_ptr<BlockAccessCipherStream>* result) = 0;
 
   virtual rocksdb::Status DeleteFile(const std::string& fname) = 0;
