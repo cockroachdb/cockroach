@@ -297,8 +297,8 @@ func (n *showTraceNode) Close(ctx context.Context) {
 }
 
 var sessionTraceTableName = tree.TableName{
-	DatabaseName: tree.Name("crdb_internal"),
-	TableName:    tree.Name("session_trace"),
+	SchemaName: tree.Name("crdb_internal"),
+	TableName:  tree.Name("session_trace"),
 }
 
 var errTracingAlreadyEnabled = errors.New(

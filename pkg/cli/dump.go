@@ -233,8 +233,12 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 	return tableNames, nil
 }
 
-func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basicMetadata, error) {
-	// Get id, create statement, and kind.
+func getBasicMetadata(
+	conn *sqlConn, dbName, tableName string, ts string,
+) (basicMetadata, error) {
+	name := &tree.TableName{SchemaName: tree.Name(dbName), TableName: tree.Name(tableName)}
+
+	// Fetch table ID.
 	dbNameEscaped := tree.NameString(dbName)
 	vals, err := conn.QueryRow(fmt.Sprintf(`
 		SELECT
@@ -248,9 +252,8 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 	`, dbNameEscaped, lex.EscapeSQLString(ts)), []driver.Value{dbName, tableName})
 	if err != nil {
 		if err == io.EOF {
-			tn := tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
 			return basicMetadata{}, errors.Wrap(
-				errors.Errorf("relation %s does not exist", tree.ErrString(&tn)),
+				errors.Errorf("relation %s does not exist", tree.ErrString(name)),
 				"getBasicMetadata",
 			)
 		}
@@ -300,7 +303,7 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 
 	return basicMetadata{
 		ID:         id,
-		name:       &tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)},
+		name:       &tree.TableName{SchemaName: tree.Name(dbName), TableName: tree.Name(tableName)},
 		createStmt: createStatement,
 		dependsOn:  refs,
 		kind:       kind,
@@ -315,7 +318,7 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 		AS OF SYSTEM TIME %s
 		WHERE TABLE_SCHEMA = $1
 			AND TABLE_NAME = $2
-		`, lex.EscapeSQLString(ts)), []driver.Value{md.name.Database(), md.name.Table()})
+		`, lex.EscapeSQLString(ts)), []driver.Value{md.name.Schema(), md.name.Table()})
 	if err != nil {
 		return tableMetadata{}, err
 	}
