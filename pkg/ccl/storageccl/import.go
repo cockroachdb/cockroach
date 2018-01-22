@@ -65,11 +65,11 @@ func init() {
 	}
 }
 
-// maxImportBatchSize determines the maximum size of the payload in an
+// MaxImportBatchSize determines the maximum size of the payload in an
 // AddSSTable request. It uses the ImportBatchSize setting directly unless the
 // specified value would exceed the maximum Raft command size, in which case it
 // returns the maximum batch size that will fit within a Raft command.
-func maxImportBatchSize(st *cluster.Settings) int64 {
+func MaxImportBatchSize(st *cluster.Settings) int64 {
 	desiredSize := importBatchSize.Get(&st.SV)
 	maxCommandSize := storage.MaxCommandSize.Get(&st.SV)
 	if desiredSize+commandMetadataEstimate > maxCommandSize {
@@ -112,6 +112,15 @@ func (b *sstBatcher) Finish(ctx context.Context, db *client.DB) error {
 		return errors.Wrapf(err, "finishing constructed sstable")
 	}
 
+	return AddSSTable(ctx, db, start, end, sstBytes)
+}
+
+func (b *sstBatcher) Close() {
+	b.sstWriter.Close()
+}
+
+// AddSSTable retries db.AddSSTable if retryable errors occur.
+func AddSSTable(ctx context.Context, db *client.DB, start, end roachpb.Key, sstBytes []byte) error {
 	const maxAddSSTableRetries = 10
 	for i := 0; ; i++ {
 		log.VEventf(ctx, 2, "sending AddSSTable [%s,%s)", start, end)
@@ -127,10 +136,6 @@ func (b *sstBatcher) Finish(ctx context.Context, db *client.DB) error {
 			start, end, i, err)
 		continue
 	}
-}
-
-func (b *sstBatcher) Close() {
-	b.sstWriter.Close()
 }
 
 // evalImport bulk loads key/value entries.
@@ -221,6 +226,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	iter := engineccl.MakeMultiIterator(iters)
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
+	maxSize := MaxImportBatchSize(cArgs.EvalCtx.ClusterSettings())
 
 	for iter.Seek(startKeyMVCC); ; {
 		ok, err := iter.Valid()
@@ -284,7 +290,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 			return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 
-		if size := batcher.Size(); size > maxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) {
+		if size := batcher.Size(); size > maxSize {
 			finishBatcher := batcher
 			batcher = nil
 			log.Eventf(gCtx, "triggering finish of batch of size %s", humanizeutil.IBytes(size))
