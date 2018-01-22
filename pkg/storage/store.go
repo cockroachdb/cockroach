@@ -97,12 +97,12 @@ const (
 	// gossip update.
 	systemDataGossipInterval = 1 * time.Minute
 
-	// prohibitRebalancesBehindThreshold is the maximum number of log entries a
+	// ProhibitRebalancesBehindThreshold is the maximum number of log entries a
 	// store allows its replicas to be behind before it starts declining incoming
 	// rebalances. We prohibit rebalances in this situation to avoid adding
 	// additional work to a store that is either not keeping up or is undergoing
 	// recovery because it is on a recently restarted node.
-	prohibitRebalancesBehindThreshold = 1000
+	ProhibitRebalancesBehindThreshold = 1000
 
 	// Messages that provide detail about why a preemptive snapshot was rejected.
 	incomingRebalancesDisabledMsg = "incoming rebalances disabled because node is behind"
@@ -4288,7 +4288,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 	s.metrics.RaftLogSelfBehindCount.Update(selfBehindCount)
 
-	if selfBehindCount > prohibitRebalancesBehindThreshold {
+	if selfBehindCount > ProhibitRebalancesBehindThreshold {
 		log.Infof(ctx, "temporarily disabling rebalances because RaftLogSelfBehindCount=%d", selfBehindCount)
 		atomic.StoreInt32(&s.incomingRebalancesDisabled, 1)
 	} else {

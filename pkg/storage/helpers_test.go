@@ -285,6 +285,14 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	return r.raftLastIndexLocked()
 }
 
+// GetEstimatedCommitIndex returns the replica's estimated raft commit index
+// and how far it thinks it's behind the leader.
+func (r *Replica) GetEstimatedCommitIndex() (index uint64, behind int64) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.estimatedCommitIndex, r.getEstimatedBehindCountRLocked(r.raftStatusRLocked())
+}
+
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
 // a given quota. Additionally it initializes the replica's quota release queue
 // and its command sizes map. Only safe to call on the replica that is both
