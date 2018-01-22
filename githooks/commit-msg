@@ -92,7 +92,7 @@ else
             hint "category missing (can only be omitted if note is 'none'). Try 'Release note (category):$entered'"
         fi
         if echo "$rnote" | $grep -qiE '^release notes?[^:]*:([^ ]|   *)' || \
-                echo "$rnote" | $grep -qiE '^release notes?(|  +)\(' || \
+                echo "$rnote" | $grep -qiE '^release notes?(\(|  +\()' || \
                 echo "$rnote" | $grep -qiE '^release notes? *\( +' || \
                 echo "$rnote" | $grep -qiE '^release notes? *\( *[^)]* +\)' ; then
             entered=${rnote:0:40}
