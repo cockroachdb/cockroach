@@ -56,7 +56,7 @@ func TestMaxImportBatchSize(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		importBatchSize.Override(&st.SV, testCase.importBatchSize)
 		storage.MaxCommandSize.Override(&st.SV, testCase.maxCommandSize)
-		if e, a := maxImportBatchSize(st), testCase.expected; e != a {
+		if e, a := MaxImportBatchSize(st), testCase.expected; e != a {
 			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
 		}
 	}
