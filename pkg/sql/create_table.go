@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -330,6 +331,12 @@ func matchesIndex(
 	return true
 }
 
+func isCascadingReferenceAction(action tree.ReferenceAction) bool {
+	return action == tree.Cascade ||
+		action == tree.SetNull ||
+		action == tree.SetDefault
+}
+
 func (p *planner) resolveFK(
 	ctx context.Context,
 	tbl *sqlbase.TableDescriptor,
@@ -474,6 +481,43 @@ func resolveFK(
 		feature := fmt.Sprintf("unsupported: ON UPDATE %s", d.Actions.Update)
 		return pgerror.Unimplemented(feature, feature)
 	}
+
+	// Don't add a cascading action if there is a CHECK on any column.
+	// See #21688
+	if len(tbl.Checks) > 0 &&
+		(isCascadingReferenceAction(d.Actions.Delete) || isCascadingReferenceAction(d.Actions.Update)) {
+		preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+			if vBase, ok := expr.(tree.VarName); ok {
+				v, err := vBase.NormalizeVarName()
+				if err != nil {
+					return err, false, nil
+				}
+				if c, ok := v.(*tree.ColumnItem); ok {
+					for _, col := range srcCols {
+						if string(c.ColumnName) == col.Name {
+							return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+								"cannot add a cascading action (SET NULL/SET DEFAULT/CASCADE) to a column [%s] with a CHECK CONSTRAINT",
+								col.Name,
+							), false, nil
+						}
+					}
+				}
+				return nil, false, v
+			}
+			return nil, true, expr
+		}
+
+		for _, check := range tbl.Checks {
+			expr, err := parser.ParseExpr(check.Expr)
+			if err != nil {
+				return err
+			}
+			if _, err := tree.SimpleVisit(expr, preFn); err != nil {
+				return err
+			}
+		}
+	}
+
 	ref := sqlbase.ForeignKeyReference{
 		Table:           target.ID,
 		Index:           targetIdxID,
@@ -1180,6 +1224,12 @@ func replaceVars(desc sqlbase.TableDescriptor, expr tree.Expr) (tree.Expr, error
 	})
 }
 
+func isCascadingAction(action sqlbase.ForeignKeyReference_Action) bool {
+	return action == sqlbase.ForeignKeyReference_CASCADE ||
+		action == sqlbase.ForeignKeyReference_SET_NULL ||
+		action == sqlbase.ForeignKeyReference_SET_DEFAULT
+}
+
 func makeCheckConstraint(
 	desc sqlbase.TableDescriptor,
 	d *tree.CheckConstraintTableDef,
@@ -1212,5 +1262,38 @@ func makeCheckConstraint(
 	); err != nil {
 		return nil, err
 	}
+
+	// Don't add a constraint if there is a cascading action on any of the
+	// columns. See #21688.
+	for _, index := range desc.Indexes {
+		if isCascadingAction(index.ForeignKey.OnDelete) ||
+			isCascadingAction(index.ForeignKey.OnUpdate) {
+			preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+				if vBase, ok := expr.(tree.VarName); ok {
+					v, err := vBase.NormalizeVarName()
+					if err != nil {
+						return err, false, nil
+					}
+					if c, ok := v.(*tree.ColumnItem); ok {
+						for _, columnName := range index.ColumnNames {
+							if string(c.ColumnName) == columnName {
+								return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+									"cannot add a check constraint as it uses column [%s] which already has a "+
+										"cascading action (SET NULL/SET DEFAULT/CASCADE)",
+									columnName,
+								), false, nil
+							}
+						}
+					}
+					return nil, false, v
+				}
+				return nil, true, expr
+			}
+			if _, err := tree.SimpleVisit(d.Expr, preFn); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return &sqlbase.TableDescriptor_CheckConstraint{Expr: tree.Serialize(d.Expr), Name: name}, nil
 }
