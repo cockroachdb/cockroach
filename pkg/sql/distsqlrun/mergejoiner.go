@@ -183,6 +183,11 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 					if m.emitUnmatchedRight {
 						m.matchedRight.Add(ridx)
 					}
+					if m.joinType == leftSemiJoin {
+						// Semi-joins only need to know if there is at least
+						// one match, so can skip the rest of the right rows.
+						m.rightIdx = len(m.rightRows)
+					}
 					return renderedRow, nil
 				}
 			}
@@ -225,6 +230,9 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		// Retrieve the next batch of rows to process.
 		var meta *ProducerMetadata
+		// TODO(paul): Investigate (with benchmarks) whether or not it's
+		// worthwhile to only buffer one row from the right stream per batch
+		// for semi-joins.
 		m.leftRows, m.rightRows, meta = m.streamMerger.NextBatch(m.evalCtx)
 		if meta != nil {
 			return nil, meta
