@@ -30,6 +30,9 @@ function renderLocation(locations: LocationTree, tiers: LocalityTier[]) {
 
 function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
   let rows: React.ReactNode[] = [];
+  const leftIndentStyle = {
+    "padding-left": 20 * tree.tiers.length,
+  };
 
   tree.nodes.forEach((node) => {
     // Yet another problem caused by the Protobuf.js-generated types.
@@ -50,7 +53,7 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
 
       rows.push(
         <tr>
-          <td className={`depth-${tree.tiers.length}`}>{ key }={ value }</td>
+          <td><span style={leftIndentStyle}>{ key }={ value }</span></td>
           <td></td>
           <td className={hasLocation(locations, { key, value }) ? "own-location" : "parent-location"}>
             { renderLocation(locations, child.tiers) }
