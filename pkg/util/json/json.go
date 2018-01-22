@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,10 +48,11 @@ const (
 
 const (
 	wordSize          = unsafe.Sizeof(big.Word(0))
-	jsonNumberSize    = unsafe.Sizeof(apd.Decimal{})
-	jsonStringSize    = unsafe.Sizeof((jsonString)(""))
-	jsonInterfaceSize = unsafe.Sizeof((JSON)(nil))
+	decimalSize       = unsafe.Sizeof(apd.Decimal{})
+	stringHeaderSize  = unsafe.Sizeof(reflect.StringHeader{})
+	sliceHeaderSize   = unsafe.Sizeof(reflect.SliceHeader{})
 	keyValuePairSize  = unsafe.Sizeof(jsonKeyValuePair{})
+	jsonInterfaceSize = unsafe.Sizeof((JSON)(nil))
 )
 
 const (
@@ -202,7 +204,7 @@ type ArrayBuilderWithCounter struct {
 func NewArrayBuilderWithCounter() *ArrayBuilderWithCounter {
 	return &ArrayBuilderWithCounter{
 		ab:   NewArrayBuilder(0),
-		size: 0,
+		size: sliceHeaderSize,
 	}
 }
 
@@ -593,15 +595,15 @@ func (jsonTrue) Size() uintptr { return 0 }
 
 func (j jsonNumber) Size() uintptr {
 	intVal := j.Coeff
-	return jsonNumberSize + uintptr(cap(intVal.Bits()))*wordSize
+	return decimalSize + uintptr(cap(intVal.Bits()))*wordSize
 }
 
 func (j jsonString) Size() uintptr {
-	return jsonStringSize + uintptr(len(j))
+	return stringHeaderSize + uintptr(len(j))
 }
 
 func (j jsonArray) Size() uintptr {
-	valSize := uintptr(cap(j)) * jsonInterfaceSize
+	valSize := sliceHeaderSize + uintptr(cap(j))*jsonInterfaceSize
 	for _, elem := range j {
 		valSize += elem.Size()
 	}
@@ -609,7 +611,11 @@ func (j jsonArray) Size() uintptr {
 }
 
 func (j jsonObject) Size() uintptr {
-	valSize := uintptr(cap(j)) * keyValuePairSize
+	valSize := sliceHeaderSize + uintptr(cap(j))*keyValuePairSize
+	// jsonKeyValuePair consists of jsonString(i.e. string header) k and JSON interface v.
+	// Since elem.k.Size() has already taken stringHeaderSize into account, we should
+	// reduce len(j) * stringHeaderSize to avoid counting the size of string headers twice
+	valSize -= uintptr(len(j)) * stringHeaderSize
 	for _, elem := range j {
 		valSize += elem.k.Size()
 		valSize += elem.v.Size()
