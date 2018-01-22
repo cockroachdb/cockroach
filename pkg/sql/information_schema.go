@@ -17,10 +17,9 @@ package sql
 import (
 	"context"
 	"sort"
+	"strconv"
 
 	"github.com/pkg/errors"
-
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -40,6 +39,7 @@ var informationSchema = virtualSchema{
 		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
 		informationSchemaKeyColumnUsageTable,
+		informationSchemaReferentialConstraintsTable,
 		informationSchemaSchemataTable,
 		informationSchemaSchemataTablePrivileges,
 		informationSchemaSequences,
@@ -114,6 +114,8 @@ func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 	return nil
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-column-privileges.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/column-privileges-table.html
 var informationSchemaColumnPrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.column_privileges (
@@ -155,6 +157,8 @@ CREATE TABLE information_schema.column_privileges (
 	},
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-columns.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/columns-table.html
 var informationSchemaColumnsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.columns (
@@ -226,6 +230,8 @@ func datetimePrecision(colType sqlbase.ColumnType) tree.Datum {
 	return tree.DNull
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-key-column-usage.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/key-column-usage-table.html
 var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.key_column_usage (
@@ -286,6 +292,96 @@ CREATE TABLE information_schema.key_column_usage (
 	},
 }
 
+var (
+	matchOptionFull    = tree.NewDString("FULL")
+	matchOptionPartial = tree.NewDString("PARTIAL")
+	matchOptionNone    = tree.NewDString("NONE")
+
+	// Avoid unused warning for constants.
+	_ = matchOptionPartial
+	_ = matchOptionNone
+
+	refConstraintRuleNoAction   = tree.NewDString("NO ACTION")
+	refConstraintRuleRestrict   = tree.NewDString("RESTRICT")
+	refConstraintRuleSetNull    = tree.NewDString("SET NULL")
+	refConstraintRuleSetDefault = tree.NewDString("SET DEFAULT")
+	refConstraintRuleCascade    = tree.NewDString("CASCADE")
+)
+
+func dStringForFKAction(action sqlbase.ForeignKeyReference_Action) tree.Datum {
+	switch action {
+	case sqlbase.ForeignKeyReference_NO_ACTION:
+		return refConstraintRuleNoAction
+	case sqlbase.ForeignKeyReference_RESTRICT:
+		return refConstraintRuleRestrict
+	case sqlbase.ForeignKeyReference_SET_NULL:
+		return refConstraintRuleSetNull
+	case sqlbase.ForeignKeyReference_SET_DEFAULT:
+		return refConstraintRuleSetDefault
+	case sqlbase.ForeignKeyReference_CASCADE:
+		return refConstraintRuleCascade
+	}
+	panic(errors.Errorf("unexpected ForeignKeyReference_Action: %v", action))
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-referential-constraints.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/referential-constraints-table.html
+var informationSchemaReferentialConstraintsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.referential_constraints (
+	CONSTRAINT_CATALOG STRING NOT NULL DEFAULT '',
+	CONSTRAINT_SCHEMA STRING NOT NULL DEFAULT '',
+	CONSTRAINT_NAME STRING NOT NULL DEFAULT '',
+	UNIQUE_CONSTRAINT_CATALOG STRING NOT NULL DEFAULT '',
+	UNIQUE_CONSTRAINT_SCHEMA STRING NOT NULL DEFAULT '',
+	UNIQUE_CONSTRAINT_NAME STRING DEFAULT NULL,
+	MATCH_OPTION STRING NOT NULL DEFAULT '',
+	UPDATE_RULE STRING NOT NULL DEFAULT '',
+	DELETE_RULE STRING NOT NULL DEFAULT '',
+	TABLE_NAME STRING NOT NULL DEFAULT '',
+	REFERENCED_TABLE_NAME STRING NOT NULL DEFAULT ''
+);`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
+			db *sqlbase.DatabaseDescriptor,
+			table *sqlbase.TableDescriptor,
+			tableLookup tableLookupFn,
+		) error {
+			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
+				fk := index.ForeignKey
+				if !fk.IsSet() {
+					return nil
+				}
+
+				refTable, err := tableLookup.tableOrErr(fk.Table)
+				if err != nil {
+					return err
+				}
+				refIndex, err := refTable.FindIndexByID(fk.Index)
+				if err != nil {
+					return err
+				}
+
+				return addRow(
+					defString,                       // constraint_catalog
+					tree.NewDString(db.Name),        // constraint_schema
+					tree.NewDString(fk.Name),        // constraint_name
+					defString,                       // unique_constraint_catalog
+					tree.NewDString(db.Name),        // unique_constraint_schema
+					tree.NewDString(refIndex.Name),  // unique_constraint_name
+					matchOptionFull,                 // match_option
+					dStringForFKAction(fk.OnUpdate), // update_rule
+					dStringForFKAction(fk.OnDelete), // delete_rule
+					tree.NewDString(table.Name),     // table_name
+					tree.NewDString(refTable.Name),  // referenced_table_name
+				)
+			})
+		})
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-schemata.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schemata-table.html
 var informationSchemaSchemataTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.schemata (
@@ -306,6 +402,8 @@ CREATE TABLE information_schema.schemata (
 	},
 }
 
+// Postgres: missing
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schema-privileges-table.html
 var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.schema_privileges (
@@ -352,7 +450,8 @@ func dStringForIndexDirection(dir sqlbase.IndexDescriptor_Direction) tree.Datum 
 	panic("unreachable")
 }
 
-// https://www.postgresql.org/docs/9.6/static/infoschema-sequences.html
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-sequences.html
+// MySQL:    missing
 var informationSchemaSequences = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.sequences (
@@ -382,16 +481,18 @@ CREATE TABLE information_schema.sequences (
 				tree.NewDInt(64),                 // numeric precision
 				tree.NewDInt(2),                  // numeric precision radix
 				tree.NewDInt(0),                  // numeric scale
-				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.Start)),     // start value
-				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.MinValue)),  // min value
-				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.MaxValue)),  // max value
-				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.Increment)), // increment
+				tree.NewDString(strconv.FormatInt(table.SequenceOpts.Start, 10)),     // start value
+				tree.NewDString(strconv.FormatInt(table.SequenceOpts.MinValue, 10)),  // min value
+				tree.NewDString(strconv.FormatInt(table.SequenceOpts.MaxValue, 10)),  // max value
+				tree.NewDString(strconv.FormatInt(table.SequenceOpts.Increment, 10)), // increment
 				noString, // cycle
 			)
 		})
 	},
 }
 
+// Postgres: missing
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/statistics-table.html
 var informationSchemaStatisticsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.statistics (
@@ -484,6 +585,8 @@ CREATE TABLE information_schema.statistics (
 	},
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-table-constraints.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/table-constraints-table.html
 var informationSchemaTableConstraintTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_constraints (
@@ -528,6 +631,8 @@ CREATE TABLE information_schema.table_constraints (
 	},
 }
 
+// Postgres: missing
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/user-privileges-table.html
 var informationSchemaUserPrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.user_privileges (
@@ -554,6 +659,8 @@ CREATE TABLE information_schema.user_privileges (
 	},
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-table-privileges.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/table-privileges-table.html
 var informationSchemaTablePrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_privileges (
@@ -596,6 +703,8 @@ var (
 	tableTypeView       = tree.NewDString("VIEW")
 )
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-tables.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/tables-table.html
 var informationSchemaTablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.tables (
@@ -627,6 +736,8 @@ CREATE TABLE information_schema.tables (
 	},
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-views.html
+// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/views-table.html
 var informationSchemaViewsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.views (
