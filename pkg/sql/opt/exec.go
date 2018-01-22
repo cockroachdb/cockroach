@@ -73,19 +73,18 @@ type ExecFactory interface {
 type execNodeSchema struct {
 	// outputCols maps columns in the output set of the relational expression to
 	// indices in the result columns of the ExecNode.
-	outputCols  map[columnIndex]int
+	outputCols  columnMap
 	outputTypes []types.T
 }
 
 func getSchema(props *relationalProps) execNodeSchema {
 	s := execNodeSchema{
-		outputCols:  make(map[columnIndex]int, props.outputCols.Len()),
 		outputTypes: make([]types.T, 0, props.outputCols.Len()),
 	}
 
 	for i := range props.columns {
 		if props.outputCols.Contains(props.columns[i].index) {
-			s.outputCols[props.columns[i].index] = i
+			s.outputCols.Set(props.columns[i].index, i)
 			s.outputTypes = append(s.outputTypes, props.columns[i].typ)
 		}
 	}

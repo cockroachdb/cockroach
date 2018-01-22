@@ -90,7 +90,7 @@ type typedExprConvCtx struct {
 
 	// varToIndexedVar is a map used when converting a variableOp into an
 	// IndexedVar. It is optional: if it is nil, a 1-to-1 mapping is assumed.
-	varToIndexedVar map[columnIndex]int
+	varToIndexedVar columnMap
 }
 
 func constOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
@@ -100,11 +100,11 @@ func constOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 func variableOpToTypedExpr(c *typedExprConvCtx, e *Expr) tree.TypedExpr {
 	col := e.private.(*columnProps)
 	var idx int
-	if c.varToIndexedVar == nil {
+	if c.varToIndexedVar.Empty() {
 		idx = col.index
 	} else {
 		var ok bool
-		idx, ok = c.varToIndexedVar[col.index]
+		idx, ok = c.varToIndexedVar.Get(col.index)
 		if !ok {
 			panic(fmt.Sprintf("missing variable-IndexedVar mapping for %d", col.index))
 		}
