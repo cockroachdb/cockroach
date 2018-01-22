@@ -676,7 +676,11 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 
 // MakeSequenceKey returns the key used to store the value of a sequence.
 func MakeSequenceKey(tableID uint32) []byte {
-	return makeKey(MakeTablePrefix(tableID), SequenceSuffix)
+	key := MakeTablePrefix(tableID)
+	key = encoding.EncodeUvarintAscending(key, 0) // Index id
+	key = encoding.EncodeUvarintAscending(key, 0) // Primary key value
+	key = encoding.EncodeUvarintAscending(key, 0) // Column family
+	return key
 }
 
 // GetRowPrefixLength returns the length of the row prefix of the key. A table

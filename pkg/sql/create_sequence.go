@@ -129,6 +129,23 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 ) (sqlbase.TableDescriptor, error) {
 	desc := initTableDescriptor(id, parentID, sequenceName, params.p.txn.OrigTimestamp(), privileges)
 
+	// These are defined so that Backup finds a span to save to an SST, which it does
+	// by iterating over a descriptor's indices.
+	//desc.Columns = []sqlbase.ColumnDescriptor{
+	//	{
+	//		ID: 0,
+	//	},
+	//}
+	desc.Indexes = []sqlbase.IndexDescriptor{
+		{
+			ID:   0,
+			Name: "primary",
+			ColumnIDs: []sqlbase.ColumnID{
+				sqlbase.ColumnID(0),
+			},
+		},
+	}
+
 	// Fill in options, starting with defaults then overriding.
 
 	opts := &sqlbase.TableDescriptor_SequenceOpts{

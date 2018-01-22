@@ -2451,6 +2451,7 @@ func TestBackupRestoreIncrementalAddTable(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE data2.t2 (i int)`)
 	sqlDB.Exec(t, "BACKUP data.*, data2.* TO $1 INCREMENTAL FROM $2", inc, full)
 }
+
 func TestBackupRestoreIncrementalAddTableMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2519,6 +2520,84 @@ func TestBackupRestoreIncrementalDropTable(t *testing.T) {
 	) {
 		t.Fatal(err)
 	}
+}
+
+func TestBackupRestoreSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	sqlDB.Exec(t, `CREATE SEQUENCE data.t_id_seq`)
+	sqlDB.Exec(t, `CREATE TABLE data.t (id INT PRIMARY KEY DEFAULT nextval('data.t_id_seq'), v text)`)
+	full, _ := filepath.Join(localFoo, "full"), filepath.Join(localFoo, "inc")
+
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('foo')`)
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('baz')`)
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, full)
+	sqlDB.Exec(t, `DROP DATABASE data`)
+
+	sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, full)
+
+	// Verify that the db was restored correctly.
+	{
+		expectedRows := []struct {
+			id int
+			v  string
+		}{
+			{1, "foo"},
+			{2, "bar"},
+			{3, "baz"},
+		}
+
+		rows := sqlDB.Query(t, `SELECT * FROM data.t`)
+		defer rows.Close()
+		var id int
+		var v string
+
+		idx := 0
+		for rows.Next() {
+			if err := rows.Scan(&id, &v); err != nil {
+				t.Fatal(err)
+			}
+			expectedRow := expectedRows[idx]
+			if expectedRow.id != id {
+				t.Fatalf("id: expected %d, got %d", expectedRow.id, id)
+			}
+			if expectedRow.v != v {
+				t.Fatalf("id: expected %s, got %s", expectedRow.v, v)
+			}
+			idx++
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	{
+		rows := sqlDB.Query(t, `SELECT last_value FROM data.t_id_seq`)
+		defer rows.Close()
+		var val int
+		for rows.Next() {
+			if err := rows.Scan(&val); err != nil {
+				t.Fatal(err)
+			}
+			expectedVal := 3
+			if val != expectedVal {
+				t.Fatalf("restored sequence value should be %d; was %d", expectedVal, val)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify that we can kkeep inserting into the table, without violating a uniqueness constraint.
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+
+	// Verify that sequence <=> table dependencies are still in place.
+	sqlDB.Exec(t, `DROP SEQUENCE data.t_id_seq`)
 }
 
 func TestFileIOLimits(t *testing.T) {

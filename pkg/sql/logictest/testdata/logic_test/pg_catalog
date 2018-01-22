@@ -417,6 +417,7 @@ WHERE n.nspname = 'relkinds'
 ORDER BY relname
 ----
 primary         i
+primary         i
 seq_test        S
 tbl_test        r
 tbl_test_v_idx  i
