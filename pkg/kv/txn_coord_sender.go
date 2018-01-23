@@ -350,6 +350,10 @@ func (tc *TxnCoordSender) Send(
 		if pErr := func() *roachpb.Error {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
+			if tc.mu.meta.Txn.ID == (uuid.UUID{}) {
+				// Ensure that the txn is bound.
+				tc.mu.meta.Txn = ba.Txn.Clone()
+			}
 			if ba.Txn.Writing {
 				if pErr := tc.maybeRejectClientLocked(ctx, ba.Txn.ID); pErr != nil {
 					return pErr
@@ -926,20 +930,22 @@ func (tc *TxnCoordSender) updateState(
 			tc.mu.meta.CommandCount = 0
 			tc.mu.Unlock()
 
-			// If the ID changed, it means we had to start a new transaction
-			// and the old one is toast. Try an asynchronous abort of the
-			// prior transaction to clean up its intents immediately, which
-			// likely will otherwise require synchronous cleanup by the
-			// restated transaction.
-			if errTxnID != newTxn.ID {
-				tc.tryAsyncAbort(ctx)
-			}
 			// Pass a HandledRetryableTxnError up to the next layer.
 			pErr = roachpb.NewError(
 				roachpb.NewHandledRetryableTxnError(
 					pErr.Message,
 					errTxnID, // the id of the transaction that encountered the error
 					newTxn))
+
+			// If the ID changed, it means we had to start a new transaction
+			// and the old one is toast. Try an asynchronous abort of the
+			// bound transaction to clean up its intents immediately, which
+			// likely will otherwise require synchronous cleanup by the
+			// restated transaction and return without any update to
+			if errTxnID != newTxn.ID {
+				tc.tryAsyncAbort(ctx)
+				return pErr
+			}
 		} else {
 			// We got a non-retryable error, or a retryable error at a leaf
 			// transaction, and need to pass responsibility for handling it
