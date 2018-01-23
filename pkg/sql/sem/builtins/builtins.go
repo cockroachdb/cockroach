@@ -1674,6 +1674,10 @@ CockroachDB supports the following flags:
 
 	"jsonb_strip_nulls": {jsonStripNullsImpl},
 
+	"json_array_length": {jsonArrayLengthImpl},
+
+	"jsonb_array_length": {jsonArrayLengthImpl},
+
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
@@ -2744,6 +2748,25 @@ var jsonStripNullsImpl = tree.Builtin{
 		return tree.NewDJSON(j), err
 	},
 	Info: "Returns from_json with all object fields that have null values omitted. Other null values are untouched.",
+}
+
+var jsonArrayLengthImpl = tree.Builtin{
+	Types:      tree.ArgTypes{{"json", types.JSON}},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		j := tree.MustBeDJSON(args[0])
+		switch j.Type() {
+		case json.ArrayJSONType:
+			return tree.NewDInt(tree.DInt(j.Len())), nil
+		case json.ObjectJSONType:
+			return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+				"cannot get array length of a non-array")
+		default:
+			return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+				"cannot get array length of a scalar")
+		}
+	},
+	Info: "Returns the number of elements in the outermost JSON or JSONB array.",
 }
 
 func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {

@@ -135,6 +135,10 @@ type JSON interface {
 	// tryDecode returns an equivalent JSON which is not a jsonEncoded, returning
 	// an error if the encoded data was corrupt.
 	tryDecode() (JSON, error)
+
+	// Len returns the number of outermost elements in the JSON document if it is an object or an array.
+	// Otherwise, Len returns 0.
+	Len() int
 }
 
 type jsonTrue struct{}
@@ -411,19 +415,21 @@ func (j jsonArray) Compare(other JSON) (int, error) {
 	if cmp != 0 {
 		return cmp, nil
 	}
+	lenJ := j.Len()
+	lenO := other.Len()
+	if lenJ < lenO {
+		return -1, nil
+	}
+	if lenJ > lenO {
+		return 1, nil
+	}
 	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
 	var err error
 	if other, err = decodeIfNeeded(other); err != nil {
 		return 0, err
 	}
 	o := other.(jsonArray)
-	if len(j) < len(o) {
-		return -1, nil
-	}
-	if len(j) > len(o) {
-		return 1, nil
-	}
-	for i := 0; i < len(j); i++ {
+	for i := 0; i < lenJ; i++ {
 		cmp, err := j[i].Compare(o[i])
 		if err != nil {
 			return 0, err
@@ -440,19 +446,21 @@ func (j jsonObject) Compare(other JSON) (int, error) {
 	if cmp != 0 {
 		return cmp, nil
 	}
+	lenJ := j.Len()
+	lenO := other.Len()
+	if lenJ < lenO {
+		return -1, nil
+	}
+	if lenJ > lenO {
+		return 1, nil
+	}
 	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
 	var err error
 	if other, err = decodeIfNeeded(other); err != nil {
 		return 0, err
 	}
 	o := other.(jsonObject)
-	if len(j) < len(o) {
-		return -1, nil
-	}
-	if len(j) > len(o) {
-		return 1, nil
-	}
-	for i := 0; i < len(j); i++ {
+	for i := 0; i < lenJ; i++ {
 		cmpKey, err := j[i].k.Compare(o[i].k)
 		if err != nil {
 			return 0, err
@@ -1324,6 +1332,14 @@ func (jsonNumber) isScalar() bool { return true }
 func (jsonString) isScalar() bool { return true }
 func (jsonArray) isScalar() bool  { return false }
 func (jsonObject) isScalar() bool { return false }
+
+func (jsonNull) Len() int     { return 0 }
+func (jsonTrue) Len() int     { return 0 }
+func (jsonFalse) Len() int    { return 0 }
+func (jsonNumber) Len() int   { return 0 }
+func (jsonString) Len() int   { return 0 }
+func (j jsonArray) Len() int  { return len(j) }
+func (j jsonObject) Len() int { return len(j) }
 
 func (jsonNull) toGoRepr() (interface{}, error)     { return nil, nil }
 func (jsonTrue) toGoRepr() (interface{}, error)     { return true, nil }
