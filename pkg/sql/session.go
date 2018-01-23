@@ -771,8 +771,6 @@ func (s *Session) synchronizeParallelStmts(ctx context.Context) error {
 				if errTxn.ID == curTxn.ID && errTxn.Epoch == curTxn.Epoch {
 					retryErr = t
 				}
-			case *roachpb.UntrackedTxnError:
-				// Symptom of concurrent retry, ignore.
 			case *roachpb.TxnPrevAttemptError:
 				// Symptom of concurrent retry, ignore.
 			default:
