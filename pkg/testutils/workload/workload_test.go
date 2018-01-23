@@ -52,7 +52,7 @@ func TestSetup(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer s.Stopper().Stop(ctx)
 
 	for _, test := range tests {
@@ -60,7 +60,6 @@ func TestSetup(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `DROP DATABASE IF EXISTS test`)
 			sqlDB.Exec(t, `CREATE DATABASE test`)
-			sqlDB.Exec(t, `USE test`)
 
 			gen := bank.FromRows(test.rows)
 			tables := gen.Tables()
