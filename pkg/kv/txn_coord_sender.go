@@ -932,7 +932,8 @@ func (tc *TxnCoordSender) updateState(
 			// likely will otherwise require synchronous cleanup by the
 			// restated transaction.
 			if errTxnID != newTxn.ID {
-				tc.tryAsyncAbort(ctx)
+				// defer(), avoiding a race with the state update below.
+				defer tc.tryAsyncAbort(ctx)
 			}
 			// Pass a HandledRetryableTxnError up to the next layer.
 			pErr = roachpb.NewError(
