@@ -25,6 +25,9 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -88,6 +91,8 @@ type Table struct {
 	// row of the table's initial data given its index. They are returned as
 	// strings and must be pre-escaped for use directly in SQL/CSVs.
 	InitialRowFn func(int) []string
+	SplitCount   int
+	SplitFn      func(int) []string
 }
 
 // Operation represents some SQL query workload performable on a database
@@ -144,7 +149,7 @@ func Registered() []Meta {
 //
 // TODO(dan): Is there something better we could be doing here for the size of
 // the loaded data?
-func Setup(db *gosql.DB, tables []Table, batchSize int) (int64, error) {
+func Setup(ctx context.Context, db *gosql.DB, tables []Table, batchSize int) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = 1000
 	}
@@ -184,6 +189,104 @@ func Setup(db *gosql.DB, tables []Table, batchSize int) (int64, error) {
 				}
 			}
 		}
+
+		if err := Split(ctx, db, table); err != nil {
+			return 0, err
+		}
 	}
 	return size, nil
+}
+
+// Split creates the range splits defined by the given table.
+//
+// TODO(dan): This is concurrent for the splits in a table, but does each table
+// one at at time.
+func Split(ctx context.Context, db *gosql.DB, table Table) error {
+	if table.SplitCount <= 0 {
+		return nil
+	}
+	splitPoints := make([][]string, table.SplitCount)
+	for splitIdx := 0; splitIdx < table.SplitCount; splitIdx++ {
+		splitPoints[splitIdx] = table.SplitFn(splitIdx)
+	}
+	// TODO(dan): Sort the split points.
+	// sort.Sort(stringStringSlice(splitPoints))
+
+	const concurrency = 10
+	type pair struct {
+		lo, hi int
+	}
+	splitCh := make(chan pair, concurrency)
+	splitCh <- pair{0, len(splitPoints)}
+	doneCh := make(chan struct{})
+
+	g, ctx := errgroup.WithContext(ctx)
+	for i := 0; i < concurrency; i++ {
+		g.Go(func() error {
+			var buf bytes.Buffer
+			for {
+				p, ok := <-splitCh
+				if !ok {
+					break
+				}
+				m := (p.lo + p.hi) / 2
+				split := strings.Join(splitPoints[m], `,`)
+
+				buf.Reset()
+				fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
+				if _, err := db.ExecContext(ctx, buf.String()); err != nil {
+					return err
+				}
+
+				if m > 0 {
+					// NB: the split-1 expression below guarantees our scatter range
+					// touches both sides of the split.
+					previousSplit := strings.Join(splitPoints[m-1], `,`)
+					buf.Reset()
+					fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
+						table.Name, previousSplit, split)
+					if _, err := db.ExecContext(ctx, buf.String()); err != nil {
+						// SCATTER can collide with normal replicate queue
+						// operations and fail spuriously, so only print the
+						// error.
+						log.Warningf(ctx, `failed to scatter FROM (%s) TO (%s): %+v`,
+							previousSplit, split, err)
+					}
+				}
+
+				doneCh <- struct{}{}
+				g.Go(func() error {
+					if p.lo < m {
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case splitCh <- pair{p.lo, m}:
+						}
+					}
+					if m+1 < p.hi {
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case splitCh <- pair{m + 1, p.hi}:
+						}
+					}
+					return nil
+				})
+			}
+			return nil
+		})
+	}
+
+	for i := 0; i < len(splitPoints); i++ {
+		select {
+		case <-ctx.Done():
+			break
+		case <-doneCh:
+		}
+		if i != 0 && i%1000 == 0 {
+			log.Infof(ctx, `finished %d of %d splits`, i, len(splitPoints))
+		}
+	}
+	close(splitCh)
+	return g.Wait()
 }

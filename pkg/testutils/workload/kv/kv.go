@@ -46,6 +46,7 @@ type kv struct {
 	readPercent                          int
 	writeSeq, seed                       int64
 	sequential                           bool
+	splits                               int
 }
 
 func init() {
@@ -67,6 +68,7 @@ var kvMeta = workload.Meta{
 		g.flags.Int64Var(&g.writeSeq, `write-seq`, 0, `Initial write sequence value.`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
+		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		return g
 	},
 }
@@ -91,20 +93,27 @@ func (w *kv) Configure(flags []string) error {
 		return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
 			w.maxBlockSizeBytes, w.minBlockSizeBytes)
 	}
-	// TODO(dan): Re-enable this check once splits are supported.
-	// if w.sequential && w.splits > 0 {
-	// 	log.Fatalf("'sequential' and 'splits' cannot both be enabled")
-	// }
+	if w.sequential && w.splits > 0 {
+		return errors.New("'sequential' and 'splits' cannot both be enabled")
+	}
 	return nil
 }
 
 // Tables implements the Generator interface.
-func (*kv) Tables() []workload.Table {
+func (w *kv) Tables() []workload.Table {
 	table := workload.Table{
-		Name:            `kv`,
-		Schema:          kvSchema,
-		InitialRowCount: 0,
+		Name:   `kv`,
+		Schema: kvSchema,
 		// TODO(dan): Support initializing kv with data.
+		InitialRowCount: 0,
+		SplitCount:      w.splits,
+		SplitFn: func(splitIdx int) []string {
+			rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
+			g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
+			return []string{
+				fmt.Sprintf("%d", g.hash(rng.Int63())),
+			}
+		},
 	}
 	return []workload.Table{table}
 }

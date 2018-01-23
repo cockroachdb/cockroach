@@ -63,7 +63,7 @@ func TestSetup(t *testing.T) {
 
 			gen := bank.FromRows(test.rows)
 			tables := gen.Tables()
-			if _, err := workload.Setup(sqlDB.DB, tables, test.batchSize); err != nil {
+			if _, err := workload.Setup(ctx, sqlDB.DB, tables, test.batchSize); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
@@ -73,6 +73,41 @@ func TestSetup(t *testing.T) {
 				if c != table.InitialRowCount {
 					t.Errorf(`%s: got %d rows expected %d`, table.Name, c, table.InitialRowCount)
 				}
+			}
+		})
+	}
+}
+
+func TestSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const rows, payloadBytes, concurrency = 10, 0, 10
+	tests := []int{1, 2, 3, 4, 10}
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+	defer s.Stopper().Stop(ctx)
+
+	for _, ranges := range tests {
+		t.Run(fmt.Sprintf("ranges=%d", ranges), func(t *testing.T) {
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `DROP DATABASE IF EXISTS test`)
+			sqlDB.Exec(t, `CREATE DATABASE test`)
+
+			gen := bank.FromConfig(rows, payloadBytes, ranges)
+			table := gen.Tables()[0]
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE test.%s %s`, table.Name, table.Schema))
+
+			if err := workload.Split(ctx, sqlDB.DB, table); err != nil {
+				t.Fatalf("%+v", err)
+			}
+
+			var actual int
+			sqlDB.QueryRow(
+				t, `SELECT COUNT(*) FROM [SHOW TESTING_RANGES FROM TABLE test.bank]`,
+			).Scan(&actual)
+			if ranges != actual {
+				t.Errorf(`expected %d got %d`, ranges, actual)
 			}
 		})
 	}

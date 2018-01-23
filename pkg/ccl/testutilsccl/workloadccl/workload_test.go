@@ -62,7 +62,7 @@ func TestSetup(t *testing.T) {
 			}
 
 			tables := gen.Tables()
-			if _, err := workload.Setup(sqlDB.DB, tables, test.batchSize); err != nil {
+			if _, err := workload.Setup(ctx, sqlDB.DB, tables, test.batchSize); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

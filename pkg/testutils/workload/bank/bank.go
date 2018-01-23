@@ -125,6 +125,12 @@ func (b *bank) Tables() []workload.Table {
 				`'` + initialPrefix + bytes + `'`, // payload
 			}
 		},
+		SplitCount: b.ranges - 1,
+		SplitFn: func(splitIdx int) []string {
+			return []string{
+				strconv.Itoa((splitIdx + 1) * (b.rows / b.ranges)),
+			}
+		},
 	}
 	return []workload.Table{table}
 }

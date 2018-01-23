@@ -209,6 +209,11 @@ func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, datab
 			return err
 		}
 	}
+	for _, table := range fixture.Generator.Tables() {
+		if err := workload.Split(ctx, sqlDB, table); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
