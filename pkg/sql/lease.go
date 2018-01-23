@@ -1329,7 +1329,10 @@ func (m *LeaseManager) AcquireByName(
 		if err := m.Release(table); err != nil {
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
-		table, expiration, err = m.acquireFreshestFromStore(ctx, tableID)
+		if err := m.acquireFreshestFromStore(ctx, tableID); err != nil {
+			return nil, hlc.Timestamp{}, err
+		}
+		table, expiration, err = m.Acquire(ctx, timestamp, tableID)
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
@@ -1390,28 +1393,15 @@ func (m *LeaseManager) Acquire(
 	return &table.TableDescriptor, table.expiration, nil
 }
 
-// acquireFreshestFromStore acquires a new lease from the store. The returned
-// table is guaranteed to have a version of the descriptor at least as recent as
+// acquireFreshestFromStore acquires a new lease from the store. The lease
+// is guaranteed to have a version of the descriptor at least as recent as
 // the time of the call (i.e. if we were in the process of acquiring a lease
-// already, that lease is not good enough). The expiration time is returned
-// along with the table descriptor.
-func (m *LeaseManager) acquireFreshestFromStore(
-	ctx context.Context, tableID sqlbase.ID,
-) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+// already, that lease is not good enough).
+func (m *LeaseManager) acquireFreshestFromStore(ctx context.Context, tableID sqlbase.ID) error {
 	t := m.findTableState(tableID, true)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if err := t.acquireFreshestFromStoreLocked(
-		ctx, m,
-	); err != nil {
-		return nil, hlc.Timestamp{}, err
-	}
-	table := t.mu.active.findNewest()
-	if table == nil {
-		panic("no lease in active set after having just acquired one")
-	}
-	table.incRefcount()
-	return &table.TableDescriptor, table.expiration, nil
+	return t.acquireFreshestFromStoreLocked(ctx, m)
 }
 
 // Release releases a previously acquired table.
