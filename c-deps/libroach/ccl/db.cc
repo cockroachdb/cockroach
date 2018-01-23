@@ -30,7 +30,7 @@ namespace cockroach {
 // DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
 // needed.
 rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
-                           EnvManager* env_ctx) {
+                           EnvManager* env_mgr) {
   DBSlice options = db_opts.extra_options;
   if (options.len == 0) {
     return rocksdb::Status::OK();
@@ -44,7 +44,7 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
   }
 
   // Switching env enabled means we have a switching provider.
-  assert(env_ctx->switching_provider != nullptr);
+  assert(env_mgr->switching_provider != nullptr);
 
   // Parse extra_options.
   cockroach::ccl::baseccl::EncryptionOptions opts;
@@ -66,17 +66,18 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
     return status;
   }
 
-  // Register a CTR stream creator at the store level. It uses (and owns) the store key manager.
-  // The switching provider owns the stream creator.
-  env_ctx->switching_provider->RegisterCipherStreamCreator(
-      enginepb::Store, new CTRCipherStreamCreator(store_key_manager));
+  // Create a cipher stream creator using the store_key_manager.
+  auto store_stream = std::unique_ptr<CTRCipherStreamCreator>(
+      new CTRCipherStreamCreator(store_key_manager, enginepb::Store));
 
-  // Construct an EncryptedEnv pointing at the "store" level.
-  // It wraps the base_env (Default or Mem).
-  // It is owned by the env context. It is an intermediate, so is not used as the db_env.
+  // Construct an EncryptedEnv using this stream creator and the base_env (Default or Mem).
   rocksdb::Env* store_keyed_env =
-      NewEncryptedEnv(env_ctx->base_env, env_ctx->switching_provider.get(), enginepb::Store);
-  env_ctx->TakeEnvOwnership(store_keyed_env);
+      NewEncryptedEnv(env_mgr->base_env, env_mgr->switching_provider.get(), store_stream.get());
+  // Transfer ownership to the env manager.
+  env_mgr->TakeEnvOwnership(store_keyed_env);
+
+  // Register the stream creator with the switching provider. This transfers ownership.
+  env_mgr->switching_provider->RegisterCipherStreamCreator(std::move(store_stream));
 
   // Initialize data key manager using the stored-keyed-env.
   DataKeyManager* data_key_manager =
@@ -87,18 +88,21 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
     return status;
   }
 
+  // Create a cipher stream creator using the data_key_manager.
   // Register a CTR stream creator at the data level. It uses (and owns) the data key manager.
   // The switching provider owns the stream creator.
-  env_ctx->switching_provider->RegisterCipherStreamCreator(
-      enginepb::Data, new CTRCipherStreamCreator(data_key_manager));
+  auto data_stream = std::unique_ptr<CTRCipherStreamCreator>(
+      new CTRCipherStreamCreator(data_key_manager, enginepb::Data));
 
-  // Construct an EncryptedEnv pointing to the DataKeyManager as a key source.
-  // It wraps the base_env (Default or Mem).
-  // It is owned by the env context, and is used as the db_env.
+  // Construct an EncryptedEnv using this stream creator and the base_env (Default or Mem).
   rocksdb::Env* data_keyed_env =
-      NewEncryptedEnv(env_ctx->base_env, env_ctx->switching_provider.get(), enginepb::Data);
-  env_ctx->TakeEnvOwnership(data_keyed_env);
-  env_ctx->db_env = data_keyed_env;
+      NewEncryptedEnv(env_mgr->base_env, env_mgr->switching_provider.get(), data_stream.get());
+  // Transfer ownership to the env manager and make it as the db_env.
+  env_mgr->TakeEnvOwnership(data_keyed_env);
+  env_mgr->db_env = data_keyed_env;
+
+  // Register the stream creator with the switching provider. This transfers ownership.
+  env_mgr->switching_provider->RegisterCipherStreamCreator(std::move(data_stream));
 
   // Fetch the current store key info.
   std::unique_ptr<enginepbccl::KeyInfo> store_key = store_key_manager->CurrentKeyInfo();
@@ -111,7 +115,8 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
   }
 
   // TODO(mberhault): enable at some point. We still want to make sure people do not use it.
-  return rocksdb::Status::InvalidArgument("encryption is not supported");
+  return rocksdb::Status::OK();
+  //  return rocksdb::Status::InvalidArgument("encryption is not supported");
 }
 
 }  // namespace cockroach
