@@ -1293,9 +1293,8 @@ func validCastTypes(t types.T) []types.T {
 		if t.FamilyEqual(types.FamCollatedString) {
 			return stringCastTypes
 		} else if t.FamilyEqual(types.FamArray) {
-			ret := make([]types.T, len(arrayCastTypes)+1)
+			ret := make([]types.T, len(arrayCastTypes))
 			copy(ret, arrayCastTypes)
-			ret[len(ret)-1] = t
 			return ret
 		}
 		return nil

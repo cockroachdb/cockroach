@@ -2836,9 +2836,18 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DString:
 			return ParseDArrayFromString(ctx, string(*v), typ.ParamType)
 		case *DArray:
-			if (*v).ParamTyp == coltypes.CastTargetToDatumType((*typ).ParamType) {
-				return d, nil
+			paramType := coltypes.CastTargetToDatumType(typ.ParamType)
+			dcast := NewDArray(paramType)
+			for _, e := range v.Array {
+				ecast, err := performCast(ctx, e, typ.ParamType)
+				if err != nil {
+					return nil, err
+				}
+				if err = dcast.Append(ecast); err != nil {
+					return nil, err
+				}
 			}
+			return dcast, nil
 		}
 	case *coltypes.TOid:
 		switch v := d.(type) {
