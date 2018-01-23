@@ -110,7 +110,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
-		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc)
+		droppedViews, err := params.p.dropTableImpl(params, droppedDesc)
 		if err != nil {
 			return err
 		}
@@ -248,8 +248,10 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
 func (p *planner) dropTableImpl(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor,
+	params runParams, tableDesc *sqlbase.TableDescriptor,
 ) ([]string, error) {
+	ctx := params.ctx
+
 	var droppedViews []string
 
 	// Remove FK and interleave relationships.
@@ -274,6 +276,13 @@ func (p *planner) dropTableImpl(
 			if err := p.removeInterleave(ctx, ref); err != nil {
 				return droppedViews, err
 			}
+		}
+	}
+
+	// Remove sequence dependencies.
+	for _, columnDesc := range tableDesc.Columns {
+		if err := removeSequenceDependencies(tableDesc, &columnDesc, params); err != nil {
+			return droppedViews, err
 		}
 	}
 

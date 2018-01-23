@@ -593,3 +593,189 @@ SELECT * FROM txn_test
 ----
 1 foo
 3 baz
+
+# PREVENTION OF DROPPING A SEQUENCE WHICH IS BEING USED
+
+statement ok
+CREATE SEQUENCE drop_prevention_test
+
+statement ok
+CREATE TABLE drop_prevention_test_tbl (id INT PRIMARY KEY DEFAULT nextval('drop_prevention_test'))
+
+statement error pq: cannot drop sequence drop_prevention_test because other objects depend on it
+DROP SEQUENCE drop_prevention_test
+
+# Giving a nonexistent function doesn't mess up the nextval-detection algorithm.
+
+statement error pq: unknown function: nxtvl()
+CREATE TABLE seq_using_table (id INT PRIMARY KEY DEFAULT nxtvl('foo'))
+
+# Sequence deletion is allowed once the sequence-using column is removed.
+
+statement ok
+CREATE SEQUENCE drop_col_test_seq
+
+statement ok
+CREATE TABLE drop_col_test_tbl (id INT PRIMARY KEY, foo INT DEFAULT nextval('drop_col_test_seq'))
+
+statement ok
+ALTER TABLE drop_col_test_tbl DROP COLUMN foo
+
+statement ok
+DROP SEQUENCE drop_col_test_seq
+
+# Sequence deletion is prevented when a sequence-using column is added to a table.
+
+statement ok
+CREATE TABLE add_col_test_tbl (id INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE add_col_test_seq
+
+statement ok
+ALTER TABLE add_col_test_tbl ADD COLUMN foo INT DEFAULT nextval('add_col_test_seq')
+
+statement error pq: cannot drop sequence add_col_test_seq because other objects depend on it
+DROP SEQUENCE add_col_test_seq
+
+# Sequence deletion is prevented when a column is altered to depend on the sequence.
+
+statement ok
+CREATE TABLE set_default_test_tbl (id INT PRIMARY KEY, foo INT)
+
+statement ok
+CREATE SEQUENCE set_default_test_seq
+
+statement ok
+ALTER TABLE set_default_test_tbl ALTER COLUMN foo SET DEFAULT nextval('set_default_test_seq')
+
+statement error pq: cannot drop sequence set_default_test_seq because other objects depend on it
+DROP SEQUENCE set_default_test_seq
+
+# When a column's DEFAULT is altered from using seq A to using seq B,
+# A can now be dropped, and B can't.
+
+statement ok
+CREATE SEQUENCE initial_seq
+
+statement ok
+CREATE SEQUENCE changed_to_seq
+
+statement ok
+CREATE TABLE set_default_test (id INT PRIMARY KEY DEFAULT nextval('initial_seq'))
+
+statement error pq: cannot drop sequence initial_seq because other objects depend on it
+DROP SEQUENCE initial_seq
+
+statement ok
+ALTER TABLE set_default_test ALTER COLUMN id SET DEFAULT nextval('changed_to_seq')
+
+statement ok
+DROP SEQUENCE initial_seq
+
+statement error pq: cannot drop sequence changed_to_seq because other objects depend on it
+DROP SEQUENCE changed_to_seq
+
+# Sequence deletion is allowed after a column's usage of a sequence is dropped with DROP DEFAULT.
+
+statement ok
+CREATE SEQUENCE drop_default_test_seq
+
+statement ok
+CREATE TABLE drop_default_test_tbl (id INT PRIMARY KEY DEFAULT nextval('drop_default_test_seq'))
+
+statement ok
+ALTER TABLE drop_default_test_tbl ALTER COLUMN id DROP DEFAULT
+
+statement ok
+DROP SEQUENCE drop_default_test_seq
+
+# Verify that a new default can be added.
+
+statement ok
+CREATE SEQUENCE drop_default_test_seq_2
+
+statement ok
+ALTER TABLE drop_default_test_tbl ALTER COLUMN id SET DEFAULT nextval('drop_default_test_seq_2')
+
+# Test that dependencies are recorded correctly when a column uses multiple sequences.
+
+statement ok
+CREATE SEQUENCE multiple_seq_test1
+
+statement ok
+CREATE SEQUENCE multiple_seq_test2
+
+statement ok
+CREATE TABLE multiple_seq_test_tbl (
+  id INT PRIMARY KEY DEFAULT nextval('multiple_seq_test1') + nextval('multiple_seq_test2')
+)
+
+statement error pq: cannot drop sequence multiple_seq_test1 because other objects depend on it
+DROP SEQUENCE multiple_seq_test1
+
+statement error pq: cannot drop sequence multiple_seq_test2 because other objects depend on it
+DROP SEQUENCE multiple_seq_test2
+
+# This should remove both sequence dependencies.
+statement ok
+ALTER TABLE multiple_seq_test_tbl ALTER COLUMN id SET DEFAULT unique_rowid()
+
+statement ok
+DROP SEQUENCE multiple_seq_test1
+
+statement ok
+DROP SEQUENCE multiple_seq_test2
+
+# Test that dependencies are recorded when multiple columns in a table use sequences.
+
+statement ok
+CREATE SEQUENCE multiple_usage_test_1
+
+statement ok
+CREATE SEQUENCE multiple_usage_test_2
+
+statement ok
+CREATE TABLE multiple_usage_test_tbl (
+  id INT PRIMARY KEY DEFAULT nextval('multiple_usage_test_1'),
+  other_id INT DEFAULT nextval('multiple_usage_test_2')
+)
+
+# We're prevented from dropping the first sequence until the dep is removed.
+
+statement error pq: cannot drop sequence multiple_usage_test_1 because other objects depend on it
+DROP SEQUENCE multiple_usage_test_1
+
+statement ok
+ALTER TABLE multiple_usage_test_tbl ALTER COLUMN id DROP DEFAULT
+
+statement ok
+DROP SEQUENCE multiple_usage_test_1
+
+# We're prevented from dropping the second sequence until the dep is removed.
+
+statement error pq: cannot drop sequence multiple_usage_test_2 because other objects depend on it
+DROP SEQUENCE multiple_usage_test_2
+
+statement ok
+ALTER TABLE multiple_usage_test_tbl ALTER COLUMN other_id DROP DEFAULT
+
+statement ok
+DROP SEQUENCE multiple_usage_test_2
+
+# Verify that deps are removed when a sequence-using table is dropped.
+
+statement ok
+CREATE SEQUENCE drop_test
+
+statement ok
+CREATE TABLE drop_test_tbl (id INT PRIMARY KEY DEFAULT nextval('drop_test'))
+
+statement error pq: cannot drop sequence drop_test because other objects depend on it
+DROP SEQUENCE drop_test
+
+statement ok
+DROP TABLE drop_test_tbl
+
+statement ok
+DROP SEQUENCE drop_test

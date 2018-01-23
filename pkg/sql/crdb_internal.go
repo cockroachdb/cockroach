@@ -1162,6 +1162,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
   descriptor_id      INT,
   descriptor_name    STRING NOT NULL,
   index_id           INT,
+  column_id          INT,
   dependson_id       INT NOT NULL,
   dependson_type     STRING NOT NULL,
   dependson_index_id INT,
@@ -1172,6 +1173,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
+		sequenceDep := tree.NewDString("sequence")
 		interleaveDep := tree.NewDString("interleave")
 		return forEachTableDescAll(ctx, p, prefix,
 			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
@@ -1188,6 +1190,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 						if err := addRow(
 							tableID, tableName,
 							idxID,
+							tree.DNull,
 							tree.NewDInt(tree.DInt(fkRef.Table)),
 							fkDep,
 							tree.NewDInt(tree.DInt(fkRef.Index)),
@@ -1202,6 +1205,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 						if err := addRow(
 							tableID, tableName,
 							idxID,
+							tree.DNull,
 							tree.NewDInt(tree.DInt(interleaveParent.TableID)),
 							interleaveDep,
 							tree.NewDInt(tree.DInt(interleaveParent.IndexID)),
@@ -1232,6 +1236,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 					if err := addRow(
 						tableID, tableName,
 						tree.DNull,
+						tree.DNull,
 						tree.NewDInt(tree.DInt(tIdx)),
 						viewDep,
 						tree.DNull,
@@ -1239,6 +1244,24 @@ CREATE TABLE crdb_internal.backward_dependencies (
 						tree.DNull,
 					); err != nil {
 						return err
+					}
+				}
+
+				// Record sequence dependencies.
+				for _, col := range table.Columns {
+					for _, sequenceID := range col.UsesSequenceIds {
+						if err := addRow(
+							tableID, tableName,
+							tree.DNull,
+							tree.NewDInt(tree.DInt(col.ID)),
+							tree.NewDInt(tree.DInt(sequenceID)),
+							sequenceDep,
+							tree.DNull,
+							tree.DNull,
+							tree.DNull,
+						); err != nil {
+							return err
+						}
 					}
 				}
 
@@ -1266,6 +1289,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
 		interleaveDep := tree.NewDString("interleave")
+		sequenceDep := tree.NewDString("sequence")
 		return forEachTableDescAll(ctx, p, prefix,
 			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				tableID := tree.DNull
@@ -1319,18 +1343,35 @@ CREATE TABLE crdb_internal.forward_dependencies (
 					}
 				}
 
-				// Record the view dependencies.
-				for _, dep := range table.DependedOnBy {
-					if err := addRow(
-						tableID, tableName,
-						tree.DNull,
-						tree.NewDInt(tree.DInt(dep.ID)),
-						viewDep,
-						tree.NewDInt(tree.DInt(dep.IndexID)),
-						tree.DNull,
-						tree.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
-					); err != nil {
-						return err
+				if table.IsTable() || table.IsView() {
+					// Record the view dependencies.
+					for _, dep := range table.DependedOnBy {
+						if err := addRow(
+							tableID, tableName,
+							tree.DNull,
+							tree.NewDInt(tree.DInt(dep.ID)),
+							viewDep,
+							tree.NewDInt(tree.DInt(dep.IndexID)),
+							tree.DNull,
+							tree.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
+						); err != nil {
+							return err
+						}
+					}
+				} else if table.IsSequence() {
+					// Record the sequence dependencies.
+					for _, dep := range table.DependedOnBy {
+						if err := addRow(
+							tableID, tableName,
+							tree.DNull,
+							tree.NewDInt(tree.DInt(dep.ID)),
+							sequenceDep,
+							tree.NewDInt(tree.DInt(dep.IndexID)),
+							tree.DNull,
+							tree.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
+						); err != nil {
+							return err
+						}
 					}
 				}
 
