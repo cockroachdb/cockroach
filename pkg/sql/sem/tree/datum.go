@@ -1124,20 +1124,30 @@ func (d *DBytes) Max(_ *EvalContext) (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DBytes) AmbiguousFormat() bool { return true }
 
-// Format implements the NodeFormatter interface.
-func (d *DBytes) Format(ctx *FmtCtx) {
-	f := ctx.flags
-	withQuotes := f.HasFlags(fmtWithinArray) || !f.HasFlags(FmtFlags(lex.EncBareStrings))
-	if withQuotes {
-		ctx.WriteByte('\'')
-	}
-	ctx.WriteString("\\x")
+func writeAsHexString(ctx *FmtCtx, d *DBytes) {
 	b := string(*d)
 	for i := 0; i < len(b); i++ {
 		ctx.Write(stringencoding.RawHexMap[b[i]])
 	}
-	if withQuotes {
-		ctx.WriteByte('\'')
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DBytes) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	if f.HasFlags(fmtWithinArray) {
+		ctx.WriteString(`"\\x`)
+		writeAsHexString(ctx, d)
+		ctx.WriteString(`"`)
+	} else {
+		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
+		if withQuotes {
+			ctx.WriteByte('\'')
+		}
+		ctx.WriteString("\\x")
+		writeAsHexString(ctx, d)
+		if withQuotes {
+			ctx.WriteByte('\'')
+		}
 	}
 }
 
