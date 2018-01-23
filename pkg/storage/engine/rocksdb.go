@@ -1559,17 +1559,14 @@ func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
 	if r.distinctOpen {
 		panic("distinct batch open")
 	}
-	// Used the cached iterator, creating it on first access.
-	iter := &r.normalIter
-	if iter.iter.iter == nil {
-		r.ensureBatch()
-		iter.iter.initTimeBound(r.batch, start, end, r)
-	}
-	if iter.batch != nil {
-		panic("iterator already in use")
-	}
+
+	// Don't cache these iterators; we're unlikely to get many calls for the same
+	// time bounds.
+	r.ensureBatch()
+	var iter rocksDBBatchIterator
+	iter.iter.initTimeBound(r.batch, start, end, r)
 	iter.batch = r
-	return iter
+	return &iter
 }
 
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
