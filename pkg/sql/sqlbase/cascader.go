@@ -1018,14 +1018,14 @@ func (c *cascader) cascadeAll(
 				} else {
 					// Updating a row.
 					switch referencingIndex.ForeignKey.OnUpdate {
-					case ForeignKeyReference_CASCADE:
+					case ForeignKeyReference_CASCADE, ForeignKeyReference_SET_NULL:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
 							&referencedIndex,
 							referencingTable.Table,
 							referencingIndex,
 							elem,
-							ForeignKeyReference_CASCADE,
+							referencingIndex.ForeignKey.OnUpdate,
 							traceKV,
 						)
 						if err != nil {
