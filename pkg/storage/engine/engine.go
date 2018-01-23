@@ -198,6 +198,11 @@ type Writer interface {
 	Merge(key MVCCKey, value []byte) error
 	// Put sets the given key to the value provided.
 	Put(key MVCCKey, value []byte) error
+	// LogData adds the specified data to the RocksDB WAL. The data is
+	// uninterpreted by RocksDB (i.e. not added to the memtable or
+	// sstables). Currently only used for performance testing of appending to the
+	// RocksDB WAL.
+	LogData(data []byte) error
 }
 
 // ReadWriter is the read/write interface to an engine's data.

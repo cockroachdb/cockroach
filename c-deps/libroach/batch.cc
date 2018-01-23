@@ -411,6 +411,7 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
     }
     return rocksdb::Status::InvalidArgument("DeleteRangeCF not implemented");
   }
+  virtual void LogData(const rocksdb::Slice& blob) { batch_->PutLogData(blob); }
 
  private:
   rocksdb::WriteBatchBase* const batch_;
