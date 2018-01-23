@@ -14,29 +14,17 @@
 
 #pragma once
 
-#include "db.h"
-#include "fmt.h"
+#include <libroach.h>
+#include <rocksdb/merge_operator.h>
+#include "defines.h"
+#include "protos/storage/engine/enginepb/mvcc.pb.h"
 
 namespace cockroach {
 
-const DBStatus kSuccess = {NULL, 0};
-
-// ToDBStatus converts a rocksdb Status to a DBStatus.
-inline DBStatus ToDBStatus(const rocksdb::Status& status) {
-  if (status.ok()) {
-    return kSuccess;
-  }
-  return ToDBString(status.ToString());
-}
-
-// FmtStatus formats the given arguments printf-style into a DBStatus.
-inline DBStatus FmtStatus(const char* fmt_str, ...) {
-  va_list ap;
-  va_start(ap, fmt_str);
-  std::string str;
-  fmt::StringAppendV(&str, fmt_str, ap);
-  va_end(ap);
-  return ToDBString(str);
-}
+WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMetadata* left,
+                                    const cockroach::storage::engine::enginepb::MVCCMetadata& right,
+                                    bool full_merge, rocksdb::Logger* logger);
+DBStatus MergeResult(cockroach::storage::engine::enginepb::MVCCMetadata* meta, DBString* result);
+rocksdb::MergeOperator* NewMergeOperator();
 
 }  // namespace cockroach

@@ -14,29 +14,12 @@
 
 #pragma once
 
-#include "db.h"
-#include "fmt.h"
+#include <libroach.h>
+#include <memory>
+#include <mutex>
+#include <rocksdb/cache.h>
 
-namespace cockroach {
-
-const DBStatus kSuccess = {NULL, 0};
-
-// ToDBStatus converts a rocksdb Status to a DBStatus.
-inline DBStatus ToDBStatus(const rocksdb::Status& status) {
-  if (status.ok()) {
-    return kSuccess;
-  }
-  return ToDBString(status.ToString());
-}
-
-// FmtStatus formats the given arguments printf-style into a DBStatus.
-inline DBStatus FmtStatus(const char* fmt_str, ...) {
-  va_list ap;
-  va_start(ap, fmt_str);
-  std::string str;
-  fmt::StringAppendV(&str, fmt_str, ap);
-  va_end(ap);
-  return ToDBString(str);
-}
-
-}  // namespace cockroach
+struct DBCache {
+  std::mutex mu;
+  std::shared_ptr<rocksdb::Cache> rep;
+};

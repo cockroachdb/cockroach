@@ -22,10 +22,20 @@ cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
 project(roachlib)
 
 add_library(roach
+  batch.cc
+  cache.cc
+  comparator.cc
   db.cc
   encoding.cc
+  engine.cc
   env_switching.cc
   eventlistener.cc
+  getter.cc
+  ldb.cc
+  merge.cc
+  mvcc.cc
+  options.cc
+  snapshot.cc
   utils.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc

@@ -14,29 +14,23 @@
 
 #pragma once
 
-#include "db.h"
-#include "fmt.h"
+#include <rocksdb/db.h>
 
 namespace cockroach {
 
-const DBStatus kSuccess = {NULL, 0};
+class DBComparator : public rocksdb::Comparator {
+ public:
+  DBComparator() {}
 
-// ToDBStatus converts a rocksdb Status to a DBStatus.
-inline DBStatus ToDBStatus(const rocksdb::Status& status) {
-  if (status.ok()) {
-    return kSuccess;
-  }
-  return ToDBString(status.ToString());
-}
+  virtual const char* Name() const override { return "cockroach_comparator"; }
 
-// FmtStatus formats the given arguments printf-style into a DBStatus.
-inline DBStatus FmtStatus(const char* fmt_str, ...) {
-  va_list ap;
-  va_start(ap, fmt_str);
-  std::string str;
-  fmt::StringAppendV(&str, fmt_str, ap);
-  va_end(ap);
-  return ToDBString(str);
-}
+  virtual int Compare(const rocksdb::Slice& a, const rocksdb::Slice& b) const override;
+  virtual bool Equal(const rocksdb::Slice& a, const rocksdb::Slice& b) const override;
+  virtual void FindShortestSeparator(std::string* start,
+                                     const rocksdb::Slice& limit) const override;
+  virtual void FindShortSuccessor(std::string* key) const override;
+};
+
+const DBComparator kComparator;
 
 }  // namespace cockroach

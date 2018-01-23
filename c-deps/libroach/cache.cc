@@ -12,31 +12,19 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#pragma once
+#include "cache.h"
 
-#include "db.h"
-#include "fmt.h"
-
-namespace cockroach {
-
-const DBStatus kSuccess = {NULL, 0};
-
-// ToDBStatus converts a rocksdb Status to a DBStatus.
-inline DBStatus ToDBStatus(const rocksdb::Status& status) {
-  if (status.ok()) {
-    return kSuccess;
-  }
-  return ToDBString(status.ToString());
+DBCache* DBNewCache(uint64_t size) {
+  const int num_cache_shard_bits = 4;
+  DBCache* cache = new DBCache;
+  cache->rep = rocksdb::NewLRUCache(size, num_cache_shard_bits);
+  return cache;
 }
 
-// FmtStatus formats the given arguments printf-style into a DBStatus.
-inline DBStatus FmtStatus(const char* fmt_str, ...) {
-  va_list ap;
-  va_start(ap, fmt_str);
-  std::string str;
-  fmt::StringAppendV(&str, fmt_str, ap);
-  va_end(ap);
-  return ToDBString(str);
+DBCache* DBRefCache(DBCache* cache) {
+  DBCache* res = new DBCache;
+  res->rep = cache->rep;
+  return res;
 }
 
-}  // namespace cockroach
+void DBReleaseCache(DBCache* cache) { delete cache; }
