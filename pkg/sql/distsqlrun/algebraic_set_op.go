@@ -15,14 +15,11 @@
 package distsqlrun
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -37,9 +34,26 @@ type algebraicSetOp struct {
 	opType                  AlgebraicSetOpSpec_SetOpType
 	ordering                Ordering
 	types                   []sqlbase.ColumnType
-	datumAlloc              *sqlbase.DatumAlloc
+	allCols                 columns
+	leftAccum, rightAccum   streamGroupAccumulator
+
+	// The following variables retain the state of the processor between
+	// successive calls to Next().
+	leftGroup, rightGroup []sqlbase.EncDatumRow
+	// rightMap stores counts of rightGroup, decrementing as rows are encountered
+	// in leftGroup.
+	rightMap map[string]int
+	// leftIdx is the index into leftGroup where we resume iteration.
+	leftIdx int
+	// cmp stores whether leftGroup < rightGroup.
+	cmp int
+
+	err        error
+	datumAlloc sqlbase.DatumAlloc
+	scratch    []byte
 }
 
+var _ RowSource = &algebraicSetOp{}
 var _ Processor = &algebraicSetOp{}
 
 func newAlgebraicSetOp(
@@ -79,7 +93,8 @@ func newAlgebraicSetOp(
 	}
 
 	e.types = lt
-	err := e.init(post, e.types, flowCtx, nil /* evalCtx */, output)
+	evalCtx := flowCtx.NewEvalCtx()
+	err := e.init(post, e.types, flowCtx, evalCtx, output)
 	if err != nil {
 		return nil, err
 	}
@@ -88,183 +103,243 @@ func newAlgebraicSetOp(
 }
 
 func (e *algebraicSetOp) Run(wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
+	if e.out.output == nil {
+		panic("algebraicSetOp output not initialized for emitting rows")
 	}
-
-	ctx := log.WithLogTag(e.flowCtx.Ctx, "ExceptAll", nil)
-	ctx, span := processorSpan(ctx, "exceptAll")
-	defer tracing.FinishSpan(span)
-
-	log.VEventf(ctx, 2, "starting exceptAll set process")
-	defer log.VEventf(ctx, 2, "exiting exceptAll")
-
-	defer e.leftSource.ConsumerDone()
-	defer e.rightSource.ConsumerDone()
-
-	e.evalCtx = e.flowCtx.NewEvalCtx()
-
-	switch e.opType {
-	case AlgebraicSetOpSpec_Except_all:
-		err := e.exceptAll(ctx)
-		DrainAndClose(ctx, e.out.output, err, e.leftSource, e.rightSource)
-
-	default:
-		panic(fmt.Sprintf("cannot run unsupported algebraicSetOp %v", e.opType))
+	Run(e.flowCtx.Ctx, e, e.out.output)
+	if wg != nil {
+		wg.Done()
 	}
 }
 
-// exceptAll pushes all rows in the left stream that are not present in the
-// right stream. It does not remove duplicates.
-func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
-	leftGroup := makeStreamGroupAccumulator(
-		e.leftSource, convertToColumnOrdering(e.ordering),
-	)
-	rightGroup := makeStreamGroupAccumulator(
-		e.rightSource, convertToColumnOrdering(e.ordering),
-	)
-
-	leftRows, err := leftGroup.advanceGroup(e.evalCtx, e.out.output)
-	if err != nil {
-		return err
+// producerMeta constructs the ProducerMetadata after consumption of rows has
+// terminated, either due to being indicated by the consumer, or because the
+// processor ran out of rows or encountered an error. It is ok for err to be
+// nil indicating that we're done producing rows even though no error occurred.
+func (e *algebraicSetOp) producerMeta(err error) *ProducerMetadata {
+	var meta *ProducerMetadata
+	if !e.closed {
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+		} else if trace := getTraceData(e.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
+		}
+		// We need to close as soon as we send producer metadata as we're done
+		// sending rows. The consumer is allowed to not call ConsumerDone().
+		e.internalClose()
 	}
-	rightRows, err := rightGroup.advanceGroup(e.evalCtx, e.out.output)
-	if err != nil {
-		return err
-	}
+	return meta
+}
 
-	allCols := make(columns, len(e.types))
-	for i := range allCols {
-		allCols[i] = uint32(i)
-	}
+func (e *algebraicSetOp) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	var row sqlbase.EncDatumRow
+	var meta *ProducerMetadata
 
-	// We iterate in lockstep through the groups of rows given equalilty under
-	// the common source ordering. Whenever we find a left group without a match
-	// on the right, it's easy - we output the full group. Whenever we find a
-	// group on the right without a match on the left, we ignore it. Whenever
-	// we find matching groups, we generate a hashMap of the right group and
-	// check the left group against the hashMap.
-	// TODO(arjun): if groups are large and we have a limit, we might want to
-	// stream through the leftGroup instead of accumulating it all.
 	for {
-		// If we exhause all left rows, we are done.
-		if len(leftRows) == 0 {
-			return nil
-		}
-		// If we exhause all right rows, we can emit all left rows.
-		if len(rightRows) == 0 {
-			break
+		switch e.opType {
+		case AlgebraicSetOpSpec_Except_all:
+			row, meta = e.nextExceptAll()
+		default:
+			panic(fmt.Sprintf("cannot run unsupported algebraicSetOp %v", e.opType))
 		}
 
-		cmp, err := CompareEncDatumRowForMerge(
+		if e.closed || meta != nil {
+			return nil, meta
+		}
+		if row == nil {
+			return nil, e.producerMeta(nil /* err */)
+		}
+
+		outRow, status, err := e.out.ProcessRow(e.ctx, row)
+		if err != nil {
+			return nil, e.producerMeta(err)
+		}
+		switch status {
+		case NeedMoreRows:
+			if outRow == nil {
+				continue
+			}
+		case DrainRequested:
+			e.leftSource.ConsumerDone()
+			e.rightSource.ConsumerDone()
+			continue
+		}
+		return outRow, nil
+	}
+}
+
+// nextExceptAll returns the next row in the left stream that is not present in the
+// right stream. It does not remove duplicates.
+func (e *algebraicSetOp) nextExceptAll() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	if e.maybeStart("exceptAll", "ExceptAll") {
+		e.evalCtx = e.flowCtx.NewEvalCtx()
+
+		e.leftAccum = makeStreamGroupAccumulator(
+			e.leftSource, convertToColumnOrdering(e.ordering),
+		)
+		e.rightAccum = makeStreamGroupAccumulator(
+			e.rightSource, convertToColumnOrdering(e.ordering),
+		)
+
+		e.leftGroup, e.err = e.leftAccum.advanceGroup(e.evalCtx, e.out.output)
+		if e.err != nil {
+			return nil, e.producerMeta(e.err)
+		}
+		e.rightGroup, e.err = e.rightAccum.advanceGroup(e.evalCtx, e.out.output)
+		if e.err != nil {
+			return nil, e.producerMeta(e.err)
+		}
+		e.resetIndexes()
+		if e.err != nil {
+			return nil, e.producerMeta(e.err)
+		}
+
+		e.allCols = make(columns, len(e.types))
+		for i := range e.allCols {
+			e.allCols[i] = uint32(i)
+		}
+
+	}
+
+	// The loop below forms a restartable state machine that iterates over a
+	// batch of rows from the left and right side. The state machine
+	// returns a result for every row that should be output.
+	for {
+		if e.rightGroup == nil {
+			// We have no more right rows, so emit all left rows.
+
+			if !e.maybeAdvanceLeft() {
+				if e.leftGroup == nil {
+					return nil, e.producerMeta(nil /* err */)
+				}
+
+				row := e.leftGroup[e.leftIdx]
+				e.leftIdx++
+
+				return row, nil
+			}
+			if e.err != nil {
+				return nil, e.producerMeta(e.err)
+			}
+		}
+
+		if e.cmp > 0 {
+			e.advanceRight()
+			if e.err != nil {
+				return nil, e.producerMeta(e.err)
+			}
+		} else if e.cmp == 0 {
+			if e.maybeAdvanceLeft() {
+				if e.leftGroup == nil {
+					return nil, e.producerMeta(nil /* err */)
+				}
+				continue
+			}
+
+			for e.leftIdx < len(e.leftGroup) {
+				encDatumRow := e.leftGroup[e.leftIdx]
+				e.leftIdx++
+
+				encoded, _, err := encodeColumnsOfRow(
+					&e.datumAlloc, e.scratch, encDatumRow, e.allCols, e.types, true, /* encodeNull */
+				)
+				e.scratch = encoded[:0]
+				if err != nil {
+					return nil, e.producerMeta(err)
+				}
+
+				e.maybeRefreshRightMap()
+
+				if count := e.rightMap[string(encoded)]; count == 0 {
+					return encDatumRow, nil
+				}
+				e.rightMap[string(encoded)]--
+			}
+		}
+		// emit the left group until exhaustion.
+		if !e.maybeAdvanceLeft() {
+			if e.leftGroup == nil {
+				return nil, e.producerMeta(e.err)
+			}
+
+			row := e.leftGroup[e.leftIdx]
+			e.leftIdx++
+			return row, nil
+		}
+		if e.err != nil {
+			return nil, e.producerMeta(e.err)
+		}
+	}
+
+}
+
+// maybeAdvanceLeft advances the left group if the left pointer is at the end
+// of the current group. It returns true if it advanced the group. If it returns
+// true the error field must be checked.
+func (e *algebraicSetOp) maybeAdvanceLeft() bool {
+	if e.leftIdx == len(e.leftGroup) {
+		e.advanceLeft()
+		return true
+	}
+	return false
+}
+
+// advanceLeft advances the left group. The error field must be checked.
+func (e *algebraicSetOp) advanceLeft() {
+	e.leftGroup, e.err = e.leftAccum.advanceGroup(e.evalCtx, e.out.output)
+	if e.leftGroup != nil {
+		e.resetIndexes()
+	}
+}
+
+// advanceRight advances the right group. The error field must be checked.
+func (e *algebraicSetOp) advanceRight() {
+	e.rightGroup, e.err = e.rightAccum.advanceGroup(e.evalCtx, e.out.output)
+	e.rightMap = nil
+	if e.rightGroup != nil {
+		e.resetIndexes()
+	}
+}
+
+// resetIndexes resets the struct state. The error field must be checked.
+func (e *algebraicSetOp) resetIndexes() {
+	e.leftIdx = 0
+	if e.leftGroup != nil && e.rightGroup != nil {
+		e.cmp, e.err = CompareEncDatumRowForMerge(
 			e.types,
-			leftRows[0], rightRows[0],
+			e.leftGroup[0], e.rightGroup[0],
 			convertToColumnOrdering(e.ordering), convertToColumnOrdering(e.ordering),
 			false, /* nullEquality */
-			e.datumAlloc,
-			e.evalCtx,
+			&e.datumAlloc, e.evalCtx,
 		)
-		if err != nil {
-			return err
-		}
-		if cmp == 0 {
-			var scratch []byte
-			rightMap := make(map[string]struct{}, len(rightRows))
-			for _, encDatumRow := range rightRows {
-				encoded, _, err := encodeColumnsOfRow(
-					e.datumAlloc, scratch, encDatumRow, allCols, e.types, true, /* encodeNull */
-				)
-				if err != nil {
-					return err
-				}
-				scratch = encoded[:0]
-				rightMap[string(encoded)] = struct{}{}
-			}
-			for _, encDatumRow := range leftRows {
-				encoded, _, err := encodeColumnsOfRow(
-					e.datumAlloc, scratch, encDatumRow, allCols, e.types, true, /* encodeNull */
-				)
-				if err != nil {
-					return err
-				}
-				scratch = encoded[:0]
-				if _, ok := rightMap[string(encoded)]; !ok {
-					status, err := e.out.EmitRow(ctx, encDatumRow)
-					if status == ConsumerClosed {
-						return nil
-					}
-					if err != nil {
-						return err
-					}
-				}
-			}
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
-			if err != nil {
-				return err
-			}
-			rightRows, err = rightGroup.advanceGroup(e.evalCtx, e.out.output)
-			if err != nil {
-				return err
-			}
-		}
-		if cmp < 0 {
-			for _, encDatumRow := range leftRows {
-				status, err := e.out.EmitRow(ctx, encDatumRow)
-				if status == ConsumerClosed {
-					return nil
-				}
-				if err != nil {
-					return err
-				}
-			}
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
-			if err != nil {
-				return err
-			}
-		}
-		if cmp > 0 {
-			rightRows, err = rightGroup.advanceGroup(e.evalCtx, e.out.output)
-			if len(rightRows) == 0 {
-				break
-			}
-			if err != nil {
-				return err
-			}
-		}
 	}
+}
 
-	if len(rightRows) == 0 {
-		// Emit all accumulated left rows.
-		for _, encDatumRow := range leftRows {
-			status, err := e.out.EmitRow(ctx, encDatumRow)
-			if status == ConsumerClosed {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-		}
+// refreshRightMap resets the right map. The error field must be checked.
+func (e *algebraicSetOp) maybeRefreshRightMap() {
+	if e.rightMap == nil {
+		e.rightMap = make(map[string]int, len(e.rightGroup))
 
-		// Emit all remaining rows.
-		for {
-			leftRows, err = leftGroup.advanceGroup(e.evalCtx, e.out.output)
-			// Emit all left rows until completion/error.
-			if err != nil || len(leftRows) == 0 {
-				return err
+		var encoded []byte
+		for _, encDatumRow := range e.rightGroup {
+			encoded, _, e.err = encodeColumnsOfRow(
+				&e.datumAlloc, nil, encDatumRow, e.allCols,
+				e.types, true, /* encodeNull */
+			)
+			if e.err != nil {
+				return
 			}
-			for _, row := range leftRows {
-				status, err := e.out.EmitRow(ctx, row)
-				if status == ConsumerClosed {
-					return nil
-				}
-				if err != nil {
-					return err
-				}
-			}
+			e.rightMap[string(encoded)]++
 		}
 	}
-	if !leftGroup.srcConsumed {
-		return errors.Errorf("exceptAll finished but leftGroup not consumed")
-	}
-	return nil
+}
+
+func (e *algebraicSetOp) ConsumerDone() {
+	e.leftSource.ConsumerDone()
+	e.rightSource.ConsumerDone()
+}
+
+func (e *algebraicSetOp) ConsumerClosed() {
+	e.leftSource.ConsumerClosed()
+	e.rightSource.ConsumerClosed()
 }
