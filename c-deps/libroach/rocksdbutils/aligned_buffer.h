@@ -1,12 +1,13 @@
 //  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
-//  This source code is licensed under both the GPLv2 (found in the
-//  COPYING file in this directory) and Apache 2.0 License
-//  (found in the LICENSE.Apache file in this directory).
+//  This source code is licensed under both the GPLv2 (found at
+//  https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+//  and Apache 2.0 License (found in licenses/APL.txt in the root
+//  of this repository).
 //
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE.leveldb file in this directory.
-// See the AUTHORS file for names of contributors.
+// found in the licences/LevelDB.txt file in in the root of this repository.
+// See the LevelDB.AUTHORS file for names of contributors.
 #pragma once
 
 #include <algorithm>
