@@ -292,9 +292,18 @@ func TestJSONSize(t *testing.T) {
 		{`true`, 0},
 		{`false`, 0},
 		{`null`, 0},
-		{`"hello"`, 21},
-		{`["hello","goodbye"]`, 76},
-		{`{"a":"b"}`, 66},
+		{`""`, stringHeaderSize},
+		{`"hello"`, stringHeaderSize + 5},
+		{`[]`, sliceHeaderSize},
+		{`[null]`, sliceHeaderSize + jsonInterfaceSize},
+		{`[""]`, sliceHeaderSize + jsonInterfaceSize + stringHeaderSize},
+		{`[[]]`, sliceHeaderSize + jsonInterfaceSize + sliceHeaderSize},
+		{`[{}]`, sliceHeaderSize + jsonInterfaceSize + sliceHeaderSize},
+		{`["hello","goodbye"]`, sliceHeaderSize + 2*jsonInterfaceSize + 2*stringHeaderSize + 12},
+		{`{}`, sliceHeaderSize},
+		{`{"":null}`, sliceHeaderSize + keyValuePairSize},
+		{`{"":{}}`, sliceHeaderSize + keyValuePairSize + sliceHeaderSize},
+		{`{"a":"b"}`, sliceHeaderSize + keyValuePairSize + 1 + stringHeaderSize + 1},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
