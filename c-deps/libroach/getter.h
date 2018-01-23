@@ -53,7 +53,3 @@ struct DBGetter : public Getter {
 };
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:

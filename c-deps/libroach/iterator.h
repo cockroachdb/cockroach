@@ -24,7 +24,3 @@ struct DBIterator {
   std::unique_ptr<rocksdb::WriteBatch> kvs;
   std::unique_ptr<rocksdb::WriteBatch> intents;
 };
-
-// local variables:
-// mode: c++
-// end:

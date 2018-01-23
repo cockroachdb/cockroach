@@ -34,7 +34,3 @@ class DBComparator : public rocksdb::Comparator {
 const DBComparator kComparator;
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:

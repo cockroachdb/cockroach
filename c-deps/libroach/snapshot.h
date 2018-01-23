@@ -41,7 +41,3 @@ struct DBSnapshot : public DBEngine {
 };
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:

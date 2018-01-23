@@ -82,7 +82,3 @@ WARN_UNUSED_RESULT inline bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key
 rocksdb::Slice KeyPrefix(const rocksdb::Slice& src);
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:
