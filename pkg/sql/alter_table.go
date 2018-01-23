@@ -81,10 +81,25 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
 				return err
 			}
+			// If the new column has a DEFAULT expression that uses a sequence, add references between
+			// its descriptor and this column descriptor.
+			if d.HasDefaultExpr() {
+				changedSeqDescs, err := maybeAddSequenceDependencies(n.tableDesc, col, expr, params.EvalContext())
+				if err != nil {
+					return err
+				}
+				for _, changedSeqDesc := range changedSeqDescs {
+					if err := params.p.writeTableDesc(params.ctx, changedSeqDesc); err != nil {
+						return err
+					}
+					params.p.notifySchemaChange(changedSeqDesc, sqlbase.InvalidMutationID)
+				}
+			}
+
 			// We're checking to see if a user is trying add a non-nullable column without a default to a
 			// non empty table by scanning the primary index span with a limit of 1 to see if any key exists.
 			if !col.Nullable && col.DefaultExpr == nil {
@@ -210,6 +225,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if dropped {
 				continue
 			}
+
+			// If the dropped column uses a sequence, remove references to it from that sequence.
+			if len(col.UsesSequenceIds) > 0 {
+				if err := removeSequenceDependencies(n.tableDesc, &col, params); err != nil {
+					return err
+				}
+			}
+
 			// You can't drop a column depended on by a view unless CASCADE was
 			// specified.
 			for _, ref := range n.tableDesc.DependedOnBy {
@@ -463,9 +486,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if dropped {
 				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 			}
-			if err := applyColumnMutation(
-				&col, t, &params.p.semaCtx, params.EvalContext(),
-			); err != nil {
+			if err := applyColumnMutation(n.tableDesc, &col, t, params); err != nil {
 				return err
 			}
 			n.tableDesc.UpdateColumnDescriptor(col)
@@ -557,25 +578,45 @@ func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterTableNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterTableNode) Close(context.Context)        {}
 
+// applyColumnMutation applies the mutation specified in `mut` to the given
+// columnDescriptor, and saves the containing table descriptor. If the column's
+// dependencies on sequences change, it updates them as well.
 func applyColumnMutation(
+	tableDesc *sqlbase.TableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
+	params runParams,
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableSetDefault:
+		if len(col.UsesSequenceIds) > 0 {
+			if err := removeSequenceDependencies(tableDesc, col, params); err != nil {
+				return err
+			}
+		}
 		if t.Default == nil {
 			col.DefaultExpr = nil
 		} else {
 			colDatumType := col.Type.ToDatumType()
-			if _, err := sqlbase.SanitizeVarFreeExpr(
-				t.Default, colDatumType, "DEFAULT", semaCtx, evalCtx,
-			); err != nil {
+			expr, err := sqlbase.SanitizeVarFreeExpr(
+				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, params.EvalContext(),
+			)
+			if err != nil {
 				return err
 			}
 			s := tree.Serialize(t.Default)
 			col.DefaultExpr = &s
+			// Add references to the sequence descriptors this column is now using.
+			changedSeqDescs, err := maybeAddSequenceDependencies(tableDesc, col, expr, params.EvalContext())
+			if err != nil {
+				return err
+			}
+			for _, changedSeqDesc := range changedSeqDescs {
+				if err := params.p.writeTableDesc(params.ctx, changedSeqDesc); err != nil {
+					return err
+				}
+				params.p.notifySchemaChange(changedSeqDesc, sqlbase.InvalidMutationID)
+			}
 		}
 
 	case *tree.AlterTableDropNotNull:
