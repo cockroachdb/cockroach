@@ -376,6 +376,12 @@ func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
 func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
 
+	bq.mu.Lock()
+	bq.maybeAddLocked(ctx, repl, now)
+	bq.mu.Unlock()
+}
+
+func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.Timestamp) {
 	// Load the system config if it's needed.
 	var cfg config.SystemConfig
 	var cfgOk bool
@@ -388,9 +394,6 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 			return
 		}
 	}
-
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
 
 	if bq.mu.stopped || bq.mu.disabled {
 		return
@@ -478,14 +481,10 @@ func (bq *baseQueue) addInternalLocked(
 
 	item, ok := bq.mu.replicas[desc.RangeID]
 	if ok {
-		// Replica is already processing. Mark to be requeued and bump requeue
-		// priority if necessary.
+		// Replica is already processing. Mark to be requeued.
 		if item.processing {
 			wasRequeued := item.requeue
 			item.requeue = true
-			if priority > item.priority {
-				item.priority = priority
-			}
 			return !wasRequeued, nil
 		}
 
@@ -737,10 +736,8 @@ func (bq *baseQueue) finishProcessingReplica(
 	bq.removeFromReplicaSetLocked(repl.RangeID)
 
 	if item.requeue {
-		_, qErr := bq.addInternalLocked(ctx, repl.Desc(), true /* should */, item.priority)
-		if !isExpectedQueueError(qErr) {
-			log.Errorf(ctx, "unable to requeue: %s", qErr)
-		}
+		// Maybe add replica back into queue.
+		bq.maybeAddLocked(ctx, repl, bq.store.Clock().Now())
 	} else if err != nil {
 		// Maybe add failing replica to purgatory if the queue supports it.
 		bq.maybeAddToPurgatoryLocked(ctx, stopper, repl, err)
