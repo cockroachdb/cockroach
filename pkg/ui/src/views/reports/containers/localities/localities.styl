@@ -1,0 +1,41 @@
+@require "~styl/base/palette.styl"
+
+.locality-table
+  width 100%
+  border 1px solid $table-border-color
+  border-collapse collapse
+  font-family Lato-Regular
+  font-weight 300
+  font-size 14px
+  vertical-align top
+  white-space nowrap
+  color $body-color
+
+  thead
+    tr
+      background-color white
+      padding 20px
+      font-size 12px
+      font-weight bold
+      letter-spacing 2px
+      text-transform uppercase
+      text-align left
+
+      td, th
+        padding 18px 20px
+        color $tooltip-color
+
+  tr
+    letter-spacing 0.33px
+    background-color white
+
+  tbody
+    tr:nth-child(2n+1)
+      background-color $background-color
+
+  td, th
+    padding 10px 20px
+    border-right 1px solid $table-border-color
+
+  .parent-location
+    color #aaa

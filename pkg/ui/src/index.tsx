@@ -44,6 +44,7 @@ import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
+import Localities from "src/views/reports/containers/localities";
 import Network from "src/views/reports/containers/network";
 import Nodes from "src/views/reports/containers/nodes";
 import Certificates from "src/views/reports/containers/certificates";
@@ -104,6 +105,7 @@ ReactDOM.render(
           <Route path="problemranges" component={ ProblemRanges }>
             <Route path={`:${nodeIDAttr}`} component={ ProblemRanges }/>
           </Route>
+          <Route path="localities" component={ Localities } />
           <Route path="network" component={ Network } />
           <Route path="nodes" component={ Nodes } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />

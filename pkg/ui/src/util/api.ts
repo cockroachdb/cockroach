@@ -21,6 +21,9 @@ export type TableDetailsResponseMessage = protos.cockroach.server.serverpb.Table
 export type EventsRequestMessage = protos.cockroach.server.serverpb.EventsRequest;
 export type EventsResponseMessage = protos.cockroach.server.serverpb.EventsResponse;
 
+export type LocationsRequestMessage = protos.cockroach.server.serverpb.LocationsRequest;
+export type LocationsResponseMessage = protos.cockroach.server.serverpb.LocationsResponse;
+
 export type NodesRequestMessage = protos.cockroach.server.serverpb.NodesRequest;
 export type NodesResponseMessage = protos.cockroach.server.serverpb.NodesResponse;
 
@@ -192,6 +195,10 @@ export function setUIData(req: SetUIDataRequestMessage, timeout?: moment.Duratio
 export function getEvents(req: EventsRequestMessage, timeout?: moment.Duration): Promise<EventsResponseMessage> {
   const queryString = propsToQueryString(_.pick(req, ["type", "target_id"]));
   return timeoutFetch(serverpb.EventsResponse, `${API_PREFIX}/events?${queryString}`, null, timeout);
+}
+
+export function getLocations(_req: LocationsRequestMessage, timeout?: moment.Duration): Promise<LocationsResponseMessage> {
+  return timeoutFetch(serverpb.LocationsResponse, `${API_PREFIX}/locations`, null, timeout);
 }
 
 // getNodes gets node data
