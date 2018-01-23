@@ -264,6 +264,18 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	return expr, nil
 }
 
+func isCastDeepValid(castFrom, castTo types.T) bool {
+	if castTo.FamilyEqual(types.FamArray) && castFrom.FamilyEqual(types.FamArray) {
+		return isCastDeepValid(castFrom.(types.TArray).Typ, castTo.(types.TArray).Typ)
+	}
+	for _, t := range validCastTypes(castTo) {
+		if castFrom.FamilyEqual(t) {
+			return true
+		}
+	}
+	return false
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ types.T) (TypedExpr, error) {
 	returnType := expr.castType()
@@ -302,12 +314,11 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ types.T) (TypedExpr, error) 
 	}
 
 	castFrom := typedSubExpr.ResolvedType()
-	for _, t := range validCastTypes(returnType) {
-		if castFrom.FamilyEqual(t) {
-			expr.Expr = typedSubExpr
-			expr.typ = returnType
-			return expr, nil
-		}
+
+	if isCastDeepValid(castFrom, returnType) {
+		expr.Expr = typedSubExpr
+		expr.typ = returnType
+		return expr, nil
 	}
 
 	return nil, pgerror.NewErrorf(pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", castFrom, expr.Type)
