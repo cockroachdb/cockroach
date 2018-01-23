@@ -330,9 +330,9 @@ func (a *Allocator) ComputeAction(
 
 type decisionDetails struct {
 	Target               string
-	Existing             string `json:",omitempty"`
-	RangeBytes           int64
-	RangeWritesPerSecond float64
+	Existing             string  `json:",omitempty"`
+	RangeBytes           int64   `json:",omitempty"`
+	RangeWritesPerSecond float64 `json:",omitempty"`
 }
 
 // AllocateTarget returns a suitable store for a new allocation with the
@@ -359,15 +359,16 @@ func (a *Allocator) AllocateTarget(
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
 		log.VEventf(ctx, 3, "add target: %s", target)
-		details, err := json.Marshal(decisionDetails{
-			Target:               target.String(),
-			RangeBytes:           rangeInfo.LogicalBytes,
-			RangeWritesPerSecond: rangeInfo.WritesPerSecond,
-		})
+		details := decisionDetails{Target: target.compactString(options)}
+		if options.statsBasedRebalancingEnabled {
+			details.RangeBytes = rangeInfo.LogicalBytes
+			details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
+		}
+		detailsBytes, err := json.Marshal(details)
 		if err != nil {
 			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %s", err)
 		}
-		return &target.store, string(details), nil
+		return &target.store, string(detailsBytes), nil
 	}
 
 	// When there are throttled stores that do match, we shouldn't send
@@ -436,15 +437,16 @@ func (a Allocator) RemoveTarget(
 		for _, exist := range rangeInfo.Desc.Replicas {
 			if exist.StoreID == bad.store.StoreID {
 				log.VEventf(ctx, 3, "remove target: %s", bad)
-				details, err := json.Marshal(decisionDetails{
-					Target:               bad.String(),
-					RangeBytes:           rangeInfo.LogicalBytes,
-					RangeWritesPerSecond: rangeInfo.WritesPerSecond,
-				})
+				details := decisionDetails{Target: bad.compactString(options)}
+				if options.statsBasedRebalancingEnabled {
+					details.RangeBytes = rangeInfo.LogicalBytes
+					details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
+				}
+				detailsBytes, err := json.Marshal(details)
 				if err != nil {
 					log.Warningf(ctx, "failed to marshal details for choosing remove target: %s", err)
 				}
-				return exist, string(details), nil
+				return exist, string(detailsBytes), nil
 			}
 		}
 	}
@@ -548,7 +550,7 @@ func (a Allocator) RebalanceTarget(
 				raftStatus, desc.Replicas, newReplica.ReplicaID)
 		}
 
-		removeReplica, details, err := a.simulateRemoveTarget(
+		removeReplica, removeDetails, err := a.simulateRemoveTarget(
 			ctx,
 			target.store.StoreID,
 			constraints,
@@ -559,7 +561,7 @@ func (a Allocator) RebalanceTarget(
 			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
 			return nil, ""
 		}
-		if shouldRebalanceBetween(ctx, *target, removeReplica, existingCandidates, details, options) {
+		if shouldRebalanceBetween(ctx, *target, removeReplica, existingCandidates, removeDetails, options) {
 			break
 		}
 		// Remove the considered target from our modified RangeDescriptor and from
@@ -571,16 +573,19 @@ func (a Allocator) RebalanceTarget(
 			return nil, ""
 		}
 	}
-	details, err := json.Marshal(decisionDetails{
-		Target:               target.String(),
-		Existing:             existingCandidates.String(),
-		RangeBytes:           rangeInfo.LogicalBytes,
-		RangeWritesPerSecond: rangeInfo.WritesPerSecond,
-	})
+	details := decisionDetails{
+		Target:   target.compactString(options),
+		Existing: existingCandidates.compactString(options),
+	}
+	if options.statsBasedRebalancingEnabled {
+		details.RangeBytes = rangeInfo.LogicalBytes
+		details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
+	}
+	detailsBytes, err := json.Marshal(details)
 	if err != nil {
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
 	}
-	return &target.store, string(details)
+	return &target.store, string(detailsBytes)
 }
 
 // shouldRebalanceBetween returns whether it's a good idea to rebalance to the
