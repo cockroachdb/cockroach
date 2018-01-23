@@ -116,8 +116,7 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
   }
 
   // TODO(mberhault): enable at some point. We still want to make sure people do not use it.
-  return rocksdb::Status::OK();
-  //  return rocksdb::Status::InvalidArgument("encryption is not supported");
+  return rocksdb::Status::InvalidArgument("encryption is not supported");
 }
 
 }  // namespace cockroach
