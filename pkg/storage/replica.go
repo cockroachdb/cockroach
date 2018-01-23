@@ -27,6 +27,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
@@ -4741,6 +4742,37 @@ func (r *Replica) processRaftCommand(
 		// before notifying a potentially waiting client.
 		r.handleEvalResultRaftMuLocked(ctx, lResult,
 			raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex)
+	}
+
+	// When set to true, recomputes the stats for the LHS and RHS of splits and
+	// makes sure that they agree with the state's range stats.
+	const expensiveSplitAssertion = false
+
+	if expensiveSplitAssertion && raftCmd.ReplicatedEvalResult.Split != nil {
+		split := raftCmd.ReplicatedEvalResult.Split
+		lhsStatsMS := r.GetMVCCStats()
+		lhsComputedMS, err := rditer.ComputeStatsForRange(&split.LeftDesc, r.store.Engine(), lhsStatsMS.LastUpdateNanos)
+		if err != nil {
+			log.Fatal(ctx, err)
+		}
+
+		rightReplica, err := r.store.GetReplica(split.RightDesc.RangeID)
+		if err != nil {
+			log.Fatal(ctx, err)
+		}
+
+		rhsStatsMS := rightReplica.GetMVCCStats()
+		rhsComputedMS, err := rditer.ComputeStatsForRange(&split.RightDesc, r.store.Engine(), rhsStatsMS.LastUpdateNanos)
+		if err != nil {
+			log.Fatal(ctx, err)
+		}
+
+		if diff := pretty.Diff(lhsStatsMS, lhsComputedMS); len(diff) > 0 {
+			log.Fatalf(ctx, "LHS split stats divergence: diff(claimed, computed) = %s", pretty.Diff(lhsStatsMS, lhsComputedMS))
+		}
+		if diff := pretty.Diff(rhsStatsMS, rhsComputedMS); len(diff) > 0 {
+			log.Fatalf(ctx, "RHS split stats divergence diff(claimed, computed) = %s", pretty.Diff(rhsStatsMS, rhsComputedMS))
+		}
 	}
 
 	if proposedLocally {
