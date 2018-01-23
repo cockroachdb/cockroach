@@ -1,10 +1,11 @@
 import React from "react";
 import { Link } from "react-router";
-import { cockroachIcon, databaseIcon } from "src/views/shared/components/icons";
+import { cockroachIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
 import homeIcon from "!!raw-loader!assets/home.svg";
 import metricsIcon from "!!raw-loader!assets/metrics.svg";
+import databasesIcon from "!!raw-loader!assets/databases.svg";
 import jobsIcon from "!!raw-loader!assets/jobs.svg";
 
 interface IconLinkProps {
@@ -50,7 +51,7 @@ export default class extends React.Component<{}, {}> {
       <ul className="navigation-bar__list">
         <IconLink to="/overview" icon={homeIcon} title="Overview" />
         <IconLink to="/cluster" icon={metricsIcon} title="Cluster" />
-        <IconLink to="/databases" icon={databaseIcon} title="Databases"/>
+        <IconLink to="/databases" icon={databasesIcon} title="Databases"/>
         <IconLink to="/jobs" icon={jobsIcon} title="Jobs"/>
       </ul>
       <ul className="navigation-bar__list navigation-bar__list--bottom">
