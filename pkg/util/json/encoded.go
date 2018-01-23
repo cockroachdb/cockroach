@@ -619,6 +619,13 @@ func (j *jsonEncoded) isScalar() bool {
 	return j.typ != ArrayJSONType && j.typ != ObjectJSONType
 }
 
+func (j *jsonEncoded) Len() int {
+	if j.typ != ArrayJSONType && j.typ != ObjectJSONType {
+		return 0
+	}
+	return j.containerLen
+}
+
 // EncodeInvertedIndexKeys implements the JSON interface.
 func (j *jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// TODO(justin): this could possibly be optimized.
