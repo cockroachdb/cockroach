@@ -318,6 +318,33 @@ func TestJSONSize(t *testing.T) {
 	}
 }
 
+func TestJSONLen(t *testing.T) {
+	testCases := []struct {
+		input string
+		len   int
+	}{
+		{`true`, 0},
+		{`false`, 0},
+		{`null`, 0},
+		{`"a"`, 0},
+		{`[]`, 0},
+		{`["a","b"]`, 2},
+		{`{}`, 0},
+		{`{"a":"b"}`, 1},
+	}
+	for _, tc := range testCases {
+		j, err := ParseJSON(tc.input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runDecodedAndEncoded(t, tc.input, j, func(t *testing.T, j JSON) {
+			if j.Len() != tc.len {
+				t.Fatalf("expected %d, got %d", tc.len, j.Len())
+			}
+		})
+	}
+}
+
 func TestMakeJSON(t *testing.T) {
 	testCases := []struct {
 		input    interface{}
