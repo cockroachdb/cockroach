@@ -34,7 +34,7 @@ var dbDir = flag.String("db-dir", "", "path to the db directory")
 var storeKeyPath = flag.String("store-key", "", "path to the active store key")
 
 type fileEntry struct {
-	envLevel int32
+	envLevel enginepb.EnvLevel
 	settings enginepbccl.EncryptionSettings
 }
 
