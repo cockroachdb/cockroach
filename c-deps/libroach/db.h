@@ -20,13 +20,6 @@
 #include <rocksdb/iterator.h>
 #include <rocksdb/status.h>
 #include <rocksdb/write_batch.h>
-#include <rocksdb/write_batch_base.h>
-
-struct DBIterator {
-  std::unique_ptr<rocksdb::Iterator> rep;
-  std::unique_ptr<rocksdb::WriteBatch> kvs;
-  std::unique_ptr<rocksdb::WriteBatch> intents;
-};
 
 namespace cockroach {
 
@@ -57,6 +50,9 @@ inline DBString ToDBString(const rocksdb::Slice& s) {
   return result;
 }
 
+// ToDBKey converts a rocksb::Slice to a DBKey.
+DBKey ToDBKey(const rocksdb::Slice& s);
+
 // ToString converts a DBSlice/DBString to a C++ string.
 inline std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
 inline std::string ToString(DBString s) { return std::string(s.data, s.len); }
@@ -69,14 +65,6 @@ inline rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data, s.len)
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k);
-
-// CockroachComparator returns CockroachDB's custom mvcc-aware RocksDB
-// comparator. The caller does not assume ownership.
-const ::rocksdb::Comparator* CockroachComparator();
-
-// GetDBBatchInserter returns a WriteBatch::Handler that operates on a
-// WriteBatchBase. The caller assumes ownership of the returned handler.
-::rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch);
 
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.
