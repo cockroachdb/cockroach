@@ -201,3 +201,38 @@ func TestExceptAll(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkExceptAll(b *testing.B) {
+	const numCols = 1
+	const numRows = 1000
+
+	ctx := context.Background()
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Ctx:      ctx,
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
+	spec := &AlgebraicSetOpSpec{
+		OpType: AlgebraicSetOpSpec_Except_all,
+	}
+	post := &PostProcessSpec{}
+	disposer := &RowDisposer{}
+	inputLeft := NewRepeatableRowSource(oneIntCol, makeIntRows(2*numRows, numCols))
+	inputRight := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+
+	b.SetBytes(int64(3 * 8 * numRows * numCols))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		d, err := newAlgebraicSetOp(flowCtx, spec, inputLeft, inputRight, post, disposer)
+		if err != nil {
+			b.Fatal(err)
+		}
+		d.Run(nil)
+		inputLeft.Reset()
+		inputRight.Reset()
+	}
+	b.StopTimer()
+}
