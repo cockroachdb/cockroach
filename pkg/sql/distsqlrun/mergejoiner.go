@@ -55,20 +55,24 @@ func newMergeJoiner(
 	post *PostProcessSpec,
 	output RowReceiver,
 ) (*mergeJoiner, error) {
+	leftEqCols := make([]uint32, len(spec.LeftOrdering.Columns))
+	rightEqCols := make([]uint32, len(spec.RightOrdering.Columns))
 	for i, c := range spec.LeftOrdering.Columns {
 		if spec.RightOrdering.Columns[i].Direction != c.Direction {
 			return nil, errors.New("Unmatched column orderings")
 		}
+		leftEqCols = append(leftEqCols, c.ColIdx)
+		rightEqCols = append(rightEqCols, spec.RightOrdering.Columns[i].ColIdx)
 	}
 
 	m := &mergeJoiner{
 		leftSource:  leftSource,
 		rightSource: rightSource,
 	}
-	// TODO: Adapt MergeJoiner to new joinerBase constructor.
+
 	err := m.joinerBase.init(flowCtx,
 		leftSource.OutputTypes(), rightSource.OutputTypes(),
-		spec.Type, spec.OnExpr, nil, nil, 0, post, output)
+		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output)
 	if err != nil {
 		return nil, err
 	}
