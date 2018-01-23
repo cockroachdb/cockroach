@@ -776,6 +776,12 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
+	// Unsuggest this range from the compaction queue.
+	unsuggestSpan := roachpb.Span{
+		Key:    roachpb.Key(s.Desc.StartKey),
+		EndKey: roachpb.Key(s.Desc.EndKey),
+	}
+	r.store.compactor.Unsuggest(ctx, unsuggestSpan)
 
 	// Nodes before v2.0 may send an incorrect Raft tombstone (see #12154) that was supposed
 	// to be unreplicated. Simply remove it.

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 const testCompactionLatency = 1 * time.Millisecond
@@ -435,7 +436,7 @@ func TestCompactorThresholds(t *testing.T) {
 			compactor.opts.CompactionMinInterval = time.Millisecond
 
 			for _, sc := range test.suggestions {
-				compactor.SuggestCompaction(context.Background(), sc)
+				compactor.Suggest(context.Background(), sc)
 			}
 
 			// If we expect no compaction, pause to ensure test will fail if
@@ -507,7 +508,7 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 	// Add a suggested compaction -- this won't get processed by this
 	// compactor for an hour.
 	compactor.opts.CompactionMinInterval = time.Hour
-	compactor.SuggestCompaction(context.Background(), storagebase.SuggestedCompaction{
+	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
 		Compaction: storagebase.Compaction{
 			Bytes:            defaultThresholdBytes,
@@ -548,7 +549,7 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 
 	// Add a suggested compaction that won't get processed because it's
 	// not over any of the thresholds.
-	compactor.SuggestCompaction(context.Background(), storagebase.SuggestedCompaction{
+	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
 		Compaction: storagebase.Compaction{
 			Bytes:            defaultThresholdBytes - 1,
@@ -572,4 +573,68 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestCompactorUnsuggest verifies that unsuggesting a span will
+// remove any overlapping suggestions.
+func TestCompactorUnsuggest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// This capacityFn will prevent compactions from running.
+	capacityFn := func() (roachpb.StoreCapacity, error) {
+		return roachpb.StoreCapacity{LogicalBytes: 100 * defaultThresholdBytes}, nil
+	}
+	compactor, we, cleanup := testSetup(capacityFn)
+	compactor.opts.CompactionMinInterval = time.Millisecond
+	compactor.opts.MaxSuggestedCompactionRecordAge = 1 * time.Millisecond
+	defer cleanup()
+
+	// Add suggested compactions with different spans.
+	for _, s := range []roachpb.Span{
+		{Key: key("a"), EndKey: key("b")},
+		{Key: key("aa"), EndKey: key("ac")},
+		{Key: key("b"), EndKey: key("c")},
+		{Key: key("ba"), EndKey: key("ca")},
+		{Key: key("c"), EndKey: key("cb")},
+		{Key: key("d"), EndKey: key("e")},
+	} {
+		compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+			StartKey: s.Key, EndKey: s.EndKey,
+			Compaction: storagebase.Compaction{
+				Bytes:            defaultThresholdBytes - 1,
+				SuggestedAtNanos: timeutil.Now().UnixNano(),
+			},
+		})
+	}
+
+	// Unsuggest an overlapping span and verify the remaining suggestions.
+	unsuggestSpan := roachpb.Span{Key: key("ac"), EndKey: key("c")}
+	compactor.Unsuggest(context.Background(), unsuggestSpan)
+	expRemainingSuggestions := []roachpb.Span{
+		{Key: key("aa"), EndKey: key("ac")},
+		{Key: key("c"), EndKey: key("cb")},
+		{Key: key("d"), EndKey: key("e")},
+	}
+	var remainingSuggestions []roachpb.Span
+	if err := we.Iterate(
+		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
+		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
+		func(kv engine.MVCCKeyValue) (bool, error) {
+			start, end, err := keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
+			if err != nil {
+				return true, errors.Errorf("failed to decode suggested compaction key: %s", err)
+			}
+			remainingSuggestions = append(remainingSuggestions, roachpb.Span{Key: start, EndKey: end})
+			return false, nil
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if a, e := remainingSuggestions, expRemainingSuggestions; !reflect.DeepEqual(a, e) {
+		t.Errorf("expected remaining suggested spans %+v; got %+v", e, a)
+	}
+
+	// Try another unsuggest, which will result in no spans being
+	// cleaned up, to verify that a noop is ok.
+	compactor.Unsuggest(context.Background(), unsuggestSpan)
 }
