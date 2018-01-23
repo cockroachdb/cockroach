@@ -73,7 +73,7 @@ func (we *wrappedEngine) GetSSTables() engine.SSTableInfos {
 	return ssti
 }
 
-func (we *wrappedEngine) CompactRange(start, end roachpb.Key) error {
+func (we *wrappedEngine) CompactRange(start, end roachpb.Key, forceBottommost bool) error {
 	we.mu.Lock()
 	defer we.mu.Unlock()
 	time.Sleep(testCompactionLatency)
@@ -435,7 +435,7 @@ func TestCompactorThresholds(t *testing.T) {
 			compactor.opts.CompactionMinInterval = time.Millisecond
 
 			for _, sc := range test.suggestions {
-				compactor.SuggestCompaction(context.Background(), sc)
+				compactor.Suggest(context.Background(), sc)
 			}
 
 			// If we expect no compaction, pause to ensure test will fail if
@@ -507,7 +507,7 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 	// Add a suggested compaction -- this won't get processed by this
 	// compactor for an hour.
 	compactor.opts.CompactionMinInterval = time.Hour
-	compactor.SuggestCompaction(context.Background(), storagebase.SuggestedCompaction{
+	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
 		Compaction: storagebase.Compaction{
 			Bytes:            defaultThresholdBytes,
@@ -548,7 +548,7 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 
 	// Add a suggested compaction that won't get processed because it's
 	// not over any of the thresholds.
-	compactor.SuggestCompaction(context.Background(), storagebase.SuggestedCompaction{
+	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
 		Compaction: storagebase.Compaction{
 			Bytes:            defaultThresholdBytes - 1,
