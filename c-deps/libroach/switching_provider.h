@@ -36,28 +36,28 @@ class CipherStreamCreator {
       const std::string& settings,
       std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) = 0;
 
-  // Return the EnvLevel for this stream creator. It should match files being operated on.
-  virtual enginepb::EnvLevel GetEnvLevel() = 0;
+  // Return the EnvType for this stream creator. It should match files being operated on.
+  virtual enginepb::EnvType GetEnvType() = 0;
 };
 
 // SwitchingProvider implement EncryptionProvider.
 //
-// It can have a number of cipher creators registered, each with a corresponding Env level.
-// Env level denotes which level of key source we are using:
+// It can have a number of cipher creators registered, each with a corresponding Env type.
+// Env type denotes which type of key source we are using:
 // - 0: plaintext
 // - 1: store-level keys
 // - 2: data-level keys
 //
 // For example: with encryption enabled, we have the following Envs being used:
-//   db_env: level 2, pointing to a cipher stream creator backed by data-level keys
-//   data_env: level 1, pointing to a cipher stream creater backed by store-level keys
-//   store_env: level 0, pointing to the base env (default or in memory env)
+//   db_env: type 2, pointing to a CTR cipher stream creator backed by data-level keys
+//   data_env: type 1, pointing to a CTR cipher stream creater backed by store-level keys
+//   store_env: type 0, pointing to the base env (default or in memory env)
 //
-// The env level is stored in the file registry to ensure that:
+// The env type is stored in the file registry to ensure that:
 // 1) we have the necessary envs (eg: we can't stop specifying encryption flags if we have encrypted
 // files) 2) we know which env is responsible for which file
 //
-// When an Env requests a cipher stream, it specifies the env level, filename,
+// When an Env requests a cipher stream, it specifies a creator, filename,
 // and whether the file is new.
 class SwitchingProvider final : public rocksdb_utils::EncryptionProvider {
  public:
@@ -66,13 +66,13 @@ class SwitchingProvider final : public rocksdb_utils::EncryptionProvider {
 
   // Register a CipherStreamCreator. This must be done at initialization time (before any calls to
   // CreateCipherStream) and is not safe for concurrent use.
-  // This returns an error if a cipher stream creator with the same GetEnvLevel() is registered.
+  // This returns an error if a cipher stream creator with the same GetEnvType() is registered.
   // Takes ownership of the creator.
   rocksdb::Status RegisterCipherStreamCreator(std::unique_ptr<CipherStreamCreator> creator);
 
-  // Verifies that all env levels described by the file registry have a registered
+  // Verifies that all env types described by the file registry have a registered
   // CipherStreamCreator.
-  rocksdb::Status CheckEnvLevels();
+  rocksdb::Status CheckEnvTypes();
 
   // The following implement EncryptionProvider.
   virtual rocksdb::Status

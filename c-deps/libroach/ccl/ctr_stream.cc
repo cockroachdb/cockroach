@@ -90,7 +90,7 @@ rocksdb::Status CTRCipherStreamCreator::CreateCipherStreamFromSettings(
   return BuildCipherStream(enc_settings, key.get(), result);
 }
 
-enginepb::EnvLevel CTRCipherStreamCreator::GetEnvLevel() { return env_level_; }
+enginepb::EnvType CTRCipherStreamCreator::GetEnvType() { return env_type_; }
 
 CTRCipherStream::CTRCipherStream(rocksdb_utils::BlockCipher* c, const std::string& nonce,
                                  uint32_t counter)

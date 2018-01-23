@@ -34,13 +34,13 @@ var dbDir = flag.String("db-dir", "", "path to the db directory")
 var storeKeyPath = flag.String("store-key", "", "path to the active store key")
 
 type fileEntry struct {
-	envLevel enginepb.EnvLevel
+	envType  enginepb.EnvType
 	settings enginepbccl.EncryptionSettings
 }
 
 func (f fileEntry) String() string {
-	ret := fmt.Sprintf(" level: %d, %s\n",
-		f.envLevel, f.settings.EncryptionType)
+	ret := fmt.Sprintf(" env type: %d, %s\n",
+		f.envType, f.settings.EncryptionType)
 	if f.settings.EncryptionType != enginepbccl.EncryptionType_Plaintext {
 		ret += fmt.Sprintf("  keyID: %s\n  nonce: % x\n  counter: %d\n",
 			f.settings.KeyId,
@@ -81,7 +81,7 @@ func loadFileRegistry() {
 			log.Fatalf(context.Background(), "could not unmarshal encryption setting for %s: %v", name, err)
 		}
 
-		fileRegistry[name] = fileEntry{entry.EnvLevel, encSettings}
+		fileRegistry[name] = fileEntry{entry.EnvType, encSettings}
 	}
 
 	log.Infof(context.Background(), "file registry contains %d entries", len(reg.Files))
