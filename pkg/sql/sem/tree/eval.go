@@ -2550,7 +2550,9 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DOid:
 			res = &v.DInt
 		}
-		return res, nil
+		if res != nil {
+			return res, nil
+		}
 
 	case *coltypes.TFloat:
 		switch v := d.(type) {
@@ -2817,8 +2819,18 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DString:
 			return ParseDArrayFromString(ctx, string(*v), typ.ParamType)
 		case *DArray:
-			if (*v).ParamTyp == coltypes.CastTargetToDatumType((*typ).ParamType) {
+			if paramType := coltypes.CastTargetToDatumType(typ.ParamType); v.ParamTyp == paramType {
 				return d, nil
+			} else {
+				dcast := NewDArray(paramType)
+				for _, e := range v.Array {
+					ecast, err := performCast(ctx, e, typ.ParamType)
+					if err != nil {
+						return nil, err
+					}
+					dcast.Append(ecast)
+				}
+				return dcast, nil
 			}
 		}
 	case *coltypes.TOid:

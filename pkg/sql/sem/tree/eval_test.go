@@ -840,6 +840,7 @@ func TestEval(t *testing.T) {
 		{`10::int::timestamp`, `'1970-01-01 00:00:10+00:00'`},
 		{`10::int::timestamptz`, `'1970-01-01 00:00:10+00:00'`},
 		{`10123456::int::interval`, `'10s123ms456µs'`},
+		{`ARRAY[NULL]::string[]`, `ARRAY['NULL']`},
 		// Type annotation expressions.
 		{`ANNOTATE_TYPE('s', string)`, `'s'`},
 		{`ANNOTATE_TYPE('s', bytes)`, `'\x73'`},
