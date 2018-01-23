@@ -81,7 +81,7 @@ func TrackRaftProtos() func() []reflect.Type {
 			return
 		}
 
-		var pcs [100]uintptr
+		var pcs [256]uintptr
 		if numCallers := runtime.Callers(0, pcs[:]); numCallers == len(pcs) {
 			panic(fmt.Sprintf("number of callers %d might have exceeded slice size %d", numCallers, len(pcs)))
 		}
