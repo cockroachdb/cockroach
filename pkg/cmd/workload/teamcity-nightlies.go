@@ -39,11 +39,9 @@ func init() {
 // clusters (# of machines in each locality) are going to generalize. For now,
 // just hardcode what we had before.
 var singleDCTests = map[string]string{
-	// TODO(dan): Enable the final list once splits are supported in the `kv`
-	// workload.
-	// `kv0`: `./workload run kv --read-percent=0 --splits=1000 --concurrency=384 --duration=10m`,
-	// `kv95`: `./workload run kv --read-percent=95 --splits=1000 --concurrency=384 --duration=10m`,
-	`kv95`: `./workload run kv --read-percent=95 --concurrency=384 --duration=10m`,
+	`kv0`:    `./workload run kv --read-percent=0 --splits=1000 --concurrency=384 --duration=10m`,
+	`kv95`:   `./workload run kv --read-percent=95 --splits=1000 --concurrency=384 --duration=10m`,
+	`splits`: `./workload run kv --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1`,
 }
 
 func runTeamcityNightlies(_ *cobra.Command, args []string) error {

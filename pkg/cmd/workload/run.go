@@ -234,6 +234,11 @@ func runRun(gen workload.Generator, args []string) error {
 	if _, err := workload.Setup(db, gen, batchSize); err != nil {
 		return err
 	}
+	for _, table := range gen.Tables() {
+		if err := workload.Split(ctx, db, table, *concurrency); err != nil {
+			return err
+		}
+	}
 
 	var limiter *rate.Limiter
 	if *maxRate > 0 {
