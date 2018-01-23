@@ -19,11 +19,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // useInitMode is an option for runTestWithCluster.
@@ -82,6 +82,13 @@ func TestInitModeNone(t *testing.T) {
 func testInitModeNoneInner(
 	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
 ) {
+	// If we can't initialize the cluster via this interface, give up.
+	// TODO(bdarnell): support RunInitCommand on the Cluster interface?
+	lc, ok := c.(*cluster.DockerCluster)
+	if !ok {
+		return
+	}
+
 	var dbs []*gosql.DB
 	defer func() {
 		for _, db := range dbs {
@@ -93,20 +100,28 @@ func testInitModeNoneInner(
 		dbs = append(dbs, makePGClient(t, c.PGUrl(ctx, i)))
 	}
 
-	// Initially, we can't connect to any node.
+	// Give the server time to bind its ports.
+	// TODO(bdarnell): Make dockercluster use the systemd readiness
+	// notification instead of fire-and-forget for INIT_NONE
+	time.Sleep(time.Second)
+
+	// Initially, we can connect to any node, but queries issued will hang.
+	errCh := make(chan error, len(dbs))
 	for _, db := range dbs {
-		var val int
-		if err := db.QueryRow("SELECT 1").Scan(&val); err == nil {
-			// TODO(bdarnell): more precise error assertions
-			t.Errorf("did not get expected error")
-		}
+		db := db
+		go func() {
+			var val int
+			errCh <- db.QueryRow("SELECT 1").Scan(&val)
+		}()
 	}
 
-	// If we can, initialize the cluster and proceed.
-	// TODO(bdarnell): support RunInitCommand on the Cluster interface?
-	lc, ok := c.(*cluster.DockerCluster)
-	if !ok {
-		return
+	// Give them time to get a "connection refused" or similar error if
+	// the server isn't listening.
+	time.Sleep(time.Second)
+	select {
+	case err := <-errCh:
+		t.Fatalf("query finished prematurely with err %v", err)
+	default:
 	}
 
 	// TODO(bdarnell): initialize a node other than 0. This will provide
@@ -127,14 +142,24 @@ func testInitModeNoneInner(
 			err, output)
 	}
 
-	// Once initialized, we can query each node.
-	testutils.SucceedsSoon(t, func() error {
-		for i, db := range dbs {
-			var val int
-			if err := db.QueryRow("SELECT 1").Scan(&val); err != nil {
-				return errors.Wrapf(err, "querying node %d", i)
+	// Once initialized, the queries we started earlier will finish.
+	deadline := time.After(10 * time.Second)
+	for i := 0; i < len(dbs); i++ {
+		select {
+		case err := <-errCh:
+			if err != nil {
+				t.Errorf("querying node %d: %s", i, err)
 			}
+		case <-deadline:
+			t.Errorf("timed out waiting for query %d", err)
 		}
-		return nil
-	})
+	}
+
+	// New queries will work too.
+	for i, db := range dbs {
+		var val int
+		if err := db.QueryRow("SELECT 1").Scan(&val); err != nil {
+			t.Errorf("querying node %d: %s", i, err)
+		}
+	}
 }
