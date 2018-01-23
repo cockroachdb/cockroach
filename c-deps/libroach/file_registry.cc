@@ -58,14 +58,14 @@ rocksdb::Status FileRegistry::Load() {
   return rocksdb::Status::OK();
 }
 
-std::unordered_set<int> FileRegistry::GetUsedEnvLevels() {
+std::unordered_set<int> FileRegistry::GetUsedEnvTypes() {
   std::unordered_set<int> ret;
 
   std::unique_lock<std::mutex> l(mu_);
   assert(registry_ != nullptr);
 
   for (auto it : registry_->files()) {
-    ret.insert(it.second.env_level());
+    ret.insert(it.second.env_type());
   }
 
   return ret;

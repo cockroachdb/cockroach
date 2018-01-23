@@ -17,8 +17,8 @@
 // Takes ownership of the KeyManager.
 class CTRCipherStreamCreator final : public CipherStreamCreator {
  public:
-  CTRCipherStreamCreator(KeyManager* key_mgr, enginepb::EnvLevel env_level)
-      : key_manager_(key_mgr), env_level_(env_level) {}
+  CTRCipherStreamCreator(KeyManager* key_mgr, enginepb::EnvType env_type)
+      : key_manager_(key_mgr), env_type_(env_type) {}
   virtual ~CTRCipherStreamCreator();
 
   virtual rocksdb::Status InitSettingsAndCreateCipherStream(
@@ -30,11 +30,11 @@ class CTRCipherStreamCreator final : public CipherStreamCreator {
       const std::string& settings,
       std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) override;
 
-  virtual enginepb::EnvLevel GetEnvLevel() override;
+  virtual enginepb::EnvType GetEnvType() override;
 
  private:
   std::unique_ptr<KeyManager> key_manager_;
-  enginepb::EnvLevel env_level_;
+  enginepb::EnvType env_type_;
 };
 
 class CTRCipherStream final : public rocksdb_utils::BlockAccessCipherStream {

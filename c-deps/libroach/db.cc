@@ -165,7 +165,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
 
   if (env_ctx->switching_provider != nullptr) {
     // We are using the switching provider. Make sure the OpenHook sets all the needed env levels.
-    auto status = env_ctx->switching_provider->CheckEnvLevels();
+    auto status = env_ctx->switching_provider->CheckEnvTypes();
     if (!status.ok()) {
       return ToDBStatus(status);
     }

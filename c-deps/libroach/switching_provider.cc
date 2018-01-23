@@ -20,20 +20,20 @@ SwitchingProvider::~SwitchingProvider() {}
 
 rocksdb::Status
 SwitchingProvider::RegisterCipherStreamCreator(std::unique_ptr<CipherStreamCreator> creator) {
-  auto res = creators_.insert(std::make_pair(creator->GetEnvLevel(), std::move(creator)));
+  auto res = creators_.insert(std::make_pair(creator->GetEnvType(), std::move(creator)));
   if (res.second != true) {
     return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
-        "double registration of cipher creator at env_level %d", creator->GetEnvLevel()));
+        "double registration of cipher creator at env_type %d", creator->GetEnvType()));
   }
   return rocksdb::Status::OK();
 }
 
-rocksdb::Status SwitchingProvider::CheckEnvLevels() {
-  auto levels = registry_->GetUsedEnvLevels();
-  for (auto it : levels) {
+rocksdb::Status SwitchingProvider::CheckEnvTypes() {
+  auto used_types = registry_->GetUsedEnvTypes();
+  for (auto it : used_types) {
     if (creators_.find(it) == creators_.cend()) {
       return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
-          "registry has encrypted files at env_level %d, but we do not have a registered "
+          "registry has encrypted files at env_type %d, but we do not have a registered "
           "CipherStreamCreator for it, did you specify all encryption options?",
           it));
     }
@@ -63,12 +63,12 @@ rocksdb::Status SwitchingProvider::LookupAndCreateCipherStream(
     return rocksdb::Status::OK();
   }
 
-  // File entry exists: check that the env_level corresponds to the requested one.
-  if (file_entry->env_level() != creator->GetEnvLevel()) {
+  // File entry exists: check that the env_type corresponds to the requested one.
+  if (file_entry->env_type() != creator->GetEnvType()) {
     return rocksdb::Status::InvalidArgument(
-        fmt::StringPrintf("file %s was written using env_level %d, but we are trying to read it "
-                          "using env_level %d: problems will occur",
-                          fname.c_str(), file_entry->env_level(), creator->GetEnvLevel()));
+        fmt::StringPrintf("file %s was written using env_type %d, but we are trying to read it "
+                          "using env_type %d: problems will occur",
+                          fname.c_str(), file_entry->env_type(), creator->GetEnvType()));
   }
 
   return creator->CreateCipherStreamFromSettings(file_entry->encryption_settings(), result);
@@ -80,12 +80,12 @@ rocksdb::Status SwitchingProvider::InitAndCreateCipherStream(
 
   // Look for file in registry.
   auto file_entry = registry_->GetFileEntry(fname);
-  if (file_entry != nullptr && file_entry->env_level() != creator->GetEnvLevel()) {
-    // File entry exists but the env_level does not match the requested one.
+  if (file_entry != nullptr && file_entry->env_type() != creator->GetEnvType()) {
+    // File entry exists but the env_type does not match the requested one.
     return rocksdb::Status::InvalidArgument(
-        fmt::StringPrintf("file %s was written using env_level %d, but we are overwriting it "
-                          "using env_level %d: problems will occur",
-                          fname.c_str(), file_entry->env_level(), creator->GetEnvLevel()));
+        fmt::StringPrintf("file %s was written using env_type %d, but we are overwriting it "
+                          "using env_type %d: problems will occur",
+                          fname.c_str(), file_entry->env_type(), creator->GetEnvType()));
   }
 
   std::string encryption_settings;
@@ -101,7 +101,7 @@ rocksdb::Status SwitchingProvider::InitAndCreateCipherStream(
     // Encryption settings specified: create a FileEntry and save it, overwriting any existing
     // one.
     std::unique_ptr<enginepb::FileEntry> new_entry(new enginepb::FileEntry());
-    new_entry->set_env_level(creator->GetEnvLevel());
+    new_entry->set_env_type(creator->GetEnvType());
     new_entry->set_encryption_settings(encryption_settings);
     return registry_->SetFileEntry(fname, std::move(new_entry));
   }

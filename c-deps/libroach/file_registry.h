@@ -45,8 +45,8 @@ class FileRegistry {
   // OK if the file does not exist or is empty.
   rocksdb::Status Load();
 
-  // Returns a hash-set of all used env levels.
-  std::unordered_set<int> GetUsedEnvLevels();
+  // Returns a hash-set of all used env types.
+  std::unordered_set<int> GetUsedEnvTypes();
 
   // Returns the FileEntry for the specified file.
   std::unique_ptr<enginepb::FileEntry> GetFileEntry(const std::string& filename);
