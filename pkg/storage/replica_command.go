@@ -527,6 +527,9 @@ func resolveLocalIntents(
 			if inSpan != nil {
 				intent.Span = *inSpan
 				num, resumeSpan, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, resolveAllowance)
+				if err != nil {
+					return err
+				}
 				if knobs.NumKeysEvaluatedForRangeIntentResolution != nil {
 					atomic.AddInt64(knobs.NumKeysEvaluatedForRangeIntentResolution, num)
 				}
@@ -537,7 +540,7 @@ func resolveLocalIntents(
 					}
 					externalIntents = append(externalIntents, *resumeSpan)
 				}
-				return err
+				return nil
 			}
 			return nil
 		}(); err != nil {
