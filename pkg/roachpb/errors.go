@@ -606,15 +606,15 @@ func (e *StoreNotFoundError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &StoreNotFoundError{}
 
-func (e *UntrackedTxnError) Error() string {
+func (e *DeprecatedUntrackedTxnError) Error() string {
 	return e.message(nil)
 }
 
-func (*UntrackedTxnError) message(_ *Error) string {
+func (*DeprecatedUntrackedTxnError) message(_ *Error) string {
 	return "writing transaction timed out or ran on multiple coordinators"
 }
 
-var _ ErrorDetailInterface = &UntrackedTxnError{}
+var _ ErrorDetailInterface = &DeprecatedUntrackedTxnError{}
 
 func (e *TxnPrevAttemptError) Error() string {
 	return e.message(nil)

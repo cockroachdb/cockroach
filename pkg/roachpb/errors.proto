@@ -329,10 +329,8 @@ message HandledRetryableTxnError {
   optional Transaction transaction = 3 [(gogoproto.nullable) = false];
 }
 
-// An UntrackedTxnError indicates that an attempt to transmit a batch request
-// for a Transaction failed because the Transaction was not being tracked by
-// the TxnCoordSender properly.
-message UntrackedTxnError {
+// DeprecatedUntrackedTxnError is deprecated.
+message DeprecatedUntrackedTxnError {
   option (gogoproto.equal) = true;
 }
 
@@ -387,7 +385,7 @@ message ErrorDetail {
   // needs to be communicated from the TxnCoordSender and Txn to the upper
   // layers through the Sender interface.
   optional HandledRetryableTxnError handled_retryable_txn_error = 28;
-  optional UntrackedTxnError untracked_txn_error = 29;
+  optional DeprecatedUntrackedTxnError deprecated_untracked_txn_error = 29;
   optional TxnPrevAttemptError txn_aborted_async_err = 30;
   optional IntegerOverflowError integer_overflow = 31;
   optional UnsupportedRequestError unsupported_request = 32;
