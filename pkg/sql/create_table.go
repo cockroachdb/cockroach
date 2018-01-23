@@ -473,7 +473,7 @@ func resolveFK(
 		feature := fmt.Sprintf("unsupported: ON DELETE %s", d.Actions.Delete)
 		return pgerror.Unimplemented(feature, feature)
 	}
-	if d.Actions.Update == tree.SetNull || d.Actions.Update == tree.SetDefault {
+	if d.Actions.Update == tree.SetDefault {
 		feature := fmt.Sprintf("unsupported: ON UPDATE %s", d.Actions.Update)
 		return pgerror.Unimplemented(feature, feature)
 	}
@@ -526,6 +526,7 @@ func resolveFK(
 			}
 		}
 	}
+
 	ref := sqlbase.ForeignKeyReference{
 		Table:           target.ID,
 		Index:           targetIdxID,
