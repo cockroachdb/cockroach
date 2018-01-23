@@ -93,9 +93,10 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	if datum == tree.DNull {
 		switch op {
 		case eqOp, ltOp, gtOp, leOp, geOp, neOp:
-			// This expression should have been converted to NULL during
-			// type checking.
-			panic("comparison with NULL")
+			// The result of this expression is always NULL. Normally, this expression
+			// should have been converted to NULL during type checking; but if the
+			// NULL is coming from a placeholder, that doesn't happen.
+			return LogicalSpans{}, true, true
 
 		case isOp:
 			if !c.colInfos[offset].Nullable {
@@ -128,9 +129,6 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 		return LogicalSpans{sp}, true, true
 
 	case neOp, isNotOp:
-		if datum == tree.DNull {
-			panic("comparison with NULL")
-		}
 		spans := LogicalSpans{c.makeNotNullSpan(offset), c.makeNotNullSpan(offset)}
 		spans[0].End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
 		spans[1].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
