@@ -163,6 +163,7 @@ func NewVirtualSchemaHolder(
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to initialize %s", table.schema)
 			}
+
 			if schema.tableValidator != nil {
 				if err := schema.tableValidator(&tableDesc); err != nil {
 					return nil, errors.Wrap(err, "programmer error")
@@ -208,7 +209,16 @@ func initVirtualTableDesc(
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
+
 	create := stmt.(*tree.CreateTable)
+	for _, def := range create.Defs {
+		if d, ok := def.(*tree.ColumnTableDef); ok && d.HasDefaultExpr() {
+			return sqlbase.TableDescriptor{},
+				errors.Errorf("virtual tables are not allowed to use default exprs "+
+					"because bootstrapping: %s:%s", create.Table, d.Name)
+		}
+	}
+
 	return MakeTableDesc(
 		ctx,
 		nil, /* txn */
