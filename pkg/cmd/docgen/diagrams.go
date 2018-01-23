@@ -420,8 +420,8 @@ var specs = []stmtSpec{
 	{
 		name:    "create_sequence_stmt",
 		inline:  []string{"opt_sequence_option_list", "sequence_option_list", "sequence_option_elem"},
-		replace: map[string]string{"signed_iconst64": "integer"},
-		unlink:  []string{"integer"},
+		replace: map[string]string{"signed_iconst64": "integer", "any_name": "sequence_name"},
+		unlink:  []string{"integer", "sequence_name"},
 		nosplit: true,
 	},
 	{name: "create_table_as_stmt", inline: []string{"opt_column_list", "name_list"}},
@@ -664,6 +664,7 @@ var specs = []stmtSpec{
 	},
 	{name: "show_columns", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'COLUMNS'")}, replace: map[string]string{"var_name": "table_name"}, unlink: []string{"table_name"}},
 	{name: "show_constraints", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CONSTRAINTS'")}, replace: map[string]string{"var_name": "table_name"}, unlink: []string{"table_name"}},
+	{name: "show_create_sequence", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CREATE' 'SEQUENCE'")}, replace: map[string]string{"var_name": "sequence_name"}, unlink: []string{"sequence_name"}},
 	{name: "show_create_table", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CREATE' 'TABLE'")}, replace: map[string]string{"var_name": "table_name"}, unlink: []string{"table_name"}},
 	{name: "show_create_view", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CREATE' 'VIEW'")}, replace: map[string]string{"var_name": "view_name"}, unlink: []string{"view_name"}},
 	{name: "show_databases", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'DATABASES'")}},
