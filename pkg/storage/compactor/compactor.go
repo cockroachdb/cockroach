@@ -397,9 +397,9 @@ func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 	return totalBytes, nil
 }
 
-// SuggestCompaction writes the specified compaction to persistent
-// storage and pings the processing goroutine.
-func (c *Compactor) SuggestCompaction(ctx context.Context, sc storagebase.SuggestedCompaction) {
+// Suggest writes the specified compaction to persistent storage and
+// pings the processing goroutine.
+func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompaction) {
 	log.VEventf(ctx, 2, "suggested compaction from %s - %s: %+v", sc.StartKey, sc.EndKey, sc.Compaction)
 
 	// Check whether a suggested compaction already exists for this key span.
@@ -430,5 +430,42 @@ func (c *Compactor) SuggestCompaction(ctx context.Context, sc storagebase.Sugges
 	select {
 	case c.ch <- struct{}{}:
 	default:
+	}
+}
+
+// Unsuggest removes suggestions from the queue which overlap the
+// supplied span.
+func (c *Compactor) Unsuggest(ctx context.Context, span roachpb.Span) {
+	log.VEventf(ctx, 2, "unsuggest compaction from %s", span)
+
+	// Find and delete overlapping suggestions.
+	delBatch := c.eng.NewWriteOnlyBatch()
+	defer func() {
+		if err := delBatch.Commit(false); err != nil {
+			log.Warningf(ctx, "unable to delete suggested compaction records: %s", err)
+		}
+		delBatch.Close()
+	}()
+	// Iterate over all suggestions and mark any which overlap the
+	// unsuggest span for deletion.
+	if err := c.eng.Iterate(
+		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
+		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
+		func(kv engine.MVCCKeyValue) (bool, error) {
+			start, end, err := keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
+			if err != nil {
+				return true, errors.Errorf("failed to decode suggested span key %s", kv.Key.Key)
+			}
+			suggestSpan := roachpb.Span{Key: start, EndKey: end}
+			if span.Overlaps(suggestSpan) {
+				if err := delBatch.Clear(kv.Key); err != nil {
+					return true, errors.Errorf("failed to clear suggest span %s", suggestSpan)
+				}
+				log.VEventf(ctx, 2, "clearing compaction suggestion %s", suggestSpan)
+			}
+			return false, nil // continue iteration
+		},
+	); err != nil {
+		log.ErrEvent(ctx, err.Error())
 	}
 }
