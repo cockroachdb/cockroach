@@ -1000,9 +1000,31 @@ func (d *DBytes) max() (Datum, bool) {
 // AmbiguousFormat implements the Datum interface.
 func (*DBytes) AmbiguousFormat() bool { return false }
 
+func writeHexDigit(buf *bytes.Buffer, v byte) {
+	if v < 10 {
+		buf.WriteByte('0' + v)
+	} else {
+		buf.WriteByte('a' + (v - 10))
+	}
+}
+
+func writeAsHexString(buf *bytes.Buffer, d *DBytes) {
+	b := string(*d)
+	for i := 0; i < len(b); i++ {
+		writeHexDigit(buf, b[i]/16)
+		writeHexDigit(buf, b[i]%16)
+	}
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
-	encodeSQLBytes(buf, string(*d))
+	if f.withinArray {
+		buf.WriteString(`"\\x`)
+		writeAsHexString(buf, d)
+		buf.WriteString(`"`)
+	} else {
+		encodeSQLBytes(buf, string(*d))
+	}
 }
 
 // Size implements the Datum interface.
