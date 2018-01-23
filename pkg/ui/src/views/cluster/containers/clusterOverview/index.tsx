@@ -17,16 +17,6 @@ import spinner from "assets/spinner.gif";
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent(capacityChart);
 
-class ClusterTicker extends React.Component<{}, {}> {
-  render() {
-    return (
-      <section className="section cluster-ticker">
-        <h1>Cluster Overview</h1>
-      </section>
-    );
-  }
-}
-
 interface CapacityUsageProps {
   usedCapacity: number;
   usableCapacity: number;
@@ -189,13 +179,16 @@ const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps)(ClusterSu
  * Renders the main content of the cluster visualization page.
  */
 class ClusterOverview extends React.Component<{}, {}> {
+  static title() {
+    return "Cluster Overview";
+  }
+
   render() {
     return (
       <div>
-        <div className="cluster-overview">
-          <ClusterTicker />
+        <section className="cluster-overview">
           <ClusterSummaryConnected />
-        </div>
+        </section>
         <NodesOverview />
       </div>
     );
