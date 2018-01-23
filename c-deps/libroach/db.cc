@@ -169,16 +169,25 @@ DBStatus DBSyncWAL(DBEngine* db) {
 #endif
 }
 
-DBStatus DBCompact(DBEngine* db) { return DBCompactRange(db, DBSlice(), DBSlice()); }
+DBStatus DBCompact(DBEngine* db) {
+  return DBCompactRange(db, DBSlice(), DBSlice(), true /* force_bottommost */);
+}
 
-DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end) {
+DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bottommost) {
   rocksdb::CompactRangeOptions options;
   // By default, RocksDB doesn't recompact the bottom level (unless
   // there is a compaction filter, which we don't use). However,
   // recompacting the bottom layer is necessary to pick up changes to
   // settings like bloom filter configurations, and to fully reclaim
   // space after dropping, truncating, or migrating tables.
-  options.bottommost_level_compaction = rocksdb::BottommostLevelCompaction::kForce;
+  if (force_bottommost) {
+    options.bottommost_level_compaction = rocksdb::BottommostLevelCompaction::kForce;
+  }
+  // By default, RocksDB treats manual compaction requests as
+  // operating exclusively, preventing normal automatic compactions
+  // from running. This can block writes to the database, as L0
+  // SSTables will become full without being allowed to compact to L1.
+  options.exclusive_manual_compaction = false;
 
   // Compacting the entire database in a single-shot can use a
   // significant amount of additional (temporary) disk space. Instead,
