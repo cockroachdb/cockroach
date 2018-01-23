@@ -632,7 +632,3 @@ typedef mvccScanner<false> mvccForwardScanner;
 typedef mvccScanner<true> mvccReverseScanner;
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:

@@ -23,7 +23,3 @@ namespace cockroach {
 rocksdb::Options DBMakeOptions(DBOptions db_opts);
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:

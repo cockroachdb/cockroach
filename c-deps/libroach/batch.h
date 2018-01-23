@@ -69,7 +69,3 @@ struct DBWriteOnlyBatch : public DBEngine {
 ::rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch);
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:

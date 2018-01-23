@@ -23,7 +23,3 @@ struct DBCache {
   std::mutex mu;
   std::shared_ptr<rocksdb::Cache> rep;
 };
-
-// local variables:
-// mode: c++
-// end:

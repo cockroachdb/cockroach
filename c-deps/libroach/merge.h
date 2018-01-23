@@ -28,7 +28,3 @@ DBStatus MergeResult(cockroach::storage::engine::enginepb::MVCCMetadata* meta, D
 rocksdb::MergeOperator* NewMergeOperator();
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:

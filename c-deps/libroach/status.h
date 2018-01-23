@@ -40,7 +40,3 @@ inline DBStatus FmtStatus(const char* fmt_str, ...) {
 }
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:

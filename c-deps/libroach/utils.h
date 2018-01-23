@@ -22,7 +22,3 @@
 // On non-OK status, the original file has not been touched.
 rocksdb::Status SafeWriteStringToFile(rocksdb::Env* env, const std::string& filename,
                                       const std::string& contents);
-
-// local variables:
-// mode: c++
-// end:

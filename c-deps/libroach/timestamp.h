@@ -55,7 +55,3 @@ inline bool operator<=(const DBTimestamp& a, const DBTimestamp& b) { return !(b 
 inline bool operator>=(const DBTimestamp& a, const DBTimestamp& b) { return b <= a; }
 
 }  // namespace cockroach
-
-// local variables:
-// mode: c++
-// end:
