@@ -156,10 +156,11 @@ rocksdb::Status FileRegistry::MaybeRenameEntry(const std::string& src, const std
   std::unique_lock<std::mutex> l(mu_);
   assert(registry_ != nullptr);
 
-  // It's cheaper to check first rather than copy and check existence after deletion.
-  auto key = registry_->files().find(newSrc);
-  if (key == registry_->files().cend()) {
-    // Entry does not exist: do nothing.
+  // It's cheaper to check first rather than copy-then-check.
+  auto src_key = registry_->files().find(newSrc);
+  auto target_key = registry_->files().find(newTarget);
+  if ((src_key == registry_->files().cend()) && (target_key == registry_->files().cend())) {
+    // Entries do not exist: do nothing.
     return rocksdb::Status::OK();
   }
 
@@ -167,11 +168,15 @@ rocksdb::Status FileRegistry::MaybeRenameEntry(const std::string& src, const std
   auto new_registry =
       std::unique_ptr<enginepb::FileRegistry>(new enginepb::FileRegistry(*registry_));
 
-  auto new_entry = std::unique_ptr<enginepb::FileEntry>(new enginepb::FileEntry(key->second));
-
-  // Set entry and delete old one.
-  (*new_registry->mutable_files())[newTarget] = *new_entry;
-  new_registry->mutable_files()->erase(newSrc);
+  if (src_key != registry_->files().cend()) {
+    // Source key exists: copy to target and delete source.
+    auto new_entry = std::unique_ptr<enginepb::FileEntry>(new enginepb::FileEntry(src_key->second));
+    (*new_registry->mutable_files())[newTarget] = *new_entry;
+    new_registry->mutable_files()->erase(newSrc);
+  } else {
+    // Source doesn't exist, this means target does: delete it.
+    new_registry->mutable_files()->erase(newTarget);
+  }
 
   return PersistRegistryLocked(std::move(new_registry));
 }
@@ -185,20 +190,24 @@ rocksdb::Status FileRegistry::MaybeLinkEntry(const std::string& src, const std::
   assert(registry_ != nullptr);
 
   // It's cheaper to check first rather than copy and check existence after deletion.
-  auto key = registry_->files().find(newSrc);
-  if (key == registry_->files().cend()) {
-    // Entry does not exist: do nothing.
-    return rocksdb::Status::OK();
+  auto src_key = registry_->files().find(newSrc);
+  auto target_key = registry_->files().find(newTarget);
+  if ((src_key == registry_->files().cend()) && (target_key == registry_->files().cend())) {
+    // Entries do not exist: do nothing.
   }
 
   // Make a copy of the registry.
   auto new_registry =
       std::unique_ptr<enginepb::FileRegistry>(new enginepb::FileRegistry(*registry_));
 
-  auto new_entry = std::unique_ptr<enginepb::FileEntry>(new enginepb::FileEntry(key->second));
-
-  // Set entry.
-  (*new_registry->mutable_files())[newTarget] = *new_entry;
+  if (src_key != registry_->files().cend()) {
+    // Source key exists: copy to target.
+    auto new_entry = std::unique_ptr<enginepb::FileEntry>(new enginepb::FileEntry(src_key->second));
+    (*new_registry->mutable_files())[newTarget] = *new_entry;
+  } else {
+    // Source doesn't exist, this means target does: delete it.
+    new_registry->mutable_files()->erase(newTarget);
+  }
 
   return PersistRegistryLocked(std::move(new_registry));
 }

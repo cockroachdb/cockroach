@@ -22,6 +22,7 @@
 
 #include <algorithm>
 
+#include "../switching_provider.h"
 #include "aligned_buffer.h"
 #include "env_encryption.h"
 
@@ -318,8 +319,8 @@ class EncryptedRandomRWFile : public rocksdb::RandomRWFile {
 // EncryptedEnv implements an Env wrapper that adds encryption to files stored on disk.
 class EncryptedEnv : public rocksdb::EnvWrapper {
  public:
-  EncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, enginepb::EnvLevel env_level)
-      : rocksdb::EnvWrapper(base_env), provider_(provider), env_level_(env_level) {}
+  EncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, CipherStreamCreator* creator)
+      : rocksdb::EnvWrapper(base_env), provider_(provider), stream_creator_(creator) {}
 
   // NewSequentialFile opens a file for sequential reading.
   virtual rocksdb::Status NewSequentialFile(const std::string& fname,
@@ -338,7 +339,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(env_level_, fname, false /* new_file */, &stream);
+    status = provider_->CreateCipherStream(stream_creator_, fname, false /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -364,7 +365,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(env_level_, fname, false /* new_file */, &stream);
+    status = provider_->CreateCipherStream(stream_creator_, fname, false /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -390,7 +391,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(env_level_, fname, true /* new_file */, &stream);
+    status = provider_->CreateCipherStream(stream_creator_, fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -422,7 +423,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(env_level_, fname, true /* new_file */, &stream);
+    status = provider_->CreateCipherStream(stream_creator_, fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -449,7 +450,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(env_level_, fname, true /* new_file */, &stream);
+    status = provider_->CreateCipherStream(stream_creator_, fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -482,7 +483,8 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream, indicating whether this is a new file.
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(env_level_, fname, isNewFile /* new_file */, &stream);
+    status =
+        provider_->CreateCipherStream(stream_creator_, fname, isNewFile /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -516,14 +518,14 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
  private:
   EncryptionProvider* provider_;
-  enginepb::EnvLevel env_level_;
+  CipherStreamCreator* stream_creator_;
 };
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
 rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider,
-                              enginepb::EnvLevel env_level) {
-  return new EncryptedEnv(base_env, provider, env_level);
+                              CipherStreamCreator* creator) {
+  return new EncryptedEnv(base_env, provider, creator);
 }
 
 // Encrypt one or more (partial) blocks of data at the file offset.
