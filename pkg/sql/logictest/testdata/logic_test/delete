@@ -184,8 +184,7 @@ EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
 ----
 delete          ·      ·
  │              from   unindexed
- └── nosort     ·      ·
-      │         order  +v
+ └── render     ·      ·
       └── scan  ·      ·
 ·               table  unindexed@primary
 ·               spans  ALL

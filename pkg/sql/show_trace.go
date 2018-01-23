@@ -137,7 +137,11 @@ WHERE message LIKE 'fetched: %'
 	// is complete. If we want to enable EXPLAIN [SHOW TRACE FOR ...],
 	// this limitation of the vtable session_trace must be lifted first.
 	// TODO(andrei): make this code more elegant.
-	if s, ok := plan.(*sortNode); ok {
+	pl := plan
+	if r, ok := pl.(*renderNode); ok {
+		pl = r.source.plan
+	}
+	if s, ok := pl.(*sortNode); ok {
 		if w, ok := s.plan.(*windowNode); ok {
 			if r, ok := w.plan.(*renderNode); ok {
 				subPlan := r.source.plan

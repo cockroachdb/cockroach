@@ -123,8 +123,8 @@ func setNeededColumns(plan planNode, needed []bool) {
 		// source. To detect this, we need to reset the IndexedVarHelper
 		// and re-bind all the expressions.
 		n.ivarHelper.Reset()
-		for i, val := range needed {
-			if !val {
+		for i := range n.render {
+			if i >= len(needed) || !needed[i] {
 				// This render is not used, so reduce its expression to NULL.
 				n.render[i] = tree.DNull
 				continue
@@ -141,6 +141,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns, needed)
 
 	case *sortNode:
+		copy(n.needed, needed)
 		sourceNeeded := make([]bool, len(planColumns(n.plan)))
 		copy(sourceNeeded[:len(needed)], needed)
 
@@ -150,7 +151,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 
 		setNeededColumns(n.plan, sourceNeeded)
-		markOmitted(n.columns, sourceNeeded[:len(n.columns)])
 
 	case *groupNode:
 		// TODO(knz): This can be optimized by removing the aggregation
@@ -239,7 +239,7 @@ func allColumns(plan planNode) []bool {
 // markOmitted propagates the information from the needed array back
 // to the sqlbase.ResultColumns array.
 func markOmitted(cols sqlbase.ResultColumns, needed []bool) {
-	for i, val := range needed {
-		cols[i].Omitted = !val
+	for i := range cols {
+		cols[i].Omitted = i >= len(needed) || !needed[i]
 	}
 }

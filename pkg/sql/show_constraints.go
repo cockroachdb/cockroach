@@ -85,16 +85,12 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 					return nil, err
 				}
 			}
-
+			ordering := sqlbase.ColumnOrdering{
+				{ColIdx: 0, Direction: encoding.Ascending},
+				{ColIdx: 1, Direction: encoding.Ascending},
+			}
 			// Sort the results by constraint name.
-			return &sortNode{
-				plan: v,
-				ordering: sqlbase.ColumnOrdering{
-					{ColIdx: 0, Direction: encoding.Ascending},
-					{ColIdx: 1, Direction: encoding.Ascending},
-				},
-				columns: v.columns,
-			}, nil
+			return newSortNode(v, ordering, len(columns)), nil
 		},
 	}, nil
 }
