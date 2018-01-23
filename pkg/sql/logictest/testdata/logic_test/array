@@ -143,9 +143,10 @@ SELECT ARRAY[1,2,3]::UUID[]
 query error invalid cast: inet[] -> INT[]
 SELECT ARRAY['8.8.8.8'::INET, '8.8.4.4'::INET]::INT[]
 
-# this _should_ be valid, but isn't, yet
-query error invalid cast: int[] -> TEXT[]
+query T
 SELECT ARRAY[1,2,3]::TEXT[]
+----
+{"1","2","3"}
 
 # array subscript access
 
