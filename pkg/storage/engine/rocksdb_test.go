@@ -755,6 +755,55 @@ func TestRocksDBTimeBound(t *testing.T) {
 	if sst.TsMax == nil || *sst.TsMax != maxTimestamp {
 		t.Fatalf("got max %v expected %v", sst.TsMax, maxTimestamp)
 	}
+
+	batch := rocksdb.NewBatch()
+
+	// Make a time bounded iterator that skips the SSTable containing our writes.
+	func() {
+		tbi := batch.NewTimeBoundIterator(maxTimestamp.Next(), maxTimestamp.Next().Next())
+		defer tbi.Close()
+		tbi.Seek(NilKey)
+
+		var count int
+		for ; ; tbi.Next() {
+			ok, err := tbi.Valid()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				break
+			}
+			count++
+		}
+
+		// Make sure the iterator sees no writes.
+		if expCount := 0; expCount != count {
+			t.Fatalf("saw %d values in time bounded iterator, but expected %d", count, expCount)
+		}
+	}()
+
+	// Make a regular iterator. Before #21721, this would accidentally pick up the
+	// time bounded iterator instead..
+	iter := batch.NewIterator(false)
+	defer iter.Close()
+	iter.Seek(NilKey)
+
+	var count int
+	for ; ; iter.Next() {
+		ok, err := iter.Valid()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+		count++
+	}
+
+	// Make sure the iterator sees the writes (i.e. it's not the time bounded iterator).
+	if expCount := len(times); expCount != count {
+		t.Fatalf("saw %d values in regular iterator, but expected %d", count, expCount)
+	}
 }
 
 func key(s string) MVCCKey {
