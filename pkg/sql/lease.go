@@ -174,7 +174,7 @@ func (s LeaseStore) acquire(
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		p, cleanup := newInternalPlanner(
+		p, cleanup := NewInternalPlanner(
 			"lease-insert", txn, security.RootUser, s.memMetrics, s.execCfg)
 		defer cleanup()
 		const insertLease = `INSERT INTO system.lease ("descID", version, "nodeID", expiration) ` +
@@ -210,7 +210,7 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 			if nodeID == 0 {
 				panic("zero nodeID")
 			}
-			p, cleanup := newInternalPlanner(
+			p, cleanup := NewInternalPlanner(
 				"lease-release", txn, security.RootUser, s.memMetrics, s.execCfg)
 			defer cleanup()
 			const deleteLease = `DELETE FROM system.lease ` +
@@ -397,7 +397,7 @@ func (s LeaseStore) countLeases(
 ) (int, error) {
 	var count int
 	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p, cleanup := newInternalPlanner(
+		p, cleanup := NewInternalPlanner(
 			"leases-count", txn, security.RootUser, s.memMetrics, s.execCfg)
 		defer cleanup()
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +

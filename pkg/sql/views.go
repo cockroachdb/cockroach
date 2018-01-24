@@ -112,7 +112,7 @@ func (p *planner) analyzeViewQuery(
 func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor) error {
 	lm := e.cfg.LeaseManager
 	// We run as NodeUser because we may update system descriptors.
-	p, cleanup := newInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		"recompute-view-dependencies", txn, security.NodeUser, lm.memMetrics, &e.cfg,
 	)
 	defer cleanup()

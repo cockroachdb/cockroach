@@ -944,6 +944,8 @@ func TestLint(t *testing.T) {
 				filter,
 				// _fsm.go files are allowed to dot-import the util/fsm package.
 				stream.GrepNot("_fsm.go.*should not use dot imports"),
+				// sql.planner is gonna stay unexported for now.
+				stream.GrepNot("exported func NewInternalPlanner returns unexported type"),
 			), func(s string) {
 				t.Error(s)
 			}); err != nil {

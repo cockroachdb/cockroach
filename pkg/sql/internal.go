@@ -43,7 +43,7 @@ func (ie *InternalExecutor) ExecuteStatementInTransaction(
 ) (int, error) {
 	// TODO(andrei): The use of the LeaseManager's memMetrics is very dubious. We
 	// should probably pass in the metrics to use.
-	p, cleanup := newInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)
@@ -56,7 +56,7 @@ func (ie *InternalExecutor) ExecuteStatementInTransaction(
 func (ie *InternalExecutor) QueryRowInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
-	p, cleanup := newInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)
@@ -69,7 +69,7 @@ func (ie *InternalExecutor) QueryRowInTransaction(
 func (ie *InternalExecutor) QueryRowsInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	p, cleanup := newInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)
@@ -101,7 +101,7 @@ func (ie *InternalExecutor) GetTableSpan(
 	ctx context.Context, user string, txn *client.Txn, dbName, tableName string,
 ) (roachpb.Span, error) {
 	// Lookup the table ID.
-	p, cleanup := newInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		"get-table-span", txn, user, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)

@@ -1208,7 +1208,7 @@ func forEachRole(
 	ctx context.Context, origPlanner *planner, fn func(username string, isRole bool) error,
 ) error {
 	query := `SELECT username, "isRole" FROM system.users`
-	p, cleanup := newInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		"for-each-role", origPlanner.txn, security.RootUser,
 		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),
 	)
@@ -1236,7 +1236,7 @@ func forEachRoleMembership(
 	ctx context.Context, origPlanner *planner, fn func(role, member string, isAdmin bool) error,
 ) error {
 	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	p, cleanup := newInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		"for-each-role-member", origPlanner.txn, security.RootUser,
 		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),
 	)
