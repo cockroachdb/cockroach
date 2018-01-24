@@ -87,6 +87,10 @@ func (w *kv) Hooks() workload.Hooks {
 				return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
 					w.maxBlockSizeBytes, w.minBlockSizeBytes)
 			}
+			// TODO(dan): Re-enable this check when splits are supported.
+			// if w.sequential && w.splits > 0 {
+			// 	return errors.Errorf("'sequential' and 'splits' cannot both be enabled")
+			// }
 			return nil
 		},
 	}
