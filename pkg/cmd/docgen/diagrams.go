@@ -664,9 +664,30 @@ var specs = []stmtSpec{
 	},
 	{name: "show_columns", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'COLUMNS'")}, replace: map[string]string{"var_name": "table_name"}, unlink: []string{"table_name"}},
 	{name: "show_constraints", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CONSTRAINTS'")}, replace: map[string]string{"var_name": "table_name"}, unlink: []string{"table_name"}},
-	{name: "show_create_sequence", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CREATE' 'SEQUENCE'")}, replace: map[string]string{"var_name": "sequence_name"}, unlink: []string{"sequence_name"}},
-	{name: "show_create_table", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CREATE' 'TABLE'")}, replace: map[string]string{"var_name": "table_name"}, unlink: []string{"table_name"}},
-	{name: "show_create_view", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CREATE' 'VIEW'")}, replace: map[string]string{"var_name": "view_name"}, unlink: []string{"view_name"}},
+	{
+		name: "show_create_sequence_stmt",
+		match: []*regexp.Regexp{
+			regexp.MustCompile("'SHOW' 'CREATE' 'SEQUENCE'"),
+		},
+		replace: map[string]string{"var_name": "sequence_name"},
+		unlink:  []string{"sequence_name"},
+	},
+	{
+		name: "show_create_table_stmt",
+		match: []*regexp.Regexp{
+			regexp.MustCompile("'SHOW' 'CREATE' 'TABLE'"),
+		},
+		replace: map[string]string{"var_name": "table_name"},
+		unlink:  []string{"table_name"},
+	},
+	{
+		name: "show_create_view_stmt",
+		match: []*regexp.Regexp{
+			regexp.MustCompile("'SHOW' 'CREATE' 'VIEW'"),
+		},
+		replace: map[string]string{"var_name": "view_name"},
+		unlink:  []string{"view_name"},
+	},
 	{name: "show_databases", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'DATABASES'")}},
 	{
 		name:    "show_backup",
