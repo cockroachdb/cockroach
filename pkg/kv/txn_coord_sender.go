@@ -629,7 +629,7 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, state txnCoordSt
 		// rejectErr is guaranteed to be non-nil because state is done or
 		// aborted on cleanup.
 		rejectErr := tc.maybeRejectClientLocked(ctx, tc.mu.meta.Txn.ID).GetDetail()
-		if rejectErr != nil {
+		if rejectErr == nil {
 			log.Fatalf(ctx, "expected non-nil rejectErr on txn coord state %v", state)
 		}
 		tc.mu.onFinishFn(rejectErr)
