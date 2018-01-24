@@ -20,9 +20,11 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -32,6 +34,15 @@ import (
 // nodes that "own" the respective ranges, and send out flows on those nodes.
 const joinReaderBatchSize = 100
 
+// A joinReader can preform an index join or a lookup join. Specifying a
+// non-empty value for eqCols indicates it is a lookup join.
+//
+// For an index join, the input is subset of rows of the `desc` table where the
+// first n columns correspond to the n columns of the index. The join reader
+// finds the full row based on the primary index.
+//
+// For a lookup join, the input is another table and the columns which match the
+// index are specified in the `eqCols` field.
 type joinReader struct {
 	processorBase
 
@@ -43,6 +54,7 @@ type joinReader struct {
 
 	input      RowSource
 	inputTypes []sqlbase.ColumnType
+	eqCols     []sqlbase.ColumnID
 }
 
 var _ Processor = &joinReader{}
@@ -51,6 +63,7 @@ func newJoinReader(
 	flowCtx *FlowCtx,
 	spec *JoinReaderSpec,
 	input RowSource,
+	eqCols []sqlbase.ColumnID,
 	post *PostProcessSpec,
 	output RowReceiver,
 ) (*joinReader, error) {
@@ -63,11 +76,17 @@ func newJoinReader(
 		desc:       spec.Table,
 		input:      input,
 		inputTypes: input.OutputTypes(),
+		eqCols:     eqCols,
 	}
 
-	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
-	for i := range types {
-		types[i] = spec.Table.Columns[i].Type
+	size := len(spec.Table.Columns) + len(input.OutputTypes())
+	types := make([]sqlbase.ColumnType, size)
+	offset := len(spec.Table.Columns)
+	for i, col := range spec.Table.Columns {
+		types[i] = col.Type
+	}
+	for i, t := range input.OutputTypes() {
+		types[offset+i] = t
 	}
 
 	if err := jr.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
@@ -75,9 +94,10 @@ func newJoinReader(
 	}
 
 	var err error
+	fetchedColumns := jr.leftCols()
 	jr.index, _, err = initRowFetcher(
 		&jr.fetcher, &jr.desc, int(spec.IndexIdx), false, /* reverse */
-		jr.out.neededColumns(), false /* isCheck */, &jr.alloc,
+		fetchedColumns, false /* isCheck */, &jr.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -88,20 +108,42 @@ func newJoinReader(
 	return jr, nil
 }
 
+func (jr *joinReader) leftCols() util.FastIntSet {
+	fetchedColumns := jr.out.neededColumns().Copy()
+	outputCols := util.MakeFastIntSet()
+	outputCols.AddRange(0, len(jr.desc.Columns)-1)
+	fetchedColumns.IntersectionWith(outputCols)
+	return fetchedColumns
+}
+
 func (jr *joinReader) generateKey(
 	row sqlbase.EncDatumRow, alloc *sqlbase.DatumAlloc, primaryKeyPrefix []byte,
 ) (roachpb.Key, error) {
 	index := jr.index
-	if len(row) < len(index.ColumnIDs) {
+	numKeyCols := len(index.ColumnIDs)
+	if len(row) < numKeyCols {
 		return nil, errors.Errorf("joinReader input has %d columns, expected at least %d",
-			len(row), len(jr.desc.PrimaryIndex.ColumnIDs))
+			len(row))
 	}
 	// There may be extra values on the row, e.g. to allow an ordered synchronizer
 	// to interleave multiple input streams.
-	row = row[:len(index.ColumnIDs)]
-	types := jr.inputTypes[:len(index.ColumnIDs)]
+	keyRow := make(sqlbase.EncDatumRow, numKeyCols)
+	types := make([]sqlbase.ColumnType, numKeyCols)
+	if len(jr.eqCols) == 0 {
+		keyRow = row[:numKeyCols]
+		types = jr.inputTypes[:numKeyCols]
+	} else {
+		if len(jr.eqCols) != numKeyCols {
+			return nil, errors.Errorf("%d equality columns specified, expecting exactly %d",
+				len(jr.eqCols), numKeyCols)
+		}
+		for i, id := range jr.eqCols {
+			keyRow[i] = row[id]
+			types[i] = jr.inputTypes[id]
+		}
+	}
 
-	return sqlbase.MakeKeyFromEncDatums(types, row, &jr.desc, index, primaryKeyPrefix, alloc)
+	return sqlbase.MakeKeyFromEncDatums(types, keyRow, &jr.desc, index, primaryKeyPrefix, alloc)
 }
 
 // mainLoop runs the mainLoop and returns any error.
@@ -130,7 +172,8 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// TODO(radu): figure out how to send smaller batches if the source has
 		// a soft limit (perhaps send the batch out if we don't get a result
 		// within a certain amount of time).
-		for spans = spans[:0]; len(spans) < joinReaderBatchSize; {
+		spanCount := 0
+		for spans = spans[:0]; len(spans) < joinReaderBatchSize; spanCount++ {
 			row, meta := jr.input.Next()
 			if meta != nil {
 				if meta.Err != nil {
@@ -142,7 +185,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				continue
 			}
 			if row == nil {
-				if len(spans) == 0 {
+				if spanCount == 0 {
 					// No fetching needed since we have collected no spans and
 					// the input has signaled that no more records are coming.
 					jr.out.Close()
@@ -156,46 +199,83 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				return err
 			}
 
-			spans = append(spans, roachpb.Span{
+			span := roachpb.Span{
 				Key:    key,
 				EndKey: key.PrefixEnd(),
-			})
+			}
+			// TODO: Should only need to do this in the else case of the
+			// condition below, but the final condition needs to be fixed.
+
+			if jr.isIndexJoin() {
+				spans = append(spans, span)
+			} else {
+				// Lookup join: lookup every row if information from the input
+				// cols needed.
+				// TODO(pbardea): Prefetching optimization below will not work
+				// with this implementation of lookupJoins.
+				if err := jr.indexLookup(ctx, txn, roachpb.Spans{span}, &row); err != nil {
+					return err
+				}
+			}
+
 		}
 
-		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
-		err := jr.fetcher.StartScan(ctx, txn, spans, false /* no batch limits */, 0, false /* traceKV */)
-		if err != nil {
-			log.Errorf(ctx, "scan error: %s", err)
-			return err
-		}
-
-		// TODO(radu): we are consuming all results from a fetch before starting
-		// the next batch. We could start the next batch early while we are
-		// outputting rows.
-		for {
-			row, _, _, err := jr.fetcher.NextRow(ctx)
-			if err != nil {
-				err = scrub.UnwrapScrubError(err)
+		// If input columns are not needed, batch input rows as spans.
+		if jr.isIndexJoin() {
+			// TODO(radu): we are consuming all results from a fetch before starting
+			// the next batch. We could start the next batch early while we are
+			// outputting rows.
+			if err := jr.indexLookup(ctx, txn, spans, nil /* row */); err != nil {
 				return err
 			}
-			if row == nil {
-				// Done with this batch.
-				break
-			}
-
-			// Emit the row; stop if no more rows are needed.
-			if !emitHelper(ctx, &jr.out, row, nil /* meta */, jr.input) {
-				return nil
-			}
 		}
 
-		if len(spans) != joinReaderBatchSize {
+		if spanCount != joinReaderBatchSize {
 			// This was the last batch.
 			sendTraceData(ctx, jr.out.output)
 			jr.out.Close()
 			return nil
 		}
 	}
+}
+
+func (jr *joinReader) isIndexJoin() bool {
+	return len(jr.eqCols) == 0
+}
+
+func (jr *joinReader) indexLookup(ctx context.Context, txn *client.Txn, spans roachpb.Spans, row *sqlbase.EncDatumRow) error {
+	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
+	err := jr.fetcher.StartScan(ctx, txn, spans, false /* no batch limits */, 0, false /* traceKV */)
+	if err != nil {
+		log.Errorf(ctx, "scan error: %s", err)
+		return err
+	}
+
+	for {
+		indexRow, _, _, err := jr.fetcher.NextRow(ctx)
+		if err != nil {
+			err = scrub.UnwrapScrubError(err)
+			return err
+		}
+		if indexRow == nil {
+			// Done with this batch.
+			break
+		}
+
+		rendered := indexRow
+		if row != nil {
+			rendered = append(indexRow, *row...)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Emit the row; stop if no more rows are needed.
+		if !emitHelper(ctx, &jr.out, rendered, nil /* meta */, jr.input) {
+			return nil
+		}
+	}
+	return nil
 }
 
 // Run is part of the processor interface.

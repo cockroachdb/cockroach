@@ -35,6 +35,11 @@ func TestJoinReader(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
+	v := [10]tree.Datum{}
+	for i := range v {
+		v[i] = tree.NewDInt(tree.DInt(i))
+	}
+
 	// Create a table where each row is:
 	//
 	//  |     a    |     b    |         sum         |         s           |
@@ -59,16 +64,21 @@ func TestJoinReader(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	testCases := []struct {
+		description string
 		post        PostProcessSpec
+		inputTypes  []sqlbase.ColumnType
 		input       [][]tree.Datum
 		outputTypes []sqlbase.ColumnType
+		eqCols      []sqlbase.ColumnID
 		expected    string
 	}{
 		{
+			description: "Test selecting rows using the primary index",
 			post: PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
 			},
+			inputTypes: twoIntCols,
 			input: [][]tree.Datum{
 				{aFn(2), bFn(2)},
 				{aFn(5), bFn(5)},
@@ -79,11 +89,65 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 		},
 		{
+			description: "Test selection from input",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 4, 6},
+			},
+			inputTypes: threeIntCols,
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2), v[7]},
+				{aFn(5), bFn(5), v[7]},
+				{aFn(10), bFn(10), v[7]},
+				{aFn(15), bFn(15), v[7]},
+			},
+			eqCols:      []sqlbase.ColumnID{0, 1},
+			outputTypes: threeIntCols,
+			expected:    "[[0 0 7] [0 0 7] [1 1 7] [1 1 7]]",
+		},
+		{
+			description: "Test duplicates in the input for lookup joins.",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{2, 4, 5},
+			},
+			inputTypes: twoIntCols,
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			eqCols:      []sqlbase.ColumnID{0, 1},
+			outputTypes: threeIntCols,
+			expected:    "[[2 0 2] [2 0 2] [5 0 5] [1 1 0] [6 1 5]]",
+		},
+		{
+			description: "Test equality columns",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{2, 4, 6},
+			},
+			inputTypes: threeIntCols,
+			input: [][]tree.Datum{
+				{aFn(2), v[7], bFn(2)},
+				{aFn(5), v[7], bFn(5)},
+				{aFn(10), v[7], bFn(10)},
+				{aFn(15), v[7], bFn(15)},
+			},
+			eqCols:      []sqlbase.ColumnID{0, 2},
+			outputTypes: threeIntCols,
+			expected:    "[[2 0 2] [5 0 5] [1 1 0] [6 1 5]]",
+		},
+		{
+			description: "Test a filter in the post process spec and using a secondary index.",
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5
 				Projection:    true,
 				OutputColumns: []uint32{3},
 			},
+			inputTypes: twoIntCols,
 			input: [][]tree.Datum{
 				{aFn(1), bFn(1)},
 				{aFn(25), bFn(25)},
@@ -99,7 +163,7 @@ func TestJoinReader(t *testing.T) {
 		},
 	}
 	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
+		t.Run(c.description, func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
@@ -117,10 +181,10 @@ func TestJoinReader(t *testing.T) {
 				}
 				encRows[rowIdx] = encRow
 			}
-			in := NewRowBuffer(twoIntCols, encRows, RowBufferArgs{})
+			in := NewRowBuffer(c.inputTypes, encRows, RowBufferArgs{})
 
 			out := &RowBuffer{}
-			jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &c.post, out)
+			jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, c.eqCols, &c.post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -187,7 +251,8 @@ func TestJoinReaderDrain(t *testing.T) {
 
 		out := &RowBuffer{}
 		out.ConsumerClosed()
-		jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out)
+		var e []sqlbase.ColumnID
+		jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, e, &PostProcessSpec{}, out)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -206,7 +271,8 @@ func TestJoinReaderDrain(t *testing.T) {
 
 		out := &RowBuffer{}
 		out.ConsumerDone()
-		jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out)
+		var e []sqlbase.ColumnID
+		jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, e, &PostProcessSpec{}, out)
 		if err != nil {
 			t.Fatal(err)
 		}

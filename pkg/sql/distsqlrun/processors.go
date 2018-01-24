@@ -595,7 +595,9 @@ func newProcessor(
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newJoinReader(flowCtx, core.JoinReader, inputs[0], post, outputs[0])
+		return newJoinReader(
+			flowCtx, core.JoinReader, inputs[0], []sqlbase.ColumnID{}, post, outputs[0],
+		)
 	}
 	if core.Sorter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
