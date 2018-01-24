@@ -101,6 +101,10 @@ const (
 	concatOp
 	lShiftOp
 	rShiftOp
+	fetchValOp
+	fetchTextOp
+	fetchValPathOp
+	fetchTextPathOp
 
 	unaryPlusOp
 	unaryMinusOp
