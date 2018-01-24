@@ -1,0 +1,233 @@
+# Simple case.
+compile
+define Join {
+    Left  Expr
+    Right Expr
+}
+#
+[CommuteJoin]
+(Join $left:* $right:*) => (Join $right $left)
+----
+(Compiled
+	(Defines
+		(Define
+			Tags=(Tags)
+			Name="Join"
+			Fields=(DefineFields
+				(DefineField Name="Left" Type="Expr")
+				(DefineField Name="Right" Type="Expr")
+			)
+		)
+	)
+	(Rules
+		(Rule
+			Name="CommuteJoin"
+			Tags=(Tags)
+			Match=(Match
+				Names=(OpNames JoinOp)
+				Fields=(List
+					(Bind Label="left" Target=(MatchAny))
+					(Bind Label="right" Target=(MatchAny))
+				)
+			)
+			Replace=(Construct
+				OpName="Join"
+				Args=(List
+					(Ref Label="right")
+					(Ref Label="left")
+				)
+			)
+		)
+	)
+)
+
+# Expand multiple match names into multiple rules and use OpName function with
+# no arguments.
+compile
+[Join]
+define InnerJoin {
+    Left  Expr
+    Right Expr
+}
+[Join]
+define LeftJoin {
+    Left  Expr
+    Right Expr
+}
+define Project {
+    Input Expr
+}
+#
+[Name]
+(Join | Project) => ((OpName))
+----
+(Compiled
+	(Defines
+		(Define
+			Tags=(Tags Join)
+			Name="InnerJoin"
+			Fields=(DefineFields
+				(DefineField Name="Left" Type="Expr")
+				(DefineField Name="Right" Type="Expr")
+			)
+		)
+		(Define
+			Tags=(Tags Join)
+			Name="LeftJoin"
+			Fields=(DefineFields
+				(DefineField Name="Left" Type="Expr")
+				(DefineField Name="Right" Type="Expr")
+			)
+		)
+		(Define
+			Tags=(Tags)
+			Name="Project"
+			Fields=(DefineFields
+				(DefineField Name="Input" Type="Expr")
+			)
+		)
+	)
+	(Rules
+		(Rule
+			Name="Name"
+			Tags=(Tags)
+			Match=(Match
+				Names=(OpNames InnerJoinOp)
+				Fields=(List)
+			)
+			Replace=(Construct OpName=InnerJoinOp Args=(List))
+		)
+		(Rule
+			Name="Name"
+			Tags=(Tags)
+			Match=(Match
+				Names=(OpNames LeftJoinOp)
+				Fields=(List)
+			)
+			Replace=(Construct OpName=LeftJoinOp Args=(List))
+		)
+		(Rule
+			Name="Name"
+			Tags=(Tags)
+			Match=(Match
+				Names=(OpNames ProjectOp)
+				Fields=(List)
+			)
+			Replace=(Construct OpName=ProjectOp Args=(List))
+		)
+	)
+)
+
+# Compile OpName functions with arguments.
+compile
+define Op {
+    Input Expr
+}
+define SubOp1 {
+}
+define SubOp2 {
+}
+#
+[SingleName]
+(Op $input:(SubOp1)) => ((OpName $input))
+[MultipleNames]
+(Op $input:(SubOp1 | SubOp2)) => ((OpName $input))
+----
+(Compiled
+	(Defines
+		(Define
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Name="Input" Type="Expr")
+			)
+		)
+		(Define Tags=(Tags) Name="SubOp1" Fields=(DefineFields))
+		(Define Tags=(Tags) Name="SubOp2" Fields=(DefineFields))
+	)
+	(Rules
+		(Rule
+			Name="SingleName"
+			Tags=(Tags)
+			Match=(Match
+				Names=(OpNames OpOp)
+				Fields=(List
+					(Bind
+						Label="input"
+						Target=(Match
+							Names=(OpNames SubOp1Op)
+							Fields=(List)
+						)
+					)
+				)
+			)
+			Replace=(Construct OpName=SubOp1Op Args=(List))
+		)
+		(Rule
+			Name="MultipleNames"
+			Tags=(Tags)
+			Match=(Match
+				Names=(OpNames OpOp)
+				Fields=(List
+					(Bind
+						Label="input"
+						Target=(Match
+							Names=(OpNames SubOp1Op SubOp2Op)
+							Fields=(List)
+						)
+					)
+				)
+			)
+			Replace=(Construct
+				OpName=(Construct
+					OpName="OpName"
+					Args=(List
+						(Ref Label="input")
+					)
+				)
+				Args=(List)
+			)
+		)
+	)
+)
+
+# Compile errors.
+compile
+define Op {
+    Input Expr
+}
+define Op {
+    Input Expr
+}
+#
+[UnrecognizedName]
+(Unknown) => (Unknown)
+#
+[UnrecognizedNestedName]
+(Op (Unknown)) => (Op)
+#
+[TooManyOpNameArgs]
+(Op) => ((OpName "foo" "bar"))
+#
+[InvalidOpNameArg]
+(Op) => ((OpName "foo"))
+#
+[InvalidOpNameArg2]
+(Op $input:"foo") => ((OpName $input))
+#
+[DuplicateLabel]
+(Op $input:"foo" $input:"bar") => (Op)
+#
+[DuplicateName]
+(Op) => (Op)
+[DuplicateName]
+(Op) => (Op)
+----
+test.opt:4:1: duplicate 'Op' define statement
+test.opt:9:1: unrecognized match name 'Unknown'
+test.opt:12:5: unrecognized match name 'Unknown'
+test.opt:15:10: too many arguments to OpName function
+test.opt:18:10: invalid OpName argument: argument must be a variable reference
+test.opt:21:31: invalid OpName argument: $input must be bound to a match expression
+test.opt:24:18: duplicate bind label 'input'
+test.opt:29:1: duplicate rule name 'DuplicateName'

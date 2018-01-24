@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>fileTypes</key>
+	<array>
+		<string>opt</string>
+	</array>
+	<key>name</key>
+	<string>optgen</string>
+	<key>patterns</key>
+	<array>
+		<dict>
+			<key>include</key>
+			<string>#tags</string>
+		</dict>
+		<dict>
+			<key>include</key>
+			<string>#define</string>
+		</dict>
+		<dict>
+			<key>include</key>
+			<string>#rule</string>
+		</dict>
+		<dict>
+			<key>include</key>
+			<string>#variable</string>
+		</dict>
+		<dict>
+			<key>include</key>
+			<string>#comment</string>
+		</dict>
+	</array>
+	<key>repository</key>
+	<dict>
+		<key>comment</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>begin</key>
+					<string>#</string>
+					<key>end</key>
+					<string>\n</string>
+					<key>name</key>
+					<string>comment.line.number-sign.optgen</string>
+				</dict>
+			</array>
+		</dict>
+		<key>define</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>begin</key>
+					<string>(?x) # Enable free spacing mode
+							^(define)
+							\s*([[:alpha:]][[:alnum:]]*)
+							\s*\{</string>
+					<key>captures</key>
+					<dict>
+						<key>1</key>
+						<dict>
+							<key>name</key>
+							<string>keyword.other.define.optgen</string>
+						</dict>
+						<key>2</key>
+						<dict>
+							<key>name</key>
+							<string>entity.name.type.optgen</string>
+						</dict>
+					</dict>
+					<key>end</key>
+					<string>\}</string>
+					<key>name</key>
+					<string>meta.define.optgen</string>
+					<key>patterns</key>
+					<array>
+						<dict>
+							<key>captures</key>
+							<dict>
+								<key>2</key>
+								<dict>
+									<key>name</key>
+									<string>storage.type.optgen</string>
+								</dict>
+							</dict>
+							<key>match</key>
+							<string>(?x) # Enable free spacing mode
+									\s*([[:alpha:]][[:alnum:]]*)
+									\s*([[:alpha:]][[:alnum:]]*)</string>
+							<key>name</key>
+							<string>meta.define.field.optgen</string>
+						</dict>
+					</array>
+				</dict>
+			</array>
+		</dict>
+		<key>operator</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>match</key>
+					<string>(?x)\b( # Enable free spacing mode
+						Subquery | 
+						Variable | 
+						Const | 
+						Placeholder | 
+						List | 
+						OrderedList | 
+						Filters | 
+						Projections | 
+						Exists | 
+						And | 
+						Or | 
+						Not | 
+						Eq | 
+						Lt | 
+						Gt | 
+						Le | 
+						Ge | 
+						Ne | 
+						In | 
+						NotIn | 
+						Like | 
+						NotLike | 
+						ILike | 
+						NotILike | 
+						SimilarTo | 
+						NotSimilarTo | 
+						RegMatch | 
+						NotRegMatch | 
+						RegIMatch | 
+						NotRegIMatch | 
+						IsDistinctFrom | 
+						IsNotDistinctFrom | 
+						Is | 
+						IsNot | 
+						Any | 
+						Some | 
+						All | 
+						Bitand | 
+						Bitor | 
+						Bitxor | 
+						Plus | 
+						Minus | 
+						Mult | 
+						Div | 
+						FloorDiv | 
+						Mod | 
+						Pow | 
+						Concat | 
+						LShift | 
+						RShift | 
+						UnaryPlus | 
+						UnaryMinus | 
+						UnaryComplement | 
+						Function | 
+						True | 
+						False | 
+						Scan | 
+						Values | 
+						Select | 
+						Project | 
+						InnerJoin | 
+						LeftJoin | 
+						RightJoin | 
+						FullJoin | 
+						SemiJoin | 
+						AntiJoin | 
+						InnerJoinApply | 
+						LeftJoinApply | 
+						RightJoinApply | 
+						FullJoinApply | 
+						SemiJoinApply | 
+						AntiJoinApply | 
+						GroupBy | 
+						Union | 
+						Intersect | 
+						Except | 
+						Sort | 
+						Arrange |
+						OpName)\b</string>
+					<key>name</key>
+					<string>keyword.other.optgen</string>
+				</dict>
+			</array>
+		</dict>
+		<key>rule</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>begin</key>
+					<string>\(</string>
+					<key>end</key>
+					<string>\)</string>
+					<key>name</key>
+					<string>meta.rules.optgen</string>
+					<key>patterns</key>
+					<array>
+						<dict>
+							<key>include</key>
+							<string>#rule</string>
+						</dict>
+						<dict>
+							<key>include</key>
+							<string>#operator</string>
+						</dict>
+						<dict>
+							<key>include</key>
+							<string>#udf</string>
+						</dict>
+						<dict>
+							<key>include</key>
+							<string>#variable</string>
+						</dict>
+						<dict>
+							<key>include</key>
+							<string>#comment</string>
+						</dict>
+					</array>
+				</dict>
+			</array>
+		</dict>
+		<key>tags</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>captures</key>
+					<dict>
+						<key>1</key>
+						<dict>
+							<key>patterns</key>
+							<array>
+								<dict>
+									<key>match</key>
+									<string>[[:alpha:]][[:alnum:]]*</string>
+									<key>name</key>
+									<string>entity.name.tag</string>
+								</dict>
+							</array>
+						</dict>
+					</dict>
+					<key>match</key>
+					<string>^\[([^\]]+)\]</string>
+					<key>name</key>
+					<string>meta.tags.optgen</string>
+				</dict>
+			</array>
+		</dict>
+		<key>udf</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>match</key>
+					<string>[[:alpha:]][[:alnum:]]*</string>
+					<key>name</key>
+					<string>entity.name.function.optgen</string>
+				</dict>
+			</array>
+		</dict>
+		<key>variable</key>
+		<dict>
+			<key>patterns</key>
+			<array>
+				<dict>
+					<key>match</key>
+					<string>\$[[:alpha:]][[:alnum:]]*</string>
+					<key>name</key>
+					<string>variable.other.optgen</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>scopeName</key>
+	<string>source.optgen</string>
+	<key>uuid</key>
+	<string>A9DEA905-4EEE-4939-ADF8-66FF8F7CC89F</string>
+</dict>
+</plist>
