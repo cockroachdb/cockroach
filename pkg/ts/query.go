@@ -21,11 +21,21 @@ import (
 	"math"
 	"sort"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
+)
+
+// Compute the size of various structures to use when tracking memory usage.
+var (
+	sizeOfDataSpan       = int(unsafe.Sizeof(dataSpan{}))
+	sizeOfCalibratedData = int(unsafe.Sizeof(calibratedData{}))
+	sizeOfSample         = int(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{}))
+	sizeOfDataPoint      = int(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))
 )
 
 // calibratedData is used to calibrate an InternalTimeSeriesData object for
@@ -746,6 +756,7 @@ func (db *DB) Query(
 	query tspb.Query,
 	queryResolution Resolution,
 	sampleDuration, startNanos, endNanos, interpolationLimitNanos int64,
+	sessionAccount *mon.BoundAccount,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Verify that sampleDuration is a multiple of
 	// queryResolution.SampleDuration().
@@ -763,6 +774,10 @@ func (db *DB) Query(
 			queryResolution.SampleDuration(),
 		)
 	}
+
+	// Create a local account to track memory usage local to this function.
+	localAccount := sessionAccount.Monitor().MakeBoundAccount()
+	defer localAccount.Close(ctx)
 
 	// Normalize startNanos to a sampleDuration boundary.
 	startNanos -= startNanos % sampleDuration
@@ -815,7 +830,7 @@ func (db *DB) Query(
 
 	// Convert the queried source data into a set of data spans, one for each
 	// source.
-	sourceSpans, err := makeDataSpans(rows, startNanos)
+	sourceSpans, err := makeDataSpans(ctx, rows, startNanos, &localAccount)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -840,6 +855,9 @@ func (db *DB) Query(
 	iters := make(aggregatingIterator, 0, len(sourceSpans))
 	maxDistance := int32(interpolationLimitNanos / sampleDuration)
 	for name, span := range sourceSpans {
+		if err := sessionAccount.Grow(ctx, int64(len(name))); err != nil {
+			return nil, nil, err
+		}
 		sources = append(sources, name)
 		iters = append(iters, newInterpolatingIterator(
 			*span, 0, sampleDuration, maxDistance, extractor, downsampler, query.GetDerivative(),
@@ -874,6 +892,9 @@ func (db *DB) Query(
 
 	for iters.isValid() && iters.timestamp() <= endNanos {
 		if value, valid := valueFn(); valid {
+			if err := sessionAccount.Grow(ctx, int64(sizeOfDataPoint)); err != nil {
+				return nil, nil, err
+			}
 			response := tspb.TimeSeriesDatapoint{
 				TimestampNanos: iters.timestamp(),
 				Value:          value,
@@ -892,7 +913,9 @@ func (db *DB) Query(
 // makeDataSpans constructs a new dataSpan for each distinct source encountered
 // in the query. Each dataspan will contain all data queried from a single
 // source.
-func makeDataSpans(rows []client.KeyValue, startNanos int64) (map[string]*dataSpan, error) {
+func makeDataSpans(
+	ctx context.Context, rows []client.KeyValue, startNanos int64, acc *mon.BoundAccount,
+) (map[string]*dataSpan, error) {
 	sourceSpans := make(map[string]*dataSpan)
 	for _, row := range rows {
 		var data roachpb.InternalTimeSeriesData
@@ -904,16 +927,25 @@ func makeDataSpans(rows []client.KeyValue, startNanos int64) (map[string]*dataSp
 			return nil, err
 		}
 		if _, ok := sourceSpans[source]; !ok {
+			if err := acc.Grow(ctx, int64(len(source)+sizeOfDataSpan)); err != nil {
+				return nil, err
+			}
 			sourceSpans[source] = &dataSpan{
 				startNanos:  startNanos,
 				sampleNanos: data.SampleDurationNanos,
 				datas:       make([]calibratedData, 0, 1),
 			}
 		}
+		if err := acc.Grow(
+			ctx, int64((sizeOfSample*len(data.Samples))+sizeOfCalibratedData),
+		); err != nil {
+			return nil, err
+		}
 		if err := sourceSpans[source].addData(data); err != nil {
 			return nil, err
 		}
 	}
+
 	return sourceSpans, nil
 }
 

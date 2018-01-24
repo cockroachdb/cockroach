@@ -267,6 +267,10 @@ func TestBoundAccount(t *testing.T) {
 		t.Fatal("closing spans leaves bytes in monitor")
 	}
 
+	if m2 := a1.Monitor(); m2 != &m {
+		t.Fatalf("a1.Monitor() returned %v, wanted %v", m2, &m)
+	}
+
 	m.Stop(ctx)
 }
 
@@ -297,6 +301,9 @@ func TestBytesMonitor(t *testing.T) {
 	}
 	if m.mu.maxAllocated != 100 {
 		t.Fatalf("incorrect max allocation: got %d, expected %d", m.mu.maxAllocated, 100)
+	}
+	if m.MaximumBytes() != 100 {
+		t.Fatalf("incorrect MaximumBytes(): got %d, expected %d", m.mu.maxAllocated, 100)
 	}
 
 	m.releaseBytes(ctx, 10) // Should succeed without panic.

@@ -41,7 +41,7 @@ import (
 //
 // - components in CockroachDB that wish to have their allocations tracked
 //   declare/register their allocations to an instance of BytesMonitor. To do
-//   this, each component maintains one or more instances of BoundAcount, one
+//   this, each component maintains one or more instances of BoundAccount, one
 //   per "category" of allocation, and issue requests to Grow, Resize or Close
 //   to their monitor. Grow/Resize requests can be denied (return an error),
 //   which indicates the budget has been reached.
@@ -407,6 +407,14 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	mm.reserved.Clear(ctx)
 }
 
+// MaximumBytes returns the maximum number of bytes that were allocated by this
+// monitor at one time since it was started.
+func (mm *BytesMonitor) MaximumBytes() int64 {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	return mm.mu.maxAllocated
+}
+
 // BoundAccount tracks the cumulated allocations for one client of a pool or
 // monitor. BytesMonitor has an account to its pool; BytesMonitor clients have
 // an account to the monitor. This allows each client to release all the bytes
@@ -433,6 +441,11 @@ func MakeStandaloneBudget(capacity int64) BoundAccount {
 // Used returns the number of bytes currently allocated through this account.
 func (b BoundAccount) Used() int64 {
 	return b.used
+}
+
+// Monitor returns the BytesMonitor to which this account is bound.
+func (b BoundAccount) Monitor() *BytesMonitor {
+	return b.mon
 }
 
 func (b BoundAccount) allocated() int64 {
