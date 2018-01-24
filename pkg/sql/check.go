@@ -231,7 +231,7 @@ func (p *planner) validateForeignKey(
 		query,
 	)
 
-	values, err := p.queryRows(ctx, query)
+	values, _ /* cols */, err := p.queryRows(ctx, query)
 	if err != nil {
 		return err
 	}

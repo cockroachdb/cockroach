@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -28,6 +29,9 @@ import (
 // for writing PGWire results. The buffer preserves any errors it encounters when writing,
 // and will turn all subsequent write attempts into no-ops until finishMsg is called.
 type writeBuffer struct {
+	//lint:ignore U1000 this marker prevents by-value copies.
+	noCopy util.NoCopy
+
 	wrapped bytes.Buffer
 	err     error
 
@@ -49,8 +53,10 @@ type writeBuffer struct {
 	bytecount *metric.Counter
 }
 
-func newWriteBuffer() *writeBuffer {
-	b := &writeBuffer{}
+func newWriteBuffer(bytecount *metric.Counter) *writeBuffer {
+	b := &writeBuffer{
+		bytecount: bytecount,
+	}
 	b.simpleFormatter = tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtSimple)
 	b.arrayFormatter = tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtArrays)
 	return b
