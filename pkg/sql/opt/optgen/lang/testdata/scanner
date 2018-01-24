@@ -1,0 +1,77 @@
+# Simple identifiers, strings, comments
+scan
+foo define f123 "hello world" foo# comment ()[]
+----
+(IDENT foo)
+(WHITESPACE  )
+(IDENT define)
+(WHITESPACE  )
+(IDENT f123)
+(WHITESPACE  )
+(STRING "hello world")
+(WHITESPACE  )
+(IDENT foo)
+(COMMENT # comment ()[])
+
+# Symbols
+scan
+()[]{}$:*==>&,^|.. ...
+----
+(LPAREN ()
+(RPAREN ))
+(LBRACKET [)
+(RBRACKET ])
+(LBRACE {)
+(RBRACE })
+(DOLLAR $)
+(COLON :)
+(ASTERISK *)
+(EQUALS =)
+(ARROW =>)
+(AMPERSAND &)
+(COMMA ,)
+(CARET ^)
+(PIPE |)
+(ILLEGAL .)
+(ELLIPSES ...)
+
+# Unterminated string
+scan
+"hello world
+----
+(ILLEGAL "hello world)
+
+# Comment on its own line.
+scan
+#comment
+----
+(COMMENT #comment)
+
+# Failure scanning string
+scan fail=5
+"hello
+----
+(ILLEGAL "hel)
+(ERROR io: read/write on closed pipe)
+
+# Failure scanning comment
+scan fail=6
+# hello
+----
+(COMMENT # hel)
+(ERROR io: read/write on closed pipe)
+
+# Failure scanning ellipses
+scan fail=3
+...
+----
+(ILLEGAL .)
+(ERROR io: read/write on closed pipe)
+
+# Failure scanning whitespace
+scan fail=5
+hel     lo
+----
+(IDENT hel)
+(WHITESPACE  )
+(ERROR io: read/write on closed pipe)
