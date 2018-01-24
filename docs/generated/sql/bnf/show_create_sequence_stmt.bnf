@@ -1,0 +1,2 @@
+show_create_sequence_stmt ::=
+	'SHOW' 'CREATE' 'SEQUENCE' sequence_name
