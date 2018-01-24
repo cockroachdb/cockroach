@@ -1276,78 +1276,77 @@ func (r *distinctBatch) close() {
 	}
 }
 
-// rocksDBBatchIterator wraps rocksDBIterator and allows reuse of an iterator
-// for the lifetime of a batch.
-type rocksDBBatchIterator struct {
+// batchIterator wraps rocksDBIterator and ensures that the buffered mutations
+// in a batch are flushed before performing read operations.
+type batchIterator struct {
 	iter  rocksDBIterator
 	batch *rocksDBBatch
 }
 
-func (r *rocksDBBatchIterator) Close() {
-	// rocksDBBatchIterator.Close() leaves the underlying rocksdb iterator open
-	// until the associated batch is closed.
+func (r *batchIterator) Close() {
 	if r.batch == nil {
 		panic("closing idle iterator")
 	}
 	r.batch = nil
+	r.iter.destroy()
 }
 
-func (r *rocksDBBatchIterator) Seek(key MVCCKey) {
+func (r *batchIterator) Seek(key MVCCKey) {
 	r.batch.flushMutations()
 	r.iter.Seek(key)
 }
 
-func (r *rocksDBBatchIterator) SeekReverse(key MVCCKey) {
+func (r *batchIterator) SeekReverse(key MVCCKey) {
 	r.batch.flushMutations()
 	r.iter.SeekReverse(key)
 }
 
-func (r *rocksDBBatchIterator) Valid() (bool, error) {
+func (r *batchIterator) Valid() (bool, error) {
 	return r.iter.Valid()
 }
 
-func (r *rocksDBBatchIterator) Next() {
+func (r *batchIterator) Next() {
 	r.batch.flushMutations()
 	r.iter.Next()
 }
 
-func (r *rocksDBBatchIterator) Prev() {
+func (r *batchIterator) Prev() {
 	r.batch.flushMutations()
 	r.iter.Prev()
 }
 
-func (r *rocksDBBatchIterator) NextKey() {
+func (r *batchIterator) NextKey() {
 	r.batch.flushMutations()
 	r.iter.NextKey()
 }
 
-func (r *rocksDBBatchIterator) PrevKey() {
+func (r *batchIterator) PrevKey() {
 	r.batch.flushMutations()
 	r.iter.PrevKey()
 }
 
-func (r *rocksDBBatchIterator) ComputeStats(
+func (r *batchIterator) ComputeStats(
 	start, end MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
 	r.batch.flushMutations()
 	return r.iter.ComputeStats(start, end, nowNanos)
 }
 
-func (r *rocksDBBatchIterator) FindSplitKey(
+func (r *batchIterator) FindSplitKey(
 	start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool,
 ) (MVCCKey, error) {
 	r.batch.flushMutations()
 	return r.iter.FindSplitKey(start, end, minSplitKey, targetSize, allowMeta2Splits)
 }
 
-func (r *rocksDBBatchIterator) MVCCGet(
+func (r *batchIterator) MVCCGet(
 	key roachpb.Key, timestamp hlc.Timestamp, txn *roachpb.Transaction, consistent bool,
 ) (*roachpb.Value, []roachpb.Intent, error) {
 	r.batch.flushMutations()
 	return r.iter.MVCCGet(key, timestamp, txn, consistent)
 }
 
-func (r *rocksDBBatchIterator) MVCCScan(
+func (r *batchIterator) MVCCScan(
 	start, end roachpb.Key,
 	max int64,
 	timestamp hlc.Timestamp,
@@ -1358,44 +1357,48 @@ func (r *rocksDBBatchIterator) MVCCScan(
 	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse)
 }
 
-func (r *rocksDBBatchIterator) Key() MVCCKey {
+func (r *batchIterator) Key() MVCCKey {
 	return r.iter.Key()
 }
 
-func (r *rocksDBBatchIterator) Value() []byte {
+func (r *batchIterator) Value() []byte {
 	return r.iter.Value()
 }
 
-func (r *rocksDBBatchIterator) ValueProto(msg protoutil.Message) error {
+func (r *batchIterator) ValueProto(msg protoutil.Message) error {
 	return r.iter.ValueProto(msg)
 }
 
-func (r *rocksDBBatchIterator) UnsafeKey() MVCCKey {
+func (r *batchIterator) UnsafeKey() MVCCKey {
 	return r.iter.UnsafeKey()
 }
 
-func (r *rocksDBBatchIterator) UnsafeValue() []byte {
+func (r *batchIterator) UnsafeValue() []byte {
 	return r.iter.UnsafeValue()
 }
 
-func (r *rocksDBBatchIterator) Less(key MVCCKey) bool {
+func (r *batchIterator) Less(key MVCCKey) bool {
 	return r.iter.Less(key)
 }
 
-func (r *rocksDBBatchIterator) getIter() *C.DBIterator {
+func (r *batchIterator) getIter() *C.DBIterator {
 	return r.iter.iter
 }
 
-// disposableIterator wraps rocksDBBatchIterator and allows Close to free up
-// the associated resources instead of tying them to the lifetime of the
-// batch. See reusableIterator and rocksDBBatch.NewTimeBoundIterator.
-type disposableIterator struct {
-	rocksDBBatchIterator
+// reusableBatchIterator wraps batchIterator and makes the Close method a no-op
+// to allow reuse of the iterator for the lifetime of the batch. The batch must
+// call iter.destroy() when it closes itself.
+type reusableBatchIterator struct {
+	batchIterator
 }
 
-func (r *disposableIterator) Close() {
-	r.rocksDBBatchIterator.Close()
-	r.iter.destroy()
+func (r *reusableBatchIterator) Close() {
+	// reusableBatchIterator.Close() leaves the underlying rocksdb iterator open
+	// until the associated batch is closed.
+	if r.batch == nil {
+		panic("closing idle iterator")
+	}
+	r.batch = nil
 }
 
 type rocksDBBatch struct {
@@ -1404,8 +1407,8 @@ type rocksDBBatch struct {
 	flushes            int
 	flushedCount       int
 	flushedSize        int
-	prefixIter         rocksDBBatchIterator
-	normalIter         rocksDBBatchIterator
+	prefixIter         reusableBatchIterator
+	normalIter         reusableBatchIterator
 	builder            RocksDBBatchBuilder
 	distinct           distinctBatch
 	distinctOpen       bool
@@ -1598,10 +1601,11 @@ func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
 	// Don't cache these iterators; we're unlikely to get many calls for the same
 	// time bounds.
 	r.ensureBatch()
-	var iter disposableIterator
+	iter := &batchIterator{
+		batch: r,
+	}
 	iter.iter.initTimeBound(r.batch, start, end, r)
-	iter.batch = r
-	return &iter
+	return iter
 }
 
 func (r *rocksDBBatch) Commit(syncCommit bool) error {
@@ -1966,9 +1970,9 @@ func (r *rocksDBIterator) ComputeStats(
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
 	stats, err := cStatsToGoStats(result, nowNanos)
 	if util.RaceEnabled {
-		// If we've come here via rocksDBBatchIterator, then flushMutations
-		// (which forces reseek) was called just before C.MVCCComputeStats. Set
-		// it here as well to match.
+		// If we've come here via batchIterator, then flushMutations (which forces
+		// reseek) was called just before C.MVCCComputeStats. Set it here as well
+		// to match.
 		r.reseek = true
 		// C.MVCCComputeStats and ComputeStatsGo must behave identically.
 		// There are unit tests to ensure that they return the same result, but
