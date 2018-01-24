@@ -109,21 +109,21 @@ INSERT INTO d VALUES(15, '1.23')
 statement ok
 INSERT INTO d VALUES(17, '[{"a":{"b":[1,[2]]}}, "d"]')
 
-statement error pq: attempted access to empty key
-INSERT INTO d VALUES(16, '{}')
+statement ok
+INSERT INTO d VALUES(25, '{}')
 
-statement error pq: attempted access to empty key
-INSERT INTO d VALUES(16, '[]')
+statement ok
+INSERT INTO d VALUES(26, '[]')
 
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a":"b"}'
 ----
-index-join  0  index-join  ·      ·                                        (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   1  scan        ·      ·                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          1  ·           table  d@foo_inv                                ·                ·
- │          1  ·           spans  /!NULL/"a"/"b"-/!NULL/"a"/"b"/PrefixEnd  ·                ·
- └── scan   1  scan        ·      ·                                        (a, b)           ·
-·           1  ·           table  d@primary                                ·                ·
+index-join  0  index-join  ·      ·                                            (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·      ·                                            (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table  d@foo_inv                                    ·                ·
+ │          1  ·           spans  /"JSONKey:a"/"b"-/"JSONKey:a"/"b"/PrefixEnd  ·                ·
+ └── scan   1  scan        ·      ·                                            (a, b)           ·
+·           1  ·           table  d@primary                                    ·                ·
 
 query IT
 SELECT * from d where b @>'{"a": "b"}' ORDER BY a;
@@ -135,12 +135,12 @@ SELECT * from d where b @>'{"a": "b"}' ORDER BY a;
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a":{"b":[1]}}'
 ----
-index-join  0  index-join  ·      ·                                                                (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   1  scan        ·      ·                                                                (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          1  ·           table  d@foo_inv                                                        ·                ·
- │          1  ·           spans  /!NULL/"a"/!NULL/"b"/Arr/1-/!NULL/"a"/!NULL/"b"/Arr/1/PrefixEnd  ·                ·
- └── scan   1  scan        ·      ·                                                                (a, b)           ·
-·           1  ·           table  d@primary                                                        ·                ·
+index-join  0  index-join  ·      ·                                                                        (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·      ·                                                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table  d@foo_inv                                                                ·                ·
+ │          1  ·           spans  /"JSONKey:a"/"JSONKey:b"/Arr/1-/"JSONKey:a"/"JSONKey:b"/Arr/1/PrefixEnd  ·                ·
+ └── scan   1  scan        ·      ·                                                                        (a, b)           ·
+·           1  ·           table  d@primary                                                                ·                ·
 
 query IT
 SELECT * from d where b @> '{"a":{"b":[1]}}' ORDER BY a;
@@ -151,12 +151,12 @@ SELECT * from d where b @> '{"a":{"b":[1]}}' ORDER BY a;
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a":{"b":[[2]]}}';
 ----
-index-join  0  index-join  ·      ·                                                                        (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   1  scan        ·      ·                                                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          1  ·           table  d@foo_inv                                                                ·                ·
- │          1  ·           spans  /!NULL/"a"/!NULL/"b"/Arr/Arr/2-/!NULL/"a"/!NULL/"b"/Arr/Arr/2/PrefixEnd  ·                ·
- └── scan   1  scan        ·      ·                                                                        (a, b)           ·
-·           1  ·           table  d@primary                                                                ·                ·
+index-join  0  index-join  ·      ·                                                                                (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·      ·                                                                                (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table  d@foo_inv                                                                        ·                ·
+ │          1  ·           spans  /"JSONKey:a"/"JSONKey:b"/Arr/Arr/2-/"JSONKey:a"/"JSONKey:b"/Arr/Arr/2/PrefixEnd  ·                ·
+ └── scan   1  scan        ·      ·                                                                                (a, b)           ·
+·           1  ·           table  d@primary                                                                        ·                ·
 
 query IT
 SELECT * from d where b @> '{"a":{"b":[[2]]}}' ORDER BY a;
@@ -167,12 +167,12 @@ SELECT * from d where b @> '{"a":{"b":[[2]]}}' ORDER BY a;
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a":{"b":true}}';
 ----
-index-join  0  index-join  ·      ·                                                     (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   1  scan        ·      ·                                                     (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          1  ·           table  d@foo_inv                                             ·                ·
- │          1  ·           spans  /!NULL/"a"/!NULL/"b"/True-/!NULL/"a"/!NULL/"b"/False  ·                ·
- └── scan   1  scan        ·      ·                                                     (a, b)           ·
-·           1  ·           table  d@primary                                             ·                ·
+index-join  0  index-join  ·      ·                                                             (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·      ·                                                             (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table  d@foo_inv                                                     ·                ·
+ │          1  ·           spans  /"JSONKey:a"/"JSONKey:b"/True-/"JSONKey:a"/"JSONKey:b"/False  ·                ·
+ └── scan   1  scan        ·      ·                                                             (a, b)           ·
+·           1  ·           table  d@primary                                                     ·                ·
 
 query IT
 SELECT * from d where b @> '{"a":{"b":true}}' ORDER BY a;
@@ -203,12 +203,12 @@ SELECT * from d where b @>'[1]' ORDER BY a;
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a":{"b":[1]}}]'
 ----
-index-join  0  index-join  ·      ·                                                                        (a, b)           b=CONST; a!=NULL; key(a)
- ├── scan   1  scan        ·      ·                                                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
- │          1  ·           table  d@foo_inv                                                                ·                ·
- │          1  ·           spans  /Arr/!NULL/"a"/!NULL/"b"/Arr/1-/Arr/!NULL/"a"/!NULL/"b"/Arr/1/PrefixEnd  ·                ·
- └── scan   1  scan        ·      ·                                                                        (a, b)           ·
-·           1  ·           table  d@primary                                                                ·                ·
+index-join  0  index-join  ·      ·                                                                                (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·      ·                                                                                (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table  d@foo_inv                                                                        ·                ·
+ │          1  ·           spans  /Arr/"JSONKey:a"/"JSONKey:b"/Arr/1-/Arr/"JSONKey:a"/"JSONKey:b"/Arr/1/PrefixEnd  ·                ·
+ └── scan   1  scan        ·      ·                                                                                (a, b)           ·
+·           1  ·           table  d@primary                                                                        ·                ·
 
 query IT
 SELECT * from d where b @>'[{"a":{"b":[1]}}]' ORDER BY a;
@@ -261,11 +261,15 @@ SELECT * from d where b @> '1.23' ORDER BY a;
 ----
 15  1.23
 
-statement error pq: constraints = , table ID = 53, index ID = 2: can't look up empty JSON
+query IT
 SELECT * from d where b @> '{}' ORDER BY a;
+----
+25  {}
 
-statement error pq: constraints = , table ID = 53, index ID = 2: can't look up empty JSON
+query IT
 SELECT * from d where b @> '[]' ORDER BY a;
+----
+26  []
 
 statement ok
 INSERT INTO d VALUES (20, '["a", "a"]')
@@ -292,9 +296,19 @@ SELECT * from d where b @> '[[[["a"]]]]' ORDER BY a;
 22  [[[["a"]]],[[["a"]]]]
 
 statement ok
-INSERT INTO d VALUES (23,  '[1,2,3,1]')
+INSERT INTO d VALUES (23,  '{"a": 123.123}')
+
+statement ok
+INSERT INTO d VALUES (24,  '{"a": 123.123000}')
 
 query IT
-SELECT * from d where b @> '[[[["a"]]]]' ORDER BY a;
+SELECT * from d where b @> '{"a": 123.123}' ORDER BY a;
 ----
-22  [[[["a"]]],[[["a"]]]]
+23  {"a":123.123}
+24  {"a":123.123000}
+
+query IT
+SELECT * from d where b @> '{"a": 123.123000}' ORDER BY a;
+----
+23  {"a":123.123}
+24  {"a":123.123000}
