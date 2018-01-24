@@ -83,7 +83,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -156,7 +155,7 @@ func TestOpt(t *testing.T) {
 					vals := strings.Split(val, ",")
 					switch key {
 					case "vars":
-						varTypes, err = parseTypes(vals)
+						varTypes, err = testutils.ParseTypes(vals)
 						if err != nil {
 							d.Fatalf(t, "%v", err)
 						}
@@ -185,7 +184,7 @@ func TestOpt(t *testing.T) {
 				getTypedExpr := func() tree.TypedExpr {
 					if typedExpr == nil {
 						var err error
-						typedExpr, err = parseScalarExpr(d.Input, &iVarHelper)
+						typedExpr, err = testutils.ParseScalarExpr(d.Input, &iVarHelper)
 						if err != nil {
 							d.Fatalf(t, "%v", err)
 						}
@@ -319,28 +318,6 @@ func TestOpt(t *testing.T) {
 	}
 }
 
-// parseType parses a string describing a type.
-func parseType(typeStr string) (types.T, error) {
-	colType, err := parser.ParseType(typeStr)
-	if err != nil {
-		return nil, err
-	}
-	return coltypes.CastTargetToDatumType(colType), nil
-}
-
-// parseColumns parses a list of types.
-func parseTypes(colStrs []string) ([]types.T, error) {
-	res := make([]types.T, len(colStrs))
-	for i, s := range colStrs {
-		var err error
-		res[i], err = parseType(s)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
 // parseIndexColumns parses descriptions of index columns; each
 // string corresponds to an index column and is of the form:
 //   <type> [ascending|descending]
@@ -384,16 +361,4 @@ func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumn
 		}
 	}
 	return res, nil
-}
-
-func parseScalarExpr(sql string, ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
-	expr, err := parser.ParseExpr(sql)
-	if err != nil {
-		return nil, err
-	}
-
-	sema := tree.MakeSemaContext(false /* privileged */)
-	sema.IVarHelper = ivh
-
-	return expr.TypeCheck(&sema, types.Any)
 }

@@ -24,6 +24,12 @@ import (
 // This file contains interfaces that are used by the query optimizer to avoid
 // including specifics of sqlbase structures in the opt code.
 
+// ColumnName is the type of a column name.
+type ColumnName string
+
+// TableName is the type of a table name.
+type TableName string
+
 // Column is an interface to a table column, exposing only the information
 // needed by the query optimizer.
 type Column interface {
@@ -31,17 +37,21 @@ type Column interface {
 	IsNullable() bool
 
 	// ColName returns the name of the column.
-	ColName() string
+	ColName() ColumnName
 
 	// DatumType returns the data type of the column.
 	DatumType() types.T
+
+	// IsHidden returns true if the column is hidden (e.g., there is always a
+	// hidden column called rowid if there is no primary key on the table).
+	IsHidden() bool
 }
 
 // Table is an interface to a database table, exposing only the information
 // needed by the query optimizer.
 type Table interface {
 	// TabName returns the name of the table.
-	TabName() string
+	TabName() TableName
 
 	// NumColumns returns the number of columns in the table.
 	NumColumns() int
