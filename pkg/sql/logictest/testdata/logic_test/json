@@ -119,6 +119,16 @@ true
 false
 NULL
 
+query T
+SELECT bar FROM foo WHERE bar->>'a' = 'b';
+----
+{"a":"b"}
+
+query T
+SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON;
+----
+{"a":"b"}
+
 statement error pgcode 0A000 can't order by column type jsonb
 SELECT bar FROM foo ORDER BY bar
 
