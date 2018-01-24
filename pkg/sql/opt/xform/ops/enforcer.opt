@@ -1,0 +1,9 @@
+[Relational, Enforcer]
+define Sort {
+    Input Expr
+}
+
+[Relational, Enforcer]
+define Arrange {
+    Input Expr
+}

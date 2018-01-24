@@ -13,6 +13,7 @@ foo define f123 "hello world" foo# comment ()[]
 (IDENT foo)
 (COMMENT # comment ()[])
 
+
 # Symbols
 scan
 ()[]{}$:*==>&,^|.. ...
@@ -35,17 +36,20 @@ scan
 (ILLEGAL .)
 (ELLIPSES ...)
 
+
 # Unterminated string
 scan
 "hello world
 ----
 (ILLEGAL "hello world)
 
+
 # Comment on its own line.
 scan
 #comment
 ----
 (COMMENT #comment)
+
 
 # Failure scanning string
 scan fail=5
@@ -54,6 +58,7 @@ scan fail=5
 (ILLEGAL "hel)
 (ERROR io: read/write on closed pipe)
 
+
 # Failure scanning comment
 scan fail=6
 # hello
@@ -61,12 +66,14 @@ scan fail=6
 (COMMENT # hel)
 (ERROR io: read/write on closed pipe)
 
+
 # Failure scanning ellipses
 scan fail=3
 ...
 ----
 (ILLEGAL .)
 (ERROR io: read/write on closed pipe)
+
 
 # Failure scanning whitespace
 scan fail=5

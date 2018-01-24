@@ -1,0 +1,132 @@
+[Relational]
+define Scan {
+    Table Table
+}
+
+[Relational]
+define Values {
+    Rows ExprList
+    Cols ColIndexes
+}
+
+[Relational]
+define Select {
+    Input  Expr
+    Filter Expr
+}
+
+[Relational]
+define Project {
+    Input       Expr
+    Projections Expr
+}
+
+[Relational, Join]
+define InnerJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define LeftJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define RightJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define FullJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define SemiJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define AntiJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define InnerJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define LeftJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define RightJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define FullJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define SemiJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define AntiJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational]
+define GroupBy {
+    Input        Expr
+    Groupings    Expr
+    Aggregations Expr
+}
+
+[Relational]
+define Union {
+    Left   Expr
+    Right  Expr
+    ColMap ColMap
+}
+
+[Relational]
+define Intersect {
+    Left  Expr
+    Right Expr
+}
+
+[Relational]
+define Except {
+    Left  Expr
+    Right Expr
+}

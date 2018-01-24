@@ -15,9 +15,11 @@
 package datadriven
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"testing"
 )
 
@@ -51,8 +53,22 @@ func RunTest(t *testing.T, path string, f func(d *TestData) string) {
 	for r.Next(t) {
 		d := &r.data
 		actual := f(d)
+		if !strings.HasSuffix(actual, "\n") {
+			// Ensure actual result always ends with a newline, since expected
+			// always will.
+			actual += "\n"
+		}
+
 		if r.rewrite != nil {
-			r.emit(actual)
+			r.emit("----")
+			if hasBlankLine(actual) {
+				r.emit("----")
+				r.rewrite.WriteString(actual)
+				r.emit("----")
+				r.emit("----")
+			} else {
+				r.emit(actual)
+			}
 		} else if d.Expected != actual {
 			t.Fatalf("%s: %s\nexpected:\n%s\nfound:\n%s", d.Pos, d.Input, d.Expected, actual)
 		} else if testing.Verbose() {
@@ -87,4 +103,14 @@ type TestData struct {
 func (td TestData) Fatalf(t *testing.T, format string, args ...interface{}) {
 	t.Helper()
 	t.Fatalf("%s: %s", td.Pos, fmt.Sprintf(format, args...))
+}
+
+func hasBlankLine(s string) bool {
+	scanner := bufio.NewScanner(strings.NewReader(s))
+	for scanner.Scan() {
+		if strings.TrimSpace(scanner.Text()) == "" {
+			return true
+		}
+	}
+	return false
 }
