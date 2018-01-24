@@ -445,7 +445,6 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a VALUES (1, 2), (3, 4)`},
 		{`INSERT INTO a VALUES (a + 1, 2 * 3)`},
 		{`INSERT INTO a(a, b) VALUES (1, 2)`},
-		{`INSERT INTO a(a, a.b) VALUES (1, 2)`},
 		{`INSERT INTO a SELECT b, c FROM d`},
 		{`INSERT INTO a DEFAULT VALUES`},
 		{`INSERT INTO a VALUES (1) RETURNING a, b`},
@@ -460,7 +459,6 @@ func TestParse(t *testing.T) {
 		{`UPSERT INTO a VALUES (1, 2), (3, 4)`},
 		{`UPSERT INTO a VALUES (a + 1, 2 * 3)`},
 		{`UPSERT INTO a(a, b) VALUES (1, 2)`},
-		{`UPSERT INTO a(a, a.b) VALUES (1, 2)`},
 		{`UPSERT INTO a SELECT b, c FROM d`},
 		{`UPSERT INTO a DEFAULT VALUES`},
 		{`UPSERT INTO a DEFAULT VALUES RETURNING a, b`},
@@ -777,7 +775,6 @@ func TestParse(t *testing.T) {
 
 		{`UPDATE a SET b = 3`},
 		{`UPDATE a.b SET b = 3`},
-		{`UPDATE a SET b.c = 3`},
 		{`UPDATE a SET b = 3, c = DEFAULT`},
 		{`UPDATE a SET b = 3 + 4`},
 		{`UPDATE a SET (b, c) = (3, DEFAULT)`},
@@ -1724,6 +1721,34 @@ SELECT 1 + ANY ARRAY[1, 2, 3]
 SELECT 'f'::"blah"
             ^
 `,
+		},
+		{
+			`INSERT INTO foo(a, a.b) VALUES (1,2)`,
+			`unimplemented at or near "b"
+INSERT INTO foo(a, a.b) VALUES (1,2)
+                     ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
+		},
+		{
+			`UPSERT INTO foo(a, a.b) VALUES (1,2)`,
+			`unimplemented at or near "b"
+UPSERT INTO foo(a, a.b) VALUES (1,2)
+                     ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
+		},
+		{
+			`UPDATE foo SET (a, a.b) = (1, 2)`,
+			`unimplemented at or near "b"
+UPDATE foo SET (a, a.b) = (1, 2)
+                     ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
+		},
+		{
+			`UPDATE foo SET a.b = 1`,
+			`unimplemented at or near "b"
+UPDATE foo SET a.b = 1
+                 ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
 		},
 	}
 	for _, d := range testData {
