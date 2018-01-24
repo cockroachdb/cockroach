@@ -70,6 +70,9 @@ const (
 	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
 	decimalTerminator       = 0x00
 
+	JSONEmptyArray  = decimalNaNDesc + 1
+	JSONEmptyObject = JSONEmptyArray + 1
+
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
 	IntMin      = 0x80 // 128
@@ -469,31 +472,40 @@ func DecodeUvarintDescending(b []byte) ([]byte, uint64, error) {
 const (
 	// <term>     -> \x00\x01
 	// \x00       -> \x00\xff
-	escape      byte = 0x00
-	escapedTerm byte = 0x01
-	escaped00   byte = 0xff
-	escapedFF   byte = 0x00
+	escape         byte = 0x00
+	escapedTerm    byte = 0x01
+	escapedJSONKey byte = 0x04
+	escaped00      byte = 0xff
+	escapedFF      byte = 0x00
 )
 
 type escapes struct {
-	escape      byte
-	escapedTerm byte
-	escaped00   byte
-	escapedFF   byte
-	marker      byte
+	escape         byte
+	escapedTerm    byte
+	escapedJSONKey byte
+	escaped00      byte
+	escapedFF      byte
+	marker         byte
 }
 
 var (
-	ascendingEscapes  = escapes{escape, escapedTerm, escaped00, escapedFF, bytesMarker}
-	descendingEscapes = escapes{^escape, ^escapedTerm, ^escaped00, ^escapedFF, bytesDescMarker}
+	ascendingEscapes  = escapes{escape, escapedTerm, escapedJSONKey, escaped00, escapedFF, bytesMarker}
+	descendingEscapes = escapes{^escape, ^escapedTerm, ^escapedJSONKey, ^escaped00, ^escapedFF, bytesDescMarker}
 )
+
+// EncodeBytesAscending encodes the []byte value using an escape-based
+// encoding.
+func EncodeBytesAscending(b []byte, data []byte) []byte {
+	return encodeBytesAscendingWithTerminator(b, data, ascendingEscapes.escapedTerm)
+}
 
 // EncodeBytesAscending encodes the []byte value using an escape-based
 // encoding. The encoded value is terminated with the sequence
 // "\x00\x01" which is guaranteed to not occur elsewhere in the
 // encoded value. The encoded bytes are append to the supplied buffer
-// and the resulting buffer is returned.
-func EncodeBytesAscending(b []byte, data []byte) []byte {
+// and the resulting buffer is returned. The terminator allows us to pass
+// different terminators for things such as JSON key encoding.
+func encodeBytesAscendingWithTerminator(b []byte, data []byte, terminator byte) []byte {
 	b = append(b, bytesMarker)
 	for {
 		// IndexByte is implemented by the go runtime in assembly and is
@@ -507,7 +519,7 @@ func EncodeBytesAscending(b []byte, data []byte) []byte {
 		data = data[i+1:]
 	}
 	b = append(b, data...)
-	return append(b, escape, escapedTerm)
+	return append(b, escape, terminator)
 }
 
 // EncodeBytesDescending encodes the []byte value using an
@@ -562,7 +574,7 @@ func decodeBytesInternal(b []byte, r []byte, e escapes, expectMarker bool) ([]by
 			return nil, nil, errors.Errorf("malformed escape in buffer %#x", b)
 		}
 		v := b[i+1]
-		if v == e.escapedTerm {
+		if v == e.escapedTerm || v == e.escapedJSONKey {
 			if r == nil {
 				r = b[:i]
 			} else {
@@ -594,7 +606,7 @@ func getBytesLength(b []byte, e escapes) (int, error) {
 			return 0, errors.Errorf("malformed escape in buffer %#x", b)
 		}
 		skipped += i + 2
-		if b[skipped-1] == e.escapedTerm {
+		if b[skipped-1] == e.escapedTerm || b[skipped-1] == e.escapedJSONKey {
 			return skipped, nil
 		}
 	}
@@ -604,6 +616,14 @@ func getBytesLength(b []byte, e escapes) (int, error) {
 // EncodeBytes for details. The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
 func EncodeStringAscending(b []byte, s string) []byte {
+	return encodeStringAscendingWithTerminator(b, s, ascendingEscapes.escapedTerm)
+}
+
+// EncodeStringAscending encodes the string value using an escape-based encoding. See
+// EncodeBytes for details. The encoded bytes are append to the supplied buffer
+// and the resulting buffer is returned. We can also pass a terminator byte to be used with
+// JSON key encoding.
+func encodeStringAscendingWithTerminator(b []byte, s string, terminator byte) []byte {
 	if len(s) == 0 {
 		return EncodeBytesAscending(b, nil)
 	}
@@ -616,7 +636,24 @@ func EncodeStringAscending(b []byte, s string) []byte {
 	// Next we treat the string data as a maximally sized array which we
 	// slice. This usage is safe because the pointer value remains in the string.
 	arg := (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
-	return EncodeBytesAscending(b, arg)
+	return encodeBytesAscendingWithTerminator(b, arg, terminator)
+}
+
+// EncodeStringAscending encodes the JSON key string value with a JSON specific escaped
+// terminator. This allows us to encodes keys in the same number of bytes as a string,
+// while at the same time giving us a sentinel to identify JSON keys.
+func EncodeJSONKeyStringAscending(b []byte, s string) []byte {
+	return encodeStringAscendingWithTerminator(b, s, escapedJSONKey)
+}
+
+// EncodeJSONEmptyArray returns a byte array b with a byte to signify an empty JSON array.
+func EncodeJSONEmptyArray(b []byte) []byte {
+	return append(b, JSONEmptyArray)
+}
+
+// EncodeJSONEmptyObject returns a byte array b with a byte to signify an empty JSON object.
+func EncodeJSONEmptyObject(b []byte) []byte {
+	return append(b, JSONEmptyObject)
 }
 
 // EncodeStringDescending is the descending version of EncodeStringAscending.
@@ -1181,7 +1218,6 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		if dir == Descending {
 			return b, "", errors.Errorf("descending bytes column dir but ascending bytes encoding")
 		}
-
 		var s string
 		b, s, err = DecodeUnsafeStringAscending(b, nil)
 		if err != nil {
@@ -1222,6 +1258,12 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		}
 		return b, d.String(), nil
 	default:
+		switch b[0] {
+		case JSONEmptyArray:
+			return b[1:], "[]", nil
+		case JSONEmptyObject:
+			return b[1:], "{}", nil
+		}
 		// This shouldn't ever happen, but if it does, return an empty slice.
 		return nil, strconv.Quote(string(b)), nil
 	}
@@ -2001,20 +2043,20 @@ func DecomposeKeyTokens(b []byte) (tokens [][]byte, containsNull bool, err error
 func GetJSONInvertedIndexKeyLength(buf []byte) (int, error) {
 	offset := 0
 	for {
-		typ := PeekType(buf)
-		switch typ {
-		case Array:
+		firstByte := buf[0]
+		switch firstByte {
+		case byte(Array):
 			offset++
 			buf = buf[1:]
-		case NotNull:
-			len, err := PeekLength(buf[1:])
-			if err != nil {
-				return 0, err
-			}
-			offset += len + 1
-			buf = buf[len+1:]
+		case JSONEmptyArray, JSONEmptyObject:
+			return offset + 1, nil
 		default:
 			len, err := PeekLength(buf)
+			if buf[len-1] == escapedJSONKey {
+				offset += len
+				buf = buf[len:]
+				continue
+			}
 			if err != nil {
 				return 0, err
 			}
