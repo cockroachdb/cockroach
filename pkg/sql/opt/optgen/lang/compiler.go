@@ -25,6 +25,7 @@ import (
 type CompiledExpr struct {
 	Defines     DefineSetExpr
 	Rules       RuleSetExpr
+	DefineTags  []string
 	defineIndex map[string]*DefineExpr
 }
 
@@ -58,7 +59,7 @@ func (c *CompiledExpr) String() string {
 	writeIndent(&buf, 1)
 	buf.WriteString(")\n")
 
-	buf.WriteString(")")
+	buf.WriteString(")\n")
 
 	return buf.String()
 }
@@ -79,6 +80,14 @@ type Compiler struct {
 func NewCompiler(files ...string) *Compiler {
 	compiled := &CompiledExpr{defineIndex: make(map[string]*DefineExpr)}
 	return &Compiler{parser: NewParser(files...), compiled: compiled}
+}
+
+// SetFileResolver overrides the default method of opening input files. The
+// default resolver will use os.Open to open input files from disk. Callers
+// can use this method to open input files in some other way.
+func (c *Compiler) SetFileResolver(resolver FileResolver) {
+	// Forward call to the parser, which actually calls the resolver.
+	c.parser.SetFileResolver(resolver)
 }
 
 // Compile parses and compiles the input files and returns the resulting
@@ -111,6 +120,8 @@ func (c *Compiler) Errors() []error {
 func (c *Compiler) compileDefines(defines DefineSetExpr) bool {
 	c.compiled.Defines = defines
 
+	unique := make(map[TagExpr]bool)
+
 	for _, define := range defines {
 		// Record the define in the index for fast lookup.
 		name := string(define.Name)
@@ -120,6 +131,14 @@ func (c *Compiler) compileDefines(defines DefineSetExpr) bool {
 		}
 
 		c.compiled.defineIndex[name] = define
+
+		// Determine unique set of tags.
+		for _, tag := range define.Tags {
+			if !unique[tag] {
+				c.compiled.DefineTags = append(c.compiled.DefineTags, string(tag))
+				unique[tag] = true
+			}
+		}
 	}
 
 	return true

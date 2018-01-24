@@ -1,0 +1,173 @@
+# relational.opt contains Optgen language definitions for all of Cockroach's
+# physical and logical operators that return a table-valued result having rows
+# and columns (i.e. relational). Many of them correspond to operators in the
+# relational algebra, but there are also variants that are useful for concisely
+# and incrementally expressing transformations.
+#
+# Tags
+#
+# Relational - All operators in this file are marked with the Relational tag,
+#              so they can be easily distinguished from Scalar and Enforcer
+#              operators.
+#
+# Join - All join operators (inner, left, right, full, semi, anti), as well as
+#        their JoinApply variants, are marked with the Join tag, which allows
+#        any of them to fulfill a Join pattern match.
+#
+# JoinApply - All join apply operators are marked with the JoinApply tag.
+#             Unlike standard Join operators, JoinApply operators allow the
+#             right input to refer to columns projected by the left input.
+#             Allowing this is useful as an intermediate (or sometimes final)
+#             step in some important transformations (like eliminating
+#             subqueries).
+
+# Scan returns a resultset containing every row in the specified table. Rows
+# and columns are not expected to have any particular ordering. The private
+# Table field is a Metadata.TableIndex that references an optbase.Table
+# definition in the query's metadata.
+[Relational]
+define Scan {
+    Table TableIndex
+}
+
+# Values returns a manufactured resultset containing a constant number of rows
+# specified by the Rows list field. Each row must contain the same set of
+# columns in the same order. The Cols field contains the set of column indexes
+# returned by each row, as a *ColSet.
+[Relational]
+define Values {
+    Rows ExprList
+    Cols ColSet
+}
+
+# Select filters rows from its input resultset, based on the boolean filter
+# predicate expression. Rows which do not match the filter are discarded.
+[Relational]
+define Select {
+    Input  Expr
+    Filter Expr
+}
+
+[Relational]
+define Project {
+    Input       Expr
+    Projections Expr
+}
+
+# InnerJoin represents creates a resultset that combines columns from its left
+# and right inputs, based upon its "on" join predicate. Rows which do not match
+# the predicate are filtered. While expressions in the predicate can refer to
+# columns projected by either the left or right inputs, the inputs are not
+# allowed to refer to the other's projected columns.
+[Relational, Join]
+define InnerJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define LeftJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define RightJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define FullJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define SemiJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join]
+define AntiJoin {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+# InnerJoinApply has the same join semantics as InnerJoin. However, unlike
+# InnerJoin, it allows the right input to refer to columns projected by the
+# left input.
+[Relational, Join, JoinApply]
+define InnerJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define LeftJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define RightJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define FullJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define SemiJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational, Join, JoinApply]
+define AntiJoinApply {
+    Left  Expr
+    Right Expr
+    On    Expr
+}
+
+[Relational]
+define GroupBy {
+    Input        Expr
+    Groupings    Expr
+    Aggregations Expr
+}
+
+[Relational]
+define Union {
+    Left   Expr
+    Right  Expr
+    ColMap ColMap
+}
+
+[Relational]
+define Intersect {
+    Left  Expr
+    Right Expr
+}
+
+[Relational]
+define Except {
+    Left  Expr
+    Right Expr
+}
