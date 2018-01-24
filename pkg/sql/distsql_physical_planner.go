@@ -106,7 +106,12 @@ var planMergeJoins = settings.RegisterBoolSetting(
 	true,
 )
 
-// NewDistSQLPlanner initializes a DistSQLPlanner
+// NewDistSQLPlanner initializes a DistSQLPlanner.
+//
+// nodeDesc is the descriptor of the node on which this planner runs. It is used
+// to favor itself and other close-by nodes when planning. An empty descriptor
+// can be passed to aid bootstrapping, but then SetNodeDesc() needs to be called
+// before this planner is used.
 func NewDistSQLPlanner(
 	ctx context.Context,
 	planVersion distsqlrun.DistSQLVersion,
@@ -119,7 +124,6 @@ func NewDistSQLPlanner(
 	stopper *stop.Stopper,
 	testingKnobs DistSQLPlannerTestingKnobs,
 ) *DistSQLPlanner {
-	log.Infof(ctx, "creating DistSQLPlanner with address %s", nodeDesc.Address)
 	dsp := &DistSQLPlanner{
 		planVersion:  planVersion,
 		st:           st,
@@ -133,6 +137,11 @@ func NewDistSQLPlanner(
 	}
 	dsp.initRunners()
 	return dsp
+}
+
+// SetNodeDesc sets the planner's node descriptor.
+func (dsp *DistSQLPlanner) SetNodeDesc(desc roachpb.NodeDescriptor) {
+	dsp.nodeDesc = desc
 }
 
 // setSpanResolver switches to a different SpanResolver. It is the caller's

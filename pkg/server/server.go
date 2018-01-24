@@ -466,6 +466,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		log.Fatal(ctx, err)
 	}
 	// Set up Executor
+
+	var sqlExecutorTestingKnobs *sql.ExecutorTestingKnobs
+	if k := s.cfg.TestingKnobs.SQLExecutor; k != nil {
+		sqlExecutorTestingKnobs = k.(*sql.ExecutorTestingKnobs)
+	} else {
+		sqlExecutorTestingKnobs = new(sql.ExecutorTestingKnobs)
+	}
+
 	execCfg := sql.ExecutorConfig{
 		Settings:                s.st,
 		NodeInfo:                nodeInfo,
@@ -484,12 +492,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
+		TestingKnobs:            sqlExecutorTestingKnobs,
+		DistSQLPlanner: sql.NewDistSQLPlanner(
+			ctx,
+			distsqlrun.Version,
+			s.st,
+			// The node descriptor will be set later, once it is initialized.
+			roachpb.NodeDescriptor{},
+			s.rpcContext,
+			s.distSQLServer,
+			s.distSender,
+			s.gossip,
+			s.stopper,
+			sqlExecutorTestingKnobs.DistSQLPlannerKnobs),
 	}
-	if sqlExecutorTestingKnobs := s.cfg.TestingKnobs.SQLExecutor; sqlExecutorTestingKnobs != nil {
-		execCfg.TestingKnobs = sqlExecutorTestingKnobs.(*sql.ExecutorTestingKnobs)
-	} else {
-		execCfg.TestingKnobs = new(sql.ExecutorTestingKnobs)
-	}
+
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
 		execCfg.SchemaChangerTestingKnobs = sqlSchemaChangerTestingKnobs.(*sql.SchemaChangerTestingKnobs)
 	} else {
@@ -1094,6 +1111,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		return err
 	}
 	log.Event(ctx, "started node")
+	s.execCfg.DistSQLPlanner.SetNodeDesc(s.node.Descriptor)
 
 	// Cluster ID should have been determined by this point.
 	if s.rpcContext.ClusterID.Get() == uuid.Nil {
@@ -1131,34 +1149,16 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		testingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
 
-	var distSQLPlannerKnobs sql.DistSQLPlannerTestingKnobs
-	if sqlExecutorTestingKnobs := s.cfg.TestingKnobs.SQLExecutor; sqlExecutorTestingKnobs != nil {
-		distSQLPlannerKnobs = sqlExecutorTestingKnobs.(*sql.ExecutorTestingKnobs).DistSQLPlannerKnobs
-	}
-
-	distSQLPlanner := sql.NewDistSQLPlanner(
-		ctx,
-		distsqlrun.Version,
-		s.st,
-		s.node.Descriptor,
-		s.rpcContext,
-		s.distSQLServer,
-		s.distSender,
-		s.gossip,
-		s.stopper,
-		distSQLPlannerKnobs,
-	)
-
 	sql.NewSchemaChangeManager(
 		s.cfg.AmbientCtx,
 		s.execCfg,
 		testingKnobs,
 		*s.db,
 		s.node.Descriptor,
-		distSQLPlanner,
+		s.execCfg.DistSQLPlanner,
 	).Start(s.stopper)
 
-	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, distSQLPlanner)
+	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.execCfg.DistSQLPlanner)
 	s.distSQLServer.Start()
 
 	s.serveMode.set(modeOperational)
