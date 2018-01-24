@@ -2437,6 +2437,15 @@ func (desc *TableDescriptor) IndexSpan(indexID IndexID) roachpb.Span {
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
+// SequenceSpan returns a span that covers the single key of a sequence (which stores its value).
+func (desc *TableDescriptor) SequenceSpan() roachpb.Span {
+	seqKey := roachpb.Key(keys.MakeSequenceKey(uint32(desc.ID)))
+	return roachpb.Span{
+		Key:    seqKey,
+		EndKey: seqKey.Next(),
+	}
+}
+
 // TableSpan returns the Span that corresponds to the entire table.
 func (desc *TableDescriptor) TableSpan() roachpb.Span {
 	prefix := roachpb.Key(keys.MakeTablePrefix(uint32(desc.ID)))

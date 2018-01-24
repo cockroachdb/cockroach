@@ -2600,3 +2600,42 @@ func TestBackupRestoreNotInTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBackupRestoreSequence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	sqlDB.Exec(t, `CREATE SEQUENCE data.t_id_seq`)
+	sqlDB.Exec(t, `CREATE TABLE data.t (id INT PRIMARY KEY DEFAULT nextval('data.t_id_seq'), v text)`)
+	full, _ := filepath.Join(localFoo, "full"), filepath.Join(localFoo, "inc")
+
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('foo')`)
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('baz')`)
+
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, full)
+	sqlDB.Exec(t, `DROP DATABASE data`)
+	sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, full)
+
+	// Verify that the db was restored correctly.
+	sqlDB.CheckQueryResults(t, `SELECT * FROM data.t`, [][]string{
+		{"1", "foo"},
+		{"2", "bar"},
+		{"3", "baz"},
+	})
+
+	sqlDB.CheckQueryResults(t, `SELECT last_value FROM data.t_id_seq`, [][]string{
+		{"3"},
+	})
+
+	// Verify that we can kkeep inserting into the table, without violating a uniqueness constraint.
+	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+
+	// Verify that sequence <=> table dependencies are still in place.
+	_, err := sqlDB.DB.Exec(`DROP SEQUENCE data.t_id_seq`)
+	if err == nil {
+		t.Fatalf("expected an error when trying to drop sequence, since other objects depend on it.")
+	}
+}
