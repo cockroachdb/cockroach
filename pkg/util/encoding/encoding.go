@@ -70,6 +70,10 @@ const (
 	decimalNaNDesc          = decimalInfinity + 1 // NaN encoded descendingly
 	decimalTerminator       = 0x00
 
+	jSONInvertedIndex = decimalNaNDesc + 1
+	jSONEmptyArray    = jSONInvertedIndex + 1
+	jSONEmptyObject   = jSONEmptyArray + 1
+
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
 	IntMin      = 0x80 // 128
@@ -112,6 +116,8 @@ const (
 	Ascending
 	Descending
 )
+
+const escapeLength = 2
 
 // Reverse returns the opposite direction.
 func (d Direction) Reverse() Direction {
@@ -465,10 +471,12 @@ func DecodeUvarintDescending(b []byte) ([]byte, uint64, error) {
 const (
 	// <term>     -> \x00\x01
 	// \x00       -> \x00\xff
-	escape      byte = 0x00
-	escapedTerm byte = 0x01
-	escaped00   byte = 0xff
-	escapedFF   byte = 0x00
+	escape                   byte = 0x00
+	escapedTerm              byte = 0x01
+	escapedJSONObjectKeyTerm byte = 0x02
+	escapedJSONArray         byte = 0x03
+	escaped00                byte = 0xff
+	escapedFF                byte = 0x00
 )
 
 type escapes struct {
@@ -490,7 +498,34 @@ var (
 // encoded value. The encoded bytes are append to the supplied buffer
 // and the resulting buffer is returned.
 func EncodeBytesAscending(b []byte, data []byte) []byte {
-	b = append(b, bytesMarker)
+	return encodeBytesAscendingWithTerminatorAndPrefix(b, data, ascendingEscapes.escapedTerm, bytesMarker)
+}
+
+// encodeBytesAscendingWithTerminator encodes the []byte value using an escape-based
+// encoding. The encoded value is terminated with the sequence
+// "\x00\terminator". The encoded bytes are append to the supplied buffer
+// and the resulting buffer is returned. The terminator allows us to pass
+// different terminators for things such as JSON key encoding.
+func encodeBytesAscendingWithTerminatorAndPrefix(
+	b []byte, data []byte, terminator byte, prefix byte,
+) []byte {
+	b = append(b, prefix)
+	return encodeBytesAscendingWithTerminator(b, data, terminator)
+}
+
+// encodeBytesAscendingWithTerminator encodes the []byte value using an escape-based
+// encoding. The encoded value is terminated with the sequence
+// "\x00\terminator". The encoded bytes are append to the supplied buffer
+// and the resulting buffer is returned. The terminator allows us to pass
+// different terminators for things such as JSON key encoding.
+func encodeBytesAscendingWithTerminator(b []byte, data []byte, terminator byte) []byte {
+	bs := encodeBytesAscendingWithoutTerminatorOrPrefix(b, data)
+	return append(bs, escape, terminator)
+}
+
+// encodeBytesAscendingWithoutTerminatorOrPrefix encodes the []byte value using an escape-based
+// encoding.
+func encodeBytesAscendingWithoutTerminatorOrPrefix(b []byte, data []byte) []byte {
 	for {
 		// IndexByte is implemented by the go runtime in assembly and is
 		// much faster than looping over the bytes in the slice.
@@ -502,8 +537,7 @@ func EncodeBytesAscending(b []byte, data []byte) []byte {
 		b = append(b, escape, escaped00)
 		data = data[i+1:]
 	}
-	b = append(b, data...)
-	return append(b, escape, escapedTerm)
+	return append(b, data...)
 }
 
 // EncodeBytesDescending encodes the []byte value using an
@@ -589,19 +623,54 @@ func getBytesLength(b []byte, e escapes) (int, error) {
 		if i+1 >= len(b) {
 			return 0, errors.Errorf("malformed escape in buffer %#x", b)
 		}
-		skipped += i + 2
+		skipped += i + escapeLength
 		if b[skipped-1] == e.escapedTerm {
 			return skipped, nil
 		}
 	}
 }
 
-// EncodeStringAscending encodes the string value using an escape-based encoding. See
-// EncodeBytes for details. The encoded bytes are append to the supplied buffer
-// and the resulting buffer is returned.
-func EncodeStringAscending(b []byte, s string) []byte {
+func decodeInvertedIndexKey(b []byte) (string, []byte, error) {
+	outBytes := ""
+	tempB := b[1:]
+	for {
+		i := bytes.IndexByte(tempB, escape)
+
+		if i == -1 {
+			return "", nil, errors.Errorf("did not find terminator %#x in buffer %#x", escape, b)
+		}
+		if i+1 >= len(tempB) {
+			return "", nil, errors.Errorf("malformed escape in buffer %#x", b)
+		}
+
+		switch tempB[i+1] {
+		case escapedTerm:
+			if len(tempB[:i]) > 0 {
+				outBytes = outBytes + strconv.Quote(unsafeString(tempB[:i]))
+			} else {
+				lenOut := len(outBytes)
+				if lenOut > 1 && outBytes[lenOut-1] == '/' {
+					outBytes = outBytes[:lenOut-1]
+				}
+			}
+			return outBytes, tempB[i+escapeLength:], nil
+		case escapedJSONObjectKeyTerm:
+			outBytes = outBytes + strconv.Quote(unsafeString(tempB[:i])) + "/"
+		case escapedJSONArray:
+			outBytes = outBytes + "Arr/"
+		default:
+			return "", nil, errors.Errorf("malformed escape in buffer %#x", b)
+
+		}
+
+		tempB = tempB[i+escapeLength:]
+	}
+}
+
+// unsafeConvertStringToBytes converts a string to a byte array to be used with string encoding functions.
+func unsafeConvertStringToBytes(s string) []byte {
 	if len(s) == 0 {
-		return EncodeBytesAscending(b, nil)
+		return nil
 	}
 	// We unsafely convert the string to a []byte to avoid the
 	// usual allocation when converting to a []byte. This is
@@ -611,8 +680,52 @@ func EncodeStringAscending(b []byte, s string) []byte {
 	hdr := (*reflect.StringHeader)(unsafe.Pointer(&s))
 	// Next we treat the string data as a maximally sized array which we
 	// slice. This usage is safe because the pointer value remains in the string.
-	arg := (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
-	return EncodeBytesAscending(b, arg)
+	return (*[0x7fffffff]byte)(unsafe.Pointer(hdr.Data))[:len(s):len(s)]
+}
+
+// EncodeStringAscending encodes the string value using an escape-based encoding. See
+// EncodeBytes for details. The encoded bytes are append to the supplied buffer
+// and the resulting buffer is returned.
+func EncodeStringAscending(b []byte, s string) []byte {
+	return encodeStringAscendingWithTerminatorAndPrefix(b, s, ascendingEscapes.escapedTerm, bytesMarker)
+}
+
+// encodeStringAscendingWithTerminatorAndPrefix encodes the string value using an escape-based encoding. See
+// EncodeBytes for details. The encoded bytes are append to the supplied buffer
+// and the resulting buffer is returned. We can also pass a terminator byte to be used with
+// JSON key encoding.
+func encodeStringAscendingWithTerminatorAndPrefix(
+	b []byte, s string, terminator byte, prefix byte,
+) []byte {
+	str := unsafeConvertStringToBytes(s)
+	return encodeBytesAscendingWithTerminatorAndPrefix(b, str, terminator, prefix)
+}
+
+// EncodeJSONKeyStringAscending encodes the JSON key string value with a JSON specific escaped
+// terminator. This allows us to encode keys in the same number of bytes as a string,
+// while at the same time giving us a sentinel to identify JSON keys.
+func EncodeJSONKeyStringAscending(b []byte, s string, end bool) []byte {
+	str := unsafeConvertStringToBytes(s)
+
+	if end {
+		return encodeBytesAscendingWithoutTerminatorOrPrefix(b, str)
+	}
+	return encodeBytesAscendingWithTerminator(b, str, escapedJSONObjectKeyTerm)
+}
+
+// EncodeJSONEmptyArray returns a byte array b with a byte to signify an empty JSON array.
+func EncodeJSONEmptyArray(b []byte) []byte {
+	return append(b, escape, escapedTerm, jSONEmptyArray)
+}
+
+// AddJSONPathTerminator adds a json path terminator to a byte array.
+func AddJSONPathTerminator(b []byte) []byte {
+	return append(b, escape, escapedTerm)
+}
+
+// EncodeJSONEmptyObject returns a byte array b with a byte to signify an empty JSON object.
+func EncodeJSONEmptyObject(b []byte) []byte {
+	return append(b, escape, escapedTerm, jSONEmptyObject)
 }
 
 // EncodeStringDescending is the descending version of EncodeStringAscending.
@@ -669,6 +782,12 @@ func EncodeNullAscending(b []byte) []byte {
 	return append(b, encodedNull)
 }
 
+// EncodeJSONAscending encodes a JSON Type. The encodes bytes are appended to the
+// supplied buffer and the final buffer is returned.
+func EncodeJSONAscending(b []byte) []byte {
+	return append(b, jSONInvertedIndex)
+}
+
 // EncodeNullDescending is the descending equivalent of EncodeNullAscending.
 func EncodeNullDescending(b []byte) []byte {
 	return append(b, encodedNullDesc)
@@ -683,7 +802,7 @@ func EncodeNotNullAscending(b []byte) []byte {
 
 // EncodeArrayAscending encodes a value used to signify membership of an array for JSON objects.
 func EncodeArrayAscending(b []byte) []byte {
-	return append(b, byte(Array))
+	return append(b, escape, escapedJSONArray)
 }
 
 // EncodeTrueAscending encodes the boolean value true for use with JSON inverted indexes.
@@ -1015,6 +1134,10 @@ func PeekLength(b []byte) (int, error) {
 		return 1, nil
 	case bytesMarker:
 		return getBytesLength(b, ascendingEscapes)
+	case jSONInvertedIndex:
+		return getInvertedIndexKeyLength(b, ascendingEscapes)
+	case jSONEmptyArray, jSONEmptyObject:
+		return 1, nil
 	case bytesDescMarker:
 		return getBytesLength(b, descendingEscapes)
 	case timeMarker:
@@ -1177,7 +1300,6 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		if dir == Descending {
 			return b, "", errors.Errorf("descending bytes column dir but ascending bytes encoding")
 		}
-
 		var s string
 		b, s, err = DecodeUnsafeStringAscending(b, nil)
 		if err != nil {
@@ -1218,6 +1340,23 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		}
 		return b, d.String(), nil
 	default:
+		switch b[0] {
+		case jSONInvertedIndex:
+			var str string
+			str, b, err = decodeInvertedIndexKey(b)
+			if err != nil {
+				return b, "", err
+			}
+			if str == "" {
+				return prettyPrintFirstValue(dir, b)
+			}
+			return b, str, nil
+		case jSONEmptyArray:
+			return b[1:], "[]", nil
+		case jSONEmptyObject:
+			return b[1:], "{}", nil
+		}
+
 		// This shouldn't ever happen, but if it does, return an empty slice.
 		return nil, strconv.Quote(string(b)), nil
 	}
@@ -1992,29 +2131,35 @@ func DecomposeKeyTokens(b []byte) (tokens [][]byte, containsNull bool, err error
 	return out, containsNull, nil
 }
 
+// getInvertedIndexKeyLength finds the length of an inverted index key
+// encoded as a byte array.
+func getInvertedIndexKeyLength(b []byte, e escapes) (int, error) {
+	skipped := 0
+	for {
+		i := bytes.IndexByte(b[skipped:], e.escape)
+		if i == -1 {
+			return 0, errors.Errorf("malformed inverted index key in buffer %#x", b)
+		}
+		skipped += i + escapeLength
+		switch b[skipped-1] {
+		case escapedTerm, jSONEmptyObject, jSONEmptyArray:
+			return skipped, nil
+		}
+	}
+}
+
 // GetJSONInvertedIndexKeyLength returns the length of encoded JSON inverted index
 // key at the start of b.
 func GetJSONInvertedIndexKeyLength(buf []byte) (int, error) {
-	offset := 0
-	for {
-		typ := PeekType(buf)
-		switch typ {
-		case Array:
-			offset++
-			buf = buf[1:]
-		case NotNull:
-			len, err := PeekLength(buf[1:])
-			if err != nil {
-				return 0, err
-			}
-			offset += len + 1
-			buf = buf[len+1:]
-		default:
-			len, err := PeekLength(buf)
-			if err != nil {
-				return 0, err
-			}
-			return offset + len, nil
-		}
+	len, err := PeekLength(buf)
+	if err != nil {
+		return 0, err
 	}
+
+	valLen, err := PeekLength(buf[len:])
+	if err != nil {
+		return 0, err
+	}
+
+	return len + valLen, nil
 }
