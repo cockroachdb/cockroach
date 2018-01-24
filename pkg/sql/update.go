@@ -521,8 +521,8 @@ func (p *planner) addOrMergeExpr(
 }
 
 // namesForExprs expands names in the tuples and subqueries in exprs.
-func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.UnresolvedNames, error) {
-	var names tree.UnresolvedNames
+func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.NameList, error) {
+	var names tree.NameList
 	for _, expr := range exprs {
 		if expr.Tuple {
 			n := -1

@@ -21,7 +21,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -211,12 +210,7 @@ func (p *planner) Insert(
 			// updated.
 			updateCols := make([]sqlbase.ColumnDescriptor, len(names))
 			for i, n := range names {
-				c, err := n.NormalizeUnqualifiedColumnItem()
-				if err != nil {
-					return nil, err
-				}
-
-				col, _, err := en.tableDesc.FindColumnByName(c.ColumnName)
+				col, _, err := en.tableDesc.FindColumnByName(n)
 				if err != nil {
 					return nil, err
 				}
@@ -505,7 +499,7 @@ func GenerateInsertRow(
 }
 
 func (p *planner) processColumns(
-	tableDesc *sqlbase.TableDescriptor, node tree.UnresolvedNames,
+	tableDesc *sqlbase.TableDescriptor, node tree.NameList,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if node == nil {
 		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
@@ -517,18 +511,8 @@ func (p *planner) processColumns(
 
 	cols := make([]sqlbase.ColumnDescriptor, len(node))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(node))
-	for i := range node {
-		c, err := node[i].NormalizeUnqualifiedColumnItem()
-		if err != nil {
-			return nil, err
-		}
-
-		if len(c.Selector) > 0 {
-			return nil, pgerror.UnimplementedWithIssueErrorf(8318,
-				"compound types not supported yet: %q", &node[i])
-		}
-
-		col, err := tableDesc.FindActiveColumnByName(string(c.ColumnName))
+	for i, colName := range node {
+		col, err := tableDesc.FindActiveColumnByName(string(colName))
 		if err != nil {
 			return nil, err
 		}

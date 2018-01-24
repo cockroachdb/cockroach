@@ -27,7 +27,7 @@ package tree
 type Insert struct {
 	With       *With
 	Table      TableExpr
-	Columns    UnresolvedNames
+	Columns    NameList
 	Rows       *Select
 	OnConflict *OnConflict
 	Returning  ReturningClause
