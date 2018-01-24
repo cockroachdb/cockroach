@@ -31,9 +31,9 @@ func TestParser(t *testing.T) {
 		}
 
 		p := NewParser("test.opt")
-		p.openFile = func(name string) (io.ReadCloser, error) {
-			return &testReader{Reader: strings.NewReader(d.Input)}, nil
-		}
+		p.SetFileResolver(func(name string) (io.Reader, error) {
+			return strings.NewReader(d.Input), nil
+		})
 
 		var actual string
 		root := p.Parse()
@@ -48,12 +48,4 @@ func TestParser(t *testing.T) {
 
 		return actual
 	})
-}
-
-type testReader struct {
-	*strings.Reader
-}
-
-func (r *testReader) Close() error {
-	return nil
 }

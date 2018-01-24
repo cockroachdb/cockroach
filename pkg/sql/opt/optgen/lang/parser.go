@@ -20,6 +20,11 @@ import (
 	"os"
 )
 
+// FileResolver is used by the parser to abstract the opening and reading of
+// input files. Callers of the parser can override the default behavior
+// (os.Open) in order to open files in some other way (e.g. for testing).
+type FileResolver func(name string) (io.Reader, error)
+
 // Parser parses Optgen language input files and builds an abstract syntax tree
 // (AST) from them. Typically the Optgen compiler invokes the parser and then
 // performs semantic checks on the resulting AST. For more details on the
@@ -27,14 +32,13 @@ import (
 type Parser struct {
 	files  []string
 	file   int
-	r      io.ReadCloser
+	r      io.Reader
 	s      *Scanner
 	src    SourceLoc
 	errors []error
 
-	// openFile is called to open a file of the specified name. Tests can hook
-	// this in order to avoid actually opening files on disk.
-	openFile func(name string) (io.ReadCloser, error)
+	// resolver is invoked to open the input files provided to the parser.
+	resolver FileResolver
 
 	// unscanned is true if the last token was unscanned (i.e. put back to be
 	// reparsed).
@@ -45,16 +49,21 @@ type Parser struct {
 // list of file paths as its input files. The Parse method must be called in
 // order to parse the input files.
 func NewParser(files ...string) *Parser {
-	// By default, open files using os.Open.
-	openFile := func(name string) (io.ReadCloser, error) {
+	p := &Parser{files: files}
+
+	// By default, resolve file names by a call to os.Open.
+	p.resolver = func(name string) (io.Reader, error) {
 		return os.Open(name)
 	}
-	return &Parser{files: files, openFile: openFile}
+
+	return p
 }
 
-// Close ensures all open files have been closed.
-func (p *Parser) Close() {
-	p.closeScanner()
+// SetFileResolver overrides the default method of opening input files. The
+// default resolver will use os.Open to open input files from disk. Callers
+// can use this method to open input files in some other way.
+func (p *Parser) SetFileResolver(resolver FileResolver) {
+	p.resolver = resolver
 }
 
 // Parse parses the input files and returns the root expression of the AST. If
@@ -62,6 +71,10 @@ func (p *Parser) Close() {
 // by the Errors function.
 func (p *Parser) Parse() *RootExpr {
 	root := p.parseRoot()
+
+	// Ensure that all open files have been closed.
+	p.closeScanner()
+
 	if p.errors != nil {
 		return nil
 	}
@@ -693,7 +706,7 @@ func (p *Parser) unscan() {
 // returns true. If it fails, then it stores the error in p.err and returns
 // false.
 func (p *Parser) openScanner() bool {
-	r, err := p.openFile(p.files[p.file])
+	r, err := p.resolver(p.files[p.file])
 	if err != nil {
 		p.errors = append(p.errors, err)
 		return false
@@ -710,7 +723,11 @@ func (p *Parser) openScanner() bool {
 // closeScanner ensures that the current scanner and reader is closed.
 func (p *Parser) closeScanner() {
 	if p.s != nil {
-		p.r.Close()
+		// If the reader has a Close method, call it.
+		closer, ok := p.r.(io.Closer)
+		if ok {
+			closer.Close()
+		}
 		p.r = nil
 		p.s = nil
 	}
