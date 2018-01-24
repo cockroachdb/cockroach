@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>contactEmailRot13</key>
+	<string></string>
+	<key>contactName</key>
+	<string>Andrew Kimball</string>
+	<key>description</key>
+	<string>Language support for optimizer generator (optgen) files containing operator definitions and matching/replace rules.</string>
+	<key>name</key>
+	<string>Optgen</string>
+	<key>uuid</key>
+	<string>00F2A5A8-0AB2-4C4C-8A12-218FB39A2081</string>
+</dict>
+</plist>
