@@ -1,0 +1,147 @@
+# lang.opt defines the AST expressions used by Optgen's parser, using Optgen's
+# own syntax. This is a form of compiler bootstrapping:
+#   https://en.wikipedia.org/wiki/Bootstrapping_(compilers)
+#
+# The langgen tool generates expr.og.go and operator.og.go from the definitions
+# in this file. See comments at the top of expr.go for instructions on how to
+# regenerate the those files. There are three kinds of nodes in the resulting
+# AST:
+#
+#   Ref: These nodes are referred to by pointer rather than by value. For
+#        example, *DefineExpr and *RuleExpr. If a define statement has no tags,
+#        then it defines a Ref node.
+#
+#   Value: These nodes are represented as a primitive type such as string or
+#          int that are typically passed by value. For example, StringExpr and
+#          TagExpr. Value definitions are marked with a "Value" tag, and have
+#          a Value field that specifies the type of the value. For example:
+#            [Value] define String { Item string }
+#
+#   Slice: These nodes are represented as a slice of some other expression. For
+#          example, []*DefineExpr and []TagExpr. Slice definitions are marked
+#          with a "Slice" tag, and have an Element field that specifies the
+#          type of slice elements. For example:
+#            [Slice] define List { Element Expr }
+
+
+# Root expression is always the top-most node in the AST.
+define Root {
+    Defines DefineSet
+    Rules   RuleSet
+}
+
+# type DefineSetExpr []*DefineExpr
+[Slice]
+define DefineSet {
+    Element Define
+}
+
+# type RuleSetExpr []*RuleExpr
+[Slice]
+define RuleSet {
+    Element Rule
+}
+
+define Define {
+    Tags   Tags
+    Name   String
+    Fields DefineFields
+}
+
+# type TagsExpr []TagExpr
+[Slice]
+define Tags {
+    Element Tag
+}
+
+# type TagExpr string
+[Value]
+define Tag {
+    Value string
+}
+
+# type DefineFieldsExpr []*DefineFieldExpr
+[Slice]
+define DefineFields {
+    Element DefineField
+}
+
+define DefineField {
+    Name String
+    Type String
+}
+
+define Rule {
+    Name    String
+    Tags    Tags
+    Match   Match
+    Replace Expr
+}
+
+define Bind {
+    Label  String
+    Target Expr
+}
+
+define Ref {
+    Label String
+}
+
+define Match {
+    Names OpNames
+    Args  List
+}
+
+# type OpNamesExpr []OpNameExpr
+[Slice]
+define OpNames {
+    Element OpName
+}
+
+# type OpNameExpr string
+[Value]
+define OpName {
+    Value string
+}
+
+define MatchAnd {
+    Left  Expr
+    Right Expr
+}
+
+define MatchInvoke {
+    FuncName String
+    Args     List
+}
+
+define MatchNot {
+    Input Expr
+}
+
+define MatchAny {
+}
+
+define MatchList {
+    MatchItem Expr
+}
+
+define Construct {
+    OpName Expr
+    Args   List
+}
+
+define ConstructList {
+    Items List
+}
+
+# type ListExpr []Expr
+[Slice]
+define List {
+    Element Expr
+}
+
+# type StringExpr string
+[Value]
+define String {
+    Value string
+}
