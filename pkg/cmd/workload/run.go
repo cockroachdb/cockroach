@@ -231,7 +231,7 @@ func runRun(gen workload.Generator, args []string) error {
 		}
 	}
 	const batchSize = -1
-	if _, err := workload.Setup(db, gen.Tables(), batchSize); err != nil {
+	if _, err := workload.Setup(db, gen, batchSize); err != nil {
 		return err
 	}
 
