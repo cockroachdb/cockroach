@@ -26,6 +26,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+type mergeJoinerTestCase struct {
+	spec          MergeJoinerSpec
+	outCols       []uint32
+	leftTypes     []sqlbase.ColumnType
+	leftInput     sqlbase.EncDatumRows
+	rightTypes    []sqlbase.ColumnType
+	rightInput    sqlbase.EncDatumRows
+	expectedTypes []sqlbase.ColumnType
+	expected      sqlbase.EncDatumRows
+}
+
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -36,16 +47,7 @@ func TestMergeJoiner(t *testing.T) {
 	}
 	null := sqlbase.EncDatum{Datum: tree.DNull}
 
-	testCases := []struct {
-		spec          MergeJoinerSpec
-		outCols       []uint32
-		leftTypes     []sqlbase.ColumnType
-		leftInput     sqlbase.EncDatumRows
-		rightTypes    []sqlbase.ColumnType
-		rightInput    sqlbase.EncDatumRows
-		expectedTypes []sqlbase.ColumnType
-		expected      sqlbase.EncDatumRows
-	}{
+	testCases := []mergeJoinerTestCase{
 		{
 			spec: MergeJoinerSpec{
 				LeftOrdering: convertToSpecOrdering(
@@ -679,141 +681,6 @@ func TestMergeJoiner(t *testing.T) {
 			},
 		},
 		{
-			// Check that INTERSECT ALL only returns rows that are in both the left
-			// and right side.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
-					sqlbase.ColumnOrdering{
-						{ColIdx: 0, Direction: encoding.Ascending},
-						{ColIdx: 1, Direction: encoding.Ascending},
-					}),
-				RightOrdering: convertToSpecOrdering(
-					sqlbase.ColumnOrdering{
-						{ColIdx: 0, Direction: encoding.Ascending},
-						{ColIdx: 1, Direction: encoding.Ascending},
-					}),
-				Type: JoinType_INTERSECT_ALL,
-				// Implicit @1 = @3 AND @2 = @4 constraint.
-			},
-			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
-			leftInput: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[0], v[3]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-			rightTypes: twoIntCols,
-			rightInput: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-			expectedTypes: twoIntCols,
-			expected: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-		},
-		{
-			// Check that INTERSECT ALL returns the correct number of duplicates when
-			// the left side contains more duplicates of a row than the right side.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
-					sqlbase.ColumnOrdering{
-						{ColIdx: 0, Direction: encoding.Ascending},
-						{ColIdx: 1, Direction: encoding.Ascending},
-					}),
-				RightOrdering: convertToSpecOrdering(
-					sqlbase.ColumnOrdering{
-						{ColIdx: 0, Direction: encoding.Ascending},
-						{ColIdx: 1, Direction: encoding.Ascending},
-					}),
-				Type: JoinType_INTERSECT_ALL,
-				// Implicit @1 = @3 AND @2 = @4 constraint.
-			},
-			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
-			leftInput: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[0], v[3]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-			rightTypes: twoIntCols,
-			rightInput: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-			expectedTypes: twoIntCols,
-			expected: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-		},
-		{
-			// Check that INTERSECT ALL returns the correct number of duplicates when
-			// the right side contains more duplicates of a row than the left side.
-			spec: MergeJoinerSpec{
-				LeftOrdering: convertToSpecOrdering(
-					sqlbase.ColumnOrdering{
-						{ColIdx: 0, Direction: encoding.Ascending},
-						{ColIdx: 1, Direction: encoding.Ascending},
-					}),
-				RightOrdering: convertToSpecOrdering(
-					sqlbase.ColumnOrdering{
-						{ColIdx: 0, Direction: encoding.Ascending},
-						{ColIdx: 1, Direction: encoding.Ascending},
-					}),
-				Type: JoinType_INTERSECT_ALL,
-				// Implicit @1 = @3 AND @2 = @4 constraint.
-			},
-			outCols:   []uint32{0, 1},
-			leftTypes: twoIntCols,
-			leftInput: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[0], v[3]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-			rightTypes: twoIntCols,
-			rightInput: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[0], v[1]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-			expectedTypes: twoIntCols,
-			expected: sqlbase.EncDatumRows{
-				{v[0], v[0]},
-				{v[0], v[0]},
-				{v[0], v[1]},
-				{v[5], v[0]},
-				{v[5], v[1]},
-			},
-		},
-		{
 			// Check that EXCEPT ALL only returns rows that are on the left side
 			// but not the right side.
 			spec: MergeJoinerSpec{
@@ -937,6 +804,11 @@ func TestMergeJoiner(t *testing.T) {
 				{v[0], v[3]},
 			},
 		},
+	}
+
+	// Add INTERSECT ALL cases with MergeJoinerSpecs.
+	for _, tc := range intersectAllTestCases() {
+		testCases = append(testCases, setOpTestCaseToMergeJoinerTestCase(tc))
 	}
 
 	for _, c := range testCases {

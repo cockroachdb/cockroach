@@ -33,6 +33,16 @@ import (
 	"github.com/pkg/errors"
 )
 
+type hashJoinerTestCase struct {
+	spec       HashJoinerSpec
+	outCols    []uint32
+	leftTypes  []sqlbase.ColumnType
+	leftInput  sqlbase.EncDatumRows
+	rightTypes []sqlbase.ColumnType
+	rightInput sqlbase.EncDatumRows
+	expected   sqlbase.EncDatumRows
+}
+
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -43,15 +53,7 @@ func TestHashJoiner(t *testing.T) {
 	}
 	null := sqlbase.EncDatum{Datum: tree.DNull}
 
-	testCases := []struct {
-		spec       HashJoinerSpec
-		outCols    []uint32
-		leftTypes  []sqlbase.ColumnType
-		leftInput  sqlbase.EncDatumRows
-		rightTypes []sqlbase.ColumnType
-		rightInput sqlbase.EncDatumRows
-		expected   sqlbase.EncDatumRows
-	}{
+	testCases := []hashJoinerTestCase{
 		{
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
@@ -874,6 +876,11 @@ func TestHashJoiner(t *testing.T) {
 				{v[2], v[2]},
 			},
 		},
+	}
+
+	// Add INTERSECT ALL cases with HashJoinerSpecs.
+	for _, tc := range intersectAllTestCases() {
+		testCases = append(testCases, setOpTestCaseToHashJoinerTestCase(tc))
 	}
 
 	ctx := context.Background()

@@ -558,14 +558,15 @@ func (h *hashJoiner) probeRow(
 				// Matched rows are marked on the stored side for 2 reasons.
 				// 1: For outer and anti joins to iterate through the unmarked
 				// rows.
-				// 2: For semi-joins where the left-side is stored, multiple
-				// rows from the right may match to the same row on the left.
+				// 2: For semi-joins and INTERSECT ALL where the left-side is stored,
+				// multiple rows from the right may match to the same row on the left.
 				// The rows on the left should only be emitted the first time
 				// a right row matches it, then marked to not be emitted again.
 				// (Note: an alternative is to remove the entry from the stored
 				// side, but our containers do not support that today).
 				// TODO(peter): figure out a way to reduce this special casing below.
-				if (h.joinType == leftSemiJoin) && i.IsMarked(ctx) {
+				if (h.joinType == leftSemiJoin || h.joinType == intersectAllJoin) &&
+					i.IsMarked(ctx) {
 					shouldEmit = false
 				} else if err := i.Mark(ctx, true); err != nil {
 					return false, nil
@@ -575,6 +576,9 @@ func (h *hashJoiner) probeRow(
 				consumerStatus, err := h.out.EmitRow(ctx, renderedRow)
 				if err != nil || consumerStatus != NeedMoreRows {
 					return true, nil
+				} else if h.joinType == intersectAllJoin {
+					// We found a match, so we are done with this row.
+					return false, nil
 				}
 			}
 			if shouldShortCircuit(h.storedSide, h.joinType) {
@@ -677,6 +681,8 @@ func shouldMark(storedSide joinSide, joinType joinType) bool {
 	case joinType == leftSemiJoin && storedSide == leftSide:
 		return true
 	case joinType == leftAntiJoin && storedSide == leftSide:
+		return true
+	case joinType == intersectAllJoin:
 		return true
 	case shouldEmitUnmatchedRow(storedSide, joinType):
 		return true
