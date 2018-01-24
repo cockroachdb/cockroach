@@ -144,7 +144,6 @@
 		StoreNotFoundError
 		UnhandledRetryableError
 		HandledRetryableTxnError
-		UntrackedTxnError
 		TxnPrevAttemptError
 		IntegerOverflowError
 		ErrorDetail
