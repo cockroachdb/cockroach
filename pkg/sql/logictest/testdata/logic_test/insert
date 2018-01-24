@@ -569,13 +569,13 @@ CREATE TABLE nocols()
 statement error INSERT has more expressions than target columns, 2 expressions for 0 targets
 INSERT INTO nocols VALUES (true, default)
 
-statement error compound types not supported yet: "kv.k"
+statement error unimplemented at or near "k"
 INSERT INTO kv (kv.k) VALUES ('hello')
 
-statement error compound types not supported yet: "k.\*"
+statement error unimplemented at or near "*"
 INSERT INTO kv (k.*) VALUES ('hello')
 
-statement error compound types not supported yet: "k.v"
+statement error unimplemented at or near "v"
 INSERT INTO kv (k.v) VALUES ('hello')
 
 
