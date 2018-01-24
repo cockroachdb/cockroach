@@ -4,7 +4,7 @@ package xform
 
 type childCountLookupFunc func(ev *ExprView) int
 
-var childCountLookup = []childCountLookupFunc{
+var childCountLookup = [...]childCountLookupFunc{
 	// UnknownOp
 	func(ev *ExprView) int {
 		panic("op type not initialized")
@@ -407,7 +407,7 @@ var childCountLookup = []childCountLookupFunc{
 		return 1
 	},
 
-	// ArrangeOp
+	// PresentOp
 	func(ev *ExprView) int {
 		return 1
 	},
@@ -415,7 +415,7 @@ var childCountLookup = []childCountLookupFunc{
 
 type childGroupLookupFunc func(ev *ExprView, n int) GroupID
 
-var childGroupLookup = []childGroupLookupFunc{
+var childGroupLookup = [...]childGroupLookupFunc{
 	// UnknownOp
 	func(ev *ExprView, n int) GroupID {
 		panic("op type not initialized")
@@ -1449,7 +1449,7 @@ var childGroupLookup = []childGroupLookupFunc{
 		panic("child index out of range")
 	},
 
-	// ArrangeOp
+	// PresentOp
 	func(ev *ExprView, n int) GroupID {
 		if n == 0 {
 			return ev.loc.group
@@ -1461,7 +1461,7 @@ var childGroupLookup = []childGroupLookupFunc{
 
 type privateLookupFunc func(ev *ExprView) PrivateID
 
-var privateLookup = []privateLookupFunc{
+var privateLookup = [...]privateLookupFunc{
 	// UnknownOp
 	func(ev *ExprView) PrivateID {
 		panic("op type not initialized")
@@ -1865,13 +1865,13 @@ var privateLookup = []privateLookupFunc{
 		return 0
 	},
 
-	// ArrangeOp
+	// PresentOp
 	func(ev *ExprView) PrivateID {
 		return 0
 	},
 }
 
-var isScalarLookup = []bool{
+var isScalarLookup = [...]bool{
 	false, // UnknownOp
 
 	true,  // SubqueryOp
@@ -1952,10 +1952,10 @@ var isScalarLookup = []bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // ArrangeOp
+	false, // PresentOp
 }
 
-var isRelationalLookup = []bool{
+var isRelationalLookup = [...]bool{
 	false, // UnknownOp
 
 	false, // SubqueryOp
@@ -2036,10 +2036,10 @@ var isRelationalLookup = []bool{
 	true,  // IntersectOp
 	true,  // ExceptOp
 	true,  // SortOp
-	true,  // ArrangeOp
+	true,  // PresentOp
 }
 
-var isJoinLookup = []bool{
+var isJoinLookup = [...]bool{
 	false, // UnknownOp
 
 	false, // SubqueryOp
@@ -2120,10 +2120,10 @@ var isJoinLookup = []bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // ArrangeOp
+	false, // PresentOp
 }
 
-var isJoinApplyLookup = []bool{
+var isJoinApplyLookup = [...]bool{
 	false, // UnknownOp
 
 	false, // SubqueryOp
@@ -2204,10 +2204,10 @@ var isJoinApplyLookup = []bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // ArrangeOp
+	false, // PresentOp
 }
 
-var isEnforcerLookup = []bool{
+var isEnforcerLookup = [...]bool{
 	false, // UnknownOp
 
 	false, // SubqueryOp
@@ -2288,7 +2288,7 @@ var isEnforcerLookup = []bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	true,  // SortOp
-	true,  // ArrangeOp
+	true,  // PresentOp
 }
 
 func (ev *ExprView) IsScalar() bool {

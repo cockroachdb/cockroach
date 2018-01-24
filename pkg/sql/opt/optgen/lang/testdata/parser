@@ -1,4 +1,6 @@
+#
 # Define without tags.
+#
 parse
 define Lt {
     Left  Expr
@@ -20,8 +22,9 @@ define Lt {
 	Rules=(RuleSet)
 )
 
-
+#
 # Define with tags.
+#
 parse
 [Tag1, Tag2]
 define Not {
@@ -42,56 +45,50 @@ define Not {
 	Rules=(RuleSet)
 )
 
-
+#
 # Define error cases + recovery cases.
+#
 parse
-#
 # Expected tag name
-#
 [...]
 define Not {}
-#
+
 # Expected comma
-#
 [Tag1 Tag2]
 define Not {}
-#
+
 # Expected define statement
-#
 [Tag1]
 def Not {}
-#
+
 # Expected define name
-#
 define {}
-#
-# Expected {
-#
+
+# Expected '{'
 }
 define Not Unknown
-#
+
 # Expected field name
-#
 define Not {
     ()
 }
-#
+
 # Expected field type
-#
 define Not {
     Input 123
 }
 ----
-test.opt:4:2: expected tag name, found '...'
-test.opt:9:7: expected comma, found 'Tag2'
-test.opt:15:1: expected define statement, found 'def'
-test.opt:19:8: expected define name, found '{'
-test.opt:24:12: expected '{', found 'Unknown'
-test.opt:29:5: expected define field name, found '('
-test.opt:35:11: expected define field type, found '1'
+test.opt:2:2: expected tag name, found '...'
+test.opt:6:7: expected comma, found 'Tag2'
+test.opt:11:1: expected define statement, found 'def'
+test.opt:14:8: expected define name, found '{'
+test.opt:18:12: expected '{', found 'Unknown'
+test.opt:22:5: expected define field name, found '('
+test.opt:27:11: expected define field type, found '1'
 
-
+#
 # Match multiple op names.
+#
 parse
 [Tag]
 (One | Two) => (One)
@@ -113,8 +110,9 @@ parse
 	)
 )
 
-
+#
 # Use various match operators.
+#
 parse
 [Tag]
 (Op
@@ -161,8 +159,9 @@ parse
 	)
 )
 
-
+#
 # Bind different kinds of expressions.
+#
 parse
 [Bind]
 (Op
@@ -221,8 +220,9 @@ parse
 	)
 )
 
-
+#
 # Match boolean expressions.
+#
 parse
 [boolean]
 (op * & ^^(func) & (func2)) => (op)
@@ -260,8 +260,9 @@ parse
 	)
 )
 
-
+#
 # Match invoke expression.
+#
 parse
 [Invoke]
 (Op $left:* $right:* & (Invoke $right $left)) => (Op)
@@ -297,8 +298,9 @@ parse
 	)
 )
 
-
+#
 # Match list expression.
+#
 parse
 [List]
 (Op [ ... $item:[ ... $item2:(SubOp) ... ] & (Func $item) ... ]) => (Op)
@@ -350,8 +352,9 @@ parse
 	)
 )
 
-
+#
 # Replace with string expression.
+#
 parse
 [ConstructString]
 (Op) => "foo"
@@ -373,8 +376,9 @@ parse
 	)
 )
 
-
+#
 # Replace with bound expression.
+#
 parse
 [ConstructBound]
 (Op $input:*) => $input
@@ -398,8 +402,9 @@ parse
 	)
 )
 
-
+#
 # Replace with construct expression.
+#
 parse
 [Construct]
 (Op $input:*) => (Op $input (SubOp "foo"))
@@ -434,8 +439,9 @@ parse
 	)
 )
 
-
+#
 # Use dynamic construct name.
+#
 parse
 [Construct]
 (Op $input:*) => ((MakeOpName $input) (SubOp $input))
@@ -477,119 +483,103 @@ parse
 	)
 )
 
-
+#
 # Match error cases + recovery cases.
+#
 parse
-#
 # Expected define statement or rule
-#
 (Op) => (Op)
-#
+
 # Expected op name
-#
 [Tag]
 (Op | *) => (Op)
-#
+
 # Expected bind label
-#
 [Tag]
 (Op $*) => (Op)
-#
+
 # Expected bind colon
-#
 [Tag]
 (Op $bind*) => (Op)
-#
+
 # Expected match pattern
-#
 [Tag]
 (Op 1) => (Op)
-#
+
 # Expected custom function call
-#
 [Tag]
 (Op * & $foo:*) => (Op)
-#
+
 # Expected custom function name
-#
 [Tag]
 (Op * & ^(*)) => (Op)
-#
+
 # Cannot bind custom function call arguments
-#
 [Tag]
 (Op * & (Func $foo:*)) => (Op)
-#
+
 # Expected variable reference
-#
 [Tag]
 (Op * & (Func *)) => (Op)
-#
+
 # Expected start ellipses
-#
 [Tag]
 (Op []) => (Op)
-#
+
 # Expected match pattern in list
-#
 [Tag]
 (Op [ ... 123 ... ]) => (Op)
-#
+
 # Expected end ellipses
-#
 [Tag]
 (Op [ ... * ]) => (Op)
-#
+
 # Expected list end bracket
-#
 [Tag]
 (Op [ ... * ...) => (Op)
 ----
-test.opt:4:1: expected define statement or rule, found '('
-test.opt:9:7: expected operator name, found '*'
-test.opt:14:6: expected bind label, found '*'
-test.opt:19:10: expected ':', found '*'
-test.opt:24:5: expected match pattern, found '1'
-test.opt:29:9: expected custom function call, found '$'
-test.opt:34:11: expected custom function name, found '*'
-test.opt:39:19: cannot bind custom function call arguments
-test.opt:44:15: expected variable reference, found '*'
-test.opt:49:6: expected '...', found ']'
-test.opt:54:11: expected match pattern, found '1'
-test.opt:59:13: expected '...', found ']'
-test.opt:64:16: expected ']', found ')'
+test.opt:2:1: expected define statement or rule, found '('
+test.opt:6:7: expected operator name, found '*'
+test.opt:10:6: expected bind label, found '*'
+test.opt:14:10: expected ':', found '*'
+test.opt:18:5: expected match pattern, found '1'
+test.opt:22:9: expected custom function call, found '$'
+test.opt:26:11: expected custom function name, found '*'
+test.opt:30:19: cannot bind custom function call arguments
+test.opt:34:15: expected variable reference, found '*'
+test.opt:38:6: expected '...', found ']'
+test.opt:42:11: expected match pattern, found '1'
+test.opt:46:13: expected '...', found ']'
+test.opt:50:16: expected ']', found ')'
 
-
+#
 # Replace error cases + recovery cases.
+#
 parse
-#
 # Expected replace expression
-#
 [Tag]
 (Op) => 123
-#
+
 # Expected construct name
-#
 [Tag]
 (Op) => (*)
-#
+
 # Expected replace expression (nested)
-#
 [Tag]
 (Op) => (Op 123)
-#
+
 # Expected construct name (nested)
-#
 [Tag]
 (Op) => ((123))
 ----
-test.opt:5:9: expected replace pattern, found '1'
-test.opt:10:10: expected construct name, found '*'
-test.opt:15:13: expected replace pattern, found '1'
-test.opt:20:11: expected construct name, found '1'
+test.opt:3:9: expected replace pattern, found '1'
+test.opt:7:10: expected construct name, found '*'
+test.opt:11:13: expected replace pattern, found '1'
+test.opt:15:11: expected construct name, found '1'
 
-
+#
 # Replace EOF error case
+#
 parse
 [Name]
 (Op)

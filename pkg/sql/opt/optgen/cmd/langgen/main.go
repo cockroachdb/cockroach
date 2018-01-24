@@ -99,7 +99,7 @@ func usage() {
 
 	fmt.Fprintf(os.Stderr, "Usage:\n")
 
-	fmt.Fprintf(os.Stderr, "\tlanggen command [flags] sources...\n\n")
+	fmt.Fprintf(os.Stderr, "\tlanggen [flags] command sources...\n\n")
 
 	fmt.Fprintf(os.Stderr, "The commands are:\n\n")
 	fmt.Fprintf(os.Stderr, "\texprs  generate expression definitions and functions\n")

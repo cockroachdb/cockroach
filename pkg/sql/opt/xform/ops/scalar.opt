@@ -1,0 +1,329 @@
+[Scalar]
+define Subquery {
+    Input      Expr
+    Projection Expr
+}
+
+# Variable returns the typed scalar value of the specified column in the query.
+# The private Col field is a Metadata.ColumnIndex.
+[Scalar]
+define Variable {
+    Col ColumnIndex
+}
+
+# Const returns a typed scalar constant value. The private Value field is a
+# tree.Datum value.
+[Scalar]
+define Const {
+    Value Datum
+}
+
+[Scalar]
+define Placeholder {
+    Value Interface
+}
+
+[Scalar]
+define Tuple {
+    Elems ExprList
+}
+
+[Scalar]
+define Filters {
+    Conditions ExprList
+}
+
+# Projections is a set of typed scalar expressions that will become output
+# columns for a containing relational expression, such as Project or GroupBy.
+# The private Cols field contains the set of column indexes returned by the
+# expression, as a *ColSet.
+[Scalar]
+define Projections {
+    Items ExprList
+    Cols  ColSet
+}
+
+[Scalar]
+define Exists {
+    Input Expr
+}
+
+[Scalar]
+define And {
+    Left  Expr
+    Right Expr
+}
+
+[Scalar]
+define Or {
+    Left  Expr
+    Right Expr
+}
+
+[Scalar]
+define Not {
+    Input Expr
+}
+
+[Scalar]
+define Eq {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Lt {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Gt {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Le {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Ge {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Ne {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define In {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define NotIn {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Like {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define NotLike {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define ILike {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define NotILike {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define SimilarTo {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define NotSimilarTo {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define RegMatch {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define NotRegMatch {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define RegIMatch {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define NotRegIMatch {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define IsDistinctFrom {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define IsNotDistinctFrom {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Is {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define IsNot {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Any {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Some {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define All {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Bitand {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Bitor {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Bitxor {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Plus {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Minus {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Mult {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Div {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define FloorDiv {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Mod {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Pow {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Concat {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define LShift {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define RShift {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define UnaryPlus {
+    Input Expr
+}
+
+[Scalar]
+define UnaryMinus {
+    Input Expr
+}
+
+[Scalar]
+define UnaryComplement {
+    Input Expr
+}
+
+[Scalar]
+define Function {
+    Args ExprList
+    Def  FuncDef
+}
+
+# True is the boolean true value that is equivalent to the tree.DBoolTrue datum
+# value. It is a separate operator to make matching and replacement simpler and
+# more efficient, as patterns can contain (True) expressions.
+[Scalar]
+define True {
+}
+
+# False is the boolean false value that is equivalent to the tree.DBoolFalse
+# datum value. It is a separate operator to make matching and replacement
+# simpler and more efficient, as patterns can contain (False) expressions.
+[Scalar]
+define False {
+}

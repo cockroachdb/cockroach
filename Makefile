@@ -357,6 +357,7 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock bin/returncheck | $(SUBMODULES_TARGE
 		./vendor/golang.org/x/tools/cmd/goyacc \
 		./vendor/golang.org/x/tools/cmd/stringer \
 		./pkg/sql/opt/optgen/cmd/langgen
+		./pkg/sql/opt/optgen/cmd/optgen
 	touch $@
 
 $(SUBMODULES_TARGET):
