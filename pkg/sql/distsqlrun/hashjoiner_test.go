@@ -874,6 +874,125 @@ func TestHashJoiner(t *testing.T) {
 				{v[2], v[2]},
 			},
 		},
+		{
+			// Check that INTERSECT ALL only returns rows that are in both the left
+			// and right side.
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0, 1},
+				RightEqColumns: []uint32{0, 1},
+				Type:           JoinType_INTERSECT_ALL,
+				// Implicit @1 = @3 AND @2 = @4 constraint.
+			},
+			outCols:   []uint32{0, 1},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[2], v[1]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+				{v[5], v[1]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+		},
+		{
+			// Check that INTERSECT ALL returns the correct number of duplicates when
+			// the left side contains more duplicates of a row than the right side.
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0, 1},
+				RightEqColumns: []uint32{0, 1},
+				Type:           JoinType_INTERSECT_ALL,
+				// Implicit @1 = @3 AND @2 = @4 constraint.
+			},
+			outCols:   []uint32{0, 1},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[2], v[1]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+				{v[5], v[1]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+		},
+		{
+			// Check that INTERSECT ALL returns the correct number of duplicates when
+			// the right side contains more duplicates of a row than the left side.
+			spec: HashJoinerSpec{
+				LeftEqColumns:  []uint32{0, 1},
+				RightEqColumns: []uint32{0, 1},
+				Type:           JoinType_INTERSECT_ALL,
+				// Implicit @1 = @3 AND @2 = @4 constraint.
+			},
+			outCols:   []uint32{0, 1},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[2], v[1]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+				{v[5], v[1]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[4]},
+				{v[2], v[0]},
+				{v[3], v[5]},
+				{v[3], v[4]},
+				{v[3], v[3]},
+			},
+		},
 	}
 
 	ctx := context.Background()
