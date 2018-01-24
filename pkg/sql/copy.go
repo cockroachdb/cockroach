@@ -49,7 +49,7 @@ import (
 // and: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
 type copyMachine struct {
 	table         tree.TableExpr
-	columns       tree.UnresolvedNames
+	columns       tree.NameList
 	resultColumns sqlbase.ResultColumns
 	buf           bytes.Buffer
 	rows          []*tree.Tuple

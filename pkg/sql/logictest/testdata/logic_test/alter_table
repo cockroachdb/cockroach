@@ -19,7 +19,7 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t]
 fetched: /t/primary/1/f -> /9
 output row: [1 9]
 
-statement error invalid table name
+statement error syntax error at or near "*"
 ALTER TABLE t RENAME TO t.*
 
 statement ok

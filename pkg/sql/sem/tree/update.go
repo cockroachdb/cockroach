@@ -63,7 +63,7 @@ func (node *UpdateExprs) Format(ctx *FmtCtx) {
 // UpdateExpr represents an update expression.
 type UpdateExpr struct {
 	Tuple bool
-	Names UnresolvedNames
+	Names NameList
 	Expr  Expr
 }
 

@@ -189,19 +189,3 @@ func (u *UnresolvedName) Format(ctx *FmtCtx) {
 	ctx.FormatNode((*NameParts)(u))
 }
 func (u *UnresolvedName) String() string { return AsString(u) }
-
-// UnresolvedNames corresponds to a comma-separate list of unresolved
-// names.  Note: this should be treated as immutable when embedded in
-// an Expr context, otherwise the Walk code must be updated to
-// duplicate the array an Expr node is duplicated.
-type UnresolvedNames []UnresolvedName
-
-// Format implements the NodeFormatter interface.
-func (u *UnresolvedNames) Format(ctx *FmtCtx) {
-	for i := range *u {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatNode(&(*u)[i])
-	}
-}

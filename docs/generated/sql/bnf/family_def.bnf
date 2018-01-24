@@ -1,3 +1,2 @@
 family_def ::=
-	'FAMILY' name '(' name ( ( ',' name ) )* ')'
-	| 'FAMILY'  '(' name ( ( ',' name ) )* ')'
+	'FAMILY' opt_family_name '(' name ( ( ',' name ) )* ')'

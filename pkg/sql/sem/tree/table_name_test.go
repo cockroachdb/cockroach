@@ -41,7 +41,7 @@ func TestNormalizeTableName(t *testing.T) {
 		{`""`, ``, ``, `empty table name`},
 		{`foo`, ``, ``, `no database specified`},
 		{`foo@bar`, ``, ``, `syntax error`},
-		{`test.*`, ``, ``, `invalid table name: "test\.\*"`},
+		{`test.*`, ``, ``, `syntax error at or near "*"`},
 		{`p."".bar`, ``, ``, `empty schema name: "p\.\.bar"`},
 	}
 
