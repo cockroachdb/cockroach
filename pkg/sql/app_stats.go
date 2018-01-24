@@ -297,8 +297,19 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 					App:     hashedApp,
 				}
 				stats.Lock()
-				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: stats.data})
+				data := stats.data
 				stats.Unlock()
+
+				if data.LastErr != "" {
+					// Unfortunately by this point we just have an opaque string and must
+					// assume it could contain anything and is thus not suitable for
+					// inclusion in for diagnostic reporting. If/when we kept the original
+					// error around, we could do some smarter redacting or classification,
+					// or we could do that upstream and keep a "clean" string for
+					// diagnostic reporting, rather than this blunt scrub.
+					data.LastErr = "scrubbed"
+				}
+				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})
 			}
 		}
 		a.Unlock()
