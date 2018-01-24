@@ -57,7 +57,7 @@ func TestSetup(t *testing.T) {
 			sqlDB.Exec(t, `USE test`)
 
 			gen := test.meta.New()
-			if err := gen.Configure(test.flags); err != nil {
+			if err := gen.Flags().Parse(test.flags); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

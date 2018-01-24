@@ -9,7 +9,6 @@
 package roachmartccl
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 
@@ -75,12 +74,9 @@ func (m *roachmart) Flags() *pflag.FlagSet {
 	return m.flags
 }
 
-// Configure implements the Generator interface.
-func (m *roachmart) Configure(flags []string) error {
-	if m.flags.Parsed() {
-		return errors.New("Configure was already called")
-	}
-	return m.flags.Parse(flags)
+// Hooks implements the Generator interface.
+func (m *roachmart) Hooks() workload.Hooks {
+	return workload.Hooks{}
 }
 
 // Tables implements the Generator interface.

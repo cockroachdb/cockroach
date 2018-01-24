@@ -71,25 +71,16 @@ func init() {
 	for _, meta := range workload.Registered() {
 		gen := meta.New()
 		genFlags := gen.Flags()
+		genHooks := gen.Hooks()
 
 		genCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
 		genCmd.Flags().AddFlagSet(rootFlags)
 		genCmd.Flags().AddFlagSet(genFlags)
 		genCmd.RunE = func(cmd *cobra.Command, args []string) error {
-			// The is a little awkward, but grab the strings back from the
-			// flags so we can use them to configure the Generator.
-			var flags []string
-			cmd.Flags().Visit(func(f *pflag.Flag) {
-				if genFlags.Lookup(f.Name) == nil {
-					// This flag is not in the Generator's set, so it must
-					// be from rootCmd.
-					return
+			if genHooks.Validate != nil {
+				if err := genHooks.Validate(); err != nil {
+					return err
 				}
-				flags = append(flags, fmt.Sprintf(`--%s=%s`, f.Name, f.Value))
-			})
-
-			if err := gen.Configure(flags); err != nil {
-				return err
 			}
 			return runRun(gen, args)
 		}
