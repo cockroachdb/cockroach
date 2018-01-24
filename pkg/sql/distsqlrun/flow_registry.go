@@ -163,7 +163,7 @@ func (fr *flowRegistry) RegisterFlow(
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
 		return errors.Errorf(
-			"flow already registered: current node ID: %d flowID: %d.\n"+
+			"flow already registered: current node ID: %d flowID: %s.\n"+
 				"Current flow: %+v\nExisting flow: %+v",
 			fr.nodeID, f.spec.FlowID, f.spec, entry.flow.spec)
 	}

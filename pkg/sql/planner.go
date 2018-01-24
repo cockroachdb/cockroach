@@ -198,11 +198,12 @@ func newInternalPlanner(
 	}
 
 	s := &Session{
-		data:     data,
-		TxnState: txnState{Ctx: ctx, implicitTxn: true},
-		context:  ctx,
-		tables:   TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
-		execCfg:  execCfg,
+		data:           data,
+		TxnState:       txnState{Ctx: ctx, implicitTxn: true},
+		context:        ctx,
+		tables:         TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
+		execCfg:        execCfg,
+		distSQLPlanner: execCfg.DistSQLPlanner,
 	}
 	s.dataMutator = sessionDataMutator{
 		data: &s.data,
