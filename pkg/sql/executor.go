@@ -274,6 +274,7 @@ type ExecutorConfig struct {
 	SessionRegistry *SessionRegistry
 	JobRegistry     *jobs.Registry
 	VirtualSchemas  *VirtualSchemaHolder
+	DistSQLPlanner  *DistSQLPlanner
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
