@@ -100,48 +100,20 @@ See our separate [style guide](docs/style.md) document.
 
 ## Commit Messages
 
-When you're ready to commit, be sure to write a Good Commit Message™. Consult
-https://github.com/erlang/otp/wiki/Writing-good-commit-messages if you're
-not sure what constitutes a Good Commit Message™.
-In addition to the general rules referenced above, please also observe the
-following guidelines:
+When you're ready to commit, be sure to write a Good Commit Message™.
 
-- Prefix your commit subject line with the affected package, if one can easily
-  be chosen. For example, the subject line of a commit mostly affecting the
-  `server` package might read: "server: use net.Pipe instead of TCP HTTP/gRPC connections".
-  Commits which affect many packages as a result of a shared dependency change
-  should probably begin their subjects with the name of the shared dependency.
-  Finally, some commits may need to affect many packages in a way which does
-  not point to a specific package; those commits may begin with "\*:" or "all:"
-  to indicate their reach.
+Our commit message guidelines are detailed here:
+https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages
 
-- We publish detailed [release notes](https://www.cockroachlabs.com/docs/releases/)
-  describing most non-test changes. To facilitate this, in every PR, at least one commit
-  should contain a brief description of the change in terms that a user would recognize.
-  Be sure to put these descriptions in commits and not in PR descriptions.
-
-  Each release note description should be prefixed with "Release note (category):",
-  where the "category" is one of the following:
-  - cli change
-  - sql change
-  - admin ui change
-  - performance improvement
-  - bug fix
-  - general change (e.g., change of required Go version)
-  - build change (e.g., compatibility with older CPUs)
-  - enterprise change (e.g., change to backup/restore)
-  - backwards-incompatible change
-
-  This list is also documented in the commit message template, which lives in
-  githooks/prepare-commit-msg.
-
-  For example, a commit like ["distsql: pre-reserve memory needed
-  to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
-  might say, "Release note (bug fix): Fixed a panic in queries with `JOIN` using the
-  distributed SQL engine."
-
-  When a commit falls into more than one category, choose the category that matches best
-  or is most affected from a user's perspective.
+In summary (not exhaustive - check the linked wiki page if it's your first time):
+- Keep in mind who reads: think of the reviewer, think of the release notes
+- [Separate subject from body with a blank line](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
+- [Use the body to explain *what* and *why* vs. *how*](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-description)
+- [Prefix the subject line with the affected package/area](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
+- [Include a release note annotation](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#release-note), in the right position
+- [Use the imperative mood in the subject line](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
+- [Limit the subject line to 50 characters](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
+- [Wrap the body at 100, preferably 72 characters](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-description)
 
 ## Code Review Workflow
 
