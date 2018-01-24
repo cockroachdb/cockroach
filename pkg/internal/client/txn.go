@@ -991,7 +991,9 @@ func (txn *Txn) Send(
 		if log.V(1) {
 			log.Infof(ctx, "failed batch: %s", pErr)
 		}
-		if retryErr, ok := pErr.GetDetail().(*roachpb.HandledRetryableTxnError); ok {
+		switch t := pErr.GetDetail().(type) {
+		case *roachpb.HandledRetryableTxnError:
+			retryErr := t
 			if requestTxnID != retryErr.TxnID {
 				// KV should not return errors for transactions other than the one that sent
 				// the request.
@@ -1003,6 +1005,14 @@ func (txn *Txn) Send(
 				// If it doesn't match here, it means a concurrent request through
 				// this Txn object has already aborted and restarted the txn.
 				txn.updateStateOnRetryableErrLocked(ctx, retryErr)
+			}
+		case *roachpb.TransactionReplayError:
+			if pErr.GetTxn().ID != txn.mu.Proto.ID {
+				// It is possible that a concurrent request through this Txn
+				// object has already aborted and restarted the txn. In this
+				// case, we may see a TransactionReplayError if the abort
+				// beats the original BeginTxn request to the txn record.
+				return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
 			}
 		}
 		// Note that unhandled retryable txn errors are allowed from leaf

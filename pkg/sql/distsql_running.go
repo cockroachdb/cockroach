@@ -323,6 +323,15 @@ func (r *distSQLReceiver) Push(
 	row sqlbase.EncDatumRow, meta *distsqlrun.ProducerMetadata,
 ) distsqlrun.ConsumerStatus {
 	if meta != nil {
+		if meta.TxnMeta != nil {
+			if r.txn != nil {
+				if r.txn.ID() == meta.TxnMeta.Txn.ID {
+					r.txn.AugmentTxnCoordMeta(*meta.TxnMeta)
+				}
+			} else {
+				r.err = errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnMeta)
+			}
+		}
 		if meta.Err != nil && r.err == nil {
 			if r.txn != nil {
 				if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
@@ -352,13 +361,6 @@ func (r *distSQLReceiver) Push(
 				r.err = errors.New("trying to ingest remote spans but there is no recording span set up")
 			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
 				r.err = errors.Errorf("error ingesting remote spans: %s", err)
-			}
-		}
-		if meta.TxnMeta != nil {
-			if r.txn != nil {
-				r.txn.AugmentTxnCoordMeta(*meta.TxnMeta)
-			} else {
-				r.err = errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnMeta)
 			}
 		}
 		return r.status
