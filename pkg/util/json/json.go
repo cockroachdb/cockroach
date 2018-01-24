@@ -682,6 +682,9 @@ func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		}
 	}
 
+	if len(j) == 0 {
+		outKeys = append(outKeys, encoding.EncodeJSONEmptyArray(b))
+	}
 	return outKeys, nil
 }
 
@@ -694,14 +697,16 @@ func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		}
 		for _, childBytes := range children {
 			encodedKey := bytes.Join([][]byte{b,
-				encoding.EncodeNotNullAscending(nil),
-				encoding.EncodeStringAscending(nil, string(j[i].k)),
+				encoding.EncodeJSONKeyStringAscending(nil, string(j[i].k)),
 				childBytes}, nil)
 
 			outKeys = append(outKeys, encodedKey)
 		}
 	}
 
+	if len(j) == 0 {
+		outKeys = append(outKeys, encoding.EncodeJSONEmptyObject(b))
+	}
 	return outKeys, nil
 }
 
