@@ -73,7 +73,7 @@ type JSON interface {
 
 	// EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
 	// one per path through the receiver.
-	EncodeInvertedIndexKeys(b []byte) ([][]byte, error)
+	encodeInvertedIndexKeys(b []byte) ([][]byte, error)
 
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
@@ -656,27 +656,34 @@ func ParseJSON(s string) (JSON, error) {
 	return MakeJSON(result)
 }
 
-func (j jsonNull) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {
+	return json.encodeInvertedIndexKeys(encoding.EncodeJSONAscending(b))
+}
+func (j jsonNull) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeNullAscending(b)}, nil
 }
-func (jsonTrue) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (jsonTrue) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeTrueAscending(b)}, nil
 }
-func (jsonFalse) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (jsonFalse) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeFalseAscending(b)}, nil
 }
-func (j jsonString) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonString) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeStringAscending(b, string(j))}, nil
 }
-func (j jsonNumber) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonNumber) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	b = encoding.AddJSONPathTerminator(b)
 	var dec = apd.Decimal(j)
 	return [][]byte{encoding.EncodeDecimalAscending(b, &dec)}, nil
 }
-func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonArray) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	var outKeys [][]byte
-
 	for i := range j {
-		children, err := j[i].EncodeInvertedIndexKeys(nil)
+		children, err := j[i].encodeInvertedIndexKeys(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -686,26 +693,37 @@ func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		}
 	}
 
+	if len(j) == 0 {
+		outKeys = append(outKeys, encoding.EncodeJSONEmptyArray(b))
+	}
 	return outKeys, nil
 }
 
-func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	var outKeys [][]byte
 	for i := range j {
-		children, err := j[i].v.EncodeInvertedIndexKeys(nil)
+		end := true
+		children, err := j[i].v.encodeInvertedIndexKeys(nil)
 		if err != nil {
 			return nil, err
 		}
+		switch j[i].v.(type) {
+		case jsonArray, jsonObject:
+			end = false
+		}
+
 		for _, childBytes := range children {
 			encodedKey := bytes.Join([][]byte{b,
-				encoding.EncodeNotNullAscending(nil),
-				encoding.EncodeStringAscending(nil, string(j[i].k)),
+				encoding.EncodeJSONKeyStringAscending(nil, string(j[i].k), end),
 				childBytes}, nil)
 
 			outKeys = append(outKeys, encodedKey)
 		}
 	}
 
+	if len(j) == 0 {
+		outKeys = append(outKeys, encoding.EncodeJSONEmptyObject(b))
+	}
 	return outKeys, nil
 }
 
