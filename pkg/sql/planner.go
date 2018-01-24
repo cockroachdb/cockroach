@@ -177,7 +177,7 @@ var emptyPlanner planner
 // growth in the log.
 var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
 
-// newInternalPlanner creates a new planner instance for internal usage. This
+// NewInternalPlanner creates a new planner instance for internal usage. This
 // planner is not associated with a sql session.
 //
 // Since it can't be reset, the planner can be used only for planning a single
@@ -185,7 +185,7 @@ var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NO
 //
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
-func newInternalPlanner(
+func NewInternalPlanner(
 	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
 ) (*planner, func()) {
 	// init with an empty session. We can't leave this nil because too much code

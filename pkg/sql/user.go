@@ -38,7 +38,7 @@ func GetUserHashedPassword(
 	var hashedPassword []byte
 	var exists bool
 	err := executor.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p, cleanup := newInternalPlanner(
+		p, cleanup := NewInternalPlanner(
 			"get-pwd", txn, security.RootUser, metrics, &executor.cfg)
 		defer cleanup()
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
@@ -61,7 +61,7 @@ func GetUserHashedPassword(
 // The map value is true if the map key is a role, false if it is a user.
 func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT username,"isRole"  FROM system.users`
-	newPlanner, cleanup := newInternalPlanner(
+	newPlanner, cleanup := NewInternalPlanner(
 		"get-all-users-and-roles", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
 	defer cleanup()
 	rows, _ /* cols */, err := newPlanner.queryRows(ctx, query)
