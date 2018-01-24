@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
@@ -44,5 +45,9 @@ type InternalExecutor interface {
 	// executed as the root user.
 	QueryRowsInTransaction(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
-	) ([]tree.Datums, error)
+	) ([]tree.Datums, sqlbase.ResultColumns, error)
+
+	QueryRows(
+		ctx context.Context, opName string, statement string, qargs ...interface{},
+	) ([]tree.Datums, sqlbase.ResultColumns, error)
 }

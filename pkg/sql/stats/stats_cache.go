@@ -355,7 +355,9 @@ WHERE "tableID" = $1
 	var rows []tree.Datums
 	if err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		rows, err = sc.SQLExecutor.QueryRowsInTransaction(ctx, "get-table-statistics", txn, getTableStatisticsStmt, tableID)
+		rows, _ /* cols */, err = sc.SQLExecutor.QueryRowsInTransaction(
+			ctx, "get-table-statistics", txn, getTableStatisticsStmt, tableID,
+		)
 		return err
 	}); err != nil {
 		return nil, err

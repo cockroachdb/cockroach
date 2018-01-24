@@ -43,7 +43,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		columns: showHistogramColumns,
 
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			rows, err := p.queryRows(
+			rows, _ /* cols */, err := p.queryRows(
 				ctx,
 				`SELECT "tableID", "columnIDs", histogram
 				 FROM system.table_statistics

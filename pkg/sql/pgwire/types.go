@@ -28,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -39,14 +40,6 @@ import (
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
-)
-
-//go:generate stringer -type=formatCode
-type formatCode uint16
-
-const (
-	formatText   formatCode = 0
-	formatBinary formatCode = 1
 )
 
 // pgType contains type metadata used in RowDescription messages.
@@ -388,7 +381,8 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
 			return
 		}
-		subWriter := newWriteBuffer()
+		// TODO(andrei): We shouldn't be allocating a new buffer for every array.
+		subWriter := newWriteBuffer(nil /* bytecount */)
 		// Put the number of dimensions. We currently support 1d arrays only.
 		subWriter.putInt32(1)
 		hasNulls := 0
@@ -539,9 +533,9 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 
 // decodeOidDatum decodes bytes with specified Oid and format code into
 // a datum.
-func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (tree.Datum, error) {
+func decodeOidDatum(id oid.Oid, code pgwirebase.FormatCode, b []byte) (tree.Datum, error) {
 	switch code {
-	case formatText:
+	case pgwirebase.FormatText:
 		switch id {
 		case oid.T_bool:
 			t, err := strconv.ParseBool(string(b))
@@ -674,7 +668,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (tree.Datum, error) {
 			}
 			return tree.NewDString(string(b)), nil
 		}
-	case formatBinary:
+	case pgwirebase.FormatBinary:
 		switch id {
 		case oid.T_bool:
 			if len(b) > 0 {
@@ -869,7 +863,7 @@ func validateStringBytes(b []byte) error {
 	return nil
 }
 
-func decodeBinaryArray(b []byte, code formatCode) (tree.Datum, error) {
+func decodeBinaryArray(b []byte, code pgwirebase.FormatCode) (tree.Datum, error) {
 	hdr := struct {
 		Ndims int32
 		// Nullflag
