@@ -51,7 +51,7 @@ TABLE abc
 ----
 1 2 3
 
-query error invalid table name
+query error syntax error at or near "*"
 TABLE abc.*
 
 query III colnames

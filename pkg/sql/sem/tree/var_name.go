@@ -22,13 +22,11 @@ import (
 // Variable names are used in multiples places in SQL:
 //
 // - if the context is the LHS of an UPDATE, then the name is for an
-//   unqualified column or part of a column.
+//   unqualified column.
 //
-//   Syntax: <column-name> [ . <subfield-name> | '[' <index> ']' ]*
-//   (the name always *starts* with a column name)
+//   Syntax: <column-name>
 //
 //   Represented by: ColumnItem
-//   Found by: NormalizeUnqualifiedColumnItem()
 //
 // - if the context is a direct select target, then the name may end
 //   with '*' for a column group, with optional database and table prefix.
@@ -265,25 +263,4 @@ func (n *UnresolvedName) NormalizeVarName() (VarName, error) {
 	}
 
 	return res, nil
-}
-
-// NormalizeUnqualifiedColumnItem normalizes a UnresolvedName for all
-// the forms it can have inside a context that requires an unqualified
-// column item (e.g. UPDATE LHS, INSERT, etc.).
-func (n *UnresolvedName) NormalizeUnqualifiedColumnItem() (*ColumnItem, error) {
-	if len(*n) == 0 {
-		return nil, newInvColRef("invalid column name: %q", *n)
-	}
-
-	colName, ok := (*n)[0].(*Name)
-	if !ok {
-		return nil, newInvColRef("invalid column name: %q", *n)
-	}
-
-	if *colName == "" {
-		return nil, newInvColRef("empty column name: %q", *n)
-	}
-
-	// Remainder is a selector.
-	return &ColumnItem{ColumnName: *colName, Selector: NameParts((*n)[1:])}, nil
 }

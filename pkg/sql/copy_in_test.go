@@ -67,7 +67,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyIn("t"))
+	stmt, err := txn.Prepare(pq.CopyIn("t", "i", "f", "s", "b", "d", "t", "ts", "n", "o", "e", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}

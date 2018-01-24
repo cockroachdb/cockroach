@@ -17,7 +17,7 @@ package tree
 // CopyFrom represents a COPY FROM statement.
 type CopyFrom struct {
 	Table   NormalizableTableName
-	Columns UnresolvedNames
+	Columns NameList
 	Stdin   bool
 }
 
