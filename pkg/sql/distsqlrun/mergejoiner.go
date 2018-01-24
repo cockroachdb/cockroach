@@ -184,7 +184,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
-					if m.joinType == leftAntiJoin {
+					if m.joinType == leftAntiJoin || m.joinType == exceptAllJoin {
 						break
 					}
 					if m.emitUnmatchedRight {
@@ -210,15 +210,16 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			m.leftIdx++
 			m.rightIdx = 0
 
-			// For INTERSECT ALL, adjust rightIdx to skip all previously matched rows
-			// on the next right-side iteration, since we don't want to match them
-			// again.
-			if m.joinType == intersectAllJoin {
+			// For INTERSECT ALL and EXCEPT ALL, adjust rightIdx to skip all
+			// previously matched rows on the next right-side iteration, since we
+			// don't want to match them again.
+			if isSetOpJoin(m.joinType) {
 				m.rightIdx = m.leftIdx
 			}
 
 			// If we didn't match any rows on the right-side of the batch and this is
-			// a left, full outer or anti join, emit an unmatched left-side row.
+			// a left outer join, full outer join, anti join, or EXCEPT ALL, emit an
+			// unmatched left-side row.
 			if m.matchedRightCount == 0 && shouldEmitUnmatchedRow(leftSide, m.joinType) {
 				return m.renderUnmatchedRow(lrow, leftSide), nil
 			}
