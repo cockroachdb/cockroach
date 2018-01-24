@@ -16,10 +16,11 @@ package server_test
 
 import (
 	"context"
-	"os"
-	"testing"
-
 	gosql "database/sql"
+	"os"
+	"path/filepath"
+	"strconv"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -39,6 +40,7 @@ import (
 type testClusterWithHelpers struct {
 	*testing.T
 	*testcluster.TestCluster
+	args func() map[int]base.TestServerArgs
 }
 
 func (th *testClusterWithHelpers) getVersionFromShow(i int) string {
@@ -82,37 +84,54 @@ func (th *testClusterWithHelpers) mustSetVersion(i int, version string) {
 // Set up a mixed cluster with the given initial bootstrap version and
 // len(versions) servers that each run at MinSupportedVersion=v[0] and
 // ServerVersion=v[1] (i.e. they identify as a binary that can run with
-// at least a v[0] mixed cluster and is itself v[1]).
+// at least a v[0] mixed cluster and is itself v[1]). A directory can
+// optionally be passed in.
 func setupMixedCluster(
-	t *testing.T, bootstrapVersion cluster.ClusterVersion, versions [][2]string,
+	t *testing.T, bootstrapVersion cluster.ClusterVersion, versions [][2]string, dir string,
 ) testClusterWithHelpers {
-	serverArgsPerNode := map[int]base.TestServerArgs{}
-	for i, v := range versions {
-		st := cluster.MakeClusterSettings(roachpb.MustParseVersion(v[0]), roachpb.MustParseVersion(v[1]))
-		serverArgsPerNode[i] = base.TestServerArgs{
-			Settings: st,
-			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
-					BootstrapVersion: &bootstrapVersion,
-				},
-			},
-		}
-	}
+
+	twh := testClusterWithHelpers{
+		T: t,
+		args: func() map[int]base.TestServerArgs {
+			serverArgsPerNode := map[int]base.TestServerArgs{}
+			for i, v := range versions {
+				st := cluster.MakeClusterSettings(roachpb.MustParseVersion(v[0]), roachpb.MustParseVersion(v[1]))
+				args := base.TestServerArgs{
+					Settings: st,
+					Knobs: base.TestingKnobs{
+						Store: &storage.StoreTestingKnobs{
+							BootstrapVersion: &bootstrapVersion,
+						},
+					},
+				}
+				if dir != "" {
+					args.StoreSpecs = []base.StoreSpec{{Path: filepath.Join(dir, strconv.Itoa(i))}}
+				}
+				serverArgsPerNode[i] = args
+			}
+			return serverArgsPerNode
+		}}
 
 	tc := testcluster.StartTestCluster(t, len(versions), base.TestClusterArgs{
-		ServerArgsPerNode: serverArgsPerNode,
+		ServerArgsPerNode: twh.args(),
 	})
+
 	// We simulate crashes using this cluster, and having this enabled (which is
 	// a default migration) causes leaktest to complain.
 	if _, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING diagnostics.reporting.enabled = 'false'"); err != nil {
 		t.Fatal(err)
 	}
-	return testClusterWithHelpers{t, tc}
+
+	twh.TestCluster = tc
+	return twh
 }
 
 func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+
+	dir, finish := testutils.TempDir(t)
+	defer finish()
 
 	// Four nodes that are all compatible with 1.0, but are really 1.2. This is
 	// what the official v1.2 binary will look like.
@@ -124,22 +143,75 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 		MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
 	}
 
-	tc := setupMixedCluster(t, bootstrapVersion, versions)
-	defer tc.Stopper().Stop(ctx)
+	// We will put down fake legacy tombstones (#12154) to jog
+	// `migrateLegacyTombstones`, including one for the existing range, but also
+	// some for non-existing ones.
+	legacyTombstoneKeys := []roachpb.Key{
+		// Range 1 actually exists, at least on some stores.
+		keys.RaftTombstoneIncorrectLegacyKey(1 /* rangeID */),
+		// These ranges don't exist.
+		keys.RaftTombstoneIncorrectLegacyKey(200 /* rangeID */),
+		keys.RaftTombstoneIncorrectLegacyKey(300 /* rangeID */),
+	}
 
-	tombstone := roachpb.RaftTombstone{NextReplicaID: 0}
+	// Immediately stop the first server. We just wanted the bootstrap to happen
+	// so that we can futz with the directories.
+	tc := setupMixedCluster(t, bootstrapVersion, versions[:1], dir)
+	tc.TestCluster.Stopper().Stop(ctx)
+
+	// Put some legacy tombstones down. We're going to test the migration for
+	// removing those in the negative: the tombstones are to be removed only after
+	// a node at *cluster version* v1.2 boots up. We don't restart nodes in this
+	// test while the versions are bumped, so the only boot is at the initial
+	// version v1.0, and we verify that the tombstones remain. The rewrite
+	// functionality is tested in TestStoreInitAndBootstrap.
+	//
+	// Only put down tombstones on the first node. This is a technical
+	// restriction; we can't just write to the other engines as these nodes aren't
+	// bootstrapped yet and check for a blank slate as they start. We can't run
+	// the whole cluster at this point in the code or we'll run into trouble when
+	// restarting it later, as replicas will have upreplicated and the machinery
+	// here starts the nodes sequentially.
+	//
+	// In practice, the first range on the first node is the most interesting any-
+	// way (as it sees both replica GC and snapshots), and all of this can be
+	// ripped out once v2.0 is out the door (as legacy tombstones are less of a
+	// concern then).
+	for _, args := range tc.args() {
+		func() {
+			// use -1 as NextReplicaID as this makes our fake value easily identified.
+			tombstone := roachpb.RaftTombstone{NextReplicaID: -1}
+
+			eng, err := engine.NewRocksDB(
+				engine.RocksDBConfig{MustExist: true, Dir: args.StoreSpecs[0].Path}, engine.RocksDBCache{},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer eng.Close()
+
+			for _, legacyTombstoneKey := range legacyTombstoneKeys {
+				if err := engine.MVCCPutProto(
+					ctx, eng, nil /* ms */, legacyTombstoneKey, hlc.Timestamp{}, nil /* txn */, &tombstone,
+				); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}()
+	}
+
+	// Start the real cluster, with four nodes.
+	tc = setupMixedCluster(t, bootstrapVersion, versions, dir)
+	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	for i := 0; i < tc.NumServers(); i++ {
+		if exp, version := bootstrapVersion.MinimumVersion.String(), tc.getVersionFromShow(i); version != exp {
+			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
+		}
+	}
+
 	tombstoneOp := func(f func(engine.Engine, roachpb.Key) error) error {
 		visitor := func(s *storage.Store) error {
-			// Put down a few fake legacy tombstones (#12154) to jog `migrateLegacyTombstones`, including
-			// one for the existing range, but also some for non-existing ones.
-
-			legacyTombstoneKeys := []roachpb.Key{
-				// Range 1 actually exists, at least on some stores.
-				keys.RaftTombstoneIncorrectLegacyKey(1 /* rangeID */),
-				// These ranges don't exist.
-				keys.RaftTombstoneIncorrectLegacyKey(200 /* rangeID */),
-				keys.RaftTombstoneIncorrectLegacyKey(300 /* rangeID */),
-			}
 			for _, legacyTombstoneKey := range legacyTombstoneKeys {
 				if err := f(s.Engine(), legacyTombstoneKey); err != nil {
 					return err
@@ -147,39 +219,10 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 			}
 			return nil
 		}
-		for i := 0; i < tc.NumServers(); i++ {
-			if err := tc.Server(i).GetStores().(*storage.Stores).VisitStores(visitor); err != nil {
-				return err
-			}
-		}
-		return nil
+		return tc.Server(0).GetStores().(*storage.Stores).VisitStores(visitor)
 	}
 
-	for i := 0; i < tc.NumServers(); i++ {
-		if exp, version := bootstrapVersion.MinimumVersion.String(), tc.getVersionFromShow(i); version != exp {
-			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-		}
-
-		// Put some legacy tombstones down. We're going to test the migration for removing those in the
-		// negative: the tombstones are to be removed only after a node at *cluster version* v1.2 boots
-		// up. We don't restart nodes in this test, so the only boot is at the initial version v1.0,
-		// and we verify that the  tombstones remain. The rewrite functionality is tested in
-		// TestStoreInitAndBootstrap.
-		if err := tombstoneOp(func(eng engine.Engine, legacyTombstoneKey roachpb.Key) error {
-			return engine.MVCCPutProto(
-				ctx, eng, nil /* ms */, legacyTombstoneKey, hlc.Timestamp{}, nil /* txn */, &tombstone,
-			)
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	for _, newVersion := range []roachpb.Version{
-		bootstrapVersion.MinimumVersion, // v1.0
-		{Major: 1, Unstable: 500},
-		{Major: 1, Minor: 1},
-		{Major: 1, Minor: 2},
-	} {
+	run := func(t *testing.T, newVersion roachpb.Version) {
 		curVersion := tc.getVersionFromSelect(0)
 		isNoopUpdate := curVersion == newVersion.String()
 
@@ -226,24 +269,72 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 					t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
 				}
 			}
-
-			// Everyone is at the version we're waiting for. Check that the tombstones are still there.
-			return tombstoneOp(func(eng engine.Engine, legacyTombstoneKey roachpb.Key) error {
-				ok, err := engine.MVCCGetProto(
-					ctx, eng, legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
-					nil,
-				)
-				if err != nil {
-					return err
-				}
-				if !ok {
-					return errors.Errorf(
-						"legacy tombstone at %s unexpectedly removed", legacyTombstoneKey,
-					)
-				}
-				return nil
-			})
+			return nil
 		})
+
+		// Everyone is at the version we're waiting for. Check that the tombstones are still there.
+		if err := tombstoneOp(func(eng engine.Engine, legacyTombstoneKey roachpb.Key) error {
+			ok, err := engine.MVCCGetProto(
+				ctx, eng, legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
+				nil,
+			)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				t.Logf("legacy tombstone not found: %s", legacyTombstoneKey)
+				mightSeeNewTombstone := !newVersion.Less(cluster.VersionByKey(cluster.VersionUnreplicatedTombstoneKey)) &&
+					legacyTombstoneKey.Equal(keys.RaftTombstoneIncorrectLegacyKey(1))
+
+				if mightSeeNewTombstone {
+					actualTombstoneKey := keys.RaftTombstoneKey(1)
+					var err error
+					// Override `ok` from the outer scope if a "new" tombstone exists.
+					// This is a bit silly, but the following can happen:
+					//
+					// 1. cluster version gets bumped past VersionUnreplicatedTombstoneKey
+					// 2. first node has their replica of range one removed
+					// 3. replicaGC destroys the range data, including the old tombstone,
+					//    installing a new one (since the cluster version has been bumped)
+					//
+					// Note also this interesting scenario (which won't end up here but is
+					// related):
+					//
+					// 1. cluster version remains old
+					// 2. same as before
+					// 3. same as before, but installs an old tombstone
+					// 4. replica receives snapshot, which removes the legacy tombstone
+					//    and atomically rewrites it
+					//
+					// (This latter history was long broken and was fixed when this
+					// comment was written. It previously lost the tombstone).
+					var tomb roachpb.RaftTombstone
+					ok, err = engine.MVCCGetProto(
+						ctx, eng, actualTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
+						&tomb,
+					)
+					if err != nil {
+						return err
+					}
+					if ok && tomb.NextReplicaID < 1 {
+						// If we're seeing a new-style tombstone, it was created via ReplicaGC
+						// and thus must have a higher NextReplicaID than the fake tombstones
+						// we've been putting down.
+						ok = false
+					}
+					t.Logf("checking for tombstone %s instead, ok=%t, value=%v", legacyTombstoneKey, ok, tomb)
+				}
+			}
+
+			if !ok {
+				t.Fatalf(
+					"legacy tombstone at %s unexpectedly removed", legacyTombstoneKey,
+				)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 
 		// Since the wrapped version setting exposes the new versions, it must
 		// definitely be present on all stores on the first try.
@@ -260,6 +351,21 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	for _, newVersion := range []roachpb.Version{
+		bootstrapVersion.MinimumVersion, // v1.0
+		{Major: 1, Unstable: 500},
+		{Major: 1, Minor: 1},
+		{Major: 1, Minor: 2},
+	} {
+		t.Run(newVersion.String(), func(t *testing.T) {
+			run(t, newVersion)
+		})
+		if t.Failed() {
+			t.FailNow()
+		}
+	}
+
 }
 
 func TestClusterVersionBootstrapStrict(t *testing.T) {
@@ -277,7 +383,7 @@ func TestClusterVersionBootstrapStrict(t *testing.T) {
 				MinimumVersion: roachpb.MustParseVersion(versions[0][0]),
 			}
 
-			tc := setupMixedCluster(t, bootstrapVersion, versions)
+			tc := setupMixedCluster(t, bootstrapVersion, versions, "")
 			defer tc.Stopper().Stop(ctx)
 
 			exp := versions[0][0]
@@ -320,7 +426,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 		MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
 	}
 
-	tc := setupMixedCluster(t, bootstrapVersion, versions)
+	tc := setupMixedCluster(t, bootstrapVersion, versions, "")
 	defer tc.Stopper().Stop(ctx)
 
 	exp := "1.1"
@@ -372,7 +478,7 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 		MinimumVersion: roachpb.Version{Major: 1, Minor: 1},
 	}
 
-	tc := setupMixedCluster(t, bootstrapVersion, versions)
+	tc := setupMixedCluster(t, bootstrapVersion, versions, "")
 	defer tc.Stopper().Stop(ctx)
 
 	tc.AddServer(t, base.TestServerArgs{
