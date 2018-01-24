@@ -45,10 +45,6 @@ type Generator interface {
 	// Flags returns the flags this Generator is configured with.
 	Flags() *pflag.FlagSet
 
-	// Configure parses the provided flags, which are only allowed to be the
-	// ones in Flags(). Configure may only be called once.
-	Configure(flags []string) error
-
 	// Tables returns the set of tables for this generator, including schemas
 	// and initial data.
 	Tables() []Table
@@ -56,6 +52,16 @@ type Generator interface {
 	// Ops returns the work functions for this generator. The tables are
 	// required to have been created and initialized before running these.
 	Ops() []Operation
+
+	// Hooks returns any hooks associated with the generator.
+	Hooks() Hooks
+}
+
+// Hooks stores functions to be called at points in the workload lifecycle.
+type Hooks struct {
+	// Validate is called after workload flags are parsed. It should return an
+	// error if the workload configuration is invalid.
+	Validate func() error
 }
 
 // Meta is used to register a Generator at init time and holds meta information

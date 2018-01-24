@@ -99,12 +99,9 @@ func (b *bank) Flags() *pflag.FlagSet {
 	return b.flags
 }
 
-// Configure implements the Generator interface.
-func (b *bank) Configure(flags []string) error {
-	if b.flags.Parsed() {
-		return errors.New("Configure was already called")
-	}
-	return b.flags.Parse(flags)
+// Hooks implements the Generator interface.
+func (b *bank) Hooks() workload.Hooks {
+	return workload.Hooks{}
 }
 
 // Tables implements the Generator interface.
