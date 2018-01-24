@@ -51,30 +51,6 @@ func (_f *Factory) ConstructPlaceholder(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_placeholderExpr)))
 }
 
-func (_f *Factory) ConstructList(
-	items ListID,
-) GroupID {
-	_listExpr := makeListExpr(items)
-	_group := _f.mem.lookupGroupByFingerprint(_listExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_listExpr)))
-}
-
-func (_f *Factory) ConstructOrderedList(
-	items ListID,
-) GroupID {
-	_orderedListExpr := makeOrderedListExpr(items)
-	_group := _f.mem.lookupGroupByFingerprint(_orderedListExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_orderedListExpr)))
-}
-
 func (_f *Factory) ConstructTuple(
 	elems ListID,
 ) GroupID {
@@ -1000,7 +976,7 @@ func (_f *Factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *Factory, children []GroupID, private PrivateID) GroupID
 
-var dynConstructLookup [78]dynConstructLookupFunc
+var dynConstructLookup [76]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1026,16 +1002,6 @@ func init() {
 	// PlaceholderOp
 	dynConstructLookup[PlaceholderOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
 		return f.ConstructPlaceholder(private)
-	}
-
-	// ListOp
-	dynConstructLookup[ListOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructList(f.StoreList(children))
-	}
-
-	// OrderedListOp
-	dynConstructLookup[OrderedListOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructOrderedList(f.StoreList(children))
 	}
 
 	// TupleOp

@@ -18,6 +18,8 @@ import (
 	"fmt"
 )
 
+//go:generate optgen -out operator.og.go -pkg xform ops ops/scalar.opt ops/relational.opt ops/enforcer.opt
+
 // Operator describes the type of operation that a memo expression performs.
 // Some operators are relational (join, select, project) and others are scalar
 // (and, or, plus, variable).

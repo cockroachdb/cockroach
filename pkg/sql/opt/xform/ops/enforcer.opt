@@ -1,0 +1,35 @@
+# enforcer.opt contains Optgen language definitions for "enforcer" operators
+# that ensure result sets provide requested physical properties like row sort
+# order and column naming. These operators are added by the optimizer on an
+# as-needed basis, in order to wrap input expressions that do not naturally
+# provide the desired properties.
+#
+# Tags
+#
+# Enforcer - All operators in this file are marked with the Enforcer tag, so
+#            they can be easily distinguished from Scalar and Relational
+#            operators.
+
+# Sort enforces the ordering of rows returned by its input expression. Rows can
+# be sorted by one or more of the input columns, each of which can be sorted in
+# either ascending or descending order. See the Ordering field in the
+# PhysicalProps struct.
+# TODO(andyk): Add the Ordering field.
+[Enforcer]
+define Sort {
+    Input Expr
+}
+
+# Present enforces physical properties related to column presentation, which
+# includes column ordering, column naming, and duplicate columns. While the
+# input expression must project the columns used by Present, it can project
+# a superset of columns in any order and using any names. Whereas the Project
+# operator modifies logical properties (i.e. the set of columns returned), the
+# Present operator enforces physical properties (i.e. the presentation of the
+# set of columns returned). See the Presentation field in the PhysicalProps
+# struct.
+# TODO(andyk): Add the Presentation field.
+[Enforcer]
+define Present {
+    Input Expr
+}

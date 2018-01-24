@@ -16,6 +16,8 @@ package xform
 
 import "github.com/cockroachdb/cockroach/pkg/sql/optbase"
 
+//go:generate optgen -out factory.og.go -pkg xform factory ops/scalar.opt ops/relational.opt ops/enforcer.opt
+
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
 // normalization transformations defined for that expression type. This may
