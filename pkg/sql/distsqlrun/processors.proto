@@ -240,6 +240,13 @@ enum JoinType {
   FULL_OUTER = 3;
   LEFT_SEMI = 4;
   LEFT_ANTI = 5;
+
+  // INTERSECT_ALL is a special JoinType that is only used for INTERSECT ALL and
+  // INTERSECT operations. It only allows equality columns to be output, and
+  // does not allow ON conditions. It returns every row from the left side that
+  // has a match on the right side, but does not allow multiple rows from the
+  // left side to match the same row on the right.
+  INTERSECT_ALL = 6;
 }
 
 // MergeJoinerSpec is the specification for a merge join processor. The processor

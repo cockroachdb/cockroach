@@ -55,8 +55,8 @@ func newMergeJoiner(
 	post *PostProcessSpec,
 	output RowReceiver,
 ) (*mergeJoiner, error) {
-	leftEqCols := make([]uint32, len(spec.LeftOrdering.Columns))
-	rightEqCols := make([]uint32, len(spec.RightOrdering.Columns))
+	leftEqCols := make([]uint32, 0, len(spec.LeftOrdering.Columns))
+	rightEqCols := make([]uint32, 0, len(spec.RightOrdering.Columns))
 	for i, c := range spec.LeftOrdering.Columns {
 		if spec.RightOrdering.Columns[i].Direction != c.Direction {
 			return nil, errors.New("Unmatched column orderings")
@@ -190,9 +190,9 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 					if m.emitUnmatchedRight {
 						m.matchedRight.Add(ridx)
 					}
-					if m.joinType == leftSemiJoin {
-						// Semi-joins only need to know if there is at least
-						// one match, so can skip the rest of the right rows.
+					if m.joinType == leftSemiJoin || m.joinType == intersectAllJoin {
+						// Semi-joins and INTERSECT ALL only need to know if there is at
+						// least one match, so can skip the rest of the right rows.
 						m.rightIdx = len(m.rightRows)
 					}
 					return renderedRow, nil
@@ -207,8 +207,15 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 			// We've exhausted the right-side batch. Adjust the indexes for the next
 			// row from the left-side of the batch.
-			m.rightIdx = 0
 			m.leftIdx++
+			m.rightIdx = 0
+
+			// For INTERSECT ALL, adjust rightIdx to skip all previously matched rows
+			// on the next right-side iteration, since we don't want to match them
+			// again.
+			if m.joinType == intersectAllJoin {
+				m.rightIdx = m.leftIdx
+			}
 
 			// If we didn't match any rows on the right-side of the batch and this is
 			// a left, full outer or anti join, emit an unmatched left-side row.

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type joinerBase struct {
@@ -54,6 +55,17 @@ func (jb *joinerBase) init(
 	output RowReceiver,
 ) error {
 	jb.joinType = joinType(jType)
+
+	if jb.joinType == intersectAllJoin {
+		if err := isValidIntersectAllJoin(
+			onExpr,
+			len(leftTypes),
+			len(rightTypes),
+			len(leftEqColumns),
+		); err != nil {
+			return err
+		}
+	}
 
 	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
@@ -134,10 +146,26 @@ func (jb *joinerBase) renderUnmatchedRow(
 }
 
 func shouldIncludeRightColsInOutput(joinType joinType) bool {
-	if joinType == leftSemiJoin || joinType == leftAntiJoin {
+	switch joinType {
+	case leftSemiJoin, leftAntiJoin, intersectAllJoin:
 		return false
+	default:
+		return true
 	}
-	return true
+}
+
+func isValidIntersectAllJoin(
+	onExpr Expression, numLeftCols int, numRightCols int, numEqCols int,
+) error {
+	if onExpr.Expr != "" {
+		return errors.Errorf("Expected empty onExpr, got %v", onExpr.Expr)
+	}
+	if numLeftCols != numEqCols || numRightCols != numEqCols {
+		return errors.Errorf(
+			"Expected %v left and right columns, got %v left and %v right columns",
+			numEqCols, numLeftCols, numRightCols)
+	}
+	return nil
 }
 
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
@@ -146,7 +174,7 @@ func shouldIncludeRightColsInOutput(joinType joinType) bool {
 // stored).
 func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 	switch joinType {
-	case leftSemiJoin, innerJoin:
+	case leftSemiJoin, innerJoin, intersectAllJoin:
 		return false
 	case rightOuter:
 		return side == rightSide
