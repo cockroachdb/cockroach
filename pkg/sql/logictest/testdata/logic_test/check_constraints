@@ -101,7 +101,7 @@ CREATE TABLE bad (a INT CHECK(SUM(a) OVER () > 1))
 statement error pq: unsupported binary operator: <bool> - <bool>
 CREATE TABLE t4 (a INT CHECK (false - true))
 
-statement error column "b" not found for constraint
+statement error column "b" not found, referenced in "a < b"
 CREATE TABLE t4 (a INT, CHECK (a < b), CHECK (a+b+c+d < 20))
 
 statement ok

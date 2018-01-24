@@ -520,7 +520,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SOME_EXISTENCE SPLIT SQL
 
-%token <str>   START STATISTICS STATUS STDIN STRICT STRING STORE STORING SUBSTRING
+%token <str>   START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
 %token <str>   SYMMETRIC SYNTAX SYSTEM
 
 %token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THAN THEN
@@ -3068,6 +3068,7 @@ pause_stmt:
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
 //   COLLATE <collationname>
+//   AS <expr> STORED
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
@@ -3357,6 +3358,10 @@ col_qualification_elem:
       Col: tree.Name($3),
       Actions: $5.referenceActions(),
     }
+ }
+| AS b_expr STORED
+ {
+    $$.val = &tree.ColumnComputedDef{Expr: $2.expr()}
  }
 
 index_def:
@@ -7567,6 +7572,7 @@ reserved_keyword:
 | SELECT
 | SESSION_USER
 | SOME
+| STORED
 | SYMMETRIC
 | TABLE
 | THEN
