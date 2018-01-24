@@ -247,6 +247,14 @@ enum JoinType {
   // has a match on the right side, but does not allow multiple rows from the
   // left side to match the same row on the right.
   INTERSECT_ALL = 6;
+
+  // EXCEPT_ALL is a special JoinType that is only used for EXCEPT ALL and
+  // EXCEPT operations. It only allows equality columns to be output, and
+  // does not allow ON conditions. It matches every row on the left side with
+  // at most one row on the right side, and does not allow multiple rows from
+  // the left to match the same row on the right. It returns every row from the
+  // left side that, after row matching, does not have a match on the right side.
+  EXCEPT_ALL = 7;
 }
 
 // MergeJoinerSpec is the specification for a merge join processor. The processor
