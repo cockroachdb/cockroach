@@ -22,6 +22,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -143,7 +145,6 @@ func SetKVBatchSize(val int64) func() {
 type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
 	txn             *client.Txn
-	spans           roachpb.Spans
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
@@ -151,6 +152,8 @@ type txnKVFetcher struct {
 	// See also rowFetcher.returnRangeInfo.
 	returnRangeInfo bool
 
+	// TODO(jordan) these should be in the mutex
+	spans     roachpb.Spans
 	fetchEnd  bool
 	batchIdx  int
 	responses []roachpb.ResponseUnion
@@ -162,6 +165,16 @@ type txnKVFetcher struct {
 	// rangeInfos are deduped, so they're not ordered in any particular way and
 	// they don't map to kvFetcher.spans in any particular way.
 	rangeInfos []roachpb.RangeInfo
+
+	mu struct {
+		sync.Mutex
+		// True if there's a prefetched batch.
+		hasResponse bool
+		// The prefetched batch.
+		nextResponse fetchResult
+		// Error from the prefetch.
+		err error
+	}
 }
 
 func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
@@ -263,8 +276,43 @@ func makeKVFetcher(
 	}, nil
 }
 
-// fetch retrieves spans from the kv
-func (f *txnKVFetcher) fetch(ctx context.Context) error {
+type fetchResult struct {
+	fetchEnd   bool
+	rangeInfos []roachpb.RangeInfo
+	spans      []roachpb.Span
+	responses  []roachpb.ResponseUnion
+}
+
+func (f *txnKVFetcher) processBatch(ctx context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var res fetchResult
+	if f.mu.hasResponse {
+		if f.mu.err != nil {
+			return f.mu.err
+		}
+		res = f.mu.nextResponse
+		f.mu.hasResponse = false
+		f.mu.nextResponse = fetchResult{}
+		f.mu.err = nil
+	} else {
+		var err error
+		res, err = f.processBatchLocked(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	f.spans = res.spans
+	f.fetchEnd = res.fetchEnd
+	f.rangeInfos = res.rangeInfos
+	f.responses = res.responses
+
+	f.batchIdx++
+	return nil
+}
+
+func (f *txnKVFetcher) processBatchLocked(ctx context.Context) (fetchResult, error) {
 	var ba roachpb.BatchRequest
 	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
 	ba.Header.ReturnRangeInfo = f.returnRangeInfo
@@ -294,33 +342,31 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		log.VEvent(ctx, 2, buf.String())
 	}
 
-	// Reset spans in preparation for adding resume-spans below.
-	f.spans = f.spans[:0]
-
 	br, err := f.txn.Send(ctx, ba)
 	if err != nil {
-		return err.GoError()
+		return fetchResult{}, err.GoError()
 	}
-	f.responses = br.Responses
 
-	// Set end to true until disproved.
-	f.fetchEnd = true
+	ret := fetchResult{
+		fetchEnd: true,
+	}
 	var sawResumeSpan bool
-	for _, resp := range f.responses {
+
+	for _, resp := range br.Responses {
 		reply := resp.GetInner()
 		header := reply.Header()
 
 		if header.NumKeys > 0 && sawResumeSpan {
-			return errors.Errorf(
+			return fetchResult{}, errors.Errorf(
 				"span with results after resume span; it shouldn't happen given that "+
 					"we're only scanning non-overlapping spans. New spans: %s",
-				PrettySpans(nil, f.spans, 0 /* skip */))
+				PrettySpans(nil, ret.spans, 0 /* skip */))
 		}
 
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {
 			// A span needs to be resumed.
-			f.fetchEnd = false
-			f.spans = append(f.spans, *resumeSpan)
+			ret.fetchEnd = false
+			ret.spans = append(ret.spans, *resumeSpan)
 			// Verify we don't receive results for any remaining spans.
 			sawResumeSpan = true
 		}
@@ -328,16 +374,32 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		// Fill up the RangeInfos, in case we got any.
 		if f.returnRangeInfo {
 			for _, ri := range header.RangeInfos {
-				f.rangeInfos = roachpb.InsertRangeInfo(f.rangeInfos, ri)
+				ret.rangeInfos = roachpb.InsertRangeInfo(ret.rangeInfos, ri)
 			}
 		}
 	}
+	ret.responses = br.Responses
+	return ret, nil
+}
 
-	f.batchIdx++
+// fetch retrieves spans from the kv
+func (f *txnKVFetcher) fetch(ctx context.Context) error {
+	if err := f.processBatch(ctx); err != nil {
+		return err
+	}
 
-	// TODO(radu): We should fetch the next chunk in the background instead of waiting for the next
-	// call to fetch(). We can use a pool of workers to issue the KV ops which will also limit the
-	// total number of fetches that happen in parallel (and thus the amount of resources we use).
+	if !f.fetchEnd {
+		// Prefetch the next batch.
+		go func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			res, err := f.processBatchLocked(ctx)
+			f.mu.nextResponse = res
+			f.mu.err = err
+			f.mu.hasResponse = true
+		}()
+	}
+
 	return nil
 }
 
