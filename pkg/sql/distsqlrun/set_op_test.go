@@ -168,3 +168,90 @@ func intersectAllTestCases() []setOpTestCase {
 		},
 	}
 }
+
+func exceptAllTestCases() []setOpTestCase {
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	var v = [10]sqlbase.EncDatum{}
+	for i := range v {
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+	}
+
+	return []setOpTestCase{
+		{
+			// Check that EXCEPT ALL only returns rows that are on the left side
+			// but not the right side.
+			setOpType:   JoinType_EXCEPT_ALL,
+			columnTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[0], v[3]},
+				{v[5], v[0]},
+				{v[5], v[1]},
+			},
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[5], v[0]},
+				{v[5], v[1]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[3]},
+			},
+		},
+		{
+			// Check that EXCEPT ALL returns the correct number of duplicates when
+			// the left side contains more duplicates of a row than the right side.
+			setOpType:   JoinType_EXCEPT_ALL,
+			columnTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[0]},
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[0], v[3]},
+				{v[5], v[0]},
+				{v[5], v[1]},
+			},
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[5], v[0]},
+				{v[5], v[1]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[3]},
+			},
+		},
+		{
+			// Check that EXCEPT ALL returns the correct number of duplicates when
+			// the right side contains more duplicates of a row than the left side.
+			setOpType:   JoinType_EXCEPT_ALL,
+			columnTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[0], v[3]},
+				{v[5], v[0]},
+				{v[5], v[1]},
+			},
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[0]},
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[0], v[1]},
+				{v[5], v[0]},
+				{v[5], v[1]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[3]},
+			},
+		},
+	}
+}

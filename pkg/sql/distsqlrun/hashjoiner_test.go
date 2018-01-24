@@ -883,6 +883,11 @@ func TestHashJoiner(t *testing.T) {
 		testCases = append(testCases, setOpTestCaseToHashJoinerTestCase(tc))
 	}
 
+	// Add EXCEPT ALL cases with HashJoinerSpecs.
+	for _, tc := range exceptAllTestCases() {
+		testCases = append(testCases, setOpTestCaseToHashJoinerTestCase(tc))
+	}
+
 	ctx := context.Background()
 	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
 	if err != nil {
