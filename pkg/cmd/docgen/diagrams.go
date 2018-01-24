@@ -304,9 +304,16 @@ var specs = []stmtSpec{
 		name:   "add_column",
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_def"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'ADD' ('COLUMN')? ?('IF' 'NOT' 'EXISTS')? ?name")},
+		match:  []*regexp.Regexp{regexp.MustCompile("'ADD' ('COLUMN')? ?('IF' 'NOT' 'EXISTS')? ?column_name")},
 		replace: map[string]string{
-			" | 'ALTER' opt_column name alter_column_default | 'ALTER' opt_column name 'DROP' 'NOT' 'NULL' | 'DROP' opt_column 'IF' 'EXISTS' name opt_drop_behavior | 'DROP' opt_column name opt_drop_behavior | 'ADD' table_constraint opt_validate_behavior | 'VALIDATE' 'CONSTRAINT' name | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' name opt_drop_behavior | 'DROP' 'CONSTRAINT' name opt_drop_behavior": "",
+			" | 'ALTER' opt_column column_name alter_column_default" +
+				" | 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'" +
+				" | 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior" +
+				" | 'DROP' opt_column column_name opt_drop_behavior" +
+				" | 'ADD' table_constraint opt_validate_behavior" +
+				" | 'VALIDATE' 'CONSTRAINT' constraint_name" +
+				" | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior" +
+				" | 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior": "",
 			"relation_expr": "table_name",
 			"col_qual_list": "( col_qualification | )"},
 		unlink: []string{"table_name"},
@@ -314,7 +321,7 @@ var specs = []stmtSpec{
 	{
 		name:    "add_constraint",
 		stmt:    "alter_onetable_stmt",
-		replace: map[string]string{"relation_expr": "table_name", "alter_table_cmds": "'ADD' 'CONSTRAINT' name constraint_elem"},
+		replace: map[string]string{"relation_expr": "table_name", "alter_table_cmds": "'ADD' 'CONSTRAINT' constraint_name constraint_elem"},
 		unlink:  []string{"table_name"},
 	},
 	{
@@ -322,7 +329,21 @@ var specs = []stmtSpec{
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "alter_column_default"},
 		match:  []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' ")},
-		replace: map[string]string{"( ',' ( 'ADD' column_def | 'ADD' 'IF' 'NOT' 'EXISTS' column_def | 'ADD' 'COLUMN' column_def | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def | 'ALTER' ( 'COLUMN' |  ) name ( 'SET' 'DEFAULT' a_expr | 'DROP' 'DEFAULT' ) | 'ALTER' ( 'COLUMN' |  ) name 'DROP' 'NOT' 'NULL' | 'DROP' ( 'COLUMN' |  ) 'IF' 'EXISTS' name opt_drop_behavior | 'DROP' ( 'COLUMN' |  ) name opt_drop_behavior | 'ADD' table_constraint opt_validate_behavior | 'VALIDATE' 'CONSTRAINT' name | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' name opt_drop_behavior | 'DROP' 'CONSTRAINT' name opt_drop_behavior ) )*": "",
+		replace: map[string]string{
+			"( ',' (" +
+				" 'ADD' column_def" +
+				" | 'ADD' 'IF' 'NOT' 'EXISTS' column_def" +
+				" | 'ADD' 'COLUMN' column_def" +
+				" | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def" +
+				" | 'ALTER' ( 'COLUMN' |  ) column_name ( 'SET' 'DEFAULT' a_expr | 'DROP' 'DEFAULT' )" +
+				" | 'ALTER' ( 'COLUMN' |  ) column_name 'DROP' 'NOT' 'NULL'" +
+				" | 'DROP' ( 'COLUMN' |  ) 'IF' 'EXISTS' column_name opt_drop_behavior" +
+				" | 'DROP' ( 'COLUMN' |  ) column_name opt_drop_behavior" +
+				" | 'ADD' table_constraint opt_validate_behavior" +
+				" | 'VALIDATE' 'CONSTRAINT' constraint_name" +
+				" | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior" +
+				" | 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior" +
+				" ) )*": "",
 			"relation_expr": "table_name"},
 		unlink: []string{"table_name"},
 	},
@@ -387,7 +408,7 @@ var specs = []stmtSpec{
 	{
 		name:    "check_table_level",
 		stmt:    "stmt_block",
-		replace: map[string]string{"stmt_list": "'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' name | ) 'CHECK' '(' check_expr ')' ( table_constraints | ) ')'"},
+		replace: map[string]string{"stmt_list": "'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' constraint_name | ) 'CHECK' '(' check_expr ')' ( table_constraints | ) ')'"},
 		unlink:  []string{"table_name", "check_expr", "table_constraints"},
 	},
 	{
@@ -429,8 +450,8 @@ var specs = []stmtSpec{
 	{
 		name:    "create_view_stmt",
 		inline:  []string{"opt_column_list"},
-		replace: map[string]string{"any_name": "view_name", "name_list": "column_list"},
-		relink:  map[string]string{"view_name": "any_name", "column_list": "name_list"},
+		replace: map[string]string{"name_list": "column_list"},
+		relink:  map[string]string{"column_list": "name_list"},
 	},
 	{name: "create_user_stmt",
 		inline: []string{"opt_with", "opt_password"},
@@ -456,7 +477,20 @@ var specs = []stmtSpec{
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("relation_expr 'DROP' 'COLUMN'")},
 		replace: map[string]string{
-			"( ',' ( 'ADD' column_def | 'ADD' 'IF' 'NOT' 'EXISTS' column_def | 'ADD' 'COLUMN' column_def | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def | 'ALTER' ( 'COLUMN' |  ) name alter_column_default | 'ALTER' ( 'COLUMN' |  ) name 'DROP' 'NOT' 'NULL' | 'DROP' ( 'COLUMN' |  ) 'IF' 'EXISTS' name ( 'CASCADE' | 'RESTRICT' |  ) | 'DROP' ( 'COLUMN' |  ) name ( 'CASCADE' | 'RESTRICT' |  ) | 'ADD' table_constraint opt_validate_behavior | 'VALIDATE' 'CONSTRAINT' name | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' name ( 'CASCADE' | 'RESTRICT' |  ) | 'DROP' 'CONSTRAINT' name ( 'CASCADE' | 'RESTRICT' |  ) ) )*": "",
+			"( ',' (" +
+				" 'ADD' column_def" +
+				" | 'ADD' 'IF' 'NOT' 'EXISTS' column_def" +
+				" | 'ADD' 'COLUMN' column_def" +
+				" | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def" +
+				" | 'ALTER' ( 'COLUMN' |  ) column_name alter_column_default" +
+				" | 'ALTER' ( 'COLUMN' |  ) column_name 'DROP' 'NOT' 'NULL'" +
+				" | 'DROP' ( 'COLUMN' |  ) 'IF' 'EXISTS' column_name ( 'CASCADE' | 'RESTRICT' |  )" +
+				" | 'DROP' ( 'COLUMN' |  ) column_name ( 'CASCADE' | 'RESTRICT' |  )" +
+				" | 'ADD' table_constraint opt_validate_behavior" +
+				" | 'VALIDATE' 'CONSTRAINT' constraint_name" +
+				" | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name ( 'CASCADE' | 'RESTRICT' |  )" +
+				" | 'DROP' 'CONSTRAINT' constraint_name ( 'CASCADE' | 'RESTRICT' |  )" +
+				" ) )*": "",
 			"'COLUMN'":      "( 'COLUMN' | )",
 			"relation_expr": "table_name"},
 		unlink: []string{"table_name"},
@@ -467,7 +501,20 @@ var specs = []stmtSpec{
 		inline: []string{"alter_table_cmds", "alter_table_cmd"},
 		match:  []*regexp.Regexp{regexp.MustCompile("relation_expr 'DROP' 'CONSTRAINT'")},
 		replace: map[string]string{
-			"opt_drop_behavior ( ',' ( 'ADD' column_def | 'ADD' 'IF' 'NOT' 'EXISTS' column_def | 'ADD' 'COLUMN' column_def | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def | 'ALTER' opt_column name alter_column_default | 'ALTER' opt_column name 'DROP' 'NOT' 'NULL' | 'DROP' opt_column 'IF' 'EXISTS' name opt_drop_behavior | 'DROP' opt_column name opt_drop_behavior | 'ADD' table_constraint opt_validate_behavior | 'VALIDATE' 'CONSTRAINT' name | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' name opt_drop_behavior | 'DROP' 'CONSTRAINT' name opt_drop_behavior ) )*": "",
+			"opt_drop_behavior ( ',' (" +
+				" 'ADD' column_def" +
+				" | 'ADD' 'IF' 'NOT' 'EXISTS' column_def" +
+				" | 'ADD' 'COLUMN' column_def" +
+				" | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def" +
+				" | 'ALTER' opt_column column_name alter_column_default" +
+				" | 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'" +
+				" | 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior" +
+				" | 'DROP' opt_column column_name opt_drop_behavior" +
+				" | 'ADD' table_constraint opt_validate_behavior" +
+				" | 'VALIDATE' 'CONSTRAINT' constraint_name" +
+				" | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior" +
+				" | 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior" +
+				" ) )*": "",
 			"'CONSTRAINT'":  "( 'CONSTRAINT' | )",
 			"relation_expr": "table_name"},
 		unlink: []string{"table_name"},
@@ -486,30 +533,25 @@ var specs = []stmtSpec{
 		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"}, unlink: []string{"table_name", "index_name"},
 	},
 	{
-		name:    "drop_sequence_stmt",
-		inline:  []string{"table_name_list", "opt_drop_behavior"},
-		replace: map[string]string{"any_name": "sequence_name"},
-		unlink:  []string{"sequence_name"},
+		name:   "drop_sequence_stmt",
+		inline: []string{"table_name_list", "opt_drop_behavior"},
+		unlink: []string{"sequence_name"},
 	},
 	{
 		name:   "drop_stmt",
-		inline: []string{"table_name_list", "any_name", "qualified_name_list", "qualified_name", "drop_ddl_stmt"},
+		inline: []string{"table_name_list", "drop_ddl_stmt"},
 	},
 	{
-		name:    "drop_table",
-		stmt:    "drop_table_stmt",
-		inline:  []string{"opt_drop_behavior", "table_name_list"},
-		match:   []*regexp.Regexp{regexp.MustCompile("'DROP' 'TABLE'")},
-		replace: map[string]string{"any_name": "table_name"},
-		relink:  map[string]string{"table_name": "any_name"},
+		name:   "drop_table",
+		stmt:   "drop_table_stmt",
+		inline: []string{"opt_drop_behavior", "table_name_list"},
+		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'TABLE'")},
 	},
 	{
-		name:    "drop_view",
-		stmt:    "drop_view_stmt",
-		inline:  []string{"opt_drop_behavior", "table_name_list"},
-		match:   []*regexp.Regexp{regexp.MustCompile("'DROP' 'VIEW'")},
-		replace: map[string]string{"any_name": "view_name"},
-		relink:  map[string]string{"view_name": "any_name"},
+		name:   "drop_view",
+		stmt:   "drop_view_stmt",
+		inline: []string{"opt_drop_behavior", "table_name_list"},
+		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'VIEW'")},
 	},
 	{
 		name:   "explain_stmt",
@@ -535,7 +577,7 @@ var specs = []stmtSpec{
 	{
 		name:    "foreign_key_table_level",
 		stmt:    "stmt_block",
-		replace: map[string]string{"stmt_list": "'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' name | ) 'FOREIGN KEY' '(' ( fk_column_name ( ',' fk_column_name )* ) ')' 'REFERENCES' parent_table ( '(' ( ref_column_name ( ',' ref_column_name )* ) ')' | ) ( table_constraints | ) ')'"},
+		replace: map[string]string{"stmt_list": "'CREATE' 'TABLE' table_name '(' ( column_def ( ',' column_def )* ) ( 'CONSTRAINT' constraint_name | ) 'FOREIGN KEY' '(' ( fk_column_name ( ',' fk_column_name )* ) ')' 'REFERENCES' parent_table ( '(' ( ref_column_name ( ',' ref_column_name )* ) ')' | ) ( table_constraints | ) ')'"},
 		unlink:  []string{"table_name", "column_name", "parent_table", "table_constraints"},
 	},
 	{name: "index_def", inline: []string{"opt_storing", "storing", "index_params", "opt_name"}},
@@ -546,7 +588,13 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'INSERT'")},
 	},
 	{name: "iso_level"},
-	{name: "interleave", stmt: "create_table_stmt", inline: []string{"opt_interleave"}, replace: map[string]string{"any_name": "table_name", "opt_table_elem_list": "table_definition", "name_list": "interleave_prefix", " name": " parent_table"}, unlink: []string{"table_name", "table_definition", "parent_table", "child_columns"}},
+	{
+		name:    "interleave",
+		stmt:    "create_table_stmt",
+		inline:  []string{"opt_interleave"},
+		replace: map[string]string{"opt_table_elem_list": "table_definition", "name_list": "interleave_prefix", " name": " parent_table"},
+		unlink:  []string{"table_name", "table_definition", "parent_table", "child_columns"},
+	},
 	{
 		name:    "not_null_column_level",
 		stmt:    "stmt_block",
