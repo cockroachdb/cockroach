@@ -56,12 +56,9 @@ func (jb *joinerBase) init(
 ) error {
 	jb.joinType = joinType(jType)
 
-	if jb.joinType == intersectAllJoin {
-		if err := isValidIntersectAllJoin(
-			onExpr,
-			len(leftTypes),
-			len(rightTypes),
-			len(leftEqColumns),
+	if isSetOpJoin(jb.joinType) {
+		if err := isValidSetOpJoin(
+			onExpr, len(leftTypes), len(rightTypes), len(leftEqColumns),
 		); err != nil {
 			return err
 		}
@@ -147,16 +144,18 @@ func (jb *joinerBase) renderUnmatchedRow(
 
 func shouldIncludeRightColsInOutput(joinType joinType) bool {
 	switch joinType {
-	case leftSemiJoin, leftAntiJoin, intersectAllJoin:
+	case leftSemiJoin, leftAntiJoin, intersectAllJoin, exceptAllJoin:
 		return false
 	default:
 		return true
 	}
 }
 
-func isValidIntersectAllJoin(
-	onExpr Expression, numLeftCols int, numRightCols int, numEqCols int,
-) error {
+func isSetOpJoin(joinType joinType) bool {
+	return joinType == intersectAllJoin || joinType == exceptAllJoin
+}
+
+func isValidSetOpJoin(onExpr Expression, numLeftCols int, numRightCols int, numEqCols int) error {
 	if onExpr.Expr != "" {
 		return errors.Errorf("Expected empty onExpr, got %v", onExpr.Expr)
 	}
@@ -181,6 +180,8 @@ func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 	case leftOuter:
 		return side == leftSide
 	case leftAntiJoin:
+		return side == leftSide
+	case exceptAllJoin:
 		return side == leftSide
 	case fullOuter:
 		return true
