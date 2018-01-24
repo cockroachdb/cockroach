@@ -1386,6 +1386,18 @@ func (r *rocksDBBatchIterator) getIter() *C.DBIterator {
 	return r.iter.iter
 }
 
+// disposableIterator wraps rocksDBBatchIterator and allows Close to free up
+// the associated resources instead of tying them to the lifetime of the
+// batch. See reusableIterator and rocksDBBatch.NewTimeBoundIterator.
+type disposableIterator struct {
+	rocksDBBatchIterator
+}
+
+func (r *disposableIterator) Close() {
+	r.rocksDBBatchIterator.Close()
+	r.iter.destroy()
+}
+
 type rocksDBBatch struct {
 	parent             *RocksDB
 	batch              *C.DBEngine
@@ -1586,7 +1598,7 @@ func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
 	// Don't cache these iterators; we're unlikely to get many calls for the same
 	// time bounds.
 	r.ensureBatch()
-	var iter rocksDBBatchIterator
+	var iter disposableIterator
 	iter.iter.initTimeBound(r.batch, start, end, r)
 	iter.batch = r
 	return &iter
