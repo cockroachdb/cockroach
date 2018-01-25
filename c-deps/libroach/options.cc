@@ -19,11 +19,8 @@
 #include "cache.h"
 #include "comparator.h"
 #include "encoding.h"
+#include "godefs.h"
 #include "merge.h"
-
-extern "C" {
-void rocksDBLog(char*, int);
-}  // extern "C"
 
 namespace cockroach {
 
