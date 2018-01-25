@@ -44,7 +44,7 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 		return nil, errors.Errorf("cannot create statistics on virtual tables")
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.SELECT); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 

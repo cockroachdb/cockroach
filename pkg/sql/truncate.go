@@ -66,7 +66,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 				tableDesc.Kind(), tn, tableDesc.Kind())
 		}
 
-		if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
+		if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
 			return nil, err
 		}
 
@@ -95,7 +95,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 				if n.DropBehavior != tree.DropCascade {
 					return nil, errors.Errorf("%q is referenced by foreign key from table %q", tableDesc.Name, other.Name)
 				}
-				if err := p.CheckPrivilege(other, privilege.DROP); err != nil {
+				if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
 					return nil, err
 				}
 				toTruncate[other.ID] = struct{}{}

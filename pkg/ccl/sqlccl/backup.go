@@ -610,7 +610,7 @@ func verifyUsableExportTarget(
 }
 
 func backupPlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	backupStmt, ok := stmt.(*tree.Backup)
 	if !ok {
@@ -651,7 +651,7 @@ func backupPlanHook(
 			return err
 		}
 
-		if err := p.RequireSuperUser("BACKUP"); err != nil {
+		if err := p.RequireSuperUser(ctx, "BACKUP"); err != nil {
 			return err
 		}
 
@@ -713,12 +713,12 @@ func backupPlanHook(
 		var tables []*sqlbase.TableDescriptor
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
-				if err := p.CheckPrivilege(dbDesc, privilege.SELECT); err != nil {
+				if err := p.CheckPrivilege(ctx, dbDesc, privilege.SELECT); err != nil {
 					return err
 				}
 			}
 			if tableDesc := desc.GetTable(); tableDesc != nil {
-				if err := p.CheckPrivilege(tableDesc, privilege.SELECT); err != nil {
+				if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 					return err
 				}
 				tables = append(tables, tableDesc)
@@ -950,7 +950,7 @@ func backupResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
 }
 
 func showBackupPlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
@@ -963,7 +963,7 @@ func showBackupPlanHook(
 		return nil, nil, err
 	}
 
-	if err := p.RequireSuperUser("SHOW BACKUP"); err != nil {
+	if err := p.RequireSuperUser(ctx, "SHOW BACKUP"); err != nil {
 		return nil, nil, err
 	}
 

@@ -41,7 +41,7 @@ func (p *planner) AlterUserSetPassword(
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tDesc, privilege.UPDATE); err != nil {
+	if err := p.CheckPrivilege(ctx, tDesc, privilege.UPDATE); err != nil {
 		return nil, err
 	}
 

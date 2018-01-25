@@ -52,11 +52,11 @@ func NoLookup(_ context.Context, _ ID) (TableLookup, error) {
 
 // CheckPrivilegeFunction is the function type used by TablesNeededForFKs that will
 // check the privileges of the current user to access specific tables.
-type CheckPrivilegeFunction func(DescriptorProto, privilege.Kind) error
+type CheckPrivilegeFunction func(context.Context, DescriptorProto, privilege.Kind) error
 
 // NoCheckPrivilege can be used to not perform any privilege checks during a
 // TablesNeededForFKs function call.
-func NoCheckPrivilege(_ DescriptorProto, _ privilege.Kind) error {
+func NoCheckPrivilege(_ context.Context, _ DescriptorProto, _ privilege.Kind) error {
 	return nil
 }
 
@@ -94,7 +94,7 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLooku
 		return TableLookup{}, err
 	}
 	if !tableLookup.IsAdding && tableLookup.Table != nil {
-		if err := q.checkPrivilege(tableLookup.Table, privilege.SELECT); err != nil {
+		if err := q.checkPrivilege(ctx, tableLookup.Table, privilege.SELECT); err != nil {
 			return TableLookup{}, err
 		}
 	}
@@ -129,11 +129,11 @@ func (q *tableLookupQueue) enqueue(ctx context.Context, tableID ID, usage FKChec
 	switch usage {
 	// Insert has already been checked when the table is fetched.
 	case CheckDeletes:
-		if err := q.checkPrivilege(tableLookup.Table, privilege.DELETE); err != nil {
+		if err := q.checkPrivilege(ctx, tableLookup.Table, privilege.DELETE); err != nil {
 			return err
 		}
 	case CheckUpdates:
-		if err := q.checkPrivilege(tableLookup.Table, privilege.UPDATE); err != nil {
+		if err := q.checkPrivilege(ctx, tableLookup.Table, privilege.UPDATE); err != nil {
 			return err
 		}
 	}
