@@ -1000,8 +1000,7 @@ func importPlanHook(
 
 		var create *tree.CreateTable
 		if importStmt.CreateDefs != nil {
-			normName := tree.NormalizableTableName{TableNameReference: &importStmt.Table}
-			create = &tree.CreateTable{Table: normName, Defs: importStmt.CreateDefs}
+			create = &tree.CreateTable{Table: importStmt.Table, Defs: importStmt.CreateDefs}
 		} else {
 			filename, err := createFileFn()
 			if err != nil {
