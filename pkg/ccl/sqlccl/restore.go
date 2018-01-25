@@ -1025,7 +1025,7 @@ var restoreHeader = sqlbase.ResultColumns{
 }
 
 func restorePlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {

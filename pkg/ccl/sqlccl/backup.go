@@ -610,7 +610,7 @@ func verifyUsableExportTarget(
 }
 
 func backupPlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	backupStmt, ok := stmt.(*tree.Backup)
 	if !ok {
@@ -950,7 +950,7 @@ func backupResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
 }
 
 func showBackupPlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {

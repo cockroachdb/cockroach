@@ -46,7 +46,7 @@ type hookFnNode struct {
 // a blocking channel, so implementors should be careful to only use blocking
 // sends on it when necessary.
 type planHookFn func(
-	tree.Statement, PlanHookState,
+	context.Context, tree.Statement, PlanHookState,
 ) (fn func(context.Context, chan<- tree.Datums) error, header sqlbase.ResultColumns, err error)
 
 var planHooks []planHookFn
