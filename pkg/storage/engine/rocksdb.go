@@ -425,6 +425,8 @@ type RocksDBConfig struct {
 	//
 	// Makes no sense for in-memory instances.
 	MustExist bool
+	// ReadOnly will open the database in read only mode if set to true.
+	ReadOnly bool
 	// MaxSizeBytes is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size.
 	MaxSizeBytes int64
@@ -592,6 +594,7 @@ func (r *RocksDB) open() error {
 			max_open_files:    C.int(maxOpenFiles),
 			use_switching_env: C.bool(newVersion == versionCurrent),
 			must_exist:        C.bool(r.cfg.MustExist),
+			read_only:         C.bool(r.cfg.ReadOnly),
 			extra_options:     goToCSlice(r.cfg.ExtraOptions),
 		})
 	if err := statusToError(status); err != nil {
