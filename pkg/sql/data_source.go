@@ -627,7 +627,7 @@ func (p *planner) getPlanForDesc(
 
 	// This name designates a real table.
 	scan := p.Scan()
-	if err := scan.initTable(p, desc, hints, scanVisibility, wantedColumns); err != nil {
+	if err := scan.initTable(ctx, p, desc, hints, scanVisibility, wantedColumns); err != nil {
 		return planDataSource{}, err
 	}
 
@@ -660,7 +660,7 @@ func (p *planner) getViewPlan(
 	// SELECT privileges on the view, which is intended to allow for exposing
 	// some subset of a restricted table's data to less privileged users.
 	if !p.skipSelectPrivilegeChecks {
-		if err := p.CheckPrivilege(desc, privilege.SELECT); err != nil {
+		if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
 			return planDataSource{}, err
 		}
 		p.skipSelectPrivilegeChecks = true

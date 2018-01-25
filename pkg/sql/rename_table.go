@@ -82,7 +82,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, sqlbase.NewUndefinedRelationError(oldTn)
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
@@ -101,7 +101,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(targetDbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, targetDbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 

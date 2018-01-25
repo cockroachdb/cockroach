@@ -29,7 +29,7 @@ import (
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilege(
-		descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+		ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 	) error
 
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
@@ -48,7 +48,7 @@ var _ AuthorizationAccessor = &planner{}
 
 // CheckPrivilegeForUser verifies that `user`` has `privilege` on `descriptor`.
 func CheckPrivilegeForUser(
-	user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+	_ context.Context, user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
 	if descriptor.GetPrivileges().CheckPrivilege(user, privilege) {
 		return nil
@@ -59,9 +59,9 @@ func CheckPrivilegeForUser(
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
 func (p *planner) CheckPrivilege(
-	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
-	return CheckPrivilegeForUser(p.SessionData().User, descriptor, privilege)
+	return CheckPrivilegeForUser(ctx, p.SessionData().User, descriptor, privilege)
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.

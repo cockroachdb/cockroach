@@ -256,6 +256,7 @@ func (n *scanNode) limitHint() int64 {
 // Initializes a scanNode with a table descriptor.
 // wantedColumns is optional.
 func (n *scanNode) initTable(
+	ctx context.Context,
 	p *planner,
 	desc *sqlbase.TableDescriptor,
 	indexHints *tree.IndexHints,
@@ -265,7 +266,7 @@ func (n *scanNode) initTable(
 	n.desc = desc
 
 	if !p.skipSelectPrivilegeChecks {
-		if err := p.CheckPrivilege(n.desc, privilege.SELECT); err != nil {
+		if err := p.CheckPrivilege(ctx, n.desc, privilege.SELECT); err != nil {
 			return err
 		}
 	}

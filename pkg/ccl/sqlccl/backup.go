@@ -713,12 +713,12 @@ func backupPlanHook(
 		var tables []*sqlbase.TableDescriptor
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
-				if err := p.CheckPrivilege(dbDesc, privilege.SELECT); err != nil {
+				if err := p.CheckPrivilege(ctx, dbDesc, privilege.SELECT); err != nil {
 					return err
 				}
 			}
 			if tableDesc := desc.GetTable(); tableDesc != nil {
-				if err := p.CheckPrivilege(tableDesc, privilege.SELECT); err != nil {
+				if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 					return err
 				}
 				tables = append(tables, tableDesc)

@@ -56,7 +56,7 @@ func (ef *execFactory) ConstructScan(table optbase.Table) (opt.ExecNode, error) 
 	}
 	// Create a scanNode.
 	scan := ef.planner.Scan()
-	if err := scan.initTable(ef.planner, desc, nil /* hints */, publicColumns, columns); err != nil {
+	if err := scan.initTable(context.TODO(), ef.planner, desc, nil /* hints */, publicColumns, columns); err != nil {
 		return nil, err
 	}
 	var err error

@@ -234,7 +234,7 @@ func allocateTableRewrites(
 						return errors.Wrapf(err, "failed to lookup parent DB %d", parentID)
 					}
 
-					if err := p.CheckPrivilege(parentDB, privilege.CREATE); err != nil {
+					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
 						return err
 					}
 				}
@@ -756,7 +756,7 @@ func restoreTableDescs(
 					return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
 				}
 				// TODO(mberhault): CheckPrivilege wants a planner.
-				if err := sql.CheckPrivilegeForUser(user, parentDB, privilege.CREATE); err != nil {
+				if err := sql.CheckPrivilegeForUser(ctx, user, parentDB, privilege.CREATE); err != nil {
 					return err
 				}
 				// Default is to copy privs from restoring parent db, like CREATE TABLE.

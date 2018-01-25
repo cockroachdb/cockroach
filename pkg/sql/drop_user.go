@@ -52,7 +52,7 @@ func (p *planner) DropUserNode(
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tDesc, privilege.DELETE); err != nil {
+	if err := p.CheckPrivilege(ctx, tDesc, privilege.DELETE); err != nil {
 		return nil, err
 	}
 
