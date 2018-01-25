@@ -888,10 +888,20 @@ var logExitFunc func(error)
 // point in hanging around. l.mu is held.
 func (l *loggingT) exitLocked(err error) {
 	l.mu.AssertHeld()
+
 	// Either stderr or our log file is broken. Try writing the error to both
 	// streams in the hope that one still works or else the user will have no idea
 	// why we crashed.
-	for _, w := range []io.Writer{OrigStderr, l.file} {
+	outputs := make([]io.Writer, 2)
+	outputs[0] = OrigStderr
+	if f, ok := l.file.(*syncBuffer); ok {
+		// Don't call syncBuffer's Write method, because it can call back into
+		// exitLocked. Go directly to syncBuffer's underlying writer.
+		outputs[1] = f.Writer
+	} else {
+		outputs[1] = l.file
+	}
+	for _, w := range outputs {
 		if w == nil {
 			continue
 		}
