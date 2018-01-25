@@ -840,6 +840,35 @@ SELECT
 statement ok
 DROP TABLE e, d, c, b, a;
 
+subtest DeleteCascade_Multi
+# Ensures that the cascader can be reused. See #21563.
+
+statement ok
+CREATE TABLE a (
+  id INT PRIMARY KEY
+);
+CREATE TABLE b (
+  id INT PRIMARY KEY
+ ,a_id INT REFERENCES a ON DELETE CASCADE
+)
+
+statement ok
+INSERT INTO a VALUES (1), (2), (3);
+INSERT INTO b VALUES (1, 1), (2, NULL), (3, 2), (4, 1), (5, NULL);
+
+statement ok
+DELETE FROM a;
+
+query II
+SELECT id, a_id FROM b;
+----
+2  NULL
+5  NULL
+
+# Clean up.
+statement ok
+DROP TABLE b, a;
+
 subtest UpdateCascade_Basic
 ### Basic Update Cascade
 #     a
@@ -1702,6 +1731,38 @@ updated updated
 # Clean up after the test.
 statement ok
 DROP TABLE f, e, d, c, b, a;
+
+subtest UpdateCascade_Multi
+# Ensures that the cascader can be reused. See #21563.
+
+statement ok
+CREATE TABLE a (
+  id INT PRIMARY KEY
+);
+CREATE TABLE b (
+  id INT PRIMARY KEY
+ ,a_id INT REFERENCES a ON UPDATE CASCADE
+)
+
+statement ok
+INSERT INTO a VALUES (1), (2), (3);
+INSERT INTO b VALUES (1, 1), (2, NULL), (3, 2), (4, 1), (5, NULL);
+
+statement ok
+UPDATE a SET id = id + 10;
+
+query II
+SELECT id, a_id FROM b;
+----
+1  11
+2  NULL
+3  12
+4  11
+5  NULL
+
+# Clean up.
+statement ok
+DROP TABLE b, a;
 
 subtest DeleteNull_Basic1
 ### Basic Delete Set Null
