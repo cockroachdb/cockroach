@@ -94,30 +94,70 @@ type TableNameReference interface {
 
 // TableName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement (and possibly other places).
+//
+// Note: user code out of this package should probably not construct
+// instances of this directly, and instead use the NewTableName /
+// MakeTableName functions underneath.
 type TableName struct {
-	PrefixName Name
-	SchemaName Name
-	TableName  Name
+	CatalogName Name
+	SchemaName  Name
 
-	// OmitSchemaNameDuringFormatting, when set to true, causes the
-	// String()/Format() methods to omit the database name even if one
-	// is set. This is used to ensure that pretty-printing
-	// a TableName normalized from a parser input yields back
-	// the original syntax.
-	OmitSchemaNameDuringFormatting bool
+	TableName Name
 
-	// PrefixOriginallySpecified indicates whether a prefix was
-	// explicitly indicated in the input syntax.
-	PrefixOriginallySpecified bool
+	// ExplicitCatalog is true iff the catalog was explicitly specified
+	// or it needs to be rendered during pretty-printing.
+	ExplicitCatalog bool
+	// ExplicitSchema is true iff the schema was explicitly specified
+	// or it needs to be rendered during pretty-printing.
+	ExplicitSchema bool
+}
+
+// MakeTableName creates a new table name qualified with just a schema.
+func MakeTableName(db, tbl Name) TableName {
+	return TableName{
+		SchemaName:     db,
+		TableName:      tbl,
+		ExplicitSchema: true,
+	}
+}
+
+// NewTableName creates a new qualified table name.
+func NewTableName(db, tbl Name) *TableName {
+	tn := MakeTableName(db, tbl)
+	return &tn
+}
+
+// MakeTableNameWithCatalog creates a new fully qualified table name.
+func MakeTableNameWithCatalog(db, schema, tbl Name) TableName {
+	return TableName{
+		CatalogName:     db,
+		SchemaName:      schema,
+		TableName:       tbl,
+		ExplicitSchema:  true,
+		ExplicitCatalog: true,
+	}
+}
+
+// MakeUnqualifiedTableName creates a new base table name.
+func MakeUnqualifiedTableName(tbl Name) TableName {
+	return TableName{
+		TableName: tbl,
+	}
+}
+
+// NewUnqualifiedTableName creates a new base table name.
+func NewUnqualifiedTableName(tbl Name) *TableName {
+	tn := MakeUnqualifiedTableName(tbl)
+	return &tn
 }
 
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if !t.OmitSchemaNameDuringFormatting ||
+	if t.ExplicitSchema ||
 		f.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil {
-		if t.PrefixOriginallySpecified {
-			ctx.FormatNode(&t.PrefixName)
+		if t.ExplicitCatalog {
+			ctx.FormatNode(&t.CatalogName)
 			ctx.WriteByte('.')
 		}
 		ctx.FormatNode(&t.SchemaName)
@@ -167,11 +207,11 @@ func (n *UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) 
 	// `select * from "".crdb_internal.tables`.
 
 	res = TableName{
-		TableName:                      Name(n.Parts[0]),
-		SchemaName:                     Name(n.Parts[1]),
-		PrefixName:                     Name(n.Parts[2]),
-		OmitSchemaNameDuringFormatting: n.NumParts == 1,
-		PrefixOriginallySpecified:      n.NumParts >= 3,
+		TableName:       Name(n.Parts[0]),
+		SchemaName:      Name(n.Parts[1]),
+		CatalogName:     Name(n.Parts[2]),
+		ExplicitSchema:  n.NumParts >= 2,
+		ExplicitCatalog: n.NumParts >= 3,
 	}
 
 	return res, nil
@@ -191,7 +231,8 @@ func (n *UnresolvedName) NormalizeTableName() (*TableName, error) {
 // table       -> database.table
 // table@index -> database.table@index
 func (t *TableName) QualifyWithDatabase(database string) error {
-	if !t.OmitSchemaNameDuringFormatting {
+	if t.ExplicitSchema {
+		// Schema already specified. No room to add a new one.
 		return nil
 	}
 	if database == "" {
