@@ -25,6 +25,7 @@ package parser
 
 import (
     "fmt"
+    "strings"
 
     "go/constant"
     "go/token"
@@ -95,7 +96,7 @@ type sqlSymUnion struct {
 // - Interfaces where a nil is not admissible are implemented as a direct
 //   type assertion, which causes a panic to occur if an unexpected nil
 //   is encountered.
-//   Examples: namePart(), tblDef().
+//   Examples: tblDef().
 //
 func (u *sqlSymUnion) numVal() *tree.NumVal {
     return u.val.(*tree.NumVal)
@@ -125,14 +126,11 @@ func (u *sqlSymUnion) tableWithIdx() tree.TableNameWithIndex {
 func (u *sqlSymUnion) newTableWithIdxList() tree.TableNameWithIndexList {
     return u.val.(tree.TableNameWithIndexList)
 }
-func (u *sqlSymUnion) namePart() tree.NamePart {
-    return u.val.(tree.NamePart)
-}
 func (u *sqlSymUnion) nameList() tree.NameList {
     return u.val.(tree.NameList)
 }
-func (u *sqlSymUnion) unresolvedName() tree.UnresolvedName {
-    return u.val.(tree.UnresolvedName)
+func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
+    return u.val.(*tree.UnresolvedName)
 }
 func (u *sqlSymUnion) unresolvedNames() tree.UnresolvedNames {
     return u.val.(tree.UnresolvedNames)
@@ -418,16 +416,13 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
     return u.val.(tree.ScrubOption)
 }
 func (u *sqlSymUnion) normalizableTableNameFromUnresolvedName() tree.NormalizableTableName {
-    un := u.val.(tree.UnresolvedName)
-    return tree.NormalizableTableName{TableNameReference: &un}
+    return tree.NormalizableTableName{TableNameReference: u.unresolvedName()}
 }
 func (u *sqlSymUnion) newNormalizableTableNameFromUnresolvedName() *tree.NormalizableTableName {
-    un := u.val.(tree.UnresolvedName)
-    return &tree.NormalizableTableName{TableNameReference: &un}
+    return &tree.NormalizableTableName{TableNameReference: u.unresolvedName()}
 }
-func (u *sqlSymUnion) resolvableFunctionReferenceFromUnresolvedName() tree.ResolvableFunctionReference {
-    un := u.val.(tree.UnresolvedName)
-    return tree.ResolvableFunctionReference{FunctionReference: &un}
+func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReference {
+    return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedName()}
 }
 func newNameFromStr(s string) *tree.Name {
     return (*tree.Name)(&s)
@@ -745,15 +740,15 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> privilege savepoint_name
 
 %type <tree.Operator> subquery_op
-%type <tree.FunctionReference> func_name
+%type <*tree.UnresolvedName> func_name
 %type <empty> opt_collate
 
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
-%type <tree.UnresolvedName> table_name sequence_name view_name db_object_name
-%type <tree.UnresolvedName> table_pattern
+%type <*tree.UnresolvedName> table_name sequence_name view_name db_object_name
+%type <*tree.UnresolvedName> table_pattern
+%type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.UnresolvedNames> column_path_list
-%type <tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target
 
 %type <*tree.TableNameWithIndex> table_name_with_index
@@ -786,7 +781,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.TablePatterns> table_pattern_list
 %type <tree.TableNameReferences> table_name_list
 %type <tree.Exprs> expr_list opt_expr_list
-%type <tree.UnresolvedName> attrs
+%type <tree.NameList> attrs
 %type <tree.SelectExprs> target_list
 %type <tree.UpdateExprs> set_clause_list
 %type <*tree.UpdateExpr> set_clause multiple_set_clause
@@ -860,7 +855,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.IndexElem> index_elem
 %type <tree.TableExpr> table_ref
 %type <tree.TableExpr> joined_table
-%type <tree.UnresolvedName> relation_expr
+%type <*tree.UnresolvedName> relation_expr
 %type <tree.TableExpr> relation_expr_opt_alias
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
@@ -887,7 +882,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <int64> iconst64
 %type <tree.Expr>  var_value
 %type <tree.Exprs> var_list
-%type <tree.UnresolvedName> var_name
+%type <tree.NameList> var_name
 %type <str>   unrestricted_name type_function_name
 %type <str>   non_reserved_word
 %type <str>   non_reserved_word_or_sconst
@@ -1919,13 +1914,11 @@ drop_role_stmt:
 table_name_list:
   table_name
   {
-    n := $1.unresolvedName()
-    $$.val = tree.TableNameReferences{&n}
+    $$.val = tree.TableNameReferences{$1.unresolvedName()}
   }
 | table_name_list ',' table_name
   {
-    n := $3.unresolvedName()
-    $$.val = append($1.tableNameReferences(), &n)
+    $$.val = append($1.tableNameReferences(), $3.unresolvedName())
   }
 
 // %Help: EXPLAIN - show the logical plan of a query
@@ -2198,11 +2191,11 @@ reset_stmt:
 reset_session_stmt:
   RESET session_var
   {
-    $$.val = &tree.SetVar{Name: &tree.UnresolvedName{newNameFromStr($2)}, Values:tree.Exprs{tree.DefaultVal{}}}
+    $$.val = &tree.SetVar{Name: $2, Values:tree.Exprs{tree.DefaultVal{}}}
   }
 | RESET SESSION session_var
   {
-    $$.val = &tree.SetVar{Name: &tree.UnresolvedName{newNameFromStr($3)}, Values:tree.Exprs{tree.DefaultVal{}}}
+    $$.val = &tree.SetVar{Name: $3, Values:tree.Exprs{tree.DefaultVal{}}}
   }
 | RESET error // SHOW HELP: RESET
 
@@ -2213,8 +2206,7 @@ reset_session_stmt:
 reset_csetting_stmt:
   RESET CLUSTER SETTING var_name
   {
-    n := $4.unresolvedName()
-    $$.val = &tree.SetClusterSetting{Name: &n, Value:tree.DefaultVal{}}
+    $$.val = &tree.SetClusterSetting{Name: strings.Join($4.strs(), "."), Value:tree.DefaultVal{}}
   }
 | RESET CLUSTER error // SHOW HELP: RESET CLUSTER SETTING
 
@@ -2223,7 +2215,7 @@ use_stmt:
   USE var_value
   {
     /* SKIP DOC */
-    $$.val = &tree.SetVar{Name: &tree.UnresolvedName{newNameFromStr("database")}, Values: tree.Exprs{$2.expr()}}
+    $$.val = &tree.SetVar{Name: "database", Values: tree.Exprs{$2.expr()}}
   }
 | USE error // SHOW HELP: SET SESSION
 
@@ -2346,13 +2338,11 @@ scrub_option:
 set_csetting_stmt:
   SET CLUSTER SETTING var_name '=' var_value
   {
-    n := $4.unresolvedName()
-    $$.val = &tree.SetClusterSetting{Name: &n, Value: $6.expr()}
+    $$.val = &tree.SetClusterSetting{Name: strings.Join($4.strs(), "."), Value: $6.expr()}
   }
 | SET CLUSTER SETTING var_name TO var_value
   {
-    n := $4.unresolvedName()
-    $$.val = &tree.SetClusterSetting{Name: &n, Value: $6.expr()}
+    $$.val = &tree.SetClusterSetting{Name: strings.Join($4.strs(), "."), Value: $6.expr()}
   }
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
 
@@ -2412,15 +2402,13 @@ set_transaction_stmt:
 | SET SESSION TRANSACTION error // SHOW HELP: SET TRANSACTION
 
 generic_set:
-var_name TO var_list
+  var_name TO var_list
   {
-    n := $1.unresolvedName()
-    $$.val = &tree.SetVar{Name: &n, Values: $3.exprs()}
+    $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
   }
 | var_name '=' var_list
   {
-    n := $1.unresolvedName()
-    $$.val = &tree.SetVar{Name: &n, Values: $3.exprs()}
+    $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
   }
 
 set_rest_more:
@@ -2430,7 +2418,7 @@ set_rest_more:
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
-    $$.val = &tree.SetVar{Name: &tree.UnresolvedName{newNameFromStr("timezone")}, Values: tree.Exprs{$3.expr()}}
+    $$.val = &tree.SetVar{Name: "timezone", Values: tree.Exprs{$3.expr()}}
   }
 | var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | set_names
@@ -2442,39 +2430,39 @@ set_names:
   NAMES var_value
   {
     /* SKIP DOC */
-    $$.val = &tree.SetVar{Name: &tree.UnresolvedName{newNameFromStr("client_encoding")}, Values: tree.Exprs{$2.expr()}}
+    $$.val = &tree.SetVar{Name: "client_encoding", Values: tree.Exprs{$2.expr()}}
   }
 | NAMES
   {
     /* SKIP DOC */
-    $$.val = &tree.SetVar{Name: &tree.UnresolvedName{newNameFromStr("client_encoding")}, Values: tree.Exprs{tree.DefaultVal{}}}
+    $$.val = &tree.SetVar{Name: "client_encoding", Values: tree.Exprs{tree.DefaultVal{}}}
   }
 
 var_name:
   name
   {
-    $$.val = tree.UnresolvedName{newNameFromStr($1)}
+    $$.val = []string{$1}
   }
 | name attrs
   {
-    $$.val = append(tree.UnresolvedName{newNameFromStr($1)}, $2.unresolvedName()...)
+    $$.val = append([]string{$1}, $2.strs()...)
   }
 
 attrs:
   '.' unrestricted_name
   {
-    $$.val = tree.UnresolvedName{newNameFromStr($2)}
+    $$.val = []string{$2}
   }
 | attrs '.' unrestricted_name
   {
-    $$.val = append($1.unresolvedName(), newNameFromStr($3))
+    $$.val = append($1.strs(), $3)
   }
 
 var_value:
   a_expr
 | ON
   {
-    $$.val = tree.Expr(&tree.UnresolvedName{newNameFromStr($1)})
+    $$.val = tree.Expr(&tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{$1}})
   }
 
 var_list:
@@ -2663,8 +2651,7 @@ show_backup_stmt:
 show_csettings_stmt:
   SHOW CLUSTER SETTING var_name
   {
-    n := $4.unresolvedName()
-    $$.val = &tree.ShowClusterSetting{Name: tree.AsStringWithFlags(&n, tree.FmtBareIdentifiers)}
+    $$.val = &tree.ShowClusterSetting{Name: strings.Join($4.strs(), ".")}
   }
 | SHOW CLUSTER SETTING ALL
   {
@@ -5015,9 +5002,9 @@ table_ref:
 // the grammar would be ambiguous.
 | db_object_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause
   {
-    $$.val = &tree.AliasedTableExpr{Expr: &tree.FuncExpr{Func: $1.resolvableFunctionReferenceFromUnresolvedName(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
+    $$.val = &tree.AliasedTableExpr{Expr: &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
   }
-| db_object_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReferenceFromUnresolvedName()) }
+| db_object_name '(' error { return helpWithFunction(sqllex, $1.resolvableFuncRefFromName()) }
 | select_with_parens opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.Subquery{Select: $1.selectStmt()}, Ordinality: $2.bool(), As: $3.aliasClause() }
@@ -5187,33 +5174,19 @@ join_qual:
   }
 
 relation_expr:
-  table_name
-  {
-    $$.val = $1.unresolvedName()
-  }
-| table_name '*'
-  {
-    $$.val = $1.unresolvedName()
-  }
-| ONLY table_name
-  {
-    $$.val = $2.unresolvedName()
-  }
-| ONLY '(' table_name ')'
-  {
-    $$.val = $3.unresolvedName()
-  }
+  table_name              { $$.val = $1.unresolvedName() }
+| table_name '*'          { $$.val = $1.unresolvedName() }
+| ONLY table_name         { $$.val = $2.unresolvedName() }
+| ONLY '(' table_name ')' { $$.val = $3.unresolvedName() }
 
 relation_expr_list:
   relation_expr
   {
-    n := $1.unresolvedName()
-    $$.val = tree.TableNameReferences{&n}
+    $$.val = tree.TableNameReferences{$1.unresolvedName()}
   }
 | relation_expr_list ',' relation_expr
   {
-    n := $3.unresolvedName()
-    $$.val = append($1.tableNameReferences(), &n)
+    $$.val = append($1.tableNameReferences(), $3.unresolvedName())
   }
 
 // Given "UPDATE foo set set ...", we have to decide without looking any
@@ -6261,8 +6234,7 @@ c_expr:
 d_expr:
   column_path_with_star
   {
-    n := $1.unresolvedName()
-    $$.val = tree.Expr(&n)
+    $$.val = tree.Expr($1.unresolvedName())
   }
 | a_expr_const
 | '@' iconst64
@@ -6310,27 +6282,27 @@ d_expr:
 func_application:
   func_name '(' ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFunctionReferenceFromUnresolvedName()}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName()}
   }
 | func_name '(' expr_list opt_sort_clause ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFunctionReferenceFromUnresolvedName(), Exprs: $3.exprs()}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs()}
   }
 | func_name '(' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
 | func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
 | func_name '(' ALL expr_list opt_sort_clause ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFunctionReferenceFromUnresolvedName(), Type: tree.AllFuncType, Exprs: $4.exprs()}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.AllFuncType, Exprs: $4.exprs()}
   }
 | func_name '(' DISTINCT expr_list opt_sort_clause ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFunctionReferenceFromUnresolvedName(), Type: tree.DistinctFuncType, Exprs: $4.exprs()}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.DistinctFuncType, Exprs: $4.exprs()}
   }
 | func_name '(' '*' ')'
   {
-    $$.val = &tree.FuncExpr{Func: $1.resolvableFunctionReferenceFromUnresolvedName(), Exprs: tree.Exprs{tree.StarExpr()}}
+    $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: tree.Exprs{tree.StarExpr()}}
   }
-| func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReferenceFromUnresolvedName()) }
+| func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFuncRefFromName()) }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
 // so that we have classifications for "everything that is a function call or
@@ -6974,13 +6946,11 @@ table_name_with_index_list:
 table_pattern_list:
   table_pattern
   {
-    n := $1.unresolvedName()
-    $$.val = tree.TablePatterns{&n}
+    $$.val = tree.TablePatterns{$1.unresolvedName()}
   }
 | table_pattern_list ',' table_pattern
   {
-    n := $3.unresolvedName()
-    $$.val = append($1.tablePatterns(), &n)
+    $$.val = append($1.tablePatterns(), $3.unresolvedName())
   }
 
 table_name_with_index:
@@ -7015,15 +6985,15 @@ table_pattern:
   db_object_name
 | name '.' unrestricted_name '.' '*'
   {
-      $$.val = tree.UnresolvedName{newNameFromStr($1), newNameFromStr($3), tree.UnqualifiedStar{}}
+    $$.val = &tree.UnresolvedName{Star: true, NumParts: 3, Parts: tree.NameParts{"", $3, $1}}
   }
 | name '.' '*'
   {
-    $$.val = tree.UnresolvedName{newNameFromStr($1), tree.UnqualifiedStar{}}
+    $$.val = &tree.UnresolvedName{Star: true, NumParts: 2, Parts: tree.NameParts{"", $1}}
   }
 | '*'
   {
-    $$.val = tree.UnresolvedName{tree.UnqualifiedStar{}}
+    $$.val = &tree.UnresolvedName{Star: true, NumParts: 1}
   }
 
 name_list:
@@ -7221,34 +7191,22 @@ explain_option_name: non_reserved_word
 column_path:
   name
   {
-      $$.val = tree.UnresolvedName{newNameFromStr($1)}
+      $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
   }
 | prefixed_column_path
 
 prefixed_column_path:
   name '.' unrestricted_name
   {
-      $$.val = tree.UnresolvedName{
-	  newNameFromStr($1),
-	  newNameFromStr($3),
-      }
+      $$.val = &tree.UnresolvedName{NumParts:2, Parts: tree.NameParts{$3,$1}}
   }
 | name '.' unrestricted_name '.' unrestricted_name
   {
-      $$.val = tree.UnresolvedName{
-	  newNameFromStr($1),
-	  newNameFromStr($3),
-	  newNameFromStr($5),
-      }
+      $$.val = &tree.UnresolvedName{NumParts:3, Parts: tree.NameParts{$5,$3,$1}}
   }
 | name '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
   {
-      $$.val = tree.UnresolvedName{
-	  newNameFromStr($1),
-	  newNameFromStr($3),
-	  newNameFromStr($5),
-	  newNameFromStr($7),
-      }
+      $$.val = &tree.UnresolvedName{NumParts:4, Parts: tree.NameParts{$7,$5,$3,$1}}
   }
 
 column_path_list:
@@ -7266,15 +7224,15 @@ column_path_with_star:
   column_path
 | name '.' unrestricted_name '.' unrestricted_name '.' '*'
   {
-      $$.val = tree.UnresolvedName{newNameFromStr($1), newNameFromStr($3), newNameFromStr($5), tree.UnqualifiedStar{}}
+    $$.val = &tree.UnresolvedName{Star:true, NumParts:4, Parts: tree.NameParts{"",$5,$3,$1}}
   }
 | name '.' unrestricted_name '.' '*'
   {
-      $$.val = tree.UnresolvedName{newNameFromStr($1), newNameFromStr($3), tree.UnqualifiedStar{}}
+    $$.val = &tree.UnresolvedName{Star:true, NumParts:3, Parts: tree.NameParts{"",$3,$1}}
   }
 | name '.' '*'
   {
-    $$.val = tree.UnresolvedName{newNameFromStr($1), tree.UnqualifiedStar{}}
+    $$.val = &tree.UnresolvedName{Star:true, NumParts:2, Parts: tree.NameParts{"",$1}}
   }
 
 // Names for functions.
@@ -7287,10 +7245,9 @@ column_path_with_star:
 func_name:
   type_function_name
   {
-    $$.val = tree.UnresolvedName{newNameFromStr($1)}
+    $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
   }
 | prefixed_column_path
-
 
 // Names for database objects (tables, sequences, views, stored functions).
 // Accepted patterns:
@@ -7300,22 +7257,15 @@ func_name:
 db_object_name:
   name
   {
-      $$.val = tree.UnresolvedName{newNameFromStr($1)}
+    $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
   }
 | name '.' unrestricted_name
   {
-      $$.val = tree.UnresolvedName{
-	  newNameFromStr($1),
-	  newNameFromStr($3),
-      }
+    $$.val = &tree.UnresolvedName{NumParts:2, Parts: tree.NameParts{$3,$1}}
   }
 | name '.' unrestricted_name '.' unrestricted_name
   {
-      $$.val = tree.UnresolvedName{
-	  newNameFromStr($1),
-	  newNameFromStr($3),
-	  newNameFromStr($5),
-      }
+    $$.val = &tree.UnresolvedName{NumParts:3, Parts: tree.NameParts{$5,$3,$1}}
   }
 
 

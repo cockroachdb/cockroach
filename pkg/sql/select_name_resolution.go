@@ -164,10 +164,11 @@ func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 				// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
 				// Replace the function with COUNT_ROWS (which doesn't take any
 				// arguments).
-				cr := tree.Name("COUNT_ROWS")
 				e := &tree.FuncExpr{
 					Func: tree.ResolvableFunctionReference{
-						FunctionReference: &tree.UnresolvedName{&cr},
+						FunctionReference: &tree.UnresolvedName{
+							NumParts: 1, Parts: tree.NameParts{"count_rows"},
+						},
 					},
 				}
 				// We call TypeCheck to fill in FuncExpr internals. This is a fixed
