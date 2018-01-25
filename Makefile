@@ -207,12 +207,11 @@ endif
 
 # We install our vendored tools to a directory within this repository to avoid
 # overwriting any user-installed binaries of the same name in the default GOBIN.
-LOCAL_BIN := $(abspath bin)
-GO_INSTALL := GOBIN='$(LOCAL_BIN)' $(GO) install
+GO_INSTALL := GOBIN='$(abspath bin)' $(GO) install
 
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
-export PATH := $(LOCAL_BIN):$(PATH)
+export PATH := $(abspath bin):$(PATH)
 
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
@@ -315,7 +314,7 @@ endif
 YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
 
 .SECONDARY: $(YARN_INSTALLED_TARGET)
-$(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
+$(YARN_INSTALLED_TARGET): $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	$(NODE_RUN) -C $(UI_ROOT) yarn install
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
@@ -333,13 +332,13 @@ $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)
 # like we do in the builder container to allow for different host and guest
 # systems, will trigger bootstrapping in the container as necessary. This is
 # extracted into a variable for the same reasons as YARN_INSTALLED_TARGET.
-BOOTSTRAP_TARGET := $(LOCAL_BIN)/.bootstrap
+BOOTSTRAP_TARGET := bin/.bootstrap
 
-SUBMODULES_TARGET := $(LOCAL_BIN)/.submodules-initialized
+SUBMODULES_TARGET := bin/.submodules-initialized
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock $(LOCAL_BIN)/returncheck | $(SUBMODULES_TARGET)
+$(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock bin/returncheck | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v \
 		./vendor/github.com/golang/dep/cmd/dep \
 		./vendor/github.com/client9/misspell/cmd/misspell \
@@ -540,14 +539,14 @@ $(CGO_FLAGS_FILES): Makefile
 # only rebuild the affected objects, but in practice dependencies on configure
 # flags are not tracked correctly, and these stale artifacts can cause
 # particularly hard-to-debug errors.
-$(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild $(BOOTSTRAP_TARGET)
+$(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild | $(SUBMODULES_TARGET)
 	rm -rf $(CRYPTOPP_DIR)
 	mkdir -p $(CRYPTOPP_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/cryptopp-rebuild. See above for rationale.
 	cd $(CRYPTOPP_DIR) && cmake $(CMAKE_FLAGS) $(CRYPTOPP_SRC_DIR)
 
-$(JEMALLOC_SRC_DIR)/configure.ac: $(BOOTSTRAP_TARGET)
+$(JEMALLOC_SRC_DIR)/configure.ac: | $(SUBMODULES_TARGET)
 
 $(JEMALLOC_SRC_DIR)/configure: $(JEMALLOC_SRC_DIR)/configure.ac
 	cd $(JEMALLOC_SRC_DIR) && autoconf
@@ -562,7 +561,7 @@ $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/con
 	@# https://github.com/jemalloc/jemalloc/issues/585.
 	cd $(JEMALLOC_DIR) && $(JEMALLOC_SRC_DIR)/configure $(CONFIGURE_FLAGS) $(if $(findstring musl,$(TARGET_TRIPLE)),,--enable-prof)
 
-$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(BOOTSTRAP_TARGET)
+$(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
 	rm -rf $(PROTOBUF_DIR)
 	mkdir -p $(PROTOBUF_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -570,7 +569,7 @@ $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(BOOTSTRAP_TARGET)
 	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 
 ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
-$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(BOOTSTRAP_TARGET)
+$(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
 	rm -rf $(PROTOC_DIR)
 	mkdir -p $(PROTOC_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -578,7 +577,7 @@ $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild $(BOOTSTRAP_TARGET)
 	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 endif
 
-$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(BOOTSTRAP_TARGET) | libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
+$(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | $(SUBMODULES_TARGET) libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
 	rm -rf $(ROCKSDB_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -591,14 +590,14 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(BOOTSTRAP_TARGET) | lib
 	@# TODO(benesch): Tweak how we pass -DNDEBUG above when we upgrade to a
 	@# RocksDB release that includes https://github.com/facebook/rocksdb/pull/2300.
 
-$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild $(BOOTSTRAP_TARGET)
+$(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild | $(SUBMODULES_TARGET)
 	rm -rf $(SNAPPY_DIR)
 	mkdir -p $(SNAPPY_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
 	cd $(SNAPPY_DIR) && cmake $(CMAKE_FLAGS) $(SNAPPY_SRC_DIR)
 
-$(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
+$(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild | $(SUBMODULES_TARGET)
 	rm -rf $(LIBROACH_DIR)
 	mkdir -p $(LIBROACH_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -677,10 +676,10 @@ SQLPARSER_TARGETS = \
 	$(PKG_ROOT)/sql/lex/keywords.go \
 	$(PKG_ROOT)/sql/lex/reserved_keywords.go
 
-GO_PROTOS_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
-GW_PROTOS_TARGET := $(LOCAL_BIN)/.gw_protobuf_sources
-CPP_PROTOS_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
-CPP_PROTOS_CCL_TARGET := $(LOCAL_BIN)/.cpp_ccl_protobuf_sources
+GO_PROTOS_TARGET := bin/.go_protobuf_sources
+GW_PROTOS_TARGET := bin/.gw_protobuf_sources
+CPP_PROTOS_TARGET := bin/.cpp_protobuf_sources
+CPP_PROTOS_CCL_TARGET := bin/.cpp_ccl_protobuf_sources
 
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
@@ -913,7 +912,7 @@ CPP_PROTO_CCL_ROOT := $(LIBROACH_SRC_DIR)/protosccl
 GOGO_PROTOBUF_PATH := ./vendor/github.com/gogo/protobuf
 PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
 
-PROTOC_PLUGIN   := $(LOCAL_BIN)/protoc-gen-gogoroach
+PROTOC_PLUGIN   := bin/protoc-gen-gogoroach
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
 COREOS_PATH := ./vendor/github.com/coreos
@@ -1191,7 +1190,7 @@ clean: clean-c-deps
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
-	rm -rf artifacts $(LOCAL_BIN) $(ARCHIVE) $(SQLPARSER_ROOT)/gen
+	rm -rf artifacts bin $(ARCHIVE) $(SQLPARSER_ROOT)/gen
 
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
@@ -1204,5 +1203,5 @@ unsafe-clean: maintainer-clean unsafe-clean-c-deps
 	git clean -dxf
 
 .SECONDEXPANSION:
-$(LOCAL_BIN)/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | $(SUBMODULES_TARGET)
+bin/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/$*
