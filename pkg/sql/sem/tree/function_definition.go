@@ -67,17 +67,15 @@ func (fd *FunctionDefinition) String() string { return AsString(fd) }
 func (n *UnresolvedName) ResolveFunction(
 	searchPath sessiondata.SearchPath,
 ) (*FunctionDefinition, error) {
-	fn, err := n.normalizeFunctionName()
-	if err != nil {
-		return nil, err
+	if n.NumParts > 2 || len(n.Parts[0]) == 0 {
+		// n.NumParts > 2 would be catalog.schema.funname().
+		// We don't support those. (yet?)
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"invalid function name: %q", ErrString(n))
 	}
+	function, prefix := n.Parts[0], n.Parts[1]
 
-	if len(fn.selector) > 0 {
-		// We do not support selectors at this point.
-		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "invalid function name: %s", n)
-	}
-
-	if d, ok := FunDefs[fn.function()]; ok && fn.prefix() == "" {
+	if d, ok := FunDefs[function]; ok && prefix == "" {
 		// Fast path: return early.
 		return d, nil
 	}
@@ -89,8 +87,8 @@ func (n *UnresolvedName) ResolveFunction(
 	// TODO(knz): this will need to be revisited once we allow
 	// function names to exist in custom namespaces, whose names
 	// may contain special characters.
-	prefix := strings.ToLower(fn.prefix())
-	smallName := strings.ToLower(fn.function())
+	prefix = strings.ToLower(prefix)
+	smallName := strings.ToLower(function)
 	fullName := smallName
 
 	if prefix == "pg_catalog" {
@@ -119,7 +117,7 @@ func (n *UnresolvedName) ResolveFunction(
 		}
 		if !found {
 			return nil, pgerror.NewErrorf(
-				pgerror.CodeUndefinedFunctionError, "unknown function: %s()", n)
+				pgerror.CodeUndefinedFunctionError, "unknown function: %s()", ErrString(n))
 		}
 	}
 

@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,13 +40,13 @@ type setVarNode struct {
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
 func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) {
-	if n.Name == nil {
-		// A client has sent the reserved internal syntax SET ROW ...
-		// Reject it.
-		return nil, errors.New("invalid statement: SET ROW")
+	if n.Name == "" {
+		// A client has sent the reserved internal syntax SET ROW ...,
+		// or the user entered `SET "" = foo`. Reject it.
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid variable name: %q", n.Name)
 	}
 
-	name := strings.ToLower(tree.AsStringWithFlags(n.Name, tree.FmtBareIdentifiers))
+	name := strings.ToLower(n.Name)
 
 	var typedValues []tree.TypedExpr
 	if len(n.Values) > 0 {
