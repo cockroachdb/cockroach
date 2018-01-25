@@ -62,7 +62,7 @@ SHOW TABLES from foo
 Table
 bar
 
-statement error invalid statement
+statement error invalid variable name: ""
 SET ROW (1, TRUE, NULL)
 
 statement ok
