@@ -68,13 +68,12 @@ const IPv6size = net.IPv6len + 2
 // IPv4mappedIPv6prefix is the byte prefix for IPv4-mapped IPv6.
 const IPv4mappedIPv6prefix = uint64(0xFFFF) << 32
 
-// IPv4mask is used to select only the lower 32 bits of uint128
-// IPv4 addresses may not have the the upper 96 bits of Addr set to 0
-//   IPv4 addresses mapped to IPv6 have prefix bits that should not
-//   change
+// IPv4mask is used to select only the lower 32 bits of uint128.
+// IPv4 addresses may not have the the upper 96 bits of Addr set to 0.
+// IPv4 addresses mapped to IPv6 have prefix bits that should not change.
 const IPv4mask = uint64(0xFFFFFFFF)
 
-// IPv4max is used for overflows
+// IPv4max is used for overflows.
 const IPv4max = IPv4mask
 
 // ToBuffer appends the IPAddr encoding to a buffer and returns the final buffer.
@@ -398,8 +397,8 @@ func (ipAddr *IPAddr) Or(other *IPAddr) (IPAddr, error) {
 }
 
 func (ipAddr *IPAddr) sum(o int64, neg bool) (IPAddr, error) {
-	// neg carries information about whether to add or subtract other
-	// x - -y is the same as x + y   and x + -y is the same as x - y
+	// neg carries information about whether to add or subtract other.
+	// x - -y is the same as x + y, and x + -y is the same as x - y.
 	var newIPAddr IPAddr
 	newIPAddr.Family = ipAddr.Family
 	newIPAddr.Mask = ipAddr.Mask
@@ -408,9 +407,9 @@ func (ipAddr *IPAddr) sum(o int64, neg bool) (IPAddr, error) {
 	var o2 uint64
 	if o < 0 {
 		neg = !neg
-		// postgresql ver 10 seems to have an error with min int64
-		// it does not handle the overflow correctly
-		// maxip - minInt64 incorrectly returns a valid address
+		// PostgreSQL ver 10 seems to have an error with min int64.
+		// It does not handle the overflow correctly.
+		// maxip - minInt64 incorrectly returns a valid address.
 		if o == math.MinInt64 {
 			o2 = 1 << 63
 		} else {
@@ -473,7 +472,7 @@ func (ipAddr IPAddr) contains(other *IPAddr) bool {
 }
 
 // ContainsOrEquals determines if one ipAddr is in the same
-// subnet as another or the addresses and subnets are equal
+// subnet as another or the addresses and subnets are equal.
 func (ipAddr IPAddr) ContainsOrEquals(other *IPAddr) bool {
 	return ipAddr.contains(other) && ipAddr.Mask <= other.Mask
 }
@@ -497,7 +496,7 @@ func (ipAddr IPAddr) ContainedBy(other *IPAddr) bool {
 }
 
 // ContainsOrContainedBy determines if one ipAddr is in the same
-// subnet as another or vice versa
+// subnet as another or vice versa.
 func (ipAddr IPAddr) ContainsOrContainedBy(other *IPAddr) bool {
 	return ipAddr.contains(other) || other.contains(&ipAddr)
 }

@@ -1041,7 +1041,7 @@ func TestEval(t *testing.T) {
 		{`'NaN'::decimal >= 'NaN'::decimal`, `true`},
 		{`'NaN'::decimal::float`, `NaN`},
 		{`'NaN'::float::decimal`, `NaN`},
-		// inet operations: ~ & | + - << <<= >> >>= &&
+		// inet operations: ~ & | + - << <<= >> >>= &&.
 		{`~'234a:3456:aaa::/12'::inet = 'dcb5:cba9:f555:ffff:ffff:ffff:ffff:ffff/12'::inet`, `true`},
 		{`'234a:3456:aaa::/12'::inet & '12aa:444f:457a:ff45:ff31::'::inet`, `'20a:446:2a::'`},
 		{`'234a:3456:aaa::/12'::inet | '12aa:444f:457a:ff45:ff31::'::inet`, `'33ea:745f:4ffa:ff45:ff31::'`},
