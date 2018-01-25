@@ -1034,19 +1034,19 @@ statement ok
 DROP TABLE b;
 
 # Fail on any cascading action.
-statement error pq: cannot add a cascading action \(SET NULL/SET DEFAULT/CASCADE\) to a column \[delete_cascade\] with a CHECK CONSTRAIN
+statement error pq: cannot add a cascading action \(SET NULL/SET DEFAULT/CASCADE\) to column "delete_cascade" with a CHECK CONSTRAIN
 CREATE TABLE b (
   id INT PRIMARY KEY
  ,delete_cascade INT CHECK (delete_cascade > 0) REFERENCES a ON DELETE CASCADE
 );
 
-statement error pq: cannot add a cascading action \(SET NULL/SET DEFAULT/CASCADE\) to a column \[update_cascade\] with a CHECK CONSTRAIN
+statement error pq: cannot add a cascading action \(SET NULL/SET DEFAULT/CASCADE\) to column "update_cascade" with a CHECK CONSTRAIN
 CREATE TABLE b (
   id INT PRIMARY KEY
  ,update_cascade INT CHECK (update_cascade > 0) REFERENCES a ON UPDATE CASCADE
 );
 
-statement error pq: cannot add a check constraint as it uses column \[delete_cascade_composite2\] which already has a cascading action \(SET NULL/SET DEFAULT/CASCADE\)
+statement error pq: cannot add a check constraint as it uses column "delete_cascade_composite2" which already has a cascading action \(SET NULL/SET DEFAULT/CASCADE\)
 CREATE TABLE b (
   id INT PRIMARY KEY
  ,delete_cascade_composite1 INT
@@ -1054,7 +1054,7 @@ CREATE TABLE b (
  ,FOREIGN KEY (delete_cascade_composite1, delete_cascade_composite2) REFERENCES a (id2, id) ON DELETE CASCADE
 );
 
-statement error pq: cannot add a check constraint as it uses column \[update_cascade_composite1\] which already has a cascading action \(SET NULL/SET DEFAULT/CASCADE\)
+statement error pq: cannot add a check constraint as it uses column "update_cascade_composite1" which already has a cascading action \(SET NULL/SET DEFAULT/CASCADE\)
 CREATE TABLE b (
   id INT PRIMARY KEY
  ,update_cascade_composite1 INT CHECK (update_cascade_composite1 > 0)
@@ -1072,12 +1072,12 @@ CREATE TABLE b (
  ,update_cascade_composite2 INT
 );
 
-statement error pq: cannot add a cascading action \(SET NULL/SET DEFAULT/CASCADE\) to a column \[delete_cascade_composite2\] with a CHECK CONSTRAINT
+statement error pq: cannot add a cascading action \(SET NULL/SET DEFAULT/CASCADE\) to column "delete_cascade_composite2" with a CHECK CONSTRAINT
 ALTER TABLE b ADD CONSTRAINT delete_cascade_constraint
   FOREIGN KEY (delete_cascade_composite2, delete_cascade_composite1) REFERENCES a (id2, id)
   ON DELETE CASCADE;
 
-statement error pq: cannot add a cascading action \(SET NULL/SET DEFAULT/CASCADE\) to a column \[update_cascade_composite1\] with a CHECK CONSTRAINT
+statement error pq: cannot add a cascading action \(SET NULL/SET DEFAULT/CASCADE\) to column "update_cascade_composite1" with a CHECK CONSTRAINT
 ALTER TABLE b ADD CONSTRAINT update_cascade_constraint
   FOREIGN KEY (update_cascade_composite2, update_cascade_composite1) REFERENCES a (id2, id)
   ON UPDATE CASCADE;
@@ -1097,10 +1097,10 @@ CREATE TABLE b (
  ,FOREIGN KEY (update_cascade_composite1, update_cascade_composite2) REFERENCES a (id2, id) ON UPDATE CASCADE
 );
 
-statement error pq: cannot add a check constraint as it uses column \[delete_cascade_composite2\] which already has a cascading action \(SET NULL/SET DEFAULT/CASCADE\)
+statement error pq: cannot add a check constraint as it uses column "delete_cascade_composite2" which already has a cascading action \(SET NULL/SET DEFAULT/CASCADE\)
 ALTER TABLE b ADD CONSTRAINT delete_check CHECK (delete_cascade_composite2 > 0);
 
-statement error pq: cannot add a check constraint as it uses column \[update_cascade_composite1\] which already has a cascading action \(SET NULL/SET DEFAULT/CASCADE\)
+statement error pq: cannot add a check constraint as it uses column "update_cascade_composite1" which already has a cascading action \(SET NULL/SET DEFAULT/CASCADE\)
 ALTER TABLE b ADD CONSTRAINT delete_check CHECK (update_cascade_composite1 > 0);
 
 # Clean up after the test.
