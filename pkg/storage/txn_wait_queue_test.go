@@ -388,7 +388,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testutils.RunTrueAndFalse(t, "txnRecordExists", func(t *testing.T, txnRecordExists bool) {
+	run := func(t *testing.T, txnRecordExists bool) (retry bool) {
 		tc := testContext{}
 		stopper := stop.NewStopper()
 		defer stopper.Stop(context.TODO())
@@ -421,16 +421,41 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 		retCh := make(chan RespWithErr, 1)
 		go func() {
 			resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
-			retCh <- RespWithErr{resp, pErr}
+			rwe := RespWithErr{resp, pErr}
+			t.Logf("MaybeWaitForPush returns (%v, %v)", rwe.resp, rwe.pErr)
+			retCh <- rwe
 		}()
 
+		var endTestEarly bool
 		testutils.SucceedsSoon(t, func() error {
 			expDeps := []uuid.UUID{pusher.ID}
 			if deps := q.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
+				// NB: this has slight potential for flakiness. If the pushee transaction
+				// expires before this gets a chance to fire, then MaybeWaitForPush may
+				// return early (since a push should now succeed), and we won't see a
+				// dependent here. In that case, we expect `rwe={nil, nil}`.
+				// Insert `time.Sleep(5 * time.Second)` above the `SucceedsSoon` to
+				// reliably simulate this case.
+				if txnRecordExists {
+					select {
+					case rwe := <-retCh:
+						if (rwe == RespWithErr{}) {
+							t.Log("ending test early")
+							endTestEarly = true
+							return nil
+						}
+					default:
+					}
+				}
+
 				return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
 			}
 			return nil
 		})
+
+		if endTestEarly {
+			return true // retry
+		}
 
 		// If the record doesn't exist yet, give the push queue enough
 		// time to query the missing record and notice.
@@ -452,6 +477,13 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 		}
 		if !testutils.IsPError(respWithErr.pErr, "txn aborted") {
 			t.Errorf("expected transaction aborted error; got %v", respWithErr.pErr)
+		}
+		return false // don't retry
+	}
+
+	testutils.RunTrueAndFalse(t, "txnRecordExists", func(t *testing.T, txnRecordExists bool) {
+		// The test has a flaky outcome in which case we want to run it again.
+		for ; run(t, txnRecordExists); t.Logf("re-running txnRecordExists=%t", txnRecordExists) {
 		}
 	})
 }
