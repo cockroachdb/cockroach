@@ -82,10 +82,13 @@ WHERE relname = 'pg_constraint'
 ----
 402060402  pg_constraint  402060402  pg_constraint  pg_constraint
 
-query OOO
-SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'upper'::REGPROC::OID
+query OOOO
+SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
-upper  upper  1736923753
+upper  upper  upper  1736923753
+
+query error invalid function name
+SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
 
 query OOO
 SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
@@ -104,7 +107,7 @@ SELECT 'blah ()'::REGPROC
 query error unknown function: blah\(\)
 SELECT 'blah( )'::REGPROC
 
-query error unknown function: "blah\(, \)"\(\)
+query error unknown function: blah\(, \)\(\)
 SELECT 'blah(, )'::REGPROC
 
 query error more than one function named 'sqrt'

@@ -645,12 +645,7 @@ func getRenderColName(
 
 	switch t := target.Expr.(type) {
 	case *tree.ColumnItem:
-		// We only shorten the name of the result column to become the
-		// unqualified column part of this expr name if there is
-		// no additional subscript on the column.
-		if len(t.Selector) == 0 {
-			return t.Column(), nil
-		}
+		return t.Column(), nil
 
 	case *tree.FuncExpr:
 		// Special case for rendering builtin functions: the column name for an

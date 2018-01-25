@@ -939,10 +939,6 @@ func findColHelper(
 // source. Returns invalid indices and an error if the source is not
 // found or the name is ambiguous.
 func (sources multiSourceInfo) findColumn(c *tree.ColumnItem) (srcIdx int, colIdx int, err error) {
-	if len(c.Selector) > 0 {
-		return invalidSrcIdx, invalidColIdx, pgerror.UnimplementedWithIssueErrorf(8318, "compound types not supported yet: %q", c)
-	}
-
 	colName := string(c.ColumnName)
 	var tableName tree.TableName
 	if c.TableName.Table() != "" {
