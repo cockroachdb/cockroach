@@ -222,7 +222,7 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 func getMetadataForTable(
 	conn *sqlConn, dbName, tableName string, ts string,
 ) (tableMetadata, error) {
-	name := &tree.TableName{SchemaName: tree.Name(dbName), TableName: tree.Name(tableName)}
+	name := tree.NewTableName(tree.Name(dbName), tree.Name(tableName))
 
 	// Fetch table ID.
 	dbNameStr := tree.NameString(dbName)

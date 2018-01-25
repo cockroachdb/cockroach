@@ -178,7 +178,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 	if err != nil {
 		return err
 	}
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, false)
+	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, true /*explicitSchema*/)
 	if err != nil {
 		return err
 	}

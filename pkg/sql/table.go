@@ -426,7 +426,7 @@ func (tc *TableCollection) getTableVersionByID(
 			log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
 			if table.Dropped() {
 				return nil, sqlbase.NewUndefinedRelationError(
-					&tree.TableName{TableName: tree.Name(fmt.Sprintf("<id=%d>", tableID))},
+					tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("<id=%d>", tableID))),
 				)
 			}
 			return table, nil
@@ -546,10 +546,10 @@ func getTableNames(
 	txn *client.Txn,
 	vt VirtualTabler,
 	dbDesc *sqlbase.DatabaseDescriptor,
-	dbNameOriginallyOmitted bool,
+	explicitSchema bool,
 ) (tree.TableNames, error) {
 	if e, ok := vt.getVirtualSchemaEntry(dbDesc.Name); ok {
-		return e.tableNames(dbNameOriginallyOmitted), nil
+		return e.tableNames(explicitSchema), nil
 	}
 
 	prefix := sqlbase.MakeNameMetadataKey(dbDesc.ID, "")
@@ -565,11 +565,8 @@ func getTableNames(
 		if err != nil {
 			return nil, err
 		}
-		tn := tree.TableName{
-			SchemaName:                     tree.Name(dbDesc.Name),
-			TableName:                      tree.Name(tableName),
-			OmitSchemaNameDuringFormatting: dbNameOriginallyOmitted,
-		}
+		tn := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(tableName))
+		tn.ExplicitSchema = explicitSchema
 		tableNames = append(tableNames, tn)
 	}
 	return tableNames, nil
@@ -585,7 +582,7 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 		n = ate.Expr
 		// It's okay to ignore the As columns here, as they're not permitted in
 		// DML aliases where this function is used.
-		alias = &tree.TableName{TableName: ate.As.Alias}
+		alias = tree.NewUnqualifiedTableName(ate.As.Alias)
 	}
 	table, ok := n.(*tree.NormalizableTableName)
 	if !ok {
@@ -705,7 +702,7 @@ func expandTableGlob(
 		return nil, err
 	}
 
-	tableNames, err := getTableNames(ctx, txn, vt, dbDesc, glob.OmitSchemaNameDuringFormatting)
+	tableNames, err := getTableNames(ctx, txn, vt, dbDesc, glob.ExplicitSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -767,10 +764,7 @@ func (p *planner) getQualifiedTableName(
 	if err != nil {
 		return "", err
 	}
-	tbName := tree.TableName{
-		SchemaName: tree.Name(dbDesc.Name),
-		TableName:  tree.Name(desc.Name),
-	}
+	tbName := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
 	return tbName.String(), nil
 }
 
@@ -792,7 +786,7 @@ func (p *planner) findTableContainingIndex(
 		return nil, err
 	}
 
-	tns, err := getTableNames(ctx, txn, vt, dbDesc, false)
+	tns, err := getTableNames(ctx, txn, vt, dbDesc, true /*explicitSchema*/)
 	if err != nil {
 		return nil, err
 	}
@@ -925,15 +919,15 @@ func resolveTableNameFromID(
 	databases map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
 ) string {
 	table := tables[tableID]
-	tn := tree.TableName{TableName: tree.Name(table.Name)}
+	tn := tree.NewTableName("", tree.Name(table.Name))
 	if parentDB, ok := databases[table.ParentID]; ok {
 		tn.SchemaName = tree.Name(parentDB.Name)
 	} else {
 		tn.SchemaName = tree.Name(fmt.Sprintf("[%d]", table.ParentID))
 		log.Errorf(ctx, "relation [%d] (%q) has no parent database (corrupted schema?)",
-			tableID, tree.ErrString(&tn))
+			tableID, tree.ErrString(tn))
 	}
-	return tree.ErrString(&tn)
+	return tree.ErrString(tn)
 }
 
 // ParseQualifiedTableName implements the tree.EvalPlanner interface.
