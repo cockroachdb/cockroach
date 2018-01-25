@@ -46,7 +46,7 @@ func (p *planner) SetClusterSetting(
 		return nil, err
 	}
 
-	name := strings.ToLower(tree.AsStringWithFlags(n.Name, tree.FmtBareIdentifiers))
+	name := strings.ToLower(n.Name)
 	st := p.EvalContext().Settings
 	setting, ok := settings.Lookup(name)
 	if !ok {

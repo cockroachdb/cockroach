@@ -150,43 +150,28 @@ func NewInvalidNameErrorf(fmt string, args ...interface{}) error {
 // valid if e.g. the name refers to a in-query table alias
 // (AS) or is qualified later using the QualifyWithDatabase method.
 func (n *UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) {
-	if len(*n) == 0 || len(*n) > 3 {
+	if n.NumParts > 3 || n.Star {
+		// The Star part of the condition is really an assertion. The
+		// parser should not have let this star propagate to a point where
+		// this method is called.
 		return res, NewInvalidNameErrorf("invalid table name: %q", ErrString(n))
 	}
 
-	name, ok := (*n)[len(*n)-1].(*Name)
-	if !ok {
-		return res, NewInvalidNameErrorf("invalid table name: %q", ErrString(n))
-	}
-
-	if len(*name) == 0 {
+	if len(n.Parts[0]) == 0 {
 		return res, NewInvalidNameErrorf("empty table name: %q", ErrString(n))
 	}
+	if n.NumParts > 1 && len(n.Parts[1]) == 0 {
+		return res, NewInvalidNameErrorf("empty schema name: %q", ErrString(n))
+	}
+	// It's ok if the prefix is empty. We allow this in e.g.
+	// `select * from "".crdb_internal.tables`.
 
-	res = TableName{TableName: *name, OmitSchemaNameDuringFormatting: true}
-
-	if len(*n) > 1 {
-		ndb, ok := (*n)[len(*n)-2].(*Name)
-		if !ok {
-			return res, NewInvalidNameErrorf("invalid schema name: %q", ErrString((*n)[len(*n)-2]))
-		}
-		res.SchemaName = *ndb
-
-		if len(res.SchemaName) == 0 {
-			return res, NewInvalidNameErrorf("empty schema name: %q", ErrString(n))
-		}
-
-		res.OmitSchemaNameDuringFormatting = false
-
-		if len(*n) > 2 {
-			pn, ok := (*n)[len(*n)-3].(*Name)
-			if !ok {
-				return res, NewInvalidNameErrorf("invalid prefix: %q", ErrString((*n)[len(*n)-3]))
-			}
-			res.PrefixName = *pn
-
-			res.PrefixOriginallySpecified = true
-		}
+	res = TableName{
+		TableName:                      Name(n.Parts[0]),
+		SchemaName:                     Name(n.Parts[1]),
+		PrefixName:                     Name(n.Parts[2]),
+		OmitSchemaNameDuringFormatting: n.NumParts == 1,
+		PrefixOriginallySpecified:      n.NumParts >= 3,
 	}
 
 	return res, nil

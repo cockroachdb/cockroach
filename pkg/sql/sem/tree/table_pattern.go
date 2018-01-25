@@ -55,33 +55,33 @@ var _ DatabaseQualifiable = &TableName{}
 // NormalizeTablePattern resolves an UnresolvedName to either a
 // TableName or AllTablesSelector.
 func (n *UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
-	ln := len(*n)
-	if ln == 0 || ln > 2 {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table name: %q", *n)
+	if n.NumParts > 2 {
+		// db/cat.schema.table: We don't support those just yet.
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+			"invalid table name: %q", ErrString(n))
+	}
+	firstCheck := 0
+	if n.Star {
+		firstCheck = 1
+	}
+	for i := firstCheck; i < n.NumParts; i++ {
+		if len(n.Parts[i]) == 0 {
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+				"invalid table name: %q", ErrString(n))
+		}
 	}
 
-	var sc Name
-	scOmitted := true
-	if ln > 1 {
-		scName, ok := (*n)[0].(*Name)
-		if !ok {
-			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid schema name: %q", (*n)[0])
-		}
-		sc = *scName
-		scOmitted = false
+	if n.Star {
+		return &AllTablesSelector{
+			Schema: Name(n.Parts[1]),
+			OmitSchemaNameDuringFormatting: n.NumParts == 1,
+		}, nil
 	}
-
-	switch t := (*n)[ln-1].(type) {
-	case UnqualifiedStar:
-		return &AllTablesSelector{Schema: sc, OmitSchemaNameDuringFormatting: scOmitted}, nil
-	case *Name:
-		if len(*t) == 0 {
-			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "empty table name: %q", *n)
-		}
-		return &TableName{SchemaName: sc, TableName: *t, OmitSchemaNameDuringFormatting: scOmitted}, nil
-	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table pattern: %q", *n)
-	}
+	return &TableName{
+		SchemaName:                     Name(n.Parts[1]),
+		OmitSchemaNameDuringFormatting: n.NumParts == 1,
+		TableName:                      Name(n.Parts[0]),
+	}, nil
 }
 
 // NormalizeTablePattern implements the TablePattern interface.
