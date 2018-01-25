@@ -209,7 +209,7 @@ CREATE TABLE crdb_internal.tables (
 		// include added and dropped descriptors.
 		for _, desc := range descs {
 			table, ok := desc.(*sqlbase.TableDescriptor)
-			if !ok || p.CheckAnyPrivilege(table) != nil {
+			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 				continue
 			}
 			dbName := dbNames[table.GetParentID()]
@@ -277,7 +277,7 @@ CREATE TABLE crdb_internal.schema_changes (
 		// include added and dropped descriptors.
 		for _, desc := range descs {
 			table, ok := desc.(*sqlbase.TableDescriptor)
-			if !ok || p.CheckAnyPrivilege(table) != nil {
+			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 				continue
 			}
 			tableID := tree.NewDInt(tree.DInt(int64(table.ID)))
@@ -326,7 +326,7 @@ CREATE TABLE crdb_internal.leases (
   deleted     BOOL NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		leaseMgr := p.LeaseMgr()
 		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.execCfg.NodeID.Get())))
 
@@ -343,7 +343,7 @@ CREATE TABLE crdb_internal.leases (
 				dropped := tree.MakeDBool(tree.DBool(ts.mu.dropped))
 
 				for _, state := range ts.mu.active.data {
-					if p.CheckAnyPrivilege(&state.TableDescriptor) != nil {
+					if p.CheckAnyPrivilege(ctx, &state.TableDescriptor) != nil {
 						continue
 					}
 

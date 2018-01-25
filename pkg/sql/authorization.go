@@ -33,7 +33,7 @@ type AuthorizationAccessor interface {
 	) error
 
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
-	CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error
+	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error
 
 	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
 	// or node). Includes the named action in the error message.
@@ -65,7 +65,7 @@ func (p *planner) CheckPrivilege(
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
+func (p *planner) CheckAnyPrivilege(_ context.Context, descriptor sqlbase.DescriptorProto) error {
 	if isVirtualDescriptor(descriptor) {
 		return nil
 	}
