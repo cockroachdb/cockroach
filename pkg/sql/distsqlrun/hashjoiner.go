@@ -550,14 +550,11 @@ func (h *hashJoiner) probeRow(
 		// If the ON condition failed, renderedRow is nil.
 		if renderedRow != nil {
 			probeMatched = true
-			shouldEmit := true
-			if h.joinType == leftAntiJoin {
-				shouldEmit = false
-			}
+			shouldEmit := h.joinType != leftAntiJoin && h.joinType != exceptAllJoin
 			if shouldMark(h.storedSide, h.joinType) {
 				// Matched rows are marked on the stored side for 2 reasons.
-				// 1: For outer and anti joins to iterate through the unmarked
-				// rows.
+				// 1: For outer joins, anti joins, and EXCEPT ALL to iterate through
+				// the unmarked rows.
 				// 2: For semi-joins and INTERSECT ALL where the left-side is stored,
 				// multiple rows from the right may match to the same row on the left.
 				// The rows on the left should only be emitted the first time
@@ -565,9 +562,19 @@ func (h *hashJoiner) probeRow(
 				// (Note: an alternative is to remove the entry from the stored
 				// side, but our containers do not support that today).
 				// TODO(peter): figure out a way to reduce this special casing below.
-				if (h.joinType == leftSemiJoin || h.joinType == intersectAllJoin) &&
-					i.IsMarked(ctx) {
-					shouldEmit = false
+				if i.IsMarked(ctx) {
+					switch h.joinType {
+					case leftSemiJoin:
+						shouldEmit = false
+					case intersectAllJoin:
+						shouldEmit = false
+					case exceptAllJoin:
+						// We want to mark a stored row if possible, so move on to the
+						// next match. Reset probeMatched in case we don't find any more
+						// matches and want to emit this row.
+						probeMatched = false
+						continue
+					}
 				} else if err := i.Mark(ctx, true); err != nil {
 					return false, nil
 				}
@@ -682,6 +689,8 @@ func shouldMark(storedSide joinSide, joinType joinType) bool {
 		return true
 	case joinType == leftAntiJoin && storedSide == leftSide:
 		return true
+	case joinType == exceptAllJoin:
+		return true
 	case joinType == intersectAllJoin:
 		return true
 	case shouldEmitUnmatchedRow(storedSide, joinType):
@@ -695,7 +704,14 @@ func shouldMark(storedSide joinSide, joinType joinType) bool {
 // the storedSide, depending on the storedSide, and don't need to know all the
 // rows. These can 'short circuit' to avoid iterating through them all.
 func shouldShortCircuit(storedSide joinSide, joinType joinType) bool {
-	return joinType == leftSemiJoin && storedSide == rightSide
+	switch joinType {
+	case leftSemiJoin:
+		return storedSide == rightSide
+	case exceptAllJoin:
+		return true
+	default:
+		return false
+	}
 }
 
 // encodeColumnsOfRow returns the encoding for the grouping columns. This is
