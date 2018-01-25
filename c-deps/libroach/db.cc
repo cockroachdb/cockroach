@@ -26,6 +26,7 @@
 #include "env_switching.h"
 #include "fmt.h"
 #include "getter.h"
+#include "godefs.h"
 #include "iterator.h"
 #include "merge.h"
 #include "options.h"
@@ -33,22 +34,6 @@
 #include "status.h"
 
 using namespace cockroach;
-
-extern "C" {
-static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
-  fprintf(stderr, "%s symbol missing; expected to be supplied by Go\n", name);
-  abort();
-}
-
-// These are Go functions exported by storage/engine. We provide these stubs,
-// which simply panic if called, to to allow intermediate build products to link
-// successfully. Otherwise, when building ccl/storageccl/engineccl, Go will
-// complain that these symbols are undefined. Because these stubs are marked
-// "weak", they will be replaced by their proper implementation in
-// storage/engine when the final cockroach binary is linked.
-void __attribute__((weak)) rocksDBLog(char*, int) { die_missing_symbol(__func__); }
-char* __attribute__((weak)) prettyPrintKey(DBKey) { die_missing_symbol(__func__); }
-}  // extern "C"
 
 namespace cockroach {
 
