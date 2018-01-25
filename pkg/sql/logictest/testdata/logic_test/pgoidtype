@@ -104,7 +104,7 @@ SELECT 'blah ()'::REGPROC
 query error unknown function: blah\(\)
 SELECT 'blah( )'::REGPROC
 
-query error unknown function: "blah\(, \)"\(\)
+query error unknown function: blah\(, \)\(\)
 SELECT 'blah(, )'::REGPROC
 
 query error more than one function named 'sqrt'

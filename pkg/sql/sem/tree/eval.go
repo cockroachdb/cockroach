@@ -2872,9 +2872,13 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 				// Resolve function name.
 				substrs := strings.Split(s, ".")
-				name := UnresolvedName{}
-				for i := range substrs {
-					name = append(name, (*Name)(&substrs[i]))
+				if len(substrs) > 3 {
+					return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+						"invalid function name: %s", s)
+				}
+				name := UnresolvedName{NumParts: len(substrs)}
+				for i := 0; i < len(substrs); i++ {
+					name.Parts[i] = substrs[len(substrs)-1-i]
 				}
 				funcDef, err := name.ResolveFunction(ctx.SessionData.SearchPath)
 				if err != nil {
