@@ -27,7 +27,6 @@
 /pkg/sql/opt/                @cockroachdb/sql-opt-prs
 
 /pkg/sql/parser/             @cockroachdb/sql-language-prs
-/pkg/sql/ir/                 @cockroachdb/sql-language-prs
 
 /pkg/sql/pgwire/             @cockroachdb/sql-wiring-prs
 /pkg/sql/privilege/          @cockroachdb/sql-wiring-prs @cockroachdb/sql-language-prs @cockroachdb/sql-execution-prs

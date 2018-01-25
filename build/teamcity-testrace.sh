@@ -24,7 +24,8 @@ else
 		echo "No changed packages; skipping race detector tests"
 		exit 0
 	fi
-	PKGSPEC=$(echo "${PKGSPEC}" | xargs -n1 dirname | sort | uniq | sed 's/^/.\//' | paste -sd " " -)
+	# Only keep the pathspecs for which there are go files remaining.
+	PKGSPEC=$(echo "${PKGSPEC}" | xargs -n1 dirname | sort | uniq | sed 's/^/.\//' | { while read path; do if ls "$path"/*.go >/dev/null 2>&1; then echo "$path"; fi; done; } | paste -sd " " -)
 	echo "Running testrace on packages ${PKGSPEC}"
 fi
 

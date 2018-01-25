@@ -998,8 +998,6 @@ func TestLint(t *testing.T) {
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/ui/embedded.go", Checks: []string{"S1013"}},
 			},
 			staticcheck.NewChecker(): {
-				// sql/ir/irgen/parser/yaccpar:362:3: this value of irgenDollar is never used (SA4006)
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser/irgen.go", Checks: []string{"SA4006"}},
 				// The generated parser is full of `case` arms such as:
 				//
 				// case 1:
@@ -1071,8 +1069,6 @@ func TestLint(t *testing.T) {
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"U1000"}},
 				// Generated file containing many unused postgres error codes.
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go", Checks: []string{"U1000"}},
-				// IR templates.
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/base/*.go", Checks: []string{"U1000"}},
 			},
 		} {
 			t.Run(checker.Name(), func(t *testing.T) {
