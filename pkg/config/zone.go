@@ -76,7 +76,7 @@ func ZoneSpecifierFromID(
 	if err != nil {
 		return tree.ZoneSpecifier{}, err
 	}
-	tn := &tree.TableName{SchemaName: tree.Name(db), TableName: tree.Name(name)}
+	tn := tree.NewTableName(tree.Name(db), tree.Name(name))
 	return tree.ZoneSpecifier{
 		TableOrIndex: tree.TableNameWithIndex{
 			Table: tree.NormalizableTableName{TableNameReference: tn},
