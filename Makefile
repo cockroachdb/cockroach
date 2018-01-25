@@ -314,7 +314,7 @@ endif
 YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
 
 .SECONDARY: $(YARN_INSTALLED_TARGET)
-$(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
+$(YARN_INSTALLED_TARGET): $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	$(NODE_RUN) -C $(UI_ROOT) yarn install
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
