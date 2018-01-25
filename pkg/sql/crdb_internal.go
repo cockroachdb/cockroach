@@ -125,8 +125,8 @@ CREATE TABLE crdb_internal.node_runtime_info (
   value     STRING NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("access the node runtime information"); err != nil {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "access the node runtime information"); err != nil {
 			return err
 		}
 
@@ -485,8 +485,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   overhead_lat_var    FLOAT NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("access application statistics"); err != nil {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "access application statistics"); err != nil {
 			return err
 		}
 
@@ -618,7 +618,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("read crdb_internal.cluster_settings"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.cluster_settings"); err != nil {
 			return err
 		}
 		for _, k := range settings.Keys() {
@@ -1398,7 +1398,7 @@ CREATE TABLE crdb_internal.ranges (
 )
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("read crdb_internal.ranges"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges"); err != nil {
 			return err
 		}
 		descs, err := GetAllDescriptors(ctx, p.txn)
@@ -1612,7 +1612,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("read crdb_internal.gossip_nodes"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_nodes"); err != nil {
 			return err
 		}
 
@@ -1676,7 +1676,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("read crdb_internal.gossip_liveness"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_liveness"); err != nil {
 			return err
 		}
 
@@ -1813,7 +1813,7 @@ CREATE TABLE crdb_internal.kv_node_status (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("read crdb_internal.kv_node_status"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.kv_node_status"); err != nil {
 			return err
 		}
 
@@ -1918,7 +1918,7 @@ CREATE TABLE crdb_internal.kv_store_status (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("read crdb_internal.kv_store_status"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.kv_store_status"); err != nil {
 			return err
 		}
 

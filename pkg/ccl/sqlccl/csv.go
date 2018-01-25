@@ -910,7 +910,7 @@ func importPlanHook(
 			)
 		}
 
-		if err := p.RequireSuperUser("IMPORT"); err != nil {
+		if err := p.RequireSuperUser(ctx, "IMPORT"); err != nil {
 			return err
 		}
 

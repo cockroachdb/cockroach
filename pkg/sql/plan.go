@@ -552,7 +552,7 @@ func (p *planner) newPlan(
 	case *tree.Scrub:
 		return p.Scrub(ctx, n)
 	case *tree.CreateDatabase:
-		return p.CreateDatabase(n)
+		return p.CreateDatabase(ctx, n)
 	case *tree.CreateIndex:
 		return p.CreateIndex(ctx, n)
 	case *tree.CreateTable:

@@ -651,7 +651,7 @@ func backupPlanHook(
 			return err
 		}
 
-		if err := p.RequireSuperUser("BACKUP"); err != nil {
+		if err := p.RequireSuperUser(ctx, "BACKUP"); err != nil {
 			return err
 		}
 
@@ -950,7 +950,7 @@ func backupResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
 }
 
 func showBackupPlanHook(
-	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
@@ -963,7 +963,7 @@ func showBackupPlanHook(
 		return nil, nil, err
 	}
 
-	if err := p.RequireSuperUser("SHOW BACKUP"); err != nil {
+	if err := p.RequireSuperUser(ctx, "SHOW BACKUP"); err != nil {
 		return nil, nil, err
 	}
 

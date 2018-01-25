@@ -302,7 +302,7 @@ func (p *planner) getVirtualDataSource(
 		prefix := string(tn.PrefixName)
 		if !tn.PrefixOriginallySpecified {
 			prefix = p.SessionData().Database
-			if prefix == "" && p.RequireSuperUser("access virtual tables across all databases") != nil {
+			if prefix == "" && p.RequireSuperUser(ctx, "access virtual tables across all databases") != nil {
 				prefix = sqlbase.SystemDB.Name
 			}
 		}

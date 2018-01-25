@@ -37,7 +37,7 @@ type AuthorizationAccessor interface {
 
 	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
 	// or node). Includes the named action in the error message.
-	RequireSuperUser(action string) error
+	RequireSuperUser(ctx context.Context, action string) error
 
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
@@ -78,7 +78,7 @@ func (p *planner) CheckAnyPrivilege(_ context.Context, descriptor sqlbase.Descri
 }
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
-func (p *planner) RequireSuperUser(action string) error {
+func (p *planner) RequireSuperUser(_ context.Context, action string) error {
 	user := p.SessionData().User
 	if user != security.RootUser && user != security.NodeUser {
 		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)
