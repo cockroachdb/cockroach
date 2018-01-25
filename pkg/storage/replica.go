@@ -2628,6 +2628,10 @@ func (r *Replica) tryExecuteWriteBatch(
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
 	startTime := timeutil.Now()
 
+	if err := r.maybeBackpressureWriteBatch(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err), proposalNoRetry
+	}
+
 	spans, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
@@ -5737,15 +5741,17 @@ func (r *Replica) needsSplitBySize() bool {
 }
 
 func (r *Replica) needsSplitBySizeRLocked() bool {
-	maxBytes := r.mu.maxBytes
-	size := r.mu.state.Stats.Total()
-	return maxBytes > 0 && size > maxBytes
+	return r.exceedsMultipleOfSplitSizeRLocked(1)
 }
 
 func (r *Replica) exceedsDoubleSplitSizeRLocked() bool {
+	return r.exceedsMultipleOfSplitSizeRLocked(2)
+}
+
+func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
 	maxBytes := r.mu.maxBytes
 	size := r.mu.state.Stats.Total()
-	return maxBytes > 0 && size > maxBytes*2
+	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
 
 func (r *Replica) setPendingSnapshotIndex(index uint64) error {
