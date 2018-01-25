@@ -167,7 +167,7 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
   constructor(props: any) {
     super(props);
     this.state = {
-      mode: "tree",
+      mode: "map",
     };
   }
 
