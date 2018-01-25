@@ -399,7 +399,7 @@ func (p *planner) makeEditNode(
 		}
 	}
 
-	if err := p.CheckPrivilege(tableDesc, priv); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, priv); err != nil {
 		return editNodeBase{}, err
 	}
 

@@ -30,7 +30,7 @@ type createDatabaseNode struct {
 // Privileges: superuser.
 //   Notes: postgres requires superuser or "CREATEDB".
 //          mysql uses the mysqladmin command.
-func (p *planner) CreateDatabase(n *tree.CreateDatabase) (planNode, error) {
+func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -65,7 +65,7 @@ func (p *planner) CreateDatabase(n *tree.CreateDatabase) (planNode, error) {
 		}
 	}
 
-	if err := p.RequireSuperUser("CREATE DATABASE"); err != nil {
+	if err := p.RequireSuperUser(ctx, "CREATE DATABASE"); err != nil {
 		return nil, err
 	}
 

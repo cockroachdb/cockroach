@@ -52,7 +52,7 @@ func (p *planner) CreateUserNode(
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tDesc, privilege.INSERT); err != nil {
+	if err := p.CheckPrivilege(ctx, tDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
 

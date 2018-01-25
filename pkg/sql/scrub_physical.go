@@ -110,7 +110,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	scan := params.p.Scan()
 	scan.run.isCheck = true
 	if err := scan.initTable(
-		params.p, o.tableDesc, indexHints, publicColumns, columnIDs,
+		ctx, params.p, o.tableDesc, indexHints, publicColumns, columnIDs,
 	); err != nil {
 		return err
 	}

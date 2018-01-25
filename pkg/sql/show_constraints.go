@@ -38,7 +38,7 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 	if err != nil {
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}
-	if err := p.CheckAnyPrivilege(desc); err != nil {
+	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return nil, err
 	}
 

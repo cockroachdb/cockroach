@@ -32,7 +32,7 @@ func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
 
-	if err := p.RequireSuperUser("SHOW CLUSTER SETTINGS"); err != nil {
+	if err := p.RequireSuperUser(ctx, "SHOW CLUSTER SETTINGS"); err != nil {
 		return nil, err
 	}
 

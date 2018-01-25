@@ -50,7 +50,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 		return nil, fmt.Errorf("table %q does not exist", tn.Table())
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 

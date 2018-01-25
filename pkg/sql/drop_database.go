@@ -61,7 +61,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, sqlbase.NewUndefinedDatabaseError(string(n.Name))
 	}
 
-	if err := p.CheckPrivilege(dbDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 

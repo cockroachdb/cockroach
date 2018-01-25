@@ -234,7 +234,7 @@ func allocateTableRewrites(
 						return errors.Wrapf(err, "failed to lookup parent DB %d", parentID)
 					}
 
-					if err := p.CheckPrivilege(parentDB, privilege.CREATE); err != nil {
+					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
 						return err
 					}
 				}
@@ -756,7 +756,7 @@ func restoreTableDescs(
 					return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
 				}
 				// TODO(mberhault): CheckPrivilege wants a planner.
-				if err := sql.CheckPrivilegeForUser(user, parentDB, privilege.CREATE); err != nil {
+				if err := sql.CheckPrivilegeForUser(ctx, user, parentDB, privilege.CREATE); err != nil {
 					return err
 				}
 				// Default is to copy privs from restoring parent db, like CREATE TABLE.
@@ -1025,7 +1025,7 @@ var restoreHeader = sqlbase.ResultColumns{
 }
 
 func restorePlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
@@ -1053,7 +1053,7 @@ func restorePlanHook(
 			return err
 		}
 
-		if err := p.RequireSuperUser("RESTORE"); err != nil {
+		if err := p.RequireSuperUser(ctx, "RESTORE"); err != nil {
 			return err
 		}
 

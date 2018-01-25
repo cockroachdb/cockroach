@@ -862,7 +862,7 @@ var importCSVEnabled = settings.RegisterBoolSetting(
 )
 
 func importPlanHook(
-	stmt tree.Statement, p sql.PlanHookState,
+	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
@@ -910,7 +910,7 @@ func importPlanHook(
 			)
 		}
 
-		if err := p.RequireSuperUser("IMPORT"); err != nil {
+		if err := p.RequireSuperUser(ctx, "IMPORT"); err != nil {
 			return err
 		}
 

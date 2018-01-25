@@ -40,7 +40,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(dbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
