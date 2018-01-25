@@ -119,3 +119,20 @@ EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS INDEX ALL
 
 statement error database "test" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS CONSTRAINT ALL
+
+# Test scrubbing sequences.
+
+statement ok
+CREATE DATABASE seq_db
+
+statement ok
+CREATE SEQUENCE seq_db.my_seq
+
+statement ok
+CREATE TABLE seq_db.my_tbl (id INT PRIMARY KEY DEFAULT nextval('seq_db.my_seq'))
+
+statement ok
+EXPERIMENTAL SCRUB DATABASE seq_db
+
+statement error pq: "seq_db.my_seq" is not a table
+EXPERIMENTAL SCRUB TABLE seq_db.my_seq
