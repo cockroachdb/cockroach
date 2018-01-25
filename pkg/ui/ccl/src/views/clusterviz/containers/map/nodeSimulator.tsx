@@ -13,60 +13,17 @@ import * as d3 from "d3";
 import * as protos from "src/js/protos";
 
 import { NanoToMilli } from "src/util/convert";
-import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { selectLocationsRequestStatus, selectLocationTree, Location, LocationTree } from "src/redux/locations";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
+import { findMostSpecificLocation } from "src/util/locations";
 
 import { ZoomTransformer } from "./zoom";
 import { ModalLocalitiesView } from "./modalLocalities";
 
 type NodeStatus = protos.cockroach.server.status.NodeStatus$Properties;
-type Tier = protos.cockroach.roachpb.Tier$Properties;
-
-// List of fake location data in order to place nodes on the map for visual
-// effect.
-const locations: [number, number][] = [
-  [-74.00597, 40.71427],
-  [-80.19366, 25.77427],
-  [-93.60911, 41.60054],
-  [-118.24368, 34.05223],
-  [-122.33207, 47.60621],
-  [-0.12574, 51.50853],
-  [13.41053, 52.52437],
-  [18.0649, 59.33258],
-  [151.20732, -33.86785],
-  [144.96332, -37.814],
-  [153.02809, -27.46794],
-  [116.39723, 39.9075],
-  [121.45806, 31.22222],
-  [114.0683, 22.54554],
-  [72.88261, 19.07283],
-  [77.59369, 12.97194],
-  [77.22445, 28.63576],
-];
-
-const localities: Tier[][] = [
-  [
-    { key: "datacenter", value: "us-east" },
-    { key: "rack", value: "us-east-1" },
-  ],
-  [
-    { key: "datacenter", value: "us-east" },
-    { key: "rack", value: "us-east-2" },
-  ],
-  [
-    { key: "datacenter", value: "us-east" },
-    { key: "rack", value: "us-east-3" },
-  ],
-  [
-    { key: "datacenter", value: "us-west" },
-    { key: "rack", value: "us-west-1" },
-  ],
-  [
-    { key: "datacenter", value: "us-west" },
-    { key: "rack", value: "us-west-2" },
-  ],
-];
 
 // SimulatedNodeStatus augments a node status from the redux state with
 // additional simulated information in order to facilitate testing of the
@@ -92,10 +49,12 @@ export class SimulatedNodeStatus {
   clientActivityRate: number;
   private statusHistory: NodeStatus[];
   private maxHistory = 2;
+  private location: Location;
 
-  constructor(initialStatus: NodeStatus) {
+  constructor(initialStatus: NodeStatus, location: Location) {
     this.statusHistory = [initialStatus];
     this.computeClientActivityRate();
+    this.location = location;
   }
 
   update(nextStatus: NodeStatus) {
@@ -118,11 +77,15 @@ export class SimulatedNodeStatus {
   }
 
   longLat() {
-    return locations[this.id() % locations.length];
+    if (_.isNil(this.location)) {
+      throw new Error("Node does not have location assigned!");
+    }
+
+    return ([this.location.longitude, this.location.latitude] as [number, number]);
   }
 
   tiers() {
-    return localities[this.id() % localities.length];
+    return this.statusHistory[0].desc.locality.tiers;
   }
 
   private computeClientActivityRate() {
@@ -142,8 +105,11 @@ export class SimulatedNodeStatus {
 interface NodeSimulatorProps {
   nodesSummary: NodesSummary;
   statusesValid: boolean;
+  locationTree: LocationTree;
+  locationStatus: CachedDataReducerState<any>;
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
+  refreshLocations: typeof refreshLocations;
 }
 
 interface NodeSimulatorOwnProps {
@@ -168,14 +134,18 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   // accumulateHistory parses incoming nodeStatus properties and accumulates
   // a history for each node.
   accumulateHistory(props = this.props) {
-    if (!props.nodesSummary.nodeStatuses) {
+    if (!props.nodesSummary.nodeStatuses || !props.locationStatus.valid) {
       return;
     }
 
     props.nodesSummary.nodeStatuses.map((status) => {
       const id = status.desc.node_id;
       if (!this.nodeHistories.hasOwnProperty(id)) {
-        this.nodeHistories[id] = new SimulatedNodeStatus(status);
+        // Yet another problem caused by the Protobuf.js-generated types.
+        const tiers = status.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
+
+        const loc = findMostSpecificLocation(props.locationTree, tiers);
+        this.nodeHistories[id] = new SimulatedNodeStatus(status, loc);
       } else {
         this.nodeHistories[id].update(status);
       }
@@ -186,12 +156,14 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
     this.accumulateHistory();
     this.props.refreshNodes();
     this.props.refreshLiveness();
+    this.props.refreshLocations();
   }
 
   componentWillReceiveProps(props: NodeSimulatorProps & NodeSimulatorOwnProps) {
     this.accumulateHistory(props);
     props.refreshNodes();
     props.refreshLiveness();
+    props.refreshLocations();
   }
 
   render() {
@@ -209,9 +181,12 @@ export default connect(
   (state: AdminUIState, _ownProps: NodeSimulatorOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
     statusesValid: state.cachedData.nodes.valid && state.cachedData.liveness.valid,
+    locationTree: selectLocationTree(state),
+    locationStatus: selectLocationsRequestStatus(state),
   }),
   {
     refreshNodes,
     refreshLiveness,
+    refreshLocations,
   },
 )(NodeSimulator);
