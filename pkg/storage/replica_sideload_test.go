@@ -932,10 +932,11 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	// confidence already that we're calling `PurgeTo` correctly, and for the
 	// remainder unit testing on each impl's PurgeTo is more useful.
 	for i := range indexes {
+		const rangeID = 1
 		newFirstIndex := indexes[i] + 1
 		truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
 		log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
-		if _, pErr := client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: 1}, &truncateArgs); pErr != nil {
+		if _, pErr := client.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
 		sideloadStrings := fmtSideloaded()
