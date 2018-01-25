@@ -790,6 +790,10 @@ func (r *Replica) destroyDataRaftMuLocked(
 	})
 
 	// Save a tombstone to ensure that replica IDs never get reused.
+	//
+	// NB: Legacy tombstones (which are in the replicated key space) are wiped
+	// in clearRangeData, but that's OK since we're writing a new one in the same
+	// batch (and in particular, sequenced *after* the wipe).
 	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
 		return err
 	}

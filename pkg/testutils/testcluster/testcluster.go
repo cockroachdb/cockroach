@@ -522,7 +522,11 @@ func (tc *TestCluster) WaitForFullReplication() error {
 		for _, s := range tc.Servers {
 			err := s.Stores().VisitStores(func(s *storage.Store) error {
 				if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
-					return err
+					// This can sometimes fail since ComputeMetrics calls
+					// updateReplicationGauges which needs the system config gossiped.
+					log.Info(context.TODO(), err)
+					notReplicated = true
+					return nil
 				}
 				if n := s.Metrics().UnderReplicatedRangeCount.Value(); n > 0 {
 					log.Infof(context.TODO(), "%s has %d underreplicated ranges", s, n)
