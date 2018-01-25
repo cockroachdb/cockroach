@@ -24,7 +24,7 @@ import (
 )
 
 func resetRepr(tn *tree.TableName) {
-	tn.OmitSchemaNameDuringFormatting = false
+	tn.ExplicitSchema = true
 }
 
 func TestNormalizeTableName(t *testing.T) {

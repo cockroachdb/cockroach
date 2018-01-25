@@ -106,7 +106,7 @@ func (ie *InternalExecutor) GetTableSpan(
 	defer cleanup()
 	ie.initSession(p)
 
-	tn := tree.TableName{SchemaName: tree.Name(dbName), TableName: tree.Name(tableName)}
+	tn := tree.MakeTableName(tree.Name(dbName), tree.Name(tableName))
 	tableID, err := getTableID(ctx, p, &tn)
 	if err != nil {
 		return roachpb.Span{}, err

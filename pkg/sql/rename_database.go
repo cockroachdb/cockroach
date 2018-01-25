@@ -55,7 +55,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	// are currently just stored as strings, they explicitly specify the database
 	// name. Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, false)
+	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, true /*explicitSchema*/)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 				var err error
 				viewName, err = p.getQualifiedTableName(ctx, viewDesc)
 				if err != nil {
-					log.Warningf(ctx, "Unable to retrieve fully-qualified name of view %d: %v",
+					log.Warningf(ctx, "unable to retrieve fully-qualified name of view %d: %v",
 						viewDesc.ID, err)
 					msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
 					return nil, sqlbase.NewDependentObjectError(msg)

@@ -299,20 +299,17 @@ func (p *planner) getVirtualDataSource(
 		//
 		// Meanwhile the root user probably would be inconvenienced by
 		// this.
-		prefix := string(tn.PrefixName)
-		if !tn.PrefixOriginallySpecified {
-			prefix = p.SessionData().Database
-			if prefix == "" && p.RequireSuperUser(ctx, "access virtual tables across all databases") != nil {
-				prefix = sqlbase.SystemDB.Name
+		catalog := string(tn.CatalogName)
+		if !tn.ExplicitCatalog {
+			catalog = p.SessionData().Database
+			if catalog == "" && p.RequireSuperUser(ctx, "access virtual tables across all databases") != nil {
+				catalog = sqlbase.SystemDB.Name
 			}
 		}
 
 		// Define the name of the source visible in EXPLAIN(NOEXPAND).
-		sourceName := tree.TableName{
-			PrefixName: tree.Name(prefix),
-			TableName:  tree.Name(virtual.desc.Name),
-			SchemaName: tn.SchemaName,
-		}
+		sourceName := tree.MakeTableNameWithCatalog(
+			tree.Name(catalog), tn.SchemaName, tree.Name(virtual.desc.Name))
 
 		// The resulting node.
 		return planDataSource{
@@ -321,7 +318,7 @@ func (p *planner) getVirtualDataSource(
 				name:    sourceName.String(),
 				columns: columns,
 				constructor: func(ctx context.Context, p *planner) (planNode, error) {
-					return constructor(ctx, p, prefix)
+					return constructor(ctx, p, catalog)
 				},
 			},
 		}, true, nil
@@ -358,7 +355,7 @@ func (p *planner) getDataSourceAsOneColumn(
 		return planDataSource{}, err
 	}
 
-	tn := tree.TableName{TableName: tree.Name(fd.Name)}
+	tn := tree.MakeUnqualifiedTableName(tree.Name(fd.Name))
 	return planDataSource{
 		info: newSourceInfoForSingleTable(tn, planColumns(newPlan)),
 		plan: newPlan,
@@ -495,18 +492,15 @@ func (p *planner) getTableScanByRef(
 		return planDataSource{}, errors.Errorf("%s: %v", tree.ErrString(tref), err)
 	}
 
-	tn := tree.TableName{
-		TableName: tree.Name(desc.Name),
-		// Ideally, we'd like to populate DatabaseName here, however that
-		// would require a reverse-lookup from DB ID to database name, and
-		// we do not provide an API to do this without a KV lookup. The
-		// cost of a KV lookup to populate a field only used in (uncommon)
-		// error messages is unwarranted.
-		// So instead, we mark the "database name as originally omitted"
-		// so as to prevent pretty-printing a potentially confusing empty
-		// database name in error messages (we want `foo` not `"".foo`).
-		OmitSchemaNameDuringFormatting: true,
-	}
+	// Ideally, we'd like to populate DatabaseName here, however that
+	// would require a reverse-lookup from DB ID to database name, and
+	// we do not provide an API to do this without a KV lookup. The
+	// cost of a KV lookup to populate a field only used in (uncommon)
+	// error messages is unwarranted.
+	// So instead, we hide the schema part so as to prevent
+	// pretty-printing a potentially confusing empty database name in
+	// error messages (we want `foo` not `"".foo`).
+	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
 
 	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, scanVisibility, tref.Columns)
 	if err != nil {
@@ -580,7 +574,7 @@ func renameSource(
 func (p *planner) getTableScanOrSequenceOrViewPlan(
 	ctx context.Context, tn *tree.TableName, hints *tree.IndexHints, scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	if tn.PrefixOriginallySpecified {
+	if tn.ExplicitCatalog {
 		// Prefixes are currently only supported for virtual tables.
 		return planDataSource{}, tree.NewInvalidNameErrorf(
 			"invalid table name: %q", tree.ErrString(tn))
@@ -773,7 +767,7 @@ func (src *dataSourceInfo) expandStar(
 		}
 	}
 
-	tableName := tree.TableName{OmitSchemaNameDuringFormatting: true}
+	tableName := anonymousTable
 	if a, ok := v.(*tree.AllColumnsSelector); ok {
 		tableName = a.TableName
 	}

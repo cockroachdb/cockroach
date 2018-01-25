@@ -483,7 +483,7 @@ func resolveFK(
 					for _, col := range srcCols {
 						if string(c.ColumnName) == col.Name {
 							return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
-								"cannot add a cascading action (SET NULL/SET DEFAULT/CASCADE) to a column [%s] with a CHECK CONSTRAINT",
+								"cannot add a cascading action (SET NULL/SET DEFAULT/CASCADE) to column %q with a CHECK CONSTRAINT",
 								col.Name,
 							), false, nil
 						}
@@ -517,10 +517,7 @@ func resolveFK(
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint",
 					tree.ErrString(&tree.ColumnItem{
-						TableName: tree.TableName{
-							SchemaName: tree.Name(database.Name),
-							TableName:  tree.Name(tbl.Name),
-						},
+						TableName:  tree.MakeTableName(tree.Name(database.Name), tree.Name(tbl.Name)),
 						ColumnName: tree.Name(sourceColumn.Name),
 					}),
 				)
@@ -540,10 +537,7 @@ func resolveFK(
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression",
 					tree.ErrString(&tree.ColumnItem{
-						TableName: tree.TableName{
-							SchemaName: tree.Name(database.Name),
-							TableName:  tree.Name(tbl.Name),
-						},
+						TableName:  tree.MakeTableName(tree.Name(database.Name), tree.Name(tbl.Name)),
 						ColumnName: tree.Name(sourceColumn.Name),
 					}),
 				)
@@ -1441,7 +1435,7 @@ func makeCheckConstraint(
 						for _, columnName := range index.ColumnNames {
 							if string(c.ColumnName) == columnName {
 								return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
-									"cannot add a check constraint as it uses column [%s] which already has a "+
+									"cannot add a check constraint as it uses column %q which already has a "+
 										"cascading action (SET NULL/SET DEFAULT/CASCADE)",
 									columnName,
 								), false, nil

@@ -28,7 +28,7 @@ import (
 // expressions to refer to the values that would be inserted for a row if it
 // didn't conflict.
 // Example: `INSERT INTO kv VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET v = excluded.v`
-var upsertExcludedTable = tree.TableName{TableName: "excluded"}
+var upsertExcludedTable = tree.MakeUnqualifiedTableName("excluded")
 
 type upsertHelper struct {
 	p                  *planner
