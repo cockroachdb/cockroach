@@ -31,6 +31,7 @@ add_library(roach
   env_switching.cc
   eventlistener.cc
   getter.cc
+  godefs.cc
   ldb.cc
   merge.cc
   mvcc.cc
