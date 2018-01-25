@@ -331,12 +331,6 @@ func (bq *baseQueue) Disabled() bool {
 	return bq.mu.disabled
 }
 
-// SetProcessTimeout sets the timeout for processing a replica.
-func (bq *baseQueue) SetProcessTimeout(dur time.Duration) {
-	defer bq.lockProcessing()()
-	bq.processTimeout = dur
-}
-
 // lockProcessing locks all processing in the baseQueue. It returns
 // a function to unlock processing.
 func (bq *baseQueue) lockProcessing() func() {

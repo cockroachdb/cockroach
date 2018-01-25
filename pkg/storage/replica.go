@@ -379,14 +379,6 @@ type Replica struct {
 		minLeaseProposedTS hlc.Timestamp
 		// Max bytes before split.
 		maxBytes int64
-		// Allow snapshots of any size instead of waiting for a split. Set to
-		// true when a split that is required for snapshots fails. Reset to
-		// false when the splits eventually succeed. The reasoning here is that
-		// in certain situations the split is dependent on the snapshot
-		// succeeding (either directly or transitively), so blocking the
-		// snapshot on the split can create a deadlock.
-		// TODO(nvanbenschoten): remove after #16954 is addressed.
-		permitLargeSnapshots bool
 		// proposals stores the Raft in-flight commands which
 		// originated at this Replica, i.e. all commands for which
 		// propose has been called, but which have not yet
@@ -1181,9 +1173,6 @@ func (r *Replica) SetMaxBytes(maxBytes int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.maxBytes = maxBytes
-
-	// Whenever we change maxBytes, reset permitLargeSnapshots.
-	r.mu.permitLargeSnapshots = false
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -5764,10 +5753,6 @@ func (r *Replica) needsSplitBySize() bool {
 
 func (r *Replica) needsSplitBySizeRLocked() bool {
 	return r.exceedsMultipleOfSplitSizeRLocked(1)
-}
-
-func (r *Replica) exceedsDoubleSplitSizeRLocked() bool {
-	return r.exceedsMultipleOfSplitSizeRLocked(2)
 }
 
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
