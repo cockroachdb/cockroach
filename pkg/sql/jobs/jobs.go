@@ -334,17 +334,14 @@ func (j *Job) ClusterID() uuid.UUID {
 	return j.registry.clusterID()
 }
 
-func (j *Job) runInTxn(
-	ctx context.Context, retryable func(context.Context, *client.Txn) error,
-) error {
+func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
 	if j.txn != nil {
 		defer func() { j.txn = nil }()
-		return j.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true},
-			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-				return retryable(ctx, txn)
-			})
+		// Don't run fn in a retry loop because we need retryable errors to
+		// propagate up to the transaction's properly-scoped retry loop.
+		return fn(ctx, j.txn)
 	}
-	return j.registry.db.Txn(ctx, retryable)
+	return j.registry.db.Txn(ctx, fn)
 }
 
 func (j *Job) initialize(payload *Payload) (err error) {
