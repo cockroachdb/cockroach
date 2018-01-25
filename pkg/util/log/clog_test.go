@@ -30,6 +30,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -773,6 +774,36 @@ func TestFileSeverityFilter(t *testing.T) {
 	if strings.Contains(string(contents), "test1") {
 		t.Errorf("info text was not filtered out of log\n%s", contents)
 	}
+}
+
+type outOfSpaceWriter struct{}
+
+func (w *outOfSpaceWriter) Write([]byte) (int, error) {
+	return 0, fmt.Errorf("no space left on device")
+}
+
+func TestExitOnFullDisk(t *testing.T) {
+	oldLogExitFunc := logExitFunc
+	logExitFunc = nil
+	defer func() { logExitFunc = oldLogExitFunc }()
+
+	var exited sync.WaitGroup
+	exited.Add(1)
+	l := &loggingT{
+		exitFunc: func(int) {
+			exited.Done()
+		},
+	}
+	l.file = &syncBuffer{
+		logger: l,
+		Writer: bufio.NewWriterSize(&outOfSpaceWriter{}, 1),
+	}
+
+	l.mu.Lock()
+	l.exitLocked(fmt.Errorf("out of space"))
+	l.mu.Unlock()
+
+	exited.Wait()
 }
 
 func BenchmarkHeader(b *testing.B) {
