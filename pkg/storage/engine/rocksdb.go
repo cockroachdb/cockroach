@@ -442,6 +442,8 @@ type RocksDBConfig struct {
 	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
 	// to C CCL code.
 	ExtraOptions []byte
+	// ReadOnly will open the database in read only mode if set to true
+	ReadOnly bool
 }
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -592,6 +594,7 @@ func (r *RocksDB) open() error {
 			use_switching_env: C.bool(newVersion == versionCurrent),
 			must_exist:        C.bool(r.cfg.MustExist),
 			extra_options:     goToCSlice(r.cfg.ExtraOptions),
+			read_only:         C.bool(r.cfg.ReadOnly),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Wrap(err, "could not open rocksdb instance")

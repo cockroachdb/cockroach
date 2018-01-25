@@ -1644,7 +1644,14 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   }
 
   rocksdb::DB* db_ptr;
-  rocksdb::Status status = rocksdb::DB::Open(options, db_dir, &db_ptr);
+
+  rocksdb::Status status;
+  if(db_opts.read_only) {                   
+    status = rocksdb::DB::OpenForReadOnly(options, db_dir, &db_ptr);
+  } else {
+    status = rocksdb::DB::Open(options, db_dir, &db_ptr);
+  }
+
   if (!status.ok()) {
     return ToDBStatus(status);
   }

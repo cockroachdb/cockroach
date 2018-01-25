@@ -68,7 +68,7 @@ func TestOpenExistingStore(t *testing.T) {
 			expErr: `could not open rocksdb instance: .* does not exist \(create_if_missing is false\)`,
 		},
 	} {
-		_, err := openExistingStore(test.dir, stopper)
+		_, err := openExistingStore(test.dir, stopper, false)
 		if !testutils.IsError(err, test.expErr) {
 			t.Fatalf("%s: wanted %s but got %v", test.dir, test.expErr, err)
 		}
