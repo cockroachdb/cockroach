@@ -845,7 +845,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			// Note: postgres ver 10 does NOT have Int - INet. Throws ERROR: 42883
+			// Note: postgres ver 10 does NOT have Int - INet. Throws ERROR: 42883.
 			LeftType:   types.INet,
 			RightType:  types.Int,
 			ReturnType: types.INet,

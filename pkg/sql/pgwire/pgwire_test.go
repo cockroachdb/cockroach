@@ -825,7 +825,8 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT DATE '2001-01-02' + ($1 + $1:::int)": {
 			baseTest.SetArgs(12).Results("2001-01-26T00:00:00Z"),
 		},
-		"SELECT TO_HEX(~(~$1))": {
+		// Hint for INT type to distinguish from ~INET functionality.
+		"SELECT TO_HEX(~(~$1:::INT))": {
 			baseTest.SetArgs(12).Results("c"),
 		},
 		"SELECT $1::INT": {

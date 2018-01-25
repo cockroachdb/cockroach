@@ -418,7 +418,7 @@ var Builtins = map[string][]tree.Builtin{
 		tree.Builtin{
 			Types: tree.ArgTypes{
 				{"val", types.INet},
-				{"val", types.INet},
+				{"container", types.INet},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -451,7 +451,7 @@ var Builtins = map[string][]tree.Builtin{
 	"inet_contains_or_equals": {
 		tree.Builtin{
 			Types: tree.ArgTypes{
-				{"val", types.INet},
+				{"container", types.INet},
 				{"val", types.INet},
 			},
 			ReturnType: tree.FixedReturnType(types.Bool),

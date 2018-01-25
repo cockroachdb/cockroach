@@ -984,6 +984,10 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (-b)`},
 		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~b)`},
 
+		{`SELECT b <<= c`, `SELECT inet_contained_by_or_equals(b, c)`},
+		{`SELECT b >>= c`, `SELECT inet_contains_or_equals(b, c)`},
+		{`SELECT b && c`, `SELECT inet_contains_or_contained_by(b, c)`},
+
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
 		// prefer escaping ' and \, so we do that.
