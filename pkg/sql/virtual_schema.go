@@ -83,15 +83,10 @@ type virtualSchemaEntry struct {
 	orderedTableNames []string
 }
 
-func (e virtualSchemaEntry) tableNames(dbNameOriginallyOmitted bool) tree.TableNames {
+func (e virtualSchemaEntry) tableNames(explicitSchema bool) tree.TableNames {
 	var res tree.TableNames
 	for _, tableName := range e.orderedTableNames {
-		tn := tree.TableName{
-			SchemaName:                     tree.Name(e.desc.Name),
-			TableName:                      tree.Name(tableName),
-			OmitSchemaNameDuringFormatting: dbNameOriginallyOmitted,
-		}
-		res = append(res, tn)
+		res = append(res, tree.MakeTableName(tree.Name(e.desc.Name), tree.Name(tableName)))
 	}
 	return res
 }

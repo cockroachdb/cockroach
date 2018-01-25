@@ -65,7 +65,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, false)
+	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, true /*explicitSchema*/)
 	if err != nil {
 		return nil, err
 	}

@@ -73,14 +73,14 @@ func (n *UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
 
 	if n.Star {
 		return &AllTablesSelector{
-			Schema: Name(n.Parts[1]),
-			OmitSchemaNameDuringFormatting: n.NumParts == 1,
+			Schema:         Name(n.Parts[1]),
+			ExplicitSchema: n.NumParts >= 2,
 		}, nil
 	}
 	return &TableName{
-		SchemaName:                     Name(n.Parts[1]),
-		OmitSchemaNameDuringFormatting: n.NumParts == 1,
-		TableName:                      Name(n.Parts[0]),
+		SchemaName:     Name(n.Parts[1]),
+		TableName:      Name(n.Parts[0]),
+		ExplicitSchema: n.NumParts >= 2,
 	}, nil
 }
 
@@ -90,13 +90,13 @@ func (t *TableName) NormalizeTablePattern() (TablePattern, error) { return t, ni
 // AllTablesSelector corresponds to a selection of all
 // tables in a database, e.g. when used with GRANT.
 type AllTablesSelector struct {
-	Schema                         Name
-	OmitSchemaNameDuringFormatting bool
+	Schema         Name
+	ExplicitSchema bool
 }
 
 // Format implements the NodeFormatter interface.
 func (at *AllTablesSelector) Format(ctx *FmtCtx) {
-	if !at.OmitSchemaNameDuringFormatting {
+	if at.ExplicitSchema {
 		ctx.FormatNode(&at.Schema)
 		ctx.WriteByte('.')
 	}
@@ -110,7 +110,8 @@ func (at *AllTablesSelector) NormalizeTablePattern() (TablePattern, error) { ret
 // QualifyWithDatabase adds an indirection for the database, if it's missing.
 // It transforms:  * -> database.*
 func (at *AllTablesSelector) QualifyWithDatabase(database string) error {
-	if !at.OmitSchemaNameDuringFormatting {
+	if at.ExplicitSchema {
+		// Database already qualified, nothing to do.
 		return nil
 	}
 	if database == "" {

@@ -234,7 +234,7 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 }
 
 func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basicMetadata, error) {
-	name := &tree.TableName{SchemaName: tree.Name(dbName), TableName: tree.Name(tableName)}
+	name := tree.NewTableName(tree.Name(dbName), tree.Name(tableName))
 
 	// Fetch table ID.
 	dbNameEscaped := tree.NameString(dbName)
@@ -301,7 +301,7 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 
 	return basicMetadata{
 		ID:         id,
-		name:       &tree.TableName{SchemaName: tree.Name(dbName), TableName: tree.Name(tableName)},
+		name:       tree.NewTableName(tree.Name(dbName), tree.Name(tableName)),
 		createStmt: createStatement,
 		dependsOn:  refs,
 		kind:       kind,
