@@ -110,7 +110,7 @@ In summary (the wiki page details the rationales and provides further suggestion
 - [Separate subject from body with a blank line](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
 - [Use the body to explain *what* and *why* vs. *how*](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-description)
 - [Prefix the subject line with the affected package/area](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
-- [Include a release note annotation](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#release-note), in the right position
+- [Include a release note annotation](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#release-notes), in the right position
 - [Use the imperative mood in the subject line](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
 - [Keep the commit title concise but information-rich](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-title)
 - [Wrap the body at some consistent width under 100 characters](https://github.com/cockroachdb/cockroach/wiki/Git-Commit-Messages#commit-description)
