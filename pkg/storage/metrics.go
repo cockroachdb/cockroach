@@ -454,6 +454,11 @@ var (
 		Name: "requests.slow.raft",
 		Help: "Number of requests that have been stuck for a long time in raft"}
 
+	// Backpressure metrics.
+	metaBackpressuredOnSplitRequests = metric.Metadata{
+		Name: "requests.backpressure.split",
+		Help: "Number of backpressured writes waiting on a Range split"}
+
 	// AddSSTable metrics.
 	metaAddSSTableProposals = metric.Metadata{
 		Name: "addsstable.proposals",
@@ -642,6 +647,9 @@ type StoreMetrics struct {
 	SlowLeaseRequests        *metric.Gauge
 	SlowRaftRequests         *metric.Gauge
 
+	// Backpressure counts.
+	BackpressuredOnSplitRequests *metric.Gauge
+
 	// AddSSTable stats: how many AddSSTable commands were proposed and how many
 	// were applied?
 	AddSSTableProposals    *metric.Counter
@@ -824,6 +832,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SlowCommandQueueRequests: metric.NewGauge(metaSlowCommandQueueRequests),
 		SlowLeaseRequests:        metric.NewGauge(metaSlowLeaseRequests),
 		SlowRaftRequests:         metric.NewGauge(metaSlowRaftRequests),
+
+		// Backpressure counters.
+		BackpressuredOnSplitRequests: metric.NewGauge(metaBackpressuredOnSplitRequests),
 
 		// AddSSTable proposal + applications counters.
 		AddSSTableProposals:    metric.NewCounter(metaAddSSTableProposals),

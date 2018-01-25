@@ -913,6 +913,97 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	})
 }
 
+// TestStoreRangeSplitBackpressureWrites tests that ranges that grow too large
+// begin enforcing backpressure on writes until the range is able to split. In
+// the test, a range is filled past the point where it will begin applying
+// backpressure. Splits are then blocked in-flight and we test that any future
+// writes wait until the split succeeds and reduces the range size beneath the
+// backpressure threshold.
+func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Set maxBytes to something small so we can exceed the maximum split
+	// size without adding 2x64MB of data.
+	const maxBytes = 1 << 16
+	defer config.TestingSetDefaultZoneConfig(config.ZoneConfig{
+		RangeMaxBytes: maxBytes,
+	})()
+
+	var replStart roachpb.RKey
+	var activateSplitFilter int32
+	splitPending, blockSplits := make(chan struct{}), make(chan struct{})
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.TestingResponseFilter =
+		func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			if atomic.LoadInt32(&activateSplitFilter) == 1 {
+				for _, req := range ba.Requests {
+					if cPut, ok := req.GetInner().(*roachpb.ConditionalPutRequest); ok {
+						if cPut.Key.Equal(keys.RangeDescriptorKey(replStart)) {
+							splitPending <- struct{}{}
+							<-blockSplits
+						}
+					}
+				}
+			}
+			return nil
+		}
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store := createTestStoreWithConfig(t, stopper, storeCfg)
+
+	if err := server.WaitForInitialSplits(store.DB()); err != nil {
+		t.Fatal(err)
+	}
+	store.SetSplitQueueActive(false)
+
+	// Fill the range past the point where writes should backpressure.
+	descID := uint32(keys.MaxReservedDescID + 1)
+	tableBoundary := keys.MakeTablePrefix(descID)
+	repl := store.LookupReplica(tableBoundary, nil)
+	replStart = repl.Desc().StartKey
+	fillRange(t, store, repl.RangeID, tableBoundary, 2*maxBytes+1)
+
+	if !repl.ShouldBackpressureWrites() {
+		t.Fatal("expected ShouldBackpressureWrites=true, found false")
+	}
+
+	// Allow the range to begin splitting and wait until it gets blocked in the
+	// response filter.
+	atomic.StoreInt32(&activateSplitFilter, 1)
+	go func() {
+		store.SetSplitQueueActive(true)
+		store.ForceSplitScanAndProcess()
+	}()
+	<-splitPending
+
+	// Send a Put request. This should be backpressured on the split, so it should
+	// not be able to succeed until we allow the split to continue.
+	writeRes := make(chan *roachpb.Error)
+	go func() {
+		// Write to the first key of the range to make sure that
+		// we don't end up on the wrong side of the split.
+		pArgs := putArgs(replStart.AsRawKey(), []byte("test"))
+		header := roachpb.Header{RangeID: repl.RangeID}
+		_, pErr := client.SendWrappedWith(context.Background(), store, header, pArgs)
+		writeRes <- pErr
+	}()
+
+	// Make sure the write doesn't succeed yet.
+	select {
+	case pErr := <-writeRes:
+		close(blockSplits)
+		t.Fatalf("write was not blocked on split, returned err %v", pErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// Let split through. Write should follow.
+	close(blockSplits)
+	if pErr := <-writeRes; pErr != nil {
+		t.Fatalf("write returned err %v", pErr)
+	}
+}
+
 // TestStoreRangeSplitAfterLargeSnapshot tests a scenario where a range is too
 // large to snapshot a follower, but is unable to split because it cannot
 // achieve quorum. The leader of the range should adapt to this, eventually

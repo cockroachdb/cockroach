@@ -339,6 +339,12 @@ func (r *Replica) PermittingLargeSnapshots() bool {
 	return r.mu.permitLargeSnapshots
 }
 
+// ShouldBackpressureWrites returns whether writes to the range should be
+// subject to backpressure.
+func (r *Replica) ShouldBackpressureWrites() bool {
+	return r.shouldBackpressureWrites()
+}
+
 // GetRaftLogSize returns the raft log size.
 func (r *Replica) GetRaftLogSize() int64 {
 	r.mu.RLock()
