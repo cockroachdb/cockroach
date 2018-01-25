@@ -6728,7 +6728,7 @@ func TestProposalOverhead(t *testing.T) {
 	// NB: the expected overhead reflects the space overhead currently present in
 	// Raft commands. This test will fail if that overhead changes. Try to make
 	// this number go down and not up.
-	const expectedOverhead = 59
+	const expectedOverhead = 52
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
@@ -8732,7 +8732,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 		t.Fatal(err)
 	}
 	storeKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
-		if atomic.LoadInt32(&filterActive) == 1 && filterArgs.StartKey.Equal(rkey) {
+		if atomic.LoadInt32(&filterActive) == 1 {
 			return roachpb.NewErrorf("boom")
 		}
 		return nil
