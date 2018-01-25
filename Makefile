@@ -207,12 +207,11 @@ endif
 
 # We install our vendored tools to a directory within this repository to avoid
 # overwriting any user-installed binaries of the same name in the default GOBIN.
-LOCAL_BIN := $(abspath bin)
-GO_INSTALL := GOBIN='$(LOCAL_BIN)' $(GO) install
+GO_INSTALL := GOBIN='$(abspath bin)' $(GO) install
 
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
-export PATH := $(LOCAL_BIN):$(PATH)
+export PATH := $(abspath bin):$(PATH)
 
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
@@ -333,13 +332,13 @@ $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)
 # like we do in the builder container to allow for different host and guest
 # systems, will trigger bootstrapping in the container as necessary. This is
 # extracted into a variable for the same reasons as YARN_INSTALLED_TARGET.
-BOOTSTRAP_TARGET := $(LOCAL_BIN)/.bootstrap
+BOOTSTRAP_TARGET := bin/.bootstrap
 
-SUBMODULES_TARGET := $(LOCAL_BIN)/.submodules-initialized
+SUBMODULES_TARGET := bin/.submodules-initialized
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock $(LOCAL_BIN)/returncheck | $(SUBMODULES_TARGET)
+$(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock bin/returncheck | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v \
 		./vendor/github.com/golang/dep/cmd/dep \
 		./vendor/github.com/client9/misspell/cmd/misspell \
@@ -677,10 +676,10 @@ SQLPARSER_TARGETS = \
 	$(PKG_ROOT)/sql/lex/keywords.go \
 	$(PKG_ROOT)/sql/lex/reserved_keywords.go
 
-GO_PROTOS_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
-GW_PROTOS_TARGET := $(LOCAL_BIN)/.gw_protobuf_sources
-CPP_PROTOS_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
-CPP_PROTOS_CCL_TARGET := $(LOCAL_BIN)/.cpp_ccl_protobuf_sources
+GO_PROTOS_TARGET := bin/.go_protobuf_sources
+GW_PROTOS_TARGET := bin/.gw_protobuf_sources
+CPP_PROTOS_TARGET := bin/.cpp_protobuf_sources
+CPP_PROTOS_CCL_TARGET := bin/.cpp_ccl_protobuf_sources
 
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
@@ -913,7 +912,7 @@ CPP_PROTO_CCL_ROOT := $(LIBROACH_SRC_DIR)/protosccl
 GOGO_PROTOBUF_PATH := ./vendor/github.com/gogo/protobuf
 PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
 
-PROTOC_PLUGIN   := $(LOCAL_BIN)/protoc-gen-gogoroach
+PROTOC_PLUGIN   := bin/protoc-gen-gogoroach
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
 COREOS_PATH := ./vendor/github.com/coreos
@@ -1191,7 +1190,7 @@ clean: clean-c-deps
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
-	rm -rf artifacts $(LOCAL_BIN) $(ARCHIVE) $(SQLPARSER_ROOT)/gen
+	rm -rf artifacts bin $(ARCHIVE) $(SQLPARSER_ROOT)/gen
 
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
@@ -1204,5 +1203,5 @@ unsafe-clean: maintainer-clean unsafe-clean-c-deps
 	git clean -dxf
 
 .SECONDEXPANSION:
-$(LOCAL_BIN)/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | $(SUBMODULES_TARGET)
+bin/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/$*
