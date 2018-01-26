@@ -821,12 +821,15 @@ func (p *planner) findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := MustGetTableDesc(
-			ctx, p.txn, p.getVirtualTabler(), tn, true, /*allowAdding*/
-		)
+		tableDesc, err := p.getTableDesc(ctx, tn)
 		if err != nil {
 			return nil, err
 		}
+
+		if !tableDesc.IsTable() {
+			continue
+		}
+
 		_, dropped, err := tableDesc.FindIndexByName(string(idxName))
 		if err != nil || dropped {
 			continue
