@@ -2865,3 +2865,37 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("columns %q, %q in descriptor", k, x)
 	}
 }
+
+// Test that, when DDL statements are run in a transaction, their errors are
+// received as the results of the commit statement.
+func TestSchemaChangeErrorOnCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// This schema change is invalid because of the duplicate v, but its error is
+	// only reported later.
+	if _, err := tx.Exec("ALTER TABLE t.test ADD CONSTRAINT v_unique UNIQUE (v)"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); !testutils.IsError(
+		err, `pq: duplicate key value`,
+	) {
+		t.Fatal(err)
+	}
+}
