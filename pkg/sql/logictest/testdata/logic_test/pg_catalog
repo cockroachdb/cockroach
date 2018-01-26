@@ -49,6 +49,7 @@ SHOW TABLES FROM pg_catalog
 pg_am
 pg_attrdef
 pg_attribute
+pg_auth_members
 pg_class
 pg_collation
 pg_constraint
@@ -1079,6 +1080,15 @@ oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  ro
 823966177   admin     -1            ********     NULL           false         NULL
 2901009604  root      -1            ********     NULL           false         NULL
 2499926009  testuser  -1            ********     NULL           false         NULL
+
+## pg_catalog.pg_auth_members
+
+query OOOB colnames
+SELECT roleid, member, grantor, admin_option
+FROM pg_catalog.pg_auth_members
+----
+roleid     member      grantor  admin_option
+823966177  2901009604  NULL     true
 
 ## pg_catalog.pg_user
 

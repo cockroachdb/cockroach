@@ -60,6 +60,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogAmTable,
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
+		pgCatalogAuthMembersTable,
 		pgCatalogClassTable,
 		pgCatalogCollationTable,
 		pgCatalogConstraintTable,
@@ -228,6 +229,30 @@ CREATE TABLE pg_catalog.pg_attribute (
 				)
 			})
 		})
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-auth-members.html.
+var pgCatalogAuthMembersTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_auth_members (
+	roleid OID,
+	member OID,
+	grantor OID,
+	admin_option BOOL
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachRoleMembership(ctx, p,
+			func(roleName, memberName string, isAdmin bool) error {
+				return addRow(
+					h.UserOid(roleName),                 // roleid
+					h.UserOid(memberName),               // member
+					tree.DNull,                          // grantor
+					tree.MakeDBool(tree.DBool(isAdmin)), // admin_option
+				)
+			})
 	},
 }
 
@@ -1340,23 +1365,24 @@ CREATE TABLE pg_catalog.pg_roles (
 		// include sensitive information such as password hashes.
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username string, isRole tree.DBool) error {
+			func(username string, isRole bool) error {
 				isRoot := tree.DBool(username == security.RootUser || username == sqlbase.AdminRole)
+				isRoleDBool := tree.DBool(isRole)
 				return addRow(
-					h.UserOid(username),     // oid
-					tree.NewDName(username), // rolname
-					tree.MakeDBool(isRoot),  // rolsuper
-					tree.MakeDBool(isRole),  // rolinherit. Roles inherit by default.
-					tree.MakeDBool(isRoot),  // rolcreaterole
-					tree.MakeDBool(isRoot),  // rolcreatedb
-					tree.DBoolFalse,         // rolcatupdate
-					tree.MakeDBool(!isRole), // rolcanlogin. Only users can login.
-					tree.DBoolFalse,         // rolreplication
-					negOneVal,               // rolconnlimit
-					passwdStarString,        // rolpassword
-					tree.DNull,              // rolvaliduntil
-					tree.DBoolFalse,         // rolbypassrls
-					tree.DNull,              // rolconfig
+					h.UserOid(username),          // oid
+					tree.NewDName(username),      // rolname
+					tree.MakeDBool(isRoot),       // rolsuper
+					tree.MakeDBool(isRoleDBool),  // rolinherit. Roles inherit by default.
+					tree.MakeDBool(isRoot),       // rolcreaterole
+					tree.MakeDBool(isRoot),       // rolcreatedb
+					tree.DBoolFalse,              // rolcatupdate
+					tree.MakeDBool(!isRoleDBool), // rolcanlogin. Only users can login.
+					tree.DBoolFalse,              // rolreplication
+					negOneVal,                    // rolconnlimit
+					passwdStarString,             // rolpassword
+					tree.DNull,                   // rolvaliduntil
+					tree.DBoolFalse,              // rolbypassrls
+					tree.DNull,                   // rolconfig
 				)
 			})
 	},
@@ -1712,7 +1738,7 @@ CREATE TABLE pg_catalog.pg_user (
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(username string, isRole tree.DBool) error {
+			func(username string, isRole bool) error {
 				if isRole {
 					return nil
 				}
