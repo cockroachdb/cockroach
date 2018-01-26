@@ -173,6 +173,8 @@ parser.add_option("--hide-unambiguous-shas", action="store_true", dest="hide_sha
                   help="omit commit SHAs from the release notes and per-contributor sections")
 parser.add_option("--hide-per-contributor-section", action="store_true", dest="hide_per_contributor", default=False,
                   help="omit the per-contributor section")
+parser.add_option("--hide-downloads-section", action="store_true", dest="hide_downloads", default=False,
+                  help="omit the email sign-up and downloads section")
 
 (options, args) = parser.parse_args()
 
@@ -180,6 +182,7 @@ sortkey = options.sort_key
 revsort = options.reverse_sort
 hideshas = options.hide_shas
 hidepercontributor = options.hide_per_contributor
+hidedownloads = options.hide_downloads
 
 repo = Repo('.')
 heads = repo.heads
@@ -376,34 +379,33 @@ print("summary: Additions and changes in CockroachDB version", current_version, 
 print("---")
 print()
 
-## Print the release notes sign-up.
-print("""Get future release notes emailed to you:
+## Print the release notes sign-up and Downloads section.
+if not hidedownloads:
+    print("""Get future release notes emailed to you:
 
-<div class="hubspot-install-form install-form-1 clearfix">
-    <script>
-        hbspt.forms.create({
-            css: '',
-            cssClass: 'install-form',
-            portalId: '1753393',
-            formId: '39686297-81d2-45e7-a73f-55a596a8d5ff',
-            formInstanceId: 1,
-            target: '.install-form-1'
-        });
-    </script>
-</div>""")
-print()
+    <div class="hubspot-install-form install-form-1 clearfix">
+        <script>
+            hbspt.forms.create({
+                css: '',
+                cssClass: 'install-form',
+                portalId: '1753393',
+                formId: '39686297-81d2-45e7-a73f-55a596a8d5ff',
+                formInstanceId: 1,
+                target: '.install-form-1'
+            });
+        </script>
+    </div>""")
+    print()
 
-## Print the Downloads section.
+    print("""### Downloads
 
-print("""### Downloads
-
-<div id="os-tabs" class="clearfix">
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.darwin-10.9-amd64.tgz"><button id="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
-</div>""")
-print()
+    <div id="os-tabs" class="clearfix">
+        <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.darwin-10.9-amd64.tgz"><button id="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
+        <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
+        <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
+        <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
+    </div>""")
+    print()
 
 seenshas = set()
 seenprs = set()
