@@ -218,3 +218,15 @@ CREATE VIEW v AS SELECT id FROM t
 
 statement error pgcode 42704 pq: index "nonexistent_index" does not exist
 DROP INDEX nonexistent_index
+
+statement ok
+CREATE DATABASE sequence_test
+
+statement ok
+SET DATABASE = sequence_test
+
+statement ok
+CREATE SEQUENCE s
+
+statement error pgcode 42704 pq: index "nonexistent_index" does not exist
+DROP INDEX nonexistent_index
