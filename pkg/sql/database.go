@@ -221,25 +221,6 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 	return database, database.Validate()
 }
 
-// getAllDatabaseDescs looks up and returns all available database
-// descriptors.
-func getAllDatabaseDescs(
-	ctx context.Context, txn *client.Txn,
-) ([]*sqlbase.DatabaseDescriptor, error) {
-	descs, err := GetAllDescriptors(ctx, txn)
-	if err != nil {
-		return nil, err
-	}
-
-	var dbDescs []*sqlbase.DatabaseDescriptor
-	for _, desc := range descs {
-		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
-			dbDescs = append(dbDescs, dbDesc)
-		}
-	}
-	return dbDescs, nil
-}
-
 // getDatabaseDesc returns the database descriptor given its name
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *databaseCache) getDatabaseDesc(

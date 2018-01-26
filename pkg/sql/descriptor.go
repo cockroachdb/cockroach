@@ -35,24 +35,6 @@ var (
 	errNoTable           = errors.New("no table specified")
 )
 
-// DescriptorAccessor provides helper methods for using descriptors
-// to SQL objects.
-type DescriptorAccessor interface {
-	// createDescriptor takes a Table or Database descriptor and creates it if
-	// needed, incrementing the descriptor counter. Returns true if the descriptor
-	// is actually created, false if it already existed, or an error if one was encountered.
-	// The ifNotExists flag is used to declare if the "already existed" state should be an
-	// error (false) or a no-op (true).
-	createDescriptor(
-		ctx context.Context,
-		plainKey sqlbase.DescriptorKey,
-		descriptor sqlbase.DescriptorProto,
-		ifNotExists bool,
-	) (bool, error)
-}
-
-var _ DescriptorAccessor = &planner{}
-
 type descriptorAlreadyExistsErr struct {
 	desc sqlbase.DescriptorProto
 	name string
@@ -74,7 +56,11 @@ func GenerateUniqueDescID(ctx context.Context, db *client.DB) (sqlbase.ID, error
 	return sqlbase.ID(newVal - 1), nil
 }
 
-// createDescriptor implements the DescriptorAccessor interface.
+// createDescriptor takes a Table or Database descriptor and creates it if
+// needed, incrementing the descriptor counter. Returns true if the descriptor
+// is actually created, false if it already existed, or an error if one was
+// encountered. The ifNotExists flag is used to declare if the "already existed"
+// state should be an error (false) or a no-op (true).
 func (p *planner) createDescriptor(
 	ctx context.Context,
 	plainKey sqlbase.DescriptorKey,
