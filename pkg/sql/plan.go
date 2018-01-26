@@ -434,7 +434,7 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 	// upcoming IR work will provide unique numeric type tags, which will
 	// elegantly solve this.
 	for _, planHook := range planHooks {
-		if fn, header, err := planHook(stmt, p); err != nil {
+		if fn, header, err := planHook(ctx, stmt, p); err != nil {
 			return nil, err
 		} else if fn != nil {
 			return &hookFnNode{f: fn, header: header}, nil
@@ -552,7 +552,7 @@ func (p *planner) newPlan(
 	case *tree.Scrub:
 		return p.Scrub(ctx, n)
 	case *tree.CreateDatabase:
-		return p.CreateDatabase(n)
+		return p.CreateDatabase(ctx, n)
 	case *tree.CreateIndex:
 		return p.CreateIndex(ctx, n)
 	case *tree.CreateTable:

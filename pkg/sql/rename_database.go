@@ -33,7 +33,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, errEmptyDatabaseName
 	}
 
-	if err := p.RequireSuperUser("ALTER DATABASE ... RENAME"); err != nil {
+	if err := p.RequireSuperUser(ctx, "ALTER DATABASE ... RENAME"); err != nil {
 		return nil, err
 	}
 
@@ -42,7 +42,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(dbDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 

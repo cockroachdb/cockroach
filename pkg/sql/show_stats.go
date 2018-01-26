@@ -46,7 +46,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	if err != nil {
 		return nil, err
 	}
-	if err := p.CheckAnyPrivilege(desc); err != nil {
+	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return nil, err
 	}
 

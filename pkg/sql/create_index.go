@@ -44,7 +44,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
