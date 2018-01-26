@@ -163,7 +163,7 @@ func (p *planner) dropTableOrViewPrepare(
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 	return tableDesc, nil
@@ -179,7 +179,7 @@ func (p *planner) canRemoveFK(
 	if behavior != tree.DropCascade {
 		return nil, fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
 	}
-	if err := p.CheckPrivilege(table, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, table, privilege.CREATE); err != nil {
 		return nil, err
 	}
 	return table, nil
@@ -202,7 +202,7 @@ func (p *planner) canRemoveInterleave(
 		return pgerror.UnimplementedWithIssueErrorf(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
-	return p.CheckPrivilege(table, privilege.CREATE)
+	return p.CheckPrivilege(ctx, table, privilege.CREATE)
 }
 
 func (p *planner) removeFK(

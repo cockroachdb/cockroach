@@ -29,15 +29,15 @@ import (
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilege(
-		descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+		ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 	) error
 
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
-	CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error
+	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error
 
 	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
 	// or node). Includes the named action in the error message.
-	RequireSuperUser(action string) error
+	RequireSuperUser(ctx context.Context, action string) error
 
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
@@ -48,7 +48,7 @@ var _ AuthorizationAccessor = &planner{}
 
 // CheckPrivilegeForUser verifies that `user`` has `privilege` on `descriptor`.
 func CheckPrivilegeForUser(
-	user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+	_ context.Context, user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
 	if descriptor.GetPrivileges().CheckPrivilege(user, privilege) {
 		return nil
@@ -59,13 +59,13 @@ func CheckPrivilegeForUser(
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
 func (p *planner) CheckPrivilege(
-	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
-	return CheckPrivilegeForUser(p.SessionData().User, descriptor, privilege)
+	return CheckPrivilegeForUser(ctx, p.SessionData().User, descriptor, privilege)
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
+func (p *planner) CheckAnyPrivilege(_ context.Context, descriptor sqlbase.DescriptorProto) error {
 	if isVirtualDescriptor(descriptor) {
 		return nil
 	}
@@ -78,7 +78,7 @@ func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
 }
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
-func (p *planner) RequireSuperUser(action string) error {
+func (p *planner) RequireSuperUser(_ context.Context, action string) error {
 	user := p.SessionData().User
 	if user != security.RootUser && user != security.NodeUser {
 		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)

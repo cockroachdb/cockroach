@@ -152,7 +152,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 	if err != nil {
 		return err
 	}
-	if err := p.CheckPrivilege(viewDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, viewDesc, privilege.DROP); err != nil {
 		return err
 	}
 	// If this view is depended on by other views, we have to check them as well.

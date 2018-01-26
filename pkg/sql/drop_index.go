@@ -58,7 +58,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 			return nil, err
 		}
 
-		if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+		if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 			return nil, err
 		}
 
