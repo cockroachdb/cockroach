@@ -2276,6 +2276,8 @@ CockroachDB supports the following flags:
 					Nanos: int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)),
 				}
 				if elapsed.Compare(minDuration) < 0 {
+					ctx.Txn.Proto().Restart(ctx.Txn.UserPriority(), 0, /* upgradePriority */
+						ctx.Txn.Proto().Timestamp)
 					return nil, ctx.Txn.GenerateForcedRetryableError("forced by crdb_internal.force_retry()")
 				}
 				return tree.DZero, nil
