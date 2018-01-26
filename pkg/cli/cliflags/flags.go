@@ -272,7 +272,7 @@ sessions.`,
 		Name:      "join",
 		Shorthand: "j",
 		Description: `
-The address of node which acts as bootstrap when a new node is
+The address of a node which acts as bootstrap when a new node is
 joining an existing cluster. This flag can be specified
 separately for each address, for example:
 <PRE>
@@ -286,14 +286,7 @@ or both forms can be used together, for example:
 
   --join=localhost:1234,localhost:2345 --join=localhost:3456
 
-</PRE>
-Each address in the list has an optional type: [type=]<address>.
-An unspecified type means ip address or dns. Type is one of:
-<PRE>
-
-  - tcp: (default if type is omitted): plain ip address or hostname.
-  - http-lb: HTTP load balancer: we query
-             http(s)://<address>/_status/details/local`,
+</PRE>`,
 	}
 
 	ServerHost = FlagInfo{
