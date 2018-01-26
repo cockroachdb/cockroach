@@ -16,6 +16,7 @@ package ts
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 
@@ -80,7 +81,7 @@ func MakeServer(
 			mon.MemoryResource,
 			nil,
 			nil,
-			queryMemoryMax/10,
+			math.MaxInt64,
 		),
 		workerSem: make(chan struct{}, queryWorkerMax),
 	}
