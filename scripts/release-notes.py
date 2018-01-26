@@ -102,7 +102,7 @@ relnotetitles = {
     'admin ui change': "Admin UI Changes",
     'general change': "General Changes",
     'build change': "Build Changes",
-    'enterprise change': "Enterprise Changes",
+    'enterprise change': "Enterprise Edition Changes",
     'backward-incompatible change': "Backward-Incompatible Changes",
     'performance improvement': "Performance Improvements",
     'bug fix': "Bug Fixes",
@@ -116,7 +116,6 @@ relnote_sec_order = [
     'sql change',
     'cli change',
     'admin ui change',
-    'core change',
     'bug fix',
     'performance improvement',
     'build change',
@@ -129,8 +128,10 @@ cat_misspells = {
     'core change': 'general change',
     'bugfix': 'bug fix',
     'performance change' : 'performance improvement',
+    'performance' : 'performance improvement',
     'ui' : 'admin ui change',
     'backwards-incompatible change': 'backward-incompatible change',
+    'enterprise': 'enterprise change'
     }
 
 ## Release note format ##
@@ -167,13 +168,16 @@ parser.add_option("-f", "--from", dest="from_commit",
 parser.add_option("-t", "--until", dest="until_commit", default="HEAD",
                   help="list history up and until COMMIT (default: HEAD)", metavar="COMMIT")
 parser.add_option("--hide-unambiguous-shas", action="store_true", dest="hide_shas", default=False,
-                  help="omit commit SHAs in the release notes and per-contributor sections")
+                  help="omit commit SHAs from the release notes and per-contributor sections")
+parser.add_option("--hide-per-contributor-section", action="store_true", dest="hide_per_contributor", default=False,
+                  help="omit the per-contributor section")
 
 (options, args) = parser.parse_args()
 
 sortkey = options.sort_key
 revsort = options.reverse_sort
 hideshas = options.hide_shas
+hidepercontributor = options.hide_per_contributor
 
 repo = Repo('.')
 heads = repo.heads
@@ -367,30 +371,30 @@ today = datetime.datetime.today()
 print("## %s %d, %d" % (today.strftime("%B"), today.day, today.year))
 print()
 
-print("This release includes %d merged PRs by %s author%s." %
-      (len(allprs),
-       len(individual_authors), (len(individual_authors) != 1 and "s" or ""),
-      ))
+## Print the release notes sign-up and Downloads section.
+print("""Get future release notes emailed to you:
 
-ext_contributors = individual_authors - crdb_folk
-if len(ext_contributors) > 0:
-    ext_contributors = sorted(ext_contributors)
-    print("We would like to thank the following contributors from the CockroachDB community:")
-    print()
-    for a in ext_contributors:
-        print("-", a)
-    print()
-# Note: CRDB folk can be first-time contributors too, so
-# not part of the if ext_contributors above.
-if len(firsttime_contributors) > 0:
-    print("With special thanks to first-time contributors ", end='')
-    for i, n in enumerate(firsttime_contributors):
-        if i > 0 and i < len(firsttime_contributors)-1:
-            print(', ', end='')
-        elif i > 0:
-            print(' and ', end='')
-        print(n, end='')
-    print('.')
+<div class="hubspot-install-form install-form-1 clearfix">
+    <script>
+        hbspt.forms.create({
+            css: '',
+            cssClass: 'install-form',
+            portalId: '1753393',
+            formId: '39686297-81d2-45e7-a73f-55a596a8d5ff',
+            formInstanceId: 1,
+            target: '.install-form-1'
+        });
+    </script>
+</div>
+
+### Downloads
+
+<div id="os-tabs" class="clearfix">
+    <a href="https://binaries.cockroachdb.com/cockroach-v2.0-alpha.20180122.darwin-10.9-amd64.tgz"><button id="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-v2.0-alpha.20180122.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-v2.0-alpha.20180122.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-v2.0-alpha.20180122.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
+</div>""")
 print()
 
 seenshas = set()
@@ -446,38 +450,74 @@ if len(missing_release_notes) > 0:
         seenprs.add(item['pr'])
     print()
 
+## Print the Doc Updates section.
+print("### Doc Updates")
+print()
+print("Docs team: Please add these manually.")
+print()
+
+## Print the Contributors section.
+print("### Contributors")
+print()
+print("This release includes %d merged PRs by %s author%s." %
+      (len(allprs),
+       len(individual_authors), (len(individual_authors) != 1 and "s" or ""),
+      ), end=' ')
+
+ext_contributors = individual_authors - crdb_folk
+
+if len(ext_contributors) > 0:
+    ext_contributors = sorted(ext_contributors)
+    # # Note: CRDB folk can be first-time contributors too, so
+    # # not part of the if ext_contributors above.
+    if len(firsttime_contributors) > 0:
+        print("We would like to thank the following contributors from the CockroachDB community, with special thanks to first-time contributors ", end='')
+        for i, n in enumerate(firsttime_contributors):
+            if i > 0 and i < len(firsttime_contributors)-1:
+                print(', ', end='')
+            elif i > 0:
+                print(', and ', end='')
+            print(n, end='')
+        print('.')
+    else:
+        print("We would like to thank the following contributors from the CockroachDB community:")
+        print()
+    for a in ext_contributors:
+        print("-", a)
+    print()
+
 ## Print the per-author contribution list.
-print()
-print("### PRs merged by committer")
-print()
-if not hideshas:
-    fmt = "  - [%(pr)-6s][%(pr)s] [%(sha)s][%(sha)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
-else:
-    fmt = "  - [%(pr)-6s][%(pr)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
+if not hidepercontributor:
+    print("### PRs merged by committer")
+    print()
+    if not hideshas:
+        fmt = "  - [%(pr)-6s][%(pr)s] [%(sha)s][%(sha)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
+    else:
+        fmt = "  - [%(pr)-6s][%(pr)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
 
-for author in allauthors:
-    items = per_author_history[author]
-    print("- %s:" % author_aliases.get(author[0], author[0]))
-    items.sort(key=lambda x:x[sortkey],reverse=not revsort)
-    for item in items:
-        print(fmt % item, end='')
-        if not hideshas:
-            seenshas.add(item['sha'])
-        seenprs.add(item['pr'])
+    for author in allauthors:
+        items = per_author_history[author]
+        print("- %s:" % author_aliases.get(author[0], author[0]))
+        items.sort(key=lambda x:x[sortkey],reverse=not revsort)
+        for item in items:
+            print(fmt % item, end='')
+            if not hideshas:
+                seenshas.add(item['sha'])
+            seenprs.add(item['pr'])
 
-        ncommits, otherauthors = item['ncommits'], item['otherauthors']
-        if ncommits > 1 or len(otherauthors) > 0:
-            print(" (", end='')
-            if ncommits > 1:
-                print("%d commits" % ncommits, end='')
-            if len(otherauthors)> 0:
+            ncommits, otherauthors = item['ncommits'], item['otherauthors']
+            if ncommits > 1 or len(otherauthors) > 0:
+                print(" (", end='')
                 if ncommits > 1:
-                    print(" ", end='')
-                print("w/", ', '.join(otherauthors), end='')
-            print(")", end='')
+                    print("%d commits" % ncommits, end='')
+                if len(otherauthors)> 0:
+                    if ncommits > 1:
+                        print(" ", end='')
+                    print("w/", ', '.join(otherauthors), end='')
+                print(")", end='')
+            print()
         print()
     print()
-print()
 
 # Link the PRs and SHAs
 for pr in sorted(list(seenprs)):
