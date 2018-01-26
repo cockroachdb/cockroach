@@ -69,7 +69,6 @@ var importOptionExpectValues = map[string]bool{
 	importOptionNullIf:    true,
 	importOptionTransform: true,
 	importOptionSSTSize:   true,
-	restoreOptIntoDB:      true,
 }
 
 // LoadCSV converts CSV files into enterprise backup format.
@@ -948,35 +947,32 @@ func importPlanHook(
 
 		parentID := defaultCSVParentID
 		transform := opts[importOptionTransform]
-		var targetDB string
 		if transform == "" {
-			if override, ok := opts[restoreOptIntoDB]; !ok {
-				if session := p.SessionData().Database; session != "" {
-					targetDB = session
-				} else {
-					return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
-				}
-			} else {
-				targetDB = override
+			name, err := importStmt.Table.NormalizeTableName()
+			if err != nil {
+				return errors.Wrap(err, "normalize create table")
 			}
+			if err := name.QualifyWithDatabase(p.SessionData().Database); err != nil {
+				return err
+			}
+			// Replace or set the database name in the original statement so it is
+			// displayed in the job desc.
+			importStmt.Table.TableNameReference = name
+
 			// Check if database exists right now. It might not after the import is done,
 			// but it's better to fail fast than wait until restore.
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				id, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, targetDB))
+				id, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, name.Schema()))
 				if err != nil {
 					return err
 				}
 				if id.Value == nil {
-					return errors.Errorf("database does not exist: %q", targetDB)
+					return errors.Errorf("database does not exist: %s", name.Schema())
 				}
 				parentID = sqlbase.ID(id.ValueInt())
 				return nil
 			}); err != nil {
 				return err
-			}
-		} else {
-			if _, ok := opts[restoreOptIntoDB]; ok {
-				return errors.Errorf("cannot specify both %s and %s", importOptionTransform, restoreOptIntoDB)
 			}
 		}
 
@@ -1025,8 +1021,13 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
-			if named, parsed := importStmt.Table.String(), create.Table.String(); parsed != named {
-				return errors.Errorf("importing table %q, but file specifies a schema for table %q", named, parsed)
+
+			if named, err := importStmt.Table.NormalizeTableName(); err != nil {
+				return errors.Wrap(err, "normalize import table")
+			} else if parsed, err := create.Table.NormalizeTableName(); err != nil {
+				return errors.Wrap(err, "normalize create table")
+			} else if named.TableName != parsed.TableName {
+				return errors.Errorf("importing table %s, but file specifies a schema for table %s", named.TableName, parsed.TableName)
 			}
 		}
 

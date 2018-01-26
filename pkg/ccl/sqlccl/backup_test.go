@@ -965,7 +965,8 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			urls = append(urls, fmt.Sprintf("'%s/%d'", srv.URL, i))
 		}
 		csvURLs := strings.Join(urls, ", ")
-		query := fmt.Sprintf(`IMPORT TABLE t (i INT PRIMARY KEY) CSV DATA (%s) WITH into_db = 'cancelimport'`, csvURLs)
+
+		query := fmt.Sprintf(`IMPORT TABLE cancelimport.t (i INT PRIMARY KEY) CSV DATA (%s)`, csvURLs)
 
 		if _, err := run(t, "cancel", query); !testutils.IsError(err, "job canceled") {
 			t.Fatalf("expected 'job canceled' error, but got %+v", err)
@@ -999,7 +1000,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
 		}
 		csvURLs := strings.Join(urls, ", ")
-		query := fmt.Sprintf(`IMPORT TABLE t (i INT PRIMARY KEY) CSV DATA (%s) WITH into_db = 'pauseimport', sstsize = '50B'`, csvURLs)
+		query := fmt.Sprintf(`IMPORT TABLE pauseimport.t (i INT PRIMARY KEY) CSV DATA (%s) WITH sstsize = '50B'`, csvURLs)
 
 		if _, err := run(t, "pause", query); !testutils.IsError(err, "job paused") {
 			t.Fatalf("expected 'job paused' error, but got %+v", err)
