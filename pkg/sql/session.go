@@ -686,7 +686,6 @@ func (s *Session) resetForBatch(e *Executor) {
 	// Update the database cache to a more recent copy, so that we can use tables
 	// that we created in previous batches of the same transaction.
 	s.tables.databaseCache = e.getDatabaseCache()
-	s.TxnState.schemaChangers.curGroupNum++
 }
 
 // setTestingVerifyMetadata implements the testingVerifyMetadata interface.
@@ -1340,27 +1339,11 @@ func (ts *txnState) setReadWriteMode(readWriteMode tree.ReadWriteMode) error {
 }
 
 type schemaChangerCollection struct {
-	// A schemaChangerCollection accumulates schemaChangers from potentially
-	// multiple user requests, part of the same SQL transaction. We need to
-	// remember what group and index within the group each schemaChanger came
-	// from, so we can map failures back to the statement that produced them.
-	curGroupNum int
-
-	// schema change callbacks together with the index of the statement
-	// that enqueued it (within its group of statements).
-	schemaChangers []struct {
-		epoch int
-		sc    SchemaChanger
-	}
+	schemaChangers []SchemaChanger
 }
 
 func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChanger) {
-	scc.schemaChangers = append(
-		scc.schemaChangers,
-		struct {
-			epoch int
-			sc    SchemaChanger
-		}{scc.curGroupNum, schemaChanger})
+	scc.schemaChangers = append(scc.schemaChangers, schemaChanger)
 }
 
 // execSchemaChanges releases schema leases and runs the queued
@@ -1377,8 +1360,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
 	var firstError error
-	for _, scEntry := range scc.schemaChangers {
-		sc := &scEntry.sc
+	for _, sc := range scc.schemaChangers {
 		sc.db = e.cfg.DB
 		sc.testingKnobs = e.cfg.SchemaChangerTestingKnobs
 		sc.distSQLPlanner = e.distSQLPlanner
@@ -1395,10 +1377,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 					// There's some sketchiness here: we assume there's a single result
 					// per statement and we clobber the result/error of the corresponding
 					// statement.
-					// There's also another subtlety: we can only report results for
-					// statements in the current batch; we can't modify the results of older
-					// statements.
-					if scEntry.epoch == scc.curGroupNum && firstError == nil {
+					if firstError == nil {
 						firstError = err
 					}
 				} else {
