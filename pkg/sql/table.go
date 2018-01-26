@@ -95,23 +95,6 @@ type tableVersionID struct {
 	version sqlbase.DescriptorVersion
 }
 
-// SchemaAccessor provides helper methods for using the SQL schema.
-type SchemaAccessor interface {
-	// NB: one can use GetTableDescFromID() to retrieve a descriptor for
-	// a table from a transaction using its ID, assuming it was loaded
-	// in the transaction already.
-
-	// notifySchemaChange notifies that an outstanding schema change
-	// exists for the table.
-	notifySchemaChange(tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID)
-
-	// writeTableDesc effectively writes a table descriptor to the
-	// database within the current planner transaction.
-	writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error
-}
-
-var _ SchemaAccessor = &planner{}
-
 func (p *planner) getVirtualTabler() VirtualTabler {
 	return p.extendedEvalCtx.VirtualSchemas
 }
@@ -268,14 +251,16 @@ type uncommittedDatabase struct {
 // as errors, or retries that result in transaction timestamp changes.
 type TableCollection struct {
 	// The timestamp used to pick tables. The timestamp falls within the
-	// validity window of every table in tables.
+	// validity window of every table in leasedTables.
 	timestamp hlc.Timestamp
+
+	// leaseMgr manages acquiring and releasing per-table leases.
+	leaseMgr *LeaseManager
 	// A collection of table descriptor valid for the timestamp.
 	// They are released once the transaction using them is complete.
 	// If the transaction gets pushed and the timestamp changes,
 	// the tables are released.
-	tables []*sqlbase.TableDescriptor
-
+	leasedTables []*sqlbase.TableDescriptor
 	// Tables modified by the uncommitted transaction affiliated
 	// with this TableCollection. This allows a transaction to see
 	// its own modifications while bypassing the table lease mechanism.
@@ -286,16 +271,20 @@ type TableCollection struct {
 	// table is marked dropped.
 	uncommittedTables []*sqlbase.TableDescriptor
 
-	// Same as uncommittedTables applying to databases modified within
-	// an uncommitted transaction.
-	uncommittedDatabases []uncommittedDatabase
-
-	// leaseMgr manages acquiring and releasing per-table leases.
-	leaseMgr *LeaseManager
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
 	databaseCache *databaseCache
+	// Same as uncommittedTables applying to databases modified within
+	// an uncommitted transaction.
+	uncommittedDatabases []uncommittedDatabase
+
+	// allDescriptors is a slice of all available descriptors. The descriptors
+	// are cached to avoid repeated lookups by users like virtual tables. The
+	// cache is purged whenever events would cause a scan of all descriptors to
+	// return different values, such as when the txn timestamp changes or when
+	// new descriptors are written in the txn.
+	allDescriptors []sqlbase.DescriptorProto
 }
 
 // Check if the timestamp used so far to pick tables has changed because
@@ -373,7 +362,7 @@ func (tc *TableCollection) getTableVersion(
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
 	// transaction.
-	for _, table := range tc.tables {
+	for _, table := range tc.leasedTables {
 		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
 			log.VEventf(ctx, 2, "found table in table collection for table '%s'", tn)
@@ -391,7 +380,7 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 	tc.timestamp = txn.OrigTimestamp()
-	tc.tables = append(tc.tables, table)
+	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
@@ -435,7 +424,7 @@ func (tc *TableCollection) getTableVersionByID(
 
 	// First, look to see if we already have the table -- including those
 	// via `getTableVersion`.
-	for _, table := range tc.tables {
+	for _, table := range tc.leasedTables {
 		if table.ID == tableID {
 			log.VEventf(ctx, 2, "found table %d in table cache", tableID)
 			return table, nil
@@ -453,7 +442,7 @@ func (tc *TableCollection) getTableVersionByID(
 		return nil, err
 	}
 	tc.timestamp = txn.OrigTimestamp()
-	tc.tables = append(tc.tables, table)
+	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
@@ -462,20 +451,21 @@ func (tc *TableCollection) getTableVersionByID(
 	return table, nil
 }
 
-// releaseTables releases all tables currently held by the Session.
+// releaseTables releases all tables currently held by the TableCollection.
 func (tc *TableCollection) releaseTables(ctx context.Context) {
 	tc.timestamp = hlc.Timestamp{}
-	if len(tc.tables) > 0 {
-		log.VEventf(ctx, 2, "releasing %d tables", len(tc.tables))
-		for _, table := range tc.tables {
+	if len(tc.leasedTables) > 0 {
+		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
+		for _, table := range tc.leasedTables {
 			if err := tc.leaseMgr.Release(table); err != nil {
 				log.Warning(ctx, err)
 			}
 		}
-		tc.tables = tc.tables[:0]
+		tc.leasedTables = tc.leasedTables[:0]
 	}
 	tc.uncommittedTables = nil
 	tc.uncommittedDatabases = nil
+	tc.releaseAllDescriptors()
 }
 
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
@@ -486,11 +476,13 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
 		}
 	}
 	tc.uncommittedTables = append(tc.uncommittedTables, &desc)
+	tc.releaseAllDescriptors()
 }
 
 func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, dropped bool) {
 	db := uncommittedDatabase{name: name, id: id, dropped: dropped}
 	tc.uncommittedDatabases = append(tc.uncommittedDatabases, db)
+	tc.releaseAllDescriptors()
 }
 
 // getUncommittedDatabaseID returns a database ID for the requested tablename
@@ -537,6 +529,33 @@ func (tc *TableCollection) getUncommittedTable(
 		}
 	}
 	return nil, nil
+}
+
+// getAllDescriptors returns all descriptors visible by the transaction,
+// first checking the TableCollection's cached descriptors for validity
+// before defaulting to a key-value scan, if necessary.
+func (tc *TableCollection) getAllDescriptors(
+	ctx context.Context, txn *client.Txn,
+) ([]sqlbase.DescriptorProto, error) {
+	// If the txn has been pushed the table collection is released and txn
+	// deadline is reset.
+	tc.resetForTxnRetry(ctx, txn)
+
+	if tc.allDescriptors == nil {
+		descs, err := GetAllDescriptors(ctx, txn)
+		if err != nil {
+			return nil, err
+		}
+		tc.timestamp = txn.OrigTimestamp()
+		tc.allDescriptors = descs
+	}
+	return tc.allDescriptors, nil
+}
+
+// releaseAllDescriptors releases the cached slice of all descriptors
+// held by TableCollection.
+func (tc *TableCollection) releaseAllDescriptors() {
+	tc.allDescriptors = nil
 }
 
 // getTableNames retrieves the list of qualified names of tables
@@ -638,7 +657,8 @@ func (p *planner) createSchemaChangeJob(
 	return mutationID, nil
 }
 
-// notifySchemaChange implements the SchemaAccessor interface.
+// notifySchemaChange notifies that an outstanding schema change
+// exists for the table.
 func (p *planner) notifySchemaChange(
 	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) {
@@ -657,7 +677,8 @@ func (p *planner) notifySchemaChange(
 	p.extendedEvalCtx.SchemaChangers.queueSchemaChanger(sc)
 }
 
-// writeTableDesc implements the SchemaAccessor interface.
+// writeTableDesc effectively writes a table descriptor to the
+// database within the current planner transaction.
 func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
 	if isVirtualDescriptor(tableDesc) {
 		panic(fmt.Sprintf("Virtual Descriptors cannot be stored, found: %v", tableDesc))

@@ -795,10 +795,18 @@ func (dbs sortedDBDescs) Less(i, j int) bool { return dbs[i].Name < dbs[j].Name 
 func forEachDatabaseDesc(
 	ctx context.Context, p *planner, fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
-	// Handle real schemas
-	dbDescs, err := getAllDatabaseDescs(ctx, p.txn)
+	// Handle real schemas.
+	descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
+	}
+
+	// Ignore table descriptors.
+	var dbDescs []*sqlbase.DatabaseDescriptor
+	for _, desc := range descs {
+		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
+			dbDescs = append(dbDescs, dbDesc)
+		}
 	}
 
 	// Handle virtual schemas.
@@ -922,7 +930,7 @@ func forEachTableDescWithTableLookupInternal(
 	databases := make(map[string]dbDescTables)
 
 	// Handle real schemas.
-	descs, err := GetAllDescriptors(ctx, p.txn)
+	descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
