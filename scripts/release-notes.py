@@ -366,24 +366,17 @@ sys.stderr.flush()
 
 # Start with known sections.
 
+current_version = subprocess.check_output(["git", "describe", "--tags", options.until_commit], universal_newlines=True).strip()
+previous_version = subprocess.check_output(["git", "describe", "--tags", options.from_commit], universal_newlines=True).strip()
+
 print("---")
-print("title: What&#39;s New in ", end='')
-sys.stdout.flush()
-os.system('git describe --tags ' + options.until_commit)
+print("title: What&#39;s New in", current_version)
 print("toc: false")
-print("summary: Additions and changes in CockroachDB version ", end='')
-sys.stdout.flush()
-os.system('git describe --tags ' + options.until_commit)
-print("   since version ", end='')
-sys.stdout.flush()
-os.system('git describe --tags ' + options.from_commit)
+print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
 print("---")
-print()
-today = datetime.datetime.today()
-print("## %s %d, %d" % (today.strftime("%B"), today.day, today.year))
 print()
 
-## Print the release notes sign-up and Downloads section.
+## Print the release notes sign-up.
 print("""Get future release notes emailed to you:
 
 <div class="hubspot-install-form install-form-1 clearfix">
@@ -397,15 +390,18 @@ print("""Get future release notes emailed to you:
             target: '.install-form-1'
         });
     </script>
-</div>
+</div>""")
+print()
 
-### Downloads
+## Print the Downloads section.
+
+print("""### Downloads
 
 <div id="os-tabs" class="clearfix">
-    <a href="https://binaries.cockroachdb.com/cockroach-v2.0-alpha.20180122.darwin-10.9-amd64.tgz"><button id="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-v2.0-alpha.20180122.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-v2.0-alpha.20180122.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-v2.0-alpha.20180122.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.darwin-10.9-amd64.tgz"><button id="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
 </div>""")
 print()
 
