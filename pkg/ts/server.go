@@ -17,6 +17,8 @@ package ts
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 
 	"google.golang.org/grpc"
@@ -223,4 +225,52 @@ func (s *Server) Query(
 	}
 
 	return &response, nil
+}
+
+// Dump is part of the tspb.TimeSeriesServer interface.
+func (s *Server) Dump(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) error {
+	ctx := stream.Context()
+	span := roachpb.Span{Key: roachpb.Key(firstTSRKey), EndKey: roachpb.Key(lastTSRKey)}
+
+	for span.Key.Compare(span.EndKey) < 0 {
+		b := &client.Batch{}
+		b.Header.MaxSpanRequestKeys = 100
+		b.Scan(span.Key, span.EndKey)
+		err := s.db.db.Run(ctx, b)
+		if err != nil {
+			return err
+		}
+		result := b.Results[0]
+		span = result.ResumeSpan
+		for i := range result.Rows {
+			row := &result.Rows[i]
+			name, source, resolution, _, err := DecodeDataKey(row.Key)
+			if err != nil {
+				return err
+			}
+			if resolution != Resolution10s {
+				// Only return the highest resolution data.
+				continue
+			}
+			var idata roachpb.InternalTimeSeriesData
+			if err := row.ValueProto(&idata); err != nil {
+				return err
+			}
+
+			tsdata := &tspb.TimeSeriesData{
+				Name:       name,
+				Source:     source,
+				Datapoints: make([]tspb.TimeSeriesDatapoint, len(idata.Samples)),
+			}
+			for i := range idata.Samples {
+				tsdata.Datapoints[i].TimestampNanos = idata.StartTimestampNanos +
+					int64(idata.Samples[i].Offset)*idata.SampleDurationNanos
+				tsdata.Datapoints[i].Value = idata.Samples[i].Sum
+			}
+			if err := stream.Send(tsdata); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
