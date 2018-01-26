@@ -23,7 +23,7 @@ import sys
 import itertools
 import re
 import os
-import datetime
+import datetime, time
 import subprocess
 from git import Repo
 from optparse import OptionParser
@@ -41,6 +41,8 @@ author_aliases = {
     'RaduBerinde': "Radu Berinde",
     'Andy Kimball': "Andrew Kimball",
     'marc': "Marc Berhault",
+    'Lauren': "Lauren Hirata",
+    'lhirata' : "Lauren Hirata",
     'MBerhault': "Marc Berhault",
     'Nate': "Nathaniel Stewart",
     'a6802739': "Song Hao",
@@ -194,12 +196,22 @@ if commit == firstCommit:
 ### Reading data from repository ###
 
 # Is the first commit reachable from the current one?
-check = commit
-while check != firstCommit:
-    if len(check.parents) == 0:
-        print("error: origin commit %s not in history of %s" %( options.from_commit, options.until_commit))
-        exit(1)
-    check = check.parents[0]
+base = repo.merge_base(firstCommit, commit)
+if len(base) == 0:
+    print("error: %s and %s have no common ancestor" % (options.from_commit, options.until_commit), file=sys.stderr)
+    exit(1)
+commonParent = base[0]
+if firstCommit != commonParent:
+    print("warning: %s is not an ancestor of %s!" % (options.from_commit, options.until_commit), file=sys.stderr) 
+    print(file=sys.stderr)
+    ageindays = int((firstCommit.committed_date - commonParent.committed_date)/86400)
+    prevlen = sum((1 for x in repo.iter_commits(commonParent.hexsha + '...' + firstCommit.hexsha)))
+    print("The first common ancestor is %s," % commonParent.hexsha, file=sys.stderr)
+    print("which is %d commits older than %s and %d days older. Using that as origin." %\
+          (prevlen, options.from_commit, ageindays), file=sys.stderr)
+    print(file=sys.stderr)
+    firstCommit = commonParent
+    options.from_commit = commonParent.hexsha
 
 print("Changes %s ... %s" % (firstCommit, commit), file=sys.stderr)
 
