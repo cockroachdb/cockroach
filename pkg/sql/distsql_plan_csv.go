@@ -17,8 +17,8 @@ package sql
 import (
 	"context"
 	"fmt"
-	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // DistLoader uses DistSQL to convert external data formats (csv, etc) into
@@ -109,27 +108,8 @@ func (l *DistLoader) LoadCSV(
 	comma, comment rune,
 	nullif *string,
 	walltime int64,
-	splitSize int64,
 ) error {
 	ctx = log.WithLogTag(ctx, "import-distsql", nil)
-
-	// splitSize is the target number of bytes at which to create SST files. We
-	// attempt to do this by sampling, which is what the first DistSQL plan of this
-	// function does. CSV rows are converted into KVs. The total size of the KV is
-	// used to determine if we should sample it or not. For example, if we had a
-	// 100 byte KV and a 30MB splitSize, we would sample the KV with probability
-	// 100/30000000. Over many KVs, this produces samples at approximately the
-	// correct spacing, but obviously also with some error. We use oversample
-	// below to decrease the error. We divide the splitSize by oversample to
-	// produce the actual sampling rate. So in the example above, oversampling by a
-	// factor of 3 would sample the KV with probability 100/10000000 since we are
-	// sampling at 3x. Since we're now getting back 3x more samples than needed,
-	// we only use every 1/(oversample), or 1/3 here, in our final sampling.
-	const oversample = 3
-	sampleSize := splitSize / oversample
-	if sampleSize > math.MaxInt32 {
-		return errors.Errorf("SST size must fit in an int32: %d", splitSize)
-	}
 
 	var p physicalPlan
 	colTypeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
@@ -142,7 +122,7 @@ func (l *DistLoader) LoadCSV(
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < len(nodes) {
 			csvSpecs = append(csvSpecs, &distsqlrun.ReadCSVSpec{
-				SampleSize: int32(sampleSize),
+				SampleSize: int32(config.DefaultZoneConfig().RangeMaxBytes),
 				TableDesc:  *tableDesc,
 				Options: roachpb.CSVOptions{
 					Comma:   comma,
@@ -226,10 +206,24 @@ func (l *DistLoader) LoadCSV(
 	tableSpan := tableDesc.TableSpan()
 	prevKey := tableSpan.Key
 	sampleCount := 0
+	// Target sample sizes above are targeted at the max range size (say,
+	// 64MB). Here we take every 10th sample key and use it as a hard-coded
+	// split point. This should create distsql range routers at ~640MB. During
+	// SST writing, these large ranges will be automatically chunked into ranges
+	// that are the max AddSSTable size. Thus, the use of a larger sample size and
+	// reducing the number of splits by 10x should produce two benefits. First,
+	// the number of ranges in the distsql range router will go down, decreasing
+	// the search time to find the correct range and also decreasing the overall
+	// size of the plan. Second, the ranges split into the cluster will have a
+	// much more predictable size. Previously, and due to sampling, the range
+	// sizes had a standard deviation that was almost as much as their average,
+	// so range sizes were anywhere from 1MB to >64MB. Purposefully hitting the
+	// max SSTable size limit and dividing into chunks will mean most of the
+	// ranges are around the max size, which should reduce the overall number
+	// of ranges added to the cluster during an IMPORT.
 	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		sampleCount++
-		sampleCount = sampleCount % oversample
-		if sampleCount == 0 {
+		if sampleCount%10 == 0 {
 			b := row[0].(*tree.DBytes)
 			k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
 			if err != nil {

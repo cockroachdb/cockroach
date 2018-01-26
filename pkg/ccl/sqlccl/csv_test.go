@@ -520,20 +520,11 @@ func TestImportStmt(t *testing.T) {
 			"",
 		},
 		{
-			// Force some SST splits.
-			"schema-in-file-sstsize",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH sstsize = '10K'`,
-			schema,
-			files,
-			`WITH sstsize = '10K'`,
-			"",
-		},
-		{
 			"schema-in-query-local",
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local, transform = $1`,
 			nil,
 			files,
-			`WITH local, transform = 'nodelocal:///6'`,
+			`WITH local, transform = 'nodelocal:///5'`,
 			"",
 		},
 		{
@@ -541,7 +532,7 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local, delimiter = '|', comment = '#', nullif='', transform = $1`,
 			nil,
 			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', local, "nullif" = '', transform = 'nodelocal:///7'`,
+			`WITH comment = '#', delimiter = '|', local, "nullif" = '', transform = 'nodelocal:///6'`,
 			"",
 		},
 		{
@@ -549,7 +540,7 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', transform = $1`,
 			nil,
 			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', "nullif" = '', transform = 'nodelocal:///8'`,
+			`WITH comment = '#', delimiter = '|', "nullif" = '', transform = 'nodelocal:///7'`,
 			"",
 		},
 		{
@@ -573,7 +564,7 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
 			schema,
 			empty,
-			`WITH local, transform = 'nodelocal:///11'`,
+			`WITH local, transform = 'nodelocal:///10'`,
 			"",
 		},
 		{
@@ -581,7 +572,7 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
 			schema,
 			append(empty, files...),
-			`WITH local, transform = 'nodelocal:///12'`,
+			`WITH local, transform = 'nodelocal:///11'`,
 			"",
 		},
 		// NB: successes above, failures below, because we check the i-th job.
@@ -725,8 +716,8 @@ func TestImportStmt(t *testing.T) {
 				t.Fatalf("expected %d rows, got %d", expectedNulls, result)
 			}
 
-			// Verify sstsize created > 1 SST files.
-			if tc.name == "schema-in-file-sstsize-dist" {
+			// Verify that small kv.import.batch_size setting created > 1 SST files.
+			if hasTransform {
 				pattern := filepath.Join(dir, fmt.Sprintf("%d", i), "*.sst")
 				matches, err := filepath.Glob(pattern)
 				if err != nil {
