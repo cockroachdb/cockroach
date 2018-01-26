@@ -218,3 +218,15 @@ CREATE VIEW v AS SELECT id FROM t
 
 statement error pq: index "nonexistent_index" not found
 DROP INDEX nonexistent_index
+
+statement ok
+CREATE DATABASE sequence_test
+
+statement ok
+SET DATABASE = sequence_test
+
+statement ok
+CREATE SEQUENCE s
+
+statement error pq: index "nonexistent_index" not found
+DROP INDEX nonexistent_index
