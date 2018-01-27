@@ -122,7 +122,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	// The rest of the supported expressions must have a constant scalar on the
 	// right-hand side.
 	if val.op != constOp {
-		return nil, false, true
+		return nil, false, false
 	}
 	datum := val.private.(tree.Datum)
 	if !c.verifyType(offset, datum.ResolvedType()) {
@@ -500,7 +500,15 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 	// Check for an operation where the left-hand side is an
 	// indexed var for this column.
 	if c.isIndexColumn(e.children[0], offset) {
-		return c.makeSpansForSingleColumn(offset, e.op, e.children[1])
+		spans, ok, tight := c.makeSpansForSingleColumn(offset, e.op, e.children[1])
+		if ok {
+			return spans, ok, tight
+		}
+		// We couldn't get any constraints for the column; see if we can at least
+		// deduce a not-NULL constraint.
+		if c.colInfos[offset].Nullable && opRequiresNotNullArgs(e.op) {
+			return LogicalSpans{c.makeNotNullSpan(offset)}, true, false
+		}
 	}
 	// Check for tuple operations.
 	if e.children[0].op == tupleOp && e.children[1].op == tupleOp {
@@ -516,14 +524,25 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	// Last resort: for conditions like a > b, our column can appear on the right
 	// side. We can deduce a not-null constraint from such conditions.
-	if c.colInfos[offset].Nullable && c.isIndexColumn(e.children[1], offset) {
-		switch e.op {
-		case eqOp, ltOp, leOp, gtOp, geOp, neOp:
-			return LogicalSpans{c.makeNotNullSpan(offset)}, true, false
-		}
+	if c.colInfos[offset].Nullable && c.isIndexColumn(e.children[1], offset) &&
+		opRequiresNotNullArgs(e.op) {
+		return LogicalSpans{c.makeNotNullSpan(offset)}, true, false
 	}
 
 	return nil, false, false
+}
+
+// opRequiresNotNullArgs returns true if the operator can never evaluate
+// to true if one of the children is NULL.
+func opRequiresNotNullArgs(op operator) bool {
+	switch op {
+	case
+		eqOp, ltOp, leOp, gtOp, geOp, neOp,
+		likeOp, notLikeOp, iLikeOp, notILikeOp, similarToOp, notSimilarToOp,
+		regMatchOp, notRegMatchOp, regIMatchOp, notRegIMatchOp:
+		return true
+	}
+	return false
 }
 
 // indexConstraintConjunctionCtx stores the context for an index constraint
