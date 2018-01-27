@@ -428,7 +428,7 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 render     ·      ·
  └── scan  ·      ·
 ·          table  t@bc
-·          spans  ALL
+·          spans  /!NULL-
 
 # Note the span is reversed because of #20203.
 query TTT

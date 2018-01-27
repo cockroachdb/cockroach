@@ -1055,7 +1055,7 @@ Remaining filter: (@2 = 2) OR (@2 = 3)
 build-scalar,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 = 1 AND @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
 ----
-[/1 - /1]
+(/1/NULL - /1]
 Remaining filter: @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
 
 # This testcase exposed an issue around extending spans. We don't normalize the
@@ -1078,19 +1078,19 @@ build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 = 1.5
 ----
-[ - ]
+(/NULL - ]
 Remaining filter: @1 = 1.5
 
 build-scalar,normalize,index-constraints vars=(int) index=(@1)
 @1 > 1.5
 ----
-[ - ]
+(/NULL - ]
 Remaining filter: @1 > 1.5
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) = (1, 2.5)
 ----
-[/1 - /1]
+(/1/NULL - /1]
 Remaining filter: @2 = 2.5
 
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
@@ -1170,13 +1170,13 @@ build-scalar,normalize,index-constraints vars=(string) index=@1
 build-scalar,normalize,index-constraints vars=(string) index=@1
 @1 LIKE '%'
 ----
-[ - ]
+(/NULL - ]
 Remaining filter: @1 LIKE '%'
 
 build-scalar,normalize,index-constraints vars=(string) index=@1
 @1 LIKE '%XY'
 ----
-[ - ]
+(/NULL - ]
 Remaining filter: @1 LIKE '%XY'
 
 build-scalar,normalize,index-constraints vars=(string) index=(@1 desc)
