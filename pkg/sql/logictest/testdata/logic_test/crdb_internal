@@ -269,22 +269,22 @@ select crdb_internal.force_log_fatal('foo')
 query error pq: insufficient privilege
 select crdb_internal.set_vmodule('')
 
-query error pq: only root is allowed to access the node runtime information
+query error pq: only superusers are allowed to access the node runtime information
 select * from crdb_internal.node_runtime_info
 
-query error pq: only root is allowed to read crdb_internal.ranges
+query error pq: only superusers are allowed to read crdb_internal.ranges
 select * from crdb_internal.ranges
 
-query error pq: only root is allowed to read crdb_internal.gossip_nodes
+query error pq: only superusers are allowed to read crdb_internal.gossip_nodes
 select * from crdb_internal.gossip_nodes
 
-query error pq: only root is allowed to read crdb_internal.gossip_liveness
+query error pq: only superusers are allowed to read crdb_internal.gossip_liveness
 select * from crdb_internal.gossip_liveness
 
-query error pq: only root is allowed to read crdb_internal.kv_node_status
+query error pq: only superusers are allowed to read crdb_internal.kv_node_status
 select * from crdb_internal.kv_node_status
 
-query error pq: only root is allowed to read crdb_internal.kv_store_status
+query error pq: only superusers are allowed to read crdb_internal.kv_store_status
 select * from crdb_internal.kv_store_status
 
 # Anyone can see the executable version.

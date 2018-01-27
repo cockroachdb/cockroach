@@ -25,7 +25,6 @@ import (
 )
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
-// TODO(mberhault): expand role membership for Check* and RequireSuperUser.
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilege(
@@ -47,6 +46,7 @@ type AuthorizationAccessor interface {
 var _ AuthorizationAccessor = &planner{}
 
 // CheckPrivilegeForUser verifies that `user`` has `privilege` on `descriptor`.
+// This is not part of the planner as the only caller (ccl/sqlccl/restore.go) does not have one.
 func CheckPrivilegeForUser(
 	_ context.Context, user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
@@ -61,16 +61,56 @@ func CheckPrivilegeForUser(
 func (p *planner) CheckPrivilege(
 	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
-	return CheckPrivilegeForUser(ctx, p.SessionData().User, descriptor, privilege)
+	user := p.SessionData().User
+	privs := descriptor.GetPrivileges()
+
+	// Check if 'user' itself has privileges.
+	if privs.CheckPrivilege(user, privilege) {
+		return nil
+	}
+
+	// Expand role memberships.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
+	for role := range memberOf {
+		if privs.CheckPrivilege(role, privilege) {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("user %s does not have %s privilege on %s %s",
+		user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) CheckAnyPrivilege(_ context.Context, descriptor sqlbase.DescriptorProto) error {
+func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error {
 	if isVirtualDescriptor(descriptor) {
 		return nil
 	}
-	if descriptor.GetPrivileges().AnyPrivilege(p.SessionData().User) {
+
+	user := p.SessionData().User
+	privs := descriptor.GetPrivileges()
+
+	// Check if 'user' itself has privileges.
+	if privs.AnyPrivilege(user) {
 		return nil
+	}
+
+	// Expand role memberships.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
+	for role := range memberOf {
+		if privs.AnyPrivilege(role) {
+			return nil
+		}
 	}
 
 	return fmt.Errorf("user %s has no privileges on %s %s",
@@ -78,17 +118,32 @@ func (p *planner) CheckAnyPrivilege(_ context.Context, descriptor sqlbase.Descri
 }
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
-func (p *planner) RequireSuperUser(_ context.Context, action string) error {
+func (p *planner) RequireSuperUser(ctx context.Context, action string) error {
 	user := p.SessionData().User
-	if user != security.RootUser && user != security.NodeUser {
-		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)
+
+	// Check if user is 'root' or 'node'.
+	if user == security.RootUser || user == security.NodeUser {
+		return nil
 	}
-	return nil
+
+	// Expand role memberships.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	// Check is 'user' is a member of role 'admin'.
+	if _, ok := memberOf[sqlbase.AdminRole]; ok {
+		return nil
+	}
+
+	return fmt.Errorf("only superusers are allowed to %s", action)
 }
 
 // MemberOfWithAdminOption looks up all the roles 'member' belongs to (direct and indirect) and
 // returns a map of "role" -> "isAdmin".
 // The "isAdmin" flag applies to both direct and indirect members.
+// TODO(mberhault): this is too expensive: we need some type of caching with change notification.
 func (p *planner) MemberOfWithAdminOption(
 	ctx context.Context, member string,
 ) (map[string]bool, error) {
