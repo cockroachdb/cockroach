@@ -161,6 +161,39 @@ func TestKeyRewriter(t *testing.T) {
 			t.Fatalf("got %s, expected %s", newSpan, expect)
 		}
 	})
+
+	t.Run("sequence", func(t *testing.T) {
+		seqDesc := sqlbase.TableDescriptor{
+			ID:           3,
+			SequenceOpts: &sqlbase.TableDescriptor_SequenceOpts{},
+		}
+		rekeys := []roachpb.ImportRequest_TableRekey{
+			{
+				OldID:   uint32(oldID),
+				NewDesc: mustMarshalDesc(t, &seqDesc),
+			},
+		}
+		rewriter, err := MakeKeyRewriter(rekeys)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		key := keys.MakeSequenceKey(uint32(oldID))
+		newKey, ok, err := rewriter.RewriteKey(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			t.Fatal("expected rewrite")
+		}
+		_, id, err := encoding.DecodeUvarintAscending(newKey)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if sqlbase.ID(id) != newID {
+			t.Fatalf("got %d expected %d", id, newID)
+		}
+	})
 }
 
 func mustMarshalDesc(t *testing.T, desc *sqlbase.TableDescriptor) []byte {

@@ -75,9 +75,16 @@ func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, e
 	}
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
+		if desc.IsSequence() {
+			prefixes = append(prefixes, prefixRewrite{
+				OldPrefix: keys.MakeTablePrefix(uint32(oldID)),
+				NewPrefix: keys.MakeTablePrefix(uint32(desc.ID)),
+			})
+			continue
+		}
+
 		// The PrefixEnd() of index 1 is the same as the prefix of index 2, so use a
 		// map to avoid duplicating entries.
-
 		for _, index := range desc.AllNonDropIndexes() {
 			oldPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(oldID, index.ID))
 			newPrefix := roachpb.Key(makeKeyRewriterPrefixIgnoringInterleaved(desc.ID, index.ID))
@@ -140,6 +147,9 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	if desc == nil {
 		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
 	}
+	if desc.IsSequence() {
+		return key, true, nil
+	}
 	// Check if this key may have interleaved children.
 	k, _, indexID, err := sqlbase.DecodeTableIDIndexID(key)
 	if err != nil {
@@ -196,6 +206,10 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 // contain just the table ID. That is, /Table/51/1 -> /Table/51. An error
 // is returned if either was not matched for rewrite.
 func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
+	_, oldTableID, _ := encoding.DecodeUvarintAscending(span.Key)
+	desc, ok := kr.descs[sqlbase.ID(oldTableID)]
+	isSeq := ok && desc.IsSequence()
+
 	newKey, ok, err := kr.RewriteKey(append([]byte(nil), span.Key...))
 	if err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
@@ -203,14 +217,17 @@ func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
 	if !ok {
 		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.Key)
 	}
-	// Modify all spans that begin at the primary index to instead begin at the
-	// start of the table. That is, change a span start key from /Table/51/1 to
-	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
-	// will be created.
-	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
-	} else if idx == 1 && len(b) == 0 {
-		newKey = keys.MakeTablePrefix(uint32(id))
+	// Sequences don't have indexes, so skip the index-specific logic.
+	if !isSeq {
+		// Modify all spans that begin at the primary index to instead begin at the
+		// start of the table. That is, change a span start key from /Table/51/1 to
+		// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
+		// will be created.
+		if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
+			return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
+		} else if idx == 1 && len(b) == 0 {
+			newKey = keys.MakeTablePrefix(uint32(id))
+		}
 	}
 	newEndKey, ok, err := kr.RewriteKey(append([]byte(nil), span.EndKey...))
 	if err != nil {

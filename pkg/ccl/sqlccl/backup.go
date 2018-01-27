@@ -196,9 +196,15 @@ func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeD
 func spansForAllTableIndexes(tables []*sqlbase.TableDescriptor) []roachpb.Span {
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
-		for _, index := range table.AllNonDropIndexes() {
-			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(index.ID)), false); err != nil {
-				panic(errors.Wrap(err, "IndexSpan"))
+		if table.IsTable() {
+			for _, index := range table.AllNonDropIndexes() {
+				if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(index.ID)), false); err != nil {
+					panic(errors.Wrap(err, "IndexSpan"))
+				}
+			}
+		} else if table.IsSequence() {
+			if err := sstIntervalTree.Insert(intervalSpan(table.SequenceSpan()), false); err != nil {
+				panic(errors.Wrap(err, "SequenceSpan"))
 			}
 		}
 	}
