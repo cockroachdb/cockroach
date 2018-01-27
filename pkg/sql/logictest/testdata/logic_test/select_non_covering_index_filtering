@@ -60,7 +60,7 @@ EXPLAIN (EXPRS) SELECT * FROM t WHERE b = 2 AND c != b
 index-join  ·       ·
  ├── scan   ·       ·
  │          table   t@bc
- │          spans   /2-/3
+ │          spans   /2/!NULL-/3
  │          filter  c != b
  └── scan   ·       ·
 ·           table   t@primary
