@@ -907,3 +907,52 @@ render     0  render  ·         ·            (a, b)              a!=NULL; b!=N
  └── scan  1  scan    ·         ·            (a, b, c[omitted])  a!=NULL; b!=NULL; key(a,b)
 ·          1  ·       table     abc@primary  ·                   ·
 ·          1  ·       spans     /1/2-/3/4/#  ·                   ·
+
+# Regression test for #21831.
+statement ok
+CREATE TABLE str (k INT PRIMARY KEY, v STRING, INDEX(v))
+
+statement ok
+INSERT INTO str VALUES (1, 'A'), (4, 'AB'), (2, 'ABC'), (5, 'ABCD'), (3, 'ABCDEZ'), (9, 'ABD')
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v LIKE 'ABC%'
+----
+scan  0  scan  ·      ·              (k, v)  k!=NULL; v!=NULL; key(k,v)
+·     0  ·     table  str@str_v_idx  ·       ·
+·     0  ·     spans  /"ABC"-/"ABD"  ·       ·
+
+query IT rowsort
+SELECT k, v FROM str WHERE v LIKE 'ABC%'
+----
+2  ABC
+5  ABCD
+3  ABCDEZ
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v LIKE 'ABC%Z'
+----
+scan  0  scan  ·       ·               (k, v)  k!=NULL; v!=NULL; key(k,v)
+·     0  ·     table   str@str_v_idx   ·       ·
+·     0  ·     spans   /"ABC"-/"ABD"   ·       ·
+·     0  ·     filter  v LIKE 'ABC%Z'  ·       ·
+
+query IT rowsort
+SELECT k, v FROM str WHERE v LIKE 'ABC%Z'
+----
+3  ABCDEZ
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
+----
+scan  0  scan  ·       ·                     (k, v)  k!=NULL; v!=NULL; key(k,v)
+·     0  ·     table   str@str_v_idx         ·       ·
+·     0  ·     spans   /"ABC"-/"ABD"         ·       ·
+·     0  ·     filter  v SIMILAR TO 'ABC_*'  ·       ·
+
+query IT rowsort
+SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
+----
+2  ABC
+5  ABCD
+3  ABCDEZ
