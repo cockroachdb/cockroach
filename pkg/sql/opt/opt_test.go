@@ -92,6 +92,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
@@ -133,7 +134,7 @@ func TestOpt(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			catalog := testCatalog{kvDB: kvDB}
 
-			testutils.RunDataDrivenTest(t, path, func(d *testutils.TestData) string {
+			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var e *Expr
 				var varTypes []types.T
 				var iVarHelper tree.IndexedVarHelper
