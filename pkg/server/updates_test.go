@@ -124,6 +124,7 @@ func TestReportUsage(t *testing.T) {
 		for _, q := range []string{
 			`SELECT * FROM %[1]s.%[1]s WHERE %[1]s = length($1::string) OR %[1]s = $2`,
 			`INSERT INTO %[1]s.%[1]s VALUES (length($1::string)), ($2)`,
+			`SELECT * FROM %[1]s.%[1]s WHERE %[1]s = length($1::string) ` + strings.Repeat(`OR %[1]s = $2`, 1000),
 		} {
 			if _, err := db.Exec(fmt.Sprintf(q, elemName), elemName, 10003); err != nil {
 				t.Fatal(err)
@@ -271,7 +272,7 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 9, len(r.last.SqlStats); expected != actual {
+	if expected, actual := 10, len(r.last.SqlStats); expected != actual {
 		t.Fatalf("expected %d queries in stats report, got %d", expected, actual)
 	}
 
@@ -293,6 +294,7 @@ func TestReportUsage(t *testing.T) {
 			`INSERT INTO _ VALUES (_)`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
+			(`SELECT * FROM _ WHERE ` + strings.Repeat(`(`, 1000) + `_ = length($1::STRING))` + strings.Repeat(` OR (_ = $2))`, 1000))[:10000],
 		},
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
@@ -313,6 +315,9 @@ func TestReportUsage(t *testing.T) {
 				if _, ok := keys[expected]; !ok {
 					t.Fatalf("expected %q in app %s: %+v", expected, appName, keys)
 				}
+			}
+			if expected, actual := 2, len(bucketByApp); expected != actual {
+				t.Fatalf("expected %d apps in stats report, got %d", expected, actual)
 			}
 		}
 	}

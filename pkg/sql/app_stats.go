@@ -290,6 +290,9 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 		for q, stats := range a.stmts {
 			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
 			if ok {
+				if len(scrubbed) >= 10000 {
+					scrubbed = scrubbed[:10000]
+				}
 				k := roachpb.StatementStatisticsKey{
 					Query:   scrubbed,
 					DistSQL: q.distSQLUsed,
