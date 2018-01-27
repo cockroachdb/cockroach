@@ -20,11 +20,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/datadriven"
 )
 
 func TestParser(t *testing.T) {
-	testutils.RunDataDrivenTest(t, "testdata/parser", func(d *testutils.TestData) string {
+	datadriven.RunTest(t, "testdata/parser", func(d *datadriven.TestData) string {
 		// Only parse command supported.
 		if d.Cmd != "parse" {
 			t.FailNow()
