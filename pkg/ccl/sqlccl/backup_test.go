@@ -2605,38 +2605,98 @@ func TestBackupRestoreNotInTxn(t *testing.T) {
 func TestBackupRestoreSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const numAccounts = 1
-	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
+	args := base.TestServerArgs{ExternalIODir: dir}
 
 	backupLoc := localFoo
 
-	sqlDB.Exec(t, `CREATE SEQUENCE data.t_id_seq`)
-	sqlDB.Exec(t, `CREATE TABLE data.t (id INT PRIMARY KEY DEFAULT nextval('data.t_id_seq'), v text)`)
-	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('foo')`)
-	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
-	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('baz')`)
+	origDB.Exec(t, `CREATE SEQUENCE data.t_id_seq`)
+	origDB.Exec(t, `CREATE TABLE data.t (id INT PRIMARY KEY DEFAULT nextval('data.t_id_seq'), v text)`)
+	origDB.Exec(t, `INSERT INTO data.t (v) VALUES ('foo'), ('bar'), ('baz')`)
 
-	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, backupLoc)
-	sqlDB.Exec(t, `DROP DATABASE data`)
-	sqlDB.Exec(t, `RESTORE DATABASE data FROM $1`, backupLoc)
+	origDB.Exec(t, `BACKUP DATABASE data TO $1`, backupLoc)
 
-	// Verify that the db was restored correctly.
-	sqlDB.CheckQueryResults(t, `SELECT * FROM data.t`, [][]string{
-		{"1", "foo"},
-		{"2", "bar"},
-		{"3", "baz"},
+	t.Run("restore both table & sequence to a new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
+		defer tc.Stopper().Stop(context.TODO())
+		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+		newDB.Exec(t, `RESTORE DATABASE data FROM $1`, backupLoc)
+		newDB.Exec(t, `USE data`)
+
+		// Verify that the db was restored correctly.
+		newDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+			{"1", "foo"},
+			{"2", "bar"},
+			{"3", "baz"},
+		})
+		newDB.CheckQueryResults(t, `SELECT last_value FROM t_id_seq`, [][]string{
+			{"3"},
+		})
+
+		// Verify that we can kkeep inserting into the table, without violating a uniqueness constraint.
+		newDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+
+		// Verify that sequence <=> table dependencies are still in place.
+		if _, err := newDB.DB.Exec(`DROP SEQUENCE t_id_seq`); !testutils.IsError(err, "pq: cannot drop sequence t_id_seq because other objects depend on it") {
+			t.Fatal(err)
+		}
 	})
-	sqlDB.CheckQueryResults(t, `SELECT last_value FROM data.t_id_seq`, [][]string{
-		{"3"},
+
+	t.Run("restore just the table to a new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
+		defer tc.Stopper().Stop(context.TODO())
+		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+		newDB.Exec(t, `CREATE DATABASE data`)
+		newDB.Exec(t, `USE data`)
+
+		if _, err := newDB.DB.Exec(
+			`RESTORE TABLE t FROM $1`, localFoo,
+		); !testutils.IsError(err, "pq: cannot restore table \"t\" without referenced sequence 52 \\(or \"skip_missing_sequences\" option\\)") {
+			t.Fatal(err)
+		}
+
+		newDB.Exec(t, `RESTORE TABLE t FROM $1 WITH OPTIONS ('skip_missing_sequences')`, localFoo)
+
+		// Verify that the table was restored correctly.
+		newDB.CheckQueryResults(t, `SELECT * FROM data.t`, [][]string{
+			{"1", "foo"},
+			{"2", "bar"},
+			{"3", "baz"},
+		})
+
+		// Test that insertion without specifying the id column doesn't work, since
+		// the DEFAULT expression has been removed.
+		if _, err := newDB.DB.Exec(
+			`INSERT INTO t (v) VALUES ('bloop')`,
+		); !testutils.IsError(err, `pq: missing \"id\" primary key column`) {
+			t.Fatal(err)
+		}
+
+		// Test that inserting with a value specified works.
+		newDB.Exec(t, `INSERT INTO t (id, v) VALUES (4, 'bloop')`)
 	})
 
-	// Verify that we can kkeep inserting into the table, without violating a uniqueness constraint.
-	sqlDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+	t.Run("restore just the sequence to a new cluster", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
+		defer tc.Stopper().Stop(context.TODO())
+		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	// Verify that sequence <=> table dependencies are still in place.
-	_, err := sqlDB.DB.Exec(`DROP SEQUENCE data.t_id_seq`)
-	expectedErrMsg := "pq: cannot drop sequence t_id_seq because other objects depend on it"
-	if err != nil && err.Error() != expectedErrMsg {
-		t.Fatalf("expected error %s; got %s", expectedErrMsg, err)
-	}
+		newDB.Exec(t, `CREATE DATABASE data`)
+		newDB.Exec(t, `USE data`)
+		// TODO(vilterp): create `RESTORE SEQUENCE` instead of `RESTORE TABLE`, and force
+		// people to use that?
+		newDB.Exec(t, `RESTORE TABLE t_id_seq FROM $1`, backupLoc)
+
+		// Verify that the sequence value was restored.
+		newDB.CheckQueryResults(t, `SELECT last_value FROM data.t_id_seq`, [][]string{
+			{"3"},
+		})
+
+		// Verify that the reference to the table that used it was removed, and
+		// it can be dropped.
+		newDB.Exec(t, `DROP SEQUENCE t_id_seq`)
+	})
 }
