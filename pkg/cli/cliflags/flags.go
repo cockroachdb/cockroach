@@ -272,9 +272,29 @@ sessions.`,
 		Name:      "join",
 		Shorthand: "j",
 		Description: `
-The address of a node which acts as bootstrap when a new node is
-joining an existing cluster. This flag can be specified
-separately for each address, for example:
+The addresses for connecting a node to a cluster.
+<PRE>
+
+</PRE>
+When starting a multi-node cluster for the first time, set this flag
+to the addresses of 3-5 of the initial nodes. Then run the cockroach
+init command against one of the nodes to complete cluster startup.
+<PRE>
+
+</PRE>
+When starting a singe-node cluster, leave this flag out. This will
+cause the node to initialize a new single-node cluster without
+needing to run the cockroach init command.
+<PRE>
+
+</PRE>
+When adding a node to an existing cluster, set this flag to 3-5
+of the nodes already in the cluster; it's easiest to use the same
+list of addresses that was used to start the initial nodes.
+<PRE>
+
+</PRE>
+This flag can be specified separately for each address:
 <PRE>
 
   --join=localhost:1234 --join=localhost:2345
