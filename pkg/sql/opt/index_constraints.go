@@ -16,6 +16,8 @@ package opt
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -46,6 +48,42 @@ func (c *indexConstraintCtx) makeNotNullSpan(offset int) LogicalSpan {
 	}
 
 	return sp
+}
+
+// makeStringPrefixSpan returns a span that constraints string column <offset>
+// to strings having the given prefix.
+func (c *indexConstraintCtx) makeStringPrefixSpan(offset int, prefix string) LogicalSpan {
+	span := c.makeNotNullSpan(offset)
+	startKey := LogicalKey{Vals: tree.Datums{tree.NewDString(prefix)}, Inclusive: true}
+	if c.colInfos[offset].Direction == encoding.Ascending {
+		span.Start = startKey
+	} else {
+		span.End = startKey
+	}
+
+	i := len(prefix) - 1
+	for ; i >= 0 && prefix[i] == 0xFF; i-- {
+	}
+	if i < 0 {
+		// We have a prefix like "\xff\xff\xff"; there is no ending value.
+		return span
+	}
+	// A few examples:
+	//   prefix      -> endValue
+	//   ABC         -> ABD
+	//   ABC\xff     -> ABD
+	//   ABC\xff\xff -> ABD
+	endVal := []byte(prefix[:i+1])
+	endVal[i]++
+	endDatum := tree.NewDString(string(endVal))
+	endKey := LogicalKey{Vals: tree.Datums{endDatum}, Inclusive: false}
+	if c.colInfos[offset].Direction == encoding.Ascending {
+		span.End = endKey
+	} else {
+		span.Start = endKey
+	}
+
+	return span
 }
 
 // verifyType checks that the type of the index column <offset> matches the
@@ -84,7 +122,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	// The rest of the supported expressions must have a constant scalar on the
 	// right-hand side.
 	if val.op != constOp {
-		return nil, false, true
+		return nil, false, false
 	}
 	datum := val.private.(tree.Datum)
 	if !c.verifyType(offset, datum.ResolvedType()) {
@@ -136,9 +174,39 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 		c.preferInclusive(offset, &spans[1])
 		return spans, true, true
 
-	default:
-		return nil, false, false
+	case likeOp:
+		if s, ok := tree.AsDString(datum); ok {
+			if i := strings.IndexAny(string(s), "_%"); i >= 0 {
+				if i == 0 {
+					// Mask starts with _ or %.
+					return nil, false, false
+				}
+				span := c.makeStringPrefixSpan(offset, string(s[:i]))
+				// A mask like ABC% is equivalent to restricting the prefix to ABC.
+				// A mask like ABC%Z requires restricting the prefix, but is a stronger
+				// condition.
+				tight := (i == len(s)-1) && s[i] == '%'
+				return LogicalSpans{span}, true, tight
+			}
+			// No wildcard characters, this is an equality.
+			return LogicalSpans{c.makeEqSpan(offset, &s)}, true, true
+		}
+
+	case similarToOp:
+		// a SIMILAR TO 'foo_*' -> prefix "foo"
+		if s, ok := tree.AsDString(datum); ok {
+			pattern := tree.SimilarEscape(string(s))
+			if re, err := regexp.Compile(pattern); err == nil {
+				prefix, complete := re.LiteralPrefix()
+				if complete {
+					return LogicalSpans{c.makeEqSpan(offset, tree.NewDString(prefix))}, true, true
+				}
+				span := c.makeStringPrefixSpan(offset, prefix)
+				return LogicalSpans{span}, true, false
+			}
+		}
 	}
+	return nil, false, false
 }
 
 // makeSpansForTupleInequality creates spans for index columns starting at
@@ -432,7 +500,15 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 	// Check for an operation where the left-hand side is an
 	// indexed var for this column.
 	if c.isIndexColumn(e.children[0], offset) {
-		return c.makeSpansForSingleColumn(offset, e.op, e.children[1])
+		spans, ok, tight := c.makeSpansForSingleColumn(offset, e.op, e.children[1])
+		if ok {
+			return spans, ok, tight
+		}
+		// We couldn't get any constraints for the column; see if we can at least
+		// deduce a not-NULL constraint.
+		if c.colInfos[offset].Nullable && opRequiresNotNullArgs(e.op) {
+			return LogicalSpans{c.makeNotNullSpan(offset)}, true, false
+		}
 	}
 	// Check for tuple operations.
 	if e.children[0].op == tupleOp && e.children[1].op == tupleOp {
@@ -448,14 +524,25 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	// Last resort: for conditions like a > b, our column can appear on the right
 	// side. We can deduce a not-null constraint from such conditions.
-	if c.colInfos[offset].Nullable && c.isIndexColumn(e.children[1], offset) {
-		switch e.op {
-		case eqOp, ltOp, leOp, gtOp, geOp, neOp:
-			return LogicalSpans{c.makeNotNullSpan(offset)}, true, false
-		}
+	if c.colInfos[offset].Nullable && c.isIndexColumn(e.children[1], offset) &&
+		opRequiresNotNullArgs(e.op) {
+		return LogicalSpans{c.makeNotNullSpan(offset)}, true, false
 	}
 
 	return nil, false, false
+}
+
+// opRequiresNotNullArgs returns true if the operator can never evaluate
+// to true if one of the children is NULL.
+func opRequiresNotNullArgs(op operator) bool {
+	switch op {
+	case
+		eqOp, ltOp, leOp, gtOp, geOp, neOp,
+		likeOp, notLikeOp, iLikeOp, notILikeOp, similarToOp, notSimilarToOp,
+		regMatchOp, notRegMatchOp, regIMatchOp, notRegIMatchOp:
+		return true
+	}
+	return false
 }
 
 // indexConstraintConjunctionCtx stores the context for an index constraint
