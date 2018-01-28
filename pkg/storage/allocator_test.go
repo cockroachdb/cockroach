@@ -696,7 +696,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 }
 
 // TestAllocatorRebalance verifies that rebalance targets are chosen
-// randomly from amongst stores over the minAvailCapacityThreshold.
+// randomly from amongst stores under the maxFractionUsedThreshold.
 func TestAllocatorRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3233,11 +3233,13 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 
 type testStore struct {
 	roachpb.StoreDescriptor
+	immediateCompaction bool
 }
 
 func (ts *testStore) add(bytes int64) {
 	ts.Capacity.RangeCount++
 	ts.Capacity.Available -= bytes
+	ts.Capacity.Used += bytes
 	ts.Capacity.LogicalBytes += bytes
 }
 
@@ -3245,12 +3247,164 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 	if ts.Capacity.RangeCount == 0 || (ts.Capacity.Capacity-ts.Capacity.Available) < bytes {
 		return
 	}
+	// Mimic a real Store's behavior of rejecting preemptive snapshots when full.
+	if !maxCapacityCheck(ots.StoreDescriptor) {
+		log.Infof(context.TODO(), "s%d too full to accept snapshot from s%d: %v", ots.StoreID, ts.StoreID, ots.Capacity)
+		return
+	}
+	log.Infof(context.TODO(), "s%d accepting snapshot from s%d", ots.StoreID, ts.StoreID)
 	ts.Capacity.RangeCount--
-	ts.Capacity.Available += bytes
+	if ts.immediateCompaction {
+		ts.Capacity.Available += bytes
+		ts.Capacity.Used -= bytes
+	}
 	ts.Capacity.LogicalBytes -= bytes
 	ots.Capacity.RangeCount++
 	ots.Capacity.Available -= bytes
+	ots.Capacity.Used += bytes
 	ots.Capacity.LogicalBytes += bytes
+}
+
+func (ts *testStore) compact() {
+	ts.Capacity.Used = ts.Capacity.LogicalBytes
+	ts.Capacity.Available = ts.Capacity.Capacity - ts.Capacity.Used
+}
+
+func TestAllocatorFullDisks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	EnableStatsBasedRebalancing.Override(&st.SV, false)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+
+	// Model a set of stores in a cluster doing rebalancing, with ranges being
+	// randomly added occasionally.
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: st.Tracer},
+		&base.Config{Insecure: true},
+		clock,
+		stopper,
+		&st.Version,
+	)
+	server := rpc.NewServer(rpcContext) // never started
+	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
+
+	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
+
+	mockNodeLiveness := newMockNodeLiveness(NodeLivenessStatus_LIVE)
+	sp := NewStorePool(
+		log.AmbientContext{Tracer: st.Tracer},
+		st,
+		g,
+		clock,
+		mockNodeLiveness.nodeLivenessFunc,
+		false, /* deterministic */
+	)
+	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
+		return 0, false
+	})
+
+	var wg sync.WaitGroup
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(_ string, _ roachpb.Value) { wg.Done() })
+
+	const generations = 100
+	const nodes = 20
+	const capacity = (1 << 30) + 1
+	const rangeSize = 16 << 20
+	const rangesPerNode = 60 // 60 * 16 = 960MB per node, i.e. ~95% full
+	const rangesToAdd = rangesPerNode * nodes
+
+	// Initialize testStores.
+	var testStores [nodes]testStore
+	for i := 0; i < len(testStores); i++ {
+		// Don't immediately reclaim disk space from removed ranges. This mimics
+		// range deletions don't immediately reclaim disk space in rocksdb.
+		testStores[i].immediateCompaction = false
+		testStores[i].StoreID = roachpb.StoreID(i)
+		testStores[i].Node = roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)}
+		testStores[i].Capacity = roachpb.StoreCapacity{Capacity: capacity, Available: capacity}
+	}
+	// Initialize the cluster with a single range.
+	testStores[0].add(rangeSize)
+	rangesAdded := 1
+
+	for i := 0; i < generations; i++ {
+		// First loop through test stores and randomly add data.
+		for j := 0; j < len(testStores); j++ {
+			if mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(j), time.Time{}, 0) == NodeLivenessStatus_DEAD {
+				continue
+			}
+			ts := &testStores[j]
+			// Add [0,3) ranges to the node, simulating splits and data growth.
+			toAdd := alloc.randGen.Intn(3)
+			for k := 0; k < toAdd; k++ {
+				if rangesAdded < rangesToAdd {
+					ts.add(rangeSize)
+					rangesAdded++
+				}
+			}
+			if ts.Capacity.Available <= 0 {
+				t.Errorf("testStore %d ran out of space during generation %d (rangesAdded=%d/%d): %+v",
+					j, i, rangesAdded, rangesToAdd, ts.Capacity)
+				mockNodeLiveness.setNodeStatus(roachpb.NodeID(j), NodeLivenessStatus_DEAD)
+			}
+			wg.Add(1)
+			if err := g.AddInfoProto(gossip.MakeStoreKey(roachpb.StoreID(j)), &ts.StoreDescriptor, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+		wg.Wait()
+
+		// Loop through each store a number of times and maybe rebalance.
+		for j := 0; j < 10; j++ {
+			for k := 0; k < len(testStores); k++ {
+				if mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(k), time.Time{}, 0) == NodeLivenessStatus_DEAD {
+					continue
+				}
+				ts := &testStores[k]
+				// Rebalance until there's no more rebalancing to do.
+				if ts.Capacity.RangeCount > 0 {
+					target, details := alloc.RebalanceTarget(
+						ctx,
+						config.Constraints{},
+						nil,
+						testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
+						storeFilterThrottled,
+						false,
+					)
+					if target != nil {
+						log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
+						testStores[k].rebalance(&testStores[int(target.StoreID)], rangeSize)
+					}
+				}
+				// Gossip occasionally, as real Stores do when replicas move around.
+				if j%3 == 2 {
+					wg.Add(1)
+					if err := g.AddInfoProto(gossip.MakeStoreKey(roachpb.StoreID(j)), &ts.StoreDescriptor, 0); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		}
+
+		// Simulate rocksdb compactions freeing up disk space.
+		for j := 0; j < len(testStores); j++ {
+			if mockNodeLiveness.nodeLivenessFunc(roachpb.NodeID(j), time.Time{}, 0) != NodeLivenessStatus_DEAD {
+				ts := &testStores[j]
+				if ts.Capacity.Available <= 0 {
+					t.Errorf("testStore %d ran out of space during generation %d: %+v", j, i, ts.Capacity)
+					mockNodeLiveness.setNodeStatus(roachpb.NodeID(j), NodeLivenessStatus_DEAD)
+				} else {
+					ts.compact()
+				}
+			}
+		}
+	}
 }
 
 func Example_rebalancing() {
@@ -3263,7 +3417,7 @@ func Example_rebalancing() {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster,
-	// randomly adding / removing stores and adding bytes.
+	// adding / rebalancing ranges of random sizes.
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: st.Tracer},
 		&base.Config{Insecure: true},
@@ -3299,6 +3453,7 @@ func Example_rebalancing() {
 	// Initialize testStores.
 	var testStores [nodes]testStore
 	for i := 0; i < len(testStores); i++ {
+		testStores[i].immediateCompaction = true
 		testStores[i].StoreID = roachpb.StoreID(i)
 		testStores[i].Node = roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)}
 		testStores[i].Capacity = roachpb.StoreCapacity{Capacity: 1 << 30, Available: 1 << 30}
@@ -3334,7 +3489,7 @@ func Example_rebalancing() {
 		// Next loop through test stores and maybe rebalance.
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
-			target, _ := alloc.RebalanceTarget(
+			target, details := alloc.RebalanceTarget(
 				context.Background(),
 				config.Constraints{},
 				nil,
@@ -3343,7 +3498,7 @@ func Example_rebalancing() {
 				false,
 			)
 			if target != nil {
-				log.Infof(context.TODO(), "rebalancing to %+v", target)
+				log.Infof(context.TODO(), "rebalancing to %v; details: %s", target, details)
 				testStores[j].rebalance(&testStores[int(target.StoreID)], alloc.randGen.Int63n(1<<20))
 			}
 		}
