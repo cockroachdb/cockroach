@@ -166,6 +166,8 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time
 	q.Set("nodeid", s.NodeID().String())
 	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
 	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
+	q.Set("internal",
+		strconv.FormatBool(strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs")))
 
 	licenseType, err := LicenseTypeFn(s.st)
 	if err == nil {
@@ -234,7 +236,7 @@ func (s *Server) maybeReportDiagnostics(
 	// TODO(dt): we should allow tuning the reset and report intervals separately.
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
-	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) && diagnosticsMetricsEnabled.Get(&s.st.SV) && !strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs") {
+	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) && diagnosticsMetricsEnabled.Get(&s.st.SV) {
 		s.reportDiagnostics(running)
 	}
 	s.sqlExecutor.ResetStatementStats(ctx)
