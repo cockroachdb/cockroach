@@ -3098,7 +3098,12 @@ func (r *Replica) propose(
 		}
 	}
 
-	if err := r.submitProposalLocked(proposal); err != nil {
+	if err := r.submitProposalLocked(proposal); err == raft.ErrProposalDropped {
+		// Silently ignore dropped proposals (they were always silently ignored
+		// prior to the introduction of ErrProposalDropped).
+		// TODO(bdarnell): Handle ErrProposalDropped better.
+		// https://github.com/cockroachdb/cockroach/issues/21849
+	} else if err != nil {
 		delete(r.mu.proposals, proposal.idKey)
 		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
 	}
@@ -3291,8 +3296,16 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		// other replica is not quiesced, so we don't need to wake the leader.
 		r.unquiesceLocked()
 		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
-		return false, /* unquiesceAndWakeLeader */
-			raftGroup.Step(req.Message)
+		err := raftGroup.Step(req.Message)
+		if err == raft.ErrProposalDropped {
+			// A proposal was forwarded to this replica but we couldn't propose it.
+			// Swallow the error since we don't have an effective way of signaling
+			// this to the sender.
+			// TODO(bdarnell): Handle ErrProposalDropped better.
+			// https://github.com/cockroachdb/cockroach/issues/21849
+			err = nil
+		}
+		return false /* unquiesceAndWakeLeader */, err
 	})
 }
 
@@ -4175,7 +4188,10 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
-		if err := r.submitProposalLocked(p); err != nil {
+		if err := r.submitProposalLocked(p); err == raft.ErrProposalDropped {
+			// TODO(bdarnell): Handle ErrProposalDropped better.
+			// https://github.com/cockroachdb/cockroach/issues/21849
+		} else if err != nil {
 			delete(r.mu.proposals, p.idKey)
 			p.finishRaftApplication(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
 		}
