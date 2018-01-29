@@ -105,8 +105,12 @@ type dataRef struct {
 //export growSlice
 func growSlice(ref unsafe.Pointer, cSlice *C.DBSlice, needed int) {
 	data := cSliceToUnsafeGoBytes(*cSlice)
-	newData := make([]byte, (cap(data)+needed)*2)
-	copy(newData, data)
+	newData := data
+	newCap := (cap(data) + needed) * 2
+	for cap(newData) < newCap {
+		newData = append(newData, data...)
+	}
+	newData = newData[:cap(newData)]
 	*cSlice = goToCSlice(newData)
 	dref := (*dataRef)(ref)
 	dref.data = newData
@@ -2102,8 +2106,11 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, nil, emptyKeyError()
 	}
 
+	if max > 10000 {
+		max = 10000
+	}
 	result := &dataRef{
-		data: make([]byte, 1024),
+		data: make([]byte, max*int64(len(start)+32)),
 	}
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
