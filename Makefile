@@ -677,6 +677,8 @@ SQLPARSER_TARGETS = \
 	$(PKG_ROOT)/sql/lex/keywords.go \
 	$(PKG_ROOT)/sql/lex/reserved_keywords.go
 
+DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
+
 GO_PROTOS_TARGET := bin/.go_protobuf_sources
 GW_PROTOS_TARGET := bin/.gw_protobuf_sources
 CPP_PROTOS_TARGET := bin/.cpp_protobuf_sources
@@ -703,7 +705,7 @@ BUILDINFO = .buildinfo/tag .buildinfo/rev
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
-	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO)
+	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) protobuf
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -831,6 +833,7 @@ dupl: $(BOOTSTRAP_TARGET)
 
 .PHONY: generate
 generate: ## Regenerate generated code.
+generate: protobuf $(DOCGEN_TARGETS)
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 .PHONY: lint
@@ -1161,6 +1164,14 @@ $(SQLPARSER_ROOT)/help_messages.go: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/he
 	awk -f $(SQLPARSER_ROOT)/help.awk < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
 	gofmt -s -w $@
+
+bin/.docgen_bnfs: $(SQLPARSER_ROOT)/sql.y
+	go run pkg/cmd/docgen/{main,diagrams}.go grammar bnf docs/generated/sql/bnf --quiet
+	touch $@
+
+bin/.docgen_functions: $(PKG_ROOT)/sql/sem/builtins/*.go $(SQLPARSER_TARGETS) $(GO_PROTOS_TARGET)
+	go run pkg/cmd/docgen/{main,funcs}.go functions docs/generated/sql --quiet
+	touch $@
 
 # Format libroach .cc and .h files (excluding protos) using clang-format if installed.
 # We also exclude the auto-generated keys.h
