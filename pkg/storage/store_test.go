@@ -3085,6 +3085,65 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 }
 
+// TestReserveSnapshotFullnessLimit verifies that snapshots are rejected when
+// the recipient store's disk is near full.
+func TestReserveSnapshotFullnessLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc := testContext{}
+	tc.Start(t, stopper)
+	s := tc.store
+
+	ctx := context.Background()
+
+	desc, err := s.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	desc.Capacity.Available = 1
+	desc.Capacity.Used = desc.Capacity.Capacity - 1
+
+	s.cfg.StorePool.detailsMu.Lock()
+	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
+	s.cfg.StorePool.detailsMu.Unlock()
+
+	// A declinable snapshot to a nearly full store should be rejected.
+	cleanupRejected, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+		RangeSize:  1,
+		CanDecline: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejectionMsg != snapshotStoreTooFullMsg {
+		t.Fatalf("expected rejection message %q, got %q", snapshotStoreTooFullMsg, rejectionMsg)
+	}
+	if cleanupRejected != nil {
+		t.Fatalf("got unexpected non-nil cleanup method")
+	}
+	if n := s.ReservationCount(); n != 0 {
+		t.Fatalf("expected 0 reservations, but found %d", n)
+	}
+
+	// But a non-declinable snapshot should be allowed.
+	cleanupAccepted, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+		RangeSize:  1,
+		CanDecline: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejectionMsg != "" {
+		t.Fatalf("expected no rejection message, got %q", rejectionMsg)
+	}
+	if n := s.ReservationCount(); n != 1 {
+		t.Fatalf("expected 1 reservation, but found %d", n)
+	}
+	cleanupAccepted()
+}
+
 func TestSnapshotRateLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
