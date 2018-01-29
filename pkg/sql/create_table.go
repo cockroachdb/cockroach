@@ -469,15 +469,6 @@ func resolveFK(
 		}
 	}
 
-	if d.Actions.Delete == tree.SetDefault {
-		feature := fmt.Sprintf("unsupported: ON DELETE %s", d.Actions.Delete)
-		return pgerror.Unimplemented(feature, feature)
-	}
-	if d.Actions.Update == tree.SetDefault {
-		feature := fmt.Sprintf("unsupported: ON UPDATE %s", d.Actions.Update)
-		return pgerror.Unimplemented(feature, feature)
-	}
-
 	// Don't add a cascading action if there is a CHECK on any column.
 	// See #21688
 	if len(tbl.Checks) > 0 &&
@@ -519,9 +510,42 @@ func resolveFK(
 	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
 		for _, sourceColumn := range srcCols {
 			if !sourceColumn.Nullable {
+				database, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
+				if err != nil {
+					return err
+				}
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
-					"cannot add a SET NULL cascading action on column \"%s\" which has a NOT NULL constraint",
-					sourceColumn.Name,
+					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint",
+					tree.ErrString(&tree.ColumnItem{
+						TableName: tree.TableName{
+							DatabaseName: tree.Name(database.Name),
+							TableName:    tree.Name(tbl.Name),
+						},
+						ColumnName: tree.Name(sourceColumn.Name),
+					}),
+				)
+			}
+		}
+	}
+
+	// Don't add a SET DEFAULT action on an index that has any column that does
+	// not have a DEFAULT expression.
+	if d.Actions.Delete == tree.SetDefault || d.Actions.Update == tree.SetDefault {
+		for _, sourceColumn := range srcCols {
+			if sourceColumn.DefaultExpr == nil {
+				database, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
+				if err != nil {
+					return err
+				}
+				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression",
+					tree.ErrString(&tree.ColumnItem{
+						TableName: tree.TableName{
+							DatabaseName: tree.Name(database.Name),
+							TableName:    tree.Name(tbl.Name),
+						},
+						ColumnName: tree.Name(sourceColumn.Name),
+					}),
 				)
 			}
 		}
