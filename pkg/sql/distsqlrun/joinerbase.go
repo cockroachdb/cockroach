@@ -157,11 +157,11 @@ func isSetOpJoin(joinType joinType) bool {
 
 func isValidSetOpJoin(onExpr Expression, numLeftCols int, numRightCols int, numEqCols int) error {
 	if onExpr.Expr != "" {
-		return errors.Errorf("Expected empty onExpr, got %v", onExpr.Expr)
+		return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
 	}
 	if numLeftCols != numEqCols || numRightCols != numEqCols {
 		return errors.Errorf(
-			"Expected %v left and right columns, got %v left and %v right columns",
+			"expected %v left and right columns, got %v left and %v right columns",
 			numEqCols, numLeftCols, numRightCols)
 	}
 	return nil
