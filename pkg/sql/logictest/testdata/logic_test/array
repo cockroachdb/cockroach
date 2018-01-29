@@ -35,6 +35,11 @@ SELECT ARRAY['a,', 'b{', 'c}', 'd', 'e f']
 ----
 {"a,","b{","c}","d","e f"}
 
+query T
+SELECT ARRAY['1}'::BYTES]
+----
+{"\\x317d"}
+
 # TODO(jordan): #16487
 # query T
 # SELECT ARRAY[e'g\x10h']
@@ -565,7 +570,7 @@ INSERT INTO a VALUES (ARRAY['foo','bar','baz'])
 query T
 SELECT b FROM a
 ----
-{b'foo',b'bar',b'baz'}
+{"\\x666f6f","\\x626172","\\x62617a"}
 
 statement ok
 DROP TABLE a
