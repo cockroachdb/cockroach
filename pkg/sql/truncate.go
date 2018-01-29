@@ -131,6 +131,8 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		return err
 	}
 	newTableDesc := *tableDesc
+	newTableDesc.ReplacementOf = append(newTableDesc.ReplacementOf,
+		sqlbase.TableDescriptor_Replacement{ID: id, Time: p.txn.OrigTimestamp()})
 	newTableDesc.SetID(0)
 	newTableDesc.Version = 1
 

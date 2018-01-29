@@ -718,6 +718,18 @@ message TableDescriptor {
   // from the cluster. In nanoseconds since the epoch.
   optional int64 gc_deadline = 29 [(gogoproto.nullable) = false,
            (gogoproto.customname) = "GCDeadline"];
+
+
+  message Replacement {
+    optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    optional util.hlc.Timestamp time = 2 [(gogoproto.nullable) = false];
+  }
+
+  // ReplacementOf tracks prior IDs by which this table went -- e.g. when
+  // TRUNCATE creates a replacement of a table and swaps it in for the the old
+  // one, it should note on the new table the ID of the table it replaced. This
+  // can be used when trying to track a table's history across truncatations.
+  repeated Replacement replacement_of = 30 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

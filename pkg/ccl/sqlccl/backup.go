@@ -159,6 +159,11 @@ func getRelevantDescChanges(
 	// obviously interesting to our backup.
 	for _, i := range descs {
 		interestingIDs[i.GetID()] = struct{}{}
+		if t := i.GetTable(); t != nil {
+			for _, j := range t.ReplacementOf {
+				interestingIDs[j.ID] = struct{}{}
+			}
+		}
 	}
 
 	// We're also interested in any desc that belonged to a DB we're backing up.
@@ -942,11 +947,22 @@ func backupPlanHook(
 
 			for _, d := range targetDescs {
 				if t := d.GetTable(); t != nil {
+					// If we're trying to use a previous backup for this table, ideally it
+					// actually contains this table.
 					if _, ok := tablesInPrev[t.ID]; ok {
 						continue
 					}
+					// This table isn't in the previous backup... maybe was added to a
+					// DB that the previous backup captured?
 					if _, ok := dbsInPrev[t.ParentID]; ok {
 						continue
+					}
+					// Maybe this table is missing from the previous backup because it was
+					// truncated?
+					if len(t.ReplacementOf) > 0 {
+						if _, ok := tablesInPrev[t.ReplacementOf[len(t.ReplacementOf)-1].ID]; ok {
+							continue
+						}
 					}
 					return errors.Errorf("previous backup does not contain table %q", t.Name)
 				}
