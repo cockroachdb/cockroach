@@ -117,14 +117,14 @@ type candidate struct {
 	details        string
 }
 
-func (c candidate) constraintScore() float64 {
+func (c candidate) localityScore() float64 {
 	return c.diversityScore + float64(c.preferredScore)
 }
 
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, constraint:%.2f, converges:%d, balance:%s, "+
+	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, locality:%.2f, converges:%d, balance:%s, "+
 		"rangeCount:%d, logicalBytes:%s, writesPerSecond:%.2f",
-		c.store.StoreID, c.valid, c.fullDisk, c.constraintScore(), c.convergesScore, c.balanceScore,
+		c.store.StoreID, c.valid, c.fullDisk, c.localityScore(), c.convergesScore, c.balanceScore,
 		c.rangeCount, humanizeutil.IBytes(c.store.Capacity.LogicalBytes),
 		c.store.Capacity.WritesPerSecond)
 	if c.details != "" {
@@ -174,8 +174,8 @@ func (c candidate) less(o candidate) bool {
 	if c.fullDisk {
 		return true
 	}
-	if c.constraintScore() != o.constraintScore() {
-		return c.constraintScore() < o.constraintScore()
+	if c.localityScore() != o.localityScore() {
+		return c.localityScore() < o.localityScore()
 	}
 	if c.convergesScore != o.convergesScore {
 		return c.convergesScore < o.convergesScore
@@ -201,8 +201,8 @@ func (c candidate) worthRebalancingTo(o candidate, options scorerOptions) bool {
 	if c.fullDisk {
 		return true
 	}
-	if c.constraintScore() != o.constraintScore() {
-		return c.constraintScore() < o.constraintScore()
+	if c.localityScore() != o.localityScore() {
+		return c.localityScore() < o.localityScore()
 	}
 	if c.convergesScore != o.convergesScore {
 		return c.convergesScore < o.convergesScore
@@ -273,7 +273,7 @@ var _ sort.Interface = byScoreAndID(nil)
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].constraintScore() == c[j].constraintScore() &&
+	if c[i].localityScore() == c[j].localityScore() &&
 		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore.totalScore() == c[j].balanceScore.totalScore() &&
 		c[i].rangeCount == c[j].rangeCount &&
@@ -304,8 +304,8 @@ func (cl candidateList) best() candidateList {
 		return cl
 	}
 	for i := 1; i < len(cl); i++ {
-		if cl[i].constraintScore() < cl[0].constraintScore() ||
-			(cl[i].constraintScore() == cl[len(cl)-1].constraintScore() &&
+		if cl[i].localityScore() < cl[0].localityScore() ||
+			(cl[i].localityScore() == cl[len(cl)-1].localityScore() &&
 				cl[i].convergesScore < cl[len(cl)-1].convergesScore) {
 			return cl[:i]
 		}
@@ -337,8 +337,8 @@ func (cl candidateList) worst() candidateList {
 	}
 	// Find the worst constraint values.
 	for i := len(cl) - 2; i >= 0; i-- {
-		if cl[i].constraintScore() > cl[len(cl)-1].constraintScore() ||
-			(cl[i].constraintScore() == cl[len(cl)-1].constraintScore() &&
+		if cl[i].localityScore() > cl[len(cl)-1].localityScore() ||
+			(cl[i].localityScore() == cl[len(cl)-1].localityScore() &&
 				cl[i].convergesScore > cl[len(cl)-1].convergesScore) {
 			return cl[i+1:]
 		}
