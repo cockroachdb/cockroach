@@ -208,7 +208,8 @@ func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
 	host, port, err := net.SplitHostPort(s.ServingAddr())
 	if err != nil {
@@ -239,7 +240,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	go func() {
 		defer close(errChan)
 		errChan <- func() error {
-			if now, err := s.(*server.TestServer).Drain(on); err != nil {
+			if now, err := s.(*server.TestServer).Drain(ctx, on); err != nil {
 				return err
 			} else if !reflect.DeepEqual(on, now) {
 				return errors.Errorf("expected drain modes %v, got %v", on, now)
@@ -269,7 +270,7 @@ func TestPGWireDrainClient(t *testing.T) {
 		}
 	}
 
-	if now := s.(*server.TestServer).Undrain(on); len(now) != 0 {
+	if now := s.(*server.TestServer).Undrain(ctx, on); len(now) != 0 {
 		t.Fatalf("unexpected active drain modes: %v", now)
 	}
 }
@@ -321,8 +322,8 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// not have any effect. The pgServer will not bother to wait for the
 		// connection to close properly and should notify the caller that a
 		// session did not respond to cancellation.
-		if err := pgServer.SetDrainingImpl(
-			true, 0 /* drainWait */, 0, /* cancelWait */
+		if err := pgServer.DrainImpl(
+			0 /* drainWait */, 0, /* cancelWait */
 		); !testutils.IsError(err, "some sessions did not respond to cancellation") {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -346,9 +347,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if err := pgServer.SetDraining(false); err != nil {
-			t.Fatal(err)
-		}
+		pgServer.Undrain()
 	})
 
 	// Make sure that a connection gets canceled and correctly responds to this
@@ -362,8 +361,8 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// Set draining with no drainWait timeout and a 1s cancelWait timeout.
 		// The expected behavior is for the pgServer to immediately cancel any
 		// ongoing sessions and wait for 1s for the cancellation to take effect.
-		if err := pgServer.SetDrainingImpl(
-			true, 0 /* drainWait */, 1*time.Second, /* cancelWait */
+		if err := pgServer.DrainImpl(
+			0 /* drainWait */, 1*time.Second, /* cancelWait */
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -372,9 +371,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if err := pgServer.SetDraining(false); err != nil {
-			t.Fatal(err)
-		}
+		pgServer.Undrain()
 	})
 }
 
