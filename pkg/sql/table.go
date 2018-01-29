@@ -624,6 +624,9 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 // descriptor and creates a schema change job in the system.jobs table.
 // The identifiers of the mutations and newly-created job are written to a new
 // MutationJob in the table descriptor.
+//
+// The job creation is done within the planner's txn. This is important - if the
+// txn ends up rolling back, the job needs to go away.
 func (p *planner) createSchemaChangeJob(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, stmt string,
 ) (sqlbase.MutationID, error) {
