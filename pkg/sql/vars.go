@@ -523,7 +523,7 @@ func enableTracing(evalCtx *tree.EvalContext, m sessionDataMutator, values []tre
 	if !enableMode {
 		return stopTracing(m)
 	}
-	return m.StartSessionTracing(recordingType, traceKV)
+	return m.StartSessionTracing(evalCtx.Ctx(), recordingType, traceKV)
 }
 
 func stopTracing(m sessionDataMutator) error {
