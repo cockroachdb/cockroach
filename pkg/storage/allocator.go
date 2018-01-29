@@ -35,12 +35,6 @@ import (
 )
 
 const (
-	// maxFractionUsedThreshold: if the fraction used of a store descriptor
-	// capacity is greater than this value, it will never be used as a rebalance
-	// target and it will always be eligible to rebalance replicas to other
-	// stores.
-	maxFractionUsedThreshold = 0.95
-
 	// baseLeaseRebalanceThreshold is the minimum ratio of a store's lease surplus
 	// to the mean range/lease count that permits lease-transfers away from that
 	// store.
