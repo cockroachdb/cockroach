@@ -1165,7 +1165,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.execCfg.DistSQLPlanner,
 	).Start(s.stopper)
 
-	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.execCfg.DistSQLPlanner)
+	s.sqlExecutor.Start(ctx, s.execCfg.DistSQLPlanner)
 	s.distSQLServer.Start()
 
 	s.serveMode.set(modeOperational)

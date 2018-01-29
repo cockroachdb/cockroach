@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -74,7 +73,6 @@ var ClusterOrganization = settings.RegisterStringSetting(
 )
 
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
-var errStaleMetadata = errors.New("metadata is still stale")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
 func errWrongNumberOfPreparedStatements(n int) error {
@@ -227,13 +225,7 @@ type Executor struct {
 	MiscCount        *metric.Counter
 	QueryCount       *metric.Counter
 
-	// System Config and mutex.
-	systemConfig config.SystemConfig
-	// databaseCache is updated with systemConfigMu held, but read atomically in
-	// order to avoid recursive locking. See WaitForGossipUpdate.
-	databaseCache    atomic.Value
-	systemConfigMu   syncutil.Mutex
-	systemConfigCond *sync.Cond
+	dbCache *databaseCacheHolder
 
 	distSQLPlanner *DistSQLPlanner
 
@@ -304,10 +296,6 @@ type StatementFilter func(context.Context, string, ResultsWriter, error) error
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
 type ExecutorTestingKnobs struct {
-	// WaitForGossipUpdate causes metadata-mutating operations to wait
-	// for the new metadata to back-propagate through gossip.
-	WaitForGossipUpdate bool
-
 	// CheckStmtStringChange causes Executor.execStmtGroup to verify that executed
 	// statements are not modified during execution.
 	CheckStmtStringChange bool
@@ -399,18 +387,15 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		MiscCount:   metric.NewCounter(MetaMisc),
 		QueryCount:  metric.NewCounter(MetaQuery),
 		sqlStats:    sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		// The cache will be updated on Start() through gossip.
+		dbCache: newDatabaseCacheHolder(newDatabaseCache(config.SystemConfig{})),
 	}
 }
 
 // Start starts workers for the executor.
-func (e *Executor) Start(
-	ctx context.Context, startupMemMetrics *MemoryMetrics, dsp *DistSQLPlanner,
-) {
+func (e *Executor) Start(ctx context.Context, dsp *DistSQLPlanner) {
 	ctx = e.AnnotateCtx(ctx)
 	e.distSQLPlanner = dsp
-
-	e.databaseCache.Store(newDatabaseCache(e.systemConfig))
-	e.systemConfigCond = sync.NewCond(&e.systemConfigMu)
 
 	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
 	e.stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -418,7 +403,7 @@ func (e *Executor) Start(
 			select {
 			case <-gossipUpdateC:
 				sysCfg, _ := e.cfg.Gossip.GetSystemConfig()
-				e.updateSystemConfig(sysCfg)
+				e.dbCache.updateSystemConfig(sysCfg)
 			case <-e.stopper.ShouldStop():
 				return
 			}
@@ -438,23 +423,57 @@ func (e *Executor) AnnotateCtx(ctx context.Context) context.Context {
 	return e.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
-// updateSystemConfig is called whenever the system config gossip entry is updated.
-func (e *Executor) updateSystemConfig(cfg config.SystemConfig) {
-	e.systemConfigMu.Lock()
-	defer e.systemConfigMu.Unlock()
-	e.systemConfig = cfg
-	// The database cache gets reset whenever the system config changes.
-	e.databaseCache.Store(newDatabaseCache(cfg))
-	e.systemConfigCond.Broadcast()
+// databaseCacheHolder is a thread-safe container for a *databaseCache.
+// It also allows clients to block until the cache is updated to a desired
+// state.
+type databaseCacheHolder struct {
+	mu struct {
+		syncutil.Mutex
+		c  *databaseCache
+		cv *sync.Cond
+	}
 }
 
-// getDatabaseCache returns a database cache with a copy of the latest
-// system config.
-func (e *Executor) getDatabaseCache() *databaseCache {
-	if v := e.databaseCache.Load(); v != nil {
-		return v.(*databaseCache)
+func newDatabaseCacheHolder(c *databaseCache) *databaseCacheHolder {
+	dc := &databaseCacheHolder{}
+	dc.mu.c = c
+	dc.mu.cv = sync.NewCond(&dc.mu.Mutex)
+	return dc
+}
+
+func (dc *databaseCacheHolder) getDatabaseCache() *databaseCache {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	return dc.mu.c
+}
+
+// waitForCacheState implements the dbCacheSubscriber interface.
+func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) (bool, error)) error {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	for {
+		done, err := cond(dc.mu.c)
+		if err != nil {
+			return err
+		}
+		if done {
+			break
+		}
+		dc.mu.cv.Wait()
 	}
 	return nil
+}
+
+// databaseCacheHolder implements the dbCacheSubscriber interface.
+var _ dbCacheSubscriber = &databaseCacheHolder{}
+
+// updateSystemConfig is called whenever a new system config gossip entry is
+// received.
+func (dc *databaseCacheHolder) updateSystemConfig(cfg config.SystemConfig) {
+	dc.mu.Lock()
+	dc.mu.c = newDatabaseCache(cfg)
+	dc.mu.cv.Broadcast()
+	dc.mu.Unlock()
 }
 
 // Prepare returns the result types of the given statement. pinfo may
@@ -604,26 +623,6 @@ func (e *Executor) ExecuteStatements(
 
 	defer session.maybeRecover("executing", stmts)
 
-	// If the Executor wants config updates to be blocked, then block them so
-	// that session.testingVerifyMetadataFn can later be run on a known version
-	// of the system config. The point is to lock the system config so that no
-	// gossip updates sneak in under us. We're then able to assert that the
-	// verify callback only succeeds after a gossip update.
-	//
-	// This lock does not change semantics. Even outside of tests, the Executor
-	// uses static systemConfig for a user request, so locking the Executor's
-	// systemConfig cannot change the semantics of the SQL operation being
-	// performed under lock.
-	//
-	// NB: The locking here implies that ExecuteStatements cannot be
-	// called recursively. So don't do that and don't try to adjust this locking
-	// to allow this method to be called recursively (sync.{Mutex,RWMutex} do not
-	// allow that).
-	if e.cfg.TestingKnobs.WaitForGossipUpdate {
-		e.systemConfigCond.L.Lock()
-		defer e.systemConfigCond.L.Unlock()
-	}
-
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
 	return e.execRequest(session, stmts, pinfo)
@@ -634,13 +633,6 @@ func (e *Executor) ExecutePreparedStatement(
 	session *Session, stmt *PreparedStatement, pinfo *tree.PlaceholderInfo,
 ) error {
 	defer session.maybeRecover("executing", stmt.Str)
-
-	// Block system config updates. For more details, see the comment in
-	// ExecuteStatements.
-	if e.cfg.TestingKnobs.WaitForGossipUpdate {
-		e.systemConfigCond.L.Lock()
-		defer e.systemConfigCond.L.Unlock()
-	}
 
 	{
 		// No parsing is taking place, but we need to set the parsing phase time
@@ -846,49 +838,18 @@ func (e *Executor) execParsed(
 			txnState.finishSQLTxn(session)
 		}
 
-		// Verify that the metadata callback fails, if one was set. This is
-		// the precondition for validating that we need a gossip update for
-		// the callback to eventually succeed. Note that we are careful to
-		// check this just once per metadata callback (setting the callback
-		// clears session.verifyFnCheckedOnce).
-		if e.cfg.TestingKnobs.WaitForGossipUpdate {
-			// Turn off test verification of metadata changes made by the
-			// transaction if an error is seen during a transaction.
-			if err != nil {
-				session.testingVerifyMetadataFn = nil
-			}
-			if fn := session.testingVerifyMetadataFn; fn != nil && !session.verifyFnCheckedOnce {
-				if fn(e.systemConfig) == nil {
-					panic(fmt.Sprintf(
-						"expected %q (or the statements before them) to require a "+
-							"gossip update, but they did not", stmts))
-				}
-				session.verifyFnCheckedOnce = true
-			}
-		}
-
 		// If the txn is not in an "open" state any more, exec the schema changes.
 		// They'll short-circuit themselves if the mutation that queued them has
 		// been rolled back from the table descriptor.
 		if !txnState.TxnIsOpen() {
-			// Verify that metadata callback eventually succeeds, if one was
-			// set.
-			if e.cfg.TestingKnobs.WaitForGossipUpdate {
-				if fn := session.testingVerifyMetadataFn; fn != nil {
-					if !session.verifyFnCheckedOnce {
-						panic("initial state of the condition to verify was not checked")
-					}
-
-					for fn(e.systemConfig) != nil {
-						e.systemConfigCond.Wait()
-					}
-
-					session.testingVerifyMetadataFn = nil
-				}
+			blockOpt := blockForDBCacheUpdate
+			if err != nil {
+				blockOpt = dontBlockForDBCacheUpdate
 			}
-
 			// Release any leases the transaction(s) may have used.
-			session.tables.releaseTables(session.Ctx())
+			if err := session.tables.releaseTables(session.Ctx(), blockOpt); err != nil {
+				return err
+			}
 
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
@@ -1688,11 +1649,11 @@ func (e *Executor) execStmtInOpenTxn(
 		return nil
 
 	case *tree.RollbackTransaction:
-		// Turn off test verification of metadata changes made by the
-		// transaction.
-		session.testingVerifyMetadataFn = nil
 		// RollbackTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
+		if err := session.tables.releaseTables(txnState.Ctx, dontBlockForDBCacheUpdate); err != nil {
+			log.Warningf(txnState.Ctx, "releaseTables failed: %s", err)
+		}
 		transition = rollbackSQLTransaction(txnState, res)
 		explicitStateTransition = true
 		return nil
@@ -1921,8 +1882,7 @@ func rollbackSQLTransaction(txnState *txnState, res StatementResult) stateTransi
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
 			txnState.State(), txnState.mu.txn.Proto()))
 	}
-	err := txnState.mu.txn.Rollback(txnState.Ctx)
-	if err != nil {
+	if err := txnState.mu.txn.Rollback(txnState.Ctx); err != nil {
 		log.Warningf(txnState.Ctx, "txn rollback failed: %s", err)
 	}
 	// We're done with this txn.

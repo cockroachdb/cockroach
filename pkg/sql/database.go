@@ -302,6 +302,7 @@ func (p *planner) createDatabase(
 func (p *planner) renameDatabase(
 	ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string,
 ) error {
+
 	onAlreadyExists := func() error {
 		return fmt.Errorf("the new database name %q already exists", newName)
 	}
@@ -332,10 +333,8 @@ func (p *planner) renameDatabase(
 	b.Put(descKey, descDesc)
 	b.Del(oldKey)
 
-	p.Tables().addUncommittedDatabase(
-		oldName, descID, true /* dropped */)
-	p.Tables().addUncommittedDatabase(
-		newName, descID, false /* dropped */)
+	p.Tables().addUncommittedDatabase(oldName, descID, dbDropped)
+	p.Tables().addUncommittedDatabase(newName, descID, dbCreated)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
@@ -343,15 +342,5 @@ func (p *planner) renameDatabase(
 		}
 		return err
 	}
-
-	p.testingVerifyMetadata().setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		if err := expectDescriptorID(systemConfig, newKey, descID); err != nil {
-			return err
-		}
-		if err := expectDescriptor(systemConfig, descKey, descDesc); err != nil {
-			return err
-		}
-		return expectDeleted(systemConfig, oldKey)
-	})
 	return nil
 }

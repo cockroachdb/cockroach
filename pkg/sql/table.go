@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -285,13 +286,28 @@ type TableCollection struct {
 	// return different values, such as when the txn timestamp changes or when
 	// new descriptors are written in the txn.
 	allDescriptors []sqlbase.DescriptorProto
+
+	// dbCacheSubscriber is used to block until the node's database cache has been
+	// updated when releaseTables is called.
+	// Can be nil if releaseTables() is only called with the
+	// dontBlockForDBCacheUpdate option.
+	dbCacheSubscriber dbCacheSubscriber
+}
+
+type dbCacheSubscriber interface {
+	// waitForCacheState takes a callback depending on the cache state and blocks
+	// until the callback declares success. The callback is repeatedly called as
+	// the cache is updated.
+	waitForCacheState(cond func(*databaseCache) (bool, error)) error
 }
 
 // Check if the timestamp used so far to pick tables has changed because
 // of a transaction retry.
 func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn) {
 	if tc.timestamp != (hlc.Timestamp{}) && tc.timestamp != txn.OrigTimestamp() {
-		tc.releaseTables(ctx)
+		if err := tc.releaseTables(ctx, dontBlockForDBCacheUpdate); err != nil {
+			log.Warningf(ctx, "error releasing tables")
+		}
 	}
 }
 
@@ -451,8 +467,21 @@ func (tc *TableCollection) getTableVersionByID(
 	return table, nil
 }
 
+// releaseOpt specifies options for tc.releaseTables().
+type releaseOpt bool
+
+const (
+	// blockForDBCacheUpdate makes releaseTables() block until the node's database
+	// cache has been updated to reflect the dropped or renamed databases. If used
+	// within a SQL session, this ensures that future queries on that session
+	// behave correctly when trying to use the names of the recently
+	// dropped/renamed databases.
+	blockForDBCacheUpdate     releaseOpt = true
+	dontBlockForDBCacheUpdate releaseOpt = false
+)
+
 // releaseTables releases all tables currently held by the TableCollection.
-func (tc *TableCollection) releaseTables(ctx context.Context) {
+func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) error {
 	tc.timestamp = hlc.Timestamp{}
 	if len(tc.leasedTables) > 0 {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
@@ -464,8 +493,38 @@ func (tc *TableCollection) releaseTables(ctx context.Context) {
 		tc.leasedTables = tc.leasedTables[:0]
 	}
 	tc.uncommittedTables = nil
+
+	if opt == blockForDBCacheUpdate {
+		for _, uc := range tc.uncommittedDatabases {
+			if !uc.dropped {
+				continue
+			}
+			err := tc.dbCacheSubscriber.waitForCacheState(
+				func(dc *databaseCache) (bool, error) {
+					desc, err := dc.getCachedDatabaseDesc(uc.name)
+					if err == nil {
+						// If the database name still exists but it not references another
+						// db, we're good - it means that the database name has been reused
+						// within the same transaction.
+						if desc.ID == uc.id {
+							return false, nil
+						}
+						return true, nil
+					}
+					if !strings.Contains(err.Error(), "does not exist") {
+						return false, err
+					}
+					return true, nil
+				})
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	tc.uncommittedDatabases = nil
 	tc.releaseAllDescriptors()
+	return nil
 }
 
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
@@ -479,8 +538,15 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
 	tc.releaseAllDescriptors()
 }
 
-func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, dropped bool) {
-	db := uncommittedDatabase{name: name, id: id, dropped: dropped}
+type dbAction bool
+
+const (
+	dbCreated dbAction = false
+	dbDropped dbAction = true
+)
+
+func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, action dbAction) {
+	db := uncommittedDatabase{name: name, id: id, dropped: action == dbDropped}
 	tc.uncommittedDatabases = append(tc.uncommittedDatabases, db)
 	tc.releaseAllDescriptors()
 }
@@ -686,12 +752,6 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	if isVirtualDescriptor(tableDesc) {
 		panic(fmt.Sprintf("Virtual Descriptors cannot be stored, found: %v", tableDesc))
 	}
-	// Some statements setTestingVerifyMetadata to verify the descriptor they
-	// have written, but if they are followed by other statements that modify
-	// the descriptor the verification of the overwritten descriptor cannot be
-	// done.
-	p.testingVerifyMetadata().setTestingVerifyMetadata(nil)
-
 	p.Tables().addUncommittedTable(*tableDesc)
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())

@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -136,7 +135,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tbNameStrings = append(tbNameStrings, tbDesc.Name)
 	}
 
-	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
+	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 
 	b := &client.Batch{}
@@ -150,17 +149,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	// Delete the zone config entry for this database.
 	b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 
-	params.extendedEvalCtx.TestingVerifyMetadata.setTestingVerifyMetadata(
-		func(systemConfig config.SystemConfig) error {
-			for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
-				if err := expectDeleted(systemConfig, key); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-
-	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
+	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, dbDropped)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
