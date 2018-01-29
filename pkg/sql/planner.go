@@ -192,13 +192,11 @@ func newInternalPlanner(
 	// looks in the session for the current database.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
 
-	data := sessiondata.SessionData{
-		Location: time.UTC,
-		User:     user,
-	}
-
 	s := &Session{
-		data:           data,
+		data: sessiondata.SessionData{
+			Location: time.UTC,
+			User:     user,
+		},
 		TxnState:       txnState{Ctx: ctx, implicitTxn: true},
 		context:        ctx,
 		tables:         TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
@@ -207,7 +205,6 @@ func newInternalPlanner(
 	}
 	s.dataMutator = sessionDataMutator{
 		data: &s.data,
-		s:    s,
 		defaults: sessionDefaults{
 			applicationName: "crdb-internal",
 			database:        "",
@@ -546,7 +543,7 @@ func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]stri
 
 // SessionData is part of the PlanHookState interface.
 func (p *planner) SessionData() *sessiondata.SessionData {
-	return &p.EvalContext().SessionData
+	return p.EvalContext().SessionData
 }
 
 func (p *planner) testingVerifyMetadata() testingVerifyMetadata {

@@ -2056,7 +2056,7 @@ func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 type EvalContext struct {
 	// Session variables. This is a read-only copy of the values owned by the
 	// Session.
-	SessionData sessiondata.SessionData
+	SessionData *sessiondata.SessionData
 	// ApplicationName is a session variable, but it is not part of SessionData.
 	// See its definition in Session for details.
 	ApplicationName string
@@ -2129,7 +2129,9 @@ type EvalContext struct {
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext() EvalContext {
-	ctx := EvalContext{}
+	ctx := EvalContext{
+		SessionData: &sessiondata.SessionData{},
+	}
 	monitor := mon.MakeMonitor(
 		"test-monitor",
 		mon.MemoryResource,

@@ -550,7 +550,7 @@ func convertRecord(
 	}
 
 	var txCtx transform.ExprTransformContext
-	evalCtx := tree.EvalContext{SessionData: sessiondata.SessionData{Location: time.UTC}}
+	evalCtx := tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.

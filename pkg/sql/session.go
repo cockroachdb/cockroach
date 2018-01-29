@@ -240,11 +240,6 @@ type Session struct {
 		// Session parameters, user-configurable.
 		//
 
-		// ApplicationName is the name of the application running the
-		// current session. This can be used for logging and per-application
-		// statistics. Change via resetApplicationName().
-		ApplicationName string
-
 		//
 		// State structures for the logical SQL session.
 		//
@@ -412,7 +407,6 @@ func NewSession(
 	}
 	s.dataMutator = sessionDataMutator{
 		data: &s.data,
-		s:    s,
 		defaults: sessionDefaults{
 			applicationName: args.ApplicationName,
 			database:        args.Database,
@@ -420,6 +414,11 @@ func NewSession(
 		settings:       e.cfg.Settings,
 		curTxnReadOnly: &s.TxnState.readOnly,
 		sessionTracing: &s.Tracing,
+		applicationNameChanged: func(newName string) {
+			if s.sqlStats != nil {
+				s.appStats = s.sqlStats.getStatsForApplication(newName)
+			}
+		},
 	}
 	s.phaseTimes[sessionInit] = timeutil.Now()
 	s.dataMutator.SetApplicationName(args.ApplicationName)
@@ -654,7 +653,7 @@ func (s *Session) extendedEvalCtx(
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:              txn,
-			SessionData:      s.data,
+			SessionData:      &s.data,
 			ApplicationName:  s.dataMutator.ApplicationName(),
 			TxnState:         getTransactionState(&s.TxnState),
 			TxnReadOnly:      s.TxnState.readOnly,
@@ -848,7 +847,7 @@ func (s *Session) serialize() serverpb.Session {
 	return serverpb.Session{
 		Username:        s.data.User,
 		ClientAddress:   s.ClientAddr,
-		ApplicationName: s.mu.ApplicationName,
+		ApplicationName: s.data.ApplicationName(),
 		Start:           s.phaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
@@ -1861,24 +1860,21 @@ type spanWithIndex struct {
 // see curTxnReadOnly).
 type sessionDataMutator struct {
 	data     *sessiondata.SessionData
-	s        *Session
 	defaults sessionDefaults
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool
 	sessionTracing *SessionTracing
+	// applicationNamedChanged, if set, is called when the "application name"
+	// variable is updated.
+	applicationNameChanged func(newName string)
 }
 
-// SetApplicationName initializes both Session.mu.ApplicationName and
-// the cached pointer to per-application statistics. It is meant to be
-// used upon session initialization and upon SET APPLICATION_NAME.
+// SetApplicationName sets the application name.
 func (m *sessionDataMutator) SetApplicationName(appName string) {
-	s := m.s
-	s.mu.Lock()
-	s.mu.ApplicationName = appName
-	s.mu.Unlock()
-	if s.sqlStats != nil {
-		s.appStats = s.sqlStats.getStatsForApplication(appName)
+	m.data.SetApplicationName(appName)
+	if m.applicationNameChanged != nil {
+		m.applicationNameChanged(appName)
 	}
 }
 
@@ -1887,9 +1883,7 @@ func (m *sessionDataMutator) SetApplicationName(appName string) {
 // ApplicationName is not part of SessionData because accessing it needs
 // locking.
 func (m *sessionDataMutator) ApplicationName() string {
-	m.s.mu.RLock()
-	defer m.s.mu.RUnlock()
-	return m.s.mu.ApplicationName
+	return m.data.ApplicationName()
 }
 
 func (m *sessionDataMutator) SetDatabase(dbName string) {
