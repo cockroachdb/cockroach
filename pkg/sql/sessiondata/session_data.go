@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // SessionData contains session parameters. They are all user-configurable.
@@ -51,6 +52,32 @@ type SessionData struct {
 	// SequenceState gives access to the SQL sequences that have been manipulated
 	// by the session.
 	SequenceState *SequenceState
+
+	mu struct {
+		syncutil.Mutex
+
+		// applicationName is the name of the application running the
+		// current session. This can be used for logging and per-application
+		// statistics.
+		//
+		// applicationName is protected by a mutex because session serialization
+		// needs to access it concurrently with the session.
+		applicationName string
+	}
+}
+
+// ApplicationName returns the identifier that the client used.
+func (s *SessionData) ApplicationName() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.applicationName
+}
+
+// SetApplicationName sets the current application name.
+func (s *SessionData) SetApplicationName(name string) {
+	s.mu.Lock()
+	s.mu.applicationName = name
+	s.mu.Unlock()
 }
 
 // DistSQLExecMode controls if and when the Executor uses DistSQL.
