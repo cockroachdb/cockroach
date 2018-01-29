@@ -149,7 +149,9 @@ func ParseType(sql string) (coltypes.CastTargetType, error) {
 }
 
 // ParseStringAs parses s as type t.
-func ParseStringAs(t types.T, s string, evalCtx *tree.EvalContext) (tree.Datum, error) {
+func ParseStringAs(
+	t types.T, s string, evalCtx *tree.EvalContext, env *tree.CollationEnvironment,
+) (tree.Datum, error) {
 	var d tree.Datum
 	var err error
 	switch t {
@@ -182,8 +184,9 @@ func ParseStringAs(t types.T, s string, evalCtx *tree.EvalContext) (tree.Datum, 
 	case types.JSON:
 		d, err = tree.ParseDJSON(s)
 	default:
-		if a, ok := t.(types.TArray); ok {
-			typ, err := coltypes.DatumTypeToColumnType(a.Typ)
+		switch t := t.(type) {
+		case types.TArray:
+			typ, err := coltypes.DatumTypeToColumnType(t.Typ)
 			if err != nil {
 				return nil, err
 			}
@@ -191,8 +194,10 @@ func ParseStringAs(t types.T, s string, evalCtx *tree.EvalContext) (tree.Datum, 
 			if err != nil {
 				return nil, err
 			}
-		} else {
-			return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %s", t)
+		case types.TCollatedString:
+			d = tree.NewDCollatedString(s, t.Locale, env)
+		default:
+			return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %s (%T)", t, t)
 		}
 	}
 	return d, err
