@@ -131,6 +131,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		return err
 	}
 	newTableDesc := *tableDesc
+	newTableDesc.Replaced = id
 	newTableDesc.SetID(0)
 	newTableDesc.Version = 1
 
