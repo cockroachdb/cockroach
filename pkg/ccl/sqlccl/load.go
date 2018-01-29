@@ -324,6 +324,13 @@ func (i inserter) Put(key, value interface{}) {
 	})
 }
 
+func (i inserter) InitPut(key, value interface{}, failOnTombstones bool) {
+	i(roachpb.KeyValue{
+		Key:   *key.(*roachpb.Key),
+		Value: *value.(*roachpb.Value),
+	})
+}
+
 // isEndOfStatement returns true if stmt ends with a semicolon.
 func isEndOfStatement(stmt string) bool {
 	sc := parser.MakeScanner(stmt)
