@@ -22,6 +22,10 @@
 
 namespace cockroach {
 
+// EncodeVarint32 encodes the uint32 value using RocksDB's varint
+// representation.
+char* EncodeVarint32(char* dst, uint32_t value);
+
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer.
 void EncodeUint32(std::string* buf, uint32_t v);

@@ -23,6 +23,13 @@
 
 namespace cockroach {
 
+extern "C" {
+static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
+  fprintf(stderr, "%s symbol missing; expected to be supplied by Go\n", name);
+  abort();
+}
+void __attribute__((weak)) growSlice(DBSlice*, int) { die_missing_symbol(__func__); }
+}
 // kMaxItersBeforeSeek is the number of calls to iter->{Next,Prev}()
 // to perform when looking for the next/prev key or a particular
 // version before calling iter->Seek(). Note that mvccScanner makes
@@ -33,6 +40,10 @@ namespace cockroach {
 // iters-before-seek value is constrained to the range
 // [1,kMaxItersBeforeSeek].
 static const int kMaxItersBeforeSeek = 10;
+
+// Our returned batches have a fixed-size 4-byte header containing the count
+// of returned keys.
+static const int kHeaderSize = 4;
 
 // mvccScanner implements the MVCCGet, MVCCScan and MVCCReverseScan
 // operations. Parameterizing the code on whether a forward or reverse
@@ -49,24 +60,26 @@ static const int kMaxItersBeforeSeek = 10;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool consistent)
+              DBTxn txn, bool consistent, DBSlice results)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
         end_key_(ToSlice(end)),
         max_keys_(max_keys),
+        keys_(0),
         timestamp_(timestamp),
         txn_id_(ToSlice(txn.id)),
         txn_epoch_(txn.epoch),
         txn_max_timestamp_(txn.max_timestamp),
         consistent_(consistent),
         check_uncertainty_(timestamp < txn.max_timestamp),
-        kvs_(new rocksdb::WriteBatch),
         intents_(new rocksdb::WriteBatch),
         peeked_(false),
         is_get_(false),
         iters_before_seek_(kMaxItersBeforeSeek / 2) {
     memset(&results_, 0, sizeof(results_));
+    results_.data = results;
+    batchPtr_ = results_.data.data + kHeaderSize;
     results_.status = kSuccess;
 
     iter_->kvs.reset();
@@ -147,21 +160,21 @@ template <bool reverse> class mvccScanner {
  private:
   const DBScanResults& fillResults() {
     if (results_.status.len == 0) {
-      if (kvs_->Count() > 0) {
-        results_.data = ToDBSlice(kvs_->Data());
-      }
       if (intents_->Count() > 0) {
         results_.intents = ToDBSlice(intents_->Data());
       }
-      iter_->kvs.reset(kvs_.release());
       iter_->intents.reset(intents_.release());
     }
+    // Until now, the result slice's len has indicated the capacity of its
+    // backing Go slice. Now, we set it to the actual length of the output
+    // buffer to communicate to Go how much of the slice to look at.
+    results_.data.len = batchPtr_ - results_.data.data;
     return results_;
   }
 
   bool uncertaintyError(DBTimestamp ts) {
     results_.uncertainty_timestamp = ts;
-    kvs_->Clear();
+    keys_ = 0;
     intents_->Clear();
     return false;
   }
@@ -232,7 +245,7 @@ template <bool reverse> class mvccScanner {
       // historical timestamp < the intent timestamp. However, we
       // return the intent separately; the caller may want to resolve
       // it.
-      if (kvs_->Count() == max_keys_ && !is_get_) {
+      if (keys_ == max_keys_ && !is_get_) {
         // We've already retrieved the desired number of keys and now
         // we're adding the resume key. We don't want to add the
         // intent here as the intents should only correspond to KVs
@@ -241,7 +254,8 @@ template <bool reverse> class mvccScanner {
         // avoid iterating to the next key. In the "get" path we want
         // to return the intent associated with the key even though
         // max_keys_==0.
-        kvs_->Put(cur_raw_key_, rocksdb::Slice());
+        putLengthPrefixedSlice(cur_raw_key_);
+        putLengthPrefixedSlice(rocksdb::Slice());
         return false;
       }
       intents_->Put(cur_raw_key_, cur_value_);
@@ -415,10 +429,39 @@ template <bool reverse> class mvccScanner {
     }
   }
 
+  // putLengthPrefixedSlice writes the input value to the iterator's output
+  // slice, prefixed by the value's length encoded as a Varint32. This matches
+  // the RocksDB WriteBatch format *without* the leading 1-byte value tag.
+  void putLengthPrefixedSlice(const rocksdb::Slice& value) {
+    // Encode the value length into a buffer to determine the size of the length
+    // encoding.
+    char buf[5];
+    char* ptr = EncodeVarint32(buf, value.size());
+    int putSize = ptr - buf;
+    // expectedLen is the length of the output batch after we append the slice.
+    int expectedLen = putSize + value.size() + batchPtr_ - results_.data.data;
+    if (expectedLen > results_.data.len) {
+      // If it's bigger than the output batch's capacity, we grow the output
+      // batch big enough to fit the slice.
+      int oldLen = batchPtr_ - results_.data.data;
+      growSlice(&results_.data, expectedLen - results_.data.len);
+      batchPtr_ = results_.data.data + oldLen;
+    }
+    memcpy(batchPtr_, buf, putSize);
+    batchPtr_ += putSize;
+    memcpy(batchPtr_, value.data(), value.size());
+    batchPtr_ += value.size();
+  }
+
   bool addAndAdvance(const rocksdb::Slice& value) {
     if (value.size() > 0) {
-      kvs_->Put(cur_raw_key_, value);
-      if (kvs_->Count() > max_keys_) {
+      putLengthPrefixedSlice(cur_raw_key_);
+      putLengthPrefixedSlice(value);
+      keys_++;
+      // TODO(jordan) we can probably do this just once at the end.
+      memcpy(results_.data.data, &keys_, sizeof(keys_));
+
+      if (keys_ > max_keys_) {
         return false;
       }
     }
@@ -598,6 +641,7 @@ template <bool reverse> class mvccScanner {
   const rocksdb::Slice start_key_;
   const rocksdb::Slice end_key_;
   const int64_t max_keys_;
+  int32_t keys_;
   const DBTimestamp timestamp_;
   const rocksdb::Slice txn_id_;
   const uint32_t txn_epoch_;
@@ -605,7 +649,9 @@ template <bool reverse> class mvccScanner {
   const bool consistent_;
   const bool check_uncertainty_;
   DBScanResults results_;
-  std::unique_ptr<rocksdb::WriteBatch> kvs_;
+  // batchPtr_ points to the end of the the results we've written so far,
+  // in results_.data.data.
+  char* batchPtr_;
   std::unique_ptr<rocksdb::WriteBatch> intents_;
   std::string key_buf_;
   std::string saved_buf_;

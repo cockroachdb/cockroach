@@ -1709,7 +1709,7 @@ func buildScanResumeKey(kvData []byte, max int) ([]byte, error) {
 	if len(kvData) == 0 {
 		return nil, nil
 	}
-	count, kvData, err := rocksDBBatchDecodeHeader(kvData)
+	count, kvData, err := mvccScanBatchDecodeHeader(kvData)
 	if err != nil {
 		return nil, err
 	}
@@ -1717,12 +1717,12 @@ func buildScanResumeKey(kvData []byte, max int) ([]byte, error) {
 		return nil, nil
 	}
 	for i := 0; i < max; i++ {
-		_, _, kvData, err = rocksDBBatchDecodeValue(kvData)
+		_, _, kvData, err = mvccScanBatchDecodeValue(kvData)
 		if err != nil {
 			return nil, err
 		}
 	}
-	key, _, _, err := rocksDBBatchDecodeValue(kvData)
+	key, _, _, err := mvccScanBatchDecodeValue(kvData)
 	if err != nil {
 		return nil, err
 	}
@@ -1753,7 +1753,7 @@ func buildScanResults(
 	// slice of roachpb.KeyValue. This code would be slightly more compact using
 	// RocksDBBatchReader, but there is a measurable performance benefit to
 	// avoiding the associated allocation for small (1 row) scans.
-	count, kvData, err := rocksDBBatchDecodeHeader(kvData)
+	count, kvData, err := mvccScanBatchDecodeHeader(kvData)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1776,7 +1776,7 @@ func buildScanResults(
 	var key MVCCKey
 	var rawBytes []byte
 	for i := range kvs {
-		key, rawBytes, kvData, err = rocksDBBatchDecodeValue(kvData)
+		key, rawBytes, kvData, err = mvccScanBatchDecodeValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1787,7 +1787,7 @@ func buildScanResults(
 
 	var resumeKey roachpb.Key
 	if count > int(max) {
-		key, _, _, err = rocksDBBatchDecodeValue(kvData)
+		key, _, _, err = mvccScanBatchDecodeValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}

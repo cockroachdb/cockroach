@@ -86,6 +86,28 @@ func prettyPrintKey(cKey C.DBKey) *C.char {
 	return C.CString(mvccKey.String())
 }
 
+// growSlice expands a DBSlice by doubling it after adding the needed amount.
+// This should only be called from C code (mvcc.h) that has been invoked with
+// Go-allocated memory that's still pointed to.
+//
+// New Go memory will be allocated to perform this expansion. It's safe to
+// let go of the handle to this memory because the original DBSlice is still
+// in scope of the Go function that called C (which called this method). See
+// callers of C.MVCCScan and C.MVCCGet.
+//
+// cSlice will be modified to contain a pointer to the new Go-allocated memory
+// and its size.
+//
+//export growSlice
+func growSlice(cSlice *C.DBSlice, needed int) {
+	slice := cSliceToUnsafeGoBytes(*cSlice)
+	newSlice := make([]byte, (cap(slice)+needed)*2)
+	copy(newSlice, slice)
+	newCSlice := goToCSlice(newSlice)
+	cSlice.data = newCSlice.data
+	cSlice.len = newCSlice.len
+}
+
 const (
 	// defaultBlockSize configures the size of a black. When reading a key-value
 	// pair from a table file, RocksDB loads an entire block into memory. The
@@ -2011,9 +2033,10 @@ func (r *rocksDBIterator) MVCCGet(
 		return nil, nil, emptyKeyError()
 	}
 
+	resultSlice := goToCSlice(make([]byte, int64(200+len(key))))
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
-		goToCTxn(txn), C.bool(consistent),
+		goToCTxn(txn), C.bool(consistent), resultSlice,
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2034,11 +2057,9 @@ func (r *rocksDBIterator) MVCCGet(
 		return nil, intents, nil
 	}
 
-	// Extract the value from the batch data. This code would be slightly more
-	// compact using RocksDBBatchReader, but avoiding the allocation has a
-	// measurable impact on benchmarks.
+	// Extract the value from the batch data.
 	repr := cSliceToUnsafeGoBytes(state.data)
-	count, repr, err := rocksDBBatchDecodeHeader(repr)
+	count, repr, err := mvccScanBatchDecodeHeader(repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2048,7 +2069,7 @@ func (r *rocksDBIterator) MVCCGet(
 	if count == 0 {
 		return nil, intents, nil
 	}
-	mvccKey, rawValue, _, err := rocksDBBatchDecodeValue(repr)
+	mvccKey, rawValue, _, err := mvccScanBatchDecodeValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2074,10 +2095,18 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, nil, emptyKeyError()
 	}
 
+	if max > 10000 {
+		max = 10000
+	}
+	// Estimate how much memory we'll need.
+	// Assume that each key is the same size as the start key, and that
+	// each value is 32 bytes.
+	resultSlice := make([]byte, max*int64(32+len(start)))
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
 		goToCTimestamp(timestamp), C.int64_t(max),
 		goToCTxn(txn), C.bool(consistent), C.bool(reverse),
+		goToCSlice(resultSlice),
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2086,7 +2115,10 @@ func (r *rocksDBIterator) MVCCScan(
 	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
 		return nil, nil, err
 	}
-	return cSliceToGoBytes(state.data), cSliceToGoBytes(state.intents), nil
+
+	// state.data now points to our Go-allocated resultSlice, so it's safe to
+	// use that memory directly with cSliceToUnsafeGoBytes.
+	return cSliceToUnsafeGoBytes(state.data), cSliceToGoBytes(state.intents), nil
 }
 
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {
