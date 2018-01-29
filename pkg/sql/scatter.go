@@ -107,8 +107,12 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		}
 		// Tolerate reversing FROM and TO; this can be useful for descending
 		// indexes.
-		if span.Key.Compare(span.EndKey) > 0 {
+		if cmp := span.Key.Compare(span.EndKey); cmp > 0 {
 			span.Key, span.EndKey = span.EndKey, span.Key
+		} else if cmp == 0 {
+			// Key==EndKey is invalid, so special-case when the user's FROM and
+			// TO are the same tuple.
+			span.EndKey = span.EndKey.Next()
 		}
 	}
 
