@@ -74,7 +74,7 @@ type copyMachine struct {
 	parsingEvalCtx *tree.EvalContext
 	// collationEnv is needed only when creating collated strings. Using a common
 	// environment allows for some expensive work to only be done once.
-	collationEnv *tree.CollationEnvironment
+	collationEnv tree.CollationEnvironment
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -91,7 +91,6 @@ func newCopyMachine(
 		// The planner will be prepared before use.
 		p:              planner{},
 		parsingEvalCtx: &evalCtx.EvalContext,
-		collationEnv:   &tree.CollationEnvironment{},
 	}
 
 	cleanup := c.preparePlanner(ctx)
@@ -355,7 +354,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 				return err
 			}
 		}
-		d, err := parser.ParseStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx, c.collationEnv)
+		d, err := parser.ParseStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx, &c.collationEnv)
 		if err != nil {
 			return err
 		}
