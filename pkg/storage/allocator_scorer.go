@@ -108,6 +108,7 @@ func (bd balanceDimensions) compactString(options scorerOptions) string {
 type candidate struct {
 	store          roachpb.StoreDescriptor
 	valid          bool
+	fullDisk       bool
 	diversityScore float64
 	preferredScore int
 	convergesScore int
@@ -121,10 +122,11 @@ func (c candidate) constraintScore() float64 {
 }
 
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, constraint:%.2f, converges:%d, balance:%s, rangeCount:%d, "+
-		"logicalBytes:%s, writesPerSecond:%.2f",
-		c.store.StoreID, c.valid, c.constraintScore(), c.convergesScore, c.balanceScore, c.rangeCount,
-		humanizeutil.IBytes(c.store.Capacity.LogicalBytes), c.store.Capacity.WritesPerSecond)
+	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, constraint:%.2f, converges:%d, balance:%s, "+
+		"rangeCount:%d, logicalBytes:%s, writesPerSecond:%.2f",
+		c.store.StoreID, c.valid, c.fullDisk, c.constraintScore(), c.convergesScore, c.balanceScore,
+		c.rangeCount, humanizeutil.IBytes(c.store.Capacity.LogicalBytes),
+		c.store.Capacity.WritesPerSecond)
 	if c.details != "" {
 		return fmt.Sprintf("%s, details:(%s)", str, c.details)
 	}
@@ -136,6 +138,9 @@ func (c candidate) compactString(options scorerOptions) string {
 	fmt.Fprintf(&buf, "s%d", c.store.StoreID)
 	if !c.valid {
 		fmt.Fprintf(&buf, ", valid:%t", c.valid)
+	}
+	if c.fullDisk {
+		fmt.Fprintf(&buf, ", fullDisk:%t", c.fullDisk)
 	}
 	if c.diversityScore != 0 {
 		fmt.Fprintf(&buf, ", diversity:%.2f", c.diversityScore)
@@ -163,6 +168,12 @@ func (c candidate) less(o candidate) bool {
 	if !c.valid {
 		return true
 	}
+	if o.fullDisk {
+		return false
+	}
+	if c.fullDisk {
+		return true
+	}
 	if c.constraintScore() != o.constraintScore() {
 		return c.constraintScore() < o.constraintScore()
 	}
@@ -182,6 +193,12 @@ func (c candidate) worthRebalancingTo(o candidate, options scorerOptions) bool {
 		return false
 	}
 	if !c.valid {
+		return true
+	}
+	if o.fullDisk {
+		return false
+	}
+	if c.fullDisk {
 		return true
 	}
 	if c.constraintScore() != o.constraintScore() {
@@ -260,6 +277,7 @@ func (c byScoreAndID) Less(i, j int) bool {
 		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore.totalScore() == c[j].balanceScore.totalScore() &&
 		c[i].rangeCount == c[j].rangeCount &&
+		c[i].fullDisk == c[j].fullDisk &&
 		c[i].valid == c[j].valid {
 		return c[i].store.StoreID < c[j].store.StoreID
 	}
@@ -267,11 +285,11 @@ func (c byScoreAndID) Less(i, j int) bool {
 }
 func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
-// onlyValid returns all the elements in a sorted (by score reversed) candidate
-// list that are valid.
-func (cl candidateList) onlyValid() candidateList {
+// onlyValidAndNotFull returns all the elements in a sorted (by score reversed)
+// candidate list that are valid and not nearly full.
+func (cl candidateList) onlyValidAndNotFull() candidateList {
 	for i := len(cl) - 1; i >= 0; i-- {
-		if cl[i].valid {
+		if cl[i].valid && !cl[i].fullDisk {
 			return cl[:i+1]
 		}
 	}
@@ -281,7 +299,7 @@ func (cl candidateList) onlyValid() candidateList {
 // best returns all the elements in a sorted (by score reversed) candidate list
 // that share the highest constraint score and are valid.
 func (cl candidateList) best() candidateList {
-	cl = cl.onlyValid()
+	cl = cl.onlyValidAndNotFull()
 	if len(cl) <= 1 {
 		return cl
 	}
@@ -305,6 +323,14 @@ func (cl candidateList) worst() candidateList {
 	if !cl[len(cl)-1].valid {
 		for i := len(cl) - 2; i >= 0; i-- {
 			if cl[i].valid {
+				return cl[i+1:]
+			}
+		}
+	}
+	// Are there candidates with a nearly full disk? If so, pick those.
+	if cl[len(cl)-1].fullDisk {
+		for i := len(cl) - 2; i >= 0; i-- {
+			if !cl[i].fullDisk {
 				return cl[i+1:]
 			}
 		}
@@ -449,14 +475,6 @@ func removeCandidates(
 			})
 			continue
 		}
-		if !maxCapacityCheck(s) {
-			candidates = append(candidates, candidate{
-				store:   s,
-				valid:   false,
-				details: "max capacity check fail",
-			})
-			continue
-		}
 		diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 		var convergesScore int
@@ -471,6 +489,7 @@ func removeCandidates(
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          true,
+			fullDisk:       !maxCapacityCheck(s),
 			diversityScore: diversityScore,
 			preferredScore: preferredMatched,
 			convergesScore: convergesScore,
@@ -562,14 +581,6 @@ func rebalanceCandidates(
 				})
 				continue
 			}
-			if !maxCapacityOK {
-				existingCandidates = append(existingCandidates, candidate{
-					store:   s,
-					valid:   false,
-					details: "max capacity check fail",
-				})
-				continue
-			}
 			diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
 			balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 			var convergesScore int
@@ -583,6 +594,7 @@ func rebalanceCandidates(
 			existingCandidates = append(existingCandidates, candidate{
 				store:          s,
 				valid:          true,
+				fullDisk:       !maxCapacityOK,
 				diversityScore: diversityScore,
 				preferredScore: storeInfo.matched,
 				convergesScore: convergesScore,
@@ -611,6 +623,7 @@ func rebalanceCandidates(
 			candidates = append(candidates, candidate{
 				store:          s,
 				valid:          true,
+				fullDisk:       !maxCapacityOK,
 				diversityScore: diversityScore,
 				preferredScore: storeInfo.matched,
 				convergesScore: convergesScore,
