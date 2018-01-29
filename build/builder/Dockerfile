@@ -150,14 +150,18 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
  && echo 'deb https://deb.nodesource.com/node_6.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list \
  && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
  && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list \
+ && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
+ && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
  && apt-get update
 
 # ccache - speed up C and C++ compilation
 # nodejs - ui
 # openjdk-8-jre - railroad diagram generation
+# google-cloud-sdk - roachprod acceptance tests
 # yarn - ui
 RUN apt-get install -y --no-install-recommends \
     ccache \
+    google-cloud-sdk \
     nodejs \
     openjdk-8-jre \
     yarn
