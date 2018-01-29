@@ -424,7 +424,6 @@ func NewSession(
 	s.dataMutator.SetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
-	s.Tracing.session = s
 	s.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
 	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 
@@ -1156,7 +1155,7 @@ func (ts *txnState) finishSQLTxn(s *Session) {
 
 	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
 	ts.sp.Finish()
-	if err := s.Tracing.onFinishSQLTxn(ts.sp); err != nil {
+	if err := s.Tracing.onFinishSQLTxn(); err != nil {
 		log.Errorf(s.context, "error finishing trace: %s", err)
 	}
 	// TODO(andrei): we should find a cheap way to get a trace's duration without
@@ -1472,7 +1471,6 @@ func (s *Session) maybeRecover(action, stmts string) {
 // SessionTracing and its interactions with the Session are thread-safe; tracing
 // can be turned on at any time.
 type SessionTracing struct {
-	session *Session
 	// enabled is set at times when "session enabled" is active - i.e. when
 	// transactions are being recorded.
 	enabled bool
@@ -1493,6 +1491,10 @@ type SessionTracing struct {
 	// one will contain the partial-recording of the transaction in which SET
 	// TRACE OFF has been run.
 	txnRecordings [][]tracing.RecordedSpan
+
+	// curSp is the currently recording span - the span corresponding to the
+	// current SQL txn.
+	curSp opentracing.Span
 }
 
 // StartTracing starts "session tracing". After calling this, all SQL
@@ -1506,11 +1508,13 @@ type SessionTracing struct {
 // kvTracingEnabled: If set, the traces will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the messages
 //   are per-row.
-func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingEnabled bool) error {
+func (st *SessionTracing) StartTracing(
+	ctx context.Context, recType tracing.RecordingType, kvTracingEnabled bool,
+) error {
 	if st.enabled {
 		return errors.Errorf("already tracing")
 	}
-	sp := opentracing.SpanFromContext(st.session.Ctx())
+	sp := opentracing.SpanFromContext(ctx)
 	if sp == nil {
 		return errors.Errorf("no span for SessionTracing")
 	}
@@ -1522,6 +1526,7 @@ func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingE
 	st.enabled = true
 	st.kvTracingEnabled = kvTracingEnabled
 	st.recordingType = recType
+	st.curSp = sp
 	return nil
 }
 
@@ -1534,12 +1539,12 @@ func (st *SessionTracing) StopTracing() error {
 	}
 	st.enabled = false
 	// Stop recording the current transaction.
-	sp := opentracing.SpanFromContext(st.session.Ctx())
-	if sp == nil {
+	if st.curSp == nil {
 		return errors.Errorf("no span for SessionTracing")
 	}
-	spans := tracing.GetRecording(sp)
-	tracing.StopRecording(sp)
+	spans := tracing.GetRecording(st.curSp)
+	tracing.StopRecording(st.curSp)
+	st.curSp = nil
 	if spans == nil {
 		return errors.Errorf("nil recording")
 	}
@@ -1552,17 +1557,15 @@ func (st *SessionTracing) StopTracing() error {
 // onFinishSQLTxn is called when a SQL transaction is about to be finished (i.e.
 // just before the span corresponding to the txn is Finish()ed). It saves that
 // span's recording in the SessionTracing.
-//
-// sp is the transaction's span.
-func (st *SessionTracing) onFinishSQLTxn(sp opentracing.Span) error {
+func (st *SessionTracing) onFinishSQLTxn() error {
 	if !st.Enabled() {
 		return nil
 	}
 
-	if sp == nil {
+	if st.curSp == nil {
 		return errors.Errorf("no span for SessionTracing")
 	}
-	spans := tracing.GetRecording(sp)
+	spans := tracing.GetRecording(st.curSp)
 	if spans == nil {
 		return errors.Errorf("nil recording")
 	}
@@ -1586,6 +1589,7 @@ func (st *SessionTracing) onNewSQLTxn(sp opentracing.Span) {
 		panic("no span for SessionTracing")
 	}
 	tracing.StartRecording(sp, st.recordingType)
+	st.curSp = sp
 }
 
 // RecordingType returns which type of tracing is currently being done.
@@ -1923,9 +1927,9 @@ func (m *sessionDataMutator) StopSessionTracing() error {
 }
 
 func (m *sessionDataMutator) StartSessionTracing(
-	recType tracing.RecordingType, kvTracingEnabled bool,
+	ctx context.Context, recType tracing.RecordingType, kvTracingEnabled bool,
 ) error {
-	return m.sessionTracing.StartTracing(recType, kvTracingEnabled)
+	return m.sessionTracing.StartTracing(ctx, recType, kvTracingEnabled)
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented
