@@ -86,6 +86,10 @@ func prettyPrintKey(cKey C.DBKey) *C.char {
 	return C.CString(mvccKey.String())
 }
 
+type dataRef struct {
+	data []byte
+}
+
 // growSlice expands a DBSlice by doubling it after adding the needed amount.
 // This should only be called from C code (mvcc.h) that has been invoked with
 // Go-allocated memory that's still pointed to.
@@ -99,13 +103,13 @@ func prettyPrintKey(cKey C.DBKey) *C.char {
 // and its size.
 //
 //export growSlice
-func growSlice(cSlice *C.DBSlice, needed int) {
-	slice := cSliceToUnsafeGoBytes(*cSlice)
-	newSlice := make([]byte, (cap(slice)+needed)*2)
-	copy(newSlice, slice)
-	newCSlice := goToCSlice(newSlice)
-	cSlice.data = newCSlice.data
-	cSlice.len = newCSlice.len
+func growSlice(ref unsafe.Pointer, cSlice *C.DBSlice, needed int) {
+	data := cSliceToUnsafeGoBytes(*cSlice)
+	newData := make([]byte, (cap(data)+needed)*2)
+	copy(newData, data)
+	*cSlice = goToCSlice(newData)
+	dref := (*dataRef)(ref)
+	dref.data = newData
 }
 
 const (
@@ -2033,10 +2037,13 @@ func (r *rocksDBIterator) MVCCGet(
 		return nil, nil, emptyKeyError()
 	}
 
-	resultSlice := goToCSlice(make([]byte, int64(200+len(key))))
+	result := &dataRef{
+		data: make([]byte, 1024),
+	}
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
-		goToCTxn(txn), C.bool(consistent), resultSlice,
+		goToCTxn(txn), C.bool(consistent), goToCSlice(result.data),
+		C.uintptr_t(uintptr(unsafe.Pointer(result))),
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2095,18 +2102,14 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, nil, emptyKeyError()
 	}
 
-	if max > 10000 {
-		max = 10000
+	result := &dataRef{
+		data: make([]byte, 1024),
 	}
-	// Estimate how much memory we'll need.
-	// Assume that each key is the same size as the start key, and that
-	// each value is 32 bytes.
-	resultSlice := make([]byte, max*int64(32+len(start)))
 	state := C.MVCCScan(
 		r.iter, goToCSlice(start), goToCSlice(end),
 		goToCTimestamp(timestamp), C.int64_t(max),
 		goToCTxn(txn), C.bool(consistent), C.bool(reverse),
-		goToCSlice(resultSlice),
+		goToCSlice(result.data), C.uintptr_t(uintptr(unsafe.Pointer(result))),
 	)
 
 	if err := statusToError(state.status); err != nil {
@@ -2116,9 +2119,13 @@ func (r *rocksDBIterator) MVCCScan(
 		return nil, nil, err
 	}
 
-	// state.data now points to our Go-allocated resultSlice, so it's safe to
-	// use that memory directly with cSliceToUnsafeGoBytes.
-	return cSliceToUnsafeGoBytes(state.data), cSliceToGoBytes(state.intents), nil
+	// state.data now points to our Go-allocated result, so it's safe to use that
+	// memory directly with cSliceToUnsafeGoBytes.
+	kvs = cSliceToUnsafeGoBytes(state.data)
+	// Need to ensure that "result" is not GC'd until we've created the result
+	// slice.
+	runtime.KeepAlive(result)
+	return kvs, cSliceToGoBytes(state.intents), nil
 }
 
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {

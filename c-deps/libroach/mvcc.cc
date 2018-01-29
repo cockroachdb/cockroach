@@ -260,7 +260,7 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
 }
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool consistent, DBSlice results) {
+                      bool consistent, DBSlice results, uintptr_t data_ref) {
   // Get is implemented as a scan where we retrieve a single key. Note
   // that the semantics of max_keys is that we retrieve one more key
   // than is specified in order to maintain the existing semantics of
@@ -270,18 +270,18 @@ DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTx
   // don't retrieve a key different than the start key. This is a bit
   // of a hack.
   const DBSlice end = {0, 0};
-  mvccForwardScanner scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent, results);
+  mvccForwardScanner scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent, results, data_ref);
   return scanner.get();
 }
 
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool consistent, bool reverse,
-                       DBSlice results) {
+                       DBSlice results, uintptr_t data_ref) {
   if (reverse) {
-    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, consistent, results);
+    mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, consistent, results, data_ref);
     return scanner.scan();
   } else {
-    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, consistent, results);
+    mvccForwardScanner scanner(iter, start, end, timestamp, max_keys, txn, consistent, results, data_ref);
     return scanner.scan();
   }
 }

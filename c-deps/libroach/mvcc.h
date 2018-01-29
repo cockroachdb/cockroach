@@ -28,8 +28,9 @@ static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
   fprintf(stderr, "%s symbol missing; expected to be supplied by Go\n", name);
   abort();
 }
-void __attribute__((weak)) growSlice(DBSlice*, int) { die_missing_symbol(__func__); }
-}
+void __attribute__((weak)) growSlice(void*, DBSlice*, int) { die_missing_symbol(__func__); }
+}  // extern "C"
+
 // kMaxItersBeforeSeek is the number of calls to iter->{Next,Prev}()
 // to perform when looking for the next/prev key or a particular
 // version before calling iter->Seek(). Note that mvccScanner makes
@@ -60,7 +61,7 @@ static const int kHeaderSize = 4;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool consistent, DBSlice results)
+              DBTxn txn, bool consistent, DBSlice results, uintptr_t data_ref)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
@@ -73,6 +74,7 @@ template <bool reverse> class mvccScanner {
         txn_max_timestamp_(txn.max_timestamp),
         consistent_(consistent),
         check_uncertainty_(timestamp < txn.max_timestamp),
+        data_ref_((void*)data_ref),
         intents_(new rocksdb::WriteBatch),
         peeked_(false),
         is_get_(false),
@@ -444,7 +446,7 @@ template <bool reverse> class mvccScanner {
       // If it's bigger than the output batch's capacity, we grow the output
       // batch big enough to fit the slice.
       int oldLen = batchPtr_ - results_.data.data;
-      growSlice(&results_.data, expectedLen - results_.data.len);
+      growSlice(data_ref_, &results_.data, expectedLen - results_.data.len);
       batchPtr_ = results_.data.data + oldLen;
     }
     memcpy(batchPtr_, buf, putSize);
@@ -649,6 +651,7 @@ template <bool reverse> class mvccScanner {
   const bool consistent_;
   const bool check_uncertainty_;
   DBScanResults results_;
+  void* data_ref_;
   // batchPtr_ points to the end of the the results we've written so far,
   // in results_.data.data.
   char* batchPtr_;
