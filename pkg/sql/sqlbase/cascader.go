@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -566,7 +567,7 @@ func (c *cascader) deleteRows(
 	deletedRowsStartIndex := deletedRows.Len()
 
 	// Delete all the rows in a new batch.
-	deleteBatch := c.txn.NewBatch()
+	batch := c.txn.NewBatch()
 
 	for _, resp := range pkResp.Responses {
 		fetcher := spanKVFetcher{
@@ -587,15 +588,15 @@ func (c *cascader) deleteRows(
 			}
 
 			// Delete the row.
-			if err := rowDeleter.DeleteRow(ctx, deleteBatch, rowToDelete, SkipFKs, traceKV); err != nil {
+			if err := rowDeleter.DeleteRow(ctx, batch, rowToDelete, SkipFKs, traceKV); err != nil {
 				return nil, nil, 0, err
 			}
 		}
 	}
 
 	// Run the batch.
-	if err := c.txn.Run(ctx, deleteBatch); err != nil {
-		return nil, nil, 0, err
+	if err := c.txn.Run(ctx, batch); err != nil {
+		return nil, nil, 0, ConvertBatchError(ctx, referencingTable, batch)
 	}
 
 	return deletedRows, rowDeleter.FetchColIDtoRowIndex, deletedRowsStartIndex, nil
@@ -653,10 +654,35 @@ func (c *cascader) updateRows(
 	// Populate a map of all columns that need to be set if the action is not
 	// cascade.
 	var referencingIndexValuesByColIDs map[ColumnID]tree.Datum
-	if action == ForeignKeyReference_SET_NULL {
+	switch action {
+	case ForeignKeyReference_SET_NULL:
 		referencingIndexValuesByColIDs = make(map[ColumnID]tree.Datum)
 		for _, columnID := range referencingIndex.ColumnIDs {
 			referencingIndexValuesByColIDs[columnID] = tree.DNull
+		}
+	case ForeignKeyReference_SET_DEFAULT:
+		referencingIndexValuesByColIDs = make(map[ColumnID]tree.Datum)
+		for _, columnID := range referencingIndex.ColumnIDs {
+			column, err := referencingTable.FindColumnByID(columnID)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+			parsedExpr, err := parser.ParseExpr(*column.DefaultExpr)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+			typedExpr, err := tree.TypeCheck(parsedExpr, nil, column.Type.ToDatumType())
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+			normalizedExpr, err := c.evalCtx.NormalizeExpr(typedExpr)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+			referencingIndexValuesByColIDs[columnID], err = normalizedExpr.Eval(c.evalCtx)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
 		}
 	}
 
@@ -793,9 +819,10 @@ func (c *cascader) updateRows(
 							colID,
 						)
 					}
-				case ForeignKeyReference_SET_NULL:
-					// Create the updateRow based on the original values and nulls for
-					// all values in the index.
+				case ForeignKeyReference_SET_NULL, ForeignKeyReference_SET_DEFAULT:
+					// Create the updateRow based on the original values and for all
+					// values in the index, either nulls (for SET NULL), or default (for
+					// SET DEFAULT).
 					for colID, rowIndex := range rowUpdater.updateColIDtoRowIndex {
 						if value, exists := referencingIndexValuesByColIDs[colID]; exists {
 							updateRow[rowIndex] = value
@@ -838,7 +865,7 @@ func (c *cascader) updateRows(
 		}
 	}
 	if err := c.txn.Run(ctx, batch); err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, 0, ConvertBatchError(ctx, referencingTable, batch)
 	}
 
 	return originalRows, updatedRows, rowUpdater.FetchColIDtoRowIndex, startIndex, nil
@@ -988,14 +1015,14 @@ func (c *cascader) cascadeAll(
 								return err
 							}
 						}
-					case ForeignKeyReference_SET_NULL:
+					case ForeignKeyReference_SET_NULL, ForeignKeyReference_SET_DEFAULT:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
 							&referencedIndex,
 							referencingTable.Table,
 							referencingIndex,
 							elem,
-							ForeignKeyReference_SET_NULL,
+							referencingIndex.ForeignKey.OnDelete,
 							traceKV,
 						)
 						if err != nil {
@@ -1018,7 +1045,7 @@ func (c *cascader) cascadeAll(
 				} else {
 					// Updating a row.
 					switch referencingIndex.ForeignKey.OnUpdate {
-					case ForeignKeyReference_CASCADE, ForeignKeyReference_SET_NULL:
+					case ForeignKeyReference_CASCADE, ForeignKeyReference_SET_NULL, ForeignKeyReference_SET_DEFAULT:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
 							&referencedIndex,
