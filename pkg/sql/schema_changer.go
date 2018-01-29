@@ -1142,7 +1142,7 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp) extendedEvalContext {
 	dummyLocation := time.UTC
 	evalCtx := extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			SessionData: sessiondata.SessionData{
+			SessionData: &sessiondata.SessionData{
 				SearchPath: sqlbase.DefaultSearchPath,
 				Location:   dummyLocation,
 				// The database is not supposed to be needed in schema changes, as there
