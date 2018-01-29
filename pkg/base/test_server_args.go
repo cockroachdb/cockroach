@@ -73,15 +73,16 @@ type TestServerArgs struct {
 	ExternalIODir string
 
 	// Fields copied to the server.Config.
-	Insecure                 bool
-	RetryOptions             retry.Options
-	SocketFile               string
-	ScanInterval             time.Duration
-	ScanMaxIdleTime          time.Duration
-	SSLCertsDir              string
-	TimeSeriesQueryWorkerMax int
-	SQLMemoryPoolSize        int64
-	ListeningURLFile         string
+	Insecure                    bool
+	RetryOptions                retry.Options
+	SocketFile                  string
+	ScanInterval                time.Duration
+	ScanMaxIdleTime             time.Duration
+	SSLCertsDir                 string
+	TimeSeriesQueryWorkerMax    int
+	TimeSeriesQueryMemoryBudget int64
+	SQLMemoryPoolSize           int64
+	ListeningURLFile            string
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running

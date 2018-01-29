@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -36,9 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/gogo/protobuf/proto"
 )
 
 // testModel is a model-based testing structure used to verify that time
@@ -60,27 +60,39 @@ type testModel struct {
 	modelData   map[string]roachpb.Value
 	seenSources map[string]struct{}
 	*localtestcluster.LocalTestCluster
-	DB         *DB
-	memMonitor *mon.BytesMonitor
+	DB                *DB
+	workerMemMonitor  *mon.BytesMonitor
+	resultMemMonitor  *mon.BytesMonitor
+	queryMemoryBudget int64
 }
 
 // newTestModel creates a new testModel instance. The Start() method must
 // be called before using it.
 func newTestModel(t *testing.T) testModel {
-	monitor := mon.MakeUnlimitedMonitor(
+	workerMonitor := mon.MakeUnlimitedMonitor(
 		context.Background(),
-		"timeseries-testmodel",
+		"timeseries-test-worker",
 		mon.MemoryResource,
 		nil,
 		nil,
-		queryMemoryMax/10,
+		math.MaxInt64,
+	)
+	resultMonitor := mon.MakeUnlimitedMonitor(
+		context.Background(),
+		"timeseries-test-result",
+		mon.MemoryResource,
+		nil,
+		nil,
+		math.MaxInt64,
 	)
 	return testModel{
-		t:                t,
-		modelData:        make(map[string]roachpb.Value),
-		seenSources:      make(map[string]struct{}),
-		LocalTestCluster: &localtestcluster.LocalTestCluster{},
-		memMonitor:       &monitor,
+		t:                 t,
+		modelData:         make(map[string]roachpb.Value),
+		seenSources:       make(map[string]struct{}),
+		LocalTestCluster:  &localtestcluster.LocalTestCluster{},
+		workerMemMonitor:  &workerMonitor,
+		resultMemMonitor:  &resultMonitor,
+		queryMemoryBudget: math.MaxInt64,
 	}
 }
 
