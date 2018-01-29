@@ -659,9 +659,9 @@ func (tm *testModel) assertQuery(
 		Sources:          sources,
 	}
 
-	account := tm.memMonitor.MakeBoundAccount()
+	account := tm.resultMemMonitor.MakeBoundAccount()
 	defer account.Close(context.TODO())
-	actualDatapoints, actualSources, err := tm.DB.Query(
+	actualDatapoints, actualSources, err := tm.DB.QueryMemoryConstrained(
 		context.TODO(),
 		q,
 		r,
@@ -670,6 +670,9 @@ func (tm *testModel) assertQuery(
 		end,
 		interpolationLimit,
 		&account,
+		tm.workerMemMonitor,
+		tm.queryMemoryBudget,
+		int64(len(tm.seenSources)),
 	)
 
 	if err != nil {
@@ -979,12 +982,12 @@ func TestQueryDownsampling(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
-	account := tm.memMonitor.MakeBoundAccount()
+	account := tm.workerMemMonitor.MakeBoundAccount()
 	defer account.Close(context.TODO())
 
 	// Query with sampleDuration that is too small, expect error.
 	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, 0, &account,
+		context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, 0, &account, tm.workerMemMonitor,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
@@ -1004,6 +1007,7 @@ func TestQueryDownsampling(t *testing.T) {
 		10000,
 		0,
 		&account,
+		tm.workerMemMonitor,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")
@@ -1140,14 +1144,241 @@ func TestInterpolationLimit(t *testing.T) {
 	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 10, 9, 2)
 }
 
-func TestQueryMemoryAccounting(t *testing.T) {
+func TestGetMaxTimespan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []struct {
+		r                   Resolution
+		memoryBudget        int64
+		estimatedSources    int64
+		interpolationLimit  int64
+		expectedTimespan    int64
+		expectedErrorString string
+	}{
+		// Simplest case: One series, room for exactly one hour of query (need two
+		// slabs of memory budget, as queried time span may stagger across two
+		// slabs)
+		{
+			Resolution10s,
+			2 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
+			1,
+			0,
+			(1 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// Not enough room for to make query.
+		{
+			Resolution10s,
+			sizeOfTimeSeriesData + sizeOfTimeSeriesData*360,
+			1,
+			0,
+			0,
+			"insufficient",
+		},
+		// Not enough room because of multiple sources.
+		{
+			Resolution10s,
+			2 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
+			2,
+			0,
+			0,
+			"insufficient",
+		},
+		// 6 sources, room for 1 hour.
+		{
+			Resolution10s,
+			12 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
+			6,
+			0,
+			(1 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// 6 sources, room for 2 hours.
+		{
+			Resolution10s,
+			18 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
+			6,
+			0,
+			(2 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// Not enough room due to interpolation buffer.
+		{
+			Resolution10s,
+			12 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
+			6,
+			1,
+			0,
+			"insufficient",
+		},
+		// Sufficient room even with interpolation buffer.
+		{
+			Resolution10s,
+			18 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
+			6,
+			1,
+			(1 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// Insufficient room for interpolation buffer (due to straddling)
+		{
+			Resolution10s,
+			18 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
+			6,
+			int64(float64(Resolution10s.SlabDuration()) * 0.75),
+			0,
+			"insufficient",
+		},
+		// Sufficient room even with interpolation buffer.
+		{
+			Resolution10s,
+			24 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
+			6,
+			int64(float64(Resolution10s.SlabDuration()) * 0.75),
+			(1 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// 1ns test resolution.
+		{
+			resolution1ns,
+			3 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*10),
+			1,
+			1,
+			10,
+			"",
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			actual, err := getMaxTimespan(
+				tc.r, tc.memoryBudget, tc.estimatedSources, tc.interpolationLimit,
+			)
+			if !testutils.IsError(err, tc.expectedErrorString) {
+				t.Fatalf("got error %s, wanted error matching %s", err, tc.expectedErrorString)
+			}
+			if tc.expectedErrorString == "" {
+				return
+			}
+			if a, e := actual, tc.expectedTimespan; a != e {
+				t.Fatalf("got max timespan %d, wanted %d", a, e)
+			}
+		})
+	}
+}
+
+func TestQueryWorkerMemoryConstraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tm := newTestModel(t)
+
+	// Swap model's memory monitor in order to adjust allocation size.
+	unlimitedMon := tm.workerMemMonitor
+	adjustedMon := mon.MakeMonitor(
+		"timeseries-test-worker-adjusted",
+		mon.MemoryResource,
+		nil,
+		nil,
+		1,
+		math.MaxInt64,
+	)
+	tm.workerMemMonitor = &adjustedMon
+	tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
+	defer tm.workerMemMonitor.Stop(context.TODO())
+
+	tm.Start()
+	defer tm.Stop()
+
+	generateData := func(dps int64) []tspb.TimeSeriesDatapoint {
+		result := make([]tspb.TimeSeriesDatapoint, 0, dps)
+		var i int64
+		for i = 0; i < dps; i++ {
+			result = append(result, datapoint(i, float64(100*i)))
+		}
+		return result
+	}
+
+	// Store data for a large metric across many keys, so we can test across
+	// many different memory maximums.
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
+		{
+			Name:       "test.metric",
+			Source:     "source1",
+			Datapoints: generateData(120),
+		},
+		{
+			Name:       "test.metric",
+			Source:     "source2",
+			Datapoints: generateData(120),
+		},
+		{
+			Name:       "test.metric",
+			Source:     "source3",
+			Datapoints: generateData(120),
+		},
+	})
+	tm.assertKeyCount(36)
+	tm.assertModelCorrect()
+
+	// Track the total maximum memory used for a query with no budget.
+	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 11, 109, 10, 99, 3)
+	memoryUsed := tm.workerMemMonitor.MaximumBytes()
+
+	for _, limit := range []int64{
+		memoryUsed,
+		memoryUsed / 2,
+		memoryUsed / 3,
+	} {
+		// Limit memory in use by model. Reset memory monitor to get new maximum.
+		tm.workerMemMonitor.Stop(context.TODO())
+		tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
+		if tm.workerMemMonitor.MaximumBytes() != 0 {
+			t.Fatalf("maximum bytes was %d, wanted zero", tm.workerMemMonitor.MaximumBytes())
+		}
+
+		tm.queryMemoryBudget = limit
+
+		// Expected maximum usage may slightly exceed the budget due to the size of
+		// dataSpan structures which are not accounted for in getMaxTimespan.
+		expectedMaxUsage := limit + 3*(int64(len("source1"))+sizeOfDataSpan)
+		tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 11, 109, 10, 99, 3)
+		if a, e := tm.workerMemMonitor.MaximumBytes(), expectedMaxUsage; a > e {
+			t.Fatalf("memory usage for query was %d, exceeded set maximum limit %d", a, e)
+		}
+
+		// As an additional check, ensure that maximum bytes used was within 5% of memory budget;
+		// we want to use as much memory as we can to ensure the fastest possible queries.
+		if a, e := float64(tm.workerMemMonitor.MaximumBytes()), float64(tm.queryMemoryBudget)*0.95; a < e {
+			t.Fatalf("memory usage for query was %f, wanted at least %f", a, e)
+		}
+	}
+
+	// Verify insufficient memory error bubbles up.
+	queryAcc := tm.workerMemMonitor.MakeBoundAccount()
+	defer queryAcc.Close(context.TODO())
+	_, _, err := tm.DB.QueryMemoryConstrained(
+		context.TODO(),
+		tspb.Query{Name: "test.metric"},
+		resolution1ns,
+		1,
+		0,
+		10000,
+		5,
+		&queryAcc,
+		tm.workerMemMonitor,
+		1000,
+		3,
+	)
+	if errorStr := "insufficient"; !testutils.IsError(err, errorStr) {
+		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
+	}
+}
+
+func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tm := newTestModel(t)
 
 	memoryBudget := int64(100 * 1024)
 
 	// Swap model's memory monitor to install a limit.
-	unlimitedMon := tm.memMonitor
+	unlimitedMon := tm.workerMemMonitor
 	limitedMon := mon.MakeMonitorWithLimit(
 		"timeseries-test-limited",
 		mon.MemoryResource,
@@ -1157,9 +1388,9 @@ func TestQueryMemoryAccounting(t *testing.T) {
 		100,
 		100,
 	)
-	tm.memMonitor = &limitedMon
-	tm.memMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
-	defer tm.memMonitor.Stop(context.TODO())
+	tm.workerMemMonitor = &limitedMon
+	tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
+	defer tm.workerMemMonitor.Stop(context.TODO())
 
 	tm.Start()
 	defer tm.Stop()
@@ -1193,7 +1424,7 @@ func TestQueryMemoryAccounting(t *testing.T) {
 	queryAcc := limitedMon.MakeBoundAccount()
 	defer queryAcc.Close(context.TODO())
 	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, 0, &queryAcc,
+		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, 0, &queryAcc, tm.workerMemMonitor,
 	)
 	if errorStr := "memory budget exceeded"; !testutils.IsError(err, errorStr) {
 		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
@@ -1204,8 +1435,8 @@ func TestQueryMemoryAccounting(t *testing.T) {
 	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 0, 7, 1)
 
 	// Start/Stop limited monitor to reset maximum allocation.
-	tm.memMonitor.Stop(context.TODO())
-	tm.memMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
+	tm.workerMemMonitor.Stop(context.TODO())
+	tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
 
 	var (
 		memStatsBefore runtime.MemStats
@@ -1214,7 +1445,7 @@ func TestQueryMemoryAccounting(t *testing.T) {
 	runtime.ReadMemStats(&memStatsBefore)
 
 	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, 0, &queryAcc,
+		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, 0, &queryAcc, tm.workerMemMonitor,
 	)
 	if err != nil {
 		t.Fatalf("expected no error from query, got %v", err)
