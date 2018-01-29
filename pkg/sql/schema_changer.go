@@ -356,6 +356,9 @@ func (sc *SchemaChanger) maybeAddDropRename(
 // Execute the entire schema change in steps.
 // inSession is set to false when this is called from the asynchronous
 // schema change execution path.
+//
+// If the txn that queued the schema changer did not commit, this will be a
+// no-op, as we'll fail to find the job for our mutation in the jobs registry.
 func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx parser.EvalContext,
 ) error {
