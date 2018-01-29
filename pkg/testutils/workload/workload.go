@@ -24,7 +24,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -97,6 +99,13 @@ type Table struct {
 	// row of the table's initial data given its index. They are returned as
 	// strings and must be pre-escaped for use directly in SQL/CSVs.
 	InitialRowFn func(int) []string
+	// SplitCount is the initial number of splits that will be present in the
+	// table after setup is completed.
+	SplitCount int
+	// SplitFn is a function to deterministically compute the datums in a tuple
+	// of the table's initial splits given its index. They are returned as
+	// strings and must be pre-escaped for use directly in SQL/CSVs.
+	SplitFn func(int) []string
 }
 
 // Operation represents some SQL query workload performable on a database
@@ -206,4 +215,101 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 		}
 	}
 	return size, nil
+}
+
+// Split creates the range splits defined by the given table.
+func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) error {
+	if table.SplitCount <= 0 {
+		return nil
+	}
+	splitPoints := make([][]string, table.SplitCount)
+	for splitIdx := 0; splitIdx < table.SplitCount; splitIdx++ {
+		splitPoints[splitIdx] = table.SplitFn(splitIdx)
+	}
+	sort.Sort(stringStringSlice(splitPoints))
+
+	type pair struct {
+		lo, hi int
+	}
+	splitCh := make(chan pair, concurrency)
+	splitCh <- pair{0, len(splitPoints)}
+	doneCh := make(chan error)
+
+	log.Infof(ctx, `starting %d splits`, len(splitPoints))
+	var wg sync.WaitGroup
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+
+		var buf bytes.Buffer
+		go func() {
+			defer wg.Done()
+			for {
+				p, ok := <-splitCh
+				if !ok {
+					break
+				}
+				m := (p.lo + p.hi) / 2
+				split := strings.Join(splitPoints[m], `,`)
+
+				buf.Reset()
+				fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
+				if _, err := db.ExecContext(ctx, buf.String()); err != nil {
+					doneCh <- errors.Wrap(err, buf.String())
+					return
+				}
+
+				buf.Reset()
+				fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
+					table.Name, split, split)
+				if _, err := db.ExecContext(ctx, buf.String()); err != nil {
+					// SCATTER can collide with normal replicate queue
+					// operations and fail spuriously, so only print the
+					// error.
+					log.Warningf(ctx, `%s: %s`, buf.String(), err)
+				}
+
+				doneCh <- nil
+				go func() {
+					if p.lo < m {
+						splitCh <- pair{p.lo, m}
+					}
+					if m+1 < p.hi {
+						splitCh <- pair{m + 1, p.hi}
+					}
+				}()
+			}
+		}()
+	}
+
+	defer func() {
+		close(splitCh)
+		wg.Wait()
+	}()
+	for finished := 1; finished <= len(splitPoints); finished++ {
+		if err := <-doneCh; err != nil {
+			return err
+		}
+		if finished%1000 == 0 {
+			log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
+		}
+	}
+	return nil
+}
+
+type stringStringSlice [][]string
+
+func (s stringStringSlice) Len() int      { return len(s) }
+func (s stringStringSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s stringStringSlice) Less(i, j int) bool {
+	for offset := 0; ; offset++ {
+		iLen, jLen := len(s[i]), len(s[j])
+		if iLen <= offset || jLen <= offset {
+			return iLen < jLen
+		}
+		if cmp := strings.Compare(s[i][offset], s[j][offset]); cmp < 0 {
+			return true
+		} else if cmp > 0 {
+			return false
+		}
+	}
 }

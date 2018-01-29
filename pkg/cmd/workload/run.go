@@ -291,6 +291,11 @@ func runRun(gen workload.Generator, args []string) error {
 			}
 		}
 	}
+	for _, table := range gen.Tables() {
+		if err := workload.Split(ctx, db, table, *concurrency); err != nil {
+			return err
+		}
+	}
 
 	var limiter *rate.Limiter
 	if *maxRate > 0 {
