@@ -1795,6 +1795,12 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		latestBackup,
 	)
 
+	fullTableBackup := filepath.Join(dir, "tbl")
+	sqlDB.Exec(t,
+		fmt.Sprintf(`BACKUP data.bank TO $1 AS OF SYSTEM TIME %s WITH experimental_revision_history`, ts[2]),
+		fullTableBackup,
+	)
+
 	sqlDB.Exec(t, `UPDATE data.bank SET balance = 3`)
 
 	// Create a table in some other DB -- this won't be in this backup (yet).
@@ -1813,12 +1819,16 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[5])
 
 	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
+	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
+	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
 	sqlDB.Exec(t, `ALTER TABLE data.sometable RENAME TO other.sometable`)
 	sqlDB.Exec(t, `CREATE INDEX ON data.teller (name)`)
 	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
 	sqlDB.Exec(t, `INSERT INTO data.teller VALUES (2, 'craig')`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[6])
 
+	sqlDB.Exec(t, `TRUNCATE TABLE data.bank`)
+	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
 	sqlDB.Exec(t, `DROP TABLE other.sometable`)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[7])
 
@@ -1831,12 +1841,23 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2 WITH experimental_revision_history`,
 		incBackup, fullBackup,
 	)
+	incTableBackup := filepath.Join(dir, "inctbl")
+	sqlDB.Exec(t,
+		`BACKUP data.bank TO $1 INCREMENTAL FROM $2 WITH experimental_revision_history`,
+		incTableBackup, fullTableBackup,
+	)
 
 	for i, timestamp := range ts {
 		name := fmt.Sprintf("ts%d", i)
 		t.Run(name, func(t *testing.T) {
 			sqlDB = sqlutils.MakeSQLRunner(sqlDB.DB)
+			// Create new DBs into which we'll restore our copies without conflicting
+			// with the existing, original table.
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, name))
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %stbl`, name))
+			// Restore the bank table from the full DB MVCC backup to time x, into a
+			// separate DB so that we can later compare it to the original table via
+			// time-travel.
 			sqlDB.Exec(t,
 				fmt.Sprintf(
 					`RESTORE data.* FROM $1, $2 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='%s'`,
@@ -1844,16 +1865,33 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 				),
 				fullBackup, incBackup,
 			)
-			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT * FROM %s.bank ORDER BY id`, name),
-				sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.bank AS OF SYSTEM TIME %s ORDER BY id`, timestamp)),
+			// Similarly restore the since-table backup -- since full DB and single table
+			// backups sometimes behave differently.
+			sqlDB.Exec(t,
+				fmt.Sprintf(
+					`RESTORE data.bank FROM $1, $2 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='%stbl'`,
+					timestamp, name,
+				),
+				fullTableBackup, incTableBackup,
 			)
+
+			// Use time-travel on the existing bank table to determine what RESTORE
+			// with AS OF should have produced.
+			expected := sqlDB.QueryStr(
+				t, fmt.Sprintf(`SELECT * FROM data.bank AS OF SYSTEM TIME %s ORDER BY id`, timestamp),
+			)
+			// Confirm reading (with no as-of) from the as-of restored table matches.
+			sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s.bank ORDER BY id`, name), expected)
+			sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %stbl.bank ORDER BY id`, name), expected)
+
+			// `sometable` moved in to data between after ts 3 and removed before 5.
 			if i == 4 || i == 5 {
 				sqlDB.CheckQueryResults(t,
 					fmt.Sprintf(`SELECT * FROM %s.sometable ORDER BY id`, name),
 					sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.sometable AS OF SYSTEM TIME %s ORDER BY id`, timestamp)),
 				)
 			}
+			// teller was created after ts 2.
 			if i > 2 {
 				sqlDB.CheckQueryResults(t,
 					fmt.Sprintf(`SELECT * FROM %s.teller ORDER BY id`, name),
