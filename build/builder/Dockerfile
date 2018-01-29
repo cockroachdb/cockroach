@@ -164,6 +164,7 @@ RUN apt-get install -y --no-install-recommends \
     google-cloud-sdk \
     nodejs \
     openjdk-8-jre \
+    openssh-client \
     yarn
 
 # Without CCACHE_CPP2=1, ccache can generate spurious warnings. See the manpage

@@ -8,12 +8,13 @@ mkdir -p artifacts
 # the nightly-workload.sh script.
 pkg/acceptance/prepare.sh
 
-docker run \
-    --workdir=/go/src/github.com/cockroachdb/cockroach \
-    --volume="${GOPATH%%:*}/src":/go/src \
-    --env="AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" \
-    --env="AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" \
-    --env="GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS}" \
-    --env="TC_BUILD_ID=${TC_BUILD_ID}" \
-    --rm \
-    cockroachdb/builder:20171004-085709 ./build/nightly-workload.sh
+# Use this instead of prepare.sh for faster debugging iteration.
+# curl -L https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.LATEST -o cockroach-linux-2.6.32-gnu-amd64
+# chmod +x cockroach-linux-2.6.32-gnu-amd64
+
+./build/builder.sh env \
+    AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+    AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+    GOOGLE_CREDENTIALS="$GOOGLE_CREDENTIALS" \
+    TC_BUILD_ID="$TC_BUILD_ID" \
+    ./build/nightly-workload.sh
