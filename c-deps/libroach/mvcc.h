@@ -28,7 +28,7 @@ static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
   fprintf(stderr, "%s symbol missing; expected to be supplied by Go\n", name);
   abort();
 }
-void __attribute__((weak)) growSlice(void*, DBSlice*, int) { die_missing_symbol(__func__); }
+void __attribute__((weak)) growSlice(void*, DBSlice*, int, int, int) { die_missing_symbol(__func__); }
 }  // extern "C"
 
 // kMaxItersBeforeSeek is the number of calls to iter->{Next,Prev}()
@@ -446,7 +446,7 @@ template <bool reverse> class mvccScanner {
       // If it's bigger than the output batch's capacity, we grow the output
       // batch big enough to fit the slice.
       int oldLen = batchPtr_ - results_.data.data;
-      growSlice(data_ref_, &results_.data, expectedLen - results_.data.len);
+      growSlice(data_ref_, &results_.data, expectedLen - results_.data.len, keys_, max_keys_);
       batchPtr_ = results_.data.data + oldLen;
     }
     memcpy(batchPtr_, buf, putSize);

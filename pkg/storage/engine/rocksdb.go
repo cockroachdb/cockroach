@@ -103,14 +103,12 @@ type dataRef struct {
 // and its size.
 //
 //export growSlice
-func growSlice(ref unsafe.Pointer, cSlice *C.DBSlice, needed int) {
+func growSlice(ref unsafe.Pointer, cSlice *C.DBSlice, needed int, keys int, maxKeys int) {
 	data := cSliceToUnsafeGoBytes(*cSlice)
-	newData := data
-	newCap := (cap(data) + needed) * 2
-	for cap(newData) < newCap {
-		newData = append(newData, data...)
-	}
-	newData = newData[:cap(newData)]
+	minimum := cap(data) + needed
+	guess := float32(maxKeys) / float32(keys) * float32(minimum)
+	newData := make([]byte, int32(guess))
+	copy(newData, data)
 	*cSlice = goToCSlice(newData)
 	dref := (*dataRef)(ref)
 	dref.data = newData
