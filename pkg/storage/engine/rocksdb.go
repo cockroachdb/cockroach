@@ -90,6 +90,8 @@ type dataRef struct {
 	data []byte
 }
 
+const maxGrowth = 16 * 1024 * 1024
+
 // growSlice expands a DBSlice by doubling it after adding the needed amount.
 // This should only be called from C code (mvcc.h) that has been invoked with
 // Go-allocated memory that's still pointed to.
@@ -106,8 +108,22 @@ type dataRef struct {
 func growSlice(ref unsafe.Pointer, cSlice *C.DBSlice, needed int, keys int, maxKeys int) {
 	data := cSliceToUnsafeGoBytes(*cSlice)
 	minimum := cap(data) + needed
-	guess := float32(maxKeys) / float32(keys) * float32(minimum)
-	newData := make([]byte, int32(guess))
+	// Guess the size of the required slice, by comparing the size of the slice
+	// we need to store all of the data for the current number of keys to the max
+	// number of keys we will be returning in this scan.
+	if keys == 0 {
+		// avoid divide by 0 errors
+		keys = 1
+	}
+	guess := int(float32(maxKeys) / float32(keys) * float32(minimum))
+	// Restrict the guess to 16 megabytes more than the current size to prevent
+	// accidental huge slice allocations. 16 megabytes should be enough for
+	// anyone!
+	maximum := minimum + maxGrowth
+	if guess > maximum {
+		guess = maximum
+	}
+	newData := make([]byte, guess)
 	copy(newData, data)
 	*cSlice = goToCSlice(newData)
 	dref := (*dataRef)(ref)
