@@ -4,7 +4,7 @@ package xform
 
 type childCountLookupFunc func(ev *ExprView) int
 
-var childCountLookup = []childCountLookupFunc{
+var childCountLookup = [...]childCountLookupFunc{
 	// UnknownOp
 	func(ev *ExprView) int {
 		panic("op type not initialized")
@@ -28,18 +28,6 @@ var childCountLookup = []childCountLookupFunc{
 	// PlaceholderOp
 	func(ev *ExprView) int {
 		return 0
-	},
-
-	// ListOp
-	func(ev *ExprView) int {
-		listExpr := (*listExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(listExpr.items().len)
-	},
-
-	// OrderedListOp
-	func(ev *ExprView) int {
-		orderedListExpr := (*orderedListExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(orderedListExpr.items().len)
 	},
 
 	// TupleOp
@@ -407,7 +395,7 @@ var childCountLookup = []childCountLookupFunc{
 		return 1
 	},
 
-	// ArrangeOp
+	// PresentOp
 	func(ev *ExprView) int {
 		return 1
 	},
@@ -415,7 +403,7 @@ var childCountLookup = []childCountLookupFunc{
 
 type childGroupLookupFunc func(ev *ExprView, n int) GroupID
 
-var childGroupLookup = []childGroupLookupFunc{
+var childGroupLookup = [...]childGroupLookupFunc{
 	// UnknownOp
 	func(ev *ExprView, n int) GroupID {
 		panic("op type not initialized")
@@ -448,28 +436,6 @@ var childGroupLookup = []childGroupLookupFunc{
 	// PlaceholderOp
 	func(ev *ExprView, n int) GroupID {
 		panic("child index out of range")
-	},
-
-	// ListOp
-	func(ev *ExprView, n int) GroupID {
-		listExpr := (*listExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		default:
-			list := ev.mem.lookupList(listExpr.items())
-			return list[n-0]
-		}
-	},
-
-	// OrderedListOp
-	func(ev *ExprView, n int) GroupID {
-		orderedListExpr := (*orderedListExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		default:
-			list := ev.mem.lookupList(orderedListExpr.items())
-			return list[n-0]
-		}
 	},
 
 	// TupleOp
@@ -1449,7 +1415,7 @@ var childGroupLookup = []childGroupLookupFunc{
 		panic("child index out of range")
 	},
 
-	// ArrangeOp
+	// PresentOp
 	func(ev *ExprView, n int) GroupID {
 		if n == 0 {
 			return ev.loc.group
@@ -1461,7 +1427,7 @@ var childGroupLookup = []childGroupLookupFunc{
 
 type privateLookupFunc func(ev *ExprView) PrivateID
 
-var privateLookup = []privateLookupFunc{
+var privateLookup = [...]privateLookupFunc{
 	// UnknownOp
 	func(ev *ExprView) PrivateID {
 		panic("op type not initialized")
@@ -1488,16 +1454,6 @@ var privateLookup = []privateLookupFunc{
 	func(ev *ExprView) PrivateID {
 		placeholderExpr := (*placeholderExpr)(ev.mem.lookupExpr(ev.loc))
 		return placeholderExpr.value()
-	},
-
-	// ListOp
-	func(ev *ExprView) PrivateID {
-		return 0
-	},
-
-	// OrderedListOp
-	func(ev *ExprView) PrivateID {
-		return 0
 	},
 
 	// TupleOp
@@ -1865,21 +1821,19 @@ var privateLookup = []privateLookupFunc{
 		return 0
 	},
 
-	// ArrangeOp
+	// PresentOp
 	func(ev *ExprView) PrivateID {
 		return 0
 	},
 }
 
-var isScalarLookup = []bool{
+var isScalarLookup = [...]bool{
 	false, // UnknownOp
 
 	true,  // SubqueryOp
 	true,  // VariableOp
 	true,  // ConstOp
 	true,  // PlaceholderOp
-	true,  // ListOp
-	true,  // OrderedListOp
 	true,  // TupleOp
 	true,  // FiltersOp
 	true,  // ProjectionsOp
@@ -1952,18 +1906,16 @@ var isScalarLookup = []bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // ArrangeOp
+	false, // PresentOp
 }
 
-var isRelationalLookup = []bool{
+var isRelationalLookup = [...]bool{
 	false, // UnknownOp
 
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
 	false, // PlaceholderOp
-	false, // ListOp
-	false, // OrderedListOp
 	false, // TupleOp
 	false, // FiltersOp
 	false, // ProjectionsOp
@@ -2035,19 +1987,17 @@ var isRelationalLookup = []bool{
 	true,  // UnionOp
 	true,  // IntersectOp
 	true,  // ExceptOp
-	true,  // SortOp
-	true,  // ArrangeOp
+	false, // SortOp
+	false, // PresentOp
 }
 
-var isJoinLookup = []bool{
+var isJoinLookup = [...]bool{
 	false, // UnknownOp
 
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
 	false, // PlaceholderOp
-	false, // ListOp
-	false, // OrderedListOp
 	false, // TupleOp
 	false, // FiltersOp
 	false, // ProjectionsOp
@@ -2120,18 +2070,16 @@ var isJoinLookup = []bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // ArrangeOp
+	false, // PresentOp
 }
 
-var isJoinApplyLookup = []bool{
+var isJoinApplyLookup = [...]bool{
 	false, // UnknownOp
 
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
 	false, // PlaceholderOp
-	false, // ListOp
-	false, // OrderedListOp
 	false, // TupleOp
 	false, // FiltersOp
 	false, // ProjectionsOp
@@ -2204,18 +2152,16 @@ var isJoinApplyLookup = []bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // ArrangeOp
+	false, // PresentOp
 }
 
-var isEnforcerLookup = []bool{
+var isEnforcerLookup = [...]bool{
 	false, // UnknownOp
 
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
 	false, // PlaceholderOp
-	false, // ListOp
-	false, // OrderedListOp
 	false, // TupleOp
 	false, // FiltersOp
 	false, // ProjectionsOp
@@ -2288,7 +2234,7 @@ var isEnforcerLookup = []bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	true,  // SortOp
-	true,  // ArrangeOp
+	true,  // PresentOp
 }
 
 func (ev *ExprView) IsScalar() bool {
@@ -2397,48 +2343,6 @@ func (m *memoExpr) asPlaceholder() *placeholderExpr {
 		return nil
 	}
 	return (*placeholderExpr)(m)
-}
-
-type listExpr memoExpr
-
-func makeListExpr(items ListID) listExpr {
-	return listExpr{op: ListOp, state: exprState{items.offset, items.len}}
-}
-
-func (e *listExpr) items() ListID {
-	return ListID{offset: e.state[0], len: e.state[1]}
-}
-
-func (e *listExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asList() *listExpr {
-	if m.op != ListOp {
-		return nil
-	}
-	return (*listExpr)(m)
-}
-
-type orderedListExpr memoExpr
-
-func makeOrderedListExpr(items ListID) orderedListExpr {
-	return orderedListExpr{op: OrderedListOp, state: exprState{items.offset, items.len}}
-}
-
-func (e *orderedListExpr) items() ListID {
-	return ListID{offset: e.state[0], len: e.state[1]}
-}
-
-func (e *orderedListExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asOrderedList() *orderedListExpr {
-	if m.op != OrderedListOp {
-		return nil
-	}
-	return (*orderedListExpr)(m)
 }
 
 type tupleExpr memoExpr

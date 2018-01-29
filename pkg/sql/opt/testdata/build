@@ -1,8 +1,10 @@
 exec-raw
 CREATE DATABASE t
+----
 
 exec-raw
 CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+----
 
 build
 SELECT * FROM t.a

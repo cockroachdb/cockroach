@@ -1,10 +1,12 @@
+#
 # Simple case.
+#
 compile
 define Join {
     Left  Expr
     Right Expr
 }
-#
+
 [CommuteJoin]
 (Join $left:* $right:*) => (Join $right $left)
 ----
@@ -45,9 +47,10 @@ define Join {
 	)
 )
 
-
+#
 # Expand multiple match names into multiple rules and use OpName function with
 # no arguments.
+#
 compile
 [Join]
 define InnerJoin {
@@ -62,7 +65,7 @@ define LeftJoin {
 define Project {
     Input Expr
 }
-#
+
 [Name]
 (Join | Project) => ((OpName))
 ----
@@ -132,19 +135,19 @@ define Project {
 	)
 )
 
-
+#
 # Compile OpName functions with arguments.
+#
 compile
 define Op {
     Input Expr
 }
-define SubOp1 {
-}
-define SubOp2 {
-}
-#
+define SubOp1 {}
+define SubOp2 {}
+
 [SingleName]
 (Op $input:(SubOp1)) => ((OpName $input))
+
 [MultipleNames]
 (Op $input:(SubOp1 | SubOp2)) => ((OpName $input))
 ----
@@ -159,7 +162,7 @@ define SubOp2 {
 			Src=<test.opt:1:1>
 		)
 		(Define Tags=(Tags) Name="SubOp1" Fields=(DefineFields) Src=<test.opt:4:1>)
-		(Define Tags=(Tags) Name="SubOp2" Fields=(DefineFields) Src=<test.opt:6:1>)
+		(Define Tags=(Tags) Name="SubOp2" Fields=(DefineFields) Src=<test.opt:5:1>)
 	)
 	(Rules
 		(Rule
@@ -173,15 +176,15 @@ define SubOp2 {
 						Target=(Match
 							Names=(OpNames SubOp1Op)
 							Args=(List)
-							Src=<test.opt:10:12>
+							Src=<test.opt:8:12>
 						)
-						Src=<test.opt:10:5>
+						Src=<test.opt:8:5>
 					)
 				)
-				Src=<test.opt:10:1>
+				Src=<test.opt:8:1>
 			)
-			Replace=(Construct OpName=SubOp1Op Args=(List) Src=<test.opt:10:25>)
-			Src=<test.opt:9:1>
+			Replace=(Construct OpName=SubOp1Op Args=(List) Src=<test.opt:8:25>)
+			Src=<test.opt:7:1>
 		)
 		(Rule
 			Name="MultipleNames"
@@ -194,30 +197,32 @@ define SubOp2 {
 						Target=(Match
 							Names=(OpNames SubOp1Op SubOp2Op)
 							Args=(List)
-							Src=<test.opt:12:12>
+							Src=<test.opt:11:12>
 						)
-						Src=<test.opt:12:5>
+						Src=<test.opt:11:5>
 					)
 				)
-				Src=<test.opt:12:1>
+				Src=<test.opt:11:1>
 			)
 			Replace=(Construct
 				OpName=(Construct
 					OpName="OpName"
 					Args=(List
-						(Ref Label="input" Src=<test.opt:12:43>)
+						(Ref Label="input" Src=<test.opt:11:43>)
 					)
-					Src=<test.opt:12:35>
+					Src=<test.opt:11:35>
 				)
 				Args=(List)
-				Src=<test.opt:12:34>
+				Src=<test.opt:11:34>
 			)
-			Src=<test.opt:11:1>
+			Src=<test.opt:10:1>
 		)
 	)
 )
 
+#
 # Compile errors.
+#
 compile
 define Op {
     Input Expr
@@ -225,27 +230,28 @@ define Op {
 define Op {
     Input Expr
 }
-#
+
 [UnrecognizedName]
 (Unknown) => (Unknown)
-#
+
 [UnrecognizedNestedName]
 (Op (Unknown)) => (Op)
-#
+
 [TooManyOpNameArgs]
 (Op) => ((OpName "foo" "bar"))
-#
+
 [InvalidOpNameArg]
 (Op) => ((OpName "foo"))
-#
+
 [InvalidOpNameArg2]
 (Op $input:"foo") => ((OpName $input))
-#
+
 [DuplicateLabel]
 (Op $input:"foo" $input:"bar") => (Op)
-#
+
 [DuplicateName]
 (Op) => (Op)
+
 [DuplicateName]
 (Op) => (Op)
 ----
@@ -256,4 +262,4 @@ test.opt:15:10: too many arguments to OpName function
 test.opt:18:10: invalid OpName argument: argument must be a variable reference
 test.opt:21:31: invalid OpName argument: $input must be bound to a match expression
 test.opt:24:18: duplicate bind label 'input'
-test.opt:28:1: duplicate rule name 'DuplicateName'
+test.opt:29:1: duplicate rule name 'DuplicateName'

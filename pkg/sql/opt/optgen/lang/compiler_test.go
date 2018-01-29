@@ -32,14 +32,14 @@ func TestCompiler(t *testing.T) {
 		}
 
 		c := NewCompiler("test.opt")
-		c.parser.openFile = func(name string) (io.ReadCloser, error) {
-			return &testReader{Reader: strings.NewReader(d.Input)}, nil
-		}
+		c.SetFileResolver(func(name string) (io.Reader, error) {
+			return strings.NewReader(d.Input), nil
+		})
 
 		var actual string
 		compiled := c.Compile()
 		if compiled != nil {
-			actual = compiled.String() + "\n"
+			actual = compiled.String()
 		} else {
 			// Concatenate errors.
 			for _, err := range c.Errors() {
@@ -54,9 +54,9 @@ func TestCompiler(t *testing.T) {
 // Test input file not found.
 func TestCompilerFileNotFound(t *testing.T) {
 	c := NewCompiler("test.opt")
-	c.parser.openFile = func(name string) (io.ReadCloser, error) {
+	c.SetFileResolver(func(name string) (io.Reader, error) {
 		return nil, errors.New("file not found")
-	}
+	})
 
 	if compiled := c.Compile(); compiled != nil {
 		t.Error("expected nil from Compile")
@@ -79,12 +79,12 @@ func TestCompilerNoFiles(t *testing.T) {
 // Test multiple input files.
 func TestCompilerMultipleFiles(t *testing.T) {
 	c := NewCompiler("test.opt", "test2.opt")
-	c.parser.openFile = func(name string) (io.ReadCloser, error) {
+	c.SetFileResolver(func(name string) (io.Reader, error) {
 		if name == "test.opt" {
-			return &testReader{strings.NewReader("define Foo {}")}, nil
+			return strings.NewReader("define Foo {}"), nil
 		}
-		return &testReader{strings.NewReader("define Bar {}")}, nil
-	}
+		return strings.NewReader("define Bar {}"), nil
+	})
 
 	if compiled := c.Compile(); compiled == nil || len(compiled.Defines) != 2 {
 		t.Errorf("expected compiled result with two defines, found: %v", compiled)
@@ -94,12 +94,12 @@ func TestCompilerMultipleFiles(t *testing.T) {
 // Test multiple input files with errors.
 func TestCompilerMultipleErrorFiles(t *testing.T) {
 	c := NewCompiler("path/test.opt", "test2.opt")
-	c.parser.openFile = func(name string) (io.ReadCloser, error) {
+	c.SetFileResolver(func(name string) (io.Reader, error) {
 		if name == "path/test.opt" {
-			return &testReader{strings.NewReader("define Bar {} define Bar {}")}, nil
+			return strings.NewReader("define Bar {} define Bar {}"), nil
 		}
-		return &testReader{strings.NewReader("[Rule] (Unknown) => (Unknown)")}, nil
-	}
+		return strings.NewReader("[Rule] (Unknown) => (Unknown)"), nil
+	})
 
 	if compiled := c.Compile(); compiled != nil {
 		t.Error("expected nil result from Compile")

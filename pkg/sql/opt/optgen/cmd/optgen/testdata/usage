@@ -1,0 +1,92 @@
+#
+# Test invalid flags.
+#
+optgen -unknown exprs
+----
+----
+flag provided but not defined: -unknown
+Optgen is a tool for generating cost-based optimizers.
+
+It compiles source files that use a custom syntax to define expressions,
+match expression patterns, and generate replacement expressions.
+
+Usage:
+	optgen [flags] command sources...
+
+The commands are:
+
+	compile    generate the optgen compiled format
+	exprs      generate expression definitions and functions
+	factory    generate expression tree creation and normalization functions
+	ops        generate operator definitions and functions
+
+Flags:
+  -out string
+    	output file name of generated code
+  -pkg string
+    	package name used in generated files
+
+----
+----
+
+#
+# Test insufficient arguments.
+#
+optgen exprs
+----
+----
+Optgen is a tool for generating cost-based optimizers.
+
+It compiles source files that use a custom syntax to define expressions,
+match expression patterns, and generate replacement expressions.
+
+Usage:
+	optgen [flags] command sources...
+
+The commands are:
+
+	compile    generate the optgen compiled format
+	exprs      generate expression definitions and functions
+	factory    generate expression tree creation and normalization functions
+	ops        generate operator definitions and functions
+
+Flags:
+  -out string
+    	output file name of generated code
+  -pkg string
+    	package name used in generated files
+
+ERROR: invalid number of arguments
+----
+----
+
+#
+# Test unknown command.
+#
+optgen unknown test.opt
+----
+----
+Optgen is a tool for generating cost-based optimizers.
+
+It compiles source files that use a custom syntax to define expressions,
+match expression patterns, and generate replacement expressions.
+
+Usage:
+	optgen [flags] command sources...
+
+The commands are:
+
+	compile    generate the optgen compiled format
+	exprs      generate expression definitions and functions
+	factory    generate expression tree creation and normalization functions
+	ops        generate operator definitions and functions
+
+Flags:
+  -out string
+    	output file name of generated code
+  -pkg string
+    	package name used in generated files
+
+ERROR: unrecognized command
+----
+----

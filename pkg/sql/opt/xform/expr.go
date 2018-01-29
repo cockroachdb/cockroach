@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
+//go:generate optgen -out expr.og.go -pkg xform exprs ops/scalar.opt ops/relational.opt ops/enforcer.opt
+
 // ColMap provides a 1:1 mapping from one column index to another. It is used
 // by operators that need to match columns from its inputs.
 type ColMap map[ColumnIndex]ColumnIndex
