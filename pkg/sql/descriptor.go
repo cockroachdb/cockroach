@@ -20,7 +20,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -128,13 +127,6 @@ func (p *planner) createDescriptorWithID(
 	}
 	b.CPut(idKey, descID, nil)
 	b.CPut(descKey, descDesc, nil)
-
-	p.testingVerifyMetadata().setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		if err := expectDescriptorID(systemConfig, idKey, descID); err != nil {
-			return err
-		}
-		return expectDescriptor(systemConfig, descKey, descDesc)
-	})
 
 	if desc, ok := descriptor.(*sqlbase.TableDescriptor); ok {
 		p.Tables().addUncommittedTable(*desc)
