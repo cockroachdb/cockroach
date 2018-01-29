@@ -205,6 +205,45 @@ func TestLoadCSVPrimaryDuplicate(t *testing.T) {
 	}
 }
 
+func TestLoadCSVDuplicateCollatedString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tmp, tmpCleanup := testutils.TempDir(t)
+	defer tmpCleanup()
+	ctx := context.Background()
+
+	const (
+		tableName   = "t"
+		csvName     = tableName + ".dat"
+		tableCreate = `
+			CREATE TABLE ` + tableName + ` (
+				s string collate en_u_ks_level1 primary key
+			)
+		`
+		tableCSV = `a
+B
+c
+D
+d
+`
+	)
+
+	tablePath := filepath.Join(tmp, tableName)
+	dataPath := filepath.Join(tmp, csvName)
+
+	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
+	if !testutils.IsError(err, "duplicate key") {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+}
+
 // TestLoadCSVPrimaryDuplicateSSTBoundary tests that duplicate keys at
 // SST boundaries are detected.
 func TestLoadCSVPrimaryDuplicateSSTBoundary(t *testing.T) {

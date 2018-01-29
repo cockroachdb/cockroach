@@ -72,6 +72,7 @@ type copyMachine struct {
 	// parsing. Is it not correcly initialized with timestamps, transactions and
 	// other things that statements more generally need.
 	parsingEvalCtx *tree.EvalContext
+	collationEnv   *tree.CollationEnvironment
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -88,6 +89,7 @@ func newCopyMachine(
 		// The planner will be prepared before use.
 		p:              planner{},
 		parsingEvalCtx: &evalCtx.EvalContext,
+		collationEnv:   &tree.CollationEnvironment{},
 	}
 
 	cleanup := c.preparePlanner(ctx)
@@ -351,7 +353,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 				return err
 			}
 		}
-		d, err := parser.ParseStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
+		d, err := parser.ParseStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx, c.collationEnv)
 		if err != nil {
 			return err
 		}
