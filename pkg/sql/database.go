@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // databaseKey implements sqlbase.DescriptorKey.
@@ -49,8 +49,8 @@ func (dk databaseKey) Name() string {
 // which is naturally limited by the number of database descriptors in the
 // system the periodic reset whenever the system config is gossiped.
 type databaseCache struct {
-	mu        syncutil.Mutex
-	databases map[string]sqlbase.ID
+	// databases is really a map of string -> sqlbase.ID
+	databases sync.Map
 
 	// systemConfig holds a copy of the latest system config since the last
 	// call to resetForBatch.
@@ -59,21 +59,20 @@ type databaseCache struct {
 
 func newDatabaseCache(cfg config.SystemConfig) *databaseCache {
 	return &databaseCache{
-		databases:    map[string]sqlbase.ID{},
 		systemConfig: cfg,
 	}
 }
 
 func (dc *databaseCache) getID(name string) sqlbase.ID {
-	dc.mu.Lock()
-	defer dc.mu.Unlock()
-	return dc.databases[name]
+	val, ok := dc.databases.Load(name)
+	if !ok {
+		return 0
+	}
+	return val.(sqlbase.ID)
 }
 
 func (dc *databaseCache) setID(name string, id sqlbase.ID) {
-	dc.mu.Lock()
-	defer dc.mu.Unlock()
-	dc.databases[name] = id
+	dc.databases.Store(name, id)
 }
 
 func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
@@ -173,7 +172,8 @@ func MustGetDatabaseDescByID(
 }
 
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
-// given its name.
+// given its name. Returns nil and no error if the name is not present in the
+// cache.
 func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
 	if name == sqlbase.SystemDB.Name {
 		return &sqlbase.SystemDB, nil
@@ -182,7 +182,7 @@ func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDe
 	nameKey := databaseKey{name}
 	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
-		return nil, fmt.Errorf("database %q does not exist in system cache", name)
+		return nil, nil
 	}
 
 	id, err := nameVal.GetInt()
@@ -192,7 +192,7 @@ func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDe
 
 	desc, err := dc.getCachedDatabaseDescByID(sqlbase.ID(id))
 	if err == nil && desc == nil {
-		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
+		return nil, errors.Errorf("database %q has name entry, but no descriptor in system cache", name)
 	}
 	return desc, err
 }
@@ -234,7 +234,9 @@ func (dc *databaseCache) getDatabaseDesc(
 	// database, but that's a race that could occur anyways.
 	desc, err := dc.getCachedDatabaseDesc(name)
 	if err != nil {
-		log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
+		return nil, err
+	}
+	if desc == nil {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
 			desc, err = MustGetDatabaseDesc(ctx, txn, vt, name)
 			return err
@@ -302,6 +304,7 @@ func (p *planner) createDatabase(
 func (p *planner) renameDatabase(
 	ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string,
 ) error {
+
 	onAlreadyExists := func() error {
 		return fmt.Errorf("the new database name %q already exists", newName)
 	}
@@ -332,10 +335,8 @@ func (p *planner) renameDatabase(
 	b.Put(descKey, descDesc)
 	b.Del(oldKey)
 
-	p.Tables().addUncommittedDatabase(
-		oldName, descID, true /* dropped */)
-	p.Tables().addUncommittedDatabase(
-		newName, descID, false /* dropped */)
+	p.Tables().addUncommittedDatabase(oldName, descID, dbDropped)
+	p.Tables().addUncommittedDatabase(newName, descID, dbCreated)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
@@ -343,15 +344,5 @@ func (p *planner) renameDatabase(
 		}
 		return err
 	}
-
-	p.testingVerifyMetadata().setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
-		if err := expectDescriptorID(systemConfig, newKey, descID); err != nil {
-			return err
-		}
-		if err := expectDescriptor(systemConfig, descKey, descDesc); err != nil {
-			return err
-		}
-		return expectDeleted(systemConfig, oldKey)
-	})
 	return nil
 }

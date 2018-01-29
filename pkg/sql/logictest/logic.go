@@ -837,7 +837,6 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 			SQLMemoryPoolSize: 192 * 1024 * 1024,
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WaitForGossipUpdate:   true,
 					CheckStmtStringChange: true,
 				},
 				Store: &storage.StoreTestingKnobs{

@@ -280,7 +280,11 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				tc := &TableCollection{leaseMgr: sc.leaseMgr}
-				defer tc.releaseTables(ctx)
+				defer func() {
+					if err := tc.releaseTables(ctx, dontBlockForDBCacheUpdate); err != nil {
+						log.Warningf(ctx, "error releasing tables: %s", err)
+					}
+				}()
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
 					return err
@@ -503,7 +507,11 @@ func (sc *SchemaChanger) distBackfill(
 
 			tc := &TableCollection{leaseMgr: sc.leaseMgr}
 			// Use a leased table descriptor for the backfill.
-			defer tc.releaseTables(ctx)
+			defer func() {
+				if err := tc.releaseTables(ctx, dontBlockForDBCacheUpdate); err != nil {
+					log.Warningf(ctx, "error releasing tables: %s", err)
+				}
+			}()
 			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 			if err != nil {
 				return err
