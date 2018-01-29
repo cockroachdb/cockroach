@@ -17,7 +17,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -108,17 +107,7 @@ func (*dropSequenceNode) Close(context.Context)        {}
 func (p *planner) dropSequenceImpl(
 	ctx context.Context, seqDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
 ) error {
-	err := p.initiateDropTable(ctx, seqDesc, true /* drainName */)
-	if err != nil {
-		return err
-	}
-
-	p.testingVerifyMetadata().setTestingVerifyMetadata(
-		func(systemConfig config.SystemConfig) error {
-			return verifyDropTableMetadata(systemConfig, seqDesc.ID, "sequence")
-		})
-
-	return nil
+	return p.initiateDropTable(ctx, seqDesc, true /* drainName */)
 }
 
 // sequenceDependency error returns an error if the given sequence cannot be dropped because

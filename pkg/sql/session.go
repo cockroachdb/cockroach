@@ -30,7 +30,6 @@ import (
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -253,17 +252,6 @@ type Session struct {
 	}
 
 	//
-	// Testing state.
-	//
-
-	// If set, called after the Session is done executing the current SQL statement.
-	// It can be used to verify assumptions about how metadata will be asynchronously
-	// updated. Note that this can overwrite a previous callback that was waiting to be
-	// verified, which is not ideal.
-	testingVerifyMetadataFn func(config.SystemConfig) error
-	verifyFnCheckedOnce     bool
-
-	//
 	// Per-session statistics.
 	//
 
@@ -400,8 +388,9 @@ func NewSession(
 		memMetrics:       memMetrics,
 		sqlStats:         &e.sqlStats,
 		tables: TableCollection{
-			leaseMgr:      e.cfg.LeaseManager,
-			databaseCache: e.getDatabaseCache(),
+			leaseMgr:          e.cfg.LeaseManager,
+			databaseCache:     e.dbCache.getDatabaseCache(),
+			dbCacheSubscriber: e.dbCache,
 		},
 		conn: conn,
 	}
@@ -490,7 +479,9 @@ func (s *Session) Finish(e *Executor) {
 	// We might have unreleased tables if we're finishing the
 	// session abruptly in the middle of a transaction, or, until #7648 is
 	// addressed, there might be leases accumulated by preparing statements.
-	s.tables.releaseTables(s.context)
+	if err := s.tables.releaseTables(s.context, dontBlockForDBCacheUpdate); err != nil {
+		log.Warningf(s.context, "error releasing tables: %s", err)
+	}
 
 	s.ClearStatementsAndPortals(s.context)
 	s.sessionMon.Stop(s.context)
@@ -528,7 +519,9 @@ func (s *Session) EmergencyClose() {
 	_ = s.synchronizeParallelStmts(s.context)
 
 	// Release the leases - to ensure other sessions don't get stuck.
-	s.tables.releaseTables(s.context)
+	if err := s.tables.releaseTables(s.context, dontBlockForDBCacheUpdate); err != nil {
+		log.Warningf(s.context, "error releasing tables: %s", err)
+	}
 
 	// The KV txn may be unusable - just leave it dead. Simply
 	// shut down its memory monitor.
@@ -665,17 +658,16 @@ func (s *Session) extendedEvalCtx(
 			TxnTimestamp:     txnTimestamp,
 			ClusterTimestamp: clusterTs,
 		},
-		SessionMutator:        s.dataMutator,
-		VirtualSchemas:        s.execCfg.VirtualSchemas,
-		Tracing:               &s.Tracing,
-		StatusServer:          statusServer,
-		MemMetrics:            s.memMetrics,
-		Tables:                &s.tables,
-		ExecCfg:               s.execCfg,
-		DistSQLPlanner:        s.distSQLPlanner,
-		TestingVerifyMetadata: s,
-		TxnModesSetter:        &s.TxnState,
-		SchemaChangers:        &s.TxnState.schemaChangers,
+		SessionMutator: s.dataMutator,
+		VirtualSchemas: s.execCfg.VirtualSchemas,
+		Tracing:        &s.Tracing,
+		StatusServer:   statusServer,
+		MemMetrics:     s.memMetrics,
+		Tables:         &s.tables,
+		ExecCfg:        s.execCfg,
+		DistSQLPlanner: s.distSQLPlanner,
+		TxnModesSetter: &s.TxnState,
+		SchemaChangers: &s.TxnState.schemaChangers,
 	}
 }
 
@@ -683,13 +675,7 @@ func (s *Session) extendedEvalCtx(
 func (s *Session) resetForBatch(e *Executor) {
 	// Update the database cache to a more recent copy, so that we can use tables
 	// that we created in previous batches of the same transaction.
-	s.tables.databaseCache = e.getDatabaseCache()
-}
-
-// setTestingVerifyMetadata implements the testingVerifyMetadata interface.
-func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
-	s.testingVerifyMetadataFn = fn
-	s.verifyFnCheckedOnce = false
+	s.tables.databaseCache = e.dbCache.getDatabaseCache()
 }
 
 // addActiveQuery adds a running query to the session's internal store of active
