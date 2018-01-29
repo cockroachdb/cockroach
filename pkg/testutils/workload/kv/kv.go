@@ -27,10 +27,10 @@ import (
 	"math/rand"
 	"sync/atomic"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -79,23 +79,21 @@ func (w *kv) Flags() *pflag.FlagSet {
 	return w.flags
 }
 
-// Configure implements the Generator interface.
-func (w *kv) Configure(flags []string) error {
-	if w.flags.Parsed() {
-		return errors.New("Configure was already called")
+// Hooks implements the Generator interface.
+func (w *kv) Hooks() workload.Hooks {
+	return workload.Hooks{
+		Validate: func() error {
+			if w.maxBlockSizeBytes < w.minBlockSizeBytes {
+				return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
+					w.maxBlockSizeBytes, w.minBlockSizeBytes)
+			}
+			// TODO(dan): Re-enable this check when splits are supported.
+			// if w.sequential && w.splits > 0 {
+			// 	return errors.Errorf("'sequential' and 'splits' cannot both be enabled")
+			// }
+			return nil
+		},
 	}
-	if err := w.flags.Parse(flags); err != nil {
-		return err
-	}
-	if w.maxBlockSizeBytes < w.minBlockSizeBytes {
-		return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
-			w.maxBlockSizeBytes, w.minBlockSizeBytes)
-	}
-	// TODO(dan): Re-enable this check once splits are supported.
-	// if w.sequential && w.splits > 0 {
-	// 	log.Fatalf("'sequential' and 'splits' cannot both be enabled")
-	// }
-	return nil
 }
 
 // Tables implements the Generator interface.

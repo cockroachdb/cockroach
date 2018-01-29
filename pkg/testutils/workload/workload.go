@@ -45,10 +45,6 @@ type Generator interface {
 	// Flags returns the flags this Generator is configured with.
 	Flags() *pflag.FlagSet
 
-	// Configure parses the provided flags, which are only allowed to be the
-	// ones in Flags(). Configure may only be called once.
-	Configure(flags []string) error
-
 	// Tables returns the set of tables for this generator, including schemas
 	// and initial data.
 	Tables() []Table
@@ -56,6 +52,19 @@ type Generator interface {
 	// Ops returns the work functions for this generator. The tables are
 	// required to have been created and initialized before running these.
 	Ops() []Operation
+
+	// Hooks returns any hooks associated with the generator.
+	Hooks() Hooks
+}
+
+// Hooks stores functions to be called at points in the workload lifecycle.
+type Hooks struct {
+	// Validate is called after workload flags are parsed. It should return an
+	// error if the workload configuration is invalid.
+	Validate func() error
+	// PreLoad is called after workload tables are created and before workload
+	// data is loaded. It is not called when storing or loading a fixture.
+	PreLoad func(*gosql.DB) error
 }
 
 // Meta is used to register a Generator at init time and holds meta information
@@ -144,11 +153,14 @@ func Registered() []Meta {
 //
 // TODO(dan): Is there something better we could be doing here for the size of
 // the loaded data?
-func Setup(db *gosql.DB, tables []Table, batchSize int) (int64, error) {
+func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = 1000
 	}
 	var insertStmtBuf bytes.Buffer
+
+	tables := gen.Tables()
+	hooks := gen.Hooks()
 
 	var size int64
 	for _, table := range tables {
@@ -156,7 +168,15 @@ func Setup(db *gosql.DB, tables []Table, batchSize int) (int64, error) {
 		if _, err := db.Exec(createStmt); err != nil {
 			return 0, err
 		}
+	}
 
+	if hooks.PreLoad != nil {
+		if err := hooks.PreLoad(db); err != nil {
+			return 0, err
+		}
+	}
+
+	for _, table := range tables {
 		for rowIdx := 0; rowIdx < table.InitialRowCount; {
 			insertStmtBuf.Reset()
 			fmt.Fprintf(&insertStmtBuf, `INSERT INTO %s VALUES `, table.Name)
