@@ -128,8 +128,8 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
 
 # Compiling Go from source requires a Go toolchain to bootstrap.
 RUN apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.9.src.tar.gz -o golang.tar.gz \
- && echo 'a4ab229028ed167ba1986825751463605264e44868362ca8e7accc8be057e993  golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.9.3.src.tar.gz -o golang.tar.gz \
+ && echo '4e3d0ad6e91e02efa77d54e86c8b9e34fbe1cbc2935b6d38784dca93331c47ae  golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
