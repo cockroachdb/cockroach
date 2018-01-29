@@ -63,20 +63,9 @@ type extendedEvalContext struct {
 
 	DistSQLPlanner *DistSQLPlanner
 
-	TestingVerifyMetadata testingVerifyMetadata
-
 	TxnModesSetter txnModesSetter
 
 	SchemaChangers *schemaChangerCollection
-}
-
-type testingVerifyMetadata interface {
-	// setTestingVerifyMetadata sets a callback to be called after the Session
-	// is done executing the current SQL statement. It can be used to verify
-	// assumptions about how metadata will be asynchronously updated.
-	// Note that this can overwrite a previous callback that was waiting to be
-	// verified, which is not ideal.
-	setTestingVerifyMetadata(fn func(config.SystemConfig) error)
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -544,10 +533,6 @@ func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]stri
 // SessionData is part of the PlanHookState interface.
 func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData
-}
-
-func (p *planner) testingVerifyMetadata() testingVerifyMetadata {
-	return p.extendedEvalCtx.TestingVerifyMetadata
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current

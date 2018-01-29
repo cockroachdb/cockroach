@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -225,10 +224,6 @@ func (p *planner) dropViewImpl(
 		return cascadeDroppedViews, err
 	}
 
-	p.testingVerifyMetadata().setTestingVerifyMetadata(
-		func(systemConfig config.SystemConfig) error {
-			return verifyDropTableMetadata(systemConfig, viewDesc.ID, "view")
-		})
 	return cascadeDroppedViews, nil
 }
 
