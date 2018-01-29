@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -745,12 +746,16 @@ func (p *planner) findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := MustGetTableDesc(
-			ctx, p.txn, p.getVirtualTabler(), tn, true, /*allowAdding*/
+		tableDesc, err := getTableOrViewDesc(
+			ctx, p.txn, p.getVirtualTabler(), tn,
 		)
 		if err != nil {
 			return nil, err
 		}
+		if !tableDesc.IsTable() {
+			continue
+		}
+
 		_, dropped, err := tableDesc.FindIndexByName(string(idxName))
 		if err != nil || dropped {
 			continue
@@ -762,7 +767,9 @@ func (p *planner) findTableContainingIndex(
 		result = tn
 	}
 	if result == nil {
-		return nil, fmt.Errorf("index %q not in any of the tables %v", idxName, tns)
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeUndefinedObjectError, "index %q not in any of the tables %v", idxName, tns,
+		)
 	}
 	return result, nil
 }
