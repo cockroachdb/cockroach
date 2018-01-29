@@ -117,6 +117,11 @@ func (md *Metadata) AddColumn(label string, typ types.T) ColumnIndex {
 	return md.nextCol
 }
 
+// NumColumns returns the count of columns tracked by this Metadata instance.
+func (md *Metadata) NumColumns() int {
+	return len(md.cols)
+}
+
 // ColumnLabel returns the label of the given column. It is used for pretty-
 // printing and debugging.
 func (md *Metadata) ColumnLabel(index ColumnIndex) string {

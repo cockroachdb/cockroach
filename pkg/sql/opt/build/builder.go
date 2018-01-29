@@ -49,9 +49,14 @@ var comparisonOpMap = [...]binaryFactoryFunc{
 	tree.NotRegIMatch:      (opt.Factory).ConstructNotRegIMatch,
 	tree.IsDistinctFrom:    (opt.Factory).ConstructIsNot,
 	tree.IsNotDistinctFrom: (opt.Factory).ConstructIs,
-	tree.Any:               (opt.Factory).ConstructAny,
-	tree.Some:              (opt.Factory).ConstructSome,
-	tree.All:               (opt.Factory).ConstructAll,
+	tree.Contains:          nil,
+	tree.ContainedBy:       nil,
+	tree.JSONExists:        nil,
+	tree.JSONSomeExists:    nil,
+	tree.JSONAllExists:     nil,
+	tree.Any:               nil,
+	tree.Some:              nil,
+	tree.All:               nil,
 }
 
 // Map from tree.BinaryOperator to Factory constructor function.
@@ -311,7 +316,8 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) opt.GroupID
 			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
 		}
 
-		// TODO(peter): handle t.SubOperator.
+		// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some, and
+		// All to various formulations of the opt Exists operator.
 		return comparisonOpMap[t.Operator](b.factory,
 			b.buildScalar(t.TypedLeft(), inScope),
 			b.buildScalar(t.TypedRight(), inScope),

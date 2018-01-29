@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package opt_test
+package build
 
 import (
 	"os"
@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../../../../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)

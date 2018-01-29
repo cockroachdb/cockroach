@@ -220,24 +220,6 @@ define ContainedBy {
    Right Expr
 }
 
-[Scalar, Comparison]
-define Any {
-   Left  Expr
-   Right Expr
-}
-
-[Scalar, Comparison]
-define Some {
-   Left  Expr
-   Right Expr
-}
-
-[Scalar, Comparison]
-define All {
-   Left  Expr
-   Right Expr
-}
-
 [Scalar, Binary]
 define Bitand {
    Left  Expr
