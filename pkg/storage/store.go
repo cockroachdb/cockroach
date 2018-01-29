@@ -97,6 +97,7 @@ const (
 	systemDataGossipInterval = 1 * time.Minute
 
 	// Messages that provide detail about why a preemptive snapshot was rejected.
+	snapshotStoreTooFullMsg = "store almost out of disk space"
 	snapshotApplySemBusyMsg = "store busy applying snapshots and/or removing replicas"
 	storeDrainingMsg        = "store is draining"
 
@@ -2816,6 +2817,10 @@ func (s *Store) reserveSnapshot(
 		// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 		// getting stuck behind large snapshots managed by the replicate queue.
 	} else if header.CanDecline {
+		storeDesc, ok := s.cfg.StorePool.getStoreDescriptor(s.StoreID())
+		if ok && !maxCapacityCheck(storeDesc) {
+			return nil, snapshotStoreTooFullMsg, nil
+		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
