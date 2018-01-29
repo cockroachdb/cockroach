@@ -62,12 +62,11 @@ func TestSetup(t *testing.T) {
 			sqlDB.Exec(t, `CREATE DATABASE test`)
 
 			gen := bank.FromRows(test.rows)
-			tables := gen.Tables()
-			if _, err := workload.Setup(sqlDB.DB, tables, test.batchSize); err != nil {
+			if _, err := workload.Setup(sqlDB.DB, gen, test.batchSize); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
-			for _, table := range tables {
+			for _, table := range gen.Tables() {
 				var c int
 				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, table.Name)).Scan(&c)
 				if c != table.InitialRowCount {

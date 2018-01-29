@@ -100,7 +100,7 @@ func backupRestoreTestSetupWithParams(
 	sqlDB.Exec(t, `CREATE DATABASE data`)
 	sqlDB.Exec(t, `USE data`)
 	const insertBatchSize = 1000
-	if _, err := workload.Setup(sqlDB.DB, bankData.Tables(), insertBatchSize); err != nil {
+	if _, err := workload.Setup(sqlDB.DB, bankData, insertBatchSize); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if err := bank.Split(sqlDB.DB, bankData); err != nil {

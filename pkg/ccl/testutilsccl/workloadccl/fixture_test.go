@@ -45,10 +45,10 @@ func makeTestWorkload() workload.Generator {
 	return g
 }
 
-func (fixtureTestGen) Meta() workload.Meta              { return workload.Meta{Name: `fixture`} }
-func (g fixtureTestGen) Flags() *pflag.FlagSet          { return g.flags }
-func (g fixtureTestGen) Configure(flags []string) error { return g.flags.Parse(flags) }
-func (fixtureTestGen) Ops() []workload.Operation        { return nil }
+func (fixtureTestGen) Meta() workload.Meta       { return workload.Meta{Name: `fixture`} }
+func (g fixtureTestGen) Flags() *pflag.FlagSet   { return g.flags }
+func (g fixtureTestGen) Hooks() workload.Hooks   { return workload.Hooks{} }
+func (fixtureTestGen) Ops() []workload.Operation { return nil }
 func (g fixtureTestGen) Tables() []workload.Table {
 	return []workload.Table{{
 		Name:            `fx`,
@@ -89,7 +89,7 @@ func TestFixture(t *testing.T) {
 
 	gen := makeTestWorkload()
 	flag := fmt.Sprintf(`val=%d`, timeutil.Now().UnixNano())
-	if err := gen.Configure([]string{`--` + flag}); err != nil {
+	if err := gen.Flags().Parse([]string{"--" + flag}); err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 
