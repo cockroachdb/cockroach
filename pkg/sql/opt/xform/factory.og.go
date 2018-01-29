@@ -448,45 +448,6 @@ func (_f *factory) ConstructContainedBy(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containedByExpr)))
 }
 
-func (_f *factory) ConstructAny(
-	left opt.GroupID,
-	right opt.GroupID,
-) opt.GroupID {
-	_anyExpr := makeAnyExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_anyExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_anyExpr)))
-}
-
-func (_f *factory) ConstructSome(
-	left opt.GroupID,
-	right opt.GroupID,
-) opt.GroupID {
-	_someExpr := makeSomeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_someExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_someExpr)))
-}
-
-func (_f *factory) ConstructAll(
-	left opt.GroupID,
-	right opt.GroupID,
-) opt.GroupID {
-	_allExpr := makeAllExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_allExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_allExpr)))
-}
-
 func (_f *factory) ConstructBitand(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1032,7 +993,7 @@ func (_f *factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [80]dynConstructLookupFunc
+var dynConstructLookup [77]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1213,21 +1174,6 @@ func init() {
 	// ContainedByOp
 	dynConstructLookup[opt.ContainedByOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructContainedBy(children[0], children[1])
-	}
-
-	// AnyOp
-	dynConstructLookup[opt.AnyOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructAny(children[0], children[1])
-	}
-
-	// SomeOp
-	dynConstructLookup[opt.SomeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructSome(children[0], children[1])
-	}
-
-	// AllOp
-	dynConstructLookup[opt.AllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructAll(children[0], children[1])
 	}
 
 	// BitandOp

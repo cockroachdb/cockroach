@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package opt_test
+package build
 
 import (
 	"os"
@@ -21,15 +21,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go
 
+// NewExecEngine returns an exec.Engine implementation that can be used to
+// create and run an execution plan. The implementation is in sql so this is an
+// opaque function that is initialized in TestMain.
+var NewExecEngine func(s serverutils.TestServerInterface) exec.Engine
+
 func TestMain(m *testing.M) {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
+
+	NewExecEngine = func(s serverutils.TestServerInterface) exec.Engine {
+		return s.Executor().(*sql.Executor).NewExecEngine()
+	}
+
 	os.Exit(m.Run())
 }
