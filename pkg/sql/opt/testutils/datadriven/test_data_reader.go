@@ -89,34 +89,75 @@ func (r *testDataReader) Next(t *testing.T) bool {
 		var separator bool
 		for r.scanner.Scan() {
 			line := r.scanner.Text()
-			if strings.TrimSpace(line) == "" {
-				break
-			}
-
-			r.emit(line)
 			if line == "----" {
 				separator = true
 				break
 			}
+
+			r.emit(line)
 			fmt.Fprintln(&buf, line)
 		}
 
 		r.data.Input = strings.TrimSpace(buf.String())
 
 		if separator {
-			buf.Reset()
-			for r.scanner.Scan() {
-				line := r.scanner.Text()
-				if strings.TrimSpace(line) == "" {
-					break
-				}
-				fmt.Fprintln(&buf, line)
-			}
-			r.data.Expected = buf.String()
+			r.readExpected()
 		}
 		return true
 	}
 	return false
+}
+
+func (r *testDataReader) readExpected() {
+	var buf bytes.Buffer
+	var line string
+	var allowBlankLines bool
+
+	if r.scanner.Scan() {
+		line = r.scanner.Text()
+		if line == "----" {
+			allowBlankLines = true
+		}
+	}
+
+	if allowBlankLines {
+		// Look for two successive lines of "----" before terminating.
+		for r.scanner.Scan() {
+			line = r.scanner.Text()
+
+			if line == "----" {
+				if r.scanner.Scan() {
+					line2 := r.scanner.Text()
+					if line2 == "----" {
+						break
+					}
+
+					fmt.Fprintln(&buf, line)
+					fmt.Fprintln(&buf, line2)
+					continue
+				}
+			}
+
+			fmt.Fprintln(&buf, line)
+		}
+	} else {
+		// Terminate on first blank line.
+		for {
+			if strings.TrimSpace(line) == "" {
+				break
+			}
+
+			fmt.Fprintln(&buf, line)
+
+			if !r.scanner.Scan() {
+				break
+			}
+
+			line = r.scanner.Text()
+		}
+	}
+
+	r.data.Expected = buf.String()
 }
 
 func (r *testDataReader) emit(s string) {
@@ -126,7 +167,7 @@ func (r *testDataReader) emit(s string) {
 	}
 }
 
-var splitDirectivesRE = regexp.MustCompile(`^ *[a-zA-Z0-9_,-]+(|=[a-zA-Z0-9_@]+|=\([^)]*\))( |$)`)
+var splitDirectivesRE = regexp.MustCompile(`^ *[a-zA-Z0-9_,-\.]+(|=[a-zA-Z0-9_@]+|=\([^)]*\))( |$)`)
 
 // splits a directive line into tokens, where each token is
 // either:
