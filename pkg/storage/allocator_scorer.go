@@ -38,6 +38,20 @@ const (
 	// https://brooker.co.za/blog/2012/01/17/two-random.html and
 	// https://www.eecs.harvard.edu/~michaelm/postscripts/mythesis.pdf.
 	allocatorRandomCount = 2
+
+	// maxFractionUsedThreshold: if the fraction used of a store descriptor
+	// capacity is greater than this value, it will never be used as a rebalance
+	// or allocate target and we will actively try to move replicas off of it.
+	maxFractionUsedThreshold = 0.95
+
+	// rebalanceToMaxFractionUsedThreshold: if the fraction used of a store
+	// descriptor capacity is greater than this value, it will never be used as a
+	// rebalance target. This is important for providing a buffer between fully
+	// healthy stores and full stores (as determined by
+	// maxFractionUsedThreshold).  Without such a buffer, replicas could
+	// hypothetically ping pong back and forth between two nodes, making one full
+	// and then the other.
+	rebalanceToMaxFractionUsedThreshold = 0.925
 )
 
 // EnableStatsBasedRebalancing controls whether range rebalancing takes
@@ -602,7 +616,7 @@ func rebalanceCandidates(
 				rangeCount:     int(s.Capacity.RangeCount),
 			})
 		} else {
-			if !storeInfo.ok || !maxCapacityOK {
+			if !storeInfo.ok || !maxCapacityOK || !rebalanceToMaxCapacityCheck(s) {
 				continue
 			}
 			balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
@@ -1197,4 +1211,11 @@ func divergesFromMean(oldVal, newVal, mean float64) bool {
 // maxCapacityCheck returns true if the store has room for a new replica.
 func maxCapacityCheck(store roachpb.StoreDescriptor) bool {
 	return store.Capacity.FractionUsed() < maxFractionUsedThreshold
+}
+
+// rebalanceToMaxCapacityCheck returns true if the store has enough room to
+// accept a rebalance. The bar for this is stricter than for whether a store
+// has enough room to accept a necessary replica (i.e. via AllocateCandidates).
+func rebalanceToMaxCapacityCheck(store roachpb.StoreDescriptor) bool {
+	return store.Capacity.FractionUsed() < rebalanceToMaxFractionUsedThreshold
 }
