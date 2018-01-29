@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,7 +51,9 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 				continue
 			}
 			// Index does not exist, but we want it to error out.
-			return nil, fmt.Errorf("index %q not found", index.Index)
+			return nil, pgerror.NewErrorf(
+				pgerror.CodeUndefinedObjectError, "index %q does not exist", index.Index,
+			)
 		}
 
 		tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
