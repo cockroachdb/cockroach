@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -187,9 +186,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := at.runScrubChecks(ctx, "tpch", "customer"); err != nil {
-				t.Error(err)
-			}
+			// TODO(vivek): Fix #21544.
+			//if err := at.runScrubChecks(ctx, "tpch", "customer"); err != nil {
+			//	t.Error(err)
+			//}
 
 			// All these return the same result.
 			validationQueries := []string{
@@ -217,9 +217,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := at.runScrubChecks(ctx, "datablocks", "blocks"); err != nil {
-				t.Error(err)
-			}
+			// TODO(vivek): Fix #21544.
+			//if err := at.runScrubChecks(ctx, "datablocks", "blocks"); err != nil {
+			//	t.Error(err)
+			//}
 
 			// All these return the same result.
 			validationQueries := []string{
@@ -336,16 +337,16 @@ func (at *allocatorTest) runValidationQueries(
 	return nil
 }
 
-func (at *allocatorTest) runScrubChecks(ctx context.Context, database, table string) error {
-	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = db.Close()
-	}()
-	return sqlutils.RunScrub(db, database, table)
-}
+//func (at *allocatorTest) runScrubChecks(ctx context.Context, database, table string) error {
+//	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
+//	if err != nil {
+//		return err
+//	}
+//	defer func() {
+//		_ = db.Close()
+//	}()
+//	return sqlutils.RunScrub(db, database, table)
+//}
 
 type timeSpan struct {
 	start, end time.Time
