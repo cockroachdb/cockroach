@@ -1446,9 +1446,11 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	}
 
 	// Set countdown target for re-gossiping capacity earlier than
-	// the usual periodic interval.
+	// the usual periodic interval. Re-gossip more rapidly for RangeCount
+	// changes because allocators with stale information are much more
+	// likely to make bad decisions.
 	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
-	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Max(rangeCountdown, 1))))
+	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Min(rangeCountdown, 3))))
 	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
