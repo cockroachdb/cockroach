@@ -115,16 +115,18 @@ func readBackupDescriptor(
 // SQL descriptors matching `descs` or `expandedDBs`, ordered by time. A
 // descriptor revision matches if it is an earlier revision of a descriptor in
 // descs (same ID) or has parentID in `expanded`. Deleted descriptors are
-// represented as nil.
+// represented as nil. Fills in the `priorIDs` map in the process, which maps
+// a descriptor the the ID by which it was previously known (e.g pre-TRUNCATE).
 func getRelevantDescChanges(
 	ctx context.Context,
 	db *client.DB,
 	startTime, endTime hlc.Timestamp,
 	descs []sqlbase.Descriptor,
 	expanded []sqlbase.ID,
+	priorIDs map[sqlbase.ID]sqlbase.ID,
 ) ([]BackupDescriptor_DescriptorRevision, error) {
 
-	allChanges, err := getAllDescChanges(ctx, db, startTime, endTime)
+	allChanges, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +150,11 @@ func getRelevantDescChanges(
 	// obviously interesting to our backup.
 	for _, i := range descs {
 		interestingIDs[i.GetID()] = struct{}{}
+		if t := i.GetTable(); t != nil {
+			for j := t.ReplacementOf.ID; j != sqlbase.InvalidID; j = priorIDs[j] {
+				interestingIDs[j] = struct{}{}
+			}
+		}
 	}
 
 	// We're also interested in any desc that belonged to a DB we're backing up.
@@ -216,7 +223,10 @@ func getRelevantDescChanges(
 // returning its ID, content and the change time (with deletions represented as
 // nil content).
 func getAllDescChanges(
-	ctx context.Context, db *client.DB, startTime, endTime hlc.Timestamp,
+	ctx context.Context,
+	db *client.DB,
+	startTime, endTime hlc.Timestamp,
+	priorIDs map[sqlbase.ID]sqlbase.ID,
 ) ([]BackupDescriptor_DescriptorRevision, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
@@ -241,6 +251,9 @@ func getAllDescChanges(
 					return nil, err
 				}
 				r.Desc = &desc
+				if t := desc.GetTable(); t != nil && t.ReplacementOf.ID != sqlbase.InvalidID {
+					priorIDs[t.ID] = t.ReplacementOf.ID
+				}
 			}
 			res = append(res, r)
 		}
@@ -916,9 +929,12 @@ func backupPlanHook(
 			startTime = prevBackups[len(prevBackups)-1].EndTime
 		}
 
+		var priorIDs map[sqlbase.ID]sqlbase.ID
+
 		var revs []BackupDescriptor_DescriptorRevision
 		if mvccFilter == MVCCFilter_All {
-			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs)
+			priorIDs = make(map[sqlbase.ID]sqlbase.ID)
+			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs)
 			if err != nil {
 				return err
 			}
@@ -940,11 +956,36 @@ func backupPlanHook(
 
 			for _, d := range targetDescs {
 				if t := d.GetTable(); t != nil {
+					// If we're trying to use a previous backup for this table, ideally it
+					// actually contains this table.
 					if _, ok := tablesInPrev[t.ID]; ok {
 						continue
 					}
+					// This table isn't in the previous backup... maybe was added to a
+					// DB that the previous backup captured?
 					if _, ok := dbsInPrev[t.ParentID]; ok {
 						continue
+					}
+					// Maybe this table is missing from the previous backup because it was
+					// truncated?
+					if t.ReplacementOf.ID != sqlbase.InvalidID {
+
+						// Check if we need to lazy-load the priorIDs (i.e. if this is the first
+						// truncate we've encountered in non-MVCC backup).
+						if priorIDs == nil {
+							priorIDs = make(map[sqlbase.ID]sqlbase.ID)
+							_, err := getAllDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, priorIDs)
+							if err != nil {
+								return err
+							}
+						}
+						found := false
+						for was := t.ReplacementOf.ID; was != sqlbase.InvalidID && !found; was = priorIDs[was] {
+							_, found = tablesInPrev[was]
+						}
+						if found {
+							continue
+						}
 					}
 					return errors.Errorf("previous backup does not contain table %q", t.Name)
 				}
