@@ -128,8 +128,8 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
 
 # Compiling Go from source requires a Go toolchain to bootstrap.
 RUN apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.9.src.tar.gz -o golang.tar.gz \
- && echo 'a4ab229028ed167ba1986825751463605264e44868362ca8e7accc8be057e993  golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.9.3.src.tar.gz -o golang.tar.gz \
+ && echo '4e3d0ad6e91e02efa77d54e86c8b9e34fbe1cbc2935b6d38784dca93331c47ae  golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
@@ -150,14 +150,18 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
  && echo 'deb https://deb.nodesource.com/node_6.x xenial main' | tee /etc/apt/sources.list.d/nodesource.list \
  && curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
  && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list \
+ && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
+ && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
  && apt-get update
 
 # ccache - speed up C and C++ compilation
 # nodejs - ui
 # openjdk-8-jre - railroad diagram generation
+# google-cloud-sdk - roachprod acceptance tests
 # yarn - ui
 RUN apt-get install -y --no-install-recommends \
     ccache \
+    google-cloud-sdk \
     nodejs \
     openjdk-8-jre \
     yarn
