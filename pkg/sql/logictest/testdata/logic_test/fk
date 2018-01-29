@@ -89,8 +89,11 @@ ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE CASCA
 statement ok
 ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
-statement error pq: unsupported: ON DELETE SET NULL
+statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE SET NULL
+
+statement ok
+ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
 statement error pq: unsupported: ON UPDATE SET NULL
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE SET NULL
@@ -1094,3 +1097,108 @@ ALTER TABLE b ADD CONSTRAINT delete_check CHECK (update_cascade_composite1 > 0);
 # Clean up after the test.
 statement ok
 DROP TABLE b, a;
+
+subtest DeleteNull_NotNullConstraint
+### Make sure that one cannot add a set null action on a NOT NULL column.
+
+statement ok
+CREATE TABLE a (
+  id INT PRIMARY KEY
+);
+
+# Create a table with a NOT NULL column and a SET NULL action.
+statement error pq: cannot add a SET NULL cascading action on column \"delete_not_nullable\" which has a NOT NULL constraint
+CREATE TABLE not_null_table (
+  id INT PRIMARY KEY
+ ,delete_not_nullable INT NOT NULL REFERENCES a ON DELETE SET NULL
+);
+
+# Create a table where the primary key has a SET NULL action.
+statement error pq: cannot add a SET NULL cascading action on column \"id\" which has a NOT NULL constraint
+CREATE TABLE primary_key_table (
+  id INT PRIMARY KEY REFERENCES a ON DELETE SET NULL
+);
+
+# Add a SET NULL action after the fact with a NOT NULL column.
+statement ok
+CREATE TABLE not_null_table (
+  id INT PRIMARY KEY
+ ,delete_not_nullable INT NOT NULL
+);
+
+statement error pq: cannot add a SET NULL cascading action on column \"delete_not_nullable\" which has a NOT NULL constraint
+ALTER TABLE not_null_table ADD CONSTRAINT not_null_set_null
+  FOREIGN KEY (delete_not_nullable) REFERENCES a (id)
+  ON DELETE SET NULL;
+
+# Add a SET NULL action after the fact with a primary key column.
+statement ok
+CREATE TABLE primary_key_table (
+  id INT PRIMARY KEY
+);
+
+statement error pq: cannot add a SET NULL cascading action on column \"id\" which has a NOT NULL constraint
+ALTER TABLE primary_key_table ADD CONSTRAINT not_null_set_null
+  FOREIGN KEY (id) REFERENCES a (id)
+  ON DELETE SET NULL;
+
+# Clean up the tables so far.
+statement ok
+DROP TABLE primary_key_table, not_null_table, a;
+
+# Now test composite foreign keys
+statement ok
+CREATE TABLE a (
+  id1 INT
+ ,id2 INT
+ ,PRIMARY KEY (id2, id1)
+);
+
+# Create a table with a NOT NULL column and a SET NULL action.
+statement error pq: cannot add a SET NULL cascading action on column \"ref1\" which has a NOT NULL constraint
+CREATE TABLE not_null_table (
+  id INT PRIMARY KEY
+ ,ref1 INT NOT NULL
+ ,ref2 INT NOT NULL
+ ,INDEX (ref1, ref2)
+ ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON DELETE SET NULL
+);
+
+statement error pq: cannot add a SET NULL cascading action on column \"ref1\" which has a NOT NULL constraint
+CREATE TABLE not_null_table (
+  id INT PRIMARY KEY
+ ,ref1 INT NOT NULL
+ ,ref2 INT
+ ,INDEX (ref1, ref2)
+ ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON DELETE SET NULL
+);
+
+statement error pq: cannot add a SET NULL cascading action on column \"ref2\" which has a NOT NULL constraint
+CREATE TABLE not_null_table (
+  id INT PRIMARY KEY
+ ,ref1 INT
+ ,ref2 INT NOT NULL
+ ,INDEX (ref1, ref2)
+ ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON DELETE SET NULL
+);
+
+# Create a table where the primary key has a SET NULL action.
+statement error pq: cannot add a SET NULL cascading action on column \"ref1\" which has a NOT NULL constraint
+CREATE TABLE primary_key_table (
+  ref1 INT
+ ,ref2 INT
+ ,PRIMARY KEY (ref2, ref1)
+ ,FOREIGN KEY (ref1, ref2) REFERENCES a (id2, id1) ON DELETE SET NULL
+);
+
+statement error pq: cannot add a SET NULL cascading action on column \"ref2\" which has a NOT NULL constraint
+CREATE TABLE primary_key_table (
+  ref1 INT
+ ,ref2 INT
+ ,PRIMARY KEY (ref2, ref1)
+ ,FOREIGN KEY (ref2, ref1) REFERENCES a (id2, id1) ON DELETE SET NULL
+);
+
+# Clean up after the test.
+statement ok
+DROP TABLE a;
