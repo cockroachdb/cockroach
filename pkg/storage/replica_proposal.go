@@ -659,7 +659,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	}
 
 	for _, sc := range rResult.SuggestedCompactions {
-		r.store.compactor.SuggestCompaction(ctx, sc)
+		r.store.compactor.Suggest(ctx, sc)
 	}
 	rResult.SuggestedCompactions = nil
 

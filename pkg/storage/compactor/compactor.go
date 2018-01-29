@@ -306,7 +306,7 @@ func (c *Compactor) processCompaction(
 	if shouldProcess {
 		startTime := timeutil.Now()
 		log.Eventf(ctx, "processing compaction %s", aggr)
-		if err := c.eng.CompactRange(aggr.StartKey, aggr.EndKey); err != nil {
+		if err := c.eng.CompactRange(aggr.StartKey, aggr.EndKey, false /* forceBottommost */); err != nil {
 			return 0, errors.Wrapf(err, "unable to compact range %+v", aggr)
 		}
 		c.Metrics.BytesCompacted.Inc(aggr.Bytes)
@@ -397,9 +397,9 @@ func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 	return totalBytes, nil
 }
 
-// SuggestCompaction writes the specified compaction to persistent
-// storage and pings the processing goroutine.
-func (c *Compactor) SuggestCompaction(ctx context.Context, sc storagebase.SuggestedCompaction) {
+// Suggest writes the specified compaction to persistent storage and
+// pings the processing goroutine.
+func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompaction) {
 	log.VEventf(ctx, 2, "suggested compaction from %s - %s: %+v", sc.StartKey, sc.EndKey, sc.Compaction)
 
 	// Check whether a suggested compaction already exists for this key span.

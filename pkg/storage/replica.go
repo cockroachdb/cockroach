@@ -780,7 +780,7 @@ func (r *Replica) destroyDataRaftMuLocked(
 	clearTime := timeutil.Now()
 
 	// Suggest the cleared range to the compactor queue.
-	r.store.compactor.SuggestCompaction(ctx, storagebase.SuggestedCompaction{
+	r.store.compactor.Suggest(ctx, storagebase.SuggestedCompaction{
 		StartKey: roachpb.Key(desc.StartKey),
 		EndKey:   roachpb.Key(desc.EndKey),
 		Compaction: storagebase.Compaction{
