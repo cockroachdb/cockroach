@@ -58,27 +58,39 @@ type testModel struct {
 	modelData   map[string]roachpb.Value
 	seenSources map[string]struct{}
 	*localtestcluster.LocalTestCluster
-	DB         *DB
-	memMonitor *mon.BytesMonitor
+	DB                *DB
+	workerMemMonitor  *mon.BytesMonitor
+	resultMemMonitor  *mon.BytesMonitor
+	queryMemoryBudget int64
 }
 
 // newTestModel creates a new testModel instance. The Start() method must
 // be called before using it.
 func newTestModel(t *testing.T) testModel {
-	monitor := mon.MakeUnlimitedMonitor(
+	workerMonitor := mon.MakeUnlimitedMonitor(
 		context.Background(),
-		"timeseries-testmodel",
+		"timeseries-test-worker",
 		mon.MemoryResource,
 		nil,
 		nil,
-		queryMemoryMax/10,
+		math.MaxInt64,
+	)
+	resultMonitor := mon.MakeUnlimitedMonitor(
+		context.Background(),
+		"timeseries-test-result",
+		mon.MemoryResource,
+		nil,
+		nil,
+		math.MaxInt64,
 	)
 	return testModel{
-		t:                t,
-		modelData:        make(map[string]roachpb.Value),
-		seenSources:      make(map[string]struct{}),
-		LocalTestCluster: &localtestcluster.LocalTestCluster{},
-		memMonitor:       &monitor,
+		t:                 t,
+		modelData:         make(map[string]roachpb.Value),
+		seenSources:       make(map[string]struct{}),
+		LocalTestCluster:  &localtestcluster.LocalTestCluster{},
+		workerMemMonitor:  &workerMonitor,
+		resultMemMonitor:  &resultMonitor,
+		queryMemoryBudget: math.MaxInt64,
 	}
 }
 

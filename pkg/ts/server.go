@@ -37,11 +37,11 @@ const (
 	URLPrefix = "/ts/"
 	// queryWorkerMax is the default maximum number of worker goroutines that
 	// the time series server can use to service incoming queries.
-	queryWorkerMax = 250
+	queryWorkerMax = 64
 	// queryMemoryMax is a soft limit for the amount of total memory used by
 	// time series queries. This is not currently enforced, but is used for
 	// monitoring purposes.
-	queryMemoryMax = 64 * 1024 * 1024 // 64MiB
+	queryMemoryMax = int64(64 * 1024 * 1024) // 64MiB
 )
 
 // ServerConfig provides a means for tests to override settings in the time
@@ -50,15 +50,44 @@ type ServerConfig struct {
 	// The maximum number of query workers used by the server. If this
 	// value is zero, a default non-zero value is used instead.
 	QueryWorkerMax int
+	// The maximum amount of memory that should be used for processing queries
+	// across all workers. If this value is zero, a default non-zero value is
+	// used instead.
+	QueryMemoryMax int64
 }
 
 // Server handles incoming external requests related to time series data.
+//
+// The server attempts to constrain the total amount of memory it uses for
+// processing incoming queries. This is accomplished with a multi-pronged
+// strategy:
+// + The server has a worker memory limit, which is a quota for the amount of
+//   memory that can be used across all currently executing queries.
+// + The server also has a pre-set limit on the number of parallel workers that
+//   can be executing at one time. Each worker is given an even share of the
+//   server's total memory limit, which it should not exceed.
+// + Each worker breaks its task into chunks which it will process sequentially;
+//   the size of each chunk is calculated to avoid exceeding the memory limit.
+//
+// In addition to this strategy, the server uses a memory monitor to track the
+// amount of memory being used in reality by worker tasks. This is intended to
+// verify the calculations of the individual workers are correct.
+//
+// A second memory monitor is used to track the space used by the results of
+// query workers, which are longer lived; an incoming request may utilize
+// several workers, but the results of each worker cannot be released until
+// being returned to the requestor. Result memory is not currently limited,
+// as in practical usage it is dwarfed by the memory needed by workers to
+// generate the results.
 type Server struct {
 	log.AmbientContext
-	db         *DB
-	memMonitor mon.BytesMonitor
-	stopper    *stop.Stopper
-	workerSem  chan struct{}
+	db               *DB
+	stopper          *stop.Stopper
+	queryMemoryMax   int64
+	queryWorkerMax   int
+	workerMemMonitor mon.BytesMonitor
+	resultMemMonitor mon.BytesMonitor
+	workerSem        chan struct{}
 }
 
 // MakeServer instantiates a new Server which services requests with data from
@@ -67,23 +96,42 @@ func MakeServer(
 	ambient log.AmbientContext, db *DB, cfg ServerConfig, stopper *stop.Stopper,
 ) Server {
 	ambient.AddLogTag("ts-srv", nil)
+
+	// Override default values from configuration.
 	queryWorkerMax := queryWorkerMax
 	if cfg.QueryWorkerMax != 0 {
 		queryWorkerMax = cfg.QueryWorkerMax
 	}
+	queryMemoryMax := queryMemoryMax
+	if cfg.QueryMemoryMax != 0 {
+		queryMemoryMax = cfg.QueryMemoryMax
+	}
+
 	return Server{
 		AmbientContext: ambient,
 		db:             db,
 		stopper:        stopper,
-		memMonitor: mon.MakeUnlimitedMonitor(
+		workerMemMonitor: mon.MakeUnlimitedMonitor(
 			context.Background(),
-			"timeseries",
+			"timeseries-workers",
+			mon.MemoryResource,
+			nil,
+			nil,
+			// Begin logging messages if we exceed our planned memory usage by
+			// more than double.
+			queryMemoryMax*2,
+		),
+		resultMemMonitor: mon.MakeUnlimitedMonitor(
+			context.Background(),
+			"timeseries-results",
 			mon.MemoryResource,
 			nil,
 			nil,
 			math.MaxInt64,
 		),
-		workerSem: make(chan struct{}, queryWorkerMax),
+		queryMemoryMax: queryMemoryMax,
+		queryWorkerMax: queryWorkerMax,
+		workerSem:      make(chan struct{}, queryWorkerMax),
 	}
 }
 
@@ -122,25 +170,9 @@ func (s *Server) Query(
 	// be interpolated).
 	interpolationLimit := storage.TimeUntilStoreDead.Get(&s.db.st.SV).Nanoseconds()
 
-	monitor := mon.MakeMonitor(
-		"timeseries-query",
-		mon.MemoryResource,
-		nil,
-		nil,
-		0,
-		math.MaxInt64,
-	)
-	monitor.Start(ctx, &s.memMonitor, mon.BoundAccount{})
-	defer monitor.Stop(ctx)
-
-	// Create a separate account for each query, allowing them to be run in
-	// parallel.
-	queryAccounts := make([]mon.BoundAccount, len(request.Queries))
-	defer func() {
-		for idx := range queryAccounts {
-			queryAccounts[idx].Close(ctx)
-		}
-	}()
+	// TODO(mrtracy): This number should be computed from node livenesses, which
+	// will yield more accurate estimates.
+	estimatedClusterNodeCount := int64(6)
 
 	response := tspb.TimeSeriesQueryResponse{
 		Results: make([]tspb.TimeSeriesQueryResponse_Result, len(request.Queries)),
@@ -155,6 +187,15 @@ func (s *Server) Query(
 	// error or nil (when successful).
 	workerOutput := make(chan error)
 
+	// Create a separate account for each query, allowing them to be run in
+	// parallel.
+	resultAccounts := make([]mon.BoundAccount, len(request.Queries))
+	defer func() {
+		for idx := range resultAccounts {
+			resultAccounts[idx].Close(ctx)
+		}
+	}()
+
 	// Start a task which is itself responsible for starting per-query worker
 	// tasks. This is needed because RunLimitedAsyncTask can block; in the
 	// case where a single request has more queries than the semaphore limit,
@@ -165,7 +206,6 @@ func (s *Server) Query(
 		for queryIdx, query := range request.Queries {
 			queryIdx := queryIdx
 			query := query
-			queryAccounts[queryIdx] = monitor.MakeBoundAccount()
 
 			if err := s.stopper.RunLimitedAsyncTask(
 				ctx,
@@ -173,7 +213,9 @@ func (s *Server) Query(
 				s.workerSem,
 				true, /* wait */
 				func(ctx context.Context) {
-					datapoints, sources, err := s.db.Query(
+					// Create a memory account for the results of this query.
+					resultAccounts[queryIdx] = s.resultMemMonitor.MakeBoundAccount()
+					datapoints, sources, err := s.db.QueryMemoryConstrained(
 						ctx,
 						query,
 						Resolution10s,
@@ -181,7 +223,12 @@ func (s *Server) Query(
 						request.StartNanos,
 						request.EndNanos,
 						interpolationLimit,
-						&queryAccounts[queryIdx],
+						&resultAccounts[queryIdx],
+						&s.workerMemMonitor,
+						// The worker is allotted an even share of the total worker memory
+						// budget for the server.
+						s.queryMemoryMax/int64(s.queryWorkerMax),
+						estimatedClusterNodeCount,
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{

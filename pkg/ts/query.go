@@ -32,10 +32,11 @@ import (
 
 // Compute the size of various structures to use when tracking memory usage.
 var (
-	sizeOfDataSpan       = int(unsafe.Sizeof(dataSpan{}))
-	sizeOfCalibratedData = int(unsafe.Sizeof(calibratedData{}))
-	sizeOfSample         = int(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{}))
-	sizeOfDataPoint      = int(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))
+	sizeOfDataSpan       = int64(unsafe.Sizeof(dataSpan{}))
+	sizeOfCalibratedData = int64(unsafe.Sizeof(calibratedData{}))
+	sizeOfTimeSeriesData = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{}))
+	sizeOfSample         = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{}))
+	sizeOfDataPoint      = int64(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))
 )
 
 // calibratedData is used to calibrate an InternalTimeSeriesData object for
@@ -717,6 +718,124 @@ func (ai aggregatingIterator) min() (float64, bool) {
 	return min, anyValid
 }
 
+// getMaxTimespan computes the longest timespan that can be safely queried while
+// remaining within the given memory budget. Inputs are the resolution of data
+// being queried, the budget, the estimated number of sources, and the
+// interpolation limit being used for the query.
+func getMaxTimespan(
+	r Resolution, memoryBudget, estimatedSourceCount, interpolationLimitNanos int64,
+) (int64, error) {
+	slabDuration := r.SlabDuration()
+
+	// Size of slab is the size of a completely full data slab for the supplied
+	// data resolution.
+	sizeOfSlab := sizeOfTimeSeriesData + (slabDuration/r.SampleDuration())*sizeOfSample
+
+	// InterpolationBuffer is the number of slabs outside of the query range
+	// needed to satisfy the interpolation limit. Extra slabs may be queried
+	// on both sides of the target range.
+	interpolationBufferOneSide :=
+		int64(math.Ceil(float64(interpolationLimitNanos) / float64(slabDuration)))
+
+	interpolationBuffer := interpolationBufferOneSide * 2
+
+	// If the (interpolation buffer timespan - interpolation limit) is less than
+	// half of a slab, then it is possible for one additional slab to be queried
+	// that would not have otherwise been queried. This can occur when the queried
+	// timespan does not start on an even slab boundary.
+	if (interpolationBufferOneSide*slabDuration)-interpolationLimitNanos < slabDuration/2 {
+		interpolationBuffer++
+	}
+
+	// The number of slabs that can be queried safely is perSeriesMem/sizeOfSlab,
+	// less the interpolation buffer.
+	perSourceMem := memoryBudget / estimatedSourceCount
+	numSlabs := perSourceMem/sizeOfSlab - interpolationBuffer
+	if numSlabs <= 0 {
+		return 0, fmt.Errorf("insufficient memory budget to attempt query")
+	}
+
+	return numSlabs * slabDuration, nil
+}
+
+// QueryMemoryConstrained executes a query while attempting to limit the maximum
+// amount of memory needed at one time. It accomplishes this by breaking the
+// query into multiple "chunks" as necessary according to the provided memory
+// budget. Chunks are queried sequentially, ensuring that the memory budget
+// applies to only a single chunk at any given time.
+//
+// In addition to the memory budget, an "expected source count" must be provided
+// to this function. This allows the query to better predict how many slabs
+// it will encounter when querying a time span.
+func (db *DB) QueryMemoryConstrained(
+	ctx context.Context,
+	query tspb.Query,
+	queryResolution Resolution,
+	sampleDuration, startNanos, endNanos, interpolationLimitNanos int64,
+	resultAccount *mon.BoundAccount,
+	workerMemMonitor *mon.BytesMonitor,
+	workerMemBudget int64,
+	expectedSourceCount int64,
+) ([]tspb.TimeSeriesDatapoint, []string, error) {
+	maxTimespan, err := getMaxTimespan(
+		queryResolution, workerMemBudget, expectedSourceCount, interpolationLimitNanos,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	totalTimespan := endNanos - startNanos
+	if maxTimespan >= totalTimespan {
+		return db.Query(
+			ctx,
+			query,
+			queryResolution,
+			sampleDuration,
+			startNanos,
+			endNanos,
+			interpolationLimitNanos,
+			resultAccount,
+			workerMemMonitor,
+		)
+	}
+
+	allData := make([]tspb.TimeSeriesDatapoint, 0)
+	allSourcesMap := make(map[string]struct{})
+	for s, e := startNanos, startNanos+maxTimespan; s < endNanos; s, e = e, e+maxTimespan {
+		// End span is not inclusive for partial queries.
+		adjustedEnd := e - queryResolution.SampleDuration()
+		// Do not exceed the specified endNanos.
+		if adjustedEnd > endNanos {
+			adjustedEnd = endNanos
+		}
+		data, sources, err := db.Query(
+			ctx,
+			query,
+			queryResolution,
+			sampleDuration,
+			s,
+			adjustedEnd,
+			interpolationLimitNanos,
+			resultAccount,
+			workerMemMonitor,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		allData = append(allData, data...)
+		for _, source := range sources {
+			allSourcesMap[source] = struct{}{}
+		}
+	}
+
+	allSources := make([]string, 0, len(allSourcesMap))
+	for source := range allSourcesMap {
+		allSources = append(allSources, source)
+	}
+
+	return allData, allSources, nil
+}
+
 // Query returns datapoints for the named time series during the supplied time
 // span.  Data is returned as a series of consecutive data points.
 //
@@ -756,7 +875,8 @@ func (db *DB) Query(
 	query tspb.Query,
 	queryResolution Resolution,
 	sampleDuration, startNanos, endNanos, interpolationLimitNanos int64,
-	sessionAccount *mon.BoundAccount,
+	resultAccount *mon.BoundAccount,
+	workerMemMonitor *mon.BytesMonitor,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Verify that sampleDuration is a multiple of
 	// queryResolution.SampleDuration().
@@ -776,7 +896,7 @@ func (db *DB) Query(
 	}
 
 	// Create a local account to track memory usage local to this function.
-	localAccount := sessionAccount.Monitor().MakeBoundAccount()
+	localAccount := workerMemMonitor.MakeBoundAccount()
 	defer localAccount.Close(ctx)
 
 	// Normalize startNanos to a sampleDuration boundary.
@@ -855,7 +975,7 @@ func (db *DB) Query(
 	iters := make(aggregatingIterator, 0, len(sourceSpans))
 	maxDistance := int32(interpolationLimitNanos / sampleDuration)
 	for name, span := range sourceSpans {
-		if err := sessionAccount.Grow(ctx, int64(len(name))); err != nil {
+		if err := resultAccount.Grow(ctx, int64(len(name))); err != nil {
 			return nil, nil, err
 		}
 		sources = append(sources, name)
@@ -892,7 +1012,7 @@ func (db *DB) Query(
 
 	for iters.isValid() && iters.timestamp() <= endNanos {
 		if value, valid := valueFn(); valid {
-			if err := sessionAccount.Grow(ctx, int64(sizeOfDataPoint)); err != nil {
+			if err := resultAccount.Grow(ctx, sizeOfDataPoint); err != nil {
 				return nil, nil, err
 			}
 			response := tspb.TimeSeriesDatapoint{
@@ -927,7 +1047,7 @@ func makeDataSpans(
 			return nil, err
 		}
 		if _, ok := sourceSpans[source]; !ok {
-			if err := acc.Grow(ctx, int64(len(source)+sizeOfDataSpan)); err != nil {
+			if err := acc.Grow(ctx, int64(len(source))+sizeOfDataSpan); err != nil {
 				return nil, err
 			}
 			sourceSpans[source] = &dataSpan{
@@ -937,7 +1057,7 @@ func makeDataSpans(
 			}
 		}
 		if err := acc.Grow(
-			ctx, int64((sizeOfSample*len(data.Samples))+sizeOfCalibratedData),
+			ctx, sizeOfSample*int64(len(data.Samples))+sizeOfCalibratedData,
 		); err != nil {
 			return nil, err
 		}

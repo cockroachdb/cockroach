@@ -137,6 +137,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.TimeSeriesQueryWorkerMax != 0 {
 		cfg.TimeSeriesServerConfig.QueryWorkerMax = params.TimeSeriesQueryWorkerMax
 	}
+	if params.TimeSeriesQueryMemoryBudget != 0 {
+		cfg.TimeSeriesServerConfig.QueryMemoryMax = params.TimeSeriesQueryMemoryBudget
+	}
 	if params.DisableEventLog {
 		cfg.EventLogEnabled = false
 	}
