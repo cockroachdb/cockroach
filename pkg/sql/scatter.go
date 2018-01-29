@@ -110,6 +110,11 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		if span.Key.Compare(span.EndKey) > 0 {
 			span.Key, span.EndKey = span.EndKey, span.Key
 		}
+		// Key==EndKey is invalid, so special-case when the user's FROM and TO
+		// are the same tuple.
+		if span.Key.Equal(span.EndKey) {
+			span.EndKey = span.EndKey.Next()
+		}
 	}
 
 	return &scatterNode{
