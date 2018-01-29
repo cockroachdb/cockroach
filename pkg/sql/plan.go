@@ -90,7 +90,7 @@ func (r *runParams) EvalContext() *tree.EvalContext {
 
 // SessionData gives convenient access to the runParam's SessionData.
 func (r *runParams) SessionData() *sessiondata.SessionData {
-	return &r.extendedEvalCtx.SessionData
+	return r.extendedEvalCtx.SessionData
 }
 
 // planNode defines the interface for executing a query or portion of a query.
