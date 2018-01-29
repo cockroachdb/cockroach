@@ -50,6 +50,10 @@ func TestJoinReader(t *testing.T) {
 	sumFn := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row/10 + row%10))
 	}
+	v := [10]tree.Datum{}
+	for i := range v {
+		v[i] = tree.NewDInt(tree.DInt(i))
+	}
 
 	sqlutils.CreateTable(t, sqlDB, "t",
 		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), INDEX bs (b,s)",
@@ -59,12 +63,15 @@ func TestJoinReader(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	testCases := []struct {
+		description string
 		post        PostProcessSpec
 		input       [][]tree.Datum
+		lookupCols  columns
 		outputTypes []sqlbase.ColumnType
 		expected    string
 	}{
 		{
+			description: "Test selecting rows using the primary index",
 			post: PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
@@ -79,6 +86,56 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 		},
 		{
+			description: "Test selecting columns from second table",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 4},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
+		},
+		{
+			description: "Test duplicates in the input of lookup joins",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 3},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
+		},
+		{
+			description: "Test selecting rows using the primary index",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 4},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
+		},
+		{
+			description: "Test a filter in the post process spec and using a secondary index",
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5
 				Projection:    true,
@@ -99,7 +156,7 @@ func TestJoinReader(t *testing.T) {
 		},
 	}
 	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
+		t.Run(c.description, func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
@@ -120,7 +177,13 @@ func TestJoinReader(t *testing.T) {
 			in := NewRowBuffer(twoIntCols, encRows, RowBufferArgs{})
 
 			out := &RowBuffer{}
-			jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &c.post, out)
+			jr, err := newJoinReader(
+				&flowCtx,
+				&JoinReaderSpec{Table: *td, LookupColumns: c.lookupCols},
+				in,
+				&c.post,
+				out,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
