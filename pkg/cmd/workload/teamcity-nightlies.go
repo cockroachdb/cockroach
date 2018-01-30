@@ -25,7 +25,7 @@ import (
 )
 
 var teamcityNightliesCmd = &cobra.Command{
-	Use:   `teamcity-nightlies <unique-run-id>`,
+	Use:   `teamcity-nightlies <cluster-prefix>`,
 	Short: `Run the nightly performance tests`,
 	Args:  cobra.ExactArgs(1),
 	RunE:  runTeamcityNightlies,
@@ -39,15 +39,15 @@ func init() {
 // clusters (# of machines in each locality) are going to generalize. For now,
 // just hardcode what we had before.
 var singleDCTests = map[string]string{
-	`kv0`:    `./workload run kv --read-percent=0 --splits=1000 --concurrency=384 --duration=10m`,
-	`kv95`:   `./workload run kv --read-percent=95 --splits=1000 --concurrency=384 --duration=10m`,
-	`splits`: `./workload run kv --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1`,
+	`kv0`:    `./workload run kv --init --read-percent=0 --splits=1000 --concurrency=384 --duration=10m`,
+	`kv95`:   `./workload run kv --init --read-percent=95 --splits=1000 --concurrency=384 --duration=10m`,
+	`splits`: `./workload run kv --init --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1`,
 }
 
 func runTeamcityNightlies(_ *cobra.Command, args []string) error {
-	uniqueRunID := args[0]
+	clusterPrefix := args[0]
 	for testName, testCmd := range singleDCTests {
-		clusterName := fmt.Sprintf(`teamcity-nightly-workload-%s-%s`, uniqueRunID, testName)
+		clusterName := fmt.Sprintf(`%s-%s`, clusterPrefix, testName)
 		defer func(clusterName string) {
 			cmd := exec.Command(`roachprod`, `-u`, `teamcity`, `destroy`, clusterName)
 			fmt.Printf("> %s\n", strings.Join(cmd.Args, ` `))
@@ -59,15 +59,18 @@ func runTeamcityNightlies(_ *cobra.Command, args []string) error {
 		cmds := []*exec.Cmd{
 			exec.Command(`roachprod`, `-u`, `teamcity`, `create`, clusterName),
 			exec.Command(`roachprod`, `sync`),
-			exec.Command(`roachperf`, clusterName, `put`, `./cockroach`, `./cockroach`),
-			exec.Command(`roachperf`, clusterName, `put`, `./workload`, `./workload`),
-			exec.Command(`roachperf`, clusterName, `workload-test`, testName, testCmd),
+			exec.Command(`sleep`, `30`),
+			exec.Command(`roachprod`, `put`, clusterName, `./cockroach`, `./cockroach`),
+			exec.Command(`roachprod`, `put`, clusterName, `./workload`, `./workload`),
+			exec.Command(`roachprod`, `workload-test`, clusterName, testName, testCmd),
 		}
 		for _, cmd := range cmds {
 			fmt.Printf("> %s\n", strings.Join(cmd.Args, ` `))
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				return errors.Errorf("%s\n\n%s\n\n%s", strings.Join(cmd.Args, ` `), err, string(output))
+				err := errors.Errorf("%s\n\n%s\n\n%s", strings.Join(cmd.Args, ` `), err, string(output))
+				fmt.Println(err)
+				return err
 			}
 		}
 	}
