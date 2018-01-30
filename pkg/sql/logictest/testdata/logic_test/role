@@ -5,3 +5,37 @@ SHOW ROLES
 ----
 username
 admin
+
+query TTB colnames
+SHOW GRANTS ON ROLE
+----
+role   member  isAdmin
+admin  root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE admin
+----
+role   member  isAdmin
+admin  root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE FOR root
+----
+role   member  isAdmin
+admin  root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE admin FOR root
+----
+role   member  isAdmin
+admin  root    true
+
+query TTB colnames
+SHOW GRANTS ON ROLE FOR testuser
+----
+role  member  isAdmin
+
+query TTB colnames
+SHOW GRANTS ON ROLE testuser,admin FOR testuser,admin
+----
+role  member  isAdmin

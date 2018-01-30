@@ -255,6 +255,10 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW GRANTS ON foo FOR ??`, `SHOW GRANTS`},
 		{`SHOW GRANTS ON foo FOR bar ??`, `SHOW GRANTS`},
 
+		{`SHOW GRANTS ON ROLE ??`, `SHOW GRANTS`},
+		{`SHOW GRANTS ON ROLE foo FOR ??`, `SHOW GRANTS`},
+		{`SHOW GRANTS ON ROLE foo FOR bar ??`, `SHOW GRANTS`},
+
 		{`SHOW KEYS ??`, `SHOW INDEXES`},
 		{`SHOW INDEX ??`, `SHOW INDEXES`},
 		{`SHOW INDEXES FROM ??`, `SHOW INDEXES`},
