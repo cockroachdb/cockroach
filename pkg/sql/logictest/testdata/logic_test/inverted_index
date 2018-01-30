@@ -327,3 +327,28 @@ query IT
 SELECT * from d where b @> '[[[["a"]]]]' ORDER BY a;
 ----
 22  [[[["a"]]],[[["a"]]]]
+
+query IT
+SELECT * from d where b->'a' = '"b"'
+----
+7  {"a":"b","c":"d"}
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
+----
+index-join  0  index-join  ·      ·                                        (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·      ·                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table  d@foo_inv                                ·                ·
+ │          1  ·           spans  /!NULL/"a"/"b"-/!NULL/"a"/"b"/PrefixEnd  ·                ·
+ └── scan   1  scan        ·      ·                                        (a, b)           ·
+·           1  ·           table  d@primary                                ·                ·
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
+----
+index-join  0  index-join  ·      ·                                        (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·      ·                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table  d@foo_inv                                ·                ·
+ │          1  ·           spans  /!NULL/"a"/"b"-/!NULL/"a"/"b"/PrefixEnd  ·                ·
+ └── scan   1  scan        ·      ·                                        (a, b)           ·
+·           1  ·           table  d@primary                                ·                ·
