@@ -20,6 +20,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
 	"hash"
 	"hash/crc32"
@@ -527,7 +528,9 @@ var Builtins = map[string][]tree.Builtin{
 				if !utf8.ValidString(data) {
 					return nil, pgerror.NewError(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
 				}
-				return tree.NewDString(data), nil
+				var buf bytes.Buffer
+				lex.HexEncodeString(&buf, data)
+				return tree.NewDString(buf.String()), nil
 			},
 			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" is supported).",
 		},
@@ -536,15 +539,17 @@ var Builtins = map[string][]tree.Builtin{
 	"decode": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"text", types.String}, {"format", types.String}},
-			ReturnType: tree.FixedReturnType(types.String),
+			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				data, format := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
 				if format != "hex" {
 					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for DECODE")
 				}
-				var buf bytes.Buffer
-				lex.HexEncodeString(&buf, data)
-				return tree.NewDString(buf.String()), nil
+				decoded, err := hex.DecodeString(data)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(decoded)), nil
 			},
 			Info: "Decodes `data` as the format specified by `format` (only \"hex\" is supported).",
 		},
