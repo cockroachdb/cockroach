@@ -9,6 +9,9 @@
 import _ from "lodash";
 import React from "react";
 import * as d3 from "d3";
+import { RouterState } from "react-router";
+
+import { parseLocalityRoute } from "src/util/localities";
 
 import "./sim.css";
 
@@ -21,7 +24,7 @@ interface ClusterVisualizationState {
   zoomTransform: ZoomTransformer;
 }
 
-export default class ClusterVisualization extends React.Component<{}, ClusterVisualizationState> {
+export default class ClusterVisualization extends React.Component<RouterState, ClusterVisualizationState> {
   graphEl: SVGElement;
   zoom: d3.behavior.Zoom<any>;
   maxLatitude = 63;
@@ -104,10 +107,12 @@ export default class ClusterVisualization extends React.Component<{}, ClusterVis
     projection.scale(projection.scale() * scale);
     projection.translate(Vector.add(Vector.mult(projection.translate(), scale), translate));
 
+    const tiers = parseLocalityRoute(this.props.params.splat);
+
     return (
       <g>
         <WorldMap projection={projection} />
-        <NodeSimulator projection={projection} zoom={this.state.zoomTransform} />
+        <NodeSimulator projection={projection} zoom={this.state.zoomTransform} tiers={tiers} />
       </g>
     );
   }

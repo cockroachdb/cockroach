@@ -6,27 +6,44 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import React from "react";
 import * as d3 from "d3";
+import PropTypes from "prop-types";
+import React from "react";
+import { InjectedRouter, RouterState } from "react-router";
+
+import { LocalityTier, LocalityTree } from "src/redux/localities";
+import { LocationTree } from "src/redux/locations";
+import { findMostSpecificLocation } from "src/util/locations";
+import { NodeStatus$Properties } from "src/util/proto";
 
 import { SimulatedNodeStatus } from "./nodeSimulator";
-import { LocalityCollection, LocalityTreeNode } from "./localityCollection";
 import { NodeView } from "./nodeView";
 import { Box, ZoomTransformer } from "./zoom";
 
-type BoxDimensions = {x: number, y: number, w: number, h: number};
-
 interface LocalityViewProps {
-  locality: LocalityTreeNode;
+  locality: LocalityTree;
 }
 
 class LocalityView extends React.Component<LocalityViewProps, any> {
+  static contextTypes = {
+    router: PropTypes.object.isRequired,
+  };
+  context: { router: InjectedRouter & RouterState };
+
+  onClick = () => {
+    const tiers = this.props.locality.tiers.map(({ key, value }) => key + "=" + value).join("/");
+    const destination = "/clusterviz/" + tiers;
+    this.context.router.push(destination);
+  }
+
   render() {
+    const { tiers } = this.props.locality;
+    const thisTier = tiers[tiers.length - 1];
+
     return (
-      <text x={15} y={15}>
+      <text x={15} y={15} onClick={this.onClick} style={{ cursor: "pointer" }}>
         {
-          // TODO Resolve name of locality.
-          (this.props.locality.data as any).key
+          thisTier.key + "=" + thisTier.value
         }
       </text>
     );
@@ -34,31 +51,41 @@ class LocalityView extends React.Component<LocalityViewProps, any> {
 }
 
 interface LocalityBoxProps {
-  box: Box;
-  data: LocalityTreeNode;
+  projection: d3.geo.Projection;
+  node: LocalityTree;
+  locationTree: LocationTree;
 }
 
 class LocalityBox extends React.Component<LocalityBoxProps, any> {
   render() {
+    const location = findMostSpecificLocation(this.props.locationTree, this.props.node.tiers);
+    const center = this.props.projection([location.longitude, location.latitude]);
+    const box = new Box(center[0] - 50, center[1] - 50, 100, 100);
     return (
-      <g transform={`translate(${this.props.box.center()})`}>
-        <LocalityView locality={this.props.data} />
+      <g transform={`translate(${box.center()})`}>
+        <LocalityView locality={this.props.node} />
       </g>
     );
   }
 }
 
 interface NodeBoxProps {
-  box: Box;
-  data: SimulatedNodeStatus;
+  projection: d3.geo.Projection;
+  node: NodeStatus$Properties;
+  nodeHistory: SimulatedNodeStatus;
+  locationTree: LocationTree;
 }
 
 class NodeBox extends React.Component<NodeBoxProps, any> {
   render() {
+    const tiers = this.props.node.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
+    const location = findMostSpecificLocation(this.props.locationTree, tiers);
+    const center = this.props.projection([location.longitude, location.latitude]);
+    const box = new Box(center[0] - 50, center[1] - 50, 100, 100);
     return (
-      <g transform={`translate(${this.props.box.center()})`}>
+      <g transform={`translate(${box.center()})`}>
         <NodeView
-          nodeHistory={this.props.data}
+          nodeHistory={this.props.nodeHistory}
           maxClientActivityRate={10000}
         />
       </g>
@@ -66,46 +93,56 @@ class NodeBox extends React.Component<NodeBoxProps, any> {
   }
 }
 
-interface ModalTreeNodeViewProps {
-  node: LocalityTreeNode;
-  projection: d3.geo.Projection;
-}
-
-class ModalTreeNodeView extends React.Component<ModalTreeNodeViewProps, any> {
-  renderContents = (b: BoxDimensions) => {
-    const { node } = this.props;
-    const box = new Box(b.x, b.y, b.w, b.h);
-    return node.isLocality()
-      ? <LocalityBox box={box} data={node} />
-      : <NodeBox box={box} data={node.data as SimulatedNodeStatus} />;
-  }
-
-  render() {
-    const { node } = this.props;
-
-    const center = this.props.projection(node.longLat());
-    const coords = {x: center[0] - 50, y: center[1] - 50, w: 100, h: 100};
-
-    return this.renderContents(coords);
-  }
-}
-
 interface ModalLocalitiesViewProps {
-  nodeHistories: SimulatedNodeStatus[];
+  localityTree: LocalityTree;
+  locationTree: LocationTree;
+  tiers: LocalityTier[];
+  nodeHistories: { [id: string]: SimulatedNodeStatus };
   projection: d3.geo.Projection;
   zoom: ZoomTransformer;
 }
 
 export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProps, any> {
+  renderChildLocalities(tree: LocalityTree) {
+    const children: React.ReactNode[] = [];
+
+    Object.keys(tree.localities).forEach((key) => {
+      Object.keys(tree.localities[key]).forEach((value) => {
+        const child = tree.localities[key][value];
+
+        children.push(
+          <LocalityBox projection={this.props.projection} node={child} locationTree={this.props.locationTree} />,
+        );
+      });
+    });
+
+    return children;
+  }
+
+  renderChildNodes(tree: LocalityTree) {
+    const children: React.ReactNode[] = [];
+
+    tree.nodes.forEach((node) => {
+      const nodeHistory = this.props.nodeHistories[node.desc.node_id];
+
+      children.push(
+        <NodeBox projection={this.props.projection} node={node} nodeHistory={nodeHistory} locationTree={this.props.locationTree} />,
+      );
+    });
+
+    return children;
+  }
+
   render() {
-    const localities = new LocalityCollection();
-    this.props.nodeHistories.forEach(nh => localities.addNode(nh));
+    let treeToRender = this.props.localityTree;
+    this.props.tiers.forEach(({ key, value }) => {
+      treeToRender = treeToRender.localities[key][value];
+    });
+
     return (
       <g>
-        {localities.tree.children
-          ? localities.tree.children.map(l => <ModalTreeNodeView projection={this.props.projection} node={l} />)
-          : null
-        }
+        { this.renderChildLocalities(treeToRender) }
+        { this.renderChildNodes(treeToRender) }
       </g>
     );
   }

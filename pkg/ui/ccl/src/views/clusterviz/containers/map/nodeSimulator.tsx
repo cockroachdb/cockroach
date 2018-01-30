@@ -15,13 +15,17 @@ import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
 import { selectLocationsRequestStatus, selectLocationTree, Location, LocationTree } from "src/redux/locations";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import { nodesSummarySelector, NodesSummary, selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { findMostSpecificLocation } from "src/util/locations";
+import Loading from "src/views/shared/components/loading";
 
 import { ZoomTransformer } from "./zoom";
 import { ModalLocalitiesView } from "./modalLocalities";
+
+import spinner from "assets/spinner.gif";
 
 type NodeStatus = protos.cockroach.server.status.NodeStatus$Properties;
 
@@ -104,7 +108,8 @@ export class SimulatedNodeStatus {
 
 interface NodeSimulatorProps {
   nodesSummary: NodesSummary;
-  statusesValid: boolean;
+  localityTree: LocalityTree;
+  localityStatus: CachedDataReducerState<any>;
   locationTree: LocationTree;
   locationStatus: CachedDataReducerState<any>;
   refreshNodes: typeof refreshNodes;
@@ -114,6 +119,7 @@ interface NodeSimulatorProps {
 
 interface NodeSimulatorOwnProps {
   projection: d3.geo.Projection;
+  tiers: LocalityTier[];
   zoom: ZoomTransformer;
 }
 
@@ -134,7 +140,7 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   // accumulateHistory parses incoming nodeStatus properties and accumulates
   // a history for each node.
   accumulateHistory(props = this.props) {
-    if (!props.nodesSummary.nodeStatuses || !props.locationStatus.valid) {
+    if (!props.localityStatus.valid || !props.locationStatus.valid ) {
       return;
     }
 
@@ -168,11 +174,20 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
 
   render() {
     return (
-      <ModalLocalitiesView
-        nodeHistories={_.values(this.nodeHistories)}
-        projection={this.props.projection}
-        zoom={this.props.zoom}
-      />
+      <Loading
+        loading={ !this.props.localityStatus.valid || !this.props.locationStatus.valid }
+        className="loading-image loading-image__spinner-left"
+        image={ spinner }
+      >
+        <ModalLocalitiesView
+          nodeHistories={this.nodeHistories}
+          localityTree={this.props.localityTree}
+          locationTree={this.props.locationTree}
+          tiers={this.props.tiers}
+          projection={this.props.projection}
+          zoom={this.props.zoom}
+        />
+      </Loading>
     );
   }
 }
@@ -180,7 +195,8 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
 export default connect(
   (state: AdminUIState, _ownProps: NodeSimulatorOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
-    statusesValid: state.cachedData.nodes.valid && state.cachedData.liveness.valid,
+    localityTree: selectLocalityTree(state),
+    localityStatus: selectNodeRequestStatus(state),
     locationTree: selectLocationTree(state),
     locationStatus: selectLocationsRequestStatus(state),
   }),
