@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="16px" height="16px" viewBox="0 0 16 16" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 48.2 (47327) - http://www.bohemiancoding.com/sketch -->
+    <title>Expand icon</title>
+    <desc>Created with Sketch.</desc>
+    <defs></defs>
+    <g id="Expand-job-B" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" transform="translate(-725.000000, -207.000000)">
+        <g id="Expand-icon" transform="translate(725.000000, 207.000000)">
+            <rect id="Rectangle-14" fill="#C8CBD4" x="0" y="0" width="16" height="16" rx="8"></rect>
+            <g id="select-83" transform="translate(5.714286, 3.428571)" fill="#FFFFFF" fill-rule="nonzero">
+                <polygon id="Shape" points="0 3.35860058 4.57142857 3.35860058 2.28571429 0"></polygon>
+                <polygon id="Shape" points="2.28571429 9.14285714 4.57142857 5.78425656 0 5.78425656"></polygon>
+            </g>
+        </g>
+    </g>
+</svg>
