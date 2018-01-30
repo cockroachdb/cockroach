@@ -80,8 +80,23 @@ interface LayoutNode<T> {
 export function layoutTree<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): LayoutNode<T>[][] {
   const depth = getDepth(root);
   function recur(node: TreeNode<T>, pathToThis: TreePath): LayoutNode<T>[][] {
+    const depthUnderThis = depth - pathToThis.length;
+    const placeholderRows = _.range(depthUnderThis).reverse().map((thisDepth) => (
+      [
+        {
+          width: 1,
+          depth: thisDepth + 1,
+          isPlaceholder: true,
+          isCollapsed: false,
+          path: pathToThis,
+          data: node.data,
+        },
+      ]
+    ));
+
     if (isLeaf(node)) {
       return [
+        ...placeholderRows,
         [
           {
             width: 1,
@@ -97,19 +112,6 @@ export function layoutTree<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): La
 
     const isCollapsed = deepIncludes(collapsedPaths, pathToThis);
     if (isCollapsed) {
-      const depthUnderThis = depth - pathToThis.length;
-      const placeholderRows = _.range(depthUnderThis).reverse().map((thisDepth) => (
-        [
-          {
-            width: 1,
-            depth: thisDepth + 1,
-            isPlaceholder: true,
-            isCollapsed: false,
-            path: pathToThis,
-            data: node.data,
-          },
-        ]
-      ));
       return [
         [
           {
@@ -129,7 +131,7 @@ export function layoutTree<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): La
       recur(childNode, [...pathToThis, childNode.name])
     ));
     const maxDepth = _.maxBy(childLayouts, (cl) => cl[0][0].depth)[0][0].depth;
-    const transposedChildLayouts = _.range(maxDepth).map(() => ([]));
+    const transposedChildLayouts = _.range(depth).map(() => ([]));
 
     _.forEach(childLayouts, (childLayout) => {
       _.forEach(childLayout, (row, rowIdx) => {
@@ -154,7 +156,8 @@ export function layoutTree<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): La
     ];
   }
 
-  return removePlaceholdersFromEnd(recur(root, []));
+  const recurRes = recur(root, []);
+  return removePlaceholdersFromEnd(recurRes);
 }
 
 function removePlaceholdersFromEnd<T>(arr: LayoutNode<T>[][]): LayoutNode<T>[][] {
