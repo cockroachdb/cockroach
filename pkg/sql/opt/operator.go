@@ -83,6 +83,12 @@ const (
 	containsOp
 	// containedByOp is the <@ JSON operator.
 	containedByOp
+	// existenceOp is the ? JSON operator.
+	existenceOp
+	// allExistenceOp is the ?& JSON operator.
+	allExistenceOp
+	// someExistenceOp is the ?| JSON operator.
+	someExistenceOp
 
 	anyOp
 	someOp
