@@ -120,12 +120,26 @@ false
 NULL
 
 query T
-SELECT bar FROM foo WHERE bar->>'a' = 'b';
+SELECT bar FROM foo WHERE bar->>'a' = 'b'
 ----
 {"a":"b"}
 
 query T
-SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON;
+SELECT bar FROM foo WHERE bar ? 'a'
+----
+{"a":"b"}
+
+query T
+SELECT bar FROM foo WHERE bar ?| ARRAY['a','b']
+----
+{"a":"b"}
+
+query T
+SELECT bar FROM foo WHERE bar ?& ARRAY['a','b']
+----
+
+query T
+SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 ----
 {"a":"b"}
 
