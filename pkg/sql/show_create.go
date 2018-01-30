@@ -125,11 +125,8 @@ func (p *planner) printForeignKeyConstraint(
 	if err != nil {
 		return err
 	}
-	fkTableName := tree.TableName{
-		DatabaseName:               tree.Name(fkDb.Name),
-		TableName:                  tree.Name(fkTable.Name),
-		OmitDBNameDuringFormatting: fkDb.Name == dbPrefix,
-	}
+	fkTableName := tree.MakeTableName(tree.Name(fkDb.Name), tree.Name(fkTable.Name))
+	fkTableName.ExplicitSchema = fkDb.Name != dbPrefix
 	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
 	buf.WriteString("FOREIGN KEY (")
 	formatQuoteNames(buf, idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...)
@@ -302,11 +299,8 @@ func (p *planner) showCreateInterleave(
 	if err != nil {
 		return err
 	}
-	parentName := tree.TableName{
-		DatabaseName:               tree.Name(parentDbDesc.Name),
-		TableName:                  tree.Name(parentTable.Name),
-		OmitDBNameDuringFormatting: parentDbDesc.Name == dbPrefix,
-	}
+	parentName := tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
+	parentName.ExplicitSchema = parentDbDesc.Name != dbPrefix
 	var sharedPrefixLen int
 	for _, ancestor := range intl.Ancestors {
 		sharedPrefixLen += int(ancestor.SharedPrefixLen)

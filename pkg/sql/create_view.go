@@ -48,7 +48,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Schema())
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 					return
 				}
 				// Persist the database prefix expansion.
-				tn.OmitDBNameDuringFormatting = false
+				tn.ExplicitSchema = true
 			},
 		)
 		f.FormatNode(n.AsSource)

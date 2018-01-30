@@ -49,8 +49,7 @@ func TestUnresolvedNameString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		n := tree.Name(tc.in)
-		q := tree.UnresolvedName{&n}
+		q := tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{tc.in}}
 		if q.String() != tc.out {
 			t.Errorf("expected q.String() == %q, got %q", tc.out, q.String())
 		}
@@ -74,9 +73,6 @@ func TestNormalizeNameInExpr(t *testing.T) {
 		{`"".foo`, ``, `empty table name`},
 		{`"".*`, ``, `empty table name`},
 		{`""`, ``, `empty column name`},
-		{`foo.*.bar`, ``, `invalid table name: "foo.*"`},
-		{`foo.*.bar[baz]`, ``, `invalid table name: "foo.*"`},
-		{`test.foo.*.bar[foo]`, ``, `invalid table name: "test.foo.*"`},
 	}
 
 	for _, tc := range testCases {

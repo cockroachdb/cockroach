@@ -72,7 +72,7 @@ type testCatalog struct {
 
 // FindTable implements the sqlbase.Catalog interface.
 func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
-	return sqlbase.GetTableDescriptor(c.kvDB, string(name.DatabaseName), string(name.TableName)), nil
+	return sqlbase.GetTableDescriptor(c.kvDB, string(name.SchemaName), string(name.TableName)), nil
 }
 
 func TestBuilder(t *testing.T) {

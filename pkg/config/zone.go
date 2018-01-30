@@ -76,7 +76,7 @@ func ZoneSpecifierFromID(
 	if err != nil {
 		return tree.ZoneSpecifier{}, err
 	}
-	tn := &tree.TableName{DatabaseName: tree.Name(db), TableName: tree.Name(name)}
+	tn := tree.NewTableName(tree.Name(db), tree.Name(name))
 	return tree.ZoneSpecifier{
 		TableOrIndex: tree.TableNameWithIndex{
 			Table: tree.NormalizableTableName{TableNameReference: tn},
@@ -105,18 +105,18 @@ func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 	}
 	parsed.SearchTable = false
 	var partition tree.Name
-	if un := parsed.Table.TableNameReference.(*tree.UnresolvedName); len(*un) == 1 {
+	if un := parsed.Table.TableNameReference.(*tree.UnresolvedName); un.NumParts == 1 {
 		// Unlike in SQL, where a name with one part indicates a table in the
 		// current database, if a CLI specifier has just one name part, it indicates
 		// a database.
-		return tree.ZoneSpecifier{Database: *(*un)[0].(*tree.Name)}, nil
-	} else if len(*un) == 3 {
+		return tree.ZoneSpecifier{Database: tree.Name(un.Parts[0])}, nil
+	} else if un.NumParts == 3 {
 		// If a CLI specifier has three name parts, the last name is a partition.
 		// Pop it off so TableNameReference.Normalize sees only the table name
 		// below.
-		partition = *(*un)[2].(*tree.Name)
-		tPref := (*un)[:2]
-		parsed.Table.TableNameReference = &tPref
+		partition = tree.Name(un.Parts[0])
+		un.Parts[0], un.Parts[1], un.Parts[2] = un.Parts[1], un.Parts[2], un.Parts[3]
+		un.NumParts--
 	}
 	// We've handled the special cases for named zones, databases and partitions;
 	// have TableNameReference.Normalize tell us whether what remains is a valid
@@ -147,7 +147,10 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 	if zs.Partition != "" {
 		tn := ti.Table.TableName()
 		ti.Table = tree.NormalizableTableName{
-			TableNameReference: &tree.UnresolvedName{&tn.DatabaseName, &tn.TableName, &zs.Partition},
+			TableNameReference: &tree.UnresolvedName{
+				NumParts: 3,
+				Parts:    tree.NameParts{string(zs.Partition), string(tn.TableName), string(tn.SchemaName)},
+			},
 		}
 		// The index is redundant when the partition is specified, so omit it.
 		ti.Index = ""
@@ -180,7 +183,7 @@ func ResolveZoneSpecifier(
 	if err != nil {
 		return 0, err
 	}
-	databaseID, err := resolveName(keys.RootNamespaceID, tn.Database())
+	databaseID, err := resolveName(keys.RootNamespaceID, tn.Schema())
 	if err != nil {
 		return 0, err
 	}

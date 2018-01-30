@@ -24,7 +24,7 @@ import (
 )
 
 func resetRepr(tn *tree.TableName) {
-	tn.OmitDBNameDuringFormatting = false
+	tn.ExplicitSchema = true
 }
 
 func TestNormalizeTableName(t *testing.T) {
@@ -41,8 +41,8 @@ func TestNormalizeTableName(t *testing.T) {
 		{`""`, ``, ``, `empty table name`},
 		{`foo`, ``, ``, `no database specified`},
 		{`foo@bar`, ``, ``, `syntax error`},
-		{`test.*`, ``, ``, `invalid table name: "test\.\*"`},
-		{`p."".bar`, ``, ``, `empty database name: "p\.\.bar"`},
+		{`test.*`, ``, ``, `syntax error at or near "*"`},
+		{`p."".bar`, ``, ``, `empty schema name: "p\.\.bar"`},
 	}
 
 	for _, tc := range testCases {

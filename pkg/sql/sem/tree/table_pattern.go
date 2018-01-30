@@ -55,33 +55,33 @@ var _ DatabaseQualifiable = &TableName{}
 // NormalizeTablePattern resolves an UnresolvedName to either a
 // TableName or AllTablesSelector.
 func (n *UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
-	ln := len(*n)
-	if ln == 0 || ln > 2 {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table name: %q", *n)
+	if n.NumParts > 2 {
+		// db/cat.schema.table: We don't support those just yet.
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+			"invalid table name: %q", ErrString(n))
+	}
+	firstCheck := 0
+	if n.Star {
+		firstCheck = 1
+	}
+	for i := firstCheck; i < n.NumParts; i++ {
+		if len(n.Parts[i]) == 0 {
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+				"invalid table name: %q", ErrString(n))
+		}
 	}
 
-	var db Name
-	dbOmitted := true
-	if ln > 1 {
-		dbName, ok := (*n)[0].(*Name)
-		if !ok {
-			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid database name: %q", (*n)[0])
-		}
-		db = *dbName
-		dbOmitted = false
+	if n.Star {
+		return &AllTablesSelector{
+			Schema:         Name(n.Parts[1]),
+			ExplicitSchema: n.NumParts >= 2,
+		}, nil
 	}
-
-	switch t := (*n)[ln-1].(type) {
-	case UnqualifiedStar:
-		return &AllTablesSelector{Database: db, OmitDBNameDuringFormatting: dbOmitted}, nil
-	case *Name:
-		if len(*t) == 0 {
-			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "empty table name: %q", *n)
-		}
-		return &TableName{DatabaseName: db, TableName: *t, OmitDBNameDuringFormatting: dbOmitted}, nil
-	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table pattern: %q", *n)
-	}
+	return &TableName{
+		SchemaName:     Name(n.Parts[1]),
+		TableName:      Name(n.Parts[0]),
+		ExplicitSchema: n.NumParts >= 2,
+	}, nil
 }
 
 // NormalizeTablePattern implements the TablePattern interface.
@@ -90,14 +90,14 @@ func (t *TableName) NormalizeTablePattern() (TablePattern, error) { return t, ni
 // AllTablesSelector corresponds to a selection of all
 // tables in a database, e.g. when used with GRANT.
 type AllTablesSelector struct {
-	Database                   Name
-	OmitDBNameDuringFormatting bool
+	Schema         Name
+	ExplicitSchema bool
 }
 
 // Format implements the NodeFormatter interface.
 func (at *AllTablesSelector) Format(ctx *FmtCtx) {
-	if !at.OmitDBNameDuringFormatting {
-		ctx.FormatNode(&at.Database)
+	if at.ExplicitSchema {
+		ctx.FormatNode(&at.Schema)
 		ctx.WriteByte('.')
 	}
 	ctx.WriteByte('*')
@@ -110,13 +110,14 @@ func (at *AllTablesSelector) NormalizeTablePattern() (TablePattern, error) { ret
 // QualifyWithDatabase adds an indirection for the database, if it's missing.
 // It transforms:  * -> database.*
 func (at *AllTablesSelector) QualifyWithDatabase(database string) error {
-	if !at.OmitDBNameDuringFormatting {
+	if at.ExplicitSchema {
+		// Database already qualified, nothing to do.
 		return nil
 	}
 	if database == "" {
 		return pgerror.NewErrorf(pgerror.CodeInvalidDatabaseDefinitionError, "no database specified: %q", at)
 	}
-	at.Database = Name(database)
+	at.Schema = Name(database)
 	return nil
 }
 
