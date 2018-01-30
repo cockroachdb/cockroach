@@ -24,11 +24,40 @@ CREATE INDEX foo_inv2 ON t(b) USING GIN
 statement error pq: syntax error at or near "inverted"
 CREATE UNIQUE INVERTED INDEX foo_inv ON t(b)
 
-statement error pq: syntax error at or near "index"
+statement ok
 CREATE TABLE c (
   id INT PRIMARY KEY,
+  foo JSON,
+  bar JSON,
+  INVERTED INDEX (foo),
+  INVERTED INDEX (bar)
+)
+
+query TT
+SHOW CREATE TABLE c
+----
+c  CREATE TABLE c (
+     id INT NOT NULL,
+     foo JSON NULL,
+     bar JSON NULL,
+     CONSTRAINT "primary" PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX c_bar_idx (bar),
+     FAMILY "primary" (id, foo, bar)
+   )
+
+statement error indexing more than one column with an inverted index is not supported
+CREATE TABLE d (
+  id INT PRIMARY KEY,
+  foo JSONB,
+  bar JSONB,
+  INVERTED INDEX (foo, bar)
+)
+
+statement error column foo is of type INT and thus is not indexable with an inverted index
+CREATE TABLE d (
+  id INT PRIMARY KEY,
   foo INT,
-  bar INT,
   INVERTED INDEX (foo)
 )
 
@@ -261,10 +290,10 @@ SELECT * from d where b @> '1.23' ORDER BY a;
 ----
 15  1.23
 
-statement error pq: constraints = , table ID = 53, index ID = 2: can't look up empty JSON
+statement error pq: constraints = , .*: can't look up empty JSON
 SELECT * from d where b @> '{}' ORDER BY a;
 
-statement error pq: constraints = , table ID = 53, index ID = 2: can't look up empty JSON
+statement error pq: constraints = , .*: can't look up empty JSON
 SELECT * from d where b @> '[]' ORDER BY a;
 
 statement ok
