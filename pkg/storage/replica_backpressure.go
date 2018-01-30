@@ -20,6 +20,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -44,6 +45,22 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 	},
 )
 
+// isSplitReq returns whether the batch request is related to a split attempt.
+func isSplitReq(ba roachpb.BatchRequest) bool {
+	// Part of split txn.
+	if ba.Txn != nil && ba.Txn.Name == splitTxnName {
+		return true
+	}
+
+	// Part of rangeID allocation.
+	if len(ba.Requests) == 1 {
+		if inc, ok := ba.Requests[0].GetInner().(*roachpb.IncrementRequest); ok {
+			return inc.Key.Equal(keys.RangeIDGenerator)
+		}
+	}
+	return false
+}
+
 // backpressurableReqMethods is the set of all request methods that can
 // be backpressured. If a batch contains any method outside of this set,
 // it will not be backpressured.
@@ -64,7 +81,7 @@ var backpressurableReqMethods = util.MakeFastIntSet(
 // for backpressure.
 func canBackpressureBatch(ba roachpb.BatchRequest) bool {
 	// Don't backpressure splits themselves.
-	if ba.Txn != nil && ba.Txn.Name == splitTxnName {
+	if isSplitReq(ba) {
 		return false
 	}
 
