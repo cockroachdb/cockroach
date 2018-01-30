@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,13 +88,15 @@ func (we *wrappedEngine) GetCompactions() []roachpb.Span {
 	return append([]roachpb.Span(nil), we.mu.compactions...)
 }
 
-func testSetup(capFn storeCapacityFunc) (*Compactor, *wrappedEngine, func()) {
+func testSetup(capFn storeCapacityFunc) (*Compactor, *wrappedEngine, *int32, func()) {
 	stopper := stop.NewStopper()
 	eng := newWrappedEngine()
 	stopper.AddCloser(eng)
-	compactor := NewCompactor(eng, capFn)
+	compactionCount := new(int32)
+	doneFn := func(_ context.Context) { atomic.AddInt32(compactionCount, 1) }
+	compactor := NewCompactor(eng, capFn, doneFn)
 	compactor.Start(context.Background(), tracing.NewTracer(), stopper)
-	return compactor, eng, func() {
+	return compactor, eng, compactionCount, func() {
 		stopper.Stop(context.Background())
 	}
 }
@@ -463,7 +466,7 @@ func TestCompactorThresholds(t *testing.T) {
 					Available:    test.availableBytes,
 				}, nil
 			}
-			compactor, we, cleanup := testSetup(capacityFn)
+			compactor, we, compactionCount, cleanup := testSetup(capacityFn)
 			defer cleanup()
 			// Shorten wait times for compactor processing.
 			compactor.opts.CompactionMinInterval = time.Millisecond
@@ -488,6 +491,9 @@ func TestCompactorThresholds(t *testing.T) {
 					return fmt.Errorf("expected bytes compacted %d; got %d", e, a)
 				}
 				if a, e := compactor.Metrics.CompactionSuccesses.Count(), int64(len(test.expCompactions)); a != e {
+					return fmt.Errorf("expected compactions %d; got %d", e, a)
+				}
+				if a, e := atomic.LoadInt32(compactionCount), int32(len(test.expCompactions)); a != e {
 					return fmt.Errorf("expected compactions %d; got %d", e, a)
 				}
 				if len(test.expCompactions) == 0 {
@@ -535,7 +541,7 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 	capacityFn := func() (roachpb.StoreCapacity, error) {
 		return roachpb.StoreCapacity{LogicalBytes: 100 * defaultThresholdBytes}, nil
 	}
-	compactor, we, cleanup := testSetup(capacityFn)
+	compactor, we, compactionCount, cleanup := testSetup(capacityFn)
 	defer cleanup()
 
 	// Add a suggested compaction -- this won't get processed by this
@@ -552,7 +558,8 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 	// Create a new fast compactor with a short wait time for processing,
 	// using the same engine so that it sees a non-empty queue.
 	stopper := stop.NewStopper()
-	fastCompactor := NewCompactor(we, capacityFn)
+	doneFn := func(_ context.Context) { atomic.AddInt32(compactionCount, 1) }
+	fastCompactor := NewCompactor(we, capacityFn, doneFn)
 	fastCompactor.opts.CompactionMinInterval = time.Millisecond
 	fastCompactor.Start(context.Background(), tracing.NewTracer(), stopper)
 	defer stopper.Stop(context.Background())
@@ -562,6 +569,9 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 		expComps := []roachpb.Span{{Key: key("a"), EndKey: key("b")}}
 		if !reflect.DeepEqual(expComps, comps) {
 			return fmt.Errorf("expected %+v; got %+v", expComps, comps)
+		}
+		if a, e := atomic.LoadInt32(compactionCount), int32(1); a != e {
+			return fmt.Errorf("expected %d; got %d", e, a)
 		}
 		return nil
 	})
@@ -578,7 +588,7 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 			Available:    100 * defaultThresholdBytes,
 		}, nil
 	}
-	compactor, we, cleanup := testSetup(capacityFn)
+	compactor, we, compactionCount, cleanup := testSetup(capacityFn)
 	compactor.opts.CompactionMinInterval = time.Millisecond
 	compactor.opts.MaxSuggestedCompactionRecordAge = 1 * time.Millisecond
 	defer cleanup()
@@ -602,6 +612,9 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 		}
 		if a, e := compactor.Metrics.BytesSkipped.Count(), compactor.opts.ThresholdBytes-1; a != e {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
+		}
+		if a, e := atomic.LoadInt32(compactionCount), int32(0); a != e {
+			return fmt.Errorf("expected compactions processed %d; got %d", e, a)
 		}
 		// Verify compaction queue is empty.
 		if bytesQueued, err := compactor.examineQueue(context.Background()); err != nil || bytesQueued > 0 {
