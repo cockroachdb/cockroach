@@ -1,5 +1,11 @@
 import React from "react";
 
+import { trustIcon } from "src/util/trust";
+
+import expandIcon from "!!raw-loader!assets/expand.svg";
+
+import "./expandable.styl";
+
 interface ExpandableStringProps {
   short?: string;
   long: string;
@@ -27,12 +33,10 @@ export class ExpandableString extends React.Component<ExpandableStringProps, Exp
     }
     const short = this.props.short || this.props.long.substr(0, truncateLength).trim();
     return (
-      <span>
-        {short}
-        <a href="#" onClick={this.onClick}>
-          &hellip;
-        </a>
-      </span>
+      <div className="expandable" onClick={this.onClick}>
+        <span className="expandable__text">{ short }&nbsp;&hellip;</span>
+        <span className="expandable__icon" dangerouslySetInnerHTML={ trustIcon(expandIcon) } />
+      </div>
     );
   }
 }
