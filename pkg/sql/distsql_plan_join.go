@@ -788,6 +788,17 @@ func distsqlJoinType(joinType joinType) distsqlrun.JoinType {
 	panic(fmt.Sprintf("invalid join type %d", joinType))
 }
 
+func distsqlSetOpJoinType(setOpType tree.UnionType) distsqlrun.JoinType {
+	switch setOpType {
+	case tree.ExceptOp:
+		return distsqlrun.JoinType_EXCEPT_ALL
+	case tree.IntersectOp:
+		return distsqlrun.JoinType_INTERSECT_ALL
+	default:
+		panic(fmt.Sprintf("set op type %v unsupported by joins", setOpType))
+	}
+}
+
 func findJoinProcessorNodes(
 	leftRouters, rightRouters []distsqlplan.ProcessorIdx, processors []distsqlplan.Processor,
 ) (nodes []roachpb.NodeID) {

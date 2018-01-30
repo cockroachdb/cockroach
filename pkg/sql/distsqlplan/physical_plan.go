@@ -777,8 +777,8 @@ func (p *PhysicalPlan) AddJoinStage(
 	nodes []roachpb.NodeID,
 	core distsqlrun.ProcessorCoreUnion,
 	post distsqlrun.PostProcessSpec,
-	leftTypes, rightTypes []sqlbase.ColumnType,
 	leftEqCols, rightEqCols []uint32,
+	leftTypes, rightTypes []sqlbase.ColumnType,
 	leftMergeOrd, rightMergeOrd distsqlrun.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
@@ -836,4 +836,21 @@ func (p *PhysicalPlan) AddJoinStage(
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
+}
+
+// AddSetOpStage creates a join stage to implement INTERSECT ALL and EXCEPT ALL
+// plans.
+func (p *PhysicalPlan) AddSetOpStage(
+	nodes []roachpb.NodeID,
+	core distsqlrun.ProcessorCoreUnion,
+	post distsqlrun.PostProcessSpec,
+	eqCols []uint32,
+	leftTypes, rightTypes []sqlbase.ColumnType,
+	leftMergeOrd, rightMergeOrd distsqlrun.Ordering,
+	leftRouters, rightRouters []ProcessorIdx,
+) {
+	p.AddJoinStage(
+		nodes, core, post, eqCols, eqCols, leftTypes, rightTypes,
+		leftMergeOrd, rightMergeOrd, leftRouters, rightRouters,
+	)
 }
