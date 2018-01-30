@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 type normalizableExpr interface {
@@ -288,7 +289,6 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			if !ok {
 				return expr
 			}
-
 			// The right is const and the left side is a binary expression. Rotate the
 			// comparison combining portions that are const.
 
@@ -418,6 +418,39 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					// variable.
 					continue
 				}
+
+			case expr.Operator == EQ && left.Operator == FetchVal && v.isConst(left.Right) &&
+				v.isConst(expr.Right):
+				// This is a JSONB inverted index normalization, changing things of the form
+				// x->y=z to x @> {y:z} which can be used to build spans for inverted index
+				// lookups.
+
+				if left.TypedRight().ResolvedType() != types.String {
+					continue
+				}
+				if expr.TypedRight().ResolvedType() != types.JSON {
+					continue
+				}
+
+				str, err := left.TypedRight().Eval(v.ctx)
+				if err != nil {
+					continue
+				}
+
+				j := json.NewObjectBuilder(1)
+				j.Add(string(*str.(*DString)), expr.Right.(*DJSON).JSON)
+
+				dj, err := MakeDJSON(j.Build())
+				if err != nil {
+					break
+				}
+
+				typedJ, err := dj.TypeCheck(nil, types.JSON)
+				if err != nil {
+					break
+				}
+
+				return NewTypedComparisonExpr(Contains, left.TypedLeft(), typedJ)
 			}
 
 			// We've run out of work to do.
