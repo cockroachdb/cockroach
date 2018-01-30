@@ -346,8 +346,8 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
 
   render() {
     return <div>
-      <LiveNodesConnected />
       <DeadNodesConnected />
+      <LiveNodesConnected />
       <DecommissionedNodesConnected />
     </div>;
   }
