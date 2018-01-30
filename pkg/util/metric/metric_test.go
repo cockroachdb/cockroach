@@ -77,8 +77,7 @@ func TestGaugeFloat64(t *testing.T) {
 
 func TestCounter(t *testing.T) {
 	c := NewCounter(emptyMetadata)
-	c.Inc(100)
-	c.Dec(10)
+	c.Inc(90)
 	if v := c.Count(); v != 90 {
 		t.Fatalf("unexpected value: %d", v)
 	}

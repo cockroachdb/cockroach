@@ -219,7 +219,7 @@ type BytesMonitor struct {
 	// become reported in the logs.
 	noteworthyUsageBytes int64
 
-	curBytesCount *metric.Counter
+	curBytesCount *metric.Gauge
 	maxBytesHist  *metric.Histogram
 }
 
@@ -257,7 +257,7 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_
 func MakeMonitor(
 	name string,
 	res Resource,
-	curCount *metric.Counter,
+	curCount *metric.Gauge,
 	maxHist *metric.Histogram,
 	increment int64,
 	noteworthy int64,
@@ -271,7 +271,7 @@ func MakeMonitorWithLimit(
 	name string,
 	res Resource,
 	limit int64,
-	curCount *metric.Counter,
+	curCount *metric.Gauge,
 	maxHist *metric.Histogram,
 	increment int64,
 	noteworthy int64,
@@ -343,7 +343,7 @@ func MakeUnlimitedMonitor(
 	ctx context.Context,
 	name string,
 	res Resource,
-	curCount *metric.Counter,
+	curCount *metric.Gauge,
 	maxHist *metric.Histogram,
 	noteworthy int64,
 ) BytesMonitor {
