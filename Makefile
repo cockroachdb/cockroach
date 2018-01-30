@@ -647,7 +647,7 @@ libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
-libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_CCL_TARGET)
+libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET) $(CPP_PROTOS_CCL_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
