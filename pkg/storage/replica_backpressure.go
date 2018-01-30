@@ -21,8 +21,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -31,13 +31,18 @@ var backpressureLogLimiter = log.Every(500 * time.Millisecond)
 // backpressureRangeSizeMultiplier is the multiple of range_max_bytes that a
 // range's size must grow to before backpressure will be applied on writes. Set
 // to 0 to disable backpressure altogether.
-var backpressureRangeSizeMultiplier = func() float64 {
-	mult := envutil.EnvOrDefaultFloat64("COCKROACH_BACKPRESSURE_RANGE_SIZE_MULTIPLIER", 2)
-	if mult < 1 {
-		panic("backpressure multiplier cannot be smaller than 1")
-	}
-	return mult
-}()
+var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
+	"kv.range.backpressure_range_size_multiplier",
+	"multiple of range_max_bytes that a range is allowed to grow to without "+
+		"splitting before writes to that range are blocked, or 0 to disable",
+	2.0,
+	func(v float64) error {
+		if v != 0 && v < 1 {
+			return errors.Errorf("backpressure multiplier cannot be smaller than 1: %f", v)
+		}
+		return nil
+	},
+)
 
 // backpressurableReqMethods is the set of all request methods that can
 // be backpressured. If a batch contains any method outside of this set,
@@ -79,14 +84,15 @@ func canBackpressureBatch(ba roachpb.BatchRequest) bool {
 // relation to the split size. The method returns true if the range is more
 // than backpressureRangeSizeMultiplier times larger than the split size.
 func (r *Replica) shouldBackpressureWrites() bool {
-	if backpressureRangeSizeMultiplier == 0 {
+	mult := backpressureRangeSizeMultiplier.Get(&r.store.cfg.Settings.SV)
+	if mult == 0 {
 		// Disabled.
 		return false
 	}
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.exceedsMultipleOfSplitSizeRLocked(backpressureRangeSizeMultiplier)
+	return r.exceedsMultipleOfSplitSizeRLocked(mult)
 }
 
 // maybeBackpressureWriteBatch blocks to apply backpressure if the replica
