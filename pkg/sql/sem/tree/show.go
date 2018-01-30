@@ -210,6 +210,25 @@ func (node *ShowGrants) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowRoleGrants represents a SHOW GRANTS ON ROLE statement.
+type ShowRoleGrants struct {
+	Roles    NameList
+	Grantees NameList
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW GRANTS ON ROLE")
+	if node.Roles != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(&node.Roles)
+	}
+	if node.Grantees != nil {
+		ctx.WriteString(" FOR ")
+		ctx.FormatNode(&node.Grantees)
+	}
+}
+
 // ShowCreateTable represents a SHOW CREATE TABLE statement.
 type ShowCreateTable struct {
 	Table NormalizableTableName

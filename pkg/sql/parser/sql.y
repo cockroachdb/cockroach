@@ -775,7 +775,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.OrderBy> sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params
-%type <tree.NameList> name_list privilege_list
+%type <tree.NameList> name_list opt_name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <*tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list
@@ -2721,9 +2721,19 @@ show_databases_stmt:
 
 // %Help: SHOW GRANTS - list grants
 // %Category: Priv
-// %Text: SHOW GRANTS [ON <targets...>] [FOR <users...>]
+// %Text:
+// Show privilege grants:
+//   SHOW GRANTS [ON <targets...>] [FOR <users...>]
+// Show role grants:
+//   SHOW GRANTS ON ROLE [<roles...>] [FOR <grantees...>]
+//
 // %SeeAlso: WEBDOCS/show-grants.html
 show_grants_stmt:
+  SHOW GRANTS ON ROLE opt_name_list for_grantee_clause
+  {
+    $$.val = &tree.ShowRoleGrants{Roles: $5.nameList(), Grantees: $6.nameList()}
+  }
+|
   SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
     $$.val = &tree.ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.nameList()}
@@ -7047,6 +7057,16 @@ name_list:
 | name_list ',' name
   {
     $$.val = append($1.nameList(), tree.Name($3))
+  }
+
+opt_name_list:
+  name_list
+  {
+    $$.val = $1.nameList()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.NameList(nil)
   }
 
 // The production for a qualified func_name has to exactly match the production

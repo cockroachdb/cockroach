@@ -438,7 +438,8 @@ show_databases_stmt ::=
 	'SHOW' 'DATABASES'
 
 show_grants_stmt ::=
-	'SHOW' 'GRANTS' on_privilege_target_clause for_grantee_clause
+	'SHOW' 'GRANTS' 'ON' 'ROLE' opt_name_list for_grantee_clause
+	| 'SHOW' 'GRANTS' on_privilege_target_clause for_grantee_clause
 
 show_histogram_stmt ::=
 	'SHOW' 'HISTOGRAM' 'ICONST'
@@ -992,12 +993,16 @@ var_value ::=
 	a_expr
 	| 'ON'
 
-on_privilege_target_clause ::=
-	'ON' targets
+opt_name_list ::=
+	name_list
 	| 
 
 for_grantee_clause ::=
 	'FOR' name_list
+	| 
+
+on_privilege_target_clause ::=
+	'ON' targets
 	| 
 
 opt_compact ::=
