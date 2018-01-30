@@ -26,11 +26,13 @@ import (
 
 func TestNormalizeExpr(t *testing.T) {
 	defer tree.MockNameTypes(map[string]types.T{
-		"a": types.Int,
-		"b": types.Int,
-		"c": types.Int,
-		"d": types.Bool,
-		"s": types.String,
+		"a":  types.Int,
+		"b":  types.Int,
+		"c":  types.Int,
+		"d":  types.Bool,
+		"s":  types.String,
+		"j":  types.JSON,
+		"jv": types.JSON,
 	})()
 	testData := []struct {
 		expr     string
@@ -216,6 +218,11 @@ func TestNormalizeExpr(t *testing.T) {
 		{`a - 1 < 9223372036854775806`, `a < 9223372036854775807`},
 		{`-1 + a < 9223372036854775807`, `(-1 + a) < 9223372036854775807`},
 		{`-1 + a < 9223372036854775806`, `a < 9223372036854775807`},
+		{`j->'s' = '"jv"'::JSONB`, `j @> '{"s":"jv"}'`},
+		{`'"jv"'::JSONB = j->'s'`, `j @> '{"s":"jv"}'`},
+		{`j->'s' = jv`, `(j->'s') = jv`},
+		{`j->s = jv`, `(j->s) = jv`},
+		{`j->2 = '"jv"'::JSONB`, `(j->2) = '"jv"'`},
 	}
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.expr)
