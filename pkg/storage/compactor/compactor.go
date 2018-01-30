@@ -97,21 +97,27 @@ func defaultCompactorOptions() compactorOptions {
 
 type storeCapacityFunc func() (roachpb.StoreCapacity, error)
 
+type doneCompactingFunc func(ctx context.Context, reason string)
+
 // A Compactor records suggested compactions and periodically
 // makes requests to the engine to reclaim storage space.
 type Compactor struct {
 	eng     engine.WithSSTables
 	capFn   storeCapacityFunc
+	doneFn  doneCompactingFunc
 	ch      chan struct{}
 	opts    compactorOptions
 	Metrics Metrics
 }
 
 // NewCompactor returns a compactor for the specified storage engine.
-func NewCompactor(eng engine.WithSSTables, capFn storeCapacityFunc) *Compactor {
+func NewCompactor(
+	eng engine.WithSSTables, capFn storeCapacityFunc, doneFn doneCompactingFunc,
+) *Compactor {
 	return &Compactor{
 		eng:     eng,
 		capFn:   capFn,
+		doneFn:  doneFn,
 		ch:      make(chan struct{}, 1),
 		opts:    defaultCompactorOptions(),
 		Metrics: makeMetrics(),
@@ -324,6 +330,9 @@ func (c *Compactor) processCompaction(
 		c.Metrics.Compactions.Inc(1)
 		duration := timeutil.Since(startTime)
 		c.Metrics.CompactingNanos.Inc(int64(duration))
+		if c.doneFn != nil {
+			c.doneFn(ctx, "manual rocksdb compaction")
+		}
 		log.Eventf(ctx, "processed compaction %s in %s", aggr, duration)
 	} else {
 		log.VEventf(ctx, 2, "skipping compaction(s) %s", aggr)
