@@ -968,3 +968,47 @@ INSERT INTO t (id, next_id) VALUES
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
+
+func TestDumpWithInvertedIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE TABLE d.t (
+		a JSON,
+		b JSON,
+		INVERTED INDEX idx (a)
+	);
+
+	CREATE INVERTED INDEX idx2 ON d.t (b);
+
+	INSERT INTO d.t VALUES ('{"a": "b"}', '{"c": "d"}');
+`
+
+	c.RunWithArgs([]string{"sql", "-e", create})
+
+	out, err := c.RunWithCapture("dump d t")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const expect = `dump d t
+CREATE TABLE t (
+	a JSON NULL,
+	b JSON NULL,
+	INVERTED INDEX idx (a),
+	INVERTED INDEX idx2 (b),
+	FAMILY "primary" (a, b, rowid)
+);
+
+INSERT INTO t (a, b) VALUES
+	('{"a":"b"}', '{"c":"d"}');
+`
+
+	if out != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
