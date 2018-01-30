@@ -17,6 +17,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.queue.split.process.failure" title="Split" nonNegativeRate />
         <Metric name="cr.store.queue.consistency.process.failure" title="Consistency" nonNegativeRate />
         <Metric name="cr.store.queue.raftlog.process.failure" title="Raft Log" nonNegativeRate />
+        <Metric name="cr.store.queue.raftsnapshot.process.failure" title="Raft Snapshot" nonNegativeRate />
         <Metric name="cr.store.queue.tsmaintenance.process.failure" title="Time Series Maintenance" nonNegativeRate />
       </Axis>
     </LineGraph>,
@@ -29,6 +30,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.queue.split.processingnanos" title="Split" nonNegativeRate />
         <Metric name="cr.store.queue.consistency.processingnanos" title="Consistency" nonNegativeRate />
         <Metric name="cr.store.queue.raftlog.processingnanos" title="Raft Log" nonNegativeRate />
+        <Metric name="cr.store.queue.raftsnapshot.processingnanos" title="Raft Snapshot" nonNegativeRate />
         <Metric name="cr.store.queue.tsmaintenance.processingnanos" title="Time Series Maintenance" nonNegativeRate />
       </Axis>
     </LineGraph>,
@@ -75,6 +77,13 @@ export default function (props: GraphDashboardProps) {
       <Axis units={AxisUnits.Count} label="actions">
         <Metric name="cr.store.queue.raftlog.process.success" title="Successful Actions / sec" nonNegativeRate />
         <Metric name="cr.store.queue.raftlog.pending" title="Pending Actions" downsampleMax />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Raft Snapshot Queue" sources={storeSources}>
+      <Axis units={AxisUnits.Count} label="actions">
+        <Metric name="cr.store.queue.raftsnapshot.process.success" title="Successful Actions / sec" nonNegativeRate />
+        <Metric name="cr.store.queue.raftsnapshot.pending" title="Pending Actions" downsampleMax />
       </Axis>
     </LineGraph>,
 
