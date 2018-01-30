@@ -974,6 +974,41 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		// was not successfully canceled.
 		sqlDB.Exec(t, query)
 	})
+
+	t.Run("pause import", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE pauseimport`)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				<-allowResponse
+				_, _ = w.Write([]byte(r.URL.Path[1:]))
+			}
+		}))
+		defer srv.Close()
+
+		var urls []string
+		for i := 0; i < 5; i++ {
+			urls = append(urls, fmt.Sprintf("'%s/%d'", srv.URL, i))
+		}
+		csvURLs := strings.Join(urls, ", ")
+		query := fmt.Sprintf(`IMPORT TABLE t (i INT) CSV DATA (%s) WITH into_db = 'pauseimport'`, csvURLs)
+
+		if _, err := run(t, "pause", query); !testutils.IsError(err, "job paused") {
+			t.Fatalf("expected 'job paused' error, but got %+v", err)
+		}
+		jobID, err := run(t, "PAUSE", query)
+		if !testutils.IsError(err, "job paused") {
+			t.Fatalf("unexpected: %v", err)
+		}
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
+		if err := waitForJob(sqlDB.DB, jobID); err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.CheckQueryResults(t,
+			`SELECT * FROM pauseimport.t ORDER BY i`,
+			[][]string{{"0"}, {"1"}, {"2"}, {"3"}, {"4"}},
+		)
+	})
 }
 
 // TestRestoreFailCleanup tests that a failed RESTORE is cleaned up.

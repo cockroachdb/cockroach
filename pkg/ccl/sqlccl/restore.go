@@ -804,6 +804,9 @@ func restoreTableDescs(
 			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
 		}
 		if err := txn.Run(ctx, b); err != nil {
+			if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
+				return errors.New("table already exists")
+			}
 			return err
 		}
 
@@ -1228,9 +1231,10 @@ type restoreResumer struct {
 }
 
 func (r *restoreResumer) Resume(
-	ctx context.Context, job *jobs.Job, resultsCh chan<- tree.Datums,
+	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	details := job.Record.Details.(jobs.RestoreDetails)
+	p := phs.(sql.PlanHookState)
 
 	backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
 	if err != nil {
@@ -1239,8 +1243,8 @@ func (r *restoreResumer) Resume(
 
 	res, databases, tables, err := restore(
 		ctx,
-		job.DB(),
-		job.Gossip(),
+		p.ExecCfg().DB,
+		p.ExecCfg().Gossip,
 		backupDescs,
 		details.EndTime,
 		sqlDescs,

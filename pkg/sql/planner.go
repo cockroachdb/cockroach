@@ -226,6 +226,10 @@ func NewInternalPlanner(
 		}
 		ts = txn.Proto().OrigTimestamp.GoTime()
 	}
+	// If txn is nil, none of the timestamp fields of the eval ctx will be set
+	// (this is in addition to the various other fields that aren't set in
+	// either case). But presumably if that is the case, the caller already
+	// doesn't care about SQL semantics too much.
 	p := s.newPlanner(
 		txn, ts /* txnTimestamp */, ts, /* stmtTimestamp */
 		nil /* reCache */, s.statsCollector())
