@@ -28,7 +28,7 @@ type DistSQLMetrics struct {
 	FlowsActive   *metric.Gauge
 	FlowsTotal    *metric.Counter
 	MaxBytesHist  *metric.Histogram
-	CurBytesCount *metric.Counter
+	CurBytesCount *metric.Gauge
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -69,7 +69,7 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		FlowsActive:   metric.NewGauge(metaFlowsActive),
 		FlowsTotal:    metric.NewCounter(metaFlowsTotal),
 		MaxBytesHist:  metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
-		CurBytesCount: metric.NewCounter(metaMemCurBytes),
+		CurBytesCount: metric.NewGauge(metaMemCurBytes),
 	}
 }
 

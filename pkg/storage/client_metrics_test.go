@@ -36,12 +36,6 @@ func checkGauge(t *testing.T, g *metric.Gauge, e int64) {
 	}
 }
 
-func checkCounter(t *testing.T, c *metric.Counter, e int64) {
-	if a := c.Count(); a != e {
-		t.Error(errors.Errorf("%s for store: actual %d != expected %d", c.GetName(), a, e))
-	}
-}
-
 func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 	var stores []*storage.Store
 	var wg sync.WaitGroup
@@ -190,7 +184,7 @@ func TestStoreMetrics(t *testing.T) {
 	}
 
 	// Verify range count is as expected
-	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 2)
+	checkGauge(t, mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Verify all stats on store0 after split.
 	verifyStats(t, mtc, 0)
@@ -224,7 +218,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Verify stats after sequence cache addition.
 	verifyStats(t, mtc, 0)
-	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 2)
+	checkGauge(t, mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Unreplicate range from the first store.
 	mtc.unreplicateRange(replica.RangeID, 0)
@@ -234,8 +228,8 @@ func TestStoreMetrics(t *testing.T) {
 	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
 
 	// Verify range count is as expected.
-	checkCounter(t, mtc.stores[0].Metrics().ReplicaCount, 1)
-	checkCounter(t, mtc.stores[1].Metrics().ReplicaCount, 1)
+	checkGauge(t, mtc.stores[0].Metrics().ReplicaCount, 1)
+	checkGauge(t, mtc.stores[1].Metrics().ReplicaCount, 1)
 
 	// Verify all stats on store0 and store1 after range is removed.
 	verifyStats(t, mtc, 0, 1)

@@ -297,6 +297,16 @@ func NewCounter(metadata Metadata) *Counter {
 	return &Counter{metadata, metrics.NewCounter()}
 }
 
+// Dec overrides the metric.Counter method. This method should NOT be
+// used and serves only to prevent misuse of the metric type.
+func (c *Counter) Dec(int64) {
+	// From https://prometheus.io/docs/concepts/metric_types/#counter
+	// > Counters should not be used to expose current counts of items
+	// > whose number can also go down, e.g. the number of currently
+	// > running goroutines. Use gauges for this use case.
+	panic("Counter should not be decremented, use a Gauge instead")
+}
+
 // GetType returns the prometheus type enum for this metric.
 func (c *Counter) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_COUNTER.Enum()

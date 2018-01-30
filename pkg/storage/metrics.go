@@ -473,8 +473,8 @@ type StoreMetrics struct {
 	registry *metric.Registry
 
 	// Replica metrics.
-	ReplicaCount                  *metric.Counter // Does not include reserved replicas.
-	ReservedReplicaCount          *metric.Counter
+	ReplicaCount                  *metric.Gauge // Does not include reserved replicas.
+	ReservedReplicaCount          *metric.Gauge
 	RaftLeaderCount               *metric.Gauge
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
@@ -521,7 +521,7 @@ type StoreMetrics struct {
 	Capacity        *metric.Gauge
 	Available       *metric.Gauge
 	Used            *metric.Gauge
-	Reserved        *metric.Counter
+	Reserved        *metric.Gauge
 	SysBytes        *metric.Gauge
 	SysCount        *metric.Gauge
 
@@ -668,8 +668,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		registry: storeRegistry,
 
 		// Replica metrics.
-		ReplicaCount:                  metric.NewCounter(metaReplicaCount),
-		ReservedReplicaCount:          metric.NewCounter(metaReservedReplicaCount),
+		ReplicaCount:                  metric.NewGauge(metaReplicaCount),
+		ReservedReplicaCount:          metric.NewGauge(metaReservedReplicaCount),
 		RaftLeaderCount:               metric.NewGauge(metaRaftLeaderCount),
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
@@ -714,7 +714,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		Capacity:        metric.NewGauge(metaCapacity),
 		Available:       metric.NewGauge(metaAvailable),
 		Used:            metric.NewGauge(metaUsed),
-		Reserved:        metric.NewCounter(metaReserved),
+		Reserved:        metric.NewGauge(metaReserved),
 		SysBytes:        metric.NewGauge(metaSysBytes),
 		SysCount:        metric.NewGauge(metaSysCount),
 
