@@ -447,7 +447,11 @@ CMAKE_SYSTEM_NAME := Windows
 endif
 
 CONFIGURE_FLAGS += --host=$(XHOST_TRIPLE) CC=$(CC_PATH) CXX=$(CXX_PATH)
-CMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME)
+
+# Use XCMAKE_FLAGS when invoking CMake on libraries/binaries for the target
+# platform (i.e., the cross-compiled platform, if specified); use plain
+# CMAKE_FLAGS when invoking CMake on libraries/binaries for the host platform.
+XCMAKE_FLAGS := $(CMAKE_FLAGS) -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME)
 
 TARGET_TRIPLE := $(XHOST_TRIPLE)
 else
@@ -545,7 +549,7 @@ $(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(CRYPTOPP_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/cryptopp-rebuild. See above for rationale.
-	cd $(CRYPTOPP_DIR) && cmake $(CMAKE_FLAGS) $(CRYPTOPP_SRC_DIR)
+	cd $(CRYPTOPP_DIR) && cmake $(XCMAKE_FLAGS) $(CRYPTOPP_SRC_DIR)
 
 $(JEMALLOC_SRC_DIR)/configure.ac: | $(SUBMODULES_TARGET)
 
@@ -567,7 +571,7 @@ $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(PROTOBUF_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
-	cd $(PROTOBUF_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
+	cd $(PROTOBUF_DIR) && cmake $(XCMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
 
 ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
 $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
@@ -583,7 +587,7 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | $(SUBMODULES_TARGET) li
 	mkdir -p $(ROCKSDB_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
-	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
+	cd $(ROCKSDB_DIR) && cmake $(XCMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(PORTABLE),-DPORTABLE=ON) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
@@ -596,14 +600,14 @@ $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(SNAPPY_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
-	cd $(SNAPPY_DIR) && cmake $(CMAKE_FLAGS) $(SNAPPY_SRC_DIR)
+	cd $(SNAPPY_DIR) && cmake $(XCMAKE_FLAGS) $(SNAPPY_SRC_DIR)
 
 $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild | $(SUBMODULES_TARGET)
 	rm -rf $(LIBROACH_DIR)
 	mkdir -p $(LIBROACH_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/libroach-rebuild. See above for rationale.
-	cd $(LIBROACH_DIR) && cmake $(CMAKE_FLAGS) $(LIBROACH_SRC_DIR) -DCMAKE_BUILD_TYPE=Release \
+	cd $(LIBROACH_DIR) && cmake $(XCMAKE_FLAGS) $(LIBROACH_SRC_DIR) -DCMAKE_BUILD_TYPE=Release \
 		-DPROTOBUF_LIB=$(PROTOBUF_DIR)/libprotobuf.a -DROCKSDB_LIB=$(ROCKSDB_DIR)/librocksdb.a \
 		-DJEMALLOC_LIB=$(JEMALLOC_DIR)/lib/libjemalloc.a -DSNAPPY_LIB=$(SNAPPY_DIR)/libsnappy.a \
 		-DCRYPTOPP_LIB=$(CRYPTOPP_DIR)/libcryptopp.a
