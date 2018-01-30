@@ -128,6 +128,8 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 				`SELECT "Database", NULL::STRING AS "Table", "User", "Privileges" FROM (`)
 			source.WriteString(dbPrivQuery)
 			source.WriteByte(')')
+			// Specify the WHERE clause for grantees.
+			cond.WriteString(`WHERE true`)
 		}
 	}
 
