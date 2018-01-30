@@ -21,7 +21,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -33,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var nodeLivenessLogLimiter = log.Every(5 * time.Second)
@@ -47,14 +45,13 @@ type nodeLiveness interface {
 
 // Registry creates Jobs and manages their leases and cancelation.
 type Registry struct {
-	ac        log.AmbientContext
-	db        *client.DB
-	ex        sqlutil.InternalExecutor
-	gossip    *gossip.Gossip
-	clock     *hlc.Clock
-	nodeID    *base.NodeIDContainer
-	clusterID func() uuid.UUID
-	settings  *cluster.Settings
+	ac       log.AmbientContext
+	db       *client.DB
+	ex       sqlutil.InternalExecutor
+	clock    *hlc.Clock
+	nodeID   *base.NodeIDContainer
+	settings *cluster.Settings
+	planFn   planHookMaker
 
 	mu struct {
 		syncutil.Mutex
@@ -71,26 +68,35 @@ type Registry struct {
 	}
 }
 
-// MakeRegistry creates a new Registry.
+// TODO(mjibson): Can we do something to avoid passing an interface{} here
+// that must be type casted in a Resumer? It cannot be done here because
+// PlanHookState lives in the sql package, which would create a dependency
+// cycle if listed here. Furthermore, moving PlanHookState into a common
+// subpackage like sqlbase is difficult because of the amount of sql-only
+// stuff that PlanHookState exports. One other choice is to merge this package
+// back into the sql package. There's maybe a better way that I'm unaware of.
+type planHookMaker func(opName, user string) (interface{}, func())
+
+// MakeRegistry creates a new Registry. planFn is a wrapper around
+// sql.newInternalPlanner. It returns a sql.PlanHookState, but must be
+// coerced into that in the Resumer functions.
 func MakeRegistry(
 	ac log.AmbientContext,
 	clock *hlc.Clock,
 	db *client.DB,
 	ex sqlutil.InternalExecutor,
-	gossip *gossip.Gossip,
 	nodeID *base.NodeIDContainer,
-	clusterID func() uuid.UUID,
 	settings *cluster.Settings,
+	planFn planHookMaker,
 ) *Registry {
 	r := &Registry{
-		ac:        ac,
-		clock:     clock,
-		db:        db,
-		ex:        ex,
-		gossip:    gossip,
-		nodeID:    nodeID,
-		clusterID: clusterID,
-		settings:  settings,
+		ac:       ac,
+		clock:    clock,
+		db:       db,
+		ex:       ex,
+		nodeID:   nodeID,
+		settings: settings,
+		planFn:   planFn,
 	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]context.CancelFunc)
@@ -266,13 +272,6 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 func (r *Registry) Cancel(ctx context.Context, txn *client.Txn, id int64) error {
 	job, resumer, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
-		// Special case IMPORT jobs to mark the job as canceled.
-		if job != nil {
-			payload := job.Payload()
-			if payload.Type() == TypeImport {
-				return job.WithTxn(txn).canceled(ctx, NoopFn)
-			}
-		}
 		return err
 	}
 	return job.WithTxn(txn).canceled(ctx, resumer.OnFailOrCancel)
@@ -302,9 +301,10 @@ func (r *Registry) Resume(ctx context.Context, txn *client.Txn, id int64) error 
 // must ensure that any work they do is still correct if the txn is aborted
 // at a later time.
 type Resumer interface {
-	// Resume is called when a job is started or resumed. Sending results on
-	// the chan will return them to a user, if a user's session is connected.
-	Resume(context.Context, *Job, chan<- tree.Datums) error
+	// Resume is called when a job is started or resumed. Sending results on the
+	// chan will return them to a user, if a user's session is connected. phs
+	// is a sql.PlanHookState.
+	Resume(ctx context.Context, job *Job, phs interface{}, resultsCh chan<- tree.Datums) error
 	// OnSuccess is called when a job has completed successfully, and is called
 	// with the same txn that will mark the job as successful. The txn will
 	// only be committed if this doesn't return an error and the job state was
@@ -357,7 +357,9 @@ func (r *Registry) resume(
 ) <-chan error {
 	errCh := make(chan error, 1)
 	go func() {
-		resumeErr := resumer.Resume(ctx, job, resultsCh)
+		phs, cleanup := r.planFn("resume-job", job.Record.Username)
+		defer cleanup()
+		resumeErr := resumer.Resume(ctx, job, phs, resultsCh)
 		terminal := true
 		var status Status
 		defer r.unregister(*job.id)

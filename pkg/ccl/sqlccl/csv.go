@@ -892,16 +892,13 @@ func importPlanHook(
 	if err != nil {
 		return nil, nil, err
 	}
-	// TODO(dan): This entire method is a placeholder to get the distsql
-	// plumbing worked out while mjibson works on the new processors and router.
-	// Currently, it "uses" distsql to compute an int and this method returns
-	// it.
+
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		walltime := timeutil.Now().UnixNano()
+		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if !importCSVEnabled.Get(&p.ExecCfg().Settings.SV) {
 			return errors.Errorf(
@@ -932,7 +929,6 @@ func importPlanHook(
 		parentID := defaultCSVParentID
 		transform := opts[importOptionTransform]
 		var targetDB string
-		var transformStorage storageccl.ExportStorage
 		if transform == "" {
 			if override, ok := opts[restoreOptIntoDB]; !ok {
 				if session := p.SessionData().Database; session != "" {
@@ -962,11 +958,6 @@ func importPlanHook(
 			if _, ok := opts[restoreOptIntoDB]; ok {
 				return errors.Errorf("cannot specify both %s and %s", importOptionTransform, restoreOptIntoDB)
 			}
-			transformStorage, err = exportStorageFromURI(ctx, transform, p.ExecCfg().Settings)
-			if err != nil {
-				return err
-			}
-			defer transformStorage.Close()
 		}
 
 		var comma rune
@@ -1028,8 +1019,14 @@ func importPlanHook(
 		}
 
 		if transform != "" {
+			transformStorage, err := exportStorageFromURI(ctx, transform, p.ExecCfg().Settings)
+			if err != nil {
+				return err
+			}
 			// Delay writing the BACKUP-CHECKPOINT file until as late as possible.
-			if err := verifyUsableExportTarget(ctx, transformStorage, transform); err != nil {
+			err = verifyUsableExportTarget(ctx, transformStorage, transform)
+			transformStorage.Close()
+			if err != nil {
 				return err
 			}
 		} else {
@@ -1043,10 +1040,13 @@ func importPlanHook(
 			}
 		}
 
-		// NB: the post-conversion RESTORE will create and maintain its own job.
-		// This job is thus only for tracking the conversion, and will be Finished()
-		// before the restore starts.
-		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
+		var nullifVal string
+		if nullif != nil {
+			nullifVal = *nullif
+		}
+		_, local := opts[importOptionLocal]
+
+		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
 			Details: jobs.ImportDetails{
@@ -1054,66 +1054,21 @@ func importPlanHook(
 					Desc:       tableDesc,
 					URIs:       files,
 					BackupPath: transform,
+					ParentID:   parentID,
+					Comma:      comma,
+					Comment:    comment,
+					HasNullif:  nullif != nil,
+					Nullif:     nullifVal,
+					SSTSize:    sstSize,
+					Walltime:   walltime,
+					Local:      local,
 				}},
 			},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err != nil {
 			return err
 		}
-		if err := job.Started(ctx); err != nil {
-			return err
-		}
-
-		var importErr error
-		if _, local := opts[importOptionLocal]; !local {
-			importErr = doDistributedCSVTransform(
-				ctx, job, files, p, parentID, tableDesc, transform,
-				comma, comment, nullif, walltime,
-				sstSize,
-			)
-		} else {
-			if transform == "" {
-				return errors.Errorf("%s option required for local import", importOptionTransform)
-			}
-			_, _, _, importErr = doLocalCSVTransform(
-				ctx, job, parentID, tableDesc, transform, files,
-				comma, comment, nullif, sstSize,
-				p.ExecCfg().DistSQLSrv.TempStorage,
-				walltime, p.ExecCfg(),
-			)
-		}
-		if transform != "" {
-			// Always attempt to cleanup the checkpoint even if the import failed.
-			if err := transformStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
-				log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
-			}
-		}
-		if importErr != nil {
-			if err := job.Failed(ctx, importErr, jobs.NoopFn); err != nil {
-				return err
-			}
-			if err, ok := errors.Cause(importErr).(*jobs.InvalidStatusError); ok && err.Status() == jobs.StatusCanceled {
-				importErr = errors.Errorf("job %s", err.Status())
-			}
-		} else {
-			if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
-				return err
-			}
-		}
-		if importErr != nil {
-			return importErr
-		}
-
-		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*job.ID())),
-			tree.NewDString(string(jobs.StatusSucceeded)),
-			tree.NewDFloat(tree.DFloat(1.0)),
-			tree.NewDInt(tree.DInt(0)),
-			tree.NewDInt(tree.DInt(0)),
-			tree.NewDInt(tree.DInt(0)),
-			tree.NewDInt(tree.DInt(0)),
-		}
-		return nil
+		return <-errCh
 	}
 	return fn, restoreHeader, nil
 }
@@ -1188,12 +1143,8 @@ func doDistributedCSVTransform(
 		}
 		return err
 	}
-
 	if temp == "" {
-		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			return restoreTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{tableDesc}, job.Record.Username)
-		})
-		return errors.Wrap(err, "creating table descriptor")
+		return nil
 	}
 
 	backupDesc := BackupDescriptor{
@@ -1677,8 +1628,134 @@ func extractSSTSpan(
 	return data, firstKey, lastKey, more, err
 }
 
+type importResumer struct {
+	settings *cluster.Settings
+	res      roachpb.BulkOpSummary
+}
+
+func (r *importResumer) Resume(
+	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
+) error {
+	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	p := phs.(sql.PlanHookState)
+	comma := details.Comma
+	comment := details.Comment
+	walltime := details.Walltime
+	transform := details.BackupPath
+	files := details.URIs
+	tableDesc := details.Desc
+	parentID := details.ParentID
+	sstSize := details.SSTSize
+	var nullif *string
+	if details.HasNullif {
+		nullif = &details.Nullif
+	}
+	local := details.Local
+
+	var importErr error
+	if !local {
+		importErr = doDistributedCSVTransform(
+			ctx, job, files, p, parentID, tableDesc, transform,
+			comma, comment, nullif, walltime,
+			sstSize,
+		)
+	} else {
+		if transform == "" {
+			return errors.Errorf("%s option required for local import", importOptionTransform)
+		}
+		_, _, _, importErr = doLocalCSVTransform(
+			ctx, job, parentID, tableDesc, transform, files,
+			comma, comment, nullif, sstSize,
+			p.ExecCfg().DistSQLSrv.TempStorage,
+			walltime, p.ExecCfg(),
+		)
+	}
+	return importErr
+}
+
+// OnFailOrCancel removes KV data that has been committed from a import that
+// has failed or been canceled. It does this by adding the table descriptors
+// in DROP state, which causes the schema change stuff to delete the keys
+// in the background.
+func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
+	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	if details.BackupPath != "" {
+		return nil
+	}
+
+	// Needed to trigger the schema change manager.
+	if err := txn.SetSystemConfigTrigger(); err != nil {
+		return err
+	}
+	b := txn.NewBatch()
+	tableDesc := details.Desc
+	tableDesc.State = sqlbase.TableDescriptor_DROP
+	b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
+	return txn.Run(ctx, b)
+}
+
+func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
+	log.Event(ctx, "making tables live")
+	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+
+	if details.BackupPath == "" {
+		// Write the new TableDescriptors and flip the namespace entries over to
+		// them. After this call, any queries on a table will be served by the newly
+		// imported data.
+		if err := restoreTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{details.Desc}, job.Record.Username); err != nil {
+			return errors.Wrapf(err, "creating table %q", details.Desc.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *importResumer) OnTerminal(
+	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
+) {
+	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+
+	if transform := details.BackupPath; transform != "" {
+		transformStorage, err := exportStorageFromURI(ctx, transform, r.settings)
+		if err != nil {
+			log.Warningf(ctx, "unable to create storage: %+v", err)
+		} else {
+			// Always attempt to cleanup the checkpoint even if the import failed.
+			if err := transformStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
+				log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+			}
+			transformStorage.Close()
+		}
+	}
+
+	if status == jobs.StatusSucceeded {
+		resultsCh <- tree.Datums{
+			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDString(string(jobs.StatusSucceeded)),
+			tree.NewDFloat(tree.DFloat(1.0)),
+			tree.NewDInt(tree.DInt(r.res.Rows)),
+			tree.NewDInt(tree.DInt(r.res.IndexEntries)),
+			tree.NewDInt(tree.DInt(r.res.SystemRecords)),
+			tree.NewDInt(tree.DInt(r.res.DataSize)),
+		}
+	}
+}
+
+var _ jobs.Resumer = &importResumer{}
+
+func importResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
+	if typ != jobs.TypeImport {
+		return nil
+	}
+
+	return &importResumer{
+		settings: settings,
+	}
+}
+
 func init() {
 	sql.AddPlanHook(importPlanHook)
 	distsqlrun.NewReadCSVProcessor = newReadCSVProcessor
 	distsqlrun.NewSSTWriterProcessor = newSSTWriterProcessor
+	jobs.AddResumeHook(importResumeHook)
 }
