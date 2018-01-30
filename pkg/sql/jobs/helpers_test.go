@@ -24,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func ResetResumeHooks() func() {
@@ -38,13 +36,6 @@ var FakeNodeID = func() *base.NodeIDContainer {
 	nodeID := base.NodeIDContainer{}
 	nodeID.Reset(1)
 	return &nodeID
-}()
-
-// FakeClusterID is a dummy cluster ID for use in tests. It always returns
-// "deadbeef-dead-beef-dead-beefdeadbeef" as a uuid.UUID.
-var FakeClusterID = func() func() uuid.UUID {
-	clusterID := uuid.FromUint128(uint128.FromInts(0xdeadbeefdeadbeef, 0xdeadbeefdeadbeef))
-	return func() uuid.UUID { return clusterID }
 }()
 
 // FakeNodeLiveness allows simulating liveness failures without the full
@@ -132,7 +123,9 @@ type FakeResumer struct {
 	Terminal func(job *Job)
 }
 
-func (d FakeResumer) Resume(_ context.Context, job *Job, _ chan<- tree.Datums) error {
+func (d FakeResumer) Resume(
+	_ context.Context, job *Job, _ interface{}, _ chan<- tree.Datums,
+) error {
 	if d.OnResume != nil {
 		return d.OnResume(job)
 	}

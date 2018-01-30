@@ -1040,9 +1040,10 @@ type backupResumer struct {
 }
 
 func (b *backupResumer) Resume(
-	ctx context.Context, job *jobs.Job, resultsCh chan<- tree.Datums,
+	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	details := job.Record.Details.(jobs.BackupDetails)
+	p := phs.(sql.PlanHookState)
 
 	if len(details.BackupDescriptor) == 0 {
 		return errors.New("missing backup descriptor; cannot resume a backup from an older version")
@@ -1064,7 +1065,7 @@ func (b *backupResumer) Resume(
 	if desc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorCheckpointName); err == nil {
 		// If the checkpoint is from a different cluster, it's meaningless to us.
 		// More likely though are dummy/lock-out checkpoints with no ClusterID.
-		if desc.ClusterID.Equal(job.ClusterID()) {
+		if desc.ClusterID.Equal(p.ExecCfg().ClusterID()) {
 			checkpointDesc = &desc
 		}
 	} else {
@@ -1075,7 +1076,7 @@ func (b *backupResumer) Resume(
 		// implementations.
 		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *job.ID(), err)
 	}
-	res, err := backup(ctx, job.DB(), job.Gossip(), exportStore, job, &backupDesc, checkpointDesc, resultsCh)
+	res, err := backup(ctx, p.ExecCfg().DB, p.ExecCfg().Gossip, exportStore, job, &backupDesc, checkpointDesc, resultsCh)
 	b.res = res
 	return err
 }

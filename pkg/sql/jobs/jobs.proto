@@ -70,6 +70,20 @@ message ImportDetails {
     repeated float sampling_progress = 5;
     repeated float read_progress = 6;
     repeated float write_progress = 7;
+    uint32 parent_id = 8 [
+      (gogoproto.customname) = "ParentID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
+    int32 comma = 9;
+    int32 comment = 10;
+    message Nullif {
+      string nullif = 1;
+    }
+    // nullif needs to differentiate between not present and the empty string.
+    Nullif nullif = 11;
+    int64 sst_size = 12 [(gogoproto.customname) = "SSTSize"];
+    int64 walltime = 13;
+    bool local = 14;
   }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
 }
