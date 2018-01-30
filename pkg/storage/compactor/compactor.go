@@ -307,10 +307,11 @@ func (c *Compactor) processCompaction(
 		startTime := timeutil.Now()
 		log.Eventf(ctx, "processing compaction %s", aggr)
 		if err := c.eng.CompactRange(aggr.StartKey, aggr.EndKey, false /* forceBottommost */); err != nil {
+			c.Metrics.CompactionFailures.Inc(1)
 			return 0, errors.Wrapf(err, "unable to compact range %+v", aggr)
 		}
 		c.Metrics.BytesCompacted.Inc(aggr.Bytes)
-		c.Metrics.Compactions.Inc(1)
+		c.Metrics.CompactionSuccesses.Inc(1)
 		duration := timeutil.Since(startTime)
 		c.Metrics.CompactingNanos.Inc(int64(duration))
 		log.Eventf(ctx, "processed compaction %s in %s", aggr, duration)
