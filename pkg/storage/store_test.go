@@ -3042,7 +3042,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	desc.Capacity.Available = 1
-	desc.Capacity.Used = desc.Capacity.Capacity - 1
+	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
 
 	s.cfg.StorePool.detailsMu.Lock()
 	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
@@ -3081,6 +3081,32 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
 	cleanupAccepted()
+
+	// Even if the store isn't mostly full, a range that's larger than the
+	// available disk space should be rejected.
+	desc.Capacity.Available = desc.Capacity.Capacity / 2
+	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
+	s.cfg.StorePool.detailsMu.Lock()
+	s.cfg.StorePool.getStoreDetailLocked(desc.StoreID).desc = desc
+	s.cfg.StorePool.detailsMu.Unlock()
+
+	// A declinable snapshot to a nearly full store should be rejected.
+	cleanupRejected2, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+		RangeSize:  desc.Capacity.Available + 1,
+		CanDecline: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejectionMsg != snapshotStoreTooFullMsg {
+		t.Fatalf("expected rejection message %q, got %q", snapshotStoreTooFullMsg, rejectionMsg)
+	}
+	if cleanupRejected2 != nil {
+		t.Fatalf("got unexpected non-nil cleanup method")
+	}
+	if n := s.ReservationCount(); n != 0 {
+		t.Fatalf("expected 0 reservations, but found %d", n)
+	}
 }
 
 func TestSnapshotRateLimit(t *testing.T) {

@@ -2818,7 +2818,7 @@ func (s *Store) reserveSnapshot(
 		// getting stuck behind large snapshots managed by the replicate queue.
 	} else if header.CanDecline {
 		storeDesc, ok := s.cfg.StorePool.getStoreDescriptor(s.StoreID())
-		if ok && !maxCapacityCheck(storeDesc) {
+		if ok && (!maxCapacityCheck(storeDesc) || header.RangeSize > storeDesc.Capacity.Available) {
 			return nil, snapshotStoreTooFullMsg, nil
 		}
 		select {
