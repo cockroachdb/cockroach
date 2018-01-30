@@ -178,15 +178,15 @@ Outer:
 	}, nil
 }
 
-func (c *cascader) close(ctx context.Context) {
+func (c *cascader) clear(ctx context.Context) {
 	for _, container := range c.deletedRows {
-		container.Close(ctx)
+		container.Clear(ctx)
 	}
 	for _, container := range c.originalRows {
-		container.Close(ctx)
+		container.Clear(ctx)
 	}
 	for _, container := range c.updatedRows {
-		container.Close(ctx)
+		container.Clear(ctx)
 	}
 }
 
@@ -903,7 +903,7 @@ func (c *cascader) cascadeAll(
 	colIDtoRowIndex map[ColumnID]int,
 	traceKV bool,
 ) error {
-	defer c.close(ctx)
+	defer c.clear(ctx)
 	var cascadeQ cascadeQueue
 
 	// Enqueue the first values.
