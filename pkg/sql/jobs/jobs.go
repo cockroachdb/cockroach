@@ -22,7 +22,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Job manages logging the progress of long-running system processes, like
@@ -108,11 +106,6 @@ type InvalidStatusError struct {
 
 func (e *InvalidStatusError) Error() string {
 	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
-}
-
-// Status returns the errors status.
-func (e InvalidStatusError) Status() Status {
-	return e.status
 }
 
 // ID returns the ID of the job that this Job is currently tracking. This will
@@ -317,21 +310,6 @@ func (j *Job) Payload() Payload {
 func (j *Job) WithTxn(txn *client.Txn) *Job {
 	j.txn = txn
 	return j
-}
-
-// DB returns the *client.DB associated with this job.
-func (j *Job) DB() *client.DB {
-	return j.registry.db
-}
-
-// Gossip returns the *gossip.Gossip associated with this job.
-func (j *Job) Gossip() *gossip.Gossip {
-	return j.registry.gossip
-}
-
-// ClusterID returns the uuid.UUID cluster ID associated with this job.
-func (j *Job) ClusterID() uuid.UUID {
-	return j.registry.clusterID()
 }
 
 func (j *Job) runInTxn(ctx context.Context, fn func(context.Context, *client.Txn) error) error {

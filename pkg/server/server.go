@@ -364,6 +364,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// InternalExecutor takes pointers to this one instance.
 	sqlExecutor := sql.InternalExecutor{}
 
+	// Similarly for execCfg.
+	var execCfg sql.ExecutorConfig
+
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
 		Settings:                st,
@@ -404,7 +407,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
-		s.cfg.AmbientCtx, s.clock, s.db, &sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID, st)
+		s.cfg.AmbientCtx, s.clock, s.db, &sqlExecutor, &s.nodeIDContainer, st, func(opName, user string) (interface{}, func()) {
+			// This is a hack to get around a Go package dependency cycle. See comment
+			// in sql/jobs/registry.go on planHookMaker.
+			return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, &execCfg)
+		})
 
 	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
@@ -472,6 +479,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
+
 	// Set up Executor
 
 	var sqlExecutorTestingKnobs *sql.ExecutorTestingKnobs
@@ -481,7 +489,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sqlExecutorTestingKnobs = new(sql.ExecutorTestingKnobs)
 	}
 
-	execCfg := sql.ExecutorConfig{
+	execCfg = sql.ExecutorConfig{
 		Settings:                s.st,
 		NodeInfo:                nodeInfo,
 		AmbientCtx:              s.cfg.AmbientCtx,

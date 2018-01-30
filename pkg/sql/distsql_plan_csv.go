@@ -189,10 +189,10 @@ func (l *DistLoader) LoadCSV(
 		p.ResultRouters[i] = pIdx
 	}
 
-	if err := job.SetDetails(ctx, jobs.ImportDetails{
-		Tables: []jobs.ImportDetails_Table{{
-			SamplingProgress: make([]float32, len(csvSpecs)),
-		}},
+	if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+		d := details.(*jobs.Payload_Import).Import
+		d.Tables[0].SamplingProgress = make([]float32, len(csvSpecs))
+		return d.Tables[0].Completed()
 	}); err != nil {
 		return err
 	}
@@ -387,11 +387,12 @@ func (l *DistLoader) LoadCSV(
 
 	// Clear SamplingProgress and prep second stage job details for progress
 	// tracking.
-	if err := job.SetDetails(ctx, jobs.ImportDetails{
-		Tables: []jobs.ImportDetails_Table{{
-			ReadProgress:  make([]float32, len(csvSpecs)),
-			WriteProgress: make([]float32, len(p.ResultRouters)),
-		}},
+	if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+		d := details.(*jobs.Payload_Import).Import
+		d.Tables[0].SamplingProgress = nil
+		d.Tables[0].ReadProgress = make([]float32, len(csvSpecs))
+		d.Tables[0].WriteProgress = make([]float32, len(p.ResultRouters))
+		return d.Tables[0].Completed()
 	}); err != nil {
 		return err
 	}
