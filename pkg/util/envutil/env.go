@@ -228,6 +228,8 @@ func EnvOrDefaultFloat64(name string, value float64) float64 {
 	return value
 }
 
+var _ = EnvOrDefaultFloat64 // silence unused warning
+
 // EnvOrDefaultBytes returns the value set by the specified environment
 // variable, if any, otherwise the specified default value.
 func EnvOrDefaultBytes(name string, value int64) int64 {
