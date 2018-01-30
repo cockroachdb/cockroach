@@ -379,14 +379,6 @@ type Replica struct {
 		minLeaseProposedTS hlc.Timestamp
 		// Max bytes before split.
 		maxBytes int64
-		// Allow snapshots of any size instead of waiting for a split. Set to
-		// true when a split that is required for snapshots fails. Reset to
-		// false when the splits eventually succeed. The reasoning here is that
-		// in certain situations the split is dependent on the snapshot
-		// succeeding (either directly or transitively), so blocking the
-		// snapshot on the split can create a deadlock.
-		// TODO(nvanbenschoten): remove after #16954 is addressed.
-		permitLargeSnapshots bool
 		// proposals stores the Raft in-flight commands which
 		// originated at this Replica, i.e. all commands for which
 		// propose has been called, but which have not yet
@@ -1181,9 +1173,6 @@ func (r *Replica) SetMaxBytes(maxBytes int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.maxBytes = maxBytes
-
-	// Whenever we change maxBytes, reset permitLargeSnapshots.
-	r.mu.permitLargeSnapshots = false
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -2634,6 +2623,10 @@ func (r *Replica) tryExecuteWriteBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
 	startTime := timeutil.Now()
+
+	if err := r.maybeBackpressureWriteBatch(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err), proposalNoRetry
+	}
 
 	spans, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
@@ -5759,15 +5752,13 @@ func (r *Replica) needsSplitBySize() bool {
 }
 
 func (r *Replica) needsSplitBySizeRLocked() bool {
-	maxBytes := r.mu.maxBytes
-	size := r.mu.state.Stats.Total()
-	return maxBytes > 0 && size > maxBytes
+	return r.exceedsMultipleOfSplitSizeRLocked(1)
 }
 
-func (r *Replica) exceedsDoubleSplitSizeRLocked() bool {
+func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
 	maxBytes := r.mu.maxBytes
 	size := r.mu.state.Stats.Total()
-	return maxBytes > 0 && size > maxBytes*2
+	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
 
 func (r *Replica) setPendingSnapshotIndex(index uint64) error {
