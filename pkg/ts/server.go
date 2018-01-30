@@ -16,6 +16,7 @@ package ts
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 
@@ -80,7 +81,7 @@ func MakeServer(
 			mon.MemoryResource,
 			nil,
 			nil,
-			queryMemoryMax/10,
+			math.MaxInt64,
 		),
 		workerSem: make(chan struct{}, queryWorkerMax),
 	}
@@ -127,7 +128,7 @@ func (s *Server) Query(
 		nil,
 		nil,
 		0,
-		0,
+		math.MaxInt64,
 	)
 	monitor.Start(ctx, &s.memMonitor, mon.BoundAccount{})
 	defer monitor.Stop(ctx)
