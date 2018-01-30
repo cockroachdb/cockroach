@@ -110,7 +110,7 @@ type Server struct {
 type ServerMetrics struct {
 	BytesInCount   *metric.Counter
 	BytesOutCount  *metric.Counter
-	Conns          *metric.Counter
+	Conns          *metric.Gauge
 	ConnMemMetrics sql.MemoryMetrics
 	SQLMemMetrics  sql.MemoryMetrics
 
@@ -121,9 +121,9 @@ func makeServerMetrics(
 	internalMemMetrics *sql.MemoryMetrics, histogramWindow time.Duration,
 ) ServerMetrics {
 	return ServerMetrics{
-		Conns:              metric.NewCounter(MetaConns),
 		BytesInCount:       metric.NewCounter(MetaBytesIn),
 		BytesOutCount:      metric.NewCounter(MetaBytesOut),
+		Conns:              metric.NewGauge(MetaConns),
 		ConnMemMetrics:     sql.MakeMemMetrics("conns", histogramWindow),
 		SQLMemMetrics:      sql.MakeMemMetrics("client", histogramWindow),
 		internalMemMetrics: internalMemMetrics,

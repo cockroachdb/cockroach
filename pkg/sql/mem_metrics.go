@@ -27,11 +27,11 @@ import (
 // - "internal" for activities related to leases, schema changes, etc.
 type MemoryMetrics struct {
 	MaxBytesHist         *metric.Histogram
-	CurBytesCount        *metric.Counter
+	CurBytesCount        *metric.Gauge
 	TxnMaxBytesHist      *metric.Histogram
-	TxnCurBytesCount     *metric.Counter
+	TxnCurBytesCount     *metric.Gauge
 	SessionMaxBytesHist  *metric.Histogram
-	SessionCurBytesCount *metric.Counter
+	SessionCurBytesCount *metric.Gauge
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -78,10 +78,10 @@ func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetric
 		Help: "Current sql session memory usage for " + endpoint}
 	return MemoryMetrics{
 		MaxBytesHist:         metric.NewHistogram(MetaMemMaxBytes, histogramWindow, log10int64times1000, 3),
-		CurBytesCount:        metric.NewCounter(MetaMemCurBytes),
+		CurBytesCount:        metric.NewGauge(MetaMemCurBytes),
 		TxnMaxBytesHist:      metric.NewHistogram(MetaMemMaxTxnBytes, histogramWindow, log10int64times1000, 3),
-		TxnCurBytesCount:     metric.NewCounter(MetaMemTxnCurBytes),
+		TxnCurBytesCount:     metric.NewGauge(MetaMemTxnCurBytes),
 		SessionMaxBytesHist:  metric.NewHistogram(MetaMemMaxSessionBytes, histogramWindow, log10int64times1000, 3),
-		SessionCurBytesCount: metric.NewCounter(MetaMemSessionCurBytes),
+		SessionCurBytesCount: metric.NewGauge(MetaMemSessionCurBytes),
 	}
 }
