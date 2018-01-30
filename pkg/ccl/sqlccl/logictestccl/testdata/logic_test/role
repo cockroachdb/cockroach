@@ -113,6 +113,12 @@ CREATE USER testuser2
 statement ok
 CREATE ROLE testrole
 
+query TTB colnames
+SHOW GRANTS ON ROLE
+----
+role   member  isAdmin
+admin  root    true
+
 # Test that only roles are grantable.
 statement error pq: role testuser does not exist
 GRANT testuser TO testrole
@@ -136,6 +142,13 @@ GRANT testrole TO testuser
 
 query TTB colnames
 SELECT * FROM system.role_members
+----
+role      member    isAdmin
+admin     root      true
+testrole  testuser  false
+
+query TTB colnames
+SHOW GRANTS ON ROLE
 ----
 role      member    isAdmin
 admin     root      true
@@ -176,6 +189,35 @@ role      member     isAdmin
 admin     root       true
 admin     testuser   false
 testrole  testuser   true
+testrole  testuser2  true
+
+query TTB colnames
+SHOW GRANTS ON ROLE
+----
+role      member     isAdmin
+admin     root       true
+admin     testuser   false
+testrole  testuser   true
+testrole  testuser2  true
+
+query TTB colnames
+SHOW GRANTS ON ROLE admin
+----
+role      member     isAdmin
+admin     root       true
+admin     testuser   false
+
+query TTB colnames
+SHOW GRANTS ON ROLE FOR testuser
+----
+role      member     isAdmin
+admin     testuser   false
+testrole  testuser   true
+
+query TTB colnames
+SHOW GRANTS ON ROLE testrole FOR testuser2
+----
+role      member     isAdmin
 testrole  testuser2  true
 
 statement ok
