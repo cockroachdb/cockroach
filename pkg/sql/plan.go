@@ -652,6 +652,8 @@ func (p *planner) newPlan(
 		return p.ShowQueries(ctx, n)
 	case *tree.ShowJobs:
 		return p.ShowJobs(ctx, n)
+	case *tree.ShowRoleGrants:
+		return p.ShowRoleGrants(ctx, n)
 	case *tree.ShowRoles:
 		return p.ShowRoles(ctx, n)
 	case *tree.ShowSessions:
@@ -773,6 +775,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowQueries(ctx, n)
 	case *tree.ShowJobs:
 		return p.ShowJobs(ctx, n)
+	case *tree.ShowRoleGrants:
+		return p.ShowRoleGrants(ctx, n)
 	case *tree.ShowRoles:
 		return p.ShowRoles(ctx, n)
 	case *tree.ShowSessions:

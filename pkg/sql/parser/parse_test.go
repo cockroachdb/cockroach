@@ -377,6 +377,12 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
 
+		{`SHOW GRANTS ON ROLE`},
+		{`SHOW GRANTS ON ROLE foo`},
+		{`SHOW GRANTS ON ROLE foo, bar`},
+		{`SHOW GRANTS ON ROLE foo FOR bar`},
+		{`SHOW GRANTS ON ROLE FOR bar, baz`},
+
 		{`SHOW TRANSACTION STATUS`},
 
 		{`SHOW SYNTAX 'select 1'`},
