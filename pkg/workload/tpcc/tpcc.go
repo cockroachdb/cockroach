@@ -48,6 +48,7 @@ var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
 		` using a rich schema of multiple tables`,
+	Version: `1.0.0`,
 	New: func() workload.Generator {
 		g := &tpcc{flags: pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)}
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
