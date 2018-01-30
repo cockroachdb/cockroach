@@ -1349,9 +1349,9 @@ query error invalid UTF-8
 SELECT ENCODE('\xa7', 'hex')
 
 query TT
-SELECT ENCODE('\x616263', 'hex'), DECODE('abc', 'hex')
+SELECT ENCODE('abc', 'hex'), DECODE('616263', 'hex')
 ----
-abc 616263
+616263 abc
 
 query T
 SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
