@@ -107,11 +107,13 @@ func TestCompactorThresholds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	fractionThresh := defaultThresholdBytesFraction*defaultThresholdBytes + 1
+	fractionAvailableThresh := defaultThresholdBytesAvailableFraction*defaultThresholdBytes + 1
 	nowNanos := timeutil.Now().UnixNano()
 	testCases := []struct {
 		name              string
 		suggestions       []storagebase.SuggestedCompaction
 		logicalBytes      int64 // logical byte count to return with store capacity
+		availableBytes    int64 // available byte count to return with store capacity
 		expBytesCompacted int64
 		expCompactions    []roachpb.Span
 		expUncompacted    []roachpb.Span
@@ -129,6 +131,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: 0,
 			expCompactions:    nil,
 			expUncompacted: []roachpb.Span{
@@ -148,6 +151,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: defaultThresholdBytes,
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("b")},
@@ -166,7 +170,27 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes,
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: int64(fractionThresh),
+			expCompactions: []roachpb.Span{
+				{Key: key("a"), EndKey: key("b")},
+			},
+		},
+		// Single suggestion over the fractional bytes available threshold.
+		{
+			name: "single suggestion over fractional bytes available threshold",
+			suggestions: []storagebase.SuggestedCompaction{
+				{
+					StartKey: key("a"), EndKey: key("b"),
+					Compaction: storagebase.Compaction{
+						Bytes:            int64(fractionAvailableThresh),
+						SuggestedAtNanos: nowNanos,
+					},
+				},
+			},
+			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes,
+			expBytesCompacted: int64(fractionAvailableThresh),
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("b")},
 			},
@@ -191,6 +215,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: defaultThresholdBytes,
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("c")},
@@ -216,6 +241,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: defaultThresholdBytes,
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("b")},
@@ -241,6 +267,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: defaultThresholdBytes,
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("d")},
@@ -266,6 +293,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes,
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: int64(fractionThresh),
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("c")},
@@ -292,6 +320,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: defaultThresholdBytes,
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("f")},
@@ -318,6 +347,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: 0,
 			expCompactions:    nil,
 			expUncompacted: []roachpb.Span{
@@ -346,6 +376,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: defaultThresholdBytes * 2,
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("b")},
@@ -373,6 +404,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: defaultThresholdBytes,
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("b")},
@@ -415,6 +447,7 @@ func TestCompactorThresholds(t *testing.T) {
 				},
 			},
 			logicalBytes:      defaultThresholdBytes * 100, // not going to trigger fractional threshold
+			availableBytes:    defaultThresholdBytes * 100, // not going to trigger fractional threshold
 			expBytesCompacted: defaultThresholdBytes,
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("zzz")},
@@ -427,6 +460,7 @@ func TestCompactorThresholds(t *testing.T) {
 			capacityFn := func() (roachpb.StoreCapacity, error) {
 				return roachpb.StoreCapacity{
 					LogicalBytes: test.logicalBytes,
+					Available:    test.availableBytes,
 				}, nil
 			}
 			compactor, we, cleanup := testSetup(capacityFn)
@@ -539,7 +573,10 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	capacityFn := func() (roachpb.StoreCapacity, error) {
-		return roachpb.StoreCapacity{LogicalBytes: 100 * defaultThresholdBytes}, nil
+		return roachpb.StoreCapacity{
+			LogicalBytes: 100 * defaultThresholdBytes,
+			Available:    100 * defaultThresholdBytes,
+		}, nil
 	}
 	compactor, we, cleanup := testSetup(capacityFn)
 	compactor.opts.CompactionMinInterval = time.Millisecond

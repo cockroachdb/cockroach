@@ -61,6 +61,14 @@ const (
 	// defaultThresholdBytes threshold.
 	defaultThresholdBytesFraction = 0.10 // more than 10% of space will trigger
 
+	// defaultThresholdBytesAvailableFraction is the fraction of remaining
+	// available space on a disk, which, if exceeded by the size of a suggested
+	// compaction, should trigger the processing of said compaction. This
+	// threshold is meant to make compaction more aggressive when a store is
+	// nearly full, since reclaiming space is much more important in such
+	// scenarios.
+	defaultThresholdBytesAvailableFraction = 0.10
+
 	// defaultMaxSuggestedCompactionRecordAge is the maximum age of a
 	// suggested compaction record. If not processed within this time
 	// interval since the compaction was suggested, it will be deleted.
@@ -73,6 +81,7 @@ type compactorOptions struct {
 	CompactionMinInterval           time.Duration
 	ThresholdBytes                  int64
 	ThresholdBytesFraction          float64
+	ThresholdBytesAvailableFraction float64
 	MaxSuggestedCompactionRecordAge time.Duration
 }
 
@@ -81,6 +90,7 @@ func defaultCompactorOptions() compactorOptions {
 		CompactionMinInterval:           defaultCompactionMinInterval,
 		ThresholdBytes:                  defaultThresholdBytes,
 		ThresholdBytesFraction:          defaultThresholdBytesFraction,
+		ThresholdBytesAvailableFraction: defaultThresholdBytesAvailableFraction,
 		MaxSuggestedCompactionRecordAge: defaultMaxSuggestedCompactionRecordAge,
 	}
 }
@@ -301,7 +311,8 @@ func (c *Compactor) processCompaction(
 	delBatch engine.Batch,
 ) (int64, error) {
 	shouldProcess := aggr.Bytes >= c.opts.ThresholdBytes ||
-		aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.opts.ThresholdBytesFraction)
+		aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.opts.ThresholdBytesFraction) ||
+		aggr.Bytes >= int64(float64(capacity.Available)*c.opts.ThresholdBytesAvailableFraction)
 
 	if shouldProcess {
 		startTime := timeutil.Now()
