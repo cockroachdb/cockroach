@@ -11,3 +11,5 @@ index_def ::=
 	| 'UNIQUE' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')' 'COVERING' '(' name_list ')' opt_interleave opt_partition_by
 	| 'UNIQUE' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')' 'STORING' '(' name_list ')' opt_interleave opt_partition_by
 	| 'UNIQUE' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')'  opt_interleave opt_partition_by
+	| 'INVERTED' 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')'
+	| 'INVERTED' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')'

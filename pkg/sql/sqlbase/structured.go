@@ -283,8 +283,10 @@ func (desc *IndexDescriptor) ColNamesFormat(ctx *tree.FmtCtxWithBuf) {
 			ctx.WriteString(", ")
 		}
 		ctx.FormatNameP(&desc.ColumnNames[i])
-		ctx.WriteByte(' ')
-		ctx.WriteString(desc.ColumnDirections[i].String())
+		if desc.Type != IndexDescriptor_INVERTED {
+			ctx.WriteByte(' ')
+			ctx.WriteString(desc.ColumnDirections[i].String())
+		}
 	}
 }
 
@@ -302,6 +304,9 @@ func (desc *IndexDescriptor) SQLString(tableName string) string {
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 	if desc.Unique {
 		f.WriteString("UNIQUE ")
+	}
+	if desc.Type == IndexDescriptor_INVERTED {
+		f.WriteString("INVERTED ")
 	}
 	f.WriteString("INDEX ")
 	if tableName != "" {
