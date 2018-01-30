@@ -1196,6 +1196,7 @@ column_def ::=
 index_def ::=
 	'INDEX' opt_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
 	| 'UNIQUE' 'INDEX' opt_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'INVERTED' 'INDEX' opt_name '(' index_params ')'
 
 family_def ::=
 	'FAMILY' opt_name '(' name_list ')'

@@ -3387,6 +3387,14 @@ index_def:
       },
     }
   }
+| INVERTED INDEX opt_name '(' index_params ')'
+  {
+    $$.val = &tree.IndexTableDef{
+      Name:    tree.Name($3),
+      Columns: $5.idxElems(),
+      Inverted: true,
+    }
+  }
 
 family_def:
   FAMILY opt_name '(' name_list ')'

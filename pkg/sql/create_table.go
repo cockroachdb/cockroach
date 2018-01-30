@@ -967,6 +967,9 @@ func MakeTableDesc(
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 			}
+			if d.Inverted {
+				idx.Type = sqlbase.IndexDescriptor_INVERTED
+			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
 			}
