@@ -148,7 +148,7 @@ func fixturesStore(cmd *cobra.Command, gen workload.Generator, crdbURI string) e
 		return err
 	}
 	for _, table := range fixture.Tables {
-		log.Infof(ctx, `stored %s`, table.BackupURI)
+		log.Infof(ctx, `stored backup %s`, table.BackupURI)
 	}
 	return nil
 }

@@ -14,15 +14,24 @@ import (
 	gosql "database/sql"
 	"encoding/csv"
 	"fmt"
+	"io"
 	"net/url"
+	"path"
 	"path/filepath"
+	"runtime"
+	"sync/atomic"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 )
 
@@ -122,44 +131,122 @@ func GetFixture(
 	return fixture, nil
 }
 
-// writeCSVs creates a file on GCS in the specified folder that contains the
-// data for the given table. The GCS object path to the written file is
-// returned.
-func writeCSVs(
-	ctx context.Context, gcs *storage.Client, table workload.Table, store FixtureStore, folder string,
-) (string, error) {
-	// TODO(dan): For large tables, break this up into multiple CSVs.
-	csvPath := filepath.Join(folder, table.Name+`.csv`)
-	const maxAttempts = 3
-	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		w := gcs.Bucket(store.GCSBucket).Object(csvPath).NewWriter(ctx)
-		csvW := csv.NewWriter(w)
-		for rowIdx := 0; rowIdx < table.InitialRowCount; rowIdx++ {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-			row := table.InitialRowFn(rowIdx)
-			rowStrings := make([]string, len(row))
-			for i, datum := range row {
-				if datum == nil {
-					rowStrings[i] = `NULL`
-				} else {
-					rowStrings[i] = fmt.Sprintf(`%v`, datum)
+type groupCSVWriter struct {
+	sem            chan struct{}
+	gcs            *storage.Client
+	store          FixtureStore
+	folder         string
+	chunkSizeBytes int64
+
+	start           time.Time
+	csvBytesWritten int64 // Only access via atomic
+}
+
+// groupWriteCSVs creates files on GCS in the specified folder that contain the
+// data for the given table and rows.
+//
+// Files are chunked into ~c.chunkSizeBytes or smaller. Concurrency is limited
+// by c.sem. The GCS object paths to the written files are returned on
+// c.pathsCh.
+func (c *groupCSVWriter) groupWriteCSVs(
+	ctx context.Context, pathsCh chan<- string, table workload.Table, rowStart, rowEnd int,
+) error {
+	if rowStart == rowEnd {
+		return nil
+	}
+
+	// For each table, first write out a chunk of ~c.chunkSizeBytes. If the
+	// table fits in one chunk, we're done, otherwise this gives an estimate for
+	// how many rows are needed.
+	var rowIdx int
+	if err := func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.sem <- struct{}{}:
+		}
+		defer func() { <-c.sem }()
+
+		path := path.Join(c.folder, table.Name, fmt.Sprintf(`%09d.csv`, rowStart))
+		const maxAttempts = 3
+		err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+			w := c.gcs.Bucket(c.store.GCSBucket).Object(path).NewWriter(ctx)
+			bytesWrittenW := &bytesWrittenWriter{w: w}
+			csvW := csv.NewWriter(bytesWrittenW)
+			for rowIdx = rowStart; rowIdx < rowEnd; rowIdx++ {
+				if c.chunkSizeBytes > 0 && bytesWrittenW.written > c.chunkSizeBytes {
+					break
+				}
+				row := table.InitialRowFn(rowIdx)
+				rowStrings := make([]string, len(row))
+				for i, datum := range row {
+					if datum == nil {
+						rowStrings[i] = `NULL`
+					} else {
+						rowStrings[i] = fmt.Sprintf(`%v`, datum)
+					}
+				}
+				if err := csvW.Write(rowStrings); err != nil {
+					return err
 				}
 			}
-			if err := csvW.Write(rowStrings); err != nil {
+			csvW.Flush()
+			if err := csvW.Error(); err != nil {
 				return err
 			}
+			if err := w.Close(); err != nil {
+				return err
+			}
+
+			pathsCh <- path
+			newBytesWritten := atomic.AddInt64(&c.csvBytesWritten, bytesWrittenW.written)
+			d := timeutil.Since(c.start)
+			throughput := float64(newBytesWritten) / (d.Seconds() * float64(1<<20) /* 1MiB */)
+			log.Infof(ctx, `wrote csv %s [%d,%d] of %d rows (total %s in %s: %.1f MB/s)`,
+				table.Name, rowStart, rowIdx, table.InitialRowCount,
+				humanizeutil.IBytes(newBytesWritten), d, throughput)
+
+			return nil
+		})
+		return err
+	}(); err != nil {
+		return err
+	}
+	if rowIdx >= rowEnd {
+		return nil
+	}
+
+	// If rowIdx < rowEnd, then the rows didn't all fit in one chunk. Use the
+	// number of rows that did fit to estimate how many chunks are needed to
+	// finish the table. Then break up the remaining rows into that many chunks,
+	// running this whole process recursively in case the distribution of row
+	// size is not uniform. Something like `(rowIdx - rowStart) * fudge` would
+	// be simpler, but this will make the chunks a more even size.
+	var rowStep int
+	{
+		const fudge = 0.9
+		additionalChunks := int(float64(rowEnd-rowIdx) / (float64(rowIdx-rowStart) * fudge))
+		if additionalChunks <= 0 {
+			additionalChunks = 1
 		}
-		csvW.Flush()
-		if err := csvW.Error(); err != nil {
-			return err
+		rowStep = (rowEnd - rowIdx) / additionalChunks
+		if rowStep <= 0 {
+			rowStep = 1
 		}
-		return w.Close()
-	})
-	return csvPath, err
+	}
+
+	g, gCtx := errgroup.WithContext(ctx)
+	for rowIdx < rowEnd {
+		chunkRowStart, chunkRowEnd := rowIdx, rowIdx+rowStep
+		if chunkRowEnd > rowEnd {
+			chunkRowEnd = rowEnd
+		}
+		g.Go(func() error {
+			return c.groupWriteCSVs(gCtx, pathsCh, table, chunkRowStart, chunkRowEnd)
+		})
+		rowIdx = chunkRowEnd
+	}
+	return g.Wait()
 }
 
 // MakeFixture regenerates a fixture, storing it to GCS. It is expected that the
@@ -178,35 +265,73 @@ func MakeFixture(
 	store FixtureStore,
 	gen workload.Generator,
 ) (Fixture, error) {
+	const writeCSVChunkSize = 64 * 1 << 20 // 64 MB
+
 	fixtureFolder := generatorToGCSFolder(store, gen)
-
-	// TODO(dan): Break up large tables into many CSV files and use the
-	// `distributed` option of `IMPORT` to do the backup generation work in
-	// parallel. Afterward, experiment with parallelizing the per-table work
-	// (IMPORT is pretty good at using cluster resources, so this is not as
-	// obvious of a win as it might seem).
-	for _, table := range gen.Tables() {
-		tableFolder := filepath.Join(fixtureFolder, table.Name)
-		csvPath, err := writeCSVs(ctx, gcs, table, store, tableFolder)
-		if err != nil {
-			return Fixture{}, err
-		}
-		backupURI := store.objectPathToURI(tableFolder)
-		csvURI := store.objectPathToURI(csvPath)
-
-		if _, err := sqlDB.ExecContext(
-			ctx, `SET CLUSTER SETTING experimental.importcsv.enabled = true`,
-		); err != nil {
-			return Fixture{}, err
-		}
-		importStmt := fmt.Sprintf(
-			`IMPORT TABLE "%s" %s CSV DATA ($1) WITH transform=$2, nullif='NULL'`,
-			table.Name, table.Schema,
-		)
-		if _, err := sqlDB.ExecContext(ctx, importStmt, csvURI, backupURI); err != nil {
-			return Fixture{}, errors.Wrapf(err, `creating backup for table %s`, table.Name)
-		}
+	if _, err := sqlDB.Exec(
+		`SET CLUSTER SETTING experimental.importcsv.enabled = true`,
+	); err != nil {
+		return Fixture{}, err
 	}
+
+	writeCSVConcurrency := runtime.NumCPU()
+	c := &groupCSVWriter{
+		sem:            make(chan struct{}, writeCSVConcurrency),
+		gcs:            gcs,
+		store:          store,
+		folder:         fixtureFolder,
+		chunkSizeBytes: writeCSVChunkSize,
+		start:          timeutil.Now(),
+	}
+
+	g, gCtx := errgroup.WithContext(ctx)
+	for _, t := range gen.Tables() {
+		table := t
+		tableCSVPathsCh := make(chan string)
+
+		g.Go(func() error {
+			defer close(tableCSVPathsCh)
+			startRow, endRow := 0, table.InitialRowCount
+			return c.groupWriteCSVs(gCtx, tableCSVPathsCh, table, startRow, endRow)
+		})
+		g.Go(func() error {
+			params := []interface{}{
+				store.objectPathToURI(filepath.Join(fixtureFolder, table.Name)),
+			}
+			// NB: it's fine to loop over this channel without selecting
+			// ctx.Done because a context cancel will cause the above goroutine
+			// to finish and close tableCSVPathsCh.
+			for tableCSVPath := range tableCSVPathsCh {
+				params = append(params, store.objectPathToURI(tableCSVPath))
+			}
+			select {
+			case <-gCtx.Done():
+				return gCtx.Err()
+			default:
+			}
+
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, `IMPORT TABLE "%s" %s CSV DATA (`, table.Name, table.Schema)
+			// $1 is used for the backup path. Generate $2,...,$N, where N is
+			// the number of params (including the backup path) for use with the
+			// csv paths.
+			for i := 2; i <= len(params); i++ {
+				if i != 2 {
+					buf.WriteString(`,`)
+				}
+				fmt.Fprintf(&buf, `$%d`, i)
+			}
+			buf.WriteString(`) WITH transform=$1, nullif='NULL'`)
+			if _, err := sqlDB.ExecContext(gCtx, buf.String(), params...); err != nil {
+				return errors.Wrapf(err, `creating backup for table %s`, table.Name)
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return Fixture{}, err
+	}
+
 	// TODO(dan): Clean up the CSVs.
 	return GetFixture(ctx, gcs, store, gen)
 }
@@ -255,4 +380,15 @@ func ListFixtures(ctx context.Context, gcs *storage.Client, store FixtureStore) 
 		}
 	}
 	return fixtures, nil
+}
+
+type bytesWrittenWriter struct {
+	w       io.Writer
+	written int64
+}
+
+func (w *bytesWrittenWriter) Write(p []byte) (int, error) {
+	n, err := w.w.Write(p)
+	w.written += int64(n)
+	return n, err
 }
