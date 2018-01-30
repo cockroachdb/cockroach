@@ -855,7 +855,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
 	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
 
-	s.compactor = compactor.NewCompactor(s.engine.(engine.WithSSTables), s.Capacity)
+	s.compactor = compactor.NewCompactor(
+		s.engine.(engine.WithSSTables),
+		s.Capacity,
+		func(ctx context.Context) { s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction") },
+	)
 	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
@@ -1427,6 +1431,18 @@ func (s *Store) systemGossipUpdate(cfg config.SystemConfig) {
 	})
 }
 
+func (s *Store) asyncGossipStore(ctx context.Context, reason string) {
+	if err := s.stopper.RunAsyncTask(
+		ctx, fmt.Sprintf("storage.Store: gossip on %s", reason),
+		func(ctx context.Context) {
+			if err := s.GossipStore(ctx); err != nil {
+				log.Warningf(ctx, "error gossiping on %s: %s", reason, err)
+			}
+		}); err != nil {
+		log.Warningf(ctx, "unable to gossip on %s: %s", reason, err)
+	}
+}
+
 // GossipStore broadcasts the store on the gossip network.
 func (s *Store) GossipStore(ctx context.Context) error {
 	// This should always return immediately and acts as a sanity check that we
@@ -1511,16 +1527,7 @@ func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityCha
 		// Reset countdowns to avoid unnecessary gossiping.
 		atomic.StoreInt32(&s.gossipRangeCountdown, 0)
 		atomic.StoreInt32(&s.gossipLeaseCountdown, 0)
-		// Send using an async task because GossipStore needs the store mutex.
-		if err := s.stopper.RunAsyncTask(
-			ctx, "storage.Store: gossip on capacity change",
-			func(ctx context.Context) {
-				if err := s.GossipStore(ctx); err != nil {
-					log.Warningf(ctx, "error gossiping on capacity change: %s", err)
-				}
-			}); err != nil {
-			log.Warningf(ctx, "unable to gossip on capacity change: %s", err)
-		}
+		s.asyncGossipStore(ctx, "capacity change")
 	}
 }
 
@@ -1534,16 +1541,7 @@ func (s *Store) recordNewWritesPerSecond(newVal float64) {
 		return
 	}
 	if newVal < oldVal*.5 || newVal > oldVal*1.5 {
-		ctx := s.AnnotateCtx(context.TODO())
-		if err := s.stopper.RunAsyncTask(
-			ctx, "storage.Store: gossip on writes-per-second change",
-			func(ctx context.Context) {
-				if err := s.GossipStore(ctx); err != nil {
-					log.Warningf(ctx, "error gossiping on writes-per-second change: %s", err)
-				}
-			}); err != nil {
-			log.Warningf(ctx, "unable to gossip on writes-per-second change: %s", err)
-		}
+		s.asyncGossipStore(context.TODO(), "writes-per-second change")
 	}
 }
 
