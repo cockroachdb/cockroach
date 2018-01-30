@@ -10,5 +10,5 @@ import { Route } from "react-router";
 import ClusterViz from "src/views/clusterviz/containers/map";
 
 export default function(): JSX.Element {
-  return <Route path="clusterviz" component={ClusterViz} />;
+  return <Route path="clusterviz(/**)" component={ClusterViz} />;
 }
