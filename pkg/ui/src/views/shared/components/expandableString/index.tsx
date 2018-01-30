@@ -22,18 +22,23 @@ export class ExpandableString extends React.Component<ExpandableStringProps, Exp
   state: ExpandableStringState = {
     expanded: false,
   };
+
   onClick = (ev: any) => {
     ev.preventDefault();
     this.setState({ expanded: true });
   }
+
   render() {
     const truncateLength = 50;
+
     if (this.state.expanded || this.props.long.length <= truncateLength + 2) {
-      return <span>{this.props.long}</span>;
+      return <span>{ this.props.long }</span>;
     }
+
     const short = this.props.short || this.props.long.substr(0, truncateLength).trim();
+
     return (
-      <div className="expandable" onClick={this.onClick}>
+      <div className="expandable" onClick={ this.onClick }>
         <span className="expandable__text">{ short }&nbsp;&hellip;</span>
         <span className="expandable__icon" dangerouslySetInnerHTML={ trustIcon(expandIcon) } />
       </div>
