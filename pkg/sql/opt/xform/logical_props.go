@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -33,6 +34,8 @@ type LogicalProps struct {
 	// operators, like select, join, and project. It is nil for scalar
 	// operators.
 	Relational *RelationalProps
+
+	Scalar *ScalarProps
 }
 
 // RelationalProps are the subset of logical properties that are computed for
@@ -50,12 +53,20 @@ type RelationalProps struct {
 	NotNullCols opt.ColSet
 }
 
+type ScalarProps struct {
+	Type types.T
+}
+
 func (p *LogicalProps) format(mem *memo, tp treeprinter.Node) {
-	p.formatOutputCols(mem, tp)
+	if p.Relational != nil {
+		p.formatOutputCols(mem, tp)
+	} else {
+		tp.Child(fmt.Sprintf("type: %s", p.Scalar.Type))
+	}
 }
 
 func (p *LogicalProps) formatOutputCols(mem *memo, tp treeprinter.Node) {
-	if p.Relational != nil && !p.Relational.OutputCols.Empty() {
+	if !p.Relational.OutputCols.Empty() {
 		var buf bytes.Buffer
 		buf.WriteString("columns:")
 		p.Relational.OutputCols.ForEach(func(i int) {

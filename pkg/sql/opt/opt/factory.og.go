@@ -29,8 +29,8 @@ type Factory interface {
 	ConstructFalse() GroupID
 	ConstructPlaceholder(value PrivateID) GroupID
 	ConstructTuple(elems ListID) GroupID
+	ConstructProjections(elems ListID, cols PrivateID) GroupID
 	ConstructFilters(conditions ListID) GroupID
-	ConstructProjections(items ListID, cols PrivateID) GroupID
 	ConstructExists(input GroupID) GroupID
 	ConstructAnd(left GroupID, right GroupID) GroupID
 	ConstructOr(left GroupID, right GroupID) GroupID
@@ -53,10 +53,10 @@ type Factory interface {
 	ConstructNotRegMatch(left GroupID, right GroupID) GroupID
 	ConstructRegIMatch(left GroupID, right GroupID) GroupID
 	ConstructNotRegIMatch(left GroupID, right GroupID) GroupID
-	ConstructIsDistinctFrom(left GroupID, right GroupID) GroupID
-	ConstructIsNotDistinctFrom(left GroupID, right GroupID) GroupID
 	ConstructIs(left GroupID, right GroupID) GroupID
 	ConstructIsNot(left GroupID, right GroupID) GroupID
+	ConstructContains(left GroupID, right GroupID) GroupID
+	ConstructContainedBy(left GroupID, right GroupID) GroupID
 	ConstructAny(left GroupID, right GroupID) GroupID
 	ConstructSome(left GroupID, right GroupID) GroupID
 	ConstructAll(left GroupID, right GroupID) GroupID
@@ -73,6 +73,10 @@ type Factory interface {
 	ConstructConcat(left GroupID, right GroupID) GroupID
 	ConstructLShift(left GroupID, right GroupID) GroupID
 	ConstructRShift(left GroupID, right GroupID) GroupID
+	ConstructFetchVal(json GroupID, index GroupID) GroupID
+	ConstructFetchText(json GroupID, index GroupID) GroupID
+	ConstructFetchValPath(json GroupID, path GroupID) GroupID
+	ConstructFetchTextPath(json GroupID, path GroupID) GroupID
 	ConstructUnaryPlus(input GroupID) GroupID
 	ConstructUnaryMinus(input GroupID) GroupID
 	ConstructUnaryComplement(input GroupID) GroupID

@@ -1,0 +1,322 @@
+# Variable
+build
+SELECT a.x FROM a
+----
+project
+ ├── columns: a.x:1
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── projections [type=tuple{int}]
+      └── variable: a.x [type=int]
+
+# Const
+build
+SELECT 1, TRUE, FALSE
+----
+project
+ ├── columns: column1:null:1 column2:null:2 column3:null:3
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections [type=tuple{int, bool, bool}]
+      ├── const: 1 [type=int]
+      ├── const: true [type=bool]
+      └── const: false [type=bool]
+
+# Placeholder
+build
+SELECT * FROM a WHERE x = $1
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── eq [type=bool]
+      ├── variable: a.x [type=int]
+      └── placeholder: $1 [type=int]
+
+# Tuple, Projections
+build
+SELECT (a.x, 1.5), a.y FROM a
+----
+project
+ ├── columns: a.y:null:2 column1:null:3
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── projections [type=tuple{tuple{int, decimal}, int}]
+      ├── tuple [type=tuple{int, decimal}]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 1.5 [type=decimal]
+      └── variable: a.y [type=int]
+
+# And, Or, Not
+build
+SELECT * FROM a WHERE a.x = 1 AND NOT (a.y = 2 OR a.y = 3.5)
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── and [type=bool]
+      ├── eq [type=bool]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 1 [type=int]
+      └── not [type=bool]
+           └── or [type=bool]
+                ├── eq [type=bool]
+                │    ├── variable: a.y [type=int]
+                │    └── const: 2 [type=int]
+                └── eq [type=bool]
+                     ├── variable: a.y [type=int]
+                     └── const: 3.5 [type=decimal]
+
+# Eq, Ne
+build
+SELECT * FROM a WHERE a.x = 1 AND a.x <> 2
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── and [type=bool]
+      ├── eq [type=bool]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 1 [type=int]
+      └── ne [type=bool]
+           ├── variable: a.x [type=int]
+           └── const: 2 [type=int]
+
+# Le, Ge, Lt, Gt
+build
+SELECT * FROM a WHERE a.x >= 1 AND a.x <= 10 AND a.y > 1 AND a.y < 10
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── and [type=bool]
+      ├── and [type=bool]
+      │    ├── and [type=bool]
+      │    │    ├── ge [type=bool]
+      │    │    │    ├── variable: a.x [type=int]
+      │    │    │    └── const: 1 [type=int]
+      │    │    └── le [type=bool]
+      │    │         ├── variable: a.x [type=int]
+      │    │         └── const: 10 [type=int]
+      │    └── gt [type=bool]
+      │         ├── variable: a.y [type=int]
+      │         └── const: 1 [type=int]
+      └── lt [type=bool]
+           ├── variable: a.y [type=int]
+           └── const: 10 [type=int]
+
+# In, NotIn
+build
+SELECT * FROM a WHERE a.x IN (1, 2) AND a.y NOT IN (3, 4)
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── and [type=bool]
+      ├── in [type=bool]
+      │    ├── variable: a.x [type=int]
+      │    └── tuple [type=tuple{int, int}]
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      └── not-in [type=bool]
+           ├── variable: a.y [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 3 [type=int]
+                └── const: 4 [type=int]
+
+# Like, NotLike
+build
+SELECT * FROM b WHERE b.x LIKE '%foo%' AND b.x NOT LIKE '%bar%'
+----
+select
+ ├── columns: b.x:1 b.z:2
+ ├── scan
+ │    └── columns: b.x:1 b.z:2
+ └── and [type=bool]
+      ├── like [type=bool]
+      │    ├── variable: b.x [type=string]
+      │    └── const: '%foo%' [type=string]
+      └── not-like [type=bool]
+           ├── variable: b.x [type=string]
+           └── const: '%bar%' [type=string]
+
+# ILike, INotLike
+build
+SELECT * FROM b WHERE b.x ILIKE '%foo%' AND b.x NOT ILIKE '%bar%'
+----
+select
+ ├── columns: b.x:1 b.z:2
+ ├── scan
+ │    └── columns: b.x:1 b.z:2
+ └── and [type=bool]
+      ├── i-like [type=bool]
+      │    ├── variable: b.x [type=string]
+      │    └── const: '%foo%' [type=string]
+      └── not-i-like [type=bool]
+           ├── variable: b.x [type=string]
+           └── const: '%bar%' [type=string]
+
+# RegMatch, NotRegMatch, RegIMatch, NotRegIMatch
+build
+SELECT * FROM b WHERE b.x ~ 'foo' AND b.x !~ 'bar' AND b.x ~* 'foo' AND b.x !~* 'bar'
+----
+select
+ ├── columns: b.x:1 b.z:2
+ ├── scan
+ │    └── columns: b.x:1 b.z:2
+ └── and [type=bool]
+      ├── and [type=bool]
+      │    ├── and [type=bool]
+      │    │    ├── reg-match [type=bool]
+      │    │    │    ├── variable: b.x [type=string]
+      │    │    │    └── const: 'foo' [type=string]
+      │    │    └── not-reg-match [type=bool]
+      │    │         ├── variable: b.x [type=string]
+      │    │         └── const: 'bar' [type=string]
+      │    └── reg-i-match [type=bool]
+      │         ├── variable: b.x [type=string]
+      │         └── const: 'foo' [type=string]
+      └── not-reg-i-match [type=bool]
+           ├── variable: b.x [type=string]
+           └── const: 'bar' [type=string]
+
+# Is, IsNot
+build
+SELECT * FROM a WHERE a.x IS DISTINCT FROM a.y AND a.x IS NULL
+----
+select
+ ├── columns: a.x:1 a.y:null:2
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── and [type=bool]
+      ├── is-not [type=bool]
+      │    ├── variable: a.x [type=int]
+      │    └── variable: a.y [type=int]
+      └── is [type=bool]
+           ├── variable: a.x [type=int]
+           └── const: NULL [type=NULL]
+
+# Any, Some, All
+build
+SELECT a.x = ANY (1, 2), a.y = SOME (3, 4), a.x = ALL (5, 6) FROM a
+----
+project
+ ├── columns: column1:null:3 column2:null:4 column3:null:5
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── projections [type=tuple{bool, bool, bool}]
+      ├── any [type=bool]
+      │    ├── variable: a.x [type=int]
+      │    └── tuple [type=tuple{int, int}]
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      ├── some [type=bool]
+      │    ├── variable: a.y [type=int]
+      │    └── tuple [type=tuple{int, int}]
+      │         ├── const: 3 [type=int]
+      │         └── const: 4 [type=int]
+      └── all [type=bool]
+           ├── variable: a.x [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 5 [type=int]
+                └── const: 6 [type=int]
+
+# Bitand, Bitor, Bitxor
+build
+SELECT a.x & a.y, a.x | a.y, a.x # a.y FROM a
+----
+project
+ ├── columns: column1:null:3 column2:null:4 column3:null:5
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── projections [type=tuple{int, int, int}]
+      ├── bitand [type=int]
+      │    ├── variable: a.x [type=int]
+      │    └── variable: a.y [type=int]
+      ├── bitor [type=int]
+      │    ├── variable: a.x [type=int]
+      │    └── variable: a.y [type=int]
+      └── bitxor [type=int]
+           ├── variable: a.x [type=int]
+           └── variable: a.y [type=int]
+
+# Plus, Minus, Mult, Div, FloorDiv
+build
+SELECT a.x + 1.5, DATE '2000-01-01' - 15, 10.10 * a.x, 1 / a.y, a.x // 1.5 FROM a
+----
+project
+ ├── columns: column1:null:3 column2:null:4 column3:null:5 column4:null:6 column5:null:7
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── projections [type=tuple{decimal, date, decimal, decimal, decimal}]
+      ├── plus [type=decimal]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 1.5 [type=decimal]
+      ├── minus [type=date]
+      │    ├── const: '2000-01-01' [type=date]
+      │    └── const: 15 [type=int]
+      ├── mult [type=decimal]
+      │    ├── const: 10.10 [type=decimal]
+      │    └── variable: a.x [type=int]
+      ├── div [type=decimal]
+      │    ├── const: 1 [type=int]
+      │    └── variable: a.y [type=int]
+      └── floor-div [type=decimal]
+           ├── variable: a.x [type=int]
+           └── const: 1.5 [type=decimal]
+
+# Mod, Pow, LShift, RShift
+build
+SELECT 100.1 % a.x, a.x ^ 2.5, a.x << 3, a.y >> 2 FROM a
+----
+project
+ ├── columns: column1:null:3 column2:null:4 column3:null:5 column4:null:6
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── projections [type=tuple{decimal, decimal, int, int}]
+      ├── mod [type=decimal]
+      │    ├── const: 100.1 [type=decimal]
+      │    └── variable: a.x [type=int]
+      ├── pow [type=decimal]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 2.5 [type=decimal]
+      ├── l-shift [type=int]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 3 [type=int]
+      └── r-shift [type=int]
+           ├── variable: a.y [type=int]
+           └── const: 2 [type=int]
+
+# Concat
+build
+SELECT b.x || 'more' FROM b
+----
+project
+ ├── columns: column1:null:3
+ ├── scan
+ │    └── columns: b.x:1 b.z:2
+ └── projections [type=tuple{string}]
+      └── concat [type=string]
+           ├── variable: b.x [type=string]
+           └── const: 'more' [type=string]
+
+# UnaryPlus, UnaryMinus, UnaryComplement
+build
+SELECT +a.x, -a.y, ~a.x FROM a
+----
+project
+ ├── columns: column1:null:3 column2:null:4 column3:null:5
+ ├── scan
+ │    └── columns: a.x:1 a.y:null:2
+ └── projections [type=tuple{int, int, int}]
+      ├── unary-plus [type=int]
+      │    └── variable: a.x [type=int]
+      ├── unary-minus [type=int]
+      │    └── variable: a.y [type=int]
+      └── unary-complement [type=int]
+           └── variable: a.x [type=int]

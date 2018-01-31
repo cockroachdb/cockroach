@@ -25,12 +25,12 @@ project
  │    │    └── columns: a.x:1 a.y:null:2
  │    ├── scan
  │    │    └── columns: b.x:null:3 b.y:null:4 b.rowid:5
- │    └── true
- └── projections
-      ├── variable: a.x
-      ├── variable: a.y
-      ├── variable: b.x
-      └── variable: b.y
+ │    └── true [type=bool]
+ └── projections [type=tuple{int, float, int, float}]
+      ├── variable: a.x [type=int]
+      ├── variable: a.y [type=float]
+      ├── variable: b.x [type=int]
+      └── variable: b.y [type=float]
 
 build
 SELECT a.x, b.y FROM t.a, t.b WHERE a.x = b.x
@@ -45,13 +45,13 @@ project
  │    │    │    └── columns: a.x:1 a.y:null:2
  │    │    ├── scan
  │    │    │    └── columns: b.x:null:3 b.y:null:4 b.rowid:5
- │    │    └── true
- │    └── eq
- │         ├── variable: a.x
- │         └── variable: b.x
- └── projections
-      ├── variable: a.x
-      └── variable: b.y
+ │    │    └── true [type=bool]
+ │    └── eq [type=bool]
+ │         ├── variable: a.x [type=int]
+ │         └── variable: b.x [type=int]
+ └── projections [type=tuple{int, float}]
+      ├── variable: a.x [type=int]
+      └── variable: b.y [type=float]
 
 build
 SELECT * FROM t.c, t.b, t.a WHERE c.x = a.x AND b.x = a.x
@@ -68,22 +68,22 @@ project
  │    │    │    │    └── columns: c.x:null:1 c.y:null:2 c.z:null:3 c.rowid:4
  │    │    │    ├── scan
  │    │    │    │    └── columns: b.x:null:5 b.y:null:6 b.rowid:7
- │    │    │    └── true
+ │    │    │    └── true [type=bool]
  │    │    ├── scan
  │    │    │    └── columns: a.x:8 a.y:null:9
- │    │    └── true
- │    └── and
- │         ├── eq
- │         │    ├── variable: c.x
- │         │    └── variable: a.x
- │         └── eq
- │              ├── variable: b.x
- │              └── variable: a.x
- └── projections
-      ├── variable: c.x
-      ├── variable: c.y
-      ├── variable: c.z
-      ├── variable: b.x
-      ├── variable: b.y
-      ├── variable: a.x
-      └── variable: a.y
+ │    │    └── true [type=bool]
+ │    └── and [type=bool]
+ │         ├── eq [type=bool]
+ │         │    ├── variable: c.x [type=int]
+ │         │    └── variable: a.x [type=int]
+ │         └── eq [type=bool]
+ │              ├── variable: b.x [type=int]
+ │              └── variable: a.x [type=int]
+ └── projections [type=tuple{int, float, string, int, float, int, float}]
+      ├── variable: c.x [type=int]
+      ├── variable: c.y [type=float]
+      ├── variable: c.z [type=string]
+      ├── variable: b.x [type=int]
+      ├── variable: b.y [type=float]
+      ├── variable: a.x [type=int]
+      └── variable: a.y [type=float]

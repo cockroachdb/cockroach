@@ -37,9 +37,9 @@ select
  ├── columns: a.x:1 a.y:null:2
  ├── scan
  │    └── columns: a.x:1 a.y:null:2
- └── gt
-      ├── variable: a.x
-      └── const: 10
+ └── gt [type=bool]
+      ├── variable: a.x [type=int]
+      └── const: 10 [type=int]
 
 build
 SELECT * FROM t.a WHERE (x > 10 AND (x < 20 AND x != 13))
@@ -48,17 +48,17 @@ select
  ├── columns: a.x:1 a.y:null:2
  ├── scan
  │    └── columns: a.x:1 a.y:null:2
- └── and
-      ├── gt
-      │    ├── variable: a.x
-      │    └── const: 10
-      └── and
-           ├── lt
-           │    ├── variable: a.x
-           │    └── const: 20
-           └── ne
-                ├── variable: a.x
-                └── const: 13
+ └── and [type=bool]
+      ├── gt [type=bool]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 10 [type=int]
+      └── and [type=bool]
+           ├── lt [type=bool]
+           │    ├── variable: a.x [type=int]
+           │    └── const: 20 [type=int]
+           └── ne [type=bool]
+                ├── variable: a.x [type=int]
+                └── const: 13 [type=int]
 
 build
 SELECT * FROM t.a WHERE x IN (1, 2, 3)
@@ -67,12 +67,12 @@ select
  ├── columns: a.x:1 a.y:null:2
  ├── scan
  │    └── columns: a.x:1 a.y:null:2
- └── in
-      ├── variable: a.x
-      └── tuple
-           ├── const: 1
-           ├── const: 2
-           └── const: 3
+ └── in [type=bool]
+      ├── variable: a.x [type=int]
+      └── tuple [type=tuple{int, int, int}]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           └── const: 3 [type=int]
 
 build
 SELECT * FROM t.a AS A(X, Y)

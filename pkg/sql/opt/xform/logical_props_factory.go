@@ -210,8 +210,9 @@ func (f *logicalPropsFactory) constructValuesProps(ev *ExprView) (props LogicalP
 	return
 }
 
-func (f *logicalPropsFactory) constructScalarProps(ev *ExprView) LogicalProps {
-	return LogicalProps{}
+func (f *logicalPropsFactory) constructScalarProps(ev *ExprView) (props LogicalProps) {
+	props.Scalar = &ScalarProps{Type: inferType(ev)}
+	return
 }
 
 // filterNullCols will ensure that the set of null columns is a subset of the

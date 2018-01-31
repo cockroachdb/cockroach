@@ -47,8 +47,8 @@ var comparisonOpMap = [...]binaryFactoryFunc{
 	tree.NotRegMatch:       (opt.Factory).ConstructNotRegMatch,
 	tree.RegIMatch:         (opt.Factory).ConstructRegIMatch,
 	tree.NotRegIMatch:      (opt.Factory).ConstructNotRegIMatch,
-	tree.IsDistinctFrom:    (opt.Factory).ConstructIsDistinctFrom,
-	tree.IsNotDistinctFrom: (opt.Factory).ConstructIsNotDistinctFrom,
+	tree.IsDistinctFrom:    (opt.Factory).ConstructIsNot,
+	tree.IsNotDistinctFrom: (opt.Factory).ConstructIs,
 	tree.Any:               (opt.Factory).ConstructAny,
 	tree.Some:              (opt.Factory).ConstructSome,
 	tree.All:               (opt.Factory).ConstructAll,
@@ -619,7 +619,7 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 		label = fmt.Sprintf("column%d", len(scope.cols)+1)
 	}
 
-	colIndex := b.factory.Metadata().AddColumn(label)
+	colIndex := b.factory.Metadata().AddColumn(label, typ)
 	col := columnProps{typ: typ, index: colIndex}
 	b.colMap = append(b.colMap, col)
 	scope.cols = append(scope.cols, col)

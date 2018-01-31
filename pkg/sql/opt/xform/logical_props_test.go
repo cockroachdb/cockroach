@@ -22,10 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -41,7 +42,7 @@ func TestLogicalProps(t *testing.T) {
 			d.Fatalf(t, "%v", err)
 		}
 
-		f := newFactory(createCatalog(), 0)
+		f := newFactory(createLogPropsCatalog(), 0)
 		b := build.NewBuilder(context.Background(), f, stmt)
 		root, _, err := b.Build()
 		if err != nil {
@@ -53,7 +54,7 @@ func TestLogicalProps(t *testing.T) {
 }
 
 func TestLogicalJoinProps(t *testing.T) {
-	cat := createCatalog()
+	cat := createLogPropsCatalog()
 	f := newFactory(cat, 0)
 	a := f.Metadata().AddTable(cat.Table("a"))
 	b := f.Metadata().AddTable(cat.Table("b"))
@@ -86,7 +87,7 @@ func TestLogicalJoinProps(t *testing.T) {
 }
 
 func TestLogicalGroupByProps(t *testing.T) {
-	cat := createCatalog()
+	cat := createLogPropsCatalog()
 	f := newFactory(cat, 0)
 	a := f.Metadata().AddTable(cat.Table("a"))
 
@@ -99,7 +100,7 @@ func TestLogicalGroupByProps(t *testing.T) {
 	cols1 := util.MakeFastIntSet(int(col1))
 	groupingsGroup := f.ConstructProjections(items1, f.InternPrivate(&cols1))
 
-	col2 := f.Metadata().AddColumn("false")
+	col2 := f.Metadata().AddColumn("false", types.Bool)
 	items2 := f.StoreList([]opt.GroupID{f.ConstructFalse()})
 	cols2 := util.MakeFastIntSet(int(col2))
 	aggsGroup := f.ConstructProjections(items2, f.InternPrivate(&cols2))
@@ -111,7 +112,7 @@ func TestLogicalGroupByProps(t *testing.T) {
 }
 
 func TestLogicalSetProps(t *testing.T) {
-	cat := createCatalog()
+	cat := createLogPropsCatalog()
 	f := newFactory(cat, 0)
 	a := f.Metadata().AddTable(cat.Table("a"))
 	b := f.Metadata().AddTable(cat.Table("b"))
@@ -135,7 +136,7 @@ func TestLogicalSetProps(t *testing.T) {
 }
 
 func TestLogicalValuesProps(t *testing.T) {
-	cat := createCatalog()
+	cat := createLogPropsCatalog()
 	f := newFactory(cat, 0)
 	a := f.Metadata().AddTable(cat.Table("a"))
 
@@ -186,20 +187,20 @@ func formatCols(md *opt.Metadata, cols opt.ColSet) string {
 	return buf.String()
 }
 
-func createCatalog() *testutils.TestCatalog {
+func createLogPropsCatalog() *testutils.TestCatalog {
 	cat := testutils.NewTestCatalog()
 
 	// CREATE TABLE a (x INT PRIMARY KEY, y INT)
 	a := &testutils.TestTable{Name: "a"}
-	x := &testutils.TestColumn{Name: "x"}
-	y := &testutils.TestColumn{Name: "y", Nullable: true}
+	x := &testutils.TestColumn{Name: "x", Type: types.Int}
+	y := &testutils.TestColumn{Name: "y", Type: types.Int, Nullable: true}
 	a.Columns = append(a.Columns, x, y)
 	cat.AddTable(a)
 
 	// CREATE TABLE b (x INT, z INT NOT NULL, FOREIGN KEY (x) REFERENCES a (x))
 	b := &testutils.TestTable{Name: "b"}
-	x = &testutils.TestColumn{Name: "x"}
-	y = &testutils.TestColumn{Name: "z"}
+	x = &testutils.TestColumn{Name: "x", Type: types.Int}
+	y = &testutils.TestColumn{Name: "z", Type: types.Int}
 	b.Columns = append(b.Columns, x, y)
 	cat.AddTable(b)
 
