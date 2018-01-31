@@ -206,7 +206,7 @@ func (n *showTraceNode) startExec(params runParams) error {
 		return errTracingAlreadyEnabled
 	}
 	if err := params.extendedEvalCtx.SessionMutator.StartSessionTracing(
-		tracing.SnowballRecording, n.kvTracingEnabled,
+		params.ctx, tracing.SnowballRecording, n.kvTracingEnabled,
 	); err != nil {
 		return err
 	}
