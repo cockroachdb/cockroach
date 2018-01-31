@@ -77,7 +77,7 @@ func rocksDBLog(s *C.char, n C.int) {
 //export prettyPrintKey
 func prettyPrintKey(cKey C.DBKey) *C.char {
 	mvccKey := MVCCKey{
-		Key: C.GoBytes(unsafe.Pointer(cKey.key.data), cKey.key.len),
+		Key: gobytes(unsafe.Pointer(cKey.key.data), int(cKey.key.len)),
 		Timestamp: hlc.Timestamp{
 			WallTime: int64(cKey.wall_time),
 			Logical:  int32(cKey.logical),
@@ -2179,7 +2179,7 @@ func cStringToGoBytes(s C.DBString) []byte {
 	if s.data == nil {
 		return nil
 	}
-	result := C.GoBytes(unsafe.Pointer(s.data), s.len)
+	result := gobytes(unsafe.Pointer(s.data), int(s.len))
 	C.free(unsafe.Pointer(s.data))
 	return result
 }
@@ -2188,7 +2188,7 @@ func cSliceToGoBytes(s C.DBSlice) []byte {
 	if s.data == nil {
 		return nil
 	}
-	return C.GoBytes(unsafe.Pointer(s.data), s.len)
+	return gobytes(unsafe.Pointer(s.data), int(s.len))
 }
 
 func cSliceToUnsafeGoBytes(s C.DBSlice) []byte {
