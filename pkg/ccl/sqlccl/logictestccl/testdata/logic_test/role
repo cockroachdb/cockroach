@@ -119,18 +119,25 @@ SHOW GRANTS ON ROLE
 role   member  isAdmin
 admin  root    true
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee  role_name  is_grantable
 root     admin      YES
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee  role_name  is_grantable
 root     root       NO
 root     admin      YES
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+admin
+root
 
 # Test that only roles are grantable.
 statement error pq: role testuser does not exist
@@ -189,18 +196,25 @@ user testuser
 statement ok
 GRANT testrole TO testuser2 WITH ADMIN OPTION
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee   role_name  is_grantable
 testuser  testrole   YES
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  testuser   NO
 testuser  testrole   YES
+testuser  testuser   NO
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+testrole
+testuser
 
 user root
 
@@ -342,21 +356,31 @@ GRANT rolea TO roleb WITH ADMIN OPTION
 
 user testuser
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee   role_name  is_grantable
 testuser  rolea      YES
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  testuser   NO
-testuser  roled      NO
-testuser  rolec      NO
-testuser  roleb      NO
 testuser  rolea      YES
+testuser  roleb      NO
+testuser  rolec      NO
+testuser  roled      NO
+testuser  testuser   NO
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+rolea
+roleb
+rolec
+roled
+testuser
 
 statement error pq: testuser is not a superuser or role admin for role roled
 GRANT roled TO rolee
@@ -370,21 +394,31 @@ GRANT roleb TO rolee
 statement ok
 GRANT rolea TO rolee
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee   role_name  is_grantable
 testuser  rolea      YES
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  testuser   NO
-testuser  roleb      NO
 testuser  rolea      YES
-testuser  roled      NO
+testuser  roleb      NO
 testuser  rolec      NO
+testuser  roled      NO
+testuser  testuser   NO
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+rolea
+roleb
+rolec
+roled
+testuser
 
 user root
 
@@ -475,39 +509,56 @@ rolea  testuser  true
 roleb  root      true
 roleb  testuser  true
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee  role_name  is_grantable
+root     admin      YES
 root     rolea      YES
 root     roleb      YES
-root     admin      YES
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee  role_name  is_grantable
-root     root       NO
 root     admin      YES
 root     rolea      YES
 root     roleb      YES
+root     root       NO
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+admin
+rolea
+roleb
+root
 
 user testuser
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee   role_name  is_grantable
 testuser  rolea      YES
 testuser  roleb      YES
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  testuser   NO
-testuser  roleb      YES
 testuser  rolea      YES
+testuser  roleb      YES
+testuser  testuser   NO
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+rolea
+roleb
+testuser
 
 statement ok
 REVOKE ADMIN OPTION FOR rolea FROM testuser

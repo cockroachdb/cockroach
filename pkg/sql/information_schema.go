@@ -40,6 +40,7 @@ var informationSchema = virtualSchema{
 		informationSchemaApplicableRoles,
 		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
+		informationSchemaEnabledRoles,
 		informationSchemaKeyColumnUsageTable,
 		informationSchemaReferentialConstraintsTable,
 		informationSchemaSchemataTable,
@@ -370,6 +371,40 @@ CREATE TABLE information_schema.key_column_usage (
 			}
 			return nil
 		})
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-enabled-roles.html
+// MySQL:    missing
+var informationSchemaEnabledRoles = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.enabled_roles (
+	ROLE_NAME STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User
+		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+		if err != nil {
+			return err
+		}
+
+		// The current user is always listed.
+		if err := addRow(
+			tree.NewDString(currentUser), // role_name: the current user
+		); err != nil {
+			return err
+		}
+
+		for roleName := range memberMap {
+			if err := addRow(
+				tree.NewDString(roleName), // role_name
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	},
 }
 

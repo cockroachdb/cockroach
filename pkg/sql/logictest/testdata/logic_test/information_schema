@@ -111,6 +111,7 @@ administrable_role_authorizations
 applicable_roles
 column_privileges
 columns
+enabled_roles
 key_column_usage
 referential_constraints
 schema_privileges
@@ -241,6 +242,7 @@ information_schema  administrable_role_authorizations
 information_schema  applicable_roles
 information_schema  column_privileges
 information_schema  columns
+information_schema  enabled_roles
 information_schema  key_column_usage
 information_schema  referential_constraints
 information_schema  schema_privileges
@@ -420,6 +422,7 @@ def            information_schema  administrable_role_authorizations  SYSTEM VIE
 def            information_schema  applicable_roles                   SYSTEM VIEW  1
 def            information_schema  column_privileges                  SYSTEM VIEW  1
 def            information_schema  columns                            SYSTEM VIEW  1
+def            information_schema  enabled_roles                      SYSTEM VIEW  1
 def            information_schema  key_column_usage                   SYSTEM VIEW  1
 def            information_schema  referential_constraints            SYSTEM VIEW  1
 def            information_schema  schema_privileges                  SYSTEM VIEW  1
@@ -1187,7 +1190,7 @@ NULL     root     def            system        eventlog    uniqueID     UPDATE  
 
 # information_schema.administrable_role_authorizations
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee  role_name  is_grantable
@@ -1195,7 +1198,7 @@ root     admin      YES
 
 user testuser
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee  role_name  is_grantable
@@ -1204,19 +1207,38 @@ user root
 
 # information_schema.applicable_roles
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee  role_name  is_grantable
-root     root       NO
 root     admin      YES
+root     root       NO
 
 user testuser
 
-query TTT colnames
+query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
 testuser  testuser   NO
+
+user root
+
+# information_schema.enabled_roles
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+admin
+root
+
+user testuser
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+testuser
 
 user root
