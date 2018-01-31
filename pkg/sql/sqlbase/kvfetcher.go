@@ -341,15 +341,11 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
-// nextKV returns the next key/value (initiating fetches as necessary). When
-// there are no more keys, returns false and an empty key/value.
-func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
-	var kv roachpb.KeyValue
+func (f *txnKVFetcher) nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error) {
 	for {
 		for len(f.kvs) == 0 && len(f.responses) > 0 {
 			reply := f.responses[0].GetInner()
 			f.responses = f.responses[1:]
-
 			switch t := reply.(type) {
 			case *roachpb.ScanResponse:
 				f.kvs = t.Rows
@@ -359,15 +355,15 @@ func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, erro
 		}
 
 		if len(f.kvs) > 0 {
-			kv = f.kvs[0]
-			f.kvs = f.kvs[1:]
-			return true, kv, nil
+			res := f.kvs
+			f.kvs = nil
+			return true, res, nil
 		}
 		if f.fetchEnd {
-			return false, kv, nil
+			return false, nil, nil
 		}
 		if err := f.fetch(ctx); err != nil {
-			return false, kv, err
+			return false, nil, err
 		}
 	}
 }

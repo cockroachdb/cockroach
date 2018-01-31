@@ -37,7 +37,7 @@ import (
 const debugRowFetch = false
 
 type kvFetcher interface {
-	nextKV(ctx context.Context) (bool, roachpb.KeyValue, error)
+	nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -196,6 +196,8 @@ type RowFetcher struct {
 	kv                roachpb.KeyValue
 	keyRemainingBytes []byte
 	kvEnd             bool
+
+	currentBatch []roachpb.KeyValue
 
 	// isCheck indicates whether or not we are running checks for k/v
 	// correctness. It is set only during SCRUB commands.
@@ -402,9 +404,26 @@ func (rf *RowFetcher) StartScan(
 func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
 	rf.indexKey = nil
 	rf.kvFetcher = f
+	rf.currentBatch = nil
 	// Retrieve the first key.
 	_, err := rf.NextKey(ctx)
 	return err
+}
+
+func (rf *RowFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, err error) {
+	if len(rf.currentBatch) != 0 {
+		kv = rf.currentBatch[0]
+		rf.currentBatch = rf.currentBatch[1:]
+		return true, kv, nil
+	}
+	ok, rf.currentBatch, err = rf.kvFetcher.nextBatch(ctx)
+	if err != nil {
+		return ok, kv, err
+	}
+	if !ok {
+		return false, kv, nil
+	}
+	return rf.nextKV(ctx)
 }
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
@@ -413,7 +432,7 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, err = rf.kvFetcher.nextKV(ctx)
+		ok, rf.kv, err = rf.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
