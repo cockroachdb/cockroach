@@ -322,7 +322,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		if err := e.WriteFile(filename, sstBytes); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := e.IngestExternalFile(ctx, filename, false /* move */); err != nil {
+		if err := e.IngestExternalFile(ctx, filename, false /* move */, true /* modify the sst */); err != nil {
 			t.Fatalf("%+v", err)
 		}
 
