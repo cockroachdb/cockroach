@@ -1,61 +1,42 @@
-import moment from "moment";
 import _ from "lodash";
 import { createSelector } from "reselect";
 
+import * as protos from "src/js/protos";
 import { AdminUIState } from "./state";
-import { NanoToMilli } from "src/util/convert";
 import { Pick } from "src/util/pick";
 import { NodeStatus$Properties, MetricConstants, BytesUsed } from "src/util/proto";
 import { nullOfReturnType } from "src/util/types";
 
 /**
- * deadTimeout indicates a grace-period duration where nodes are still
- * considered to be alive; if more than this duration has passed since the
- * node's liveness expired, it is considered dead.
- *
- * The value of this constant is based on the default value of the server
- * configuration value "TimeUntilStoreDead". At some point this configuration
- * value will be moved to a cluster configuration table (#14230), and at that
- * point it will be appropriate to pull this value from the server directly.
+ * LivenessStatus is a type alias for the fully-qualified NodeLivenessStatus
+ * enumeration. As an enum, it needs to be imported rather than using the 'type'
+ * keyword.
  */
-export const deadTimeout = moment.duration(5, "m");
+export import LivenessStatus = protos.cockroach.storage.NodeLivenessStatus;
 
 /**
- * A grace period for which a liveness record can be expired before being
- * its node is considered suspect. This helps to avoid situations where liveness
- * records are being updated correctly on the server, but are judged to be dead
- * on the client due to clock skew.
+ * livenessNomenclature resolves a mismatch between the terms used for liveness
+ * status on our Admin UI and the terms used by the backend. Examples:
+ * + "Live" on the server is "Healthy" on the Admin UI
+ * + "Unavailable" on the server is "Suspect" on the Admin UI
  */
-export const suspectGracePeriod = moment.duration(5, "s");
-
-/**
- * LivenessStatus is a convenience enumeration used to bucket node liveness
- * records into basic states.
- */
-export enum LivenessStatus {
-  /**
-   * The node's liveness record has been updated recently.
-   */
-  HEALTHY,
-  /**
-   * The node's liveness record has not been updated for a short duration, and
-   * thus this node might be down.
-   */
-  SUSPECT,
-  /**
-   * The node's liveness record has been expired long enough that the node is
-   * considered dead.
-   */
-  DEAD,
-  /**
-   * DEAD, but the liveness record has the decommissioning flag set.
-   */
-  DECOMMISSIONED,
+export function livenessNomenclature(liveness: LivenessStatus) {
+  switch (liveness) {
+    case LivenessStatus.LIVE:
+      return "healthy";
+    case LivenessStatus.UNAVAILABLE:
+      return "suspect";
+    case LivenessStatus.DECOMMISSIONING:
+      return "decommissioning";
+    case LivenessStatus.DECOMMISSIONED:
+      return "decommissioned";
+    default:
+      return "dead";
+  }
 }
 
 // Functions to select data directly from the redux state.
 const livenessesSelector = (state: AdminUIState) => state.cachedData.liveness.data;
-const livenessCheckedAtSelector = (state: AdminUIState) => state.cachedData.liveness.requestedAt;
 
 /*
  * nodeStatusesSelector returns the current status for each node in the cluster.
@@ -88,20 +69,10 @@ export const livenessByNodeIDSelector = createSelector(
  * LivenessStatus of that node.
  */
 const livenessStatusByNodeIDSelector = createSelector(
-  livenessByNodeIDSelector,
-  livenessCheckedAtSelector,
-  (livenessByNodeID, livenessCheckedAt) => {
-    if (livenessCheckedAt) {
-      const deadCutoff = livenessCheckedAt.clone().subtract(deadTimeout);
-      return _.mapValues(livenessByNodeID, (l) => {
-        const expiration = moment(NanoToMilli(l.expiration.wall_time.toNumber()));
-        if (expiration.isBefore(deadCutoff)) {
-          return l.decommissioning ? LivenessStatus.DECOMMISSIONED : LivenessStatus.DEAD;
-        } else if (expiration.clone().add(suspectGracePeriod).isBefore(livenessCheckedAt)) {
-          return LivenessStatus.SUSPECT;
-        }
-        return LivenessStatus.HEALTHY;
-      });
+  livenessesSelector,
+  (livenesses) => {
+    if (livenesses) {
+      return livenesses.statuses;
     }
     return {};
   },
@@ -160,14 +131,15 @@ const nodeSumsSelector = createSelector(
     if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
       nodeStatuses.forEach((n) => {
         const status = livenessStatusByNodeID[n.desc.node_id];
-        if (status !== LivenessStatus.DECOMMISSIONED) {
+        if (status !== LivenessStatus.DECOMMISSIONING) {
           result.nodeCounts.total += 1;
         }
         switch (status) {
-          case LivenessStatus.HEALTHY:
+          case LivenessStatus.LIVE:
             result.nodeCounts.healthy++;
             break;
-          case LivenessStatus.SUSPECT:
+          case LivenessStatus.UNAVAILABLE:
+          case LivenessStatus.DECOMMISSIONING:
             result.nodeCounts.suspect++;
             break;
           case LivenessStatus.DECOMMISSIONED:

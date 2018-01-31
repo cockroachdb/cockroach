@@ -298,7 +298,7 @@ func createTestAllocator(
 // ranges in deadReplicas.
 func mockStorePool(
 	storePool *StorePool,
-	aliveStoreIDs, deadStoreIDs, decommissioningStoreIDs []roachpb.StoreID,
+	aliveStoreIDs, deadStoreIDs, decommissioningStoreIDs, decommissionedStoreIDs []roachpb.StoreID,
 	deadReplicas []roachpb.ReplicaIdent,
 ) {
 	storePool.detailsMu.Lock()
@@ -324,6 +324,14 @@ func mockStorePool(
 	}
 	for _, storeID := range decommissioningStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = NodeLivenessStatus_DECOMMISSIONING
+		detail := storePool.getStoreDetailLocked(storeID)
+		detail.desc = &roachpb.StoreDescriptor{
+			StoreID: storeID,
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
+		}
+	}
+	for _, storeID := range decommissionedStoreIDs {
+		liveNodeSet[roachpb.NodeID(storeID)] = NodeLivenessStatus_DECOMMISSIONED
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -970,11 +978,14 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 
 	EnableStatsBasedRebalancing.Override(&sp.st.SV, false)
 
-	mockStorePool(sp,
+	mockStorePool(
+		sp,
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
 		[]roachpb.StoreID{7, 8},
 		nil,
-		nil)
+		nil,
+		nil,
+	)
 
 	ranges := func(rangeCount int32) roachpb.StoreCapacity {
 		return roachpb.StoreCapacity{
@@ -2446,6 +2457,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 8},
 		[]roachpb.StoreID{6, 7},
 		nil,
+		nil,
 		[]roachpb.ReplicaIdent{{
 			RangeID: 0,
 			Replica: roachpb.ReplicaDescriptor{
@@ -2647,7 +2659,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, tcase.dead, nil, nil)
+		mockStorePool(sp, tcase.live, tcase.dead, nil, nil, nil)
 
 		action, _ := a.ComputeAction(ctx, tcase.zone, RangeInfo{Desc: &tcase.desc}, false)
 		if tcase.expectedAction != action {
@@ -2666,6 +2678,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		live            []roachpb.StoreID
 		dead            []roachpb.StoreID
 		decommissioning []roachpb.StoreID
+		decommissioned  []roachpb.StoreID
 	}{
 		// Has three replicas, but one is in decommissioning status
 		{
@@ -2761,6 +2774,42 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 			dead:            []roachpb.StoreID{2},
 			decommissioning: []roachpb.StoreID{3},
 		},
+		// Needs three replicas, has four, where one is decommissioning and one is
+		// decommissioned.
+		{
+			zone: config.ZoneConfig{
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				Replicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDead,
+			live:            []roachpb.StoreID{1, 4},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{3},
+			decommissioned:  []roachpb.StoreID{2},
+		},
 		// Needs three replicas, has three, all decommissioning
 		{
 			zone: config.ZoneConfig{
@@ -2831,7 +2880,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	for i, tcase := range testCases {
-		mockStorePool(sp, tcase.live, tcase.dead, tcase.decommissioning, nil)
+		mockStorePool(sp, tcase.live, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
 
 		action, _ := a.ComputeAction(ctx, tcase.zone, RangeInfo{Desc: &tcase.desc}, false)
 		if tcase.expectedAction != action {
