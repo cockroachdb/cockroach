@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // makeEqSpan returns a span that constraints column <offset> to a single value.
@@ -806,10 +807,43 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 	switch e.op {
 	case containsOp:
 		lhs, rhs := e.children[0], e.children[1]
+
 		if !c.isIndexColumn(lhs, 0 /* index */) || rhs.op != constOp {
 			return nil, false, false
 		}
-		return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
+
+		rightDatum := rhs.private.(tree.Datum)
+		rd := rightDatum.(*tree.DJSON).JSON
+
+		switch rd.Type() {
+		case json.ArrayJSONType, json.ObjectJSONType:
+			return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
+		default:
+			// If we find a scalar on the right side of the @> operator it means that we need to find
+			// both matching scalars and arrays that contain that value. In order to do this we generate
+			// two logical spans, one for the original scalar and one for arrays containing the scalar.
+			// This is valid because in JSON something can either be an array or scalar so the spans are
+			// guaranteed not to overlap when mapped onto the primary key space. Therefore there won't be
+			// any duplicate primary keys when we retrieve rows for both sets.
+			spans := make(LogicalSpans, 2)
+
+			j := json.NewArrayBuilder(1)
+			j.Add(rd)
+			dJSON, err := tree.MakeDJSON(j.Build())
+			if err != nil {
+				break
+			}
+
+			// This is the span for the scalar.
+			spans[0].Start = LogicalKey{Vals: tree.Datums{rightDatum}, Inclusive: true}
+			spans[0].End = spans[0].Start
+
+			// This is the span to match arrays.
+			spans[1].Start = LogicalKey{Vals: tree.Datums{dJSON}, Inclusive: true}
+			spans[1].End = spans[1].Start
+
+			return spans, true, true
+		}
 
 	case andOp:
 		for _, child := range e.children {
