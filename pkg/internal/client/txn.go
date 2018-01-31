@@ -1199,7 +1199,14 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 
 // GenerateForcedRetryableError returns a HandledRetryableTxnError that will
 // cause the txn to be retried.
+//
+// The transaction's epoch is bumped, simulating to an extent what the
+// TxnCoordSender does on retriable errors. The transaction's timestamp is only
+// bumped to the extent that txn.OrigTimestamp is racheted up to txn.Timestamp.
+// TODO(andrei): This method should take in an up-to-date timestamp, but
+// unfortunately its callers don't currently have that handy.
 func (txn *Txn) GenerateForcedRetryableError(msg string) error {
+	txn.Proto().Restart(txn.UserPriority(), 0 /* upgradePriority */, txn.Proto().Timestamp)
 	return roachpb.NewHandledRetryableTxnError(
 		msg,
 		txn.ID(),
