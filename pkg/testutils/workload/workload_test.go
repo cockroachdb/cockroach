@@ -54,12 +54,12 @@ func TestSetup(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer s.Stopper().Stop(ctx)
+	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("rows=%d/batch=%d", test.rows, test.batchSize), func(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
-			sqlDB.Exec(t, `DROP DATABASE IF EXISTS test`)
-			sqlDB.Exec(t, `CREATE DATABASE test`)
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
 			gen := bank.FromRows(test.rows)
 			if _, err := workload.Setup(sqlDB.DB, gen, test.batchSize); err != nil {
@@ -86,16 +86,16 @@ func TestSplits(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer s.Stopper().Stop(ctx)
+	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
 
 	for _, ranges := range tests {
 		t.Run(fmt.Sprintf("ranges=%d", ranges), func(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
-			sqlDB.Exec(t, `DROP DATABASE IF EXISTS test`)
-			sqlDB.Exec(t, `CREATE DATABASE test`)
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
 			gen := bank.FromConfig(rows, payloadBytes, ranges)
 			table := gen.Tables()[0]
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE test.%s %s`, table.Name, table.Schema))
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, table.Name, table.Schema))
 
 			if err := workload.Split(ctx, sqlDB.DB, table, concurrency); err != nil {
 				t.Fatalf("%+v", err)
