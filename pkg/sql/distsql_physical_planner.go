@@ -450,15 +450,26 @@ func (p *planningCtx) sanityCheckAddresses() error {
 type physicalPlan struct {
 	distsqlplan.PhysicalPlan
 
-	// planToStreamColMap maps planNode Columns() to columns in the result
-	// streams. Note that in some cases, not all columns in the result streams
-	// are referenced in the map (this is due to some processors not being
-	// configurable to output only certain columns and will be fixed).
+	// planToStreamColMap maps planNode columns (see planColumns()) to columns in
+	// the result streams. These stream indices correspond to the streams
+	// referenced in ResultTypes.
+	//
+	// Note that in some cases, not all columns in the result streams are
+	// referenced in the map; for example, columns that are only required for
+	// stream merges in downstream input synchronizers are not included here.
+	// (This is due to some processors not being configurable to output only
+	// certain columns and will be fixed.)
 	//
 	// Conversely, in some cases not all planNode columns have a corresponding
 	// result stream column (these map to index -1); this is the case for scanNode
 	// and indexJoinNode where not all columns in the table are actually used in
-	// the plan.
+	// the plan, but are kept for possible use downstream (e.g., sorting).
+	//
+	// When the query is run, the output processor's planToStreamColMap is used
+	// by distSQLReceiver to create an implicit projection on the processor's
+	// output for client consumption (see distSQLReceiver.Push()). Therefore,
+	// "invisible" columns (e.g., columns required for merge ordering) will not
+	// be output.
 	planToStreamColMap []int
 }
 
