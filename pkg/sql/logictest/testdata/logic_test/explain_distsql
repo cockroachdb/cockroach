@@ -57,15 +57,15 @@ SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT k, SUM(v) FROM kv WHERE k>1 GR
 ----
 true
 
-# Hard limit in scan - don't distribute.
+# Hard limit in scan - distribute.
 query B
 SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv LIMIT 1]
 ----
-false
+true
 
 # Soft limit in scan - don't distribute.
 query B
-SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE v=1 LIMIT 1]
+SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1]
 ----
 false
 

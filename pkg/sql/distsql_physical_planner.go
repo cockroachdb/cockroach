@@ -315,8 +315,8 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *scanNode:
 		rec := canDistribute
-		if n.hardLimit != 0 || n.softLimit != 0 {
-			// We don't yet recommend distributing plans where limits propagate
+		if n.softLimit != 0 {
+			// We don't yet recommend distributing plans where soft limits propagate
 			// to scan nodes; we don't have infrastructure to only plan for a few
 			// ranges at a time.
 			rec = shouldNotDistribute
@@ -513,6 +513,52 @@ type spanPartition struct {
 	spans roachpb.Spans
 }
 
+func (dsp *DistSQLPlanner) checkNodeHealth(
+	ctx context.Context, nodeID roachpb.NodeID, addr string,
+) error {
+	// Check if the node is still in gossip - i.e. if it hasn't been
+	// decommissioned or overridden by another node at the same address.
+	if _, err := dsp.gossip.GetNodeIDAddress(nodeID); err != nil {
+		log.VEventf(ctx, 1, "not using n%d because gossip doesn't know about it. "+
+			"It might have gone away from the cluster. Gossip said: %s.", nodeID, err)
+		return err
+	}
+
+	var err error
+	if dsp.testingKnobs.OverrideHealthCheck != nil {
+		err = dsp.testingKnobs.OverrideHealthCheck(nodeID, addr)
+	} else {
+		err = dsp.rpcContext.ConnHealth(addr)
+	}
+	if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
+		// This host is known to be unhealthy. Don't use it (use the gateway
+		// instead). Note: this can never happen for our nodeID (which
+		// always has its address in the nodeMap).
+		log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", nodeID, err)
+		return err
+	}
+
+	// Check that the node is not draining.
+	drainingInfo := &distsqlrun.DistSQLDrainingInfo{}
+	if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
+		// Because draining info has no expiration, an error
+		// implies that we have not yet received a node's
+		// draining information. Since this information is
+		// written on startup, the most likely scenario is
+		// that the node is ready. We therefore return no
+		// error.
+		return nil
+	}
+
+	if drainingInfo.Draining {
+		errMsg := fmt.Sprintf("not using n%d because it is draining", nodeID)
+		log.VEvent(ctx, 1, errMsg)
+		return errors.New(errMsg)
+	}
+
+	return nil
+}
+
 // partitionSpans finds out which nodes are owners for ranges touching the
 // given spans, and splits the spans according to owning nodes. The result is a
 // set of spanPartitions (guaranteed one for each relevant node), which form a
@@ -591,50 +637,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 				addr, inAddrMap := planCtx.nodeAddresses[nodeID]
 				if !inAddrMap {
 					addr = replInfo.NodeDesc.Address.String()
-					checkNodeHealth := func() error {
-						// Check if the node is still in gossip - i.e. if it hasn't been
-						// decommissioned or overridden by another node at the same address.
-						if _, err := dsp.gossip.GetNodeIDAddress(nodeID); err != nil {
-							log.VEventf(ctx, 1, "not using n%d because gossip doesn't know about it. "+
-								"It might have gone away from the cluster. Gossip said: %s.", nodeID, err)
-							return err
-						}
-
-						var err error
-						if dsp.testingKnobs.OverrideHealthCheck != nil {
-							err = dsp.testingKnobs.OverrideHealthCheck(replInfo.NodeDesc.NodeID, addr)
-						} else {
-							err = dsp.rpcContext.ConnHealth(addr)
-						}
-						if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
-							// This host is known to be unhealthy. Don't use it (use the gateway
-							// instead). Note: this can never happen for our nodeID (which
-							// always has its address in the nodeMap).
-							log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", nodeID, err)
-							return err
-						}
-
-						// Check that the node is not draining.
-						drainingInfo := &distsqlrun.DistSQLDrainingInfo{}
-						if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
-							// Because draining info has no expiration, an error
-							// implies that we have not yet received a node's
-							// draining information. Since this information is
-							// written on startup, the most likely scenario is
-							// that the node is ready. We therefore return no
-							// error.
-							return nil
-						}
-
-						if drainingInfo.Draining {
-							errMsg := fmt.Sprintf("not using n%d because it is draining", nodeID)
-							log.VEvent(ctx, 1, errMsg)
-							return errors.New(errMsg)
-						}
-
-						return nil
-					}
-					if err := checkNodeHealth(); err != nil {
+					if err := dsp.checkNodeHealth(ctx, nodeID, addr); err != nil {
 						addr = ""
 					}
 					if err == nil && addr != "" {
@@ -797,6 +800,48 @@ func (dsp *DistSQLPlanner) convertOrdering(
 	return result
 }
 
+// getNodeIDForScan retrieves the node ID where the single table reader should
+// reside for a limited scan. Ideally this is the lease holder for the first
+// range in the specified spans. But if that node is unhealthy or incompatible,
+// we use the gateway node instead.
+func (dsp *DistSQLPlanner) getNodeIDForScan(
+	planCtx *planningCtx, spans []roachpb.Span, reverse bool,
+) (roachpb.NodeID, error) {
+	if len(spans) == 0 {
+		panic("no spans")
+	}
+
+	// Determine the node ID for the first range to be scanned.
+	it := planCtx.spanIter
+	scanDirection := kv.Ascending
+	if reverse {
+		scanDirection = kv.Descending
+	}
+	it.Seek(planCtx.ctx, spans[0], scanDirection)
+	if !it.Valid() {
+		return 0, it.Error()
+	}
+	replInfo, err := it.ReplicaInfo(planCtx.ctx)
+	if err != nil {
+		return 0, err
+	}
+	nodeID := replInfo.NodeID
+
+	// Check node health and compatibility.
+	addr := replInfo.NodeDesc.Address.String()
+	if err := dsp.checkNodeHealth(planCtx.ctx, nodeID, addr); err != nil {
+		log.Eventf(planCtx.ctx, "not planning on node %d. unhealthy", nodeID)
+		return dsp.nodeDesc.NodeID, nil
+	}
+	if !dsp.nodeVersionIsCompatible(nodeID, dsp.planVersion) {
+		log.Eventf(planCtx.ctx, "not planning on node %d. incompatible version", nodeID)
+		return dsp.nodeDesc.NodeID, nil
+	}
+
+	planCtx.nodeAddresses[nodeID] = addr
+	return nodeID, nil
+}
+
 // createTableReaders generates a plan consisting of table reader processors,
 // one for each node that has spans that we are reading.
 // overridesResultColumns is optional.
@@ -808,9 +853,23 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		return physicalPlan{}, err
 	}
 
-	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
-	if err != nil {
-		return physicalPlan{}, err
+	var spanPartitions []spanPartition
+	if n.hardLimit == 0 && n.softLimit == 0 {
+		spanPartitions, err = dsp.partitionSpans(planCtx, n.spans)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+	} else {
+		// If the scan is limited, use a single TableReader to avoid reading more
+		// rows than necessary. Note that distsql is currently only enabled for hard
+		// limits since the TableReader will still read too eagerly in the soft
+		// limit case. To prevent this we'll need a new mechanism on the execution
+		// side to modulate table reads.
+		nodeID, err := dsp.getNodeIDForScan(planCtx, n.spans, n.reverse)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		spanPartitions = []spanPartition{{nodeID, n.spans}}
 	}
 
 	var p physicalPlan
