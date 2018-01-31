@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestSplit(t *testing.T) {
+func TestBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
@@ -41,18 +41,17 @@ func TestSplit(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer s.Stopper().Stop(ctx)
+	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("rows=%d/ranges=%d", test.rows, test.ranges), func(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
 			bank := FromConfig(test.rows, defaultPayloadBytes, test.ranges)
 			bankTable := bank.Tables()[0]
-			sqlDB.Exec(t, `DROP DATABASE IF EXISTS data CASCADE`)
-			sqlDB.Exec(t, `CREATE DATABASE data`)
-			sqlDB.Exec(t, `USE data`)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, bankTable.Name, bankTable.Schema))
 
 			if err := Split(sqlDB.DB, bank); err != nil {
