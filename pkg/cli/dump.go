@@ -204,9 +204,9 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT descriptor_name
 		FROM "".crdb_internal.create_statements
-		AS OF SYSTEM TIME '%s'
+		AS OF SYSTEM TIME %s
 		WHERE database_name = $1
-		`, ts), []driver.Value{dbName})
+		`, lex.EscapeSQLString(ts)), []driver.Value{dbName})
 	if err != nil {
 		return nil, err
 	}
@@ -242,10 +242,10 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 			create_statement,
 			descriptor_type
 		FROM %s.crdb_internal.create_statements
-		AS OF SYSTEM TIME '%s'
+		AS OF SYSTEM TIME %s
 		WHERE database_name = $1
 			AND descriptor_name = $2
-	`, dbNameEscaped, ts), []driver.Value{dbName, tableName})
+	`, dbNameEscaped, lex.EscapeSQLString(ts)), []driver.Value{dbName, tableName})
 	if err != nil {
 		if err == io.EOF {
 			tn := tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
@@ -276,9 +276,9 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT dependson_id
 		FROM %s.crdb_internal.backward_dependencies
-		AS OF SYSTEM TIME '%s'
+		AS OF SYSTEM TIME %s
 		WHERE descriptor_id = $1
-		`, dbNameEscaped, ts), []driver.Value{id})
+		`, dbNameEscaped, lex.EscapeSQLString(ts)), []driver.Value{id})
 	if err != nil {
 		return basicMetadata{}, err
 	}
@@ -312,10 +312,10 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME, DATA_TYPE
 		FROM "".information_schema.columns
-		AS OF SYSTEM TIME '%s'
+		AS OF SYSTEM TIME %s
 		WHERE TABLE_SCHEMA = $1
 			AND TABLE_NAME = $2
-		`, ts), []driver.Value{md.name.Database(), md.name.Table()})
+		`, lex.EscapeSQLString(ts)), []driver.Value{md.name.Database(), md.name.Table()})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -375,7 +375,7 @@ const (
 func dumpSequenceData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetadata) error {
 	vals, err := conn.QueryRow(fmt.Sprintf(
 		"SELECT last_value FROM %s AS OF SYSTEM TIME %s",
-		bmd.name, clusterTS,
+		bmd.name, lex.EscapeSQLString(clusterTS),
 	), nil)
 	if err != nil {
 		return err
@@ -398,9 +398,9 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 		return err
 	}
 
-	bs := fmt.Sprintf("SELECT * FROM %s AS OF SYSTEM TIME '%s' ORDER BY PRIMARY KEY %[1]s",
+	bs := fmt.Sprintf("SELECT * FROM %s AS OF SYSTEM TIME %s ORDER BY PRIMARY KEY %[1]s",
 		md.name,
-		clusterTS,
+		lex.EscapeSQLString(clusterTS),
 	)
 	inserts := make([]string, 0, insertRows)
 	rows, err := conn.Query(bs, nil)
