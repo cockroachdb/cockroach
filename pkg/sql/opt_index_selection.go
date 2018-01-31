@@ -515,7 +515,38 @@ func spansFromLogicalSpans(
 		}
 		spans[i] = s
 	}
+
+	v.sortSpans(spans)
 	return spans, nil
+}
+
+type spanSorter struct {
+	spans roachpb.Spans
+}
+
+var _ sort.Interface = &spanSorter{}
+
+// Len is part of sort.Interface.
+func (ss *spanSorter) Len() int {
+	return len(ss.spans)
+}
+
+// Less is part of sort.Interface.
+func (ss *spanSorter) Less(i, j int) bool {
+	// Compare start keys.
+	return ss.spans[i].Key.Compare(ss.spans[j].EndKey) < 0
+}
+
+// Swap is part of sort.Interface.
+func (ss *spanSorter) Swap(i, j int) {
+	ss.spans[i], ss.spans[j] = ss.spans[j], ss.spans[i]
+}
+
+func (c *indexInfo) sortSpans(spans roachpb.Spans) {
+	ss := spanSorter{
+		spans: spans,
+	}
+	sort.Sort(&ss)
 }
 
 // encodeLogicalKey encodes each logical part of a key into a

@@ -19,9 +19,12 @@ import (
 	"regexp"
 	"strings"
 
+	"context"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // makeEqSpan returns a span that constraints column <offset> to a single value.
@@ -800,20 +803,55 @@ func (c *indexConstraintCtx) makeSpansForOrExprs(
 
 // makeInvertedIndexSpansForExpr is analogous to makeSpansForExpr, but it is
 // used for inverted indexes.
-func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
+func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(offset int,
 	e *Expr,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	switch e.op {
 	case containsOp:
 		lhs, rhs := e.children[0], e.children[1]
+
 		if !c.isIndexColumn(lhs, 0 /* index */) || rhs.op != constOp {
 			return nil, false, false
+		}
+
+		rightDatum := rhs.private.(tree.Datum)
+		rd := rightDatum.(*tree.DJSON).JSON
+
+		log.Infof(context.TODO(), "%s", rd.Type())
+
+		switch rd.Type() {
+		case json.ArrayJSONType, json.ObjectJSONType:
+			break
+		default:
+			spans := make(LogicalSpans, 2)
+			datum := rhs.private.(tree.Datum)
+			if !c.verifyType(offset, datum.ResolvedType()) {
+				return nil, false, false
+			}
+
+			j := json.NewArrayBuilder(1)
+			j.Add(rd)
+			dj, err := tree.MakeDJSON(j.Build())
+			if err != nil {
+				break
+			}
+
+			spans[0].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
+			spans[0].End = spans[0].Start
+
+			spans[1].Start = LogicalKey{Vals: tree.Datums{dj}, Inclusive: true}
+			spans[1].End = spans[1].Start
+
+			c.checkSpans(0, spans)
+
+			c.sortSpans(offset, spans)
+			return spans, true, true
 		}
 		return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
 
 	case andOp:
 		for _, child := range e.children {
-			sp, ok, _ := c.makeInvertedIndexSpansForExpr(child)
+			sp, ok, _ := c.makeInvertedIndexSpansForExpr(offset, child)
 			if ok {
 				// TODO(radu, masha): for now, the best we can do is to generate
 				// constraints for at most one "contains" op in the disjunction; the
@@ -997,7 +1035,7 @@ func (c *indexConstraintCtx) simplifyFilterImpl(
 		var ok, tight bool
 		if c.isInverted {
 			if offset == 0 {
-				exprSpans, ok, tight = c.makeInvertedIndexSpansForExpr(e)
+				exprSpans, ok, tight = c.makeInvertedIndexSpansForExpr(0, e)
 			}
 		} else {
 			exprSpans, ok, tight = c.makeSpansForExpr(offset, e)
@@ -1065,7 +1103,7 @@ func (ic *IndexConstraints) Init(
 		indexConstraintCtx: makeIndexConstraintCtx(colInfos, isInverted, evalCtx),
 	}
 	if isInverted {
-		ic.spans, ic.spansPopulated, ic.spansTight = ic.makeInvertedIndexSpansForExpr(ic.filter)
+		ic.spans, ic.spansPopulated, ic.spansTight = ic.makeInvertedIndexSpansForExpr(0, ic.filter)
 	} else {
 		ic.spans, ic.spansPopulated, ic.spansTight = ic.makeSpansForExpr(0 /* offset */, ic.filter)
 	}

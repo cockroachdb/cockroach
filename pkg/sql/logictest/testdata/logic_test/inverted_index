@@ -283,6 +283,7 @@ SELECT * from d where b @> 'false' ORDER BY a;
 query IT
 SELECT * from d where b @> '1' ORDER BY a;
 ----
+2   [1,2,3,4,"foo"]
 14  1
 
 query IT
@@ -352,3 +353,4 @@ index-join  0  index-join  ·      ·                                        (a,
  │          1  ·           spans  /!NULL/"a"/"b"-/!NULL/"a"/"b"/PrefixEnd  ·                ·
  └── scan   1  scan        ·      ·                                        (a, b)           ·
 ·           1  ·           table  d@primary                                ·                ·
+
