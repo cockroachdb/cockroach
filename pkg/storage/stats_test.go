@@ -19,8 +19,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/kr/pretty"
@@ -69,10 +69,11 @@ func TestRangeStatsInit(t *testing.T) {
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}
-	if err := engine.MVCCSetRangeStats(context.Background(), tc.engine, 1, &ms); err != nil {
+	rsl := stateloader.Make(nil /* st */, tc.repl.RangeID)
+	if err := rsl.SetMVCCStats(context.Background(), tc.engine, &ms); err != nil {
 		t.Fatal(err)
 	}
-	loadMS, err := engine.MVCCGetRangeStats(context.Background(), tc.engine, tc.repl.RangeID)
+	loadMS, err := rsl.LoadMVCCStats(context.Background(), tc.engine)
 	if err != nil {
 		t.Fatal(err)
 	}
